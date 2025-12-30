@@ -117,7 +117,8 @@ export class AuthController {
   })
   async getRedisCredentials(@Request() req) {
     return {
-      host: process.env.REDIS_HOST,
+      host: process.env.REDIS_EXTERNAL_HOST || process.env.REDIS_HOST,
+      port: process.env.REDIS_EXTERNAL_PORT || '6379',
       username: process.env.REDIS_USERNAME,
       password: process.env.REDIS_PASSWORD,
     };

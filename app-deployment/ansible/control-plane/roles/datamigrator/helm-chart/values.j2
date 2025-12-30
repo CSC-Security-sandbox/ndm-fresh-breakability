@@ -10,6 +10,96 @@ global:
 {% if local_cluster is defined %}
   local_cluster: {{ local_cluster }}
 {% endif %}
+  istio:
+    enabled: {{ enable_istio | default(false) | bool | string | lower }}
+    hosts:
+{% set _istio_route_hosts = istio_gateway_hosts_effective | default(istio_gateway.hosts | default(public_ingress_hosts | default(['*']))) %}
+{% for host in _istio_route_hosts %}
+      - {{ host | quote }}
+{% endfor %}
+    gateway:
+      name: {{ istio_gateway.name | default('datamigrator-gateway') }}
+      namespace: "{{ istio_gateway.namespace | default('istio-system') }}"
+      port: {{ istio_gateway.port | default(80) }}
+      portName: {{ istio_gateway.port_name | default('http') }}
+      protocol: {{ istio_gateway.protocol | default('HTTP') }}
+      selector:
+{% for key, value in istio_gateway.selector | default({'istio':'ingressgateway'}) | dictsort %}
+        {{ key }}: {{ value }}
+{% endfor %}
+      tls:
+        enabled: {{ istio_gateway.tls.enabled | default(false) | bool | string | lower }}
+        secretName: {{ istio_gateway.tls.secretName | default('') | quote }}
+    keycloakRoute:
+      enabled: {{ istio_keycloak_route.enabled | default(true) | bool | string | lower }}
+      virtualServiceName: {{ istio_keycloak_route.virtualservice_name | default('keycloak-virtualservice') | quote }}
+      httpRouteName: {{ istio_keycloak_route.http_route_name | default('keycloak-route') | quote }}
+      serviceHost: {{ istio_keycloak_route.service_host | default('keycloak.keycloak.svc.cluster.local') | quote }}
+      servicePort: {{ istio_keycloak_route.service_port | default(80) }}
+      uri:
+        prefix: {{ istio_keycloak_route.path_prefix | default('/keycloak') | quote }}
+    jwt:
+      enabled: {{ istio_jwt_auth.enabled | default(false) | bool | string | lower }}
+      requestAuthenticationName: {{ istio_jwt_auth.request_authentication_name | default('keycloak-jwt') | quote }}
+      authPolicyName: {{ istio_jwt_auth.auth_policy_name | default('require-jwt') | quote }}
+      publicAuthPolicyName: {{ istio_jwt_auth.public_auth_policy_name | default('allow-public') | quote }}
+      issuer: {{ istio_jwt_auth.issuer | default('') | quote }}
+      jwksUri: {{ istio_jwt_auth.jwks_uri | default('') | quote }}
+{% if istio_jwt_auth.forward_original_token is defined %}
+      forwardOriginalToken: {{ istio_jwt_auth.forward_original_token | bool | string | lower }}
+{% endif %}
+{% if istio_jwt_auth.from_headers is defined %}
+      fromHeaders:
+{% for header in istio_jwt_auth.from_headers %}
+        - name: {{ header.name | quote }}
+{% if header.prefix is defined %}
+          prefix: {{ header.prefix | quote }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if istio_jwt_auth.audiences is defined %}
+      audiences:
+{% for audience in istio_jwt_auth.audiences %}
+        - {{ audience | quote }}
+{% endfor %}
+{% endif %}
+{% if istio_jwt_auth.public_paths is defined %}
+      publicPaths:
+{% for path in istio_jwt_auth.public_paths %}
+        - {{ path | quote }}
+{% endfor %}
+{% endif %}
+{% if istio_jwt_auth.protected_paths is defined %}
+      protectedPaths:
+{% for path_config in istio_jwt_auth.protected_paths %}
+        - paths:
+{% for path in path_config.paths %}
+            - {{ path | quote }}
+{% endfor %}
+{% if path_config.methods is defined %}
+          methods:
+{% for method in path_config.methods %}
+            - {{ method | quote }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+    openbaoEgress:
+      enabled: true
+      host: "openbao.openbao.svc.cluster.local"
+      resourcePrefix: "openbao"
+      namespace: {{ istio_gateway.namespace | default('datamigrator') }}
+      ports:
+        - number: 8200
+          name: http
+          protocol: HTTP
+      serviceEntry:
+        enabled: true
+        location: MESH_INTERNAL
+        resolution: DNS
+      destinationRule:
+        enabled: true
+        tlsMode: DISABLE
   
 admin-service:
   image:
@@ -51,6 +141,7 @@ db-migrations:
   image:
     tag: {{ db_migrations_tag | default(common_tag) | default("latest") }}
   annotations:
+    sidecar.istio.io/inject: "false"
     vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"}]'
 
 support-service:

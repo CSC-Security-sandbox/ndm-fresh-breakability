@@ -47,6 +47,10 @@ env:
     value: "5432"
   - name: REDIS_HOST
     value: "redis-master.redis.svc.cluster.local"
+  - name: REDIS_EXTERNAL_HOST
+    value: "$(MY_HOST_IP)"
+  - name: REDIS_EXTERNAL_PORT
+    value: "30379"
 
   # - name: DATABASE_USERNAME # from secret
   #   value: "dmadmin"
@@ -72,7 +76,7 @@ env:
   - name: SYNCHRONIZE
     value: "false"
   - name: KEYCLOAK_BASE_URL
-    value: "https://$(MY_HOST_IP)/keycloak"
+    value: "http://keycloak.keycloak.svc.cluster.local/keycloak"
   - name: SWAGGER_BASEURL
     value: "https://$(MY_HOST_IP)"
   - name: KEYCLOAK_REALM
@@ -103,8 +107,18 @@ service:
 # Ingress for User-facing APIs
 # ==============================
 ingressThrottle:
-  pathPrefix: api/v1/
-  trailingPath: "(accounts|user-status|reset-password|create-user|user-roles|user-permissions|roles|users|projects|setting|about-ndm)"
+  prefixPaths:
+    - /api/v1/accounts
+    - /api/v1/user-status
+    - /api/v1/reset-password
+    - /api/v1/create-user
+    - /api/v1/user-roles
+    - /api/v1/user-permissions
+    - /api/v1/roles
+    - /api/v1/users
+    - /api/v1/projects
+    - /api/v1/setting
+    - /api/v1/about-ndm
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -119,8 +133,13 @@ ingressThrottle:
 # Ingress for CP and worker
 # ==============================
 ingress:
-  pathPrefix: api/v1/
-  trailingPath: "(health|admin-docs|inviteUser|email|worker-registration|secrets)"
+  prefixPaths:
+    - /api/v1/health
+    - /api/v1/admin-docs
+    - /api/v1/inviteUser
+    - /api/v1/email
+    - /api/v1/worker-registration
+    - /api/v1/secrets
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"

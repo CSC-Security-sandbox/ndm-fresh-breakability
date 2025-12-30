@@ -1,0 +1,25 @@
+---
+istio_version: "1.24.0"
+istio_install_profile: "default"
+istio_download_os: linux
+istio_arch_map:
+  x86_64: amd64
+  amd64: amd64
+  aarch64: arm64
+  arm64: arm64
+istio_tmp_dir: /tmp/istio-install
+istioctl_install_path: /usr/local/bin/istioctl
+istio_kubeconfig_path: /var/snap/microk8s/current/credentials/client.config
+istio_prereq_packages:
+  - curl
+  - tar
+istio_namespace: istio-system
+istio_namespace_wait_retries: 30
+istio_namespace_wait_delay: 10
+istio_rollout_retries: 20
+istio_rollout_delay: 15
+istio_rollout_resources:
+  - kind: deployment
+    name: istiod
+  - kind: deployment
+    name: istio-ingressgateway

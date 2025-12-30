@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/api/v1/admin/health": {
+    "/api/v1/health": {
       "get": {
         "operationId": "AppController_getHealthCheck",
         "parameters": [],
@@ -12,11 +12,11 @@
         }
       }
     },
-    "/api/v1/admin/accounts": {
+    "/api/v1/accounts": {
       "post": {
         "operationId": "AccountController_create",
         "summary": "Create Account",
-        "description": "This endpoint is used to create a new account with the provided details. You need to include the account details in the request body, and the API will return the created account object.\n\n**Request Body Parameters**:\n- **account_name** (required): The name of the account to be created.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/accounts` endpoint with the account details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created account object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new accounts to the system, enabling organizational management.",
+        "description": "This endpoint is used to create a new account with the provided details. You need to include the account details in the request body, and the API will return the created account object.\n\n**Request Body Parameters**:\n- **account_name** (required): The name of the account to be created.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/accounts` endpoint with the account details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created account object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new accounts to the system, enabling organizational management.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -40,7 +40,7 @@
       "get": {
         "operationId": "AccountController_findAll",
         "summary": "Get Page of Account List",
-        "description": "This endpoint retrieves a paginated list of all accounts stored in the system. You can filter the results based on various parameters, allowing you to manage and view accounts effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of accounts per page (default is 10).\n- **sort** (optional): The field by which to sort the accounts (e.g., account_name).\n- **order** (optional): The sorting order, either ascending or descending.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/accounts` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of accounts along with pagination metadata (total count, current page, etc.).\n- If no accounts match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all accounts for better organizational management.",
+        "description": "This endpoint retrieves a paginated list of all accounts stored in the system. You can filter the results based on various parameters, allowing you to manage and view accounts effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of accounts per page (default is 10).\n- **sort** (optional): The field by which to sort the accounts (e.g., account_name).\n- **order** (optional): The sorting order, either ascending or descending.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/accounts` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of accounts along with pagination metadata (total count, current page, etc.).\n- If no accounts match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all accounts for better organizational management.",
         "parameters": [
           {
             "name": "page",
@@ -102,11 +102,11 @@
         ]
       }
     },
-    "/api/v1/admin/accounts/{id}": {
+    "/api/v1/accounts/{id}": {
       "get": {
         "operationId": "AccountController_findOne",
         "summary": "Get Account by account id",
-        "description": "This endpoint retrieves the details of a specific account identified by its unique ID. It allows users to view account information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/accounts/{id}` endpoint, replacing `{id}` with the actual account ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the account’s details.\n- If the account with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific accounts.",
+        "description": "This endpoint retrieves the details of a specific account identified by its unique ID. It allows users to view account information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/accounts/{id}` endpoint, replacing `{id}` with the actual account ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the account’s details.\n- If the account with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific accounts.",
         "parameters": [
           {
             "name": "id",
@@ -129,7 +129,7 @@
       "patch": {
         "operationId": "AccountController_update",
         "summary": "Update Account",
-        "description": "This endpoint updates the details of an existing account identified by its unique ID. You need to provide the updated account details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to update.\n\n**Request Body Parameters**:\n- **account_name** (optional): The updated name of the account.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/admin/accounts/{id}` endpoint with the updated account details as a JSON object in the request body.\n- Ensure that the account ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated account object.\n- If the account is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date account information.",
+        "description": "This endpoint updates the details of an existing account identified by its unique ID. You need to provide the updated account details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to update.\n\n**Request Body Parameters**:\n- **account_name** (optional): The updated name of the account.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/accounts/{id}` endpoint with the updated account details as a JSON object in the request body.\n- Ensure that the account ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated account object.\n- If the account is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date account information.",
         "parameters": [
           {
             "name": "id",
@@ -162,7 +162,7 @@
       "delete": {
         "operationId": "AccountController_delete",
         "summary": "Delete Account",
-        "description": "This endpoint deletes an existing account from the system using its unique ID. It is a destructive operation that permanently removes the account.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/admin/accounts/{id}` endpoint, replacing `{id}` with the actual account ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the account has been deleted.\n- If the account is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing account lifecycles by allowing deletions of obsolete or incorrect accounts.",
+        "description": "This endpoint deletes an existing account from the system using its unique ID. It is a destructive operation that permanently removes the account.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the account to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/accounts/{id}` endpoint, replacing `{id}` with the actual account ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the account has been deleted.\n- If the account is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing account lifecycles by allowing deletions of obsolete or incorrect accounts.",
         "parameters": [
           {
             "name": "id",
@@ -183,11 +183,11 @@
         ]
       }
     },
-    "/api/v1/admin/permissions": {
+    "/api/v1/permissions": {
       "post": {
         "operationId": "PermissionController_create",
         "summary": "Create Permission",
-        "description": "This endpoint is used to create a new permission with the provided details. You need to include the permission details in the request body, and the API will return the created permission object.\n\n**Request Body Parameters**:\n- **permission_name** (required): The name of the permission (max length: 80 characters).\n- **permission_status** (optional): The status of the permission (default is \"active\").\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/permissions` endpoint with the permission details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created permission object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new permissions to the system.",
+        "description": "This endpoint is used to create a new permission with the provided details. You need to include the permission details in the request body, and the API will return the created permission object.\n\n**Request Body Parameters**:\n- **permission_name** (required): The name of the permission (max length: 80 characters).\n- **permission_status** (optional): The status of the permission (default is \"active\").\n\n**How to Use**:\n- Send a POST request to the `/api/v1/permissions` endpoint with the permission details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created permission object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new permissions to the system.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -211,7 +211,7 @@
       "get": {
         "operationId": "PermissionController_findAll",
         "summary": "Retrieve All Permissions",
-        "description": "This endpoint retrieves a list of all active permissions stored in the system. You can filter the results based on various parameters for better management.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/permissions` endpoint.\n- Ensure that any filtering parameters are correctly formatted, if applicable.\n\n**Response Details**:\n- The API returns a JSON object containing a list of permissions.\n- If no permissions are found, an empty list is returned.\n\nThis endpoint is useful for retrieving all permissions for better access control management.",
+        "description": "This endpoint retrieves a list of all active permissions stored in the system. You can filter the results based on various parameters for better management.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/permissions` endpoint.\n- Ensure that any filtering parameters are correctly formatted, if applicable.\n\n**Response Details**:\n- The API returns a JSON object containing a list of permissions.\n- If no permissions are found, an empty list is returned.\n\nThis endpoint is useful for retrieving all permissions for better access control management.",
         "parameters": [],
         "responses": {
           "200": {
@@ -223,11 +223,11 @@
         ]
       }
     },
-    "/api/v1/admin/permissions/{id}": {
+    "/api/v1/permissions/{id}": {
       "get": {
         "operationId": "PermissionController_findOne",
         "summary": "Retrieve Permission by ID",
-        "description": "This endpoint retrieves the details of a specific permission identified by its unique ID. It allows users to view permission information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/permissions/{id}` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the permission’s details.\n- If the permission with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific permissions.",
+        "description": "This endpoint retrieves the details of a specific permission identified by its unique ID. It allows users to view permission information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/permissions/{id}` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the permission’s details.\n- If the permission with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific permissions.",
         "parameters": [
           {
             "name": "id",
@@ -250,7 +250,7 @@
       "patch": {
         "operationId": "PermissionController_update",
         "summary": "Update Permission",
-        "description": "This endpoint updates the details of an existing permission identified by its unique ID. You need to provide the updated permission details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to update.\n\n**Request Body Parameters**:\n- **permission_name** (optional): The updated name of the permission (max length: 80 characters).\n- **permission_status** (optional): The updated status of the permission.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/admin/permissions/{id}` endpoint with the updated permission details as a JSON object in the request body.\n- Ensure that the permission ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns a confirmation message indicating the permission has been updated.\n- If the permission is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date permission information.",
+        "description": "This endpoint updates the details of an existing permission identified by its unique ID. You need to provide the updated permission details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to update.\n\n**Request Body Parameters**:\n- **permission_name** (optional): The updated name of the permission (max length: 80 characters).\n- **permission_status** (optional): The updated status of the permission.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/permissions/{id}` endpoint with the updated permission details as a JSON object in the request body.\n- Ensure that the permission ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns a confirmation message indicating the permission has been updated.\n- If the permission is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date permission information.",
         "parameters": [
           {
             "name": "id",
@@ -283,7 +283,7 @@
       "delete": {
         "operationId": "PermissionController_delete",
         "summary": "Delete Permission",
-        "description": "This endpoint deletes an existing permission from the system using its unique ID. It is a destructive operation that permanently removes the permission.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/admin/permissions/{id}` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the permission has been deleted.\n- If the permission is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing permission lifecycles by allowing deletions of obsolete or incorrect permissions.",
+        "description": "This endpoint deletes an existing permission from the system using its unique ID. It is a destructive operation that permanently removes the permission.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/permissions/{id}` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the permission has been deleted.\n- If the permission is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing permission lifecycles by allowing deletions of obsolete or incorrect permissions.",
         "parameters": [
           {
             "name": "id",
@@ -304,11 +304,11 @@
         ]
       }
     },
-    "/api/v1/admin/permissions/{id}/inactivate": {
+    "/api/v1/permissions/{id}/inactivate": {
       "patch": {
         "operationId": "PermissionController_inactivate",
         "summary": "Inactivate Permission",
-        "description": "This endpoint inactivates an existing permission identified by its unique ID. It updates the status of the permission to inactive without deleting it.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to inactivate.\n\n**How to Use**:\n- Send a PATCH request to the `/api/v1/admin/permissions/{id}/inactivate` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful inactivation, the API returns a confirmation message indicating the permission has been inactivated.\n- If the permission is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint allows for the temporary disabling of permissions without deletion.",
+        "description": "This endpoint inactivates an existing permission identified by its unique ID. It updates the status of the permission to inactive without deleting it.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the permission to inactivate.\n\n**How to Use**:\n- Send a PATCH request to the `/api/v1/permissions/{id}/inactivate` endpoint, replacing `{id}` with the actual permission ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful inactivation, the API returns a confirmation message indicating the permission has been inactivated.\n- If the permission is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint allows for the temporary disabling of permissions without deletion.",
         "parameters": [
           {
             "name": "id",
@@ -329,11 +329,11 @@
         ]
       }
     },
-    "/api/v1/admin/roles": {
+    "/api/v1/roles": {
       "post": {
         "operationId": "RoleController_create",
         "summary": "Create a new Role",
-        "description": "This endpoint is used to create a new role with the provided details. You need to include the role details in the request body, and the API will return the created role object.\n\n**Request Body Parameters**:\n- **role_name** (required): The name of the role to be created.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/roles` endpoint with the role details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created role object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new roles to the system, enabling role management.",
+        "description": "This endpoint is used to create a new role with the provided details. You need to include the role details in the request body, and the API will return the created role object.\n\n**Request Body Parameters**:\n- **role_name** (required): The name of the role to be created.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/roles` endpoint with the role details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created role object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new roles to the system, enabling role management.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -369,7 +369,7 @@
         ]
       }
     },
-    "/api/v1/admin/roles/{id}": {
+    "/api/v1/roles/{id}": {
       "get": {
         "operationId": "RoleController_findOne",
         "summary": "Get Role by ID",
@@ -450,7 +450,7 @@
         ]
       }
     },
-    "/api/v1/admin/roles/{id}/inactivate": {
+    "/api/v1/roles/{id}/inactivate": {
       "patch": {
         "operationId": "RoleController_inactivate",
         "summary": "Inactivate Role",
@@ -475,11 +475,11 @@
         ]
       }
     },
-    "/api/v1/admin/users": {
+    "/api/v1/users": {
       "post": {
         "operationId": "UserController_create",
         "summary": "Create a new User",
-        "description": "This endpoint is used to create a new user with the provided details. You need to include user details in the request body, and the API will return the created user object.\n\n**Request Body Parameters**:\n- **email** (required): The email address of the user.\n- **user_status** (optional, default: \"active\"): The current status of the user account (e.g., active, inactive).\n- **role** (required): The ID of the role assigned to the user. This establishes a relation in the user-role table.\n- **project** (required): The ID of the project the user is associated with. This helps in project management.\n- **account** (required): The ID of the account associated with the new user.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/users` endpoint with the user details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created user object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new users to the system with specified roles and project associations.",
+        "description": "This endpoint is used to create a new user with the provided details. You need to include user details in the request body, and the API will return the created user object.\n\n**Request Body Parameters**:\n- **email** (required): The email address of the user.\n- **user_status** (optional, default: \"active\"): The current status of the user account (e.g., active, inactive).\n- **role** (required): The ID of the role assigned to the user. This establishes a relation in the user-role table.\n- **project** (required): The ID of the project the user is associated with. This helps in project management.\n- **account** (required): The ID of the account associated with the new user.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/users` endpoint with the user details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created user object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new users to the system with specified roles and project associations.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -503,7 +503,7 @@
       "get": {
         "operationId": "UserController_findAll",
         "summary": "Get a paginated list of Users",
-        "description": "This endpoint retrieves a paginated list of all users stored in the system. You can filter the results based on various parameters, allowing you to manage and view users effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of users per page (default is 10).\n- **sort** (optional): The field by which to sort the users (e.g., userName).\n- **order** (optional): The sorting order, either ascending or descending.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/users` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of users along with pagination metadata (total count, current page, etc.).\n- If no users match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all users for better user management.",
+        "description": "This endpoint retrieves a paginated list of all users stored in the system. You can filter the results based on various parameters, allowing you to manage and view users effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of users per page (default is 10).\n- **sort** (optional): The field by which to sort the users (e.g., userName).\n- **order** (optional): The sorting order, either ascending or descending.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/users` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of users along with pagination metadata (total count, current page, etc.).\n- If no users match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all users for better user management.",
         "parameters": [],
         "responses": {
           "200": {
@@ -515,11 +515,11 @@
         ]
       }
     },
-    "/api/v1/admin/users/{id}": {
+    "/api/v1/users/{id}": {
       "get": {
         "operationId": "UserController_findOne",
         "summary": "Get User by ID",
-        "description": "This endpoint fetches the details of a specific user identified by their unique ID. It allows users to view user information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/users/{id}` endpoint, replacing `{id}` with the actual user ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the user’s details.\n- If the user with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific users.",
+        "description": "This endpoint fetches the details of a specific user identified by their unique ID. It allows users to view user information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/users/{id}` endpoint, replacing `{id}` with the actual user ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the user’s details.\n- If the user with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific users.",
         "parameters": [
           {
             "name": "id",
@@ -542,7 +542,7 @@
       "patch": {
         "operationId": "UserController_update",
         "summary": "Update User by ID",
-        "description": "This endpoint updates the details of an existing user identified by their unique ID. You need to provide the updated user details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to update.\n\n**Request Body Parameters**:\n- **email** (optional): The updated email address of the user.\n- **user_status** (optional): The updated status of the user account.\n- **roleId** (optional): The updated role ID associated with the user, establishing a relationship in the user-role table.\n- **projectId** (optional): The updated project ID the user is associated with.\n- **accountId** (optional): The updated account ID associated with the user.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/admin/users/{id}` endpoint with the updated user details as a JSON object in the request body.\n- Ensure that the user ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated user object.\n- If the user is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date user information.",
+        "description": "This endpoint updates the details of an existing user identified by their unique ID. You need to provide the updated user details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to update.\n\n**Request Body Parameters**:\n- **email** (optional): The updated email address of the user.\n- **user_status** (optional): The updated status of the user account.\n- **roleId** (optional): The updated role ID associated with the user, establishing a relationship in the user-role table.\n- **projectId** (optional): The updated project ID the user is associated with.\n- **accountId** (optional): The updated account ID associated with the user.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/users/{id}` endpoint with the updated user details as a JSON object in the request body.\n- Ensure that the user ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated user object.\n- If the user is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date user information.",
         "parameters": [
           {
             "name": "id",
@@ -575,7 +575,7 @@
       "delete": {
         "operationId": "UserController_delete",
         "summary": "Delete User by ID",
-        "description": "This endpoint deletes an existing user from the system using their unique ID. It is a destructive operation that permanently removes the user.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/admin/users/{id}` endpoint, replacing `{id}` with the actual user ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the user has been deleted.\n- If the user is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing user lifecycles by allowing deletions of obsolete or incorrect users.",
+        "description": "This endpoint deletes an existing user from the system using their unique ID. It is a destructive operation that permanently removes the user.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/users/{id}` endpoint, replacing `{id}` with the actual user ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the user has been deleted.\n- If the user is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing user lifecycles by allowing deletions of obsolete or incorrect users.",
         "parameters": [
           {
             "name": "id",
@@ -596,11 +596,11 @@
         ]
       }
     },
-    "/api/v1/admin/users/{id}/inactivate": {
+    "/api/v1/users/{id}/inactivate": {
       "patch": {
         "operationId": "UserController_inactivate",
         "summary": "Inactivate User By Id",
-        "description": "This endpoint inactivates an existing user by setting their status to inactive. This operation does not delete the user from the system but rather marks them as inactive, allowing for potential reactivation in the future.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to be inactivated.\n\n**How to Use**:\n- Send a PATCH request to the `/api/v1/admin/users/{id}/inactivate` endpoint, replacing `{id}` with the actual user ID.\n- Ensure that the request is authenticated and that the user has the necessary permissions to inactivate another user.\n\n**Response Details**:\n- On successful inactivation, the API returns a confirmation message indicating that the user has been successfully inactivated.\n- If the user with the specified ID does not exist, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is crucial for managing user accounts, especially in cases where users should no longer have access but are not to be permanently deleted.",
+        "description": "This endpoint inactivates an existing user by setting their status to inactive. This operation does not delete the user from the system but rather marks them as inactive, allowing for potential reactivation in the future.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the user to be inactivated.\n\n**How to Use**:\n- Send a PATCH request to the `/api/v1/users/{id}/inactivate` endpoint, replacing `{id}` with the actual user ID.\n- Ensure that the request is authenticated and that the user has the necessary permissions to inactivate another user.\n\n**Response Details**:\n- On successful inactivation, the API returns a confirmation message indicating that the user has been successfully inactivated.\n- If the user with the specified ID does not exist, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is crucial for managing user accounts, especially in cases where users should no longer have access but are not to be permanently deleted.",
         "parameters": [
           {
             "name": "id",
@@ -621,11 +621,11 @@
         ]
       }
     },
-    "/api/v1/admin/projects": {
+    "/api/v1/projects": {
       "post": {
         "operationId": "ProjectController_create",
         "summary": "Create Project",
-        "description": "This endpoint is used to create a new project with the provided details. You need to include the project details in the request body, and the API will return the created project object. \n\n**Request Body Parameters**:\n- **project_name** (required): The name of the project.\n- **start_date** (required): The start date of the project in ISO 8601 format.\n- **created_by** (required): The UUID of the user creating the project.\n- **account** (required): The ID of the account associated with the project.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/projects` endpoint with the project details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created project object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new projects to the system and associating them with accounts while tracking their start dates.",
+        "description": "This endpoint is used to create a new project with the provided details. You need to include the project details in the request body, and the API will return the created project object. \n\n**Request Body Parameters**:\n- **project_name** (required): The name of the project.\n- **start_date** (required): The start date of the project in ISO 8601 format.\n- **created_by** (required): The UUID of the user creating the project.\n- **account** (required): The ID of the account associated with the project.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/projects` endpoint with the project details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created project object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows adding new projects to the system and associating them with accounts while tracking their start dates.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -649,7 +649,7 @@
       "get": {
         "operationId": "ProjectController_findAll",
         "summary": "Get Page of Project List",
-        "description": "This endpoint retrieves a paginated list of all projects stored in the system. You can filter the results based on various parameters, allowing you to manage and view projects effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of projects per page (default is 10).\n- **sort** (optional): The field by which to sort the projects (e.g., project_name).\n- **order** (optional): The sorting order, either ascending or descending.\n- **account** (optional): Filter projects by a specific account ID.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/projects` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of projects along with pagination metadata (total count, current page, etc.).\n- If no projects match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all projects for better project management.",
+        "description": "This endpoint retrieves a paginated list of all projects stored in the system. You can filter the results based on various parameters, allowing you to manage and view projects effectively.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of projects per page (default is 10).\n- **sort** (optional): The field by which to sort the projects (e.g., project_name).\n- **order** (optional): The sorting order, either ascending or descending.\n- **account** (optional): Filter projects by a specific account ID.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/projects` endpoint with the desired query parameters.\n- Ensure parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of projects along with pagination metadata (total count, current page, etc.).\n- If no projects match the criteria, an empty list is returned.\n\nThis endpoint is useful for retrieving and displaying all projects for better project management.",
         "parameters": [
           {
             "name": "page",
@@ -711,11 +711,11 @@
         ]
       }
     },
-    "/api/v1/admin/projects/accounts/{account_id}/projects": {
+    "/api/v1/projects/accounts/{account_id}/projects": {
       "get": {
         "operationId": "ProjectController_findByAccountId",
         "summary": "Get Project By Account Id",
-        "description": "This endpoint retrieves a paginated list of projects associated with a specific account. You can filter and sort the projects to manage and view them effectively based on the account.\n\n**Path Parameters**:\n- **account_id** (required): The unique identifier of the account whose projects you want to retrieve.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of projects per page (default is 10).\n- **sortField** (optional): The field by which to sort the projects (e.g., project_name).\n- **sortOrder** (optional): The sorting order, either ascending or descending.\n- **filter** (optional): Filter conditions to apply when retrieving projects.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/projects/accounts/{account_id}/projects` endpoint, replacing `{account_id}` with the actual account ID.\n- Ensure the parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of projects associated with the specified account, along with pagination metadata (total count, current page, etc.).\n- If no projects are found for the account, an empty list is returned.\n\nThis endpoint is essential for managing projects within specific accounts, allowing for effective project tracking and oversight.",
+        "description": "This endpoint retrieves a paginated list of projects associated with a specific account. You can filter and sort the projects to manage and view them effectively based on the account.\n\n**Path Parameters**:\n- **account_id** (required): The unique identifier of the account whose projects you want to retrieve.\n\n**Query Parameters**:\n- **page** (optional): The page number of the results to retrieve (default is 1).\n- **limit** (optional): The number of projects per page (default is 10).\n- **sortField** (optional): The field by which to sort the projects (e.g., project_name).\n- **sortOrder** (optional): The sorting order, either ascending or descending.\n- **filter** (optional): Filter conditions to apply when retrieving projects.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/projects/accounts/{account_id}/projects` endpoint, replacing `{account_id}` with the actual account ID.\n- Ensure the parameters are correctly formatted for filtering and sorting.\n\n**Response Details**:\n- The API returns a JSON object containing a list of projects associated with the specified account, along with pagination metadata (total count, current page, etc.).\n- If no projects are found for the account, an empty list is returned.\n\nThis endpoint is essential for managing projects within specific accounts, allowing for effective project tracking and oversight.",
         "parameters": [
           {
             "name": "account_id",
@@ -785,11 +785,11 @@
         ]
       }
     },
-    "/api/v1/admin/projects/{id}": {
+    "/api/v1/projects/{id}": {
       "get": {
         "operationId": "ProjectController_findOne",
         "summary": "Get Project by project id",
-        "description": "This endpoint fetches the details of a specific project identified by its unique ID. It allows users to view project information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/admin/projects/{id}` endpoint, replacing `{id}` with the actual project ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the project’s details.\n- If the project with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific projects.",
+        "description": "This endpoint fetches the details of a specific project identified by its unique ID. It allows users to view project information in detail.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to retrieve.\n\n**How to Use**:\n- Send a GET request to the `/api/v1/projects/{id}` endpoint, replacing `{id}` with the actual project ID.\n- Ensure the ID is correctly formatted.\n\n**Response Details**:\n- On success, the API returns a JSON object with the project’s details.\n- If the project with the specified ID is not found, a 404 Not Found error is returned.\n\nThis endpoint is essential for accessing detailed information about specific projects.",
         "parameters": [
           {
             "name": "id",
@@ -812,7 +812,7 @@
       "patch": {
         "operationId": "ProjectController_update",
         "summary": "Update Project",
-        "description": "This endpoint updates the details of an existing project identified by its unique ID. You need to provide the updated project details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to update.\n\n**Request Body Parameters**:\n- **project_name** (optional): The updated name of the project.\n- **start_date** (optional): The updated start date of the project in ISO 8601 format.\n- **account** (optional): The updated account ID associated with the project.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/admin/projects/{id}` endpoint with the updated project details as a JSON object in the request body.\n- Ensure that the project ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated project object.\n- If the project is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date project information.",
+        "description": "This endpoint updates the details of an existing project identified by its unique ID. You need to provide the updated project details in the request body.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to update.\n\n**Request Body Parameters**:\n- **project_name** (optional): The updated name of the project.\n- **start_date** (optional): The updated start date of the project in ISO 8601 format.\n- **account** (optional): The updated account ID associated with the project.\n\n**How to Use**:\n- Send a PUT request to the `/api/v1/projects/{id}` endpoint with the updated project details as a JSON object in the request body.\n- Ensure that the project ID is in the URL and the request body includes valid fields.\n\n**Response Details**:\n- On successful update, the API returns the updated project object.\n- If the project is not found, a 404 Not Found error is returned.\n- Validation errors will result in a 400 Bad Request error.\n\nThis endpoint is crucial for maintaining accurate and up-to-date project information.",
         "parameters": [
           {
             "name": "id",
@@ -845,7 +845,7 @@
       "delete": {
         "operationId": "ProjectController_delete",
         "summary": "Delete Project",
-        "description": "This endpoint deletes an existing project from the system using its unique ID. It is a destructive operation that permanently removes the project.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/admin/projects/{id}` endpoint, replacing `{id}` with the actual project ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the project has been deleted.\n- If the project is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing project lifecycles by allowing deletions of obsolete or incorrect projects.",
+        "description": "This endpoint deletes an existing project from the system using its unique ID. It is a destructive operation that permanently removes the project.\n\n**Path Parameters**:\n- **id** (required): The unique identifier of the project to delete.\n\n**How to Use**:\n- Send a DELETE request to the `/api/v1/projects/{id}` endpoint, replacing `{id}` with the actual project ID.\n- Ensure that you have the necessary permissions to perform this operation.\n\n**Response Details**:\n- On successful deletion, the API returns a confirmation message indicating the project has been deleted.\n- If the project is not found, a 404 Not Found error is returned.\n- Permission errors will result in a 403 Forbidden error.\n\nThis endpoint is essential for managing project lifecycles by allowing deletions of obsolete or incorrect projects.",
         "parameters": [
           {
             "name": "id",
@@ -866,11 +866,11 @@
         ]
       }
     },
-    "/api/v1/admin/role-permissions": {
+    "/api/v1/role-permissions": {
       "post": {
         "operationId": "RolePermissionController_create",
         "summary": "Create a new role-permission association",
-        "description": "This endpoint creates a new association between a role and a permission. You need to include the role ID and permission ID in the request body. The API will return the created role-permission object.\n\n**Request Body Parameters**:\n- **role_id** (required): The ID of the role for which the permission is assigned.\n- **permission_id** (required): The ID of the permission being assigned to the role.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/role-permissions` endpoint with the role-permission details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created role-permission object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows you to associate roles with specific permissions, enabling effective permission management.",
+        "description": "This endpoint creates a new association between a role and a permission. You need to include the role ID and permission ID in the request body. The API will return the created role-permission object.\n\n**Request Body Parameters**:\n- **role_id** (required): The ID of the role for which the permission is assigned.\n- **permission_id** (required): The ID of the permission being assigned to the role.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/role-permissions` endpoint with the role-permission details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created role-permission object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows you to associate roles with specific permissions, enabling effective permission management.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -956,7 +956,7 @@
         ]
       }
     },
-    "/api/v1/admin/role-permissions/{id}": {
+    "/api/v1/role-permissions/{id}": {
       "get": {
         "operationId": "RolePermissionController_findOne",
         "summary": "Get a role-permission association by ID",
@@ -1037,11 +1037,11 @@
         ]
       }
     },
-    "/api/v1/admin/user-roles": {
+    "/api/v1/user-roles": {
       "post": {
         "operationId": "UserRoleController_create",
         "summary": "Create a new user-role association",
-        "description": "This endpoint is used to create a new user-role association. You need to include the user ID, role ID, project ID, and account ID in the request body. The API will return the created user-role object.\n\n**Request Body Parameters**:\n- **user_id** (required): The ID of the user to associate with a role.\n- **role_id** (required): The ID of the role to be assigned to the user.\n- **project_id** (required): The ID of the project for which the role is assigned.\n- **account_id** (required): The ID of the account under which the role is assigned.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/admin/user-roles` endpoint with the user-role details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created user-role object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows associating users with specific roles, enabling effective role management.",
+        "description": "This endpoint is used to create a new user-role association. You need to include the user ID, role ID, project ID, and account ID in the request body. The API will return the created user-role object.\n\n**Request Body Parameters**:\n- **user_id** (required): The ID of the user to associate with a role.\n- **role_id** (required): The ID of the role to be assigned to the user.\n- **project_id** (required): The ID of the project for which the role is assigned.\n- **account_id** (required): The ID of the account under which the role is assigned.\n\n**How to Use**:\n- Send a POST request to the `/api/v1/user-roles` endpoint with the user-role details as a JSON object in the request body.\n- Ensure all required fields are included and correctly formatted.\n\n**Response Details**:\n- On successful creation, the API returns the newly created user-role object with its generated ID.\n- If any required field is missing or the provided data is invalid, the API responds with a 400 Bad Request error.\n- Server errors or permission issues will result in a 500 Internal Server Error.\n\nThis endpoint allows associating users with specific roles, enabling effective role management.",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -1163,7 +1163,7 @@
         ]
       }
     },
-    "/api/v1/admin/user-roles/{id}": {
+    "/api/v1/user-roles/{id}": {
       "patch": {
         "operationId": "UserRoleController_update",
         "summary": "Update a user-role association by ID",

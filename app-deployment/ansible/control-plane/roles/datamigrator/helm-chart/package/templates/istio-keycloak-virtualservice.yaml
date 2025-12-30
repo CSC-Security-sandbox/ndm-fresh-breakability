@@ -1,0 +1,39 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $route := $istio.keycloakRoute | default dict -}}
+{{- if and ($istio.enabled | default false) ($route.enabled | default false) ($route.serviceHost | default "" | trim) }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ $route.virtualServiceName | default "keycloak-virtualservice" }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+  {{- range $host := $istio.hosts | default (list "*") }}
+  - {{ $host | quote }}
+  {{- end }}
+  gateways:
+  {{- $gatewayName := $istio.gateway.name | default "datamigrator-gateway" -}}
+  {{- $gatewayNamespace := $istio.gateway.namespace | default .Release.Namespace -}}
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+    - name: {{ $route.httpRouteName | default "keycloak-route" }}
+      match:
+        - uri:
+            {{- if $route.uri.regex | default "" | trim }}
+            regex: {{ $route.uri.regex | quote }}
+            {{- else if $route.uri.prefix | default "" | trim }}
+            prefix: {{ $route.uri.prefix | quote }}
+            {{- else }}
+            prefix: "/keycloak"
+            {{- end }}
+      route:
+        - destination:
+            host: {{ $route.serviceHost | quote }}
+            port:
+              number: {{ $route.servicePort | default 80 }}
+{{- end }}

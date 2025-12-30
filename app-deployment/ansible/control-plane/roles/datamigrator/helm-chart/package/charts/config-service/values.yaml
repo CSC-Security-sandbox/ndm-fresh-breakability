@@ -56,7 +56,7 @@ env:
   - name: ENABLE_PRE_LIST_PATH
     value: "false"
   - name: KEYCLOAK_BASE_URL
-    value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
+    value: "http://keycloak.keycloak.svc.cluster.local/keycloak"
   - name: KEYCLOAK_REALM
     value: "datamigrator"
   - name: TEMPORAL_ADDRESS
@@ -75,8 +75,10 @@ service:
 # Ingress for User-facing APIs
 # ==============================
 ingressThrottle:
-  pathPrefix: api/v1/
-  trailingPath: "(servers|paths-upload|support-bundle)"
+  prefixPaths:
+    - /api/v1/servers
+    - /api/v1/paths-upload
+    - /api/v1/support-bundle
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -91,8 +93,10 @@ ingressThrottle:
 # Ingress for CP and worker
 # ==============================
 ingress:
-  pathPrefix: api/v1/
-  trailingPath: "(work-manager|config-docs)"
+  # Use prefix matching - automatically matches all subpaths
+  prefixPaths:
+    - /api/v1/work-manager
+    - /api/v1/config-docs
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"

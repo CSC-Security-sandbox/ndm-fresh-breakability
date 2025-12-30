@@ -1,0 +1,93 @@
+---
+- name: Ensure Istio install prerequisites are present
+  ansible.builtin.package:
+    name: "{{ istio_prereq_packages }}"
+    state: present
+  when: istio_prereq_packages | length > 0
+
+- name: Resolve Istio download architecture
+  ansible.builtin.set_fact:
+    istio_download_arch: "{{ istio_arch_map[ansible_architecture] | default(ansible_architecture) }}"
+
+- name: Define Istio archive metadata
+  ansible.builtin.set_fact:
+    istio_archive_filename: "istio-{{ istio_version }}-{{ istio_download_os }}-{{ istio_download_arch }}.tar.gz"
+    istio_archive_url: "https://github.com/istio/istio/releases/download/{{ istio_version }}/istio-{{ istio_version }}-{{ istio_download_os }}-{{ istio_download_arch }}.tar.gz"
+    istio_archive_path: "{{ istio_tmp_dir }}/istio-{{ istio_version }}-{{ istio_download_os }}-{{ istio_download_arch }}.tar.gz"
+    istio_extract_path: "{{ istio_tmp_dir }}/istio-{{ istio_version }}"
+
+- name: Ensure Istio temp directory exists
+  ansible.builtin.file:
+    path: "{{ istio_tmp_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Download Istio release archive
+  ansible.builtin.get_url:
+    url: "{{ istio_archive_url }}"
+    dest: "{{ istio_archive_path }}"
+    mode: "0644"
+    force: false
+
+- name: Extract Istio archive
+  ansible.builtin.unarchive:
+    src: "{{ istio_archive_path }}"
+    dest: "{{ istio_tmp_dir }}"
+    remote_src: true
+    creates: "{{ istio_extract_path }}"
+
+- name: Install istioctl binary
+  ansible.builtin.copy:
+    src: "{{ istio_extract_path }}/bin/istioctl"
+    dest: "{{ istioctl_install_path }}"
+    mode: "0755"
+    owner: root
+    group: root
+    remote_src: true
+
+- name: Check if Istio CRDs exist
+  ansible.builtin.command: kubectl get crd gateways.networking.istio.io
+  register: istio_crd_check
+  failed_when: false
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ istio_kubeconfig_path }}"
+
+- name: Install Istio control plane via istioctl
+  ansible.builtin.command: >-
+    {{ istioctl_install_path }} install --set profile={{ istio_install_profile | default('default') }} -y
+  environment:
+    KUBECONFIG: "{{ istio_kubeconfig_path }}"
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+  when: istio_crd_check.rc != 0
+
+- name: Wait for Istio namespace
+  ansible.builtin.command: kubectl get namespace {{ istio_namespace }}
+  register: istio_namespace_check
+  changed_when: false
+  retries: "{{ istio_namespace_wait_retries }}"
+  delay: "{{ istio_namespace_wait_delay }}"
+  until: istio_namespace_check.rc == 0
+  environment:
+    KUBECONFIG: "{{ istio_kubeconfig_path }}"
+
+- name: Wait for Istio control plane rollouts
+  ansible.builtin.command: >-
+    kubectl rollout status {{ item.kind }}/{{ item.name }} -n {{ istio_namespace }} --timeout=120s
+  register: istio_rollout_status
+  changed_when: false
+  retries: "{{ istio_rollout_retries }}"
+  delay: "{{ istio_rollout_delay }}"
+  until: istio_rollout_status.rc == 0
+  loop: "{{ istio_rollout_resources }}"
+  loop_control:
+    label: "{{ item.kind }}/{{ item.name }}"
+  environment:
+    KUBECONFIG: "{{ istio_kubeconfig_path }}"
+
+- name: Verify Istio installation
+  ansible.builtin.command: "{{ istioctl_install_path }} version --remote=false"
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ istio_kubeconfig_path }}"
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"

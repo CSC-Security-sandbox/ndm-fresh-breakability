@@ -1,0 +1,125 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $jwt := $istio.jwt | default dict -}}
+{{- if and ($istio.enabled | default false) ($jwt.enabled | default false) }}
+---
+# RequestAuthentication validates JWT tokens from Keycloak
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: {{ $jwt.requestAuthenticationName | default "keycloak-jwt" }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if $jwt.selector }}
+  selector:
+    matchLabels:
+      {{- range $key, $value := $jwt.selector }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+  {{- end }}
+  jwtRules:
+  - issuer: {{ $jwt.issuer | quote }}
+    jwksUri: {{ $jwt.jwksUri | quote }}
+    {{- if $jwt.audiences }}
+    audiences:
+    {{- range $jwt.audiences }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- end }}
+    {{- if $jwt.fromHeaders }}
+    fromHeaders:
+    {{- range $jwt.fromHeaders }}
+    - name: {{ .name | quote }}
+      {{- if .prefix }}
+      prefix: {{ .prefix | quote }}
+      {{- end }}
+    {{- end }}
+    {{- else }}
+    fromHeaders:
+    - name: "Authorization"
+      prefix: "Bearer "
+    {{- end }}
+    {{- if $jwt.forwardOriginalToken }}
+    forwardOriginalToken: {{ $jwt.forwardOriginalToken }}
+    {{- end }}
+    {{- if $jwt.outputPayloadToHeader }}
+    outputPayloadToHeader: {{ $jwt.outputPayloadToHeader | quote }}
+    {{- end }}
+
+---
+# AuthorizationPolicy enforces JWT authentication on protected endpoints
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $jwt.authPolicyName | default "require-jwt" }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if $jwt.selector }}
+  selector:
+    matchLabels:
+      {{- range $key, $value := $jwt.selector }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+  {{- end }}
+  action: {{ $jwt.action | default "ALLOW" }}
+  rules:
+  {{- if $jwt.protectedPaths }}
+  # Protected paths require valid JWT
+  {{- range $idx, $pathConfig := $jwt.protectedPaths }}
+  - to:
+    - operation:
+        {{- if $pathConfig.paths }}
+        paths:
+        {{- range $pathConfig.paths }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+        {{- if $pathConfig.methods }}
+        methods:
+        {{- range $pathConfig.methods }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+    when:
+    - key: request.auth.claims[iss]
+      values: [{{ $jwt.issuer | quote }}]
+    {{- if $pathConfig.requiredClaims }}
+    {{- range $claim := $pathConfig.requiredClaims }}
+    - key: request.auth.claims[{{ $claim.name }}]
+      {{- if $claim.values }}
+      values:
+      {{- range $claim.values }}
+      - {{ . | quote }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+
+---
+# AuthorizationPolicy for public endpoints (no JWT required)
+{{- if $jwt.publicPaths }}
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $jwt.publicAuthPolicyName | default "allow-public" }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if $jwt.selector }}
+  selector:
+    matchLabels:
+      {{- range $key, $value := $jwt.selector }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+  {{- end }}
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        paths:
+        {{- range $jwt.publicPaths }}
+        - {{ . | quote }}
+        {{- end }}
+{{- end }}
+{{- end }}

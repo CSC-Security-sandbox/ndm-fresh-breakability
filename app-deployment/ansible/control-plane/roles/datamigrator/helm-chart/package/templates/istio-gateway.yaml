@@ -1,0 +1,29 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $selector := $istio.gateway.selector | default (dict "istio" "ingressgateway") -}}
+{{- if $istio.enabled | default false }}
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ $istio.gateway.name | default "datamigrator-gateway" }}
+  namespace: {{ $istio.gateway.namespace | default .Release.Namespace }}
+spec:
+  selector:
+  {{- range $key, $value := $selector }}
+    {{ $key }}: {{ $value }}
+  {{- end }}
+  servers:
+    - port:
+        number: {{ $istio.gateway.port | default 80 }}
+        name: {{ $istio.gateway.portName | default "http" }}
+        protocol: {{ $istio.gateway.protocol | default "HTTP" }}
+      hosts:
+      {{- range $host := $istio.hosts | default (list "*") }}
+        - {{ $host | quote }}
+      {{- end }}
+      {{- if and ($istio.gateway.tls.enabled | default false) ($istio.gateway.tls.secretName | default "") }}
+      tls:
+        mode: SIMPLE
+        credentialName: {{ $istio.gateway.tls.secretName | quote }}
+      {{- end }}
+{{- end }}

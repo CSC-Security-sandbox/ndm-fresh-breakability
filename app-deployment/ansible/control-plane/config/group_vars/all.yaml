@@ -2,6 +2,127 @@
 # Build Version
 build_version: "0.1.0"
 
+# Istio configuration
+enable_istio: true
+istio_version: "1.24.0"
+istio_install_profile: "default"
+istio_namespace: "istio-system"
+
+# Update to match your public DNS entry (used by Istio Gateway + VirtualServices)
+public_ingress_hosts: &public_ingress_hosts
+  - datamigrator.local
+
+# Allow the Istio gateway/VirtualServices to accept any host header (so raw IPs work)
+istio_gateway_allow_any_host: true
+
+# Leave empty to reuse the host's private IP; otherwise supply a MetalLB-assigned address
+istio_ingressgateway_loadbalancer_ip: ""
+
+istio_gateway:
+  name: datamigrator-gateway
+  namespace: istio-system
+  hosts: *public_ingress_hosts
+  port: 443
+  port_name: https
+  protocol: HTTPS
+  selector:
+    istio: ingressgateway
+  tls:
+    enabled: true
+    secretName: datamigrator-istio-tls
+
+istio_keycloak_route:
+  enabled: true
+  virtualservice_name: keycloak-virtualservice
+  http_route_name: keycloak
+  service_host: keycloak.keycloak.svc.cluster.local
+  service_port: 80
+  path_prefix: /keycloak
+
+# JWT Authentication at Istio Gateway
+istio_jwt_auth:
+  enabled: true
+  request_authentication_name: keycloak-jwt
+  auth_policy_name: require-jwt
+  public_auth_policy_name: allow-public
+  
+  # Keycloak JWT validation
+  # IMPORTANT: Two URLs required for JWT validation to work:
+  # 1. issuer: External URL that matches JWT 'iss' claim (what clients see)
+  # 2. jwks_uri: Internal cluster URL for Istio to fetch public keys
+  issuer: "https://{{ ansible_host }}/keycloak/realms/datamigrator"
+  jwks_uri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
+  # audiences:
+  #   - datamigrator-client  # Commented out - Keycloak may not include aud claim by default
+  
+  # Forward JWT to backend services for @Auth decorator validation
+  forward_original_token: true
+  
+  # JWT extraction from request headers
+  from_headers:
+    - name: "Authorization"
+      prefix: "Bearer "
+  
+  # Public endpoints (no JWT required)
+  public_paths:
+    - /api/v1/health
+    - /api/v1/secrets/redis  # Worker authentication endpoint
+    - /keycloak/*
+    - /temporal/*
+    - /ui/vault/*
+    - /v1/*
+    - /grafana/*
+    - /prometheus/*
+    - /*  # UI static files - catch-all for React app (API paths protected separately)
+  
+  # Protected endpoints (JWT required)
+  protected_paths:
+    # Admin Service - User facing APIs (throttled)
+    - paths:
+        - /api/v1/accounts*
+        - /api/v1/user-status*
+        - /api/v1/reset-password*
+        - /api/v1/create-user*
+        - /api/v1/user-roles*
+        - /api/v1/user-permissions*
+        - /api/v1/roles*
+        - /api/v1/users*
+        - /api/v1/projects*
+        - /api/v1/setting*
+        - /api/v1/about-ndm*
+    # Admin Service - CP and worker endpoints
+    - paths:
+        - /api/v1/admin-docs*
+        - /api/v1/inviteUser*
+        - /api/v1/email*
+        - /api/v1/worker-registration*
+    # Config Service
+    - paths:
+        - /api/v1/servers*
+        - /api/v1/paths-upload*
+        - /api/v1/support-bundle*
+        - /api/v1/work-manager*
+        - /api/v1/config-docs*
+    # Jobs Service
+    - paths:
+        - /api/v1/workers*
+        - /api/v1/jobs*
+        - /api/v1/job-run*
+        - /api/v1/tasks*
+        - /api/v1/bulk-discovery*
+        - /api/v1/bulk-migrate*
+        - /api/v1/bulk-cutover*
+        - /api/v1/jobs-docs*
+        - /api/v1/statscheck*
+    # DB Writer Service
+    - paths:
+        - /api/v1/redis-consumer*
+        - /api/v1/db-writer-docs*
+    # Reports Service
+    - paths:
+        - /api/v1/report*
+        - /api/v1/reports-docs*
+
 # Microservices release tags of docker images
 datamigrator_ui_tag: "latest"
 config_service_tag: "latest"
@@ -58,7 +179,7 @@ microk8s_plugins:
   gpu: false # Automatic enablement of Nvidia CUDA
   helm: true # Helm 2 - the package manager for Kubernetes
   helm3: true # Helm 3 - Kubernetes package manager
-  istio: false # Core Istio service mesh services
+  istio: "{{ enable_istio | default(false) | bool }}" # Core Istio service mesh services
   jaeger: false # Kubernetes Jaeger operator with its simple config
   knative: false # The Knative framework on Kubernetes.
   kubeflow: false # Kubeflow for easy ML deployments

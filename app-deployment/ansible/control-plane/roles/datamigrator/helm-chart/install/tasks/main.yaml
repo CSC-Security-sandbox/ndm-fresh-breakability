@@ -128,12 +128,60 @@
   ignore_errors: yes
   when: local_cluster is defined
 
-- name: Install Helm chart
+- name: Wait for Istio CRDs when mesh is enabled
   become: yes
-  shell: |
-    helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz
-  register: helm_install_output
+  vars:
+    istio_crds:
+      - gateways.networking.istio.io
+      - virtualservices.networking.istio.io
+  shell: kubectl get crd {{ item }}
+  register: istio_crd_check
+  retries: 30
+  delay: 10
+  until: istio_crd_check.rc == 0
+  loop: "{{ istio_crds }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - local_cluster is defined
+    - enable_istio | default(false) | bool
+
+- block:
+    - name: Install Helm chart
+      become: yes
+      shell: "{{ helm_command }}"
+      register: helm_install_output
+      environment: "{{ helm_environment }}"
+  rescue:
+    - name: Detect Helm pending-operation failure
+      ansible.builtin.set_fact:
+        helm_pending_failure: "{{ 'another operation' in (ansible_failed_result.stderr | default(''))
+          or 'another operation' in (ansible_failed_result.msg | default('')) }}"
+    - name: Force uninstall stuck Helm release
+      become: yes
+      shell: helm uninstall datamigrator -n datamigrator --keep-history
+      environment: "{{ helm_environment }}"
+      register: helm_force_uninstall
+      failed_when: false
+      changed_when: helm_force_uninstall.rc == 0
+      when: helm_pending_failure | bool
+    - name: Retry Helm chart install after cleanup
+      become: yes
+      shell: "{{ helm_command }}"
+      register: helm_install_output
+      environment: "{{ helm_environment }}"
+      when: helm_pending_failure | bool
+    - name: Fail Helm install
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg }}"
+      when: not helm_pending_failure | bool
   when: local_cluster is defined
+  vars:
+    helm_command: >-
+      helm upgrade --install datamigrator -n datamigrator $HOME/helm-chart.tgz --timeout 15m
+    helm_environment:
+      PATH: "/snap/bin:/usr/local/bin:/usr/bin:{{ ansible_env.PATH | default('') }}"
+      KUBECONFIG: "/var/snap/microk8s/current/credentials/client.config"
 
 - name: Debug Helm install output
   debug:

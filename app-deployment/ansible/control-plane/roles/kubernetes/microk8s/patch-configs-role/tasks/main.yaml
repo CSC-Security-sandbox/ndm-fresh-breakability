@@ -44,6 +44,49 @@
     executable: /bin/bash
     chdir: $HOME
 
+- name: Check if Istio namespace exists
+  become: yes
+  shell: kubectl get namespace istio-system
+  register: istio_namespace_status
+  failed_when: false
+  changed_when: false
+  when: enable_istio | default(false) | bool
+
+- name: Wait for Istio ingressgateway service
+  become: yes
+  shell: kubectl get svc istio-ingressgateway -n istio-system
+  register: istio_ingress_svc
+  retries: 15
+  delay: 10
+  until: istio_ingress_svc.rc == 0
+  when:
+    - enable_istio | default(false) | bool
+    - istio_namespace_status is defined
+    - istio_namespace_status.rc == 0
+
+- name: Create Istio ingressgateway service patch
+  become: yes
+  template:
+    src: istio-ingressgateway-service-patch.j2
+    dest: $HOME/ingress/istio-ingressgateway-service-patch.yaml
+  vars:
+    istio_lb_ip: "{{ istio_ingressgateway_loadbalancer_ip | default(private_ip, true) }}"
+  when:
+    - enable_istio | default(false) | bool
+    - istio_namespace_status is defined
+    - istio_namespace_status.rc == 0
+
+- name: Patch Istio ingressgateway service with MetalLB IP
+  become: yes
+  shell: kubectl patch svc istio-ingressgateway -n istio-system --type merge --patch-file $HOME/ingress/istio-ingressgateway-service-patch.yaml
+  args:
+    executable: /bin/bash
+    chdir: $HOME
+  when:
+    - enable_istio | default(false) | bool
+    - istio_namespace_status is defined
+    - istio_namespace_status.rc == 0
+
 - name: Delete ingress directory
   become: yes
   file:
