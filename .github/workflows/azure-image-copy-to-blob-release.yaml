@@ -3,18 +3,25 @@ name: Azure VHD Export & SAS URL Generation
 on:
   workflow_dispatch:
     inputs:
-      sig_image_id_worker:
+      release_sig_image_id_worker:
         description: "Worker SIG Image ID"
         required: true
-      sig_image_id_controlplane:
+      release_sig_image_id_controlplane:
         description: "Control Plane SIG Image ID"
         required: true
+      copy_sas_duration_hours:
+        description: "SAS token(read-only-access) duration for copy of disk to blob in hours (default: 1)"
+        required: false
+        default: "1"
 
 env:
   SOURCE_RESOURCE_GROUP: datamigrate-acr-resource-group
   SOURCE_STORAGE_ACCOUNT: netappvhdexports
   SOURCE_CONTAINER_NAME: ndm-releases-vhd
   SOURCE_AZURE_REGION: eastus
+  AZURE_VM_HOST: ${{ secrets.SAS_AZURE_VM_HOST }}
+  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
+
 
 jobs:
   vhd-export:
@@ -28,26 +35,30 @@ jobs:
       - name: Install SSH Tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y sshpass
+          sudo apt-get install -y sshpass openssh-client
+
+      - name: Add VM SSH Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ env.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
       - name: SSH into VM and Export VHDs
         run: |
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ubuntu@20.51.200.139 << 'REMOTE_SCRIPT'
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
           
           export SOURCE_RESOURCE_GROUP="datamigrate-acr-resource-group"
           export SOURCE_STORAGE_ACCOUNT="netappvhdexports"
           export SOURCE_CONTAINER_NAME="ndm-releases-vhd"
           export SOURCE_AZURE_REGION="eastus"
-          export SIG_IMAGE_WORKER="${{ github.event.inputs.sig_image_id_worker }}"
-          export SIG_IMAGE_CP="${{ github.event.inputs.sig_image_id_controlplane }}"
+          export SIG_IMAGE_WORKER="${{ github.event.inputs.release_sig_image_id_worker }}"
+          export SIG_IMAGE_CP="${{ github.event.inputs.release_sig_image_id_controlplane }}"
+          export SAS_DURATION_HOURS="${{ env.SAS_DURATION_HOURS }}" 
           export TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           
           echo "Starting VHD export - Timestamp: $TIMESTAMP"
-          
-          # Login to Azure
-          az login --service-principal -u "${{ secrets.AZURE_CLIENT_ID }}" \
-            -p "${{ secrets.AZURE_CLIENT_SECRET }}" \
-            --tenant "${{ secrets.AZURE_TENANT_ID }}" --output none
+          echo "SAS Duration: ${SAS_DURATION_HOURS} hours"  
           
           # Get storage account key
           STORAGE_KEY=$(az storage account keys list \
@@ -91,12 +102,15 @@ jobs:
             local blob_name=$2
             
             echo "Copying $disk_name to blob storage..."
+
+            local sas_seconds=$(( ${SAS_DURATION_HOURS} * 3600 ))
+
             
             DISK_SAS=$(az disk grant-access \
               --resource-group "$SOURCE_RESOURCE_GROUP" \
               --name "$disk_name" \
               --access-level Read \
-              --duration-in-seconds 3600 \
+              --duration-in-seconds $sas_seconds \
               --query accessSAS -o tsv)
             
             az storage blob copy start \
@@ -106,6 +120,10 @@ jobs:
               --account-name "$SOURCE_STORAGE_ACCOUNT" \
               --account-key "$STORAGE_KEY" \
               --output none
+
+            # Timeout configuration
+            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 5 min buffer, 30s check intervals
+            local iteration=0
             
             while true; do
               STATUS=$(az storage blob show \
@@ -116,9 +134,20 @@ jobs:
                 --account-key "$STORAGE_KEY" 2>/dev/null)
               
               [ "$STATUS" = "success" ] && break
-              [ "$STATUS" = "failed" ] || [ "$STATUS" = "aborted" ] && return 1
+              if [ "$STATUS" = "failed" ] || [ "$STATUS" = "aborted" ]; then
+                echo "ERROR: Copy failed with status: $STATUS"
+                az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+                return 1
+              fi
               
-              echo "Copy status: $STATUS"
+              iteration=$((iteration + 1))
+              if [ $iteration -ge $max_iterations ]; then
+                echo "ERROR: Copy timeout after $((iteration * 30)) seconds"
+                az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+                return 1
+              fi
+
+              echo "Copy status: $STATUS (${iteration}/${max_iterations})"
               sleep 30
             done
             
@@ -215,14 +244,32 @@ jobs:
         run: |
           mkdir -p /tmp/vhd-export
           
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
-            ubuntu@20.51.200.139:~/vhd-export-info.txt /tmp/vhd-export/info.txt 2>/dev/null || true
+          echo "Retrieving vhd-export-info.txt..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve vhd-export-info.txt from remote VM." >&2
+            exit 1
+          fi
           
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
-            'ubuntu@20.51.200.139:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/ 2>/dev/null || true
+          echo "Retrieving storage key file..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            'ubuntu@${{ env.AZURE_VM_HOST }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve storage-key-*.txt from remote VM." >&2
+            exit 1
+          fi
           
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp -o StrictHostKeyChecking=no \
-            'ubuntu@20.51.200.139:~/vhd-checksums-*.txt' /tmp/vhd-export/ 2>/dev/null || true
+          echo "Retrieving checksum file..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            'ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve vhd-checksums-*.txt from remote VM." >&2
+            exit 1
+          fi
+          
+          echo "All files retrieved successfully"
+          ls -lh /tmp/vhd-export/
 
       - name: Parse and Output Blob Information
         id: blob-info
@@ -237,6 +284,18 @@ jobs:
           # Get storage key
           STORAGE_KEY_FILE=$(ls -t /tmp/vhd-export/storage-key-*.txt 2>/dev/null | head -1)
           STORAGE_KEY=$(cat "$STORAGE_KEY_FILE" 2>/dev/null | sed 's/[[:space:]]*//g')
+
+          # Mask storage key immediately after retrieval
+          [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
+
+          if [ -z "$STORAGE_KEY_FILE" ] || [ ! -f "$STORAGE_KEY_FILE" ]; then
+            echo "ERROR: Storage key file not found." >&2
+            exit 1
+          fi
+          if [ -z "$STORAGE_KEY" ]; then
+            echo "ERROR: Storage key is empty." >&2
+            exit 1
+          fi
           
           echo "storage_account=$STORAGE_ACCOUNT" >> $GITHUB_OUTPUT
           echo "container_name=$CONTAINER_NAME" >> $GITHUB_OUTPUT
@@ -247,7 +306,7 @@ jobs:
           [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
 
       - name: Upload Export Info
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.3.3
         with:
           name: vhd-export-info
           path: /tmp/vhd-export/
@@ -284,4 +343,6 @@ jobs:
           else
             echo "No checksum file found"
           fi
+
+
  
