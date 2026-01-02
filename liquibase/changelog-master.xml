@@ -506,17 +506,17 @@
       </rollback>
    </changeSet>
 
-   <changeSet id="20251216_01_alter_config_and_file_server_table.sql" author="ashish">
-      <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table.sql"/>
+   <changeSet id="20251215_01_alter_jobconfig_add_should_scan_ads_column.sql" author="ab">
+      <sqlFile path="liquibase/20251215_01_alter_jobconfig_add_should_scan_ads_column.sql"/>
       <rollback>
-         <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table_rollback.sql"/>
+         <sqlFile path="liquibase/rollback/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
       </rollback>
    </changeSet>
 
    <changeSet id="20251216_01_alter_config_and_file_server_table.sql" author="ashish">
       <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table.sql"/>
       <rollback>
-         <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table_rollback.sql"/>
+         <sqlFile path="liquibase/rollback/20251216_01_alter_config_and_file_server_table_rollback.sql"/>
       </rollback>
    </changeSet>
    
