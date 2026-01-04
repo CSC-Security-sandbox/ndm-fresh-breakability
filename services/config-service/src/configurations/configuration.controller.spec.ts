@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
-import { ConfigurationType } from 'src/constants/enums';
-import { ConfigDTO } from './dto/config.dto';
+import { ConfigurationType, ServerType } from 'src/constants/enums';
+import { ConfigDTO, FetchZonesRequestDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, FetchZonesResponseDTO } from './dto/config.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
@@ -19,7 +19,10 @@ describe('ConfigurationController', () => {
     updateConfiguration: jest.fn(),
     refreshConfig: jest.fn(),
     remove: jest.fn(),
-    isConfigNameUnique: jest.fn()
+    isConfigNameUnique: jest.fn(),
+    validateConnection: jest.fn(),
+    fetchCertificate: jest.fn(),
+    fetchZones: jest.fn()
   };
 
   beforeEach(async () => {
@@ -51,6 +54,7 @@ describe('ConfigurationController', () => {
       const createConfigDTO: ConfigDTO = {
         configName: "testConfig",
         configType: ConfigurationType.file,
+        serverType: ServerType.other,
         workingDirectory: {
           pathName: '/temp',
           pathId: '123123',
@@ -100,13 +104,25 @@ describe('ConfigurationController', () => {
   describe('getConfiguration', () => {
     it('should return a configuration by ID', async () => {
       const configId = '1';
-      const config = {}; 
+      const config = {
+        id: '1',
+        configName: "testConfig",
+        configType: ConfigurationType.file,
+        serverType: ServerType.other,
+        fileServers: [],
+        workingDirectory: {
+          pathName: '/temp',
+          pathId: '123123',
+          workingDirectory: '/working-directory'
+        },
+        projectId: "2345678",
+      }; 
 
       mockConfigurationService.getConfigById.mockResolvedValue(config);
 
       const result = await controller.getConfiguration(configId);
       expect(result).toEqual(config);
-      expect(service.getConfigById).toHaveBeenCalledWith(configId);
+      expect(mockConfigurationService.getConfigById).toHaveBeenCalledWith(configId, undefined);
     });
 
   });
@@ -135,6 +151,7 @@ describe('ConfigurationController', () => {
 
       const updateConfigDTO: ConfigDTO = {
         configName: "testConfigUpdate",
+        serverType: ServerType.other,
         configType: ConfigurationType.file,
         fileServers: [],
         workingDirectory: {
@@ -168,6 +185,70 @@ describe('ConfigurationController', () => {
     });
   });
 
+  describe('refreshConfig', () => {
+    it('should refresh configuration successfully', async () => {
+      const configId = '1';
+      const fileServerId = 'file-server-123';
+      const user: UserDetails = {
+        user: {
+          id: '23',
+          roles: []
+        },
+        trackId: 'track-123'
+      };
+      const refreshResult = {
+        id: configId,
+        status: 'refreshed',
+        message: 'Configuration refreshed successfully',
+        updatedAt: new Date().toISOString()
+      };
+
+      mockConfigurationService.refreshConfig.mockResolvedValue(refreshResult);
+
+      const result = await controller.refreshConfig(configId, user, fileServerId);
+      expect(result).toEqual(refreshResult);
+      expect(mockConfigurationService.refreshConfig).toHaveBeenCalledWith(configId, user.trackId, fileServerId);
+    });
+
+    it('should refresh configuration without fileServerId', async () => {
+      const configId = '1';
+      const user: UserDetails = {
+        user: {
+          id: '23',
+          roles: []
+        },
+        trackId: 'track-123'
+      };
+      const refreshResult = {
+        id: configId,
+        status: 'refreshed',
+        message: 'Configuration refreshed successfully'
+      };
+
+      mockConfigurationService.refreshConfig.mockResolvedValue(refreshResult);
+
+      const result = await controller.refreshConfig(configId, user);
+      expect(result).toEqual(refreshResult);
+      expect(mockConfigurationService.refreshConfig).toHaveBeenCalledWith(configId, user.trackId, undefined);
+    });
+
+    it('should handle refresh config errors', async () => {
+      const configId = 'invalid-id';
+      const user: UserDetails = {
+        user: {
+          id: '23',
+          roles: []
+        },
+        trackId: 'track-123'
+      };
+
+      mockConfigurationService.refreshConfig.mockRejectedValue(new NotFoundException('Configuration not found'));
+
+      await expect(controller.refreshConfig(configId, user)).rejects.toThrow(NotFoundException);
+      expect(mockConfigurationService.refreshConfig).toHaveBeenCalledWith(configId, user.trackId, undefined);
+    });
+  });
+
   describe('remove', () => {
     it('should delete configuration by ID', async () => {
       const configId = '1';
@@ -178,6 +259,189 @@ describe('ConfigurationController', () => {
       const result = await controller.remove(configId);
       expect(result).toEqual(deleteResult);
       expect(service.remove).toHaveBeenCalledWith(configId);
+    });
+  });
+
+  describe('validateConnection', () => {
+    it('should validate connection successfully', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: '10.192.7.32',
+        port: 8080,
+        username: 'root',
+        password: 'password123',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+      const validationResult = { isValid: true, message: 'Connection successful' };
+
+      mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
+
+      const result = await controller.validateConnection(request);
+      expect(result).toEqual(validationResult);
+      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+    });
+
+    it('should return invalid connection when validation fails', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: '10.192.7.32',
+        port: 8080,
+        username: 'wronguser',
+        password: 'wrongpassword',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+      const validationResult = { isValid: false, message: 'Invalid credentials' };
+
+      mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
+
+      const result = await controller.validateConnection(request);
+      expect(result).toEqual(validationResult);
+      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+    });
+
+    it('should handle connection validation errors', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: 'invalid.host',
+        port: 8080,
+        username: 'root',
+        password: 'password123',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+
+      mockConfigurationService.validateConnection.mockRejectedValue(new Error('Network error'));
+
+      await expect(controller.validateConnection(request)).rejects.toThrow('Network error');
+      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+    });
+  });
+
+  describe('fetchCertificate', () => {
+    it('should fetch certificate successfully', async () => {
+      const request: FetchCertificateRequestDTO = {
+        host: '10.192.7.32',
+        serverType: ServerType.dell
+      };
+      const certificateResponse: FetchCertificateResponseDTO = {
+        isSelfSigned: true,
+        subject: {
+          CN: 'isilon.example.com',
+          O: 'Dell Technologies',
+          C: 'US'
+        },
+        issuer: {
+          CN: 'isilon.example.com',
+          O: 'Dell Technologies',
+          C: 'US'
+        },
+        validFrom: '2024-01-01T00:00:00.000Z',
+        validTo: '2025-01-01T00:00:00.000Z',
+        serialNumber: '01:23:45:67:89:AB:CD:EF',
+        fingerprint: 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD',
+        fingerprint256: '12:34:56:78:9A:BC:DE:F0:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00',
+        subjectAltNames: ['DNS:isilon.example.com', 'IP:10.192.7.32'],
+        daysRemaining: 365,
+        isExpired: false,
+        issuerChain: [],
+        certificatePEM: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----',
+        host: '10.192.7.32',
+        port: 443,
+        hostMatches: true,
+        certificateHosts: ['isilon.example.com', '10.192.7.32']
+      };
+
+      mockConfigurationService.fetchCertificate.mockResolvedValue(certificateResponse);
+
+      const result = await controller.fetchCertificate(request);
+      expect(result).toEqual(certificateResponse);
+      expect(mockConfigurationService.fetchCertificate).toHaveBeenCalledWith(request);
+    });
+
+    it('should handle certificate fetch errors', async () => {
+      const request: FetchCertificateRequestDTO = {
+        host: 'invalid.host',
+        serverType: ServerType.dell
+      };
+
+      mockConfigurationService.fetchCertificate.mockRejectedValue(new Error('Connection timeout'));
+
+      await expect(controller.fetchCertificate(request)).rejects.toThrow('Connection timeout');
+      expect(mockConfigurationService.fetchCertificate).toHaveBeenCalledWith(request);
+    });
+  });
+
+  describe('fetchZones', () => {
+    it('should fetch zones successfully', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: '10.192.7.32',
+        port: 8080,
+        username: 'root',
+        password: 'password123',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+      const zonesResponse: FetchZonesResponseDTO = {
+        zones: [
+          {
+            zoneId: 1,
+            zoneName: 'System',
+            ipAddresses: ['192.168.1.10', '192.168.1.11'],
+            smartConnectFqdn: 'isilon.lab.local',
+            ssip: '192.168.1.100'
+          },
+          {
+            zoneId: 2,
+            zoneName: 'zone1',
+            ipAddresses: ['192.168.1.20', '192.168.1.21']
+          }
+        ],
+        totalZones: 2,
+        totalIpAddresses: 4
+      };
+
+      mockConfigurationService.fetchZones.mockResolvedValue(zonesResponse);
+
+      const result = await controller.fetchZones(request);
+      expect(result).toEqual(zonesResponse);
+      expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
+    });
+
+    it('should handle empty zones response', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: '10.192.7.32',
+        port: 8080,
+        username: 'root',
+        password: 'password123',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+      const emptyZonesResponse: FetchZonesResponseDTO = {
+        zones: [],
+        totalZones: 0,
+        totalIpAddresses: 0
+      };
+
+      mockConfigurationService.fetchZones.mockResolvedValue(emptyZonesResponse);
+
+      const result = await controller.fetchZones(request);
+      expect(result).toEqual(emptyZonesResponse);
+      expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
+    });
+
+    it('should handle zones fetch errors', async () => {
+      const request: FetchZonesRequestDTO = {
+        serverType: ServerType.dell,
+        host: '10.192.7.32',
+        port: 8080,
+        username: 'wronguser',
+        password: 'wrongpassword',
+        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+      };
+
+      mockConfigurationService.fetchZones.mockRejectedValue(new Error('Authentication failed'));
+
+      await expect(controller.fetchZones(request)).rejects.toThrow('Authentication failed');
+      expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
     });
   });
 });
