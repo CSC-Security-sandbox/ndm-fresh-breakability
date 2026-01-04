@@ -463,6 +463,62 @@ it('JOB_RUN_DETAILS_MAPPER handles invalid stat_value gracefully', () => {
     });
 });
 
+it('JOB_RUN_DETAILS_MAPPER includes file_server_name when present (non-OtherNAS)', () => {
+    const input = [{
+        volume_path: '/mnt/data',
+        config_name: 'config1',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 60,
+        file_server_name: 'zone1'
+    }];
+    const result = JOB_RUN_DETAILS_MAPPER(input as any);
+    expect(result).toEqual([
+        { value: '/mnt/data', category: 'File Server Info', valueType: 'string', sub_category: 'Path' },
+        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
+        { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
+        { value: 'zone1', category: 'File Server Info', valueType: 'string', sub_category: 'File Server Name' },
+        { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
+        { value: '1min', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
+    ]);
+});
+
+it('JOB_RUN_DETAILS_MAPPER excludes file_server_name when null (OtherNAS)', () => {
+    const input = [{
+        volume_path: '/mnt/data',
+        config_name: 'config1',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 60,
+        file_server_name: null
+    }];
+    const result = JOB_RUN_DETAILS_MAPPER(input as any);
+    expect(result).toEqual([
+        { value: '/mnt/data', category: 'File Server Info', valueType: 'string', sub_category: 'Path' },
+        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
+        { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
+        { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
+        { value: '1min', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
+    ]);
+    // Verify file_server_name is NOT in the result
+    expect(result.find(r => r.sub_category === 'File Server Name')).toBeUndefined();
+});
+
+it('JOB_RUN_DETAILS_MAPPER excludes file_server_name when undefined', () => {
+    const input = [{
+        volume_path: '/mnt/data',
+        config_name: 'config1',
+        protocol: 'NFS',
+        status: 'SUCCESS',
+        stat_value: 60
+        // file_server_name is not provided (undefined)
+    }];
+    const result = JOB_RUN_DETAILS_MAPPER(input as any);
+    // Should have 5 entries (no file_server_name)
+    expect(result.length).toBe(5);
+    expect(result.find(r => r.sub_category === 'File Server Name')).toBeUndefined();
+});
+
 it('REDIRECTS_FILE_NAME_MAPPER maps multiple symbolic links and junctions correctly', () => {
     const input = [
       { file_type: 'SYMBOLIC_LINK', path: '/a/b.txt; ' },
