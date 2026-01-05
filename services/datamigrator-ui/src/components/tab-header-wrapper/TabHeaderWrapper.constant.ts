@@ -34,7 +34,7 @@ const JOB_HEADER_TAB: BlueXpTabHeaderPropsType = {
   tabLabel: "Jobs",
   tabLinks: [
     {
-      label: "Job List",
+      label: "Job Config List",
       path: "/jobs-list",
       id: 0,
     },

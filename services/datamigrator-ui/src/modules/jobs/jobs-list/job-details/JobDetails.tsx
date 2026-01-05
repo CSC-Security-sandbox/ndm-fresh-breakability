@@ -328,7 +328,7 @@ const JobDetails = () => {
         <Button onClick={() => navigate("/jobs-list")} variant="text">
           Jobs
         </Button>
-        <Box>Job Details</Box>
+        <Box>Job Config Details</Box>
       </Breadcrumbs>
       <Box className="flex flex-col gap-2">
         <Box className="flex justify-between">
