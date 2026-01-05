@@ -15,12 +15,13 @@ on:
         default: "1"
 
 env:
-  SOURCE_RESOURCE_GROUP: datamigrate-acr-resource-group
-  SOURCE_STORAGE_ACCOUNT: netappvhdexports
-  SOURCE_CONTAINER_NAME: ndm-releases-vhd
-  SOURCE_AZURE_REGION: eastus
-  AZURE_VM_HOST: ${{ secrets.SAS_AZURE_VM_HOST }}
+  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'datamigrate-acr-resource-group' }}
+  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
+  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
+  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION || 'eastus' }}
+  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST}}
   SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
+  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID || 'ndm-vm-export-acr-rg' }}
 
 
 jobs:
@@ -48,13 +49,14 @@ jobs:
         run: |
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
           
-          export SOURCE_RESOURCE_GROUP="datamigrate-acr-resource-group"
-          export SOURCE_STORAGE_ACCOUNT="netappvhdexports"
-          export SOURCE_CONTAINER_NAME="ndm-releases-vhd"
-          export SOURCE_AZURE_REGION="eastus"
+          export SOURCE_RESOURCE_GROUP="${{ env.SOURCE_RESOURCE_GROUP }}"
+          export SOURCE_STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
+          export SOURCE_CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
+          export SOURCE_AZURE_REGION="${{ env.SOURCE_AZURE_REGION }}"
           export SIG_IMAGE_WORKER="${{ github.event.inputs.release_sig_image_id_worker }}"
           export SIG_IMAGE_CP="${{ github.event.inputs.release_sig_image_id_controlplane }}"
           export SAS_DURATION_HOURS="${{ env.SAS_DURATION_HOURS }}" 
+          export DISK_ACCESS_ID="${{ env.AZURE_DISK_ACCESS_ID }}"
           export TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           
           echo "Starting VHD export - Timestamp: $TIMESTAMP"
@@ -72,7 +74,7 @@ jobs:
           chmod 600 ~/.vhd-export/storage-key-${TIMESTAMP}.txt
           
           # Create disks
-          DISK_ACCESS_ID="ndm-vm-export-acr-rg"
+          DISK_ACCESS_ID="$DISK_ACCESS_ID"
           WORKER_DISK_NAME="ndm-worker-vhd-$TIMESTAMP"
           CONTROLPLANE_DISK_NAME="ndm-controlplane-vhd-$TIMESTAMP"
           
@@ -122,7 +124,8 @@ jobs:
               --output none
 
             # Timeout configuration
-            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 5 min buffer, 30s check intervals
+            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 30s check intervals and 10 iterations buffer before copy_sas_duration expiry(10*30sec=300sec=5min)
+            # so that means we are timeouting 5 minutes before copy_sas_duration expiry
             local iteration=0
             
             while true; do
@@ -156,8 +159,8 @@ jobs:
           }
           
           # Copy both disks
-          copy_disk "$WORKER_DISK_NAME" "worker"
-          copy_disk "$CONTROLPLANE_DISK_NAME" "controlplane"
+          copy_disk "$WORKER_DISK_NAME" "worker" || exit 1
+          copy_disk "$CONTROLPLANE_DISK_NAME" "controlplane" || exit 1
           
           # Cleanup temporary disks
           az disk delete --resource-group "$SOURCE_RESOURCE_GROUP" --name "$WORKER_DISK_NAME" --yes --output none
@@ -224,12 +227,13 @@ jobs:
           BLOBFUSE_CONFIG
           
           # Mount blob storage
-          sudo blobfuse2 mount /mnt/azureblob --config-file=/tmp/blobfuse2-config-${TIMESTAMP}.yaml
+          echo "Mounting blob storage..."
+          sudo blobfuse2 mount /mnt/azureblob --config-file=/tmp/blobfuse2-config-${TIMESTAMP}.yaml || exit 1
           
           # Generate SHA256 checksums
           echo "Generating SHA256 checksums..."
           cd /mnt/azureblob
-          sha256sum worker-${TIMESTAMP}.vhd controlplane-${TIMESTAMP}.vhd > ~/vhd-checksums-${TIMESTAMP}.txt
+          sha256sum worker-${TIMESTAMP}.vhd controlplane-${TIMESTAMP}.vhd > ~/vhd-checksums-${TIMESTAMP}.txt || exit 1
           
           # Unmount blob storage
           sudo umount /mnt/azureblob
@@ -274,16 +278,25 @@ jobs:
       - name: Parse and Output Blob Information
         id: blob-info
         run: |
-          STORAGE_ACCOUNT="netappvhdexports"
-          CONTAINER_NAME="ndm-releases-vhd"
-          
+          STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
+          CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
+
           # Extract blob names from info file
           WORKER_BLOB_NAME=$(grep "Worker Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Worker Blob: //' | xargs)
           CONTROLPLANE_BLOB_NAME=$(grep "Control Plane Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Control Plane Blob: //' | xargs)
           
+          if [ -z "$WORKER_BLOB_NAME" ]; then
+            echo "ERROR: Worker blob name not found in export info" >&2
+            exit 1
+          fi
+          if [ -z "$CONTROLPLANE_BLOB_NAME" ]; then
+            echo "ERROR: Control Plane blob name not found in export info" >&2
+            exit 1
+          fi
+
           # Get storage key
           STORAGE_KEY_FILE=$(ls -t /tmp/vhd-export/storage-key-*.txt 2>/dev/null | head -1)
-          STORAGE_KEY=$(cat "$STORAGE_KEY_FILE" 2>/dev/null | sed 's/[[:space:]]*//g')
+          STORAGE_KEY=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$STORAGE_KEY_FILE" 2>/dev/null)
 
           # Mask storage key immediately after retrieval
           [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
@@ -302,8 +315,6 @@ jobs:
           echo "worker_blob_name=$WORKER_BLOB_NAME" >> $GITHUB_OUTPUT
           echo "controlplane_blob_name=$CONTROLPLANE_BLOB_NAME" >> $GITHUB_OUTPUT
           
-          # Mask storage key
-          [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
 
       - name: Upload Export Info
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.3.3
@@ -343,6 +354,24 @@ jobs:
           else
             echo "No checksum file found"
           fi
+    
+  cleanup-remote-vm:
+    needs: display-results
+    runs-on: openlab
+    if: always()  # Run even if previous jobs fail
+    steps:
+      - name: Install SSH Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client
 
-
- 
+      - name: Cleanup Remote VM Files
+        run: |
+          echo "Cleaning up remote VM files..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'CLEANUP'
+          rm -f ~/vhd-export-info.txt
+          rm -f ~/vhd-checksums-*.txt
+          rm -rf ~/.vhd-export
+          echo "Remote VM cleanup completed"
+          CLEANUP
+        continue-on-error: true  # Don't fail workflow if cleanup fails  
