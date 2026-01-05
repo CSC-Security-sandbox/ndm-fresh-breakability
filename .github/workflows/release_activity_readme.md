@@ -10,10 +10,26 @@ Complete NDM release across Azure, GCP, vSphere, and Windows platforms.
 
 ### Before Starting Release
 
+
+The release name will be in the format YYYY.MM.<Patch-version>>
+
+Example 
+
+2025.10.0 (release version)
+
+2025.10.1 (patch version 1) 
+
+2025.10.2 (patch version 2)  and so on....
+
 ### Trigger the Release Pipeline
-1) In the ndm mono repo, create a "release/preview" branch from main branch post code freeze.
-2) Open the release workflow, run the release workflow by choosing the "release/preview" branch.
-3) Once the workflow is complete, you can view the release details in artifactory - https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases/. A folder named preview must have been created. The release folder contains the following:
+
+1) Take the latest from main branch, from which the branch will be created. 
+2) Create a new branch from the latest : git checkout -b release/2025.10.0 ( the branch name must be release/<YYYY.MM.PATCH>
+3) Run the Release workflow(release-workflow.yaml) on this branch. 
+This is an example of the workflow https://github.com/NetApp-Cloud-DataMigrate/ndm/actions/runs/18121000912 
+This will create the image and run the e2e on the release branch. 
+
+4) Once the workflow is complete, you can view the release details in artifactory - https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/releases/. A folder named preview must have been created. The release folder contains the following:
     1) docker/
         Contains tar files of all Docker images used in this release. Each image is tagged with the release version.
 
@@ -224,10 +240,8 @@ cd ../ova && sha256sum -c OVA_SHA256SUMS-*.sha256
 cd ../windows && sha256sum -c WINDOWS_SHA256SUMS-*.sha256
 ```
 
-### 2. Create Release Notes
-Document version, artifacts, scan results, and known issues.
+### 2. Coordinate NSS Upload
+This is a manual step in order to upload to NSS for the Below Confluence
 
-### 3. Coordinate NSS Upload
-Notify NSS team with artifacts location and checksums.
-
+https://confluence.ngage.netapp.com/spaces/CDMT/pages/1256682983/NSS+Posting
 ---
