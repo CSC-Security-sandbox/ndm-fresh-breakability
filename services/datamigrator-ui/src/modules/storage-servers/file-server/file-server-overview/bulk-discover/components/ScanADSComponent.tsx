@@ -3,11 +3,11 @@ import { RadioButton, Text, Popover } from "@netapp/bxp-design-system-react";
 import { ScheduleComponentType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 
 const ScanADSComponent = ({ bulkDiscoveryForm }: ScheduleComponentType) => {
-  // Show Scan ADS toggle for both NFS and SMB for testing
+  // Show Scan ADS toggle only for SMB protocol 
   const protocol = bulkDiscoveryForm.formState.protocol?.value;
-  const showScanADS = protocol === "SMB" || protocol === "NFS";
+  const isSMB = protocol === "SMB";
 
-  if (!showScanADS) {
+  if (!isSMB) {
     return null;
   }
 
