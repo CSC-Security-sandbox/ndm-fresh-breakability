@@ -41,7 +41,7 @@ export const MENU_ITEMS = [
     path: "/jobs",
     subMenu: [
       {
-        label: "Job List",
+        label: "Job Config List",
         id: "31",
         icon: <></>,
         path: "/jobs-list",

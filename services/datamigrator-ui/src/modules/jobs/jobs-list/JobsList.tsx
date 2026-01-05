@@ -360,7 +360,7 @@ const JobsList = () => {
       tableStateProps={tableStateProps}
       isLoading={isLoading}
       rowMenu={rowMenu}
-      label="Job Listings"
+      label="Job Config List"
       content={<></>}
       isTogglingColumns={true}
       originalColumns={JOB_LIST_COLUMN_DEFS}

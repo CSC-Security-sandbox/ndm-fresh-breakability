@@ -57,7 +57,7 @@ const JobChart = ({
       {totalSize.toString().length > 3 && <Tooltip>{totalSize}</Tooltip>}
       <DoughnutChart
         unit=""
-        label="Total Jobs"
+        label="Total Job Configs"
         colors={
           ["chart-4", "chart-6", "chart-9"]
         }
