@@ -76,8 +76,8 @@ export class ErrorLogService {
       params.push([...USER_VISIBLE_ERROR_TYPES]);
       params.push(pageSize, offset);
 
-      // Uses first 10 chars of file_path as a unique prefix to match and replace
-      // the full path with just the relative_file_path.
+      // Trims file paths in error messages to show only the filename.
+      // Uses first 10 chars of file_path as a unique prefix to match the full path
 
       const query = `
   SELECT
@@ -87,10 +87,10 @@ export class ErrorLogService {
     jc.job_type                AS "Job Type",
     oe.error_type              AS "Error Type",
     CASE
-      WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+      WHEN oe.file_path IS NOT NULL AND oe.file_name IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
         REGEXP_REPLACE(
           oe.error_message,
-          '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+          '[''"]?' || SUBSTRING(REPLACE(oe.file_path, E'\\\\', E'\\\\\\\\') FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
           oe.file_name,
           'g'
         )
