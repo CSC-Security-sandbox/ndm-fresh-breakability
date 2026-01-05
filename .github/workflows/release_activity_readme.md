@@ -78,8 +78,7 @@ graph LR
 1. **Create BlackDuck scan folder in BDS UI** (prerequisite)
 2. **bds-security-scan** → BlackDuck Security Scan for code
 3. **bds-security-docker-image-scan** → BlackDuck Security Scan for docker images
-4. **Azure VHD Export + GCP Image Upload** (parallel)
-5. **OVA Signing + Windows Installer Signing** (parallel)
+4. **Azure VHD Export + GCP Image Upload + OVA Signing + Windows Installer Signing** 
 
 ---
 
@@ -160,7 +159,7 @@ release_folder: "preview_121"
 
 ### 5. OVA Image Signing
 **Location:** `.github/workflows/ova-image-signing.yaml`  
-**Purpose:** Sign OVA files with digital certificates and upload to the scrqatch space
+**Purpose:** Sign OVA files with digital certificates and upload to the scratch space
 
 **Inputs:**
 ```yaml
