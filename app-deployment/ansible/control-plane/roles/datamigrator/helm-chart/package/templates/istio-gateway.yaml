@@ -26,4 +26,20 @@ spec:
         mode: SIMPLE
         credentialName: {{ $istio.gateway.tls.secretName | quote }}
       {{- end }}
+{{- if and ($istio.enabled) ($istio.temporalMtls.enabled | default false) ($istio.temporalMtls.jwtAuth.enabled | default false) }}
+    # HTTPS server for Temporal gRPC (external worker connections with TLS + JWT validation)
+    # Gateway terminates TLS, validates JWT, then forwards to backend with Istio mTLS
+    # Protocol HTTPS allows HTTP/2 which is required for gRPC
+    - port:
+        number: 7233
+        name: grpc-temporal
+        protocol: HTTPS
+      hosts:
+      {{- range $host := $istio.hosts | default (list "*") }}
+        - {{ $host | quote }}
+      {{- end }}
+      tls:
+        mode: SIMPLE
+        credentialName: {{ $istio.gateway.tls.secretName | quote }}
+{{- end }}
 {{- end }}

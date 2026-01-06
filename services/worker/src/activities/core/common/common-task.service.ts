@@ -12,6 +12,7 @@ import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-l
 import { calculateCommandHash } from "src/activities/utils/utils";
 import { buildTask } from "../utils/utils";
 import { InitTaskInput } from "../migrate/sync-activity.type";
+import { AuthService } from "src/auth/auth.service";
 
 
 @Injectable()
@@ -28,6 +29,7 @@ export class CommonTaskService {
       @Inject(ConfigService) private readonly configService: ConfigService,
       @Inject(LoggerFactory) loggerFactory: LoggerFactory,
       private readonly redisService: RedisService,
+      private readonly authService: AuthService,
     ) {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -109,15 +111,47 @@ export class CommonTaskService {
   }
 
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
-    const connection = await Connection.connect({address: this.temporalAddress});
+    // Build connection config with TLS+JWT if enabled
+    const connectionConfig: any = { address: this.temporalAddress };
+    
+    if (process.env.TEMPORAL_TLS_ENABLED === 'true' && process.env.TEMPORAL_TLS_CA_CERT) {
+      const caCertBuffer = Buffer.from(process.env.TEMPORAL_TLS_CA_CERT, 'base64');
+      connectionConfig.tls = {
+        serverNameOverride: process.env.TEMPORAL_TLS_SERVER_NAME,
+        serverRootCACertificate: caCertBuffer,
+      };
+      this.logger.debug(`Using TLS configuration for workflow check activity`);
+    }
+
+    // Add JWT to metadata if enabled
+    if (process.env.TEMPORAL_JWT_ENABLED === 'true') {
+      try {
+        const accessToken = await this.authService.getAccessToken();
+        connectionConfig.metadata = {
+          authorization: `Bearer ${accessToken}`,
+        };
+        this.logger.debug(`JWT added to workflow check activity connection metadata`);
+      } catch (jwtError) {
+        this.logger.error(`Failed to obtain JWT for workflow check activity: ${jwtError}`);
+        throw new Error('JWT authentication required but token unavailable');
+      }
+    }
+
+    const connection = await Connection.connect(connectionConfig);
     this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
-    const namespace = 'default'; // replace with your namespace if different
-    const resp = await connection.workflowService.describeWorkflowExecution({
-      namespace,
-      execution: { workflowId },
-    });
-    // Status 1 means RUNNING
-    return resp.workflowExecutionInfo?.status === 1;
+    
+    try {
+      const namespace = 'default'; // replace with your namespace if different
+      const resp = await connection.workflowService.describeWorkflowExecution({
+        namespace,
+        execution: { workflowId },
+      });
+      // Status 1 means RUNNING
+      return resp.workflowExecutionInfo?.status === 1;
+    } finally {
+      // Always close the connection to avoid leaks
+      await connection.close();
+    }
   }
 
 

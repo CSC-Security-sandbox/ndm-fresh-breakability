@@ -1,0 +1,20 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: istio-control-plane
+  namespace: istio-system
+spec:
+  profile: default
+  
+  # Global sidecar proxy resource configuration
+  values:
+    global:
+      proxy:
+        # Reduce sidecar resource requests for development/testing
+        resources:
+          requests:
+            cpu: 50m      # Reduced from default 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi

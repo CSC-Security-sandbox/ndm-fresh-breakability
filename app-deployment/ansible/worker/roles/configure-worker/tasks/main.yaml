@@ -52,7 +52,7 @@
 
 - name: 4.5. Copy worker-register.j2 to /opt/datamigrator/bin/
   become: yes
-  copy:
+  template:
     src: ./templates/worker-register.j2
     dest: /opt/datamigrator/bin/worker_register.sh
     mode: '0755'

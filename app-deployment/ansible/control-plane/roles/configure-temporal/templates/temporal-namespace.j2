@@ -3,4 +3,6 @@ kind: Namespace
 metadata:
   name: temporal
   labels:
-    istio-injection: disabled
+    # Enable namespace-wide auto-injection for all Temporal pods
+    # Schema Job has explicit sidecar.istio.io/inject: "false" to exclude it
+    istio-injection: enabled

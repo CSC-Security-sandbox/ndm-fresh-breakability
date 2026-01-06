@@ -8,14 +8,14 @@ istio_version: "1.24.0"
 istio_install_profile: "default"
 istio_namespace: "istio-system"
 
-# Update to match your public DNS entry (used by Istio Gateway + VirtualServices)
+# used by Istio Gateway + VirtualServices
 public_ingress_hosts: &public_ingress_hosts
   - datamigrator.local
 
 # Allow the Istio gateway/VirtualServices to accept any host header (so raw IPs work)
 istio_gateway_allow_any_host: true
 
-# Leave empty to reuse the host's private IP; otherwise supply a MetalLB-assigned address
+# Empty to reuse the host's IP
 istio_ingressgateway_loadbalancer_ip: ""
 
 istio_gateway:
@@ -53,7 +53,7 @@ istio_jwt_auth:
   issuer: "https://{{ ansible_host }}/keycloak/realms/datamigrator"
   jwks_uri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
   # audiences:
-  #   - datamigrator-client  # Commented out - Keycloak may not include aud claim by default
+  #   - datamigrator-client  # Commented out - some requests do not have audience claim
   
   # Forward JWT to backend services for @Auth decorator validation
   forward_original_token: true
@@ -143,6 +143,21 @@ chart_names:
   - datamigrator-ui
   - db-migrations
   - support-service
+
+# ============================================================================
+# Temporal mTLS Configuration
+# ============================================================================
+temporal_mtls:
+  enabled: true
+  mode: PERMISSIVE
+  
+  # JWT authentication for external workers (via Istio Gateway)
+  jwt_auth:
+    enabled: true  # External workers send JWT in gRPC metadata
+  
+  # TLS server name for certificate validation
+  # Defaults to the first host in istio_gateway.hosts (e.g., 'datamigrator.local')
+  tls_server_name: "{{ istio_gateway_tls_hosts | default(['datamigrator.local']) | first }}"
 
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else '' }}"
 

@@ -47,7 +47,7 @@ export class WorkManagerController {
     @ClientIp() ip: string,
     @Req() req: any,
     @Body() body: any,
-  ): Promise<WorkerConfiguration[]> {
+  ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
     this.logger.debug(
       `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );
@@ -72,7 +72,7 @@ export class WorkManagerController {
   async getWorkerConfigurations(
     @ClientIp() ip: string,
     @Req() req: any,
-  ): Promise<WorkerConfiguration[]> {
+  ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
     this.logger.debug(
       `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );

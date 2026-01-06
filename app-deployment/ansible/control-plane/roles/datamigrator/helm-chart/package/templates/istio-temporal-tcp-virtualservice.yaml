@@ -1,0 +1,43 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $temporalMtls := $istio.temporalMtls | default dict -}}
+{{- if and ($istio.enabled) ($temporalMtls.enabled | default false) ($temporalMtls.jwtAuth.enabled | default false) }}
+---
+# VirtualService for Temporal gRPC traffic from external workers
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: temporal-frontend-grpc
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+  {{- $gatewayName := $istio.gateway.name | default "datamigrator-gateway" -}}
+  {{- $gatewayNamespace := $istio.gateway.namespace | default .Release.Namespace -}}
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+    - {{ $gatewayName }}
+  {{- else }}
+    - {{ $gatewayNamespace }}/{{ $gatewayName }}
+  {{- end }}
+  http:
+    # Match gRPC traffic by content-type header
+    - match:
+        - port: 7233
+          headers:
+            content-type:
+              prefix: application/grpc
+      route:
+        - destination:
+            host: temporaltest-frontend.temporal.svc.cluster.local
+            port:
+              number: 7233
+    # Fallback match for any other traffic on port 7233
+    - match:
+        - port: 7233
+      route:
+        - destination:
+            host: temporaltest-frontend.temporal.svc.cluster.local
+            port:
+              number: 7233
+{{- end }}

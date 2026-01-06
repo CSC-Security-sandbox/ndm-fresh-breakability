@@ -100,6 +100,12 @@ global:
       destinationRule:
         enabled: true
         tlsMode: DISABLE
+    # Temporal mTLS Configuration
+    temporalMtls:
+      enabled: {{ temporal_mtls.enabled | default(false) | bool | string | lower }}
+      mode: {{ temporal_mtls.mode | default('PERMISSIVE') | quote }}
+      jwtAuth:
+        enabled: {{ temporal_mtls.jwt_auth.enabled | default(true) | bool | string | lower }}
   
 admin-service:
   image:

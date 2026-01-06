@@ -53,9 +53,15 @@
   environment:
     KUBECONFIG: "{{ istio_kubeconfig_path }}"
 
-- name: Install Istio control plane via istioctl
+- name: Copy Istio operator config
+  ansible.builtin.copy:
+    src: istio-operator-config.yaml
+    dest: "{{ istio_tmp_dir }}/istio-operator-config.yaml"
+    mode: "0644"
+
+- name: Install Istio control plane via istioctl with custom config
   ansible.builtin.command: >-
-    {{ istioctl_install_path }} install --set profile={{ istio_install_profile | default('default') }} -y
+    {{ istioctl_install_path }} install -f {{ istio_tmp_dir }}/istio-operator-config.yaml -y
   environment:
     KUBECONFIG: "{{ istio_kubeconfig_path }}"
     PATH: "/usr/local/bin:{{ ansible_env.PATH }}"

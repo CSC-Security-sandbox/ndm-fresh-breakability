@@ -1,0 +1,77 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $temporalMtls := $istio.temporalMtls | default dict -}}
+{{- if $temporalMtls.enabled | default false }}
+---
+# DestinationRule for Temporal Frontend
+# Enables Istio mTLS for secure service-to-service communication
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: temporal-frontend-mtls
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: temporaltest-frontend.temporal.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
+    connectionPool:
+      tcp:
+        maxConnections: 100  # Limit concurrent connections
+    loadBalancer:
+      simple: ROUND_ROBIN
+---
+# DestinationRule for Temporal History
+# Enables Istio mTLS for secure service-to-service communication
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: temporal-history-mtls
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: temporaltest-history.temporal.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
+    connectionPool:
+      tcp:
+        maxConnections: 100
+    loadBalancer:
+      simple: ROUND_ROBIN
+---
+# DestinationRule for Temporal Matching
+# Enables Istio mTLS for secure service-to-service communication
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: temporal-matching-mtls
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: temporaltest-matching.temporal.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
+    connectionPool:
+      tcp:
+        maxConnections: 100
+    loadBalancer:
+      simple: ROUND_ROBIN
+---
+# DestinationRule for Temporal Internal Worker
+# Enables Istio mTLS for secure service-to-service communication
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: temporal-worker-mtls
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: temporaltest-worker.temporal.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
+    connectionPool:
+      tcp:
+        maxConnections: 100
+    loadBalancer:
+      simple: ROUND_ROBIN
+{{- end }}

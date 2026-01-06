@@ -65,6 +65,10 @@ env:
     value: "http://admin-service-service:3000"
   - name: BUNDLE_OUTPUT_PATH
     value: "/generated-zips"
+  - name: ISTIO_GATEWAY_TLS_SECRET
+    value: "datamigrator-istio-tls"
+  - name: ISTIO_NAMESPACE
+    value: "istio-system"
 
 service:
   type: ClusterIP

@@ -50,6 +50,19 @@
   args:
     executable: /bin/bash
 
+- name: Copy RBAC configuration for config-service
+  become: yes
+  copy:
+    src: config-service-rbac.yaml
+    dest: /tmp/config-service-rbac.yaml
+    mode: '0644'
+  when: enable_istio | default(false) | bool
+
+- name: Apply RBAC for config-service to read Istio Gateway TLS certificate
+  become: yes
+  shell: kubectl apply -f /tmp/config-service-rbac.yaml
+  when: enable_istio | default(false) | bool
+
 - name: Check MicroK8s ingress TLS secret
   become: yes
   shell: kubectl get secret microk8s-cert -n ingress
@@ -176,6 +189,28 @@
   shell: |
     kubectl label namespace datamigrator istio-injection=enabled --overwrite
   when: enable_istio | default(false) | bool
+
+# ============================================================================
+# Temporal TLS Configuration for External Workers
+# ============================================================================
+- name: Patch Istio Ingress Gateway to expose Temporal TCP port 7233
+  become: yes
+  shell: |
+    kubectl patch service istio-ingressgateway -n istio-system --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/ports/-",
+        "value": {
+          "name": "tcp-temporal-grpc",
+          "port": 7233,
+          "protocol": "TCP",
+          "targetPort": 7233
+        }
+      }
+    ]'
+  when: temporal_mtls.enabled | default(false) | bool
+  register: temporal_port_patch
+  failed_when: false  # Don't fail if port already exists
 
 # - name: Create acr pull secert
 #   become: yes

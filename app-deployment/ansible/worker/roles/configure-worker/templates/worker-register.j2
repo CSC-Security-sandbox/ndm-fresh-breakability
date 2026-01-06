@@ -83,7 +83,7 @@ log_message "Required environment variables are set."
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
-    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|TEMPORAL_TLS_ENABLED|TEMPORAL_JWT_ENABLED|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
@@ -97,6 +97,18 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "WORKER_JOB_SERVICE_URL=https://${CONTROL_PLANE_IP}"
     echo "WORKER_REPORT_SERVICE_URL=https://${CONTROL_PLANE_IP}"
     echo "TEMPORAL_ADDRESS=${CONTROL_PLANE_IP}:7233"
+{% if temporal_mtls.enabled | default(false) %}
+    echo "# Temporal TLS + JWT Configuration"
+    echo "# External workers use TLS with self-signed certificates"
+    echo "# JWT provides authentication security"
+    echo "TEMPORAL_TLS_ENABLED=true"
+    echo "TEMPORAL_TLS_SERVER_NAME={{ temporal_mtls.tls_server_name | default('datamigrator.local') }}"
+    echo "# Disable TLS certificate verification for self-signed certificates"
+    echo "NODE_TLS_REJECT_UNAUTHORIZED=0"
+{% if temporal_mtls.jwt_auth.enabled | default(false) %}
+    echo "TEMPORAL_JWT_ENABLED=true"
+{% endif %}
+{% endif %}
     echo "KEYCLOAK_BASE_URL=https://${CONTROL_PLANE_IP}/keycloak"
     echo "WORKER_ID=${WORKER_ID}"
     echo "WORKER_SECRET=${WORKER_SECRET}"

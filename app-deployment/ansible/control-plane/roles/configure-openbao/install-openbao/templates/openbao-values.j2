@@ -16,6 +16,23 @@ server:
     
   affinity: {}
 
+  # Fix hostpath-provisioner permission issues
+  extraInitContainers:
+    - name: fix-permissions
+      image: "busybox:1.36"
+      command:
+        - sh
+        - -c
+        - |
+          chown -R 100:1000 /openbao/data
+          chmod -R 775 /openbao/data
+      volumeMounts:
+        - name: data
+          mountPath: /openbao/data
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+
   ha:
     enabled: true
     replicas: 3
