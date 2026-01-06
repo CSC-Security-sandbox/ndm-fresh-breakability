@@ -1583,20 +1583,14 @@ export class ConfigurationService {
       // Discover exports via Isilon REST API (zone-aware)
       const discoveredPathsMap = await this.discoverIsilonExportsForFileServers(config, fileServersToRefresh, traceId);
 
-      // For Dell Isilon, set reachableCount = 1 since exports are discovered via REST API
-      // (no worker workflow, so we assume reachable if API returns the export)
-      const dellPathsMap: PathsMap = {
-        NFS: { workers: 1, paths: [] },
-        SMB: { workers: 1, paths: [] },
-      };
-
       // Sync volumes (create new, keep existing, mark removed as deleted)
       await this.syncVolumesForFileServers(
         fileServersToRefresh,
         discoveredPathsMap,
         config.createdBy,
         config.updatedBy,
-        dellPathsMap, // Pass pathsMap so reachableCount = 1 for Dell
+        undefined, // pathsMap not used for Dell
+        config.serverType as ServerType,
       );
 
       // Update scan timestamp
@@ -1802,6 +1796,7 @@ export class ConfigurationService {
         config.createdBy,
         config.updatedBy,
         pathsMap, // Pass pathsMap for reachableCount (worker count)
+        config.serverType as ServerType,
       );
 
       // ==================== Update Scan Timestamp ====================
@@ -1831,13 +1826,23 @@ export class ConfigurationService {
     discoveredPathsMap: Map<string, string[]>,
     createdBy: string,
     updatedBy?: string,
-    pathsMap?: PathsMap, // Optional: for reachableCount (non-Dell only)
+    pathsMap?: PathsMap, // for reachableCount (Other NAS - from workflow)
+    serverType?: ServerType, // to determine reachableCount logic
   ): Promise<void> {
     const fileServersIds = fileServers.map((fs) => fs.id);
 
     for (const fileServer of fileServers) {
       const discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
-      const reachableCount = pathsMap?.[fileServer.protocol]?.workers ?? 0;
+      
+      // Determine reachableCount based on server type
+      let reachableCount: number;
+      if (serverType === ServerType.dell) {
+        // Dell: use worker count per file server (zone)
+        reachableCount = fileServer.workers?.length ?? 0;
+      } else {
+        // Other NAS: use worker count from pathsMap (workflow result)
+        reachableCount = pathsMap?.[fileServer.protocol]?.workers ?? 0;
+      }
 
       // 1. Re-enable existing volumes if path still exists on NAS
       if (discoveredPaths.length > 0) {
