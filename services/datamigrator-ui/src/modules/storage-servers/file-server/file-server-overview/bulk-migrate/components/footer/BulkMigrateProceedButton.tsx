@@ -1,7 +1,7 @@
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
 import { useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { BULK_MIGRATE_STEPS_IDS } from "@/modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 
 const BulkMigrateProceedButton = () => {
@@ -11,9 +11,19 @@ const BulkMigrateProceedButton = () => {
   const { handleSubmit, optionForm, sourceFileServerDetails } =
     useContext(BulkMigrateContext);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Get zone query params for Dell Isilon - to preserve when navigating back
+  const zoneNameParam = searchParams.get('zone');
+  const zoneFileServerId = searchParams.get('fileServerId');
 
-  const onSuccessfulSubmit = () =>
-    navigate(`/file-server/${sourceFileServerDetails.id}`);
+  const onSuccessfulSubmit = () => {
+    // Build query string to preserve zone params for Dell Isilon
+    const queryString = zoneFileServerId && zoneNameParam 
+      ? `?zone=${encodeURIComponent(zoneNameParam)}&fileServerId=${zoneFileServerId}`
+      : '';
+    navigate(`/file-server/${sourceFileServerDetails.id}${queryString}`);
+  };
 
   const handleNextOrSubmit = () => {
     if (currentStepIndex === BULK_MIGRATE_STEPS_IDS.review) {
