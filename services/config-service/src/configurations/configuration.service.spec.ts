@@ -379,13 +379,14 @@ describe('ConfigurationService', () => {
         InternalServerErrorException,
       );
     });
-    it('should handle ERRORED status by setting fileServers volumes to empty array', async () => {
-      // Mock config with ERRORED status
+    it('should handle ERRORED status by setting fileServers volumes to empty array for Other NAS', async () => {
+      // Mock config with ERRORED status for Other NAS
       const fileServerId = uuidv4();
       const volumeId = uuidv4();
       const mockConfig = {
         id: uuidv4(),
         status: ConfigStatus.ERRORED,
+        serverType: ServerType.other, // Other NAS should clear volumes
         fileServers: [
           {
             id: fileServerId,
@@ -404,17 +405,18 @@ describe('ConfigurationService', () => {
 
       const result = await service.getConfigById(mockConfig.id);
 
-      // Verify that volumes array is empty
+      // Verify that volumes array is empty for Other NAS with ERRORED status
       expect(result.fileServers[0].volumes).toEqual([]);
     });
 
-    it('should handle DRAFT status by setting fileServers volumes to empty array', async () => {
-      // Mock config with DRAFT status
+    it('should handle DRAFT status by setting fileServers volumes to empty array for Other NAS', async () => {
+      // Mock config with DRAFT status for Other NAS
       const fileServerId = uuidv4();
       const volumeId = uuidv4();
       const mockConfig = {
         id: uuidv4(),
         status: ConfigStatus.DRAFT,
+        serverType: ServerType.other, // Other NAS should clear volumes
         fileServers: [
           {
             id: fileServerId,
@@ -433,8 +435,70 @@ describe('ConfigurationService', () => {
 
       const result = await service.getConfigById(mockConfig.id);
 
-      // Verify that volumes array is empty
+      // Verify that volumes array is empty for Other NAS with DRAFT status
       expect(result.fileServers[0].volumes).toEqual([]);
+    });
+
+    it('should keep volumes for Dell even with ERRORED status', async () => {
+      // Mock config with ERRORED status for Dell
+      const fileServerId = uuidv4();
+      const volumeId = uuidv4();
+      const mockConfig = {
+        id: uuidv4(),
+        status: ConfigStatus.ERRORED,
+        serverType: ServerType.dell, // Dell should keep volumes
+        fileServers: [
+          {
+            id: fileServerId,
+            volumes: [{ id: volumeId, volumePath: '/path/to/volume' }],
+            workers: [{ stats: { updatedAt: new Date() } }],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+      jest.spyOn(pathUploadRepository, 'find').mockResolvedValue([]);
+      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+      jest.spyOn(service, 'isUploadInProgress').mockResolvedValue(false);
+
+      const result = await service.getConfigById(mockConfig.id);
+
+      // Verify that volumes array is NOT empty for Dell
+      expect(result.fileServers[0].volumes.length).toBe(1);
+      expect(result.fileServers[0].volumes[0].volumePath).toBe('/path/to/volume');
+    });
+
+    it('should keep volumes for Dell even with DRAFT status', async () => {
+      // Mock config with DRAFT status for Dell
+      const fileServerId = uuidv4();
+      const volumeId = uuidv4();
+      const mockConfig = {
+        id: uuidv4(),
+        status: ConfigStatus.DRAFT,
+        serverType: ServerType.dell, // Dell should keep volumes
+        fileServers: [
+          {
+            id: fileServerId,
+            volumes: [{ id: volumeId, volumePath: '/path/to/volume' }],
+            workers: [{ stats: { updatedAt: new Date() } }],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+      jest.spyOn(pathUploadRepository, 'find').mockResolvedValue([]);
+      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+      jest.spyOn(service, 'isUploadInProgress').mockResolvedValue(false);
+
+      const result = await service.getConfigById(mockConfig.id);
+
+      // Verify that volumes array is NOT empty for Dell
+      expect(result.fileServers[0].volumes.length).toBe(1);
+      expect(result.fileServers[0].volumes[0].volumePath).toBe('/path/to/volume');
     });
   });
 
