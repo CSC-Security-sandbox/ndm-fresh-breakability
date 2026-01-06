@@ -19,10 +19,23 @@ const JobsAction = ({
   const pathname = window.location.pathname;
   const [searchParams] = useSearchParams();
   
-  // Get zone name from query parameter (for Dell Isilon zones)
+  // Get zone name and fileServerId from query parameters (for Dell Isilon zones)
   const zoneNameParam = searchParams.get('zone');
+  const zoneFileServerId = searchParams.get('fileServerId');
 
-  const isActive = fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
+  // For Dell Isilon zones, check the zone-level status, not the config-level status
+  const isActive = useMemo(() => {
+    if (zoneFileServerId && fileServerDetails?.fileServers) {
+      // Find the specific zone's file server and check its status
+      const zoneFileServer = fileServerDetails.fileServers.find(
+        (fs) => fs.id === zoneFileServerId
+      );
+      // Use type assertion since status exists on file server for Dell Isilon
+      return (zoneFileServer as any)?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
+    }
+    // For regular NAS, check the config-level status
+    return fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
+  }, [fileServerDetails, zoneFileServerId]);
 
   // Check if all export paths are disabled (isValid = false or isDisabled = true)
   const areAllExportPathsDisabled = useMemo(() => {
@@ -49,6 +62,14 @@ const JobsAction = ({
     return fileServerDetails?.configName;
   }, [fileServerDetails?.configName, zoneNameParam]);
 
+  // Build query string for navigation - preserve zone and fileServerId for Dell Isilon
+  const queryString = useMemo(() => {
+    if (zoneFileServerId && zoneNameParam) {
+      return `?zone=${encodeURIComponent(zoneNameParam)}&fileServerId=${zoneFileServerId}`;
+    }
+    return '';
+  }, [zoneFileServerId, zoneNameParam]);
+
   return (
     <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
@@ -70,19 +91,19 @@ const JobsAction = ({
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
             disabled={areExportPathsInvalid}
-            onClick={() => navigate(`${pathname}/bulk-discover`)}
+            onClick={() => navigate(`${pathname}/bulk-discover${queryString}`)}
           >
             Bulk Discover
           </Button>
           <Button
             disabled={areExportPathsInvalid}
-            onClick={() => navigate(`${pathname}/bulk-migrate`)}
+            onClick={() => navigate(`${pathname}/bulk-migrate${queryString}`)}
           >
             Bulk Migrate
           </Button>
           <Button
             disabled={areExportPathsInvalid}
-            onClick={() => navigate(`${pathname}/bulk-cutover`)}
+            onClick={() => navigate(`${pathname}/bulk-cutover${queryString}`)}
           >
             Bulk Cutover
           </Button>
