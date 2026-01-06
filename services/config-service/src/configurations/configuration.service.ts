@@ -341,10 +341,14 @@ export class ConfigurationService {
 
       if ([ConfigStatus.ERRORED, ConfigStatus.DRAFT].includes(config.status)) {
         if (config.fileServers) {
-          config.fileServers = config.fileServers.map((server) => ({
-            ...server,
-            volumes: [],
-          }));
+          // For Storage Aware: Always show volumes regardless of status (per-zone visibility)
+          // For Other NAS: Clear volumes if config is DRAFT/ERRORED
+          if (config.serverType === ServerType.other) {
+            config.fileServers = config.fileServers.map((server) => ({
+              ...server,
+              volumes: [],
+            }));
+          }
         }
       }
       // Mask sensitive information
@@ -720,7 +724,7 @@ export class ConfigurationService {
         createConfig.projectId,
         sanitizedConfigName,
       );
-      
+
       // Build hashmap of hasWorkers per file server (keyed by fileServerName)
       const hasWorkersMap: Record<string, boolean> = {};
       createConfig.fileServers.forEach((fs) => {
@@ -769,8 +773,16 @@ export class ConfigurationService {
       });
       
       
-      // Config-level check (true if any file server has workers)
-      const hasWorkers = Object.values(hasWorkersMap).some(v => v);
+      // Config-level status check
+      // For Dell: DRAFT if ANY file server has no workers (priority over IN_PROGRESS)
+      // For Other NAS: Only one file server, so same logic applies
+      const hasDraft = Object.values(hasWorkersMap).some(v => !v);  // TRUE if any file server has no workers
+      const hasWorkers = Object.values(hasWorkersMap).some(v => v);  // TRUE if any file server has workers
+      
+      // Determine initial config status
+      // Priority: DRAFT (if any zone has no workers) > IN_PROGRESS (if any zone has workers)
+      const initialConfigStatus = hasDraft ? ConfigStatus.DRAFT : (hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT);
+      
       let config;
       switch (createConfig.serverType) {
         case ServerType.dell:
@@ -778,7 +790,7 @@ export class ConfigurationService {
             configName: sanitizedConfigName,
             configType: createConfig.configType,
             projectId: createConfig.projectId,
-            status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
+            status: initialConfigStatus,
             fileServers: await Promise.all(fileServerPromises),
             createdBy: userId,
             hostname: createConfig.managementHost,
@@ -796,7 +808,7 @@ export class ConfigurationService {
             configName: sanitizedConfigName,
             configType: createConfig.configType,
             projectId: createConfig.projectId,
-            status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
+            status: initialConfigStatus,
             fileServers: await Promise.all(fileServerPromises),
             createdBy: userId,
             serverType: createConfig.serverType,
