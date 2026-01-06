@@ -1,0 +1,344 @@
+name: Windows Installer Signing & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      windows_installer_name:
+        description: "Windows Installer filename for uploading(without .exe extension) should be downloaded from artifactory from the release folder"
+        required: true
+        type: string
+      release_folder:
+        description: "Release folder name (e.g., preview_x). If this folder already exists in scratch space (created by GCP or OVA workflows), use it; otherwise, create a new one."
+        required: true
+        type: string
+      artifactory_path:
+        description: "Artifactory path (e.g., releases/preview_x/windows-installer) for downloading the windows installer"
+        required: true
+        type: string
+
+env:
+  ARTIFACTORY_BASE_URL: ${{ vars.ARTIFACTORY_BASE_URL || 'https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm'}}
+  LOCAL_BASE_PATH: ${{ vars.LOCAL_BASE_PATH || '/home/ubuntu'}}
+  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing'}}
+  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space'}}
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer-signing:
+    runs-on: openlab
+    outputs:
+      signed_installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}
+      checksum_file: ${{ steps.execute-signing-prep.outputs.checksum_file }}
+      release_folder: ${{ steps.execute-signing-prep.outputs.release_folder }}
+    
+    steps:
+      - name: Install SSH Tools
+        run: |
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client curl
+
+      - name: Extract Branch Name
+        id: branch-info
+        run: |
+          # Extract branch name from github.ref
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
+          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
+          echo "Branch suffix for file naming: $BRANCH_SUFFIX"
+
+      - name: Add SSH Host Keys to known_hosts
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
+          LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
+        run: |
+          # Add Linux runner host key to GitHub runner's known_hosts
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+          
+          # Add Windows server host key to Linux runner's known_hosts
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} "
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+            ssh-keyscan -H '${WINDOWS_SERVER}' >> ~/.ssh/known_hosts 2>/dev/null
+            chmod 644 ~/.ssh/known_hosts
+          "
+          echo "Host keys added for both Linux runner and Windows server"
+
+      - name: Download and Prepare Windows Installer
+        id: download-installer
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          ARTIFACTORY_PATH: ${{ github.event.inputs.artifactory_path }}
+          LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
+          ARTIFACTORY_BASE: ${{ env.ARTIFACTORY_BASE_URL }}
+          BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+        run: |
+          # Build the remote command as a single string to avoid heredoc issues
+          REMOTE_CMD=$(cat << 'CMDEOF'
+          set -e
+          echo "Starting Windows Installer Signing Process"
+          echo "Release Folder: __RELEASE_FOLDER__"
+          echo "Installer: __INSTALLER_NAME__.exe"
+          echo "Branch Suffix: __BRANCH_SUFFIX__"
+          
+          LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
+          IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
+          ARTIFACTORY_BASE="__ARTIFACTORY_BASE__"
+          ARTIFACTORY_PATH="__ARTIFACTORY_PATH__"
+          INSTALLER_NAME="__INSTALLER_NAME__"
+          BRANCH_SUFFIX="__BRANCH_SUFFIX__"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          # Create new installer name with branch suffix
+          NEW_INSTALLER_NAME="${INSTALLER_NAME}-${BRANCH_SUFFIX}"
+          
+          # Create directory structure
+          echo "Creating directories..."
+          sudo mkdir -p "${LOCAL_PATH}"
+          sudo mkdir -p "${IMAGE_SIGNING_PATH}"
+          
+          # Download Windows Installer from Artifactory
+          echo "Downloading Windows Installer from Artifactory..."
+          cd "${LOCAL_PATH}"
+          INSTALLER_URL="${ARTIFACTORY_BASE}/${ARTIFACTORY_PATH}/${INSTALLER_NAME}.exe"
+          echo "Downloading from: ${INSTALLER_URL}"
+          
+          sudo curl -o "${NEW_INSTALLER_NAME}.exe" "${INSTALLER_URL}"
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ] || [ ! -f "${NEW_INSTALLER_NAME}.exe" ]; then
+            echo "Failed to download Windows Installer from ${INSTALLER_URL} (curl exit code: $CURL_EXIT_CODE)"
+            exit 1
+          fi
+          echo "Windows Installer downloaded as: ${NEW_INSTALLER_NAME}.exe"
+          
+          # Move installer to image signing mount
+          echo "Moving installer to image signing mount..."
+          sudo cp "${NEW_INSTALLER_NAME}.exe" "${IMAGE_SIGNING_PATH}/"
+          sudo chmod 644 "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
+          
+          if [ ! -f "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe" ]; then
+            echo "Failed to copy installer to image signing mount"
+            exit 1
+          fi
+          echo "Installer copied to: ${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
+          echo "SUCCESS: Download and prepare step completed"
+          echo "OUTPUT_INSTALLER_NAME:${NEW_INSTALLER_NAME}"
+          CMDEOF
+          )
+          
+          # Substitute variables into the command
+          REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
+          REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
+          REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_PATH__/$ARTIFACTORY_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_BASE__/$ARTIFACTORY_BASE}"
+          REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
+          
+          # Execute remote command and capture output
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
+          echo "$OUTPUT"
+          
+          # Extract the new installer name for subsequent steps
+          NEW_INSTALLER_NAME=$(echo "$OUTPUT" | grep '^OUTPUT_INSTALLER_NAME:' | cut -d: -f2)
+          echo "new_installer_name=$NEW_INSTALLER_NAME" >> $GITHUB_OUTPUT
+
+      - name: Sign Windows Installer
+        id: sign-installer
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
+          LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
+        run: |
+          WINDOWS_PASS="${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
+          WINDOWS_USER="Imageadmin"
+          WINDOWS_DEST_PATH="C:/share/${RELEASE_FOLDER}"
+          WINDOWS_DEST_PATH_WIN="C:\\share\\${RELEASE_FOLDER}"
+          
+          # Validate required secrets
+          if [ -z "${WINDOWS_SERVER}" ] || [ -z "${WINDOWS_PASS}" ]; then
+            echo "ERROR: WINDOWS_SIGNING_SERVER_IP or WINDOWS_SIGNING_PASSWORD secret not configured"
+            exit 1
+          fi
+          
+          echo "=== SCP-based Windows Signing Approach ==="
+          echo "Windows Server: ${WINDOWS_SERVER}"
+          echo "Linux Runner IP: ${LINUX_RUNNER_IP}"
+          echo "Installer: ${INSTALLER_NAME}.exe"
+          echo "Source Path: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          echo "Windows Dest Path: ${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe"
+          
+          # Step 1: Verify source file exists on Linux runner
+          echo "=== Step 1: Verify source file exists ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          # Step 2: Create destination directory on Windows server
+          echo "=== Step 2: Create destination directory on Windows ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'if not exist \"${WINDOWS_DEST_PATH_WIN}\" mkdir \"${WINDOWS_DEST_PATH_WIN}\"'"
+          
+          # Step 3: SCP the installer FROM Linux runner TO Windows server
+          echo "=== Step 3: Copy installer to Windows server via SCP ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' scp '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe'"
+          
+          echo "=== Step 4: Verify file arrived on Windows ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'dir \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          # Step 5: Delete the unsigned installer from image signing path to avoid conflicts
+          echo "=== Step 5: Delete unsigned installer from image signing path ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sudo rm -f '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' && echo 'Unsigned installer deleted from ${IMAGE_SIGNING_PATH}'" 
+
+          echo "=== Step 6: Sign the installer with signtool ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
+             '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" sign /tr \"http://timestamp.sectigo.com?td=sha256\" /td SHA256 /fd SHA256 /f \"C:\\dpod\\ndm-msi-signing-certificates\\ndm-msi-prod-main.cer\" /CSP \"SafeNet Key Storage Provider\" /v /kc \"NDM-MSI-PROD-keypair\" \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          echo "=== Step 7: Verify the signature ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
+             '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" verify /pa \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          echo "=== Step 8: Copy signed installer back to Linux runner ==="
+          
+          # Step 8a: Copy signed installer from Windows server to temporary location on Linux runner
+          echo "=== Step 8a: SCP signed installer from Windows to Linux temp ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' scp '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe' '/tmp/${INSTALLER_NAME}_signed.exe'"
+          
+          # Step 8b: Move signed installer from temporary location into the image signing path
+          echo "=== Step 8b: Copy from temp to image signing path ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sudo cp '/tmp/${INSTALLER_NAME}_signed.exe' '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          # Step 8c: Remove temporary signed installer file from Linux runner
+          echo "=== Step 8c: Remove temp file ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "rm '/tmp/${INSTALLER_NAME}_signed.exe'"
+          
+          echo "=== Step 9: Verify signed file is back on Linux runner ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          echo "=== Signing completed successfully ==="
+          echo "Installer signed and copied back to Linux runner!"
+
+      - name: Generate Checksums and Finalize
+        id: execute-signing-prep
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
+          SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
+          BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+        run: |
+          # Build the remote command
+          REMOTE_CMD=$(cat << 'CMDEOF'
+          set -e
+          INSTALLER_NAME="__INSTALLER_NAME__"
+          RELEASE_FOLDER="__RELEASE_FOLDER__"
+          LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
+          IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
+          SCRATCH_SPACE="__SCRATCH_SPACE__"
+          BRANCH_SUFFIX="__BRANCH_SUFFIX__"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          # Verify signed file exists in the mount
+          if [ ! -f "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" ]; then
+            echo "ERROR: Signed file not found at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+            exit 1
+          fi
+          echo "Signed installer verified at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          echo "Branch suffix: ${BRANCH_SUFFIX}"
+          echo "Timestamp: ${TIMESTAMP}"
+          
+          # Generate checksums and copy to scratch space
+          echo "Copying signed installer to local path..."
+          sudo mkdir -p "${LOCAL_PATH}/signed"
+          SIGNED_INSTALLER_NAME="${INSTALLER_NAME}_signed-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
+          sudo cp "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" "${LOCAL_PATH}/signed/${SIGNED_INSTALLER_NAME}"
+          
+          # Generate SHA256 Checksum
+          echo "Generating SHA256 checksum..."
+          cd "${LOCAL_PATH}/signed"
+          CHECKSUM_FILE="WINDOWS_INSTALLER_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256"
+          sha256sum "${SIGNED_INSTALLER_NAME}" | sudo tee "${CHECKSUM_FILE}" > /dev/null
+          echo "Checksum generated:"
+          cat "${CHECKSUM_FILE}"
+          
+          # Copy to Scratch Space
+          echo "Copying signed installer and checksum to scratch space..."
+          SCRATCH_DEST="${SCRATCH_SPACE}/${RELEASE_FOLDER}/windows"
+          sudo mkdir -p "${SCRATCH_DEST}"
+          sudo cp "${SIGNED_INSTALLER_NAME}" "${SCRATCH_DEST}/"
+          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_DEST}/"
+          sudo chmod 644 "${SCRATCH_DEST}/${SIGNED_INSTALLER_NAME}"
+          sudo chmod 644 "${SCRATCH_DEST}/${CHECKSUM_FILE}"
+          
+          echo "Files copied to scratch space: ${SCRATCH_DEST}"
+          
+          # Note: Signed file is preserved at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe for manual verification
+          echo "Signed file preserved at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          
+          echo "Windows installer signing process completed successfully"
+          
+          # Output data in pipe-delimited format (at end so it's easy to parse)
+          echo "OUTPUT_DATA:${SIGNED_INSTALLER_NAME}|${CHECKSUM_FILE}|${RELEASE_FOLDER}"
+          CMDEOF
+          )
+          
+          # Substitute variables into the command
+          REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
+          REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
+          REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__SCRATCH_SPACE__/$SCRATCH_SPACE}"
+          REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
+          
+          # Execute and capture output
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
+          echo "$OUTPUT"
+          
+          # Parse the output data line
+          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
+          if [ -z "$DATA_LINE" ]; then
+            echo "ERROR: Could not find OUTPUT_DATA in remote output"
+            exit 1
+          fi
+          
+          SIGNED_INSTALLER=$(echo "$DATA_LINE" | cut -d'|' -f1)
+          CHECKSUM_FILE=$(echo "$DATA_LINE" | cut -d'|' -f2)
+          RELEASE_FOLDER_OUT=$(echo "$DATA_LINE" | cut -d'|' -f3)
+          
+          # Set outputs
+          echo "signed_installer=$SIGNED_INSTALLER" >> $GITHUB_OUTPUT
+          echo "checksum_file=$CHECKSUM_FILE" >> $GITHUB_OUTPUT
+          echo "release_folder=$RELEASE_FOLDER_OUT" >> $GITHUB_OUTPUT
+          
+          echo "Checksums generated and files finalized!"
+
+      - name: Display Summary
+        run: |
+          echo "=== Windows Installer Signing Complete ==="
+          echo "Signed Installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}"
+          echo "Checksum File: ${{ steps.execute-signing-prep.outputs.checksum_file }}"
+          echo ""
+          echo "Files Location:"
+          echo "  Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.execute-signing-prep.outputs.release_folder }}/windows/"
