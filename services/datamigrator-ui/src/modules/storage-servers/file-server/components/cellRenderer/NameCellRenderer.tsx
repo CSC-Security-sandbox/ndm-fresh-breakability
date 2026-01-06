@@ -60,13 +60,15 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
     const zoneName = row._zoneName || row.displayName;
     // Use _configId (parent config ID) for navigation, not the file server's own id
     const configId = row._configId || row.id;
-    // Pass zone name as query parameter so overview page knows which zone is being viewed
+    // Get the actual file server ID for this zone to filter workers/volumes
+    const zoneFileServerId = row.id;
+    // Pass zone name and fileServerId as query parameters so overview page knows which zone is being viewed
     const zoneParam = encodeURIComponent(zoneName || '');
     
     return (
       <Box 
         className="flex items-center gap-2 pl-8 py-1 cursor-pointer hover:bg-blue-50 rounded transition-colors -ml-2 px-2"
-        onClick={() => navigate(`/file-server/${configId}?zone=${zoneParam}`)}
+        onClick={() => navigate(`/file-server/${configId}?zone=${zoneParam}&fileServerId=${zoneFileServerId}`)}
       >
         {/* Indentation line */}
         <Box className="flex items-center text-gray-300">
