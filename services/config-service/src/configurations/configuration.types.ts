@@ -1,6 +1,11 @@
 import { ExportPathSource, Protocol } from "src/constants/enums";
 import { WorkflowExecutionStatus } from "src/workflow/workflow.types";
 
+export interface DiscoveredVolumeData {
+    volumePath: string;
+    directoryPath: string;
+}
+
 export interface ListPathWorkflowStatus {
     status: WorkflowExecutionStatus;
     id: string;
