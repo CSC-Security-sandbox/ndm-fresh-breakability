@@ -254,9 +254,11 @@ export class WorkManagerService {
 
   /**
    * Aggregate Dell config status from all file server statuses
-   * - ERRORED if any file server is ERRORED
-   * - ACTIVE if all file servers are ACTIVE
-   * - IN_PROGRESS otherwise
+   * Priority order:
+   * 1. DRAFT if any file server is DRAFT (no workers assigned)
+   * 2. ERRORED if any file server is ERRORED
+   * 3. ACTIVE if all file servers are ACTIVE
+   * 4. IN_PROGRESS otherwise
    */
   private async aggregateDellConfigStatus(config: ConfigEntity) {
     try {
@@ -270,10 +272,14 @@ export class WorkManagerService {
       let aggregatedStatus: ConfigStatus;
       let errorMessage: string | null = null;
 
+      const hasDraft = fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
       const hasErrored = fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
       const allActive = fileServers.every(fs => fs.status === ConfigStatus.ACTIVE);
 
-      if (hasErrored) {
+      if (hasDraft) {
+        aggregatedStatus = ConfigStatus.DRAFT;
+        errorMessage = 'One or more zones have no workers assigned';
+      } else if (hasErrored) {
         aggregatedStatus = ConfigStatus.ERRORED;
         errorMessage = 'One or more zones failed validation';
       } else if (allActive) {
@@ -285,7 +291,7 @@ export class WorkManagerService {
       }
 
       this.logger.log(
-        `Dell config ${config.id}: Aggregated status = ${aggregatedStatus} (${fileServers.length} file servers, hasErrored=${hasErrored}, allActive=${allActive})`,
+        `Dell config ${config.id}: Aggregated status = ${aggregatedStatus} (${fileServers.length} file servers, hasDraft=${hasDraft}, hasErrored=${hasErrored}, allActive=${allActive})`,
       );
 
       // Update config status
