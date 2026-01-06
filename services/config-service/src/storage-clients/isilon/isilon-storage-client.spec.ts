@@ -52,6 +52,339 @@ describe('IsilonStorageClient', () => {
     jest.clearAllMocks();
   });
 
+  describe('detectIsilonVersion', () => {
+    const mockConnectionParams = {
+      host: 'isilon.example.com',
+      port: 8080,
+      username: 'admin',
+      password: 'password123',
+      certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----',
+    };
+
+    it('should detect OneFS 9.4.x and return API v14', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.4.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.4.0.0');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should detect OneFS 8.2.1.x and return API v8', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.2.1.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.2.1.0');
+      expect(result.apiVersion).toBe(8);
+    });
+
+    it('should detect OneFS 8.1.0.x and return API v5', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.1.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.1.0.0');
+      expect(result.apiVersion).toBe(5);
+    });
+
+    it('should detect OneFS 8.0.x and return API v3', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.0.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.0.0.0');
+      expect(result.apiVersion).toBe(3);
+    });
+
+    it('should detect OneFS 7.x and return API v3 (earliest documented)', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '7.2.1.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('7.2.1.0');
+      expect(result.apiVersion).toBe(3);
+    });
+
+    it('should detect OneFS 9.3.0.x and return API v14', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.3.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.3.0.0');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should detect OneFS 9.2.1.x and return API v13', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.2.1.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.2.1.0');
+      expect(result.apiVersion).toBe(13);
+    });
+
+    it('should detect OneFS 9.2.0.x and return API v12', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.2.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.2.0.0');
+      expect(result.apiVersion).toBe(12);
+    });
+
+    it('should detect OneFS 9.1.0.x and return API v11', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.1.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.1.0.0');
+      expect(result.apiVersion).toBe(11);
+    });
+
+    it('should detect OneFS 9.0.0.x and return API v10', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '9.0.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.0.0.0');
+      expect(result.apiVersion).toBe(10);
+    });
+
+    it('should detect OneFS 8.2.2.x and return API v9', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.2.2.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.2.2.0');
+      expect(result.apiVersion).toBe(9);
+    });
+
+    it('should detect OneFS 8.2.0.x and return API v7', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.2.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.2.0.0');
+      expect(result.apiVersion).toBe(7);
+    });
+
+    it('should detect OneFS 8.1.1.x and return API v6', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.1.1.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.1.1.0');
+      expect(result.apiVersion).toBe(6);
+    });
+
+    it('should detect OneFS 8.0.1.x and return API v4', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.0.1.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.0.1.0');
+      expect(result.apiVersion).toBe(4);
+    });
+
+    it('should handle version from version field if release is not available', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { version: '9.5.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('9.5.0.0');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should default to API v14 when version cannot be determined', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: {},
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('unknown');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should default to API v14 when version cannot be parsed', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: 'invalid-version' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('invalid-version');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should default to API v14 when API call fails', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockRejectedValueOnce(
+        new Error('Connection failed'),
+      );
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('unknown');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should handle version with v prefix', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: 'v9.3.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('v9.3.0.0');
+      expect(result.apiVersion).toBe(14);
+    });
+  });
+
   describe('fetchZones', () => {
     const mockParams = {
       host: 'isilon.example.com',
@@ -61,6 +394,14 @@ describe('IsilonStorageClient', () => {
       certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----',
       serverType: ServerType.dell,
     };
+
+    beforeEach(() => {
+      // Mock detectIsilonVersion for all fetchZones tests
+      jest.spyOn(service, 'detectIsilonVersion').mockResolvedValue({
+        oneFsVersion: '9.4.0.0',
+        apiVersion: 14,
+      });
+    });
 
     it('should fetch zones successfully', async () => {
       const mockZonesResponse = {
@@ -500,6 +841,14 @@ describe('IsilonStorageClient', () => {
 
   describe('makeIsilonAPICall', () => {
     // Testing the private method through integration with public methods
+    beforeEach(() => {
+      // Mock detectIsilonVersion for all makeIsilonAPICall tests
+      jest.spyOn(service, 'detectIsilonVersion').mockResolvedValue({
+        oneFsVersion: '9.4.0.0',
+        apiVersion: 7,
+      });
+    });
+
     it('should handle successful API response', async () => {
       const mockParams = {
         host: 'isilon.example.com',
