@@ -1,4 +1,4 @@
-import { DirMap, TaskMap, CursorMap } from "src/redis/hmap-collection";
+import { DirMap, TaskMap, CursorMap, RetryBatchMap } from "src/redis/hmap-collection";
 import { Cmd, ItemInfo, TaskInfo } from "../../datatype/stream-datatypes";
 import { GroupReaderType } from "../enums";
 import { JobConfig } from "../job-config";
@@ -60,7 +60,11 @@ export  class JobManagerContext {
     }
 
     // Error Stream Methods
-    async publishToErrorStream(error: DMError): Promise<string> {
+    async publishToErrorStream(error: DMError, originalJobRunId?: string): Promise<string> {
+        // If originalJobRunId is provided (retry scenario), add it to operation errors
+        if (error.operation && originalJobRunId) {
+            error.operation.originalJobRunId = originalJobRunId;
+        }
         return await this.errorStream.append(error);
     }
 
@@ -132,6 +136,19 @@ export  class JobManagerContext {
 
     async deleteBatchDir(key: string): Promise<void> {
         await this.dirBatchMap.deleteValue(key);
+    }
+
+    // Retry Batch Methods (for GroupedOperationsBatch storage)
+    async setRetryBatch(key: string, value: any): Promise<void> {
+        await this.retryBatches.setValue(key, value);
+    }
+
+    async getRetryBatch(key: string): Promise<any | null> {
+        return await this.retryBatches.getValue(key);
+    }
+
+    async deleteRetryBatch(key: string): Promise<void> {
+        await this.retryBatches.deleteValue(key);
     }
 
     /**

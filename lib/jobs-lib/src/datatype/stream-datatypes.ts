@@ -169,27 +169,37 @@ export class TaskInfo implements Serializable{
     }
 }
 
-export calss FailedOperations implements Serializable{
+export class FailedOperations implements Serializable{
     id: string;
     fPath: string;
     constructor(id: string, fPath: string) {
         this.id = id;
         this.fPath = fPath;
     }
-    
-
+    serialize(): string {
+        return JSON.stringify(this);
+    }
+    static deserialize(serialized: string): FailedOperations {
+        return JSON.parse(serialized);
+    }
 }
 
 export class RetryBatchInfo implements Serializable{
-    batchId: string;
-    operations: FailedOperation[];
-    parentPath: string
-    constructor(batchId: string, operations: FailedOperation[]) {
-        this.batchId = batchId;
+    parentPath: string;
+    operations: FailedOperations[];
+
+    constructor(parentPath: string, operations: FailedOperations[]) {
+        this.parentPath = parentPath;
         this.operations = operations;
     }
+
     serialize(): string {
         return JSON.stringify(this);
+    }
+
+    static deserialize(serialized: string): RetryBatchInfo {
+        const data = JSON.parse(serialized);
+        return new RetryBatchInfo(data.parentPath, data.operations);
     }
 }
 
