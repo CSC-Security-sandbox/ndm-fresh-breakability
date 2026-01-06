@@ -472,8 +472,11 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
   const fileServerName =
     data?.find(
       (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.FILE_SERVER_NAME
+    )?.value || data?.find(
+      (item: DataItemType) =>
         item.sub_category === FileSystemSubCategory.CONFIG_NAME
-    )?.value || 0;
+    )?.value || "";
   const fileServerPath =
     data?.find(
       (item: DataItemType) => item.sub_category === FileSystemSubCategory.PATH
