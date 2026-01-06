@@ -33,3 +33,6 @@ ADD COLUMN status varchar(255);
 
 ALTER TABLE datamigrator.file_server
 DROP COLUMN IF EXISTS server_type;
+
+ALTER TABLE datamigrator.volume
+ADD COLUMN directory_path text NULL;
