@@ -77,6 +77,7 @@ export class WinOperationService {
   }: CommandExecInput): Promise<{ output: StampMetaOutput; errors: string[] }> {
     const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
     let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
+    this.logger.log(`Fetched source ACL for ${sourcePath}: ${JSON.stringify(acl)}`);
     if (jobContext.jobConfig?.options?.isIdentityMappingAvailable) {
       this.logger.log(
         'Mapping SID to target: ' +
@@ -128,6 +129,7 @@ export class WinOperationService {
       targetPath,
       false,
     );
+    this.logger.log(`Fetched target ACL for ${targetPath}: ${JSON.stringify(targetAcl)}`);
 
     const validation = await this.validateAclOperation(acl, targetAcl);
     if (validation.inValid.length > 0)
