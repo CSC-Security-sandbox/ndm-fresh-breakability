@@ -21,6 +21,10 @@ class FileServerDto {
   @ApiProperty()
   @IsString()
   serverName: string;
+
+  @ApiProperty()
+  @IsString()
+  configName: string;
 }
 
 class JobConfigDto {
