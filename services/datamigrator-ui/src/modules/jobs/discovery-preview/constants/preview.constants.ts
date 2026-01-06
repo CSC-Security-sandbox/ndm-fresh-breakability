@@ -59,6 +59,7 @@ export enum FileSystemSubCategory {
   PATH = "Path",
   PROTOCOL = "Protocol",
   CONFIG_NAME = "Config Name",
+  FILE_SERVER_NAME = "File Server Name",
 
   // Biggest subcategories
   TOP_5_LONGEST_FILE_NAMES = "Top 5 Longest File Names",
