@@ -27,6 +27,129 @@ export class IsilonStorageClient extends StorageClient {
   }
 
   /**
+   * Detect the installed Isilon/PowerScale OneFS version and determine the appropriate API version
+   * Maps OneFS versions to their supported platform API versions based on Dell documentation:
+   * https://www.dell.com/support/manuals/en-in/isilon-onefs/ifs_pub_onefs_api_reference/api-versions-in-onefs
+   * 
+   * OneFS Version -> API Version:
+   * - 9.3.0.0+    -> API v14
+   * - 9.2.1.0     -> API v13
+   * - 9.2.0.0     -> API v12
+   * - 9.1.0.0     -> API v11
+   * - 9.0.0.0     -> API v10
+   * - 8.2.2.x     -> API v9
+   * - 8.2.1.x     -> API v8
+   * - 8.2.0.x     -> API v7
+   * - 8.1.1.x     -> API v6
+   * - 8.1.0.x     -> API v5
+   * - 8.0.1.x     -> API v4
+   * - 8.0.0.x     -> API v3
+   * 
+   * @returns Object containing OneFS version and API version to use
+   */
+  async detectIsilonVersion(
+    host: string,
+    port: number,
+    username: string,
+    password: string,
+    certificate: string,
+  ): Promise<{ oneFsVersion: string; apiVersion: number }> {
+    try {
+      this.logger.log(`Detecting Isilon/PowerScale version at ${host}:${port}`);
+
+      // Call /platform/1/cluster/config to get cluster information including OneFS version
+      const clusterConfig = await this.makeIsilonAPICall(
+        host,
+        port,
+        '/platform/1/cluster/config',
+        'GET',
+        username,
+        password,
+        certificate,
+      );
+
+      const oneFsVersion = clusterConfig?.onefs_version?.release || clusterConfig?.onefs_version?.version || '';
+      
+      if (!oneFsVersion) {
+        this.logger.warn(`Could not determine OneFS version from cluster config, defaulting to API v14`);
+        return { oneFsVersion: 'unknown', apiVersion: 14 };
+      }
+
+      this.logger.log(`Detected OneFS version: ${oneFsVersion}`);
+
+      // Parse major, minor, and patch version numbers
+      const versionMatch = oneFsVersion.match(/^v?(\d+)\.(\d+)\.(\d+)/i);
+      if (!versionMatch) {
+        this.logger.warn(`Could not parse OneFS version '${oneFsVersion}', defaulting to API v14`);
+        return { oneFsVersion, apiVersion: 14 };
+      }
+
+      const majorVersion = parseInt(versionMatch[1], 10);
+      const minorVersion = parseInt(versionMatch[2], 10);
+      const patchVersion = parseInt(versionMatch[3], 10);
+
+      // Determine API version based on OneFS version (from Dell documentation)
+      let apiVersion: number;
+
+      if (majorVersion >= 10) {
+        // Future versions - use latest known API
+        apiVersion = 14;
+      } else if (majorVersion === 9) {
+        if (minorVersion >= 3) {
+          apiVersion = 14; // 9.3.0.0+
+        } else if (minorVersion === 2 && patchVersion >= 1) {
+          apiVersion = 13; // 9.2.1.0
+        } else if (minorVersion === 2) {
+          apiVersion = 12; // 9.2.0.0
+        } else if (minorVersion === 1) {
+          apiVersion = 11; // 9.1.0.0
+        } else {
+          apiVersion = 10; // 9.0.0.0
+        }
+      } else if (majorVersion === 8) {
+        if (minorVersion >= 3) {
+          apiVersion = 9; // 8.3+ (use latest 8.x API)
+        } else if (minorVersion === 2) {
+          if (patchVersion >= 2) {
+            apiVersion = 9; // 8.2.2.x
+          } else if (patchVersion === 1) {
+            apiVersion = 8; // 8.2.1.x
+          } else {
+            apiVersion = 7; // 8.2.0.x
+          }
+        } else if (minorVersion === 1) {
+          if (patchVersion >= 1) {
+            apiVersion = 6; // 8.1.1.x
+          } else {
+            apiVersion = 5; // 8.1.0.x
+          }
+        } else {
+          // minorVersion === 0
+          if (patchVersion >= 1) {
+            apiVersion = 4; // 8.0.1.x
+          } else {
+            apiVersion = 3; // 8.0.0.x
+          }
+        }
+      } else {
+        // OneFS 7.x or older - use API v3 (earliest documented)
+        this.logger.warn(`OneFS version ${majorVersion}.${minorVersion}.${patchVersion} is older than 8.0, using API v3`);
+        apiVersion = 3;
+      }
+
+      this.logger.log(
+        `Using API v${apiVersion} for OneFS ${oneFsVersion}`
+      );
+
+      return { oneFsVersion, apiVersion };
+    } catch (error) {
+      this.logger.error(`Error detecting Isilon version: ${error?.message || 'Unknown error'}`);
+      // Default to v14 if detection fails - most common modern version
+      return { oneFsVersion: 'unknown', apiVersion: 14 };
+    }
+  }
+
+  /**
    * Fetch access zones from Isilon management server
    * Used during initial setup before credentials are stored in DB
    * Fetches zones, their groupnets, subnets, and IP pool ranges
@@ -37,11 +160,22 @@ export class IsilonStorageClient extends StorageClient {
     try {
       this.logger.log(`Fetching all zones from ${host}:${port}`);
 
-      // 1. Get all zones from /platform/7/zones
+      // Detect Isilon version and get appropriate API version
+      const { oneFsVersion, apiVersion } = await this.detectIsilonVersion(
+        host,
+        port,
+        username,
+        password,
+        certificate,
+      );
+
+      this.logger.log(`Using API v${apiVersion} for zones endpoint (OneFS: ${oneFsVersion})`);
+
+      // 1. Get all zones from /platform/{apiVersion}/zones
       const zonesResponse = await this.makeIsilonAPICall(
         host,
         port,
-        '/platform/7/zones',
+        `/platform/${apiVersion}/zones`,
         'GET',
         username,
         password,
@@ -87,11 +221,11 @@ export class IsilonStorageClient extends StorageClient {
 
           this.logger.debug(`Zone '${zoneName}' is associated with groupnet '${groupnet}'`);
 
-          // Get subnets for the groupnet from /platform/7/network/groupnets/{groupnet}/subnets
+          // Get subnets for the groupnet from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets
           const subnetsResponse = await this.makeIsilonAPICall(
             host,
             port,
-            `/platform/7/network/groupnets/${groupnet}/subnets`,
+            `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets`,
             'GET',
             username,
             password,
@@ -122,11 +256,11 @@ export class IsilonStorageClient extends StorageClient {
             this.logger.debug(`Processing subnet '${subnetName}' in zone '${zoneName}'`);
 
             try {
-              // Get pools from /platform/7/network/groupnets/{groupnet}/subnets/{subnet}/pools/
+              // Get pools from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets/{subnet}/pools/
               const poolsResponse = await this.makeIsilonAPICall(
                 host,
                 port,
-                `/platform/7/network/groupnets/${groupnet}/subnets/${subnetName}/pools`,
+                `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets/${subnetName}/pools`,
                 'GET',
                 username,
                 password,
@@ -180,11 +314,11 @@ export class IsilonStorageClient extends StorageClient {
                 }
                 
                 try {
-                  // Get interfaces (individual IPs) from /platform/7/network/groupnets/{groupnet}/subnets/{subnet}/pools/{pool}/interfaces
+                  // Get interfaces (individual IPs) from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets/{subnet}/pools/{pool}/interfaces
                   const interfacesResponse = await this.makeIsilonAPICall(
                     host,
                     port,
-                    `/platform/7/network/groupnets/${groupnet}/subnets/${subnetName}/pools/${poolName}/interfaces`,
+                    `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets/${subnetName}/pools/${poolName}/interfaces`,
                     'GET',
                     username,
                     password,
