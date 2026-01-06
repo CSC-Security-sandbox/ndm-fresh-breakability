@@ -720,7 +720,12 @@ export class ConfigurationService {
         createConfig.projectId,
         sanitizedConfigName,
       );
-
+      
+      // Build hashmap of hasWorkers per file server (keyed by fileServerName)
+      const hasWorkersMap: Record<string, boolean> = {};
+      createConfig.fileServers.forEach((fs) => {
+        hasWorkersMap[fs.fileServerName] = (fs?.workers?.length ?? 0) > 0;
+      });
      
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
@@ -752,6 +757,7 @@ export class ConfigurationService {
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
             zone_id: fileServer.zone_id,
+            status: hasWorkersMap[fileServer.fileServerName] ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
           });
         },
       );
@@ -761,10 +767,10 @@ export class ConfigurationService {
         where: { workerId: In(allWorkerIds) },
         relations: { stats: true },
       });
-
-      const hasWorkers = createConfig?.fileServers?.some(
-        (fs) => fs?.workers?.length > 0,
-      );
+      
+      
+      // Config-level check (true if any file server has workers)
+      const hasWorkers = Object.values(hasWorkersMap).some(v => v);
       let config;
       switch (createConfig.serverType) {
         case ServerType.dell:
@@ -798,11 +804,30 @@ export class ConfigurationService {
           break;
       }
 
+      // Check worker health at config level
       if (workers?.length > 0 && (await this.isAllWorkerUnHealthy(workers)))
         allUnHealthy = true;
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
+      }
+
+      // Check worker health at file server level
+      for (const fileServer of config.fileServers) {
+        if (fileServer.workers?.length > 0) {
+          // Get worker IDs from the already-populated workers relation
+          const workerIds = fileServer.workers.map(w => w.workerId);
+          
+          const fsWorkers: WorkerEntity[] = await this.WorkerEntity.find({
+            where: { workerId: In(workerIds) },
+            relations: { stats: true },
+          });
+          
+          if (fsWorkers?.length > 0 && (await this.isAllWorkerUnHealthy(fsWorkers))) {
+            fileServer.status = ConfigStatus.ERRORED;
+            fileServer.errorMessage = ConfigErrorMsg.ERRORED;
+          }
+        }
       }
       const update = await this.configEntity.save(config);
       if (allUnHealthy) {
@@ -1478,8 +1503,8 @@ export class ConfigurationService {
       // With fileServerId (UI call): refresh only that file server/zone
       // Without fileServerId (creation flow): refresh all file servers
       const fileServersToRefresh = fileServerId
-        ? config.fileServers.filter(fs => fs.id === fileServerId)
-        : config.fileServers;
+        ? config.fileServers.filter(fs => fs.id === fileServerId) 
+        : config.fileServers; 
 
       if (fileServerId && fileServersToRefresh.length === 0) {
         throw new NotFoundException(`File server ${fileServerId} not found in config ${configId}`);
