@@ -46,6 +46,7 @@ import {
 } from 'src/workflow/workflow.types';
 import {
   Credentials,
+  DiscoveredVolumeData,
   ListPathWorkflowStatus,
   PathsMap,
 } from './configuration.types';
@@ -849,7 +850,7 @@ export class ConfigurationService {
       // For Dell, discover exports via API for workflow payload
       // NOTE: We do NOT save volumes here - refreshConfig will handle that
       // This just discovers exports for the validation workflow
-      let discoveredPathsMap: Map<string, string[]> | null = null;
+      let discoveredPathsMap: Map<string, DiscoveredVolumeData[]> | null = null;
       if (createConfig.serverType === ServerType.dell) {
         this.logger.log(`Discovering Isilon exports for config ${update.id} for workflow payload`);
         try {
@@ -1132,7 +1133,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     configId: string,
     traceId: string,
-    discoveredPathsMap?: Map<string, string[]> | null, // Dell: pre-discovered exports (optional)
+    discoveredPathsMap?: Map<string, DiscoveredVolumeData[]> | null, // Dell: pre-discovered exports (optional)
   ) {
     // Validate input parameters - throw InternalServerErrorException if any required parameter is empty
     if (!createConfig || !configId || !traceId || !createConfig.fileServers || createConfig.fileServers.length === 0) {
@@ -1175,7 +1176,7 @@ export class ConfigurationService {
     createConfig: ConfigDTO,
     configId: string,
     traceId: string,
-    discoveredPathsMap?: Map<string, string[]> | null, // Pre-discovered exports (optional)
+    discoveredPathsMap?: Map<string, DiscoveredVolumeData[]> | null, // Pre-discovered exports (optional)
   ) {
     this.logger.debug(`Dell: Starting per-zone workflows for config ${configId}`);
 
@@ -1204,7 +1205,8 @@ export class ConfigurationService {
       // Priority: 1. Pre-discovered paths passed as parameter, 2. Query from DB (for update/refresh)
       let discoveredPaths: string[] = [];
       if (discoveredPathsMap?.has(fileServer.id)) {
-        discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
+        const volumeDataList = discoveredPathsMap.get(fileServer.id) || [];
+        discoveredPaths = volumeDataList.map(v => v.volumePath);
         this.logger.debug(`Dell: Using pre-discovered ${discoveredPaths.length} paths for file server ${fileServer.id}`);
       } else {
         // Fallback: Fetch from DB (for update scenarios where volumes exist)
@@ -1374,14 +1376,14 @@ export class ConfigurationService {
 
   /**
    * Discover exports/shares from Dell Isilon using REST API for ALL file servers in a config.
-   * Returns a map of fileServerId -> discovered paths.
+   * Returns a map of fileServerId -> discovered volume data.
    * 
    * This is a convenience wrapper around discoverIsilonExportsForFileServers
    * that fetches the config and passes all file servers.
    * 
    * Used during config creation to discover exports for workflow payload.
    */
-  async discoverIsilonExports(configId: string, traceId: string): Promise<Map<string, string[]>> {
+  async discoverIsilonExports(configId: string, traceId: string): Promise<Map<string, DiscoveredVolumeData[]>> {
     try {
       this.logger.log(`Discovering Isilon exports for config ${configId} (trace: ${traceId})`);
 
@@ -1397,7 +1399,7 @@ export class ConfigurationService {
 
       if (config.serverType !== ServerType.dell) {
         this.logger.warn(`Config ${configId} is not Dell Isilon (${config.serverType}), skipping API discovery`);
-        return new Map<string, string[]>();
+        return new Map<string, DiscoveredVolumeData[]>();
       }
 
       // Delegate to the shared method for all file servers
@@ -1417,13 +1419,17 @@ export class ConfigurationService {
    * 
    * IMPORTANT: If API discovery fails, we throw an error to prevent
    * volumes from being incorrectly disabled due to empty paths.
+   * 
+   * Returns Map<fileServerId, DiscoveredVolumeData[]>
+   * - For NFS: volumePath = directoryPath (both are the export path)
+   * - For SMB: volumePath = share name, directoryPath = filesystem path
    */
   async discoverIsilonExportsForFileServers(
     config: ConfigEntity,
     fileServers: FileServerEntity[],
     traceId: string,
-  ): Promise<Map<string, string[]>> {
-    const discoveredPathsMap = new Map<string, string[]>();
+  ): Promise<Map<string, DiscoveredVolumeData[]>> {
+    const discoveredPathsMap = new Map<string, DiscoveredVolumeData[]>();
     const errors: string[] = [];
     
     this.logger.log(`Discovering Isilon exports for ${fileServers.length} file server(s) (trace: ${traceId})`);
@@ -1437,7 +1443,7 @@ export class ConfigurationService {
     for (const fileServer of fileServers) {
       this.logger.log(`Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`);
 
-      const paths: string[] = [];
+      const volumeDataList: DiscoveredVolumeData[] = [];
       let apiError: string | null = null;
 
       // Fetch NFS exports if protocol includes NFS
@@ -1447,7 +1453,11 @@ export class ConfigurationService {
           this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
 
           for (const nfsExport of nfsExports) {
-            paths.push(nfsExport.path);
+            // For NFS: volumePath and directoryPath are the same (both are the export path)
+            volumeDataList.push({
+              volumePath: nfsExport.path,
+              directoryPath: nfsExport.path,
+            });
           }
         } catch (error) {
           apiError = `Failed to fetch NFS exports: ${error.message}`;
@@ -1462,7 +1472,11 @@ export class ConfigurationService {
           this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
 
           for (const smbShare of smbShares) {
-            paths.push(smbShare.name);
+            // For SMB: volumePath = share name, directoryPath = filesystem path
+            volumeDataList.push({
+              volumePath: smbShare.name,
+              directoryPath: smbShare.path,
+            });
           }
         } catch (error) {
           apiError = `Failed to fetch SMB shares: ${error.message}`;
@@ -1477,8 +1491,8 @@ export class ConfigurationService {
         continue; // Skip this file server, don't add empty paths
       }
 
-      discoveredPathsMap.set(fileServer.id, paths);
-      this.logger.log(`Discovered ${paths.length} paths for file server ${fileServer.id}`);
+      discoveredPathsMap.set(fileServer.id, volumeDataList);
+      this.logger.log(`Discovered ${volumeDataList.length} paths for file server ${fileServer.id}`);
     }
 
     // If any API calls failed, throw error to prevent incorrect volume disabling
@@ -1823,16 +1837,16 @@ export class ConfigurationService {
    */
   private async syncVolumesForFileServers(
     fileServers: FileServerEntity[],
-    discoveredPathsMap: Map<string, string[]>,
+    discoveredPathsMap: Map<string, string[] | DiscoveredVolumeData[]>,
     createdBy: string,
     updatedBy?: string,
     pathsMap?: PathsMap, // for reachableCount (Other NAS - from workflow)
-    serverType?: ServerType, // to determine reachableCount logic
+    serverType?: ServerType, // to determine reachableCount logic and directoryPath handling
   ): Promise<void> {
     const fileServersIds = fileServers.map((fs) => fs.id);
 
     for (const fileServer of fileServers) {
-      const discoveredPaths = discoveredPathsMap.get(fileServer.id) || [];
+      const discoveredData = discoveredPathsMap.get(fileServer.id) || [];
       
       // Determine reachableCount based on server type
       let reachableCount: number;
@@ -1844,19 +1858,43 @@ export class ConfigurationService {
         reachableCount = pathsMap?.[fileServer.protocol]?.workers ?? 0;
       }
 
+      // Normalize discovered data to DiscoveredVolumeData[]
+      // For Dell: already in DiscoveredVolumeData format
+      // For Other NAS: convert string[] to DiscoveredVolumeData[] (volumePath = directoryPath)
+      const volumeDataList: DiscoveredVolumeData[] = discoveredData.map((item) => {
+        if (typeof item === 'string') {
+          // Other NAS: volumePath = directoryPath (no separate directory path)
+          return { volumePath: item, directoryPath: item };
+        }
+        return item;
+      });
+
+      const discoveredPaths = volumeDataList.map((v) => v.volumePath);
+      
+      // Build a map of volumePath -> directoryPath for quick lookup
+      const directoryPathMap = new Map<string, string>();
+      for (const vd of volumeDataList) {
+        directoryPathMap.set(vd.volumePath, vd.directoryPath);
+      }
+
       // 1. Re-enable existing volumes if path still exists on NAS
+      // Also update directoryPath for Dell
       if (discoveredPaths.length > 0) {
-        await this.volumes.update(
-          {
-            fileServerId: fileServer.id,
-            volumePath: In(discoveredPaths),
-          },
-          {
-            reachableCount: reachableCount,
-            isValid: true,
-            isDisabled: false,
-          },
-        );
+        // For each discovered path, update with correct directoryPath
+        for (const vd of volumeDataList) {
+          await this.volumes.update(
+            {
+              fileServerId: fileServer.id,
+              volumePath: vd.volumePath,
+            },
+            {
+              reachableCount: reachableCount,
+              isValid: true,
+              isDisabled: false,
+              directoryPath: vd.directoryPath,
+            },
+          );
+        }
       }
 
       // 2. Create new volumes only for paths that don't exist in DB
@@ -1864,12 +1902,13 @@ export class ConfigurationService {
         fileServer.volumes?.map((vol) => vol.volumePath) || [],
       );
       const newVolumes: VolumeEntity[] = [];
-      for (const path of discoveredPaths) {
-        if (!existingPaths.has(path)) {
+      for (const vd of volumeDataList) {
+        if (!existingPaths.has(vd.volumePath)) {
           newVolumes.push(
             this.volumes.create({
               fileServerId: fileServer.id,
-              volumePath: path,
+              volumePath: vd.volumePath,
+              directoryPath: vd.directoryPath,
               isValid: true,
               isDisabled: false,
               reachableCount: reachableCount,
