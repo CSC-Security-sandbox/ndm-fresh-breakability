@@ -33,7 +33,7 @@ import { nanoid } from "@reduxjs/toolkit";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { BULK_DISCOVERY_DEFAULT_COLUMN_STATE } from "@modules/storage-servers/file-server/file-server-overview/fileServerId.constant";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 import { SCHEDULE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
@@ -42,6 +42,11 @@ dayjs.extend(utc);
 
 const BulkDiscover = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Get zone query params for Dell Isilon - to preserve when navigating back
+  const zoneNameParam = searchParams.get('zone');
+  const zoneFileServerId = searchParams.get('fileServerId');
+  
   const [createBulkDiscoveryApi, { isLoading: isSubmitting }] =
     useBulkDiscoveryMutation();
   const [getAllFileServersApi] = useLazyGetAllFileServersWithVolumeQuery();
@@ -131,7 +136,12 @@ const BulkDiscover = () => {
         selectedExportPathsIds
       );
       await createBulkDiscoveryApi(payload).unwrap();
-      navigate(`/file-server/${fileServerDetails?.id}`);
+      
+      // Build query string to preserve zone params for Dell Isilon
+      const queryString = zoneFileServerId && zoneNameParam 
+        ? `?zone=${encodeURIComponent(zoneNameParam)}&fileServerId=${zoneFileServerId}`
+        : '';
+      navigate(`/file-server/${fileServerDetails?.id}${queryString}`);
 
       const configName = fileServerDetails?.configName;
       const successMessage = (

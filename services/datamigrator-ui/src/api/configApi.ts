@@ -67,8 +67,10 @@ export const configApi = createApi({
     }),
 
     getFileServerById: builder.query({
-      query: ({ fileServerId }) => ({
-        url: `/servers/${fileServerId}`,
+      query: ({ fileServerId, zoneFileServerId }) => ({
+        url: zoneFileServerId 
+          ? `/servers/${fileServerId}?fileServerId=${zoneFileServerId}`
+          : `/servers/${fileServerId}`,
         method: "GET",
       }),
       transformResponse: (response) => {

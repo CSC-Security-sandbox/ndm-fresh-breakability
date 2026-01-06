@@ -5,16 +5,20 @@ import {
   VolumeType,
   WorkerApiType,
 } from "@/types/app.type";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 const useFileServerDetails = () => {
   const { fileServerId } = useParams<{ fileServerId: string }>();
+  const [searchParams] = useSearchParams();
+  // Get zone-specific file server ID from URL - used for Dell Isilon to filter to specific zone
+  const zoneFileServerId = searchParams.get("fileServerId");
+  
   const {
     data: _fileServerDetails,
     refetch,
     isFetching,
   } = useGetFileServerByIdQuery(
-    { fileServerId },
+    { fileServerId, zoneFileServerId },
     {
       pollingInterval: Number(
         window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
@@ -56,7 +60,7 @@ const useFileServerDetails = () => {
 
   useEffect(() => {
     getFileServerDetails();
-  }, [_fileServerDetails]);
+  }, [_fileServerDetails, zoneFileServerId]);
 
   return {
     fileServerDetails,
@@ -64,6 +68,7 @@ const useFileServerDetails = () => {
     allWorkersList,
     refetch,
     isFetching,
+    zoneFileServerId,
   };
 };
 
