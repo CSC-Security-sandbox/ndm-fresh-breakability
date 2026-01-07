@@ -1033,6 +1033,7 @@ export class ConfigurationService {
           zone_id: update.zone_id,
           smartConnectSsip: update.smartConnectSsip, // SSIP for SmartConnect DNS resolution
           smartConnectDnsZone: update.smartConnectDnsZone, // DNS zone from Isilon API
+          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
 
@@ -1090,8 +1091,12 @@ export class ConfigurationService {
           password: newFs.password,
           updatedBy: userId,
           isRefreshed: false,
+          volumes: [], // Initialize with empty volumes array
           exportPathSource: newFs.exportPathSource,
           zone_id: newFs.zone_id,
+          smartConnectSsip: newFs.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+          smartConnectDnsZone: newFs.smartConnectDnsZone, // DNS zone from Isilon API
+          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
 
@@ -1154,6 +1159,27 @@ export class ConfigurationService {
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
+      } else if (updateConfig.serverType === ServerType.dell) {
+        // Aggregate per-zone statuses to config-level status for Dell Isilon
+        const fileServers = config.fileServers;
+        const hasDraft = fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
+        const hasErrored = fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
+        
+        if (hasDraft) {
+          config.status = ConfigStatus.DRAFT;
+          config.errorMessage = 'One or more zones have no workers assigned';
+        } else if (hasErrored) {
+          config.status = ConfigStatus.ERRORED;
+          config.errorMessage = 'One or more zones failed validation';
+        } else {
+          // All zones have workers, set to IN_PROGRESS (workflow will set ACTIVE on success)
+          config.status = ConfigStatus.IN_PROGRESS;
+          config.errorMessage = null;
+        }
+        
+        this.logger.debug(
+          `Dell config ${id}: Aggregated status = ${config.status} (hasDraft=${hasDraft}, hasErrored=${hasErrored})`,
+        );
       }
 
       const update = await this.configEntity.save(config);
