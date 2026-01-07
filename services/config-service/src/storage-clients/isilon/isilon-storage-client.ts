@@ -215,6 +215,7 @@ export class IsilonStorageClient extends StorageClient {
               ipAddresses: [],
               smartConnectFqdn: null,
               ssip: null,
+              scDnsZone: null,
             });
             continue;
           }
@@ -250,6 +251,7 @@ export class IsilonStorageClient extends StorageClient {
           const ipAddresses = [];
           let zoneSmartConnectFqdn: string | null = null;
           let zoneSsip: string | null = null;
+          let zoneScDnsZone: string | null = null;
 
           for (const subnet of subnets) {
             const subnetName = subnet?.name || 'unknown';
@@ -296,15 +298,14 @@ export class IsilonStorageClient extends StorageClient {
                   // Store zone-level SmartConnect info
                   zoneSmartConnectFqdn = smartConnectFqdn;
                   zoneSsip = ssip;
+                  zoneScDnsZone = scDnsZone || null;
                   
-                  // Add SmartConnect FQDN as first IP option
+                  // Add SmartConnect FQDN as first IP option (for user selection)
                   if (!ipAddresses.includes(smartConnectFqdn)) {
                     ipAddresses.unshift(smartConnectFqdn);
                   }
-                  // Add SSIP as second option if available
-                  if (ssip && !ipAddresses.includes(ssip)) {
-                    ipAddresses.unshift(ssip);
-                  }
+                  // Note: SSIP is stored separately for DNS configuration, not shown in IP list
+                  // It's used by workers to configure DNS resolver for FQDN resolution
                 }
                 
                 // Only collect IPs from pools that belong to this zone
@@ -359,6 +360,7 @@ export class IsilonStorageClient extends StorageClient {
             ipAddresses,
             smartConnectFqdn: zoneSmartConnectFqdn,
             ssip: zoneSsip,
+            scDnsZone: zoneScDnsZone,
           });
 
           this.logger.debug(`Found ${ipAddresses.length} IP addresses for zone '${zoneName}'${zoneSmartConnectFqdn ? `, SmartConnect: ${zoneSmartConnectFqdn}` : ''}`);
@@ -373,6 +375,7 @@ export class IsilonStorageClient extends StorageClient {
             ipAddresses: [],
             smartConnectFqdn: null,
             ssip: null,
+            scDnsZone: null,
           });
         }
       }

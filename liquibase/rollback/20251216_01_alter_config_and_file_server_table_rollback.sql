@@ -1,3 +1,9 @@
+ALTER TABLE datamigrator.file_server 
+DROP COLUMN IF EXISTS smart_connect_dns_zone;
+
+ALTER TABLE datamigrator.file_server 
+DROP COLUMN IF EXISTS smart_connect_ssip;
+
 ALTER TABLE datamigrator.volume
 DROP COLUMN IF EXISTS directory_path;
 

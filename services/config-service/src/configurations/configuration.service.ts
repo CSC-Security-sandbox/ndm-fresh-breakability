@@ -762,6 +762,8 @@ export class ConfigurationService {
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
             zone_id: fileServer.zone_id,
+            smartConnectSsip: fileServer.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+            smartConnectDnsZone: fileServer.smartConnectDnsZone, // DNS zone from Isilon API
             status: hasWorkersMap[fileServer.fileServerName] ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
           });
         },
@@ -1020,6 +1022,8 @@ export class ConfigurationService {
           isRefreshed: false,
           exportPathSource: update.exportPathSource,
           zone_id: update.zone_id,
+          smartConnectSsip: update.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+          smartConnectDnsZone: update.smartConnectDnsZone, // DNS zone from Isilon API
         });
       });
 
@@ -1239,10 +1243,12 @@ export class ConfigurationService {
       const listPathPayload: ListPathDTO[] = [{
         type: fileServerConfig.protocol,
         protocolVersion: fileServerConfig.protocolVersion?.replace(/^v/, ''),
-        host: fileServerConfig.host?.trim(),
+        host: fileServerConfig.host?.trim() || '',
         username: fileServerConfig.userName,
         password: fileServerConfig.password,
         exportPathSource: fileServerConfig.exportPathSource,
+        smartConnectSsip: fileServerConfig.smartConnectSsip, // SSIP for DNS resolution (from API)
+        smartConnectDnsZone: fileServerConfig.smartConnectDnsZone, // DNS zone for resolver config (from API)
       }];
 
       const payload: ValidateExportPathAndWorkingDirectoryDTO = {
@@ -1290,6 +1296,7 @@ export class ConfigurationService {
 
   /**
    * Start single workflow for Other NAS (existing behavior)
+   * Note: Other NAS doesn't have SmartConnect, so SSIP and DNS zone fields are not used
    */
   private async startOtherNasWorkflow(
     createConfig: ConfigDTO,
@@ -1302,10 +1309,11 @@ export class ConfigurationService {
       const payload: ListPathDTO = {
         type: fileServer?.protocol,
         protocolVersion: fileServer?.protocolVersion?.replace(/^v/, ''),
-        host: fileServer?.host?.trim(),
+        host: fileServer?.host?.trim() || '',
         username: fileServer?.userName,
         password: fileServer?.password,
         exportPathSource: fileServer.exportPathSource,
+        // Other NAS doesn't have SmartConnect - these fields are not applicable
       };
       listPathPayload.push(payload);
     });

@@ -13,6 +13,8 @@ interface ZoneData {
   numericId: number;    // Numeric zone ID from Isilon API
   name: string;
   ipList: Array<{ label: string; value: string }>;
+  smartConnectSsip?: string;   // SSIP from Isilon API
+  smartConnectDnsZone?: string; // DNS zone from Isilon API
 }
 
 const IsilonCredentials = () => {
@@ -83,10 +85,11 @@ const IsilonCredentials = () => {
         console.debug("[IsilonCredentials] Zones API response:", response);
 
         // Transform API response to ZoneData format
-        // Each zone has zoneId (numeric), zoneName, ipAddresses[], smartConnectFqdn, ssip
+        // Each zone has zoneId (numeric), zoneName, ipAddresses[], smartConnectFqdn, ssip, scDnsZone
         const transformedZones: ZoneData[] = (response?.zones || []).map((zone: any) => {
           const smartConnectFqdn = zone.smartConnectFqdn;
           const ssip = zone.ssip;
+          const scDnsZone = zone.scDnsZone;
           
           // Build IP list with SmartConnect FQDN formatted as "fqdn(ssip)"
           const ipList = (zone.ipAddresses || []).map((ip: string) => {
@@ -108,6 +111,8 @@ const IsilonCredentials = () => {
             numericId: zone.zoneId || 1,
             name: zone.zoneName,
             ipList,
+            smartConnectSsip: ssip,       // SSIP from Isilon API
+            smartConnectDnsZone: scDnsZone, // DNS zone from Isilon API
           };
         });
 
@@ -421,15 +426,17 @@ const IsilonCredentials = () => {
     console.debug("[IsilonCredentials] Selection changed", selectionState.rows, "selectedZoneIdArray", selectedZoneIdArray);
     setSelectedZoneIds(selectedZoneIdArray);
     
-    // Also store numeric zone IDs in zoneCredentials for each selected zone
+    // Also store zone metadata (numericZoneId, SmartConnect info) in zoneCredentials for each selected zone
     selectedZoneIdArray.forEach((zoneId) => {
       const zone = zones.find((z) => z.id === zoneId);
-      if (zone && zone.numericId !== undefined) {
+      if (zone) {
         setZoneCredentials((prev: any) => ({
           ...prev,
           [zoneId]: {
             ...prev[zoneId],
             numericZoneId: zone.numericId,
+            smartConnectSsip: zone.smartConnectSsip,       // SSIP from Isilon API
+            smartConnectDnsZone: zone.smartConnectDnsZone, // DNS zone from Isilon API
           },
         }));
       }
