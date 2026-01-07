@@ -251,6 +251,14 @@ export class ConfigurationService {
           scannedDate: true,
           status: true,
           errorMessage: true,
+          // Dell Isilon management console fields
+          serverType: true,
+          hostname: true,
+          port: true,
+          username: true,
+          tlsAccepted: true,
+          tlsCaCertificate: true,
+          tlsExpiry: true,
           workingDirectory: {
             pathName: true,
             workingDirectory: true,
@@ -972,6 +980,7 @@ export class ConfigurationService {
         config.tlsExpiry = updateConfig.tlsExpiry;
       }
 
+      // Process existing file servers (update them)
       const fileServerPromises = config.fileServers.map(async (fileServer) => {
         const update = updateConfig.fileServers.find(
           (it) => it.id == fileServer.id,
@@ -1023,6 +1032,65 @@ export class ConfigurationService {
         });
       });
 
+      // Process new file servers (create them) - file servers with null or undefined id
+      const newFileServerDTOs = updateConfig.fileServers.filter(
+        (fs) => fs.id === null || fs.id === undefined,
+      );
+
+      this.logger.debug(
+        `Found ${newFileServerDTOs.length} new file servers to create for config ${id}`,
+      );
+
+      const newFileServerPromises = newFileServerDTOs.map(async (newFs) => {
+        const workers = Array.isArray(newFs.workers)
+          ? await this.WorkerEntity.find({
+              where: { workerId: In(newFs.workers) },
+            })
+          : [];
+
+        const workersWithStats: WorkerEntity[] = Array.isArray(newFs.workers)
+          ? await this.WorkerEntity.find({
+              where: { workerId: In(newFs.workers) },
+              relations: { stats: true },
+            })
+          : [];
+
+        if (
+          workersWithStats?.length > 0 &&
+          (await this.isAllWorkerUnHealthy(workersWithStats))
+        )
+          allUnHealthy = true;
+
+        credentials.push({
+          details: {
+            hostname: newFs.host,
+            username: newFs.userName,
+            password: newFs.password,
+          },
+          protocol: newFs.protocol,
+          workers: workers.map((it) => it.workerId),
+        });
+
+        this.logger.debug(
+          `Creating new file server: ${newFs.fileServerName} (${newFs.protocol}) with ${workers.length} workers`,
+        );
+
+        return this.fileServerEntity.create({
+          host: newFs.host.trim(),
+          fileServerName: newFs.fileServerName,
+          workers: workers,
+          createdBy: userId,
+          protocol: newFs.protocol,
+          protocolVersion: newFs.protocolVersion,
+          userName: newFs.userName,
+          password: newFs.password,
+          updatedBy: userId,
+          isRefreshed: false,
+          exportPathSource: newFs.exportPathSource,
+          zone_id: newFs.zone_id,
+        });
+      });
+
       const { workingDirectory } = updateConfig;
       const mapping =
         await this.fileServerWorkingDirectoryMappingEntity.findOne({
@@ -1047,7 +1115,16 @@ export class ConfigurationService {
       const existingWorkers = config.fileServers.flatMap(
         (fileServer) => fileServer.workers,
       );
-      config.fileServers = await Promise.all(fileServerPromises);
+      
+      // Combine existing (updated) file servers and new file servers
+      const updatedFileServers = await Promise.all(fileServerPromises);
+      const createdFileServers = await Promise.all(newFileServerPromises);
+      config.fileServers = [...updatedFileServers, ...createdFileServers];
+      
+      this.logger.debug(
+        `Config ${id}: ${updatedFileServers.length} updated file servers, ${createdFileServers.length} new file servers`,
+      );
+      
       const newWorkers = updateConfig.fileServers.flatMap((fileServer) =>
         Array.isArray(fileServer.workers) ? fileServer.workers : [],
       );
@@ -1096,10 +1173,26 @@ export class ConfigurationService {
         },
       });
 
+              let discoveredPathsMap: Map<string, DiscoveredVolumeData[]> | null = null;
+        if (updateConfig.serverType === ServerType.dell) {
+        this.logger.log(`Discovering Isilon exports for config ${update.id} for workflow payload (update)`);
+        try {
+        discoveredPathsMap = await this.discoverIsilonExports(update.id, traceId);
+        this.logger.log(`Discovered exports for ${discoveredPathsMap.size} file servers`);
+        } catch (error) {
+        this.logger.error(
+        `Error discovering Isilon exports for config ${update.id}: ${error.message}`,
+        );
+        // Don't fail config update if discovery fails
+        }
+        }
+
+
       await this.startValidateWorkingDirectoryWorkflow(
         updateConfig,
         update.id,
         traceId,
+        discoveredPathsMap
       );
 
       await this.volumes.update(

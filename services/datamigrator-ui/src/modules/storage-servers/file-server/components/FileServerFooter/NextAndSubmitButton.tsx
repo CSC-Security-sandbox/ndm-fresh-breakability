@@ -1,5 +1,5 @@
 import { Button, useWizard } from "@netapp/bxp-design-system-react";
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { useLazyGetUniqueFileServerNamesQuery } from "@api/configApi";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
@@ -47,15 +47,39 @@ const NextAndSubmitButton = () => {
 
   const isDellIsilon = serverTypeForm?.formState?.serverType?.value === "dell";
 
+  // Build map of originally configured zones and protocols for edit mode validation
+  const originalConfiguredZones = useMemo(() => {
+    if (!isEditMode || !editingFileServerDetails?.fileServers) {
+      return new Map<string, { hasNfs: boolean; hasSmb: boolean }>();
+    }
+    
+    const configMap = new Map<string, { hasNfs: boolean; hasSmb: boolean }>();
+    editingFileServerDetails.fileServers.forEach((fs: any) => {
+      const zoneName = fs.fileServerName || "";
+      if (!configMap.has(zoneName)) {
+        configMap.set(zoneName, { hasNfs: false, hasSmb: false });
+      }
+      const zoneConfig = configMap.get(zoneName)!;
+      if (fs.protocol === "NFS") {
+        zoneConfig.hasNfs = true;
+      } else if (fs.protocol === "SMB") {
+        zoneConfig.hasSmb = true;
+      }
+    });
+    return configMap;
+  }, [isEditMode, editingFileServerDetails]);
+
   console.debug("[NextAndSubmitButton] Render", {
     currentStepIndex,
     isDellIsilon,
+    isEditMode,
     selectedZoneIds: safeSelectedZoneIds,
     zoneCredentials: safeZoneCredentials,
     selectedProtocol,
     hostCredentialsForm,
     nfsCredentialsForm,
     smbCredentialsForm,
+    originalConfiguredZones: Array.from(originalConfiguredZones.entries()),
   });
 
   const handleFinish = async () => {
@@ -98,9 +122,14 @@ const NextAndSubmitButton = () => {
           if (safeSelectedZoneIds.length === 0) {
             return true; // Disabled - no zones selected
           }
-          // Check if all selected zones have at least one protocol fully filled
+          
+          // In edit mode, we need additional validation:
+          // - Configured zones must have their configured protocols with valid IP (can't be empty)
+          // - At least one protocol must be fully filled per zone
           const allZonesValid = safeSelectedZoneIds.every((zoneId) => {
             const creds = safeZoneCredentials[zoneId] || {};
+            const configuredProtocols = originalConfiguredZones.get(zoneId);
+            
             // SMB is valid if: IP is selected AND username AND password are filled
             const smbValid = !!(
               creds.smbIp &&
@@ -113,6 +142,26 @@ const NextAndSubmitButton = () => {
               creds.nfsUsername?.trim() &&
               creds.nfsPassword?.trim()
             );
+            
+            // Edit mode additional validation
+            if (isEditMode && configuredProtocols) {
+              // If SMB was configured, it must still have a valid IP (password can be refilled)
+              if (configuredProtocols.hasSmb && !creds.smbIp) {
+                return false; // SMB IP is required for configured protocols
+              }
+              // If NFS was configured, it must still have a valid IP
+              if (configuredProtocols.hasNfs && !creds.nfsIp) {
+                return false; // NFS IP is required for configured protocols
+              }
+              // Also check that configured protocols have username/password
+              if (configuredProtocols.hasSmb && !(creds.smbUsername?.trim() && creds.smbPassword?.trim())) {
+                return false;
+              }
+              if (configuredProtocols.hasNfs && !(creds.nfsUsername?.trim() && creds.nfsPassword?.trim())) {
+                return false;
+              }
+            }
+            
             // At least one protocol must be fully filled
             return smbValid || nfsValid;
           });
@@ -120,6 +169,8 @@ const NextAndSubmitButton = () => {
             safeSelectedZoneIds,
             safeZoneCredentials,
             allZonesValid,
+            isEditMode,
+            originalConfiguredZones: Array.from(originalConfiguredZones.entries()),
           });
           return !allZonesValid; // Disabled if not all zones are valid
         }
@@ -153,7 +204,7 @@ const NextAndSubmitButton = () => {
   };
 
   const handleProceed = () => {
-    console.debug("[NextAndSubmitButton] handleProceed", { currentStepIndex });
+    console.debug("[NextAndSubmitButton] handleProceed", { currentStepIndex, isEditMode, isDellIsilon, certificateAccepted });
     const isConfigNameChanged =
       editingFileServerDetails?.configName !==
       serverTypeForm?.formState?.configName;
@@ -161,10 +212,21 @@ const NextAndSubmitButton = () => {
     const isFirstStep = currentStepIndex === STEP_0_FILE_SERVER_NAME;
 
     if (isFirstStep) {
-      // Dell Isilon: Always fetch certificate when clicking Proceed
-      // User must accept certificate in modal to proceed to next step
+      // Dell Isilon: Handle certificate flow
       if (isDellIsilon) {
-        // Always fetch the certificate - modal's Accept button handles navigation
+        // In edit mode, if certificate was already accepted (from existing config), skip certificate fetch
+        if (isEditMode && certificateAccepted) {
+          // Check unique name if changed
+          if (isConfigNameChanged) {
+            checkUniqueFileServerName();
+          } else {
+            handleNextClick();
+          }
+          return;
+        }
+        
+        // New config or certificate not yet accepted: fetch certificate
+        // Modal's Accept button handles navigation
         handleFetchCertificate();
         return;
       }
