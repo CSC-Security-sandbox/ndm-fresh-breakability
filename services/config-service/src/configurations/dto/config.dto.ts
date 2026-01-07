@@ -65,6 +65,16 @@ export class FileServersDTO {
     @IsOptional()
     zone_id?: number;
 
+    @ApiPropertyOptional({ description: 'SmartConnect Service IP (SSIP) for DNS resolution of FQDN', example: '10.192.7.110' })
+    @IsString()
+    @IsOptional()
+    smartConnectSsip?: string;
+
+    @ApiPropertyOptional({ description: 'SmartConnect DNS Zone for resolver configuration', example: 'lab.local' })
+    @IsString()
+    @IsOptional()
+    smartConnectDnsZone?: string;
+
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
     @IsArray()
     @IsUUID('all', { each: true })
@@ -345,6 +355,11 @@ export class IsilonZoneDTO {
     @IsString()
     @IsOptional()
     ssip?: string;
+
+    @ApiProperty({ description: 'SmartConnect DNS Zone (e.g., lab.local)', example: 'lab.local', required: false })
+    @IsString()
+    @IsOptional()
+    scDnsZone?: string;
 }
 
 /**

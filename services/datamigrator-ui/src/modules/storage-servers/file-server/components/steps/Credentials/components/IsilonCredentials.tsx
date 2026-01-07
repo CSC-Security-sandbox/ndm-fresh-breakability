@@ -13,6 +13,8 @@ interface ZoneData {
   numericId: number;
   name: string;
   ipList: Array<{ label: string; value: string }>;
+  smartConnectSsip?: string;     // SSIP from Isilon API for DNS resolution
+  smartConnectDnsZone?: string;  // DNS zone from Isilon API for resolver config
 }
 
 // Extended type for Edit mode with configuration flags
@@ -290,7 +292,7 @@ const AddModeTable = ({
     console.debug("[AddModeTable] Selection changed", selectionState.rows, "selectedZoneIdArray", selectedZoneIdArray);
     setSelectedZoneIds(selectedZoneIdArray);
 
-    // Store numeric zone IDs in zoneCredentials
+    // Store numeric zone IDs and SmartConnect info in zoneCredentials
     selectedZoneIdArray.forEach((zoneId) => {
       const zone = zones.find((z) => z.id === zoneId);
       if (zone && zone.numericId !== undefined) {
@@ -299,6 +301,8 @@ const AddModeTable = ({
           [zoneId]: {
             ...prev[zoneId],
             numericZoneId: zone.numericId,
+            smartConnectSsip: zone.smartConnectSsip,       // SSIP for DNS resolution
+            smartConnectDnsZone: zone.smartConnectDnsZone, // DNS zone for resolver config
           },
         }));
       }
@@ -836,7 +840,7 @@ const EditModeTable = ({
     console.debug("[EditModeTable] Selection changed", selectionState.rows, "selectedZoneIdArray", selectedZoneIdArray);
     setSelectedZoneIds(selectedZoneIdArray);
 
-    // Store numeric zone IDs in zoneCredentials
+    // Store numeric zone IDs and SmartConnect info in zoneCredentials
     selectedZoneIdArray.forEach((zoneId) => {
       const zone = zones.find((z) => z.id === zoneId);
       if (zone && zone.numericId !== undefined) {
@@ -845,6 +849,8 @@ const EditModeTable = ({
           [zoneId]: {
             ...prev[zoneId],
             numericZoneId: zone.numericId,
+            smartConnectSsip: zone.smartConnectSsip,       // SSIP for DNS resolution
+            smartConnectDnsZone: zone.smartConnectDnsZone, // DNS zone for resolver config
           },
         }));
       }
@@ -981,6 +987,8 @@ const IsilonCredentials = () => {
             numericId: zone.zoneId || 1,
             name: zone.zoneName,
             ipList,
+            smartConnectSsip: ssip || undefined,           // SSIP for DNS resolution
+            smartConnectDnsZone: zone.scDnsZone || undefined, // DNS zone for resolver config
           };
         });
 
