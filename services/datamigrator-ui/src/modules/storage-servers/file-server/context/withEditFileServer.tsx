@@ -13,9 +13,11 @@ import {
   createConfigPayload,
   patchCredentialsFormValue,
   patchJobConfigFormValue,
+  createDellIsilonConfigPayload,
+  flattenDellIsilonPayloadToConfigs,
 } from "@modules/storage-servers/file-server/components/add-file-server.util";
 import { useFileServerForm } from "@modules/storage-servers/file-server/context/useFileServerForm";
-import { MountPathsOptionsListType } from "@modules/storage-servers/file-server/fileServer.interface";
+import { MountPathsOptionsListType, ZoneCredentialsType, ZoneWorkerAssignmentsType } from "@modules/storage-servers/file-server/fileServer.interface";
 import { ComponentType, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { EXPORT_PATH_SOURCE_ENUM } from "@modules/storage-servers/file-server/components/file-server.constant";
@@ -57,6 +59,26 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
     useEffect(() => {
       if (!editingFileServerDetails?.id) return;
 
+      // Check serverType from the config level (API now returns this)
+      // serverType is "Dell" or "dell" for Dell Isilon, "other" for Other NAS
+      const serverType = editingFileServerDetails?.serverType;
+      const isDellIsilon = serverType === "Dell" || serverType === "dell";
+
+      if (isDellIsilon) {
+        // DELL ISILON EDIT MODE PRE-FILLING
+        prefillDellIsilonForms();
+      } else {
+        // OTHER NAS EDIT MODE PRE-FILLING
+        prefillOtherNASForms();
+      }
+
+      fileServerForm?.setIsJobRunning(false);
+      const isJobRunning = isAnyJobRunReady(editingFileServerDetails);
+      fileServerForm?.setIsJobRunning(isJobRunning);
+    }, [editingFileServerDetails]);
+
+    // Pre-fill forms for Other NAS (existing logic)
+    const prefillOtherNASForms = () => {
       // STEP 1 FORM PRE FILLING
       fileServerForm.serverTypeForm.resetForm({
         configName: editingFileServerDetails?.configName || "",
@@ -147,11 +169,124 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
           currentVolumes
         )
       );
+    };
 
-      fileServerForm?.setIsJobRunning(false);
-      const isJobRunning = isAnyJobRunReady(editingFileServerDetails);
-      fileServerForm?.setIsJobRunning(isJobRunning);
-    }, [editingFileServerDetails]);
+    // Pre-fill forms for Dell Isilon (new logic)
+    const prefillDellIsilonForms = () => {
+      // STEP 1 FORM PRE FILLING - Server Type
+      fileServerForm.serverTypeForm.resetForm({
+        configName: editingFileServerDetails?.configName || "",
+        serverType: {
+          value: "dell",
+          label: "Dell Isilon",
+        },
+      });
+
+      // Management Console Form - prepopulate with existing data
+      // Note: Password will be empty for security
+      // API returns hostname/username, but form uses managementHost/managementUsername
+      fileServerForm.managementConsoleForm.resetForm({
+        managementHost: editingFileServerDetails?.hostname || "",
+        managementUsername: editingFileServerDetails?.username || "",
+        managementPassword: "", // Password is always empty for security in edit mode
+      });
+
+      // Set certificate data if available (for display purposes)
+      // API returns tlsCaCertificate, but form uses certificatePEM
+      if (editingFileServerDetails?.tlsCaCertificate) {
+        fileServerForm.setCertificateData({
+          certificatePEM: editingFileServerDetails?.tlsCaCertificate || "",
+          validTo: editingFileServerDetails?.tlsExpiry || "",
+          validFrom: "",
+          issuer: "",
+          subject: "",
+          fingerprint: "",
+        });
+        fileServerForm.setCertificateAccepted(true);
+      }
+
+      // STEP 2 FORM PRE FILLING - Zone Credentials
+      // Group file servers by zone (fileServerName is the zone name)
+      const zoneMap = new Map<string, {
+        nfs?: FileServerApiType;
+        smb?: FileServerApiType;
+        numericZoneId?: number;
+      }>();
+
+      editingFileServerDetails?.fileServers?.forEach((fs: any) => {
+        const zoneName = fs.fileServerName || "";
+        if (!zoneMap.has(zoneName)) {
+          zoneMap.set(zoneName, {});
+        }
+        const zoneData = zoneMap.get(zoneName)!;
+        if (fs.protocol === "NFS") {
+          zoneData.nfs = fs;
+        } else if (fs.protocol === "SMB") {
+          zoneData.smb = fs;
+        }
+        // Store numeric zone ID
+        if (fs.zone_id !== undefined) {
+          zoneData.numericZoneId = fs.zone_id;
+        }
+      });
+
+      // Build selectedZoneIds and zoneCredentials from existing data
+      const selectedZoneIds: string[] = [];
+      const zoneCredentials: Record<string, ZoneCredentialsType> = {};
+      const zoneWorkerAssignments: Record<string, ZoneWorkerAssignmentsType> = {};
+      const originalZoneCredentials: Record<string, ZoneCredentialsType> = {};
+
+      zoneMap.forEach((zoneData, zoneName) => {
+        selectedZoneIds.push(zoneName);
+        
+        // Build credentials for this zone
+        const creds: ZoneCredentialsType = {
+          numericZoneId: zoneData.numericZoneId,
+        };
+
+        // NFS credentials
+        if (zoneData.nfs) {
+          creds.nfsIp = zoneData.nfs.host || "";
+          creds.nfsUsername = zoneData.nfs.userName || "";
+          creds.nfsPassword = ""; // Password empty for security
+        }
+
+        // SMB credentials
+        if (zoneData.smb) {
+          creds.smbIp = zoneData.smb.host || "";
+          creds.smbUsername = zoneData.smb.userName || "";
+          creds.smbPassword = ""; // Password empty for security
+        }
+
+        zoneCredentials[zoneName] = creds;
+        originalZoneCredentials[zoneName] = { ...creds }; // Store original for comparison
+
+        // Build worker assignments for this zone
+        const workerAssignments: ZoneWorkerAssignmentsType = {
+          nfs: [],
+          smb: [],
+        };
+
+        if (zoneData.nfs?.workers) {
+          workerAssignments.nfs = zoneData.nfs.workers.map((w: any) => w.workerId);
+        }
+        if (zoneData.smb?.workers) {
+          workerAssignments.smb = zoneData.smb.workers.map((w: any) => w.workerId);
+        }
+
+        zoneWorkerAssignments[zoneName] = workerAssignments;
+      });
+
+      // Set zone state
+      fileServerForm.setSelectedZoneIds(selectedZoneIds);
+      fileServerForm.setZoneCredentials(zoneCredentials);
+      fileServerForm.setZoneWorkerAssignments(zoneWorkerAssignments);
+      
+      // Store original zone credentials for edit mode validation
+      // This will be used in IsilonCredentials to determine which zones/protocols are configured
+      (fileServerForm as any).originalZoneCredentials = originalZoneCredentials;
+      (fileServerForm as any).originalSelectedZoneIds = [...selectedZoneIds];
+    };
 
     const isAnyJobRunReady = (
       editingFileServerDetails: FileServerDetailsType
@@ -198,6 +333,30 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
     };
 
     const handleEditConfiguration = async () => {
+      const serverType = fileServerForm.serverTypeForm?.formState?.serverType?.value;
+      const isDellIsilon = serverType === "dell";
+
+      try {
+        fileServerForm?.setDisableNextButton(true);
+        
+        if (isDellIsilon) {
+          await handleEditDellIsilonConfiguration();
+        } else {
+          await handleEditOtherNASConfiguration();
+        }
+        
+        notify.success("Configuration Successfully updated...");
+        navigate("/file-server");
+      } catch (err) {
+        notify.error("Error updating file server.");
+        console.error({ error: err, level: "Updating Config" });
+      } finally {
+        fileServerForm?.setDisableNextButton(false);
+      }
+    };
+
+    // Edit Other NAS file server (existing logic)
+    const handleEditOtherNASConfiguration = async () => {
       const payload = createConfigPayload(
         selectedProjectId,
         fileServerForm.serverTypeForm,
@@ -210,26 +369,133 @@ export function withEditFileServer(WrappedComponent: ComponentType<any>) {
         editingFileServerDetails
       );
 
-      try {
-        updateConfigurationApi({
-          id: editingFileServerDetails?.id,
-          body: payload,
-        })
-          .unwrap()
-          .then((resp) => {
-            if (resp.error) {
-              throw new Error("Error creating file server");
-            }
+      const resp = await updateConfigurationApi({
+        id: editingFileServerDetails?.id,
+        body: payload,
+      }).unwrap();
 
-            navigate("/file-server");
-          })
-          .catch((err) => {
-            notify.error("Something Went wrong...");
-            console.error({ err, level: "Updating config" });
-          });
-      } catch {
-        notify.error("Failed to save configuration.");
+      if (resp.error) {
+        throw new Error("Error updating file server");
       }
+    };
+
+    // Edit Dell Isilon file server
+    const handleEditDellIsilonConfiguration = async () => {
+      console.log("[Dell Isilon Edit] ===== STARTING EDIT CONFIGURATION =====");
+      console.log("[Dell Isilon Edit] Input state:", {
+        selectedZoneIds: fileServerForm.selectedZoneIds,
+        zoneCredentialsKeys: Object.keys(fileServerForm.zoneCredentials || {}),
+        zoneWorkerAssignmentsKeys: Object.keys(fileServerForm.zoneWorkerAssignments || {}),
+      });
+      
+      // Log detailed credentials for each zone
+      (fileServerForm.selectedZoneIds || []).forEach((zoneId: string) => {
+        const creds = fileServerForm.zoneCredentials?.[zoneId] || {};
+        const workers = fileServerForm.zoneWorkerAssignments?.[zoneId] || { nfs: [], smb: [] };
+        console.log(`[Dell Isilon Edit] Zone "${zoneId}" credentials:`, {
+          nfsIp: creds.nfsIp,
+          nfsUsername: creds.nfsUsername,
+          nfsPassword: creds.nfsPassword ? '(set)' : '(empty)',
+          smbIp: creds.smbIp,
+          smbUsername: creds.smbUsername,
+          smbPassword: creds.smbPassword ? '(set)' : '(empty)',
+          numericZoneId: creds.numericZoneId,
+          nfsWorkers: workers.nfs,
+          smbWorkers: workers.smb,
+        });
+      });
+      
+      // Build zone metadata from selectedZoneIds
+      const zonesMetadata = (fileServerForm.selectedZoneIds || []).map((zoneId: string) => ({
+        id: zoneId,
+        name: zoneId,
+      }));
+
+      // Build Dell Isilon payload using updated zone credentials and worker assignments
+      const dellPayload = createDellIsilonConfigPayload(
+        selectedProjectId,
+        fileServerForm.serverTypeForm,
+        fileServerForm.managementConsoleForm,
+        fileServerForm.selectedZoneIds || [],
+        fileServerForm.zoneCredentials || {},
+        fileServerForm.zoneWorkerAssignments || {},
+        fileServerForm.certificateData,
+        zonesMetadata
+      );
+
+      console.log("[Dell Isilon Edit] Created payload:", dellPayload);
+      console.log("[Dell Isilon Edit] Zones in payload:", dellPayload.zones?.map((z: any) => ({
+        zoneId: z.zoneId,
+        hasNfs: !!z.nfs,
+        hasSmb: !!z.smb,
+      })));
+
+      // Flatten to config format
+      const config = flattenDellIsilonPayloadToConfigs(dellPayload);
+
+      // Preserve existing file server IDs for zones that already exist
+      // This ensures the backend can properly update instead of creating new records
+      const existingFileServersMap = new Map<string, any>();
+      editingFileServerDetails?.fileServers?.forEach((fs: any) => {
+        const key = `${fs.fileServerName}-${fs.protocol}`;
+        existingFileServersMap.set(key, fs);
+      });
+      
+      console.log("[Dell Isilon Edit] Existing file servers map:", 
+        Array.from(existingFileServersMap.entries()).map(([key, fs]) => ({
+          key,
+          id: fs.id,
+          fileServerName: fs.fileServerName,
+          protocol: fs.protocol,
+        }))
+      );
+
+      // Update file servers with existing IDs where applicable
+      // For new file servers (no existing ID), explicitly set id to null
+      config.fileServers = config.fileServers.map((fs: any) => {
+        const key = `${fs.fileServerName}-${fs.protocol}`;
+        const existingFs = existingFileServersMap.get(key);
+        if (existingFs) {
+          console.log(`[Dell Isilon Edit] Preserving ID for existing file server: ${key} -> ${existingFs.id}`);
+          return {
+            ...fs,
+            id: existingFs.id, // Preserve existing file server ID
+          };
+        }
+        console.log(`[Dell Isilon Edit] New file server (no existing ID): ${key} - setting id to null`);
+        // Explicitly set id to null for new file servers so backend knows to create them
+        return {
+          ...fs,
+          id: null,
+        };
+      });
+
+      console.log("[Dell Isilon Edit] Final config payload:", config);
+      console.log("[Dell Isilon Edit] File servers to send:", config.fileServers.map((fs: any) => ({
+        id: fs.id || '(new)',
+        fileServerName: fs.fileServerName,
+        protocol: fs.protocol,
+        host: fs.host,
+        userName: fs.userName,
+        hasPassword: !!fs.password,
+        workersCount: fs.workers?.length || 0,
+      })));
+
+      if (config.fileServers.length === 0) {
+        throw new Error("No valid zone configurations found");
+      }
+
+      // Update the configuration
+      const resp = await updateConfigurationApi({
+        id: editingFileServerDetails?.id,
+        body: config,
+      }).unwrap();
+
+      if (resp.error) {
+        throw new Error("Error updating Dell Isilon file server");
+      }
+
+      console.log("[Dell Isilon Edit] Configuration updated successfully");
     };
 
     const editFileServerHelpers = {
