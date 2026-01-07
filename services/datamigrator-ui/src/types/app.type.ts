@@ -341,6 +341,11 @@ export enum JOBS_TYPE {
   CUT_OVER = "CUT_OVER",
 }
 
+export enum JOBS_RUN_TYPE {
+  REGULAR = "REGULAR",
+  RETRY = "RETRY",
+}
+
 export enum JOB_CONFIG_STATUS_ENUM {
   ACTIVE = "ACTIVE",
   INACTIVE = "IN_ACTIVE",
@@ -363,6 +368,7 @@ export type JobRunApiType = {
   startTime: string;
   endTime: string;
   jobType: JOBS_TYPE;
+  jobRunType?: JOBS_RUN_TYPE;
   timeElapsed: number;
   scannedFilesCount: number;
   scannedDirectoriesCount: number;
@@ -590,6 +596,8 @@ export interface AllFileServerWithVolumesApiType {
 export type GetActionMenuPropType = {
   jobRunId: JobRunApiType["jobRunId"];
   status: JobRunApiType["status"];
+  jobType: JOBS_TYPE;
+  jobRunType?: JOBS_RUN_TYPE;
   handleUpdateStatus: (
     jobRunId: JobRunApiType["jobRunId"],
     status: JOB_ACTION_STATUS_ENUM

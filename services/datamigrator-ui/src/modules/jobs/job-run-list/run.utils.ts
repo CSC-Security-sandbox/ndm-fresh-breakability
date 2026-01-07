@@ -3,6 +3,7 @@ import {
   JOB_ACTION_STATUS_ENUM,
   JOB_STATUS_TYPE_ENUM,
   JobRunApiType,
+  JOBS_RUN_TYPE,
   JOBS_TYPE,
   REPORT_TYPES_ENUM,
 } from "@/types/app.type";
@@ -19,12 +20,25 @@ export const getJobRunListFlaternList = (list: JobRunApiType[]) => {
 export const getActionMenu = ({
   jobRunId,
   status,
+  jobType,
+  jobRunType,
   handleUpdateStatus,
   isDisabled,
   adhocRun,
 }: GetActionMenuPropType) => {
   switch (status) {
     case JOB_STATUS_TYPE_ENUM.RUNNING:
+      // For RETRY jobs, exclude the Pause button
+      if (jobRunType === JOBS_RUN_TYPE.RETRY && jobType !== JOBS_TYPE.DISCOVERY) {
+        return [
+          {
+            label: "Stop",
+            onClick: () =>
+              handleUpdateStatus(jobRunId, JOB_ACTION_STATUS_ENUM.STOP),
+            disabled: isDisabled,
+          },
+        ];
+      }
       return [
         {
           label: "Pause",

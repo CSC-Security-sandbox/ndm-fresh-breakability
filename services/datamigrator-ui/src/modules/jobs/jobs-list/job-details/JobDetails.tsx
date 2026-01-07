@@ -6,6 +6,7 @@ import {
   BlueXpFormType,
   JobRunApiType,
   JOBS_TYPE,
+  JOBS_RUN_TYPE,
   ProtocolType,
 } from "@/types/app.type";
 import RefreshButton from "@components/refresh-button/RefreshButton";
@@ -18,6 +19,7 @@ import {
   useUpdateMigrationJobConfigMutation,
   useRemoveJobIdentityMappingsMutation,
   useGetJobConfigInventoryStatsMutation,
+  useRetryJobRunMutation,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -42,7 +44,7 @@ import { DOWNLOAD_BULK_ERROR_REPORT, GENERATE_BULK_ERROR_REPORT } from "@modules
 import JobDescription from "@modules/jobs/jobs-list/job-details/components/JobDescription";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
 import JobHeader from "@modules/jobs/jobs-list/job-details/components/JobHeader";
-import { JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
+import { FAILED_RECORDS_RETRY_THRESHOLD, JOB_RUN_LIST_COLUMN_DEFS } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import { handleDownloadCocReport, handleDownloadErrorsLogs, handleDownloadReport } from "@modules/jobs/jobs.utils";
 import ScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScheduleComponent";
 import {
@@ -183,6 +185,7 @@ const JobDetails = () => {
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
+  const [retryJobRun] = useRetryJobRunMutation();
   const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
   const [updateStatus, { isLoading: isUpdating }] = useUpdateJobRunStatusMutation();
   const [updateDiscoveryConfig, { isLoading: isUpdatingDiscoveryConfig }] = useUpdateDiscoveryJobConfigMutation();
@@ -217,6 +220,8 @@ const JobDetails = () => {
       ? getActionMenu({
           jobRunId: row.jobRunId,
           status: row.status,
+          jobType: row.jobType,
+          jobRunType: row.jobRunType,
           handleUpdateStatus,
           isDisabled: isLoading || isUpdating,
           adhocRun: () => adhocRun(jobId),
@@ -256,8 +261,16 @@ const JobDetails = () => {
 
   const defaultColumnState = { scannedDirectoriesCount: { isHidden: true } };
 
+  const getVisibleColumns = () => {
+  const columns = JOB_RUN_LIST_COLUMN_DEFS;
+    if (jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY) {
+      return columns.filter(col => col.id !== 'jobRunType');
+    }
+    return columns;
+  };
+
   const tableStateProps = {
-    columns: JOB_RUN_LIST_COLUMN_DEFS,
+    columns: getVisibleColumns(),
     rows: jobConfigDetails?.jobRuns,
     isSorting: true,
     pageSize: 10,
@@ -274,6 +287,30 @@ const JobDetails = () => {
 
   const { latestJobRun, latestJobRunId } = useLatestJobRun(
     jobConfigDetails?.jobRuns
+  );
+
+  const retryEligibleRuns = useMemo(() => 
+    jobConfigDetails?.jobRuns?.filter(run => 
+      (run.jobType === JOBS_TYPE.MIGRATE || run.jobType === JOBS_TYPE.CUT_OVER) &&
+    run.jobRunType === JOBS_RUN_TYPE.REGULAR
+    ),
+    [jobConfigDetails?.jobRuns]
+  );
+
+  const { latestJobRun: latestRetryableRun, latestJobRunId: latestRetryableRunId } = useLatestJobRun(
+    retryEligibleRuns
+  );
+
+  const latestNonRetryRuns = useMemo(
+    () =>
+      jobConfigDetails?.jobRuns?.filter(
+        (run) => run.jobRunType !== JOBS_RUN_TYPE.RETRY
+      ) ?? [],
+    [jobConfigDetails?.jobRuns]
+  );
+  
+  const { latestJobRunId: latestNonRetryJobRunId } = useLatestJobRun(
+    latestNonRetryRuns
   );
 
   useEffect(() => {
@@ -294,6 +331,102 @@ const JobDetails = () => {
       const errorMsg = "Error while downloading error logs.";
       notify.error(error?.data?.displayMessage || errorMsg);
       console.error(`errorMsg ${error?.data?.message}`);
+    }
+  };
+
+  const handleRetryJobRun = async (jobConfigId: string) => {
+     try {
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Retry Job Run",
+          modalContent: (
+            <div className="flex flex-col gap-4 text-gray-700">
+              <p className="text-lg font-medium">Are you sure you want to retry this job?</p>
+              
+              {/* Warning Box */}
+              <div className="bg-yellow-50 p-3 rounded-lg border-l-4 border-l-yellow-400">
+                <p className="text-sm text-yellow-800">
+                  If the number of failed records exceeds <strong>{FAILED_RECORDS_RETRY_THRESHOLD}</strong>, a new ad hoc job run is recommended.
+                </p>
+              </div>
+
+              {/* Job Details Section */}
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <h4 className="font-medium text-gray-800 mb-3">Job Configuration Details:</h4>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-600">Job ID:</span>
+                    <span className="font-mono text-xs text-black">{jobId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-600">Job Type:</span>
+                    <span className="text-gray-800">{jobConfigDetails?.jobType || 'N/A'}</span>
+                  </div>
+                  {latestRetryableRun && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Latest Run ID:</span>
+                        <span className="font-mono text-xs text-black">{latestRetryableRunId}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Latest Run Status:</span>
+                        <span className="text-gray-800">{latestRetryableRun.status || 'N/A'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ),
+          modalFooter: (
+            <>
+              <Button
+                color="secondary"
+                onClick={() => dispatch(setModalClose())}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="primary"
+                onClick={() => {
+                  dispatch(setModalClose());
+                  adhocRun(jobId, true);
+                }}
+              >
+                Proceed with Ad-Hoc
+              </Button>
+              <Button
+                color="primary"
+                onClick={() => {
+                  dispatch(setModalClose());
+                  proceedWithRetry();
+                }}
+              >
+                Proceed with Retry
+              </Button>
+            </>
+          ),
+        })
+      );
+    } catch (error) {
+      notify.error("Failed to retry job run.");
+      console.error(error);
+    }
+  };
+
+  const proceedWithRetry = async () => {
+    try {
+      await retryJobRun({
+        jobConfigId: jobId,
+        jobRunId: latestRetryableRunId,
+      }).unwrap();
+      notify.success("Job run retry initiated successfully.");
+      refetch();
+    } catch (error: any) {
+      const errorMessage = error?.data?.message || error?.data?.displayMessage || "Failed to retry job run.";
+      notify.error(errorMessage);
+      console.error(error);
     }
   };
 
@@ -996,6 +1129,19 @@ const JobDetails = () => {
               >
                 Adhoc Run
               </Button>
+              {jobConfigDetails?.jobType !== JOBS_TYPE.DISCOVERY && (
+                <Button
+                  onClick={() => { handleRetryJobRun(jobId);
+                  }}
+                  disabled={
+                    !jobId ||
+                    jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE ||
+                    !latestRetryableRunId 
+                  }
+                >
+                  Retry Recent Errors
+                </Button>
+              )}
             </Box>
           </PermissionAuth>
         </Box>
@@ -1010,7 +1156,7 @@ const JobDetails = () => {
           />
         </Box>
         <Box className="grow basis-1/2 items-stretch">
-          <JobErrors latestJobRunId={latestJobRunId} />
+          <JobErrors latestJobRunId={latestNonRetryJobRunId} />
         </Box>
       </Box>
       <TableWrapper
@@ -1020,7 +1166,7 @@ const JobDetails = () => {
         label="Run History"
         content={errorLogContent}
         isTogglingColumns={true}
-        originalColumns={JOB_RUN_LIST_COLUMN_DEFS}
+        originalColumns={getVisibleColumns()}
         refetchTableData={refetch}
         isRefreshing={isFetching}
       />

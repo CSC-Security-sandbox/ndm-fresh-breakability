@@ -4,6 +4,7 @@ import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunSta
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
 import { BlueXpTableRowType, JOBS_TYPE, JobRunApiType } from "@/types/app.type";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
+import { getJobRunType } from "@/utils/common.utils";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
   {
@@ -90,6 +91,16 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["errors"]>) => (
       <ErrorNumberCellRenderer value={value} />
     ),
+  },
+  {
+    header: "Type",
+    accessor: "jobRunType",
+    id: "jobRunType",
+    width: 80,
+    Renderer: ({
+      value,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType["jobRunType"]>) =>
+      value ? <span>{getJobRunType(value)}</span> : <span>-</span>,
   },
 ];
 
@@ -249,3 +260,4 @@ export {
 };
 
 export const GENERATING_REPORT_LABEL = "Generating reports, please wait";
+export const FAILED_RECORDS_RETRY_THRESHOLD = 4000;

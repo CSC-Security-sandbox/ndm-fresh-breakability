@@ -94,6 +94,7 @@ const JobRunList = () => {
       ? getActionMenu({
           jobRunId: row.jobRunId,
           status: row.status,
+          jobType: row.jobType,
           handleUpdateStatus,
           isDisabled: isLoading || isUpdating,
           adhocRun: () => adhocRun(row.jobConfigId),

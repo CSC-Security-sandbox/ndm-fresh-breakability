@@ -104,6 +104,7 @@ const JobRunDetails = () => {
         ...getActionMenu({
           jobRunId,
           status: jobRunDetails?.status || JOB_STATUS_TYPE_ENUM.COMPLETED,
+          jobRunType: jobRunDetails?.jobRunType,
           handleUpdateStatus,
           isDisabled: false,
           adhocRun: () => adhocRun(jobId),
