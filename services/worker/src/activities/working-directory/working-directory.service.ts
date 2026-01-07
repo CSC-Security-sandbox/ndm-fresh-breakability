@@ -135,6 +135,12 @@ export class ValidateWorkingDirectoryActivity {
           this.logger.log(`Skipping mounting and unmounting for MANUAL_UPLOAD type for host ${fileServer.host}`);
           continue;
         }
+
+        // For Dell Isilon with SmartConnect FQDN on Linux: configure DNS resolver
+        // This allows the worker to resolve the SmartConnect FQDN using the SSIP
+        if (isDell && fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
+          await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
+        }
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
@@ -196,9 +202,15 @@ export class ValidateWorkingDirectoryActivity {
 
     // For Dell per-zone, include fileServerId in path to prevent collision between zones
     const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
+    const isDell = payload?.isDell || payload?.serverType === 'Dell';
 
     try {
       for (const fileServer of payload.listPathPayload) {
+        // For Dell Isilon with SmartConnect FQDN: configure DNS resolver
+        if (isDell && fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
+          await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
+        }
+
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
@@ -258,6 +270,169 @@ export class ValidateWorkingDirectoryActivity {
     } catch (error) {
       this.logger.error(`Error: No write permission for directory ${directoryPath} - ${error.message}`);
       return false;
+    }
+  }
+
+  /**
+   * Configure DNS resolver for Dell Isilon SmartConnect FQDN resolution
+   * This adds the SmartConnect SSIP as a nameserver for the SmartConnect DNS zone
+   * Supports Linux, macOS, and Windows workers
+   * 
+   * @param traceId - Trace ID for logging
+   * @param ssip - SmartConnect Service IP (SSIP) - the DNS server for the zone
+   * @param dnsZone - SmartConnect DNS zone (e.g., "lab.local")
+   */
+  private async configureSmartConnectDns(traceId: string, ssip: string, dnsZone: string): Promise<void> {
+    this.logger.log(`[${traceId}] Configuring SmartConnect DNS: SSIP=${ssip}, Zone=${dnsZone}, Platform=${process.platform}`);
+    
+    try {
+      switch (process.platform) {
+        case 'linux':
+          await this.configureSmartConnectDnsLinux(traceId, ssip, dnsZone);
+          break;
+        case 'darwin':
+          await this.configureSmartConnectDnsMacOS(traceId, ssip, dnsZone);
+          break;
+        case 'win32':
+          await this.configureSmartConnectDnsWindows(traceId, ssip, dnsZone);
+          break;
+        default:
+          this.logger.warn(`[${traceId}] Unsupported platform for DNS configuration: ${process.platform}`);
+      }
+    } catch (error) {
+      // Don't fail the workflow if DNS configuration fails - the mount might still work
+      // if the host is an IP address or already resolvable
+      this.logger.warn(`[${traceId}] Failed to configure SmartConnect DNS: ${error.message}. Mount may fail if host is FQDN.`);
+    }
+  }
+
+  /**
+   * Configure DNS for Linux by modifying /etc/resolv.conf
+   */
+  private async configureSmartConnectDnsLinux(traceId: string, ssip: string, dnsZone: string): Promise<void> {
+    const resolvConfPath = '/etc/resolv.conf';
+    const nameserverEntry = `nameserver ${ssip}`;
+    const searchEntry = `search ${dnsZone}`;
+    
+    // Read current resolv.conf
+    let currentContent = '';
+    try {
+      currentContent = fs.readFileSync(resolvConfPath, 'utf-8');
+    } catch (readError) {
+      this.logger.warn(`[${traceId}] Could not read ${resolvConfPath}: ${readError.message}`);
+    }
+    
+    // Check if SSIP is already configured
+    if (currentContent.includes(nameserverEntry)) {
+      this.logger.log(`[${traceId}] SmartConnect SSIP ${ssip} already configured in ${resolvConfPath}`);
+      return;
+    }
+    
+    // Prepend the SmartConnect SSIP as the first nameserver
+    const lines = currentContent.split('\n');
+    const newLines: string[] = [];
+    
+    // Add SmartConnect SSIP as first nameserver
+    newLines.push(nameserverEntry);
+    
+    // Add search domain if not already present
+    let hasSearchDomain = false;
+    for (const line of lines) {
+      if (line.startsWith('search ')) {
+        // Append our DNS zone to existing search line if not present
+        if (!line.includes(dnsZone)) {
+          newLines.push(`${line} ${dnsZone}`);
+        } else {
+          newLines.push(line);
+        }
+        hasSearchDomain = true;
+      } else if (line.trim()) {
+        newLines.push(line);
+      }
+    }
+    
+    // Add search line if none exists
+    if (!hasSearchDomain) {
+      newLines.push(searchEntry);
+    }
+    
+    // Write updated resolv.conf
+    const newContent = newLines.join('\n') + '\n';
+    fs.writeFileSync(resolvConfPath, newContent);
+    
+    this.logger.log(`[${traceId}] Linux: SmartConnect DNS configured successfully`);
+  }
+
+  /**
+   * Configure DNS for macOS by creating a resolver file in /etc/resolver/
+   * This is the recommended way to add DNS for specific domains on macOS
+   */
+  private async configureSmartConnectDnsMacOS(traceId: string, ssip: string, dnsZone: string): Promise<void> {
+    const resolverDir = '/etc/resolver';
+    const resolverFile = path.join(resolverDir, dnsZone);
+    
+    // Check if already configured
+    if (fs.existsSync(resolverFile)) {
+      const content = fs.readFileSync(resolverFile, 'utf-8');
+      if (content.includes(ssip)) {
+        this.logger.log(`[${traceId}] SmartConnect SSIP ${ssip} already configured for ${dnsZone}`);
+        return;
+      }
+    }
+    
+    // Create resolver directory if it doesn't exist
+    if (!fs.existsSync(resolverDir)) {
+      fs.mkdirSync(resolverDir, { recursive: true });
+    }
+    
+    // Create resolver file for the DNS zone
+    const resolverContent = `# SmartConnect DNS resolver for Dell Isilon\nnameserver ${ssip}\n`;
+    fs.writeFileSync(resolverFile, resolverContent);
+    
+    this.logger.log(`[${traceId}] macOS: SmartConnect DNS configured at ${resolverFile}`);
+  }
+
+  /**
+   * Configure DNS for Windows using PowerShell to add DNS client configuration
+   * Uses Add-DnsClientNrptRule to add a Name Resolution Policy Table rule
+   */
+  private async configureSmartConnectDnsWindows(traceId: string, ssip: string, dnsZone: string): Promise<void> {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+    
+    // Check if rule already exists
+    const checkCmd = `powershell -Command "Get-DnsClientNrptRule | Where-Object { $_.Namespace -eq '.${dnsZone}' }"`;
+    
+    try {
+      const { stdout } = await execPromise(checkCmd);
+      if (stdout && stdout.trim()) {
+        this.logger.log(`[${traceId}] SmartConnect DNS rule already exists for ${dnsZone}`);
+        return;
+      }
+    } catch (checkError) {
+      // Rule doesn't exist, continue to create it
+    }
+    
+    // Add NRPT rule for the DNS zone
+    // This tells Windows to use the SSIP as DNS server for the specified zone
+    const addCmd = `powershell -Command "Add-DnsClientNrptRule -Namespace '.${dnsZone}' -NameServers '${ssip}'"`;
+    
+    try {
+      await execPromise(addCmd);
+      this.logger.log(`[${traceId}] Windows: SmartConnect DNS NRPT rule added for ${dnsZone} -> ${ssip}`);
+    } catch (addError) {
+      // Fallback: Try adding to hosts file or using netsh
+      this.logger.warn(`[${traceId}] Failed to add NRPT rule: ${addError.message}. Trying alternative method...`);
+      
+      // Alternative: Use netsh to set DNS server (requires admin)
+      const netshCmd = `netsh interface ip add dns name="Ethernet" addr=${ssip} index=1`;
+      try {
+        await execPromise(netshCmd);
+        this.logger.log(`[${traceId}] Windows: SmartConnect DNS added via netsh`);
+      } catch (netshError) {
+        throw new Error(`Could not configure DNS: ${netshError.message}`);
+      }
     }
   }
 
