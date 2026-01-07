@@ -36,3 +36,9 @@ DROP COLUMN IF EXISTS server_type;
 
 ALTER TABLE datamigrator.volume
 ADD COLUMN directory_path text NULL;
+
+ALTER TABLE datamigrator.file_server 
+ADD COLUMN smart_connect_ssip text NULL;
+
+ALTER TABLE datamigrator.file_server 
+ADD COLUMN smart_connect_dns_zone text NULL;

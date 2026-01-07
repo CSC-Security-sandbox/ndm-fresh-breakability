@@ -85,4 +85,14 @@ export class FileServerEntity extends Base {
     @IsOptional()
     zone_id?: number;
 
+    @ApiPropertyOptional({ description: 'SmartConnect Service IP (SSIP) for DNS resolution of FQDN', example: '10.192.7.110' })
+    @Column({ type: 'text', nullable: true, name: 'smart_connect_ssip' })
+    @IsOptional()
+    smartConnectSsip?: string;
+
+    @ApiPropertyOptional({ description: 'SmartConnect DNS Zone for resolver configuration', example: 'lab.local' })
+    @Column({ type: 'text', nullable: true, name: 'smart_connect_dns_zone' })
+    @IsOptional()
+    smartConnectDnsZone?: string;
+
 }

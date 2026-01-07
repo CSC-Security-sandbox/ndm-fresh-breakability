@@ -283,6 +283,8 @@ export const createDellIsilonConfigPayload = (
       zoneId,
       numericZoneId: creds.numericZoneId || 1, // Numeric zone ID from Isilon API (default to 1 for System)
       zoneName: zoneMeta?.name || zoneId,
+      smartConnectSsip: creds.smartConnectSsip,     // SSIP from Isilon API
+      smartConnectDnsZone: creds.smartConnectDnsZone, // DNS zone from Isilon API
     };
     
     // Add NFS config if present
@@ -360,6 +362,8 @@ export const flattenDellIsilonPayloadToConfigs = (
         zone_id: zone.numericZoneId, // Numeric zone ID (e.g., 1)
         exportPathSource: "AUTO_DISCOVER",
         workers: zone.nfs.workers || [],
+        smartConnectSsip: zone.smartConnectSsip,       // SSIP from Isilon API
+        smartConnectDnsZone: zone.smartConnectDnsZone, // DNS zone from Isilon API
         // Note: createdBy is set by the backend from the authenticated user
       });
     }
@@ -377,6 +381,8 @@ export const flattenDellIsilonPayloadToConfigs = (
         zone_id: zone.numericZoneId, // Numeric zone ID (e.g., 1)
         exportPathSource: "AUTO_DISCOVER",
         workers: zone.smb.workers || [],
+        smartConnectSsip: zone.smartConnectSsip,       // SSIP from Isilon API
+        smartConnectDnsZone: zone.smartConnectDnsZone, // DNS zone from Isilon API
         // Note: createdBy is set by the backend from the authenticated user
       });
     }

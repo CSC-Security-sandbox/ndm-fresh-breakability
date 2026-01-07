@@ -14,6 +14,8 @@ export interface ZoneCredentialsType {
   nfsUsername?: string;
   nfsPassword?: string;
   numericZoneId?: number; // Numeric zone ID from Isilon API (e.g., 1 for "System")
+  smartConnectSsip?: string; // SSIP from Isilon API for DNS resolution
+  smartConnectDnsZone?: string; // DNS zone from Isilon API for resolver config
 }
 
 // Dell Isilon Zone Worker Assignments Type
@@ -308,6 +310,8 @@ export interface DellIsilonZonePayloadType {
   zoneId: string;           // Zone name (e.g., "System") - used as key
   numericZoneId: number;    // Numeric zone ID from Isilon API (e.g., 1)
   zoneName: string;
+  smartConnectSsip?: string;   // SSIP from Isilon API for DNS resolution
+  smartConnectDnsZone?: string; // DNS zone from Isilon API for resolver config
   nfs?: {
     host: string;
     userName: string;
