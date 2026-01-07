@@ -149,17 +149,26 @@ const FileServer = () => {
   );
 
   const rowMenu = (row: any) => {
-    // Dell Isilon parent - expand/collapse option only
+    // Dell Isilon parent - expand/collapse and edit options
     if (row._isDellIsilonParent) {
       return [
         {
           label: row._isExpanded ? "Collapse Zones" : "Expand Zones",
           onClick: () => toggleParentExpand(row.configName),
         },
+        {
+          label: "Edit File Server",
+          onClick: () => {
+            // Use the original server's id for navigation
+            const configId = row._originalServer?.id || row.id?.replace('dell-parent-', '');
+            navigate(`/edit-file-server/${configId}`);
+          },
+          disabled: !canManageConfig,
+        },
       ];
     }
     
-    // Dell Isilon child (zone file server) - view/edit options
+    // Dell Isilon child (zone file server) - view only, no edit option for zones
     if (row._isDellIsilonChild) {
       // Use _configId (parent config ID) for navigation, not the file server's own id
       const configId = row._configId || row.id;
@@ -174,13 +183,6 @@ const FileServer = () => {
           onClick: () => {
             navigate(`/file-server/${configId}?zone=${zoneParam}&fileServerId=${zoneFileServerId}`);
           },
-        },
-        {
-          label: "Edit File Server",
-          onClick: () => {
-            navigate(`/edit-file-server/${configId}`);
-          },
-          disabled: !canManageConfig,
         },
       ];
     }

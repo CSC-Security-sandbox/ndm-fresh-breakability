@@ -84,10 +84,16 @@ export const configApi = createApi({
     }),
 
     refetchConfigExportPaths: builder.query({
-      query: ({ fileServerId }) => ({
-        url: `/servers/refresh/${fileServerId}`,
-        method: "GET",
-      }),
+      query: ({ configId, fileServerId }) => {
+        // For Dell Isilon: configId is the config ID, fileServerId is the zone's file server ID
+        // For Other NAS: configId is used as the path param (legacy behavior)
+        const pathId = configId || fileServerId;
+        const queryParams = configId && fileServerId ? `?fileServerId=${fileServerId}` : '';
+        return {
+          url: `/servers/refresh/${pathId}${queryParams}`,
+          method: "GET",
+        };
+      },
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
       },
