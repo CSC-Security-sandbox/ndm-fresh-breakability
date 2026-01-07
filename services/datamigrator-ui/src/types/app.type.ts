@@ -178,6 +178,14 @@ export type ConfigListTypeApiType = {
   status: FILE_SERVER_STATUS_ENUM;
   isRefreshAvailable?: boolean;
   isUploadInProgress?: boolean;
+  // Dell Isilon management console fields
+  hostname?: string;
+  port?: number;
+  serverType?: string;
+  username?: string;
+  tlsAccepted?: boolean;
+  tlsCaCertificate?: string;
+  tlsExpiry?: string;
 };
 
 export type FileServerDetailsType = ConfigListTypeApiType;

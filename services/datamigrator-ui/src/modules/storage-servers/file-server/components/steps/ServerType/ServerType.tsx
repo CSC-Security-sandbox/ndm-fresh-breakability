@@ -33,6 +33,9 @@ const ServerType = () => {
   
   const isDellIsilon = serverTypeForm?.formState?.serverType?.value === "dell";
   
+  // In edit mode for Dell Isilon, Host and Server Type should be read-only
+  const isDellIsilonEditMode = isEditMode && isDellIsilon;
+  
   // Handle accept and navigate to next step (with unique name check)
   const onAcceptAndContinue = async () => {
     // Accept certificate (lazy approach - just store in memory)
@@ -79,7 +82,7 @@ const ServerType = () => {
           form={serverTypeForm}
           name="serverType"
           label="Server Type"
-          disabled={isJobRunning}
+          disabled={isJobRunning || isDellIsilonEditMode}
           options={[
             {
               label: "Other NAS",
@@ -104,7 +107,7 @@ const ServerType = () => {
               form={managementConsoleForm}
               name="managementHost"
               placeholder="e.g., 10.192.7.32:8080"
-              disabled={isJobRunning}
+              disabled={isJobRunning || isDellIsilonEditMode}
               label="Host"
             />
             <FormFieldInputNew

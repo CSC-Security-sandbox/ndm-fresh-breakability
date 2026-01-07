@@ -254,11 +254,30 @@ export const createDellIsilonConfigPayload = (
 ): DellIsilonCreatePayloadType => {
   const parentName = serverTypeForm.formState?.configName || "";
   
+  console.debug("[createDellIsilonConfigPayload] Input params:", {
+    parentName,
+    selectedZoneIds,
+    zoneCredentialsKeys: Object.keys(zoneCredentials),
+    zonesMetadataCount: zonesMetadata.length,
+  });
+  
   // Build zone payloads
   const zones: DellIsilonZonePayloadType[] = selectedZoneIds.map((zoneId) => {
     const zoneMeta = zonesMetadata.find((z) => z.id === zoneId);
     const creds = zoneCredentials[zoneId] || {};
     const workers = zoneWorkerAssignments[zoneId] || { nfs: [], smb: [] };
+    
+    console.debug(`[createDellIsilonConfigPayload] Zone "${zoneId}" credentials:`, {
+      nfsIp: creds.nfsIp,
+      nfsUsername: creds.nfsUsername,
+      nfsPassword: creds.nfsPassword ? '(set)' : '(empty)',
+      smbIp: creds.smbIp,
+      smbUsername: creds.smbUsername,
+      smbPassword: creds.smbPassword ? '(set)' : '(empty)',
+      numericZoneId: creds.numericZoneId,
+      nfsWorkers: workers.nfs,
+      smbWorkers: workers.smb,
+    });
     
     const zonePayload: DellIsilonZonePayloadType = {
       zoneId,
@@ -267,7 +286,9 @@ export const createDellIsilonConfigPayload = (
     };
     
     // Add NFS config if present
-    if (creds.nfsIp && creds.nfsUsername && creds.nfsPassword) {
+    const hasNfs = !!(creds.nfsIp && creds.nfsUsername && creds.nfsPassword);
+    console.debug(`[createDellIsilonConfigPayload] Zone "${zoneId}" hasNfs=${hasNfs}`);
+    if (hasNfs) {
       zonePayload.nfs = {
         host: creds.nfsIp,
         userName: creds.nfsUsername,
@@ -278,7 +299,9 @@ export const createDellIsilonConfigPayload = (
     }
     
     // Add SMB config if present
-    if (creds.smbIp && creds.smbUsername && creds.smbPassword) {
+    const hasSmb = !!(creds.smbIp && creds.smbUsername && creds.smbPassword);
+    console.debug(`[createDellIsilonConfigPayload] Zone "${zoneId}" hasSmb=${hasSmb}`);
+    if (hasSmb) {
       zonePayload.smb = {
         host: creds.smbIp,
         userName: creds.smbUsername,
@@ -286,6 +309,12 @@ export const createDellIsilonConfigPayload = (
         workers: workers.smb || [],
       };
     }
+    
+    console.debug(`[createDellIsilonConfigPayload] Zone "${zoneId}" final payload:`, {
+      zoneId: zonePayload.zoneId,
+      hasNfs: !!zonePayload.nfs,
+      hasSmb: !!zonePayload.smb,
+    });
     
     return zonePayload;
   });
