@@ -383,6 +383,40 @@ describe('IsilonStorageClient', () => {
       expect(result.oneFsVersion).toBe('v9.3.0.0');
       expect(result.apiVersion).toBe(14);
     });
+
+    it('should detect OneFS 10.x (future version) and return API v14', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '10.0.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('10.0.0.0');
+      expect(result.apiVersion).toBe(14);
+    });
+
+    it('should detect OneFS 8.3.x and return API v9', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall').mockResolvedValueOnce({
+        onefs_version: { release: '8.3.0.0' },
+      });
+
+      const result = await service.detectIsilonVersion(
+        mockConnectionParams.host,
+        mockConnectionParams.port,
+        mockConnectionParams.username,
+        mockConnectionParams.password,
+        mockConnectionParams.certificate,
+      );
+
+      expect(result.oneFsVersion).toBe('8.3.0.0');
+      expect(result.apiVersion).toBe(9);
+    });
   });
 
   describe('fetchZones', () => {
@@ -525,6 +559,156 @@ describe('IsilonStorageClient', () => {
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].ipAddresses).toEqual([]);
+    });
+
+    it('should handle pool interface fetch errors gracefully', async () => {
+      const mockZonesResponse = {
+        zones: [
+          { name: 'zone1', zone_id: 1, groupnet: 'groupnet0' },
+        ],
+      };
+
+      const mockSubnetsResponse = {
+        subnets: [{ name: 'subnet0' }],
+      };
+
+      const mockPoolsResponse = {
+        pools: [{ name: 'pool0', access_zone: 'zone1' }],
+      };
+
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockResolvedValueOnce(mockZonesResponse)
+        .mockResolvedValueOnce(mockSubnetsResponse)
+        .mockResolvedValueOnce(mockPoolsResponse)
+        .mockRejectedValueOnce(new Error('Interface fetch failed')); // interfaces error
+
+      const result = await service.fetchZones(mockParams);
+
+      expect(result.zones).toHaveLength(1);
+      expect(result.zones[0].zoneName).toBe('zone1');
+      // Should continue despite interface error
+    });
+
+    it('should handle pool fetch errors gracefully', async () => {
+      const mockZonesResponse = {
+        zones: [
+          { name: 'zone1', zone_id: 1, groupnet: 'groupnet0' },
+        ],
+      };
+
+      const mockSubnetsResponse = {
+        subnets: [{ name: 'subnet0' }],
+      };
+
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockResolvedValueOnce(mockZonesResponse)
+        .mockResolvedValueOnce(mockSubnetsResponse)
+        .mockRejectedValueOnce(new Error('Pool fetch failed')); // pools error
+
+      const result = await service.fetchZones(mockParams);
+
+      expect(result.zones).toHaveLength(1);
+      expect(result.zones[0].zoneName).toBe('zone1');
+    });
+
+    it('should handle zone processing errors gracefully', async () => {
+      const mockZonesResponse = {
+        zones: [
+          { name: 'zone1', zone_id: 1, groupnet: 'groupnet0' },
+          { name: 'zone2', zone_id: 2, groupnet: 'groupnet0' },
+        ],
+      };
+
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockResolvedValueOnce(mockZonesResponse)
+        .mockRejectedValueOnce(new Error('Zone processing failed')) // error for zone1
+        .mockResolvedValueOnce({ subnets: [] }); // zone2 succeeds with empty subnets
+
+      const result = await service.fetchZones(mockParams);
+
+      expect(result.zones).toHaveLength(2);
+      expect(result.zones[0].zoneName).toBe('zone1');
+      expect(result.zones[0].ipAddresses).toEqual([]);
+      expect(result.zones[1].zoneName).toBe('zone2');
+    });
+
+    it('should include SmartConnect FQDN and SSIP when available', async () => {
+      const mockZonesResponse = {
+        zones: [
+          { name: 'zone1', zone_id: 1, groupnet: 'groupnet0' },
+        ],
+      };
+
+      const mockSubnetsResponse = {
+        subnets: [
+          {
+            name: 'subnet0',
+            sc_service_name: 'smartconnect',
+            sc_service_addrs: [{ low: '10.0.0.100' }],
+          },
+        ],
+      };
+
+      const mockPoolsResponse = {
+        pools: [
+          {
+            name: 'pool0',
+            access_zone: 'zone1',
+            sc_dns_zone: 'example.com',
+          },
+        ],
+      };
+
+      const mockInterfacesResponse = {
+        interfaces: [{ ip_addrs: ['10.0.0.1'] }],
+      };
+
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockResolvedValueOnce(mockZonesResponse)
+        .mockResolvedValueOnce(mockSubnetsResponse)
+        .mockResolvedValueOnce(mockPoolsResponse)
+        .mockResolvedValueOnce(mockInterfacesResponse);
+
+      const result = await service.fetchZones(mockParams);
+
+      expect(result.zones).toHaveLength(1);
+      expect(result.zones[0].smartConnectFqdn).toBe('smartconnect.example.com');
+      expect(result.zones[0].ssip).toBe('10.0.0.100');
+    });
+
+    it('should skip pools that belong to different zone', async () => {
+      const mockZonesResponse = {
+        zones: [
+          { name: 'zone1', zone_id: 1, groupnet: 'groupnet0' },
+        ],
+      };
+
+      const mockSubnetsResponse = {
+        subnets: [{ name: 'subnet0' }],
+      };
+
+      const mockPoolsResponse = {
+        pools: [
+          { name: 'pool0', access_zone: 'different_zone' }, // Different zone
+        ],
+      };
+
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockResolvedValueOnce(mockZonesResponse)
+        .mockResolvedValueOnce(mockSubnetsResponse)
+        .mockResolvedValueOnce(mockPoolsResponse);
+
+      const result = await service.fetchZones(mockParams);
+
+      expect(result.zones).toHaveLength(1);
+      expect(result.zones[0].ipAddresses).toEqual([]);
+    });
+
+    it('should handle SSL error message', async () => {
+      jest.spyOn(service as any, 'makeIsilonAPICall')
+        .mockRejectedValue(new Error('SSL connection failed'));
+
+      await expect(service.fetchZones(mockParams)).rejects.toThrow(BadRequestException);
     });
   });
 
