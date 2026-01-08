@@ -2,8 +2,15 @@ name: Nightly Trivy Scan for NDM Services
 
 on:
   schedule:
-    - cron: '30 18 * * *'
-
+    - cron: '30 18 * * *'  
+  workflow_dispatch:    # <-- Enables the "Run workflow" button
+    inputs:
+      branch:
+        description: 'Branch to scan'
+        required: false
+        default: 'main'
+        type: string
+       
 permissions:
   contents: read
   security-events: write
