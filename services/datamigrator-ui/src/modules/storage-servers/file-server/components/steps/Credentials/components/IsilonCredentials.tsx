@@ -1021,7 +1021,7 @@ const IsilonCredentials = () => {
           Select one or more zones and enter SMB/NFS credentials for each selected zone.
         </Text>
 
-        {/* Edit mode info banner */}
+        {/* Edit mode info banner
         {isEditMode && originalConfiguredZones.size > 0 && (
           <Box className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md mb-4">
             <NoticeTriangleIcon className="text-amber-600 mt-0.5 flex-shrink-0" size="16" />
@@ -1031,7 +1031,7 @@ const IsilonCredentials = () => {
               You can add new zones or configure new protocols for existing zones.
             </Text>
           </Box>
-        )}
+        )} */}
 
         <Box className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md mb-4">
           <InfoIcon className="text-blue-600 mt-0.5 flex-shrink-0" size="16" />
