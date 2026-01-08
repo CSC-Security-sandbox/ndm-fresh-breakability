@@ -287,14 +287,14 @@ export const createDellIsilonConfigPayload = (
       smartConnectDnsZone: creds.smartConnectDnsZone, // DNS zone from Isilon API
     };
     
-    // Add NFS config if present
-    const hasNfs = !!(creds.nfsIp && creds.nfsUsername && creds.nfsPassword);
+    // Add NFS config if present (password NOT required for Isilon - only IP and username needed)
+    const hasNfs = !!(creds.nfsIp && creds.nfsUsername);
     console.debug(`[createDellIsilonConfigPayload] Zone "${zoneId}" hasNfs=${hasNfs}`);
     if (hasNfs) {
       zonePayload.nfs = {
         host: creds.nfsIp,
         userName: creds.nfsUsername,
-        password: creds.nfsPassword,
+        password: creds.nfsPassword || "", // Password is optional for Isilon NFS, send empty string if not provided
         workers: workers.nfs || [],
         protocolVersion: "v3", // Default NFS version - must match backend enum (v3, v4.0, v4.1, v4.2)
       };

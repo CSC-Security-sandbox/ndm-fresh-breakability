@@ -91,7 +91,8 @@ const ValidateConnection = () => {
     });
     return safeSelectedZoneIds.map((zoneId) => {
       const creds = safeZoneCredentials[zoneId] || {};
-      const hasNfs = !!(creds.nfsIp && creds.nfsUsername && creds.nfsPassword);
+      // NFS only requires IP and username (password is optional for Isilon)
+      const hasNfs = !!(creds.nfsIp && creds.nfsUsername);
       const hasSmb = !!(creds.smbIp && creds.smbUsername && creds.smbPassword);
       console.debug(`[ValidateConnection] Zone ${zoneId}:`, {
         creds,
@@ -99,7 +100,7 @@ const ValidateConnection = () => {
         hasSmb,
         nfsIp: creds.nfsIp,
         nfsUsername: creds.nfsUsername,
-        nfsPassword: !!creds.nfsPassword,
+        nfsPassword: !!creds.nfsPassword, // Optional - just for logging
         smbIp: creds.smbIp,
         smbUsername: creds.smbUsername,
         smbPassword: !!creds.smbPassword,
