@@ -6,15 +6,15 @@ dayjs.extend(utc);
 
 export const DEFAULT_MINUTES_AHEAD = {
   START_NOW: 0,
-  SCHEDULE_DATE: 5,
+  SCHEDULE_DATE: 6,
 };
 
 const TIMESTAMP_VALIDATION = {
   SCHEDULE_FUTURE_TIMESTAMP: "Scheduled date and time must be in the future",
   SCHEDULE_LATER_TIMESTAMP:
     "Date and time is required when scheduling for later",
-  SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP:
-    "Scheduled date and time must be at least 1 minute from now",
+  SCHEDULE_FIVE_MINUTE_AHEAD_TIMESTAMP:
+    "Scheduled date and time must be at least 5 minutes from now",
 };
 
 const PROTOCOL_REQUIRED = "Protocol selection is required.";
@@ -44,15 +44,14 @@ export const BULK_DISCOVERY_FORM_SCHEMA = yup.object().shape({
         )
         .test(
           "min-time-ahead",
-          TIMESTAMP_VALIDATION?.SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP,
+          TIMESTAMP_VALIDATION?.SCHEDULE_FIVE_MINUTE_AHEAD_TIMESTAMP,
           function (value) {
             if (!value) return false;
             const selectedDate = dayjs(value as any);
-            const minFutureTime = dayjs().add(1, "minute");
+            const minFutureTime = dayjs().add(5, "minute");
             return (
               selectedDate.isValid() &&
-              (selectedDate.isAfter(minFutureTime) ||
-                selectedDate.isSame(minFutureTime))
+              (!selectedDate.isBefore(minFutureTime))
             );
           }
         ),

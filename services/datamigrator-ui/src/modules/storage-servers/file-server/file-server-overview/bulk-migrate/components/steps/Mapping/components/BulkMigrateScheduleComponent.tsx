@@ -3,7 +3,8 @@ import { Box } from "@components/container/index";
 import { Text } from "@netapp/bxp-design-system-react";
 import { FormikProps } from "formik";
 import { MappingStepFormikFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import { Radio, RadioGroup, FormControlLabel } from "@mui/material";
+import { Radio, RadioGroup, FormControlLabel} from "@mui/material";
+import { Popover, RadioButton, Text as EditText } from "@netapp/bxp-design-system-react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -14,6 +15,7 @@ import {
   DEFAULT_MINUTES_AHEAD,
   SCHEDULE_OPTIONS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { MODAL_POPPER_ZINDEX } from "@utils/constants";
 
 dayjs.extend(utc);
 
@@ -28,13 +30,18 @@ const getDefaultDateTime = (scheduleType: string) => {
 
 const BulkMigrateScheduleComponent = ({
   mappingStepForm,
+  variant,
 }: {
   mappingStepForm: FormikProps<MappingStepFormikFormType>;
+  variant: "normal_run" | "edit_config";
 }) => {
   const { values, setFieldValue, errors } = mappingStepForm;
   const [pickerError, setPickerError] = useState<string | null>(null);
 
   useEffect(() => {
+    if(variant === "edit_config") {
+      return;
+    }
     if (values?.scheduleTime === SCHEDULE_OPTIONS?.START_NOW) {
       setFieldValue(
         "scheduledDateTime",
@@ -53,66 +60,123 @@ const BulkMigrateScheduleComponent = ({
     if (typeof scheduledError === "string") {
       return scheduledError;
     }
-
     if (pickerError === "disablePast") {
       return "You can't select a date in the past";
     }
-
     return "";
   }, [pickerError, errors?.scheduledDateTime]);
 
-  return (
-    <Box className="w-1/2">
-      <Text>Job Schedule</Text>
-      <RadioGroup
-        name="scheduleTime"
-        value={values?.scheduleTime || SCHEDULE_OPTIONS?.START_NOW}
-        onChange={(e) => {
-          setFieldValue("scheduleTime", e.target.value);
-        }}
-      >
-        <Box className="flex">
-          <FormControlLabel
-            value={SCHEDULE_OPTIONS?.START_NOW}
-            control={<Radio />}
-            label="Start Now"
-          />
-          <FormControlLabel
-            value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
-            control={<Radio />}
-            label="Schedule Date & Time (UTC)"
-          />
-        </Box>
-      </RadioGroup>
-      {values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE && (
-        <Box className="flex gap-3 mt-3">
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <DateTimePicker
-              value={
-                values.scheduledDateTime ||
-                getDefaultDateTime(SCHEDULE_OPTIONS?.SCHEDULE_DATE)
-              }
-              timezone="UTC"
-              slotProps={{
-                textField: {
-                  helperText: errorMessage,
-                  error: !!errorMessage,
-                },
-              }}
-              onError={(newError) => setPickerError(newError)}
-              onChange={(newValue) => {
-                setFieldValue("scheduledDateTime", newValue);
-                setPickerError(null);
-              }}
-              format={DATE_FORMAT}
-              disablePast
-              timeSteps={{ minutes: 1 }}
+  if(variant === "normal_run") {
+    return (
+      <Box className="w-1/2">
+        <Text>Job Schedule</Text>
+        <RadioGroup
+          name="scheduleTime"
+          value={values?.scheduleTime || SCHEDULE_OPTIONS?.START_NOW}
+          onChange={(e) => {
+            setFieldValue("scheduleTime", e.target.value);
+          }}
+        >
+          <Box className="flex">
+            <FormControlLabel
+              value={SCHEDULE_OPTIONS?.START_NOW}
+              control={<Radio />}
+              label="Start Now"
             />
-          </LocalizationProvider>
+            <FormControlLabel
+              value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
+              control={<Radio />}
+              label="Schedule Date & Time (UTC)"
+            />
+          </Box>
+        </RadioGroup>
+        {values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE && (
+          <Box className="flex gap-3 mt-3">
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DateTimePicker
+                value={
+                  values.scheduledDateTime ||
+                  getDefaultDateTime(SCHEDULE_OPTIONS?.SCHEDULE_DATE)
+                }
+                timezone="UTC"
+                slotProps={{
+                  textField: {
+                    helperText: errorMessage,
+                    error: !!errorMessage,
+                  },
+                }}
+                onError={(newError) => setPickerError(newError)}
+                onChange={(newValue) => {
+                  setFieldValue("scheduledDateTime", newValue);
+                  setPickerError(null);
+                }}
+                format={DATE_FORMAT}
+                disablePast
+                timeSteps={{ minutes: 1 }}
+              />
+            </LocalizationProvider>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+else{
+  return (
+      <Box>
+        <Box className="flex gap-2 items-center">
+          <EditText bold className="!mb-0">Job Schedule</EditText>
+          <Popover placement="right" verticalPlacement="center">
+            Schedule a job run for a specific date & time
+          </Popover>
         </Box>
-      )}
-    </Box>
-  );
+        <Box>
+          <RadioGroup
+          name="scheduleTime"
+          value={values?.scheduleTime}
+          onChange={(e) => {
+            setFieldValue("scheduleTime", e.target.value);
+          }}
+        >
+          <Box>
+            <FormControlLabel
+              value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
+              control={<Radio size="medium" sx={{ color: 'black', '& .MuiSvgIcon-root': { fontSize: 20 } }} />}
+              label="Schedule Date & Time (UTC)"
+            />
+          </Box>
+        </RadioGroup>
+        </Box>
+        {values.scheduleTime === SCHEDULE_OPTIONS?.SCHEDULE_DATE && (
+          <Box>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DateTimePicker
+                value={
+                  values?.scheduledDateTime
+                }
+                timezone="UTC"
+                slotProps={{
+                  textField: {
+                    helperText: errorMessage,
+                    error: !!errorMessage,
+                    sx: { width: '300px' },
+                  },
+                  popper: { sx: { zIndex: MODAL_POPPER_ZINDEX } },
+                }}
+                onError={(newError) => setPickerError(newError)}
+                onChange={(newValue) => {
+                  setFieldValue("scheduledDateTime", newValue);
+                  setPickerError(null);
+                }}
+                format={DATE_FORMAT}
+                disablePast
+                timeSteps={{ minutes: 1 }}
+              />
+            </LocalizationProvider>
+          </Box>
+        )}
+      </Box>
+    );
+  }
 };
 
 export default BulkMigrateScheduleComponent;

@@ -176,11 +176,11 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
         errors.scheduledDateTime =
           TIMESTAMP_VALIDATION?.SCHEDULE_FUTURE_TIMESTAMP;
       } else {
-        // Check if date is at least 1 minute from now
-        const minimumTime = now.add(1, "minute");
+        // Check if date is at least 5 minutes from now
+        const minimumTime = now.add(5, "minute");
         if (scheduledDateTime.isBefore(minimumTime)) {
           errors.scheduledDateTime =
-            TIMESTAMP_VALIDATION?.SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP;
+            TIMESTAMP_VALIDATION?.SCHEDULE_FIVE_MINUTE_AHEAD_TIMESTAMP;
         }
       }
     }

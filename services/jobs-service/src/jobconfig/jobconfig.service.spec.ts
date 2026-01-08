@@ -13,6 +13,7 @@ import {
 } from "@netapp-cloud-datamigrate/logger-lib";
 import { createClient } from "redis";
 import {
+  JobConfigurationEnum,
   JobRunStatus,
   JobStatus,
   JobType,
@@ -311,6 +312,7 @@ describe("JobConfigService", () => {
             save: jest.fn(),
             remove: jest.fn(),
             find: jest.fn(),
+            findBy: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -359,6 +361,9 @@ describe("JobConfigService", () => {
     jobConfigRepo = module.get<Repository<JobConfigEntity>>(
       getRepositoryToken(JobConfigEntity)
     );
+    (jobConfigRepo as any).manager = {
+      transaction: jest.fn(),
+    };
     speedTestConfigRepo = module.get<Repository<SpeedTestConfigEntity>>(
       getRepositoryToken(SpeedTestConfigEntity)
     );
@@ -1927,6 +1932,43 @@ describe("JobConfigService", () => {
       });
     });
 
+    it("should use manager repository when manager is provided", async () => {
+      const mockJobConfigId = "jobConfigId";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        jobType: JobType.MIGRATE,
+      } as any;
+      const mockManagerRepo = {
+        findOne: jest.fn().mockResolvedValue(mockJobConfig),
+        save: jest.fn().mockImplementation(async (entity) => entity),
+      };
+      const mockManager = {
+        getRepository: jest.fn().mockReturnValue(mockManagerRepo),
+      } as any;
+      const updatePayload: Partial<JobConfigDto> = {
+        status: JobStatus.Active,
+      };
+
+      const result = await service.updateJobConfig(
+        mockJobConfigId,
+        updatePayload,
+        mockManager
+      );
+
+      expect(mockManager.getRepository).toHaveBeenCalledWith(JobConfigEntity);
+      expect(jobConfigRepo.findOne).not.toHaveBeenCalled();
+      expect(jobConfigRepo.save).not.toHaveBeenCalled();
+      expect(mockManagerRepo.findOne).toHaveBeenCalledWith({
+        where: { id: mockJobConfigId },
+      });
+      expect(mockManagerRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: JobStatus.Active })
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ id: mockJobConfigId, status: JobStatus.Active })
+      );
+    });
+
     it("should throw an error if job config is not found", async () => {
       const mockJobConfigId = "jobConfigId";
       const mockData: Partial<JobConfigDto> = {};
@@ -2461,6 +2503,37 @@ describe("JobConfigService", () => {
       };
       const result = service.getConfigurationsSetToJob(jobConfig as any);
       expect(result["Excluded Path Patterns"]).toEqual([]);
+    });
+
+    it("should expose shouldScanADS as Enabled for discovery jobs", () => {
+      const firstRunAt = new Date("2025-02-10T00:00:00.000Z");
+      const jobConfig = {
+        jobType: JobType.DISCOVER,
+        excludeFilePatterns: "*/ads/*,*/alt/*",
+        shouldScanADS: true,
+        firstRunAt,
+      };
+
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+
+      expect(result[JobConfigurationEnum.shouldScanADS]).toBe("Enabled");
+      expect(result[JobConfigurationEnum.excludeFilePatterns]).toEqual([
+        "*/ads/*",
+        "*/alt/*",
+      ]);
+      expect(result[JobConfigurationEnum.firstRunAt]).toBe(firstRunAt);
+    });
+
+    it("should default shouldScanADS to Disabled when not provided", () => {
+      const jobConfig = {
+        jobType: JobType.DISCOVER,
+        excludeFilePatterns: "",
+      };
+
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+
+      expect(result[JobConfigurationEnum.shouldScanADS]).toBe("Disabled");
+      expect(result[JobConfigurationEnum.excludeFilePatterns]).toEqual([]);
     });
   });
 
@@ -4651,4 +4724,281 @@ describe("JobConfigService", () => {
       );
     });
   })
+
+  describe('getIdentityMappingsForJob', () => {
+    it('should return identity mappings for a job configuration', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const identityMapId = 'test-identity-map-id';
+      
+      const crossMappings = [{
+          id: 'cross-1',
+          jobConfigId,
+          identityMappingId: identityMapId,
+          isOrphan: false,
+        },
+      ];
+      const identityMappings = [{
+          id: 'mapping-1',
+          identityMap: identityMapId,
+          identityType: TemplateType.SID,
+          sourceMapping: 'S-1-5-21-1111',
+          targetMapping: 'S-1-5-21-2222',
+        }, {
+          id: 'mapping-2',
+          identityMap: identityMapId,
+          identityType: TemplateType.SID,
+          sourceMapping: 'S-1-5-21-3333',
+          targetMapping: 'S-1-5-21-4444',
+        },
+      ];
+
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue(crossMappings as any);
+      jest.spyOn(identityMappingRepo, 'findBy').mockResolvedValue(identityMappings as any);
+
+      const result = await service.getIdentityMappingsForJob(jobConfigId);
+      expect(result).toEqual({
+        data: identityMappings,
+        crossMappings: crossMappings,
+      });
+      expect(identityCrossMappingRepo.find).toHaveBeenCalledWith({
+        where: { jobConfigId, isOrphan: false },
+        relations: ['identityMapping'],
+      });
+      expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
+        identityMap: In([identityMapId]),
+      });
+    });
+
+    it('should return empty data when no mappings found', async () => {
+      const jobConfigId = 'test-job-config-id';
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue([]);
+      const result = await service.getIdentityMappingsForJob(jobConfigId);
+      expect(result).toEqual({
+        data: [],
+        message: 'No identity mappings found for this job configuration',
+      });
+      expect(identityCrossMappingRepo.find).toHaveBeenCalledWith({
+        where: { jobConfigId, isOrphan: false },
+        relations: ['identityMapping'],
+      });
+    });
+
+    it('should throw HttpException on error', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const error = new Error('Database error');
+      jest.spyOn(identityCrossMappingRepo, 'find').mockRejectedValue(error);
+      await expect(service.getIdentityMappingsForJob(jobConfigId)).rejects.toThrow(
+        HttpException
+      );
+    });
+  });
+
+  describe('updateJobIdentityMappings', () => {
+    it('should update SID mappings for a job configuration', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const sidMappingBase64 = 'data:text/csv;base64,U291cmNlU0lELFRhcmdldFNJRApTLTEtNS0yMS0xMTExLFMtMS01LTIxLTIyMjI=';
+      const mappingData = { sidMapping: sidMappingBase64 };
+      const existingCrossMapping = [{
+          id: 'cross-1',
+          jobConfigId,
+          identityMappingId: 'old-map-id',
+          isOrphan: false,
+        },
+      ];
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue(existingCrossMapping as any);
+      jest.spyOn(identityCrossMappingRepo, 'update').mockResolvedValue({} as any);
+      jest.spyOn(service as any, 'decodeBase64').mockResolvedValue('SourceSID,TargetSID\nS-1-5-21-1111,S-1-5-21-2222');
+      jest.spyOn(service as any, 'parseBlobData').mockResolvedValue([
+        { sourceMapping: 'S-1-5-21-1111', targetMapping: 'S-1-5-21-2222' },
+      ]);
+      jest.spyOn(service as any, 'saveIdentityMappingsWithMap').mockResolvedValue(undefined);
+      await service.updateJobIdentityMappings(jobConfigId, mappingData);
+      expect(identityCrossMappingRepo.update).toHaveBeenCalledWith(
+        { jobConfigId, isOrphan: false },
+        { isOrphan: true }
+      );
+      expect(service['saveIdentityMappingsWithMap']).toHaveBeenCalled();
+    });
+
+    it('should update GID mappings for a job configuration', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const gidMappingBase64 = 'data:text/csv;base64,U291cmNlR0lELFRhcmdldEdJRCxTb3VyY2VVSUQsVGFyZ2V0VUlECjEwMDAsMjAwMCwxMDAxLDIwMDE=';
+      const mappingData = { gidMapping: gidMappingBase64 };
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(service as any, 'decodeBase64').mockResolvedValue('SourceGID,TargetGID,SourceUID,TargetUID\n1000,2000,1001,2001');
+      jest.spyOn(service as any, 'parseBlobData').mockResolvedValue([
+        {
+          sourceMappingGid: '1000',
+          targetMappingGid: '2000',
+          sourceMappingUid: '1001',
+          targetMappingUid: '2001',
+        },
+      ]);
+      jest.spyOn(service as any, 'saveIdentityMappingsWithMap').mockResolvedValue(undefined);
+      await service.updateJobIdentityMappings(jobConfigId, mappingData);
+      expect(service['saveIdentityMappingsWithMap']).toHaveBeenCalled();
+    });
+
+    it('should throw HttpException on error', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const mappingData = { sidMapping: 'invalid-base64' };
+      const error = new Error('Decoding error');
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(service as any, 'decodeBase64').mockRejectedValue(error);
+      await expect(
+        service.updateJobIdentityMappings(jobConfigId, mappingData)
+      ).rejects.toThrow(HttpException);
+    });
+  });
+
+  describe('updateJobConfigWithMappings', () => {
+    it('should update mappings and config within a single transaction', async () => {
+      const jobConfigId = 'job-123';
+      const jobConfigData: Partial<JobConfigDto> = {
+        excludeFilePatterns: '*.log',
+      };
+      const mappingData = { sidMapping: 'base64-sid' };
+      const mockManager = { id: 'manager' } as any;
+
+      const transactionSpy = jest
+        .spyOn(jobConfigRepo.manager, 'transaction')
+        .mockImplementation(async (isolationOrCallback: any, maybeCallback?: any) => {
+          const callback = typeof isolationOrCallback === 'function' ? isolationOrCallback : maybeCallback;
+          if (!callback) {
+            throw new Error('Transaction callback missing');
+          }
+          return callback(mockManager);
+        });
+      const updateMappingsSpy = jest
+        .spyOn(service, 'updateJobIdentityMappings')
+        .mockResolvedValue({ data: ['mapped'] } as any);
+      const updateJobSpy = jest
+        .spyOn(service, 'updateJobConfig')
+        .mockResolvedValue({ id: jobConfigId } as JobConfigEntity);
+
+      const result = await service.updateJobConfigWithMappings(
+        jobConfigId,
+        jobConfigData,
+        mappingData,
+      );
+
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+      expect(updateMappingsSpy).toHaveBeenCalledWith(
+        jobConfigId,
+        mappingData,
+        mockManager,
+      );
+      expect(updateJobSpy).toHaveBeenCalledWith(
+        jobConfigId,
+        jobConfigData,
+        mockManager,
+      );
+      expect(result).toEqual({
+        jobConfig: { id: jobConfigId },
+        identityMappings: { data: ['mapped'] },
+      });
+
+      transactionSpy.mockRestore();
+      updateMappingsSpy.mockRestore();
+      updateJobSpy.mockRestore();
+    });
+
+    it('should propagate errors when either update fails', async () => {
+      const jobConfigId = 'job-500';
+      const mappingData = { gidMapping: 'base64-gid' };
+      const mockManager = { id: 'manager' } as any;
+      const error = new Error('transaction failure');
+
+      const transactionSpy = jest
+        .spyOn(jobConfigRepo.manager, 'transaction')
+        .mockImplementation(async (isolationOrCallback: any, maybeCallback?: any) => {
+          const callback = typeof isolationOrCallback === 'function'
+            ? isolationOrCallback
+            : maybeCallback;
+          if (!callback) {
+            throw new Error('Transaction callback missing');
+          }
+          return callback(mockManager);
+        });
+      const updateMappingsSpy = jest
+        .spyOn(service, 'updateJobIdentityMappings')
+        .mockResolvedValue({ data: [] } as any);
+      const updateJobSpy = jest
+        .spyOn(service, 'updateJobConfig')
+        .mockRejectedValue(error);
+
+      await expect(
+        service.updateJobConfigWithMappings(jobConfigId, {}, mappingData),
+      ).rejects.toBeInstanceOf(HttpException);
+
+      expect(updateMappingsSpy).toHaveBeenCalledWith(
+        jobConfigId,
+        mappingData,
+        mockManager,
+      );
+      expect(updateJobSpy).toHaveBeenCalledWith(
+        jobConfigId,
+        {},
+        mockManager,
+      );
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+
+      transactionSpy.mockRestore();
+      updateMappingsSpy.mockRestore();
+      updateJobSpy.mockRestore();
+    });
+  });
+
+  describe('deleteIdentityMappingsForJob', () => {
+    it('should delete identity mappings by marking them as orphan', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const jobConfig = {
+        id: jobConfigId,
+        jobType: JobType.MIGRATE,
+        status: JobStatus.Active,
+      };
+
+      const crossMappings = [{
+          id: 'cross-1',
+          jobConfigId,
+          identityMappingId: 'map-id-1',
+          isOrphan: false,
+        }, {
+          id: 'cross-2',
+          jobConfigId,
+          identityMappingId: 'map-id-2',
+          isOrphan: false,
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig as any);
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue(crossMappings as any);
+      jest.spyOn(identityCrossMappingRepo, 'update').mockResolvedValue({} as any);
+
+      const result = await service.deleteIdentityMappingsForJob(jobConfigId);
+      expect(result).toEqual({
+        message: 'Identity mappings deleted successfully',
+        deletedCount: 2,
+      });
+      expect(identityCrossMappingRepo.update).toHaveBeenCalledWith(
+        { jobConfigId, isOrphan: false },
+        { isOrphan: true }
+      );
+    });
+
+    it('should throw HttpException on database error', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const jobConfig = {
+        id: jobConfigId,
+        jobType: JobType.MIGRATE,
+        status: JobStatus.Active,
+      };
+      const error = new Error('Database error');
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(jobConfig as any);
+      jest.spyOn(identityCrossMappingRepo, 'find').mockRejectedValue(error);
+      await expect(service.deleteIdentityMappingsForJob(jobConfigId)).rejects.toThrow(
+        HttpException
+      );
+    });
+  });
 });

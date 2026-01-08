@@ -62,7 +62,7 @@ const Options = () => {
               </Box>
             </Box>
           </Box>
-          <IncrementalSyncSchedule />
+          <IncrementalSyncSchedule variant="normal_run"/>
         </Box>
         <Box className="w-3/6 flex flex-col gap-10">
           <FormFieldTextArea
@@ -72,7 +72,7 @@ const Options = () => {
             label="Excluded Path Patterns"
             isOptional
             labelChildren={
-              <Popover>Mention File Patterns that's needs to exclude</Popover>
+              <Popover>Mention File Patterns that should be excluded</Popover>
             }
           />
 
