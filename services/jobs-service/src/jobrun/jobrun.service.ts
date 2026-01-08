@@ -3,6 +3,7 @@ import {
   Injectable,
   Inject,
   NotFoundException,
+  InternalServerErrorException
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -22,6 +23,7 @@ import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobConfigEntity } from "src/entities/jobconfig.entity";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
+import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { OperationsEntity } from "src/entities/operation.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
@@ -63,6 +65,8 @@ export class JobRunService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
     private inventoryRepo: Repository<InventoryEntity>,
+    @InjectRepository(IdentityMappingEntity)
+    private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(OperationsEntity)
     private operationRepo: Repository<OperationsEntity>,
     @InjectRepository(OperationErrorEntity)
@@ -1031,4 +1035,40 @@ export class JobRunService {
       throw error;
     }
   }
+
+  async getJobRunIdentityMappings(jobRunId: string): Promise<any> {
+    try {
+      const jobRun = await this.jobRunRepo.findOne({
+        where: { id: jobRunId },
+        relations: ["options"],
+      });
+      if (!jobRun) {
+        throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+      }
+      const identityMappingId = jobRun.options?.identityMappingId;
+      if (!identityMappingId) {
+        return {
+          data: [],
+          message: "No identity mappings found for this job run",
+        };
+      }
+      const identityMappings = await this.identityMappingRepo.findBy({
+        identityMap: identityMappingId,
+      });
+      return {
+        data: identityMappings,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(
+        `Error fetching identity mappings for job run ${jobRunId}:`, error
+      );
+      throw new InternalServerErrorException(
+        `Failed to fetch identity mappings for job run ${jobRunId}`
+      );
+    }
+  }
+
 }

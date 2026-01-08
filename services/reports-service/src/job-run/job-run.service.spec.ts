@@ -217,7 +217,7 @@ describe("JobRunService", () => {
         status: JobRunStatus.Completed,
         jobConfig: {
           id: "configId",
-          jobType: JobType.Discover,
+          jobType: JobType.Migrate,
           sourcePath: {
             fileServer: {
               protocol: "http",
@@ -232,6 +232,13 @@ describe("JobRunService", () => {
             },
             volumePath: "/destination",
           },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: new Date("2025-01-01T00:00:00Z"),
+          excludeFilePatterns: "*.tmp",
+          skipFile: "x-M",
+          identityMappingId: "mapping-123",
         },
         worker: { workerId: "worker1" },
       };
@@ -275,6 +282,13 @@ describe("JobRunService", () => {
             },
             volumePath: "/destination",
           },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: null,
+          excludeFilePatterns: "*.tmp",
+          skipFile: null,
+          identityMappingId: null,
         },
         worker: { workerId: "worker1" },
       };
@@ -322,6 +336,13 @@ describe("JobRunService", () => {
             volumePath: "/destination",
           },
         },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: new Date("2025-01-01T00:00:00Z"),
+          excludeFilePatterns: "*.tmp",
+          skipFile: "x-M",
+          identityMappingId: "mapping-123",
+        },
         worker: { workerId: "worker1" },
       };
       const mockGetRawMany = [{ count: "1" }];
@@ -360,6 +381,13 @@ describe("JobRunService", () => {
             volumePath: "/destination",
           },
         },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: new Date("2025-01-01T00:00:00Z"),
+          excludeFilePatterns: "*.tmp",
+          skipFile: null,
+          identityMappingId: null,
+        },
         worker: { workerId: "worker1" },
       };
 
@@ -388,6 +416,13 @@ describe("JobRunService", () => {
             },
             volumePath: "/destination",
           },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: null,
+          excludeFilePatterns: "*.tmp",
+          skipFile: null,
+          identityMappingId: null,
         },
         worker: { workerId: "worker1" },
       };
@@ -444,6 +479,57 @@ describe("JobRunService", () => {
         { isReportReady: true }
       );
     });
+
+    it("should return job options correctly in the response", async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourcePath: {
+            fileServer: {
+              protocol: "nfs",
+              config: { configName: "sourceServer" },
+            },
+            volumePath: "/source",
+          },
+          destinationPath: {
+            fileServer: {
+              protocol: "smb",
+              config: { configName: "destServer" },
+            },
+            volumePath: "/destination",
+          },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: new Date("2025-01-01T00:00:00Z"),
+          excludeFilePatterns: "*.tmp,*.log",
+          skipFile: "x-M",
+          identityMappingId: "mapping-456",
+        },
+        worker: { workerId: "worker1" },
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 100,
+        directoryCount: 20,
+        totalSize: 2048,
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.jobOptions).toBeDefined();
+      expect(result.jobOptions.preserveAccessTime).toBe(true);
+      expect(result.jobOptions.excludeOlderThan).toEqual(new Date("2025-01-01T00:00:00Z"));
+      expect(result.jobOptions.excludeFilePatterns).toBe("*.tmp,*.log");
+      expect(result.jobOptions.skipFile).toBe("x-M");
+      expect(result.jobOptions.identityMappingId).toBe("mapping-456");
+    });
   });
 
   describe("getJobStatsId - Inventory Summary Processing", () => {
@@ -475,6 +561,13 @@ describe("JobRunService", () => {
             },
             volumePath: "/destination",
           },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: null,
+          excludeFilePatterns: "*.tmp",
+          skipFile: null,
+          identityMappingId: null,
         },
         worker: { workerId: "worker1" },
       };
@@ -519,6 +612,13 @@ describe("JobRunService", () => {
             },
             volumePath: "/destination",
           },
+        },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: null,
+          excludeFilePatterns: "*.tmp",
+          skipFile: null,
+          identityMappingId: null,
         },
         worker: { workerId: "worker1" },
       };

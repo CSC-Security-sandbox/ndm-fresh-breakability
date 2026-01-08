@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "@components/container/index";
-import { Text, Button } from "@netapp/bxp-design-system-react"
+import { Text, Button } from "@netapp/bxp-design-system-react";
 import { ProtocolType } from "@/types/app.type";
 
 interface IdentityMappingData {

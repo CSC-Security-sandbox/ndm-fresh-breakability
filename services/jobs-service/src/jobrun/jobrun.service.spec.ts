@@ -356,6 +356,7 @@ describe("JobRunService", () => {
             save: jest.fn(),
             remove: jest.fn(),
             find: jest.fn(),
+            findBy: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -3885,6 +3886,111 @@ describe("JobRunService", () => {
 
         expect(errorRemedySpy).not.toHaveBeenCalled();
         expect(sendMailSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("getJobRunIdentityMappings", () => {
+      it("should return identity mappings when they exist", async () => {
+        const mockJobRunId = "test-job-run-id";
+        const mockIdentityMappingId = "test-identity-mapping-id";
+        
+        const mockJobRun = {
+          id: mockJobRunId,
+          options: {
+            identityMappingId: mockIdentityMappingId,
+          },
+        };
+
+        const mockIdentityMappings = [{
+            id: "mapping-1",
+            identityMap: mockIdentityMappingId,
+            sourceUser: "user1",
+            targetUser: "mapped-user1",
+          }, {
+            id: "mapping-2",
+            identityMap: mockIdentityMappingId,
+            sourceUser: "user2",
+            targetUser: "mapped-user2",
+          },
+        ];
+
+        jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+        (identityMappingRepo.findBy as jest.Mock).mockResolvedValue(mockIdentityMappings as any);
+
+        const result = await service.getJobRunIdentityMappings(mockJobRunId);
+
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: mockJobRunId },
+          relations: ["options"],
+        });
+        expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
+          identityMap: mockIdentityMappingId,
+        });
+        expect(result).toEqual({
+          data: mockIdentityMappings,
+        });
+      });
+
+      it("should throw NotFoundException when job run not found", async () => {
+        const mockJobRunId = "non-existent-job-run-id";
+        jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
+        await expect(service.getJobRunIdentityMappings(mockJobRunId)).rejects.toThrow(
+          new NotFoundException(`Job Run with id ${mockJobRunId} not found`)
+        );
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: mockJobRunId },
+          relations: ["options"],
+        });
+      });
+
+      it("should return empty data with message when no identity mapping ID exists", async () => {
+        const mockJobRunId = "test-job-run-id";
+        
+        const mockJobRun = {
+          id: mockJobRunId,
+          options: null,
+        };
+
+        jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+
+        const result = await service.getJobRunIdentityMappings(mockJobRunId);
+
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: mockJobRunId },
+          relations: ["options"],
+        });
+        expect(result).toEqual({
+          data: [],
+          message: "No identity mappings found for this job run",
+        });
+      });
+
+      it("should return empty data array when identity mappings not found for valid mapping ID", async () => {
+        const mockJobRunId = "test-job-run-id";
+        const mockIdentityMappingId = "test-identity-mapping-id";
+        
+        const mockJobRun = {
+          id: mockJobRunId,
+          options: {
+            identityMappingId: mockIdentityMappingId,
+          },
+        };
+
+        jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+        (identityMappingRepo.findBy as jest.Mock).mockResolvedValue([]);
+
+        const result = await service.getJobRunIdentityMappings(mockJobRunId);
+
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: mockJobRunId },
+          relations: ["options"],
+        });
+        expect(identityMappingRepo.findBy).toHaveBeenCalledWith({
+          identityMap: mockIdentityMappingId,
+        });
+        expect(result).toEqual({
+          data: [],
+        });
       });
     });
 

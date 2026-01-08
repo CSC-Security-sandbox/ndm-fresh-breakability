@@ -15,21 +15,13 @@ import { ReportsEntity } from "src/entities/reports.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { ProjectIdCacheService } from "../utils/project-id-cache.service";
 import { Repository } from "typeorm";
-import {
-  JobRunDetailsResponseDto,
-  JobRunStats,
-  TaskDto,
-} from "./dto/job-rundetails.dto";
-import { InventoryStatusSummary, TaskStatusCount } from "./job-run.type";
+import { JobRunDetailsResponseDto, JobRunStats, TaskDto, } from "./dto/job-rundetails.dto";
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { formatBytes, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
+import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
-import {
-  LoggerService,
-  LoggerFactory,
-} from '@netapp-cloud-datamigrate/logger-lib';
+import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Injectable()
 export class JobRunService {
@@ -150,9 +142,17 @@ export class JobRunService {
           sourcePath: volumeSearch,
           destinationPath: volumeSearch,
         },
+        options: {
+          preserveAccessTime: true,
+          excludeOlderThan: true,
+          excludeFilePatterns: true,
+          skipFile: true,
+          identityMappingId: true,
+        },
       },
       relations: {
         worker: true,
+        options: true,
         jobConfig: {
           sourcePath: { fileServer: { config: true } },
           destinationPath: { fileServer: { config: true } },
@@ -179,6 +179,13 @@ export class JobRunService {
           serverName:
             jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,
         },
+      },
+      jobOptions: jobRun.options && {
+        preserveAccessTime: jobRun.options.preserveAccessTime,
+        excludeOlderThan: jobRun.options.excludeOlderThan,
+        excludeFilePatterns: jobRun.options.excludeFilePatterns,
+        skipFile: jobRun.options.skipFile,
+        identityMappingId: jobRun.options.identityMappingId,
       },
       worker: jobRun?.worker?.length ?? 0,
     };
