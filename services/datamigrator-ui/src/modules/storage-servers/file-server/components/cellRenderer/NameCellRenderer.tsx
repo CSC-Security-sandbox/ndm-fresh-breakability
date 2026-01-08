@@ -58,6 +58,8 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
   // Dell Isilon Child Row (Zone) - Indented submenu item style
   if (row?._isDellIsilonChild) {
     const zoneName = row._zoneName || row.displayName;
+    const protocol = row._protocol || 'NFS';
+    const displayNameWithProtocol = `${zoneName} (${protocol})`;
     // Use _configId (parent config ID) for navigation, not the file server's own id
     const configId = row._configId || row.id;
     // Get the actual file server ID for this zone to filter workers/volumes
@@ -75,13 +77,13 @@ const NameCellRenderer = (params: BlueXpTableRowType<any, any>) => {
           
         </Box>
         
-        {/* Zone name only */}
+        {/* Zone name with protocol */}
         <Heading
           level="16"
           color="text-title"
           className="font-semibold overflow-hidden text-ellipsis whitespace-nowrap hover:text-blue-600"
         >
-          {zoneName}
+          {displayNameWithProtocol}
         </Heading>
       </Box>
     );
