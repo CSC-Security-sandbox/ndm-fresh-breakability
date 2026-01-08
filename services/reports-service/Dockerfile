@@ -3,7 +3,6 @@ FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 # Install system dependencies and build tools first
 RUN apt-get update && apt-get install -y \
     wget \
-    gnupg \
     ca-certificates \
     build-essential \
     equivs \
