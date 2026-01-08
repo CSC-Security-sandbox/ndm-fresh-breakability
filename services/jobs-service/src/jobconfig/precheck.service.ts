@@ -110,7 +110,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
     private async fetchVolumesWithWorkers(pathIds: string[]): Promise<VolumeEntity[]> {
         return this.volumeRepo.find({
             where: { id: In([...pathIds]) },
-            relations: { fileServer: { workers: { stats: true } } },
+            relations: { fileServer: { workers: { stats: true }, config: true } },
         });
     }
 
