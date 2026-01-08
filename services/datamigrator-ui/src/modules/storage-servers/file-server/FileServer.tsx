@@ -81,31 +81,24 @@ const FileServer = () => {
     });
   };
 
-  // Build top-level entries (parents + regular servers) - used for pagination
-  // Each Dell Isilon parent counts as 1 entry, regardless of how many zones it has
   const topLevelEntries = useMemo(() => {
     const serverList = configByProject?.serverConfig || [];
     const { parents, regularServers } = groupDellIsilonFileServers(serverList);
     
-    // Sort parents by createdAt descending (newest first)
-    const sortedParents = [...parents].sort((a, b) => {
+    // Mark parents with _isParent flag
+    const parentsWithFlag = parents.map(p => ({ ...p, _isParent: true }));
+    
+    // Combine all entries and sort by createdAt descending (newest first)
+    // This ensures Dell Isilon and Other NAS are interleaved based on creation order
+    const allEntries = [...parentsWithFlag, ...regularServers];
+    
+    allEntries.sort((a, b) => {
       const dateA = new Date(a.createdAt || 0).getTime();
       const dateB = new Date(b.createdAt || 0).getTime();
-      return dateB - dateA;
+      return dateB - dateA; // Descending order (newest first)
     });
     
-    // Sort regular servers by createdAt descending
-    const sortedRegularServers = [...regularServers].sort((a, b) => {
-      const dateA = new Date(a.createdAt || 0).getTime();
-      const dateB = new Date(b.createdAt || 0).getTime();
-      return dateB - dateA;
-    });
-    
-    // Combine: Dell Isilon parents first, then regular servers
-    return [
-      ...sortedParents.map(p => ({ ...p, _isParent: true })),
-      ...sortedRegularServers
-    ];
+    return allEntries;
   }, [configByProject?.serverConfig]);
 
   // Calculate pagination based on top-level entries
@@ -120,9 +113,7 @@ const FileServer = () => {
     return topLevelEntries.slice(startIdx, endIdx);
   }, [topLevelEntries, currentPageIndex]);
 
-  // Build display rows for current page - includes expanded children inline
-  // Example: 4 Isilon parents (each with 2 zones) + 6 regular servers = 10 top-level
-  // When all expanded: 4 parents + 8 children + 6 regular = 18 visible rows
+
   const displayRows = useMemo(() => {
     const rows: any[] = [];
     
@@ -251,8 +242,6 @@ const FileServer = () => {
     </PermissionAuth>
   );
 
-  // Table displays all rows including expanded children
-  // Page size is set to display all rows on current page (we handle pagination ourselves)
   const tableStateProps = {
     columns: FILE_SERVER_LIST_COLUMN_DEFS,
     rows: displayRows,
@@ -262,12 +251,10 @@ const FileServer = () => {
     pageSize: displayRows.length > 0 ? displayRows.length : BASE_PAGE_SIZE,
   };
 
-  // Custom pagination: counter shows top-level entries only (e.g., "1-10 of 18")
-  // Table displays all rows including expanded children
   const customPaginationProps = {
-    pageRows: displayRows,                      // All rows to display (including children)
-    topLevelPageRows: currentPageTopLevelEntries, // For counter: "1-10"
-    totalTopLevelRows: topLevelEntries,         // For counter: "of 18"
+    pageRows: displayRows,                      
+    topLevelPageRows: currentPageTopLevelEntries, 
+    totalTopLevelRows: topLevelEntries,         
     pageIndex: currentPageIndex,
     pageCount: pageCount,
     gotoPage,
