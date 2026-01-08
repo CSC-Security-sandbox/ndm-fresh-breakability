@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { ExcludeDateTimePickerWrapperPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/ExcludeDateTimePickerWrapper.interface";
 import { useMemo, useState } from "react";
+import { MODAL_POPPER_ZINDEX } from "@utils/constants";
 
 dayjs.extend(utc);
 const today = dayjs();
@@ -38,6 +39,7 @@ const DateTimePickerWrapper = ({
             textField: {
               helperText: errorMessage,
             },
+            popper: { sx: { zIndex: MODAL_POPPER_ZINDEX } },
           }}
           onError={(newError) => setError(newError)}
           onChange={(newValue) => {

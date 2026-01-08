@@ -52,7 +52,7 @@ const Mapping = () => {
           <Text>Source File Server</Text>
           <Text bold>{sourceFileServerDetails?.configName}</Text>
         </Box>
-        <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} />
+        <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} variant="normal_run" />
       </Card>
       <Card className="mt-2 p-6 flex flex-col">
         <Text>Table mapping</Text>

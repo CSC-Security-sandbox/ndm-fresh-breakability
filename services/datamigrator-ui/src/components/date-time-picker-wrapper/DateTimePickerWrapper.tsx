@@ -9,6 +9,7 @@ import {
   FormErrors,
 } from "@components/date-time-picker-wrapper/DateTimePickerWrapper.interface";
 import { useMemo, useState } from "react";
+import { MODAL_POPPER_ZINDEX } from "@utils/constants";
 
 dayjs.extend(utc);
 const today = dayjs();
@@ -22,15 +23,12 @@ const DateTimePickerWrapper = ({
   const errorMessage = useMemo(() => {
     const formErrors = bulkDiscoveryForm?.formErrors as FormErrors;
     const firstRunAtError = formErrors?.firstRunAt;
-
     if (typeof firstRunAtError === "string") {
       return firstRunAtError;
     }
-
     if (error === "disablePast") {
       return "You can't select a date in the past";
     }
-
     return "";
   }, [error, bulkDiscoveryForm?.formErrors]);
 
@@ -46,13 +44,11 @@ const DateTimePickerWrapper = ({
               helperText: errorMessage,
               error: !!errorMessage,
             },
+            popper: { sx: { zIndex: MODAL_POPPER_ZINDEX } },
           }}
           onError={(newError) => setError(newError)}
           onChange={(newValue) => {
-            bulkDiscoveryForm.resetForm({
-              ...bulkDiscoveryForm.formState,
-              firstRunAt: newValue,
-            });
+            bulkDiscoveryForm.wrappedHandleFormChange('firstRunAt')(newValue, null);
           }}
           format="DD/MM/YYYY hh:mm:A UTC"
           disablePast

@@ -178,6 +178,7 @@ export enum JobConfigurationEnum {
   excludeOlderThan = "Exclude file older than (UTC)",
   futureScheduleAt = "Incremental sync schedule",
   shouldScanADS = "Scan Alternate Data Streams (ADS)",
+  firstRunAt = "Job Scheduled For",
 }
 
 /**
