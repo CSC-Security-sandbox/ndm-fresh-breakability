@@ -5,8 +5,10 @@ export const generateBulkDiscoveryPayload = (
   bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType>,
   sourcePathIds: string[]
 ) => {
-  const { excludeFilePatterns, firstRunAt, scheduleTime } =
+    const { excludeFilePatterns, firstRunAt, scheduleTime, protocol, shouldScanADS } =
     bulkDiscoveryForm.formState;
+
+    const isSMB = protocol?.value === "SMB";
 
   return {
     excludeFilePatterns: excludeFilePatterns.replaceAll("\n", ","),
@@ -16,6 +18,7 @@ export const generateBulkDiscoveryPayload = (
         : undefined,
     sourcePathIds,
     preserveAccessTime: true,
+    ...(isSMB && { shouldScanADS: shouldScanADS === "yes" }),
   };
 };
 

@@ -72,6 +72,7 @@ const BulkDiscover = () => {
     scheduleTime: "start_now",
     firstRunAt: dayjs.utc(),
     protocol: options[0],
+    shouldScanADS: "no",
   };
 
   const bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType> = useForm(

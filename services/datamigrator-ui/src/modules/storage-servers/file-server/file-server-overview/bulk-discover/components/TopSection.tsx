@@ -8,6 +8,8 @@ import {
 import React from "react";
 import { TopSectionPropsType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 import ScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScheduleComponent";
+import ScanADSComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScanADSComponent";
+
 
 const TopSection = ({
   fileServerDetails,
@@ -22,6 +24,7 @@ const TopSection = ({
             <Text bold>{fileServerDetails?.configName}</Text>
           </Box>
           <ScheduleComponent bulkDiscoveryForm={bulkDiscoveryForm} />
+          <ScanADSComponent bulkDiscoveryForm={bulkDiscoveryForm} />
         </Box>
         <Box className="w-3/6">
           <FormFieldTextArea
