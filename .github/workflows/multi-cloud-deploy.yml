@@ -638,9 +638,8 @@ on:
         description: "Control Plane SIG Image ID"
         required: true
       windows_installer_name:
-        description: "Windows Installer filename (without .exe extension) - leave empty to skip"
-        required: false
-        default: ""
+        description: "Windows Installer filename (without .exe extension)"
+        required: true
       copy_sas_duration_hours:
         description: "SAS token(read-only-access) duration for copy of disk to blob in hours (default: 1)"
         required: false
@@ -1165,24 +1164,13 @@ jobs:
   # Trigger the SAS URL generation workflow after VHD export completes
   generate-sas-urls:
     needs: [vhd-export, display-results]
-    runs-on: openlab
     if: success()
-    steps:
-      - name: Trigger SAS URL Generation Workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Triggering generate-vhd-sas-url workflow..."
-          
-          gh workflow run generate-vhd-sas-url.yaml \
-            --repo ${{ github.repository }} \
-            --field control_plane_blob_name="${{ needs.vhd-export.outputs.controlplane_blob_name }}" \
-            --field linux_worker_blob_name="${{ needs.vhd-export.outputs.worker_blob_name }}" \
-            --field windows_worker_blob_name="${{ needs.vhd-export.outputs.installer_blob_name }}" \
-            --field storage_account_name="${{ needs.vhd-export.outputs.storage_account }}" \
-            --field container_name="${{ needs.vhd-export.outputs.container_name }}" \
-            --field sas_expiry_days="${{ github.event.inputs.sas_expiry_days || '7' }}"
-          
-          echo "SAS URL generation workflow triggered successfully!"
-          echo ""
-          echo "Check the 'Generate Azure SAS URLs for Azure Artifacts' workflow run for the SAS URLs."
+    uses: ./.github/workflows/generate-vhd-sas-url.yaml
+    with:
+      control_plane_blob_name: ${{ needs.vhd-export.outputs.controlplane_blob_name }}
+      linux_worker_blob_name: ${{ needs.vhd-export.outputs.worker_blob_name }}
+      windows_worker_blob_name: ${{ needs.vhd-export.outputs.installer_blob_name}}
+      storage_account_name: ${{ needs.vhd-export.outputs.storage_account }}
+      container_name: ${{ needs.vhd-export.outputs.container_name }}
+      sas_expiry_days: ${{ github.event.inputs.sas_expiry_days || '7' }}
+    secrets: inherit
