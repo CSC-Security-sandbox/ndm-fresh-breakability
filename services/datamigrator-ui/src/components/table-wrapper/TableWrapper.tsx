@@ -38,6 +38,7 @@ const TableWrapper = ({
   showSearch = true,
   showRefresh = true,
   showPagination = true,
+  customPagination,
 }: TableWrapperPropsType) => {
   const [currentFilters, setCurrentFilters] = useState<any>({});
   const [organizedRowsFiltered, setOrganizedRowsFiltered] = useState<any[]>(
@@ -175,7 +176,7 @@ const TableWrapper = ({
       <Box>
         <Table
           {...tableState}
-          rows={pagination?.pageRows}
+          rows={customPagination ? customPagination.pageRows : pagination?.pageRows}
           rowState={rowState}
           updateRowState={updateRowState}
           selectionState={selectionState}
@@ -186,7 +187,8 @@ const TableWrapper = ({
           isTogglingColumns={isTogglingColumns || false}
           noDataLabel={noDataLabel}
         />
-        {showPagination && !isLoading && pagination?.pageRows && (
+        {/* Standard pagination (when no custom pagination) */}
+        {showPagination && !customPagination && !isLoading && pagination?.pageRows && (
           <TablePager
             pageRows={pagination?.pageRows}
             pageSize={10}
@@ -194,6 +196,17 @@ const TableWrapper = ({
             pageIndex={pagination?.pageIndex}
             pageCount={pagination?.pageCount}
             gotoPage={pagination?.gotoPage}
+          />
+        )}
+        {/* Custom pagination for hierarchical data (e.g., Dell Isilon parent/child) */}
+        {customPagination && !isLoading && (
+          <TablePager
+            pageRows={customPagination.topLevelPageRows}
+            pageSize={10}
+            rows={customPagination.totalTopLevelRows}
+            pageIndex={customPagination.pageIndex}
+            pageCount={customPagination.pageCount}
+            gotoPage={customPagination.gotoPage}
           />
         )}
       </Box>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import PermissionAuth from "@/auth/PermissionAuth";
 import { useGetAllFileServersOfProjectQuery } from "@api/configApi";
 import { hasPermission } from "@auth/auth.utils";
@@ -15,6 +15,10 @@ import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import { groupDellIsilonFileServers } from "@modules/storage-servers/file-server/components/add-file-server.util";
 import { dellIsilonExpandEvents } from "@modules/storage-servers/file-server/components/cellRenderer/NameCellRenderer";
 
+// Pagination is based on top-level entries (parents + regular servers)
+// Each page shows 10 top-level entries, but expanded children appear inline
+const BASE_PAGE_SIZE = 10;
+
 const FileServer = () => {
   const LOWER_TIME_INTERVAL_FOR_IN_PROGRESS = 5000; // 5 seconds
   const navigate = useNavigate();
@@ -24,6 +28,7 @@ const FileServer = () => {
 
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   const {
     data: configByProject,
@@ -76,12 +81,11 @@ const FileServer = () => {
     });
   };
 
-  // Group Dell Isilon file servers by parent and build display rows
-  const displayRows = useMemo(() => {
+  // Build top-level entries (parents + regular servers) - used for pagination
+  // Each Dell Isilon parent counts as 1 entry, regardless of how many zones it has
+  const topLevelEntries = useMemo(() => {
     const serverList = configByProject?.serverConfig || [];
     const { parents, regularServers } = groupDellIsilonFileServers(serverList);
-    
-    const rows: any[] = [];
     
     // Sort parents by createdAt descending (newest first)
     const sortedParents = [...parents].sort((a, b) => {
@@ -90,59 +94,96 @@ const FileServer = () => {
       return dateB - dateA;
     });
     
-    // Add Dell Isilon parents with expandable zones
-    for (const parent of sortedParents) {
-      // Add parent row (expandable header)
-      const isExpanded = expandedParents.has(parent.configName);
-      
-      // Create a sort key that keeps children grouped with parent
-      // Parent gets base timestamp, children get same timestamp + small offset
-      const parentSortKey = new Date(parent.createdAt || 0).getTime();
-      
-      rows.push({
-        ...parent,
-        id: `dell-parent-${parent.configName}`,
-        _isDellIsilonParent: true,
-        _isExpanded: isExpanded,
-        _zoneCount: parent.zones.length,
-        _serverCount: parent.zoneServerCount,
-        _sortKey: parentSortKey,
-        // Show zone count in the name for parent rows
-        displayName: `${parent.configName} (${parent.zones.length} zone${parent.zones.length !== 1 ? 's' : ''})`,
-      });
-      
-      // If expanded, add zone file servers as indented child rows
-      if (isExpanded) {
-        let childOffset = 1;
-        for (const zone of parent.zones) {
-          for (const fileServer of zone.fileServers) {
-            const protocol = fileServer._protocol || fileServer.fileServers?.[0]?.protocol || 'N/A';
-            rows.push({
-              ...fileServer,
-              _isDellIsilonChild: true,
-              _parentName: parent.configName,
-              _zoneName: zone.zoneName,
-              _sortKey: parentSortKey - childOffset, // Slightly less than parent to keep order
-              // Display indented zone name with protocol
-              displayName: `${zone.zoneName} (${protocol})`,
-            });
-            childOffset++;
-          }
-        }
-      }
-    }
-    
-    // Sort regular servers by createdAt descending and add them
+    // Sort regular servers by createdAt descending
     const sortedRegularServers = [...regularServers].sort((a, b) => {
       const dateA = new Date(a.createdAt || 0).getTime();
       const dateB = new Date(b.createdAt || 0).getTime();
       return dateB - dateA;
     });
     
-    rows.push(...sortedRegularServers);
+    // Combine: Dell Isilon parents first, then regular servers
+    return [
+      ...sortedParents.map(p => ({ ...p, _isParent: true })),
+      ...sortedRegularServers
+    ];
+  }, [configByProject?.serverConfig]);
+
+  // Calculate pagination based on top-level entries
+  const pageCount = useMemo(() => {
+    return Math.max(1, Math.ceil(topLevelEntries.length / BASE_PAGE_SIZE));
+  }, [topLevelEntries.length]);
+
+  // Get top-level entries for current page
+  const currentPageTopLevelEntries = useMemo(() => {
+    const startIdx = currentPageIndex * BASE_PAGE_SIZE;
+    const endIdx = startIdx + BASE_PAGE_SIZE;
+    return topLevelEntries.slice(startIdx, endIdx);
+  }, [topLevelEntries, currentPageIndex]);
+
+  // Build display rows for current page - includes expanded children inline
+  // Example: 4 Isilon parents (each with 2 zones) + 6 regular servers = 10 top-level
+  // When all expanded: 4 parents + 8 children + 6 regular = 18 visible rows
+  const displayRows = useMemo(() => {
+    const rows: any[] = [];
+    
+    for (const entry of currentPageTopLevelEntries) {
+      if (entry._isParent) {
+        // This is a Dell Isilon parent
+        const parent = entry;
+        const isExpanded = expandedParents.has(parent.configName);
+        const parentSortKey = new Date(parent.createdAt || 0).getTime();
+        
+        rows.push({
+          ...parent,
+          id: `dell-parent-${parent.configName}`,
+          _isDellIsilonParent: true,
+          _isExpanded: isExpanded,
+          _zoneCount: parent.zones.length,
+          _serverCount: parent.zoneServerCount,
+          _sortKey: parentSortKey,
+          displayName: `${parent.configName} (${parent.zones.length} zone${parent.zones.length !== 1 ? 's' : ''})`,
+        });
+        
+        // If expanded, add zone file servers as indented child rows (same page)
+        if (isExpanded) {
+          let childOffset = 1;
+          for (const zone of parent.zones) {
+            for (const fileServer of zone.fileServers) {
+              const protocol = fileServer._protocol || fileServer.fileServers?.[0]?.protocol || 'N/A';
+              rows.push({
+                ...fileServer,
+                _isDellIsilonChild: true,
+                _parentName: parent.configName,
+                _zoneName: zone.zoneName,
+                _sortKey: parentSortKey - childOffset,
+                displayName: `${zone.zoneName} (${protocol})`,
+              });
+              childOffset++;
+            }
+          }
+        }
+      } else {
+        // Regular file server
+        rows.push(entry);
+      }
+    }
     
     return rows;
-  }, [configByProject?.serverConfig, expandedParents]);
+  }, [currentPageTopLevelEntries, expandedParents]);
+
+  // Reset page index when data changes and current page is out of bounds
+  useEffect(() => {
+    if (currentPageIndex >= pageCount) {
+      setCurrentPageIndex(Math.max(0, pageCount - 1));
+    }
+  }, [pageCount, currentPageIndex]);
+
+  // Pagination navigation handler
+  const gotoPage = useCallback((pageIndex: number) => {
+    if (pageIndex >= 0 && pageIndex < pageCount) {
+      setCurrentPageIndex(pageIndex);
+    }
+  }, [pageCount]);
 
   const canManageConfig: boolean = hasPermission(
     USER_PERMISSION_TYPE_ENUM.ManageConfig
@@ -210,12 +251,26 @@ const FileServer = () => {
     </PermissionAuth>
   );
 
+  // Table displays all rows including expanded children
+  // Page size is set to display all rows on current page (we handle pagination ourselves)
   const tableStateProps = {
     columns: FILE_SERVER_LIST_COLUMN_DEFS,
     rows: displayRows,
     // Disable table sorting - we handle sorting manually to preserve parent-child order
     isSorting: false,
-    pageSize: 10,
+    // Set page size to show all rows on this page (including expanded children)
+    pageSize: displayRows.length > 0 ? displayRows.length : BASE_PAGE_SIZE,
+  };
+
+  // Custom pagination: counter shows top-level entries only (e.g., "1-10 of 18")
+  // Table displays all rows including expanded children
+  const customPaginationProps = {
+    pageRows: displayRows,                      // All rows to display (including children)
+    topLevelPageRows: currentPageTopLevelEntries, // For counter: "1-10"
+    totalTopLevelRows: topLevelEntries,         // For counter: "of 18"
+    pageIndex: currentPageIndex,
+    pageCount: pageCount,
+    gotoPage,
   };
 
   return (
@@ -227,6 +282,7 @@ const FileServer = () => {
       label="File Server List"
       refetchTableData={refetch}
       isRefreshing={isFetching}
+      customPagination={customPaginationProps}
     />
   );
 };
