@@ -1,5 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException, BadRequestException, ServiceUnavailableException, Inject, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
 import { validateFilePath } from 'src/utils/utils';
@@ -9,6 +10,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { JobType } from 'src/constants/enums';
+import { DestinationFilesCountMvEntity } from '../entities/destination-files-count-mv.entity';
 
 @Injectable()
 export class CsvService {
@@ -22,6 +24,8 @@ export class CsvService {
     constructor(
         private readonly dataSource: DataSource, 
         private readonly projectIdCacheService: ProjectIdCacheService,
+        @InjectRepository(DestinationFilesCountMvEntity)
+        private readonly destinationFilesCountMvRepository: Repository<DestinationFilesCountMvEntity>,
         @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
     ) {
         if (loggerFactory) {
@@ -170,6 +174,34 @@ export class CsvService {
             LIMIT $2 OFFSET $3;
         `;
         return { query, values: [jobRunId, limit, offset] };
+    }
+
+    async getDestinationFilesCountQuery(jobConfigId: string) {
+        // Query from materialized view for better performance
+        const result = await this.destinationFilesCountMvRepository.findOne({
+            where: { jobConfigId: jobConfigId },
+        });
+
+        if (!result) {
+            // Return zero counts if no data found
+            return {
+                total_destination_files: 0,
+                total_destination_directories: 0,
+                total_destination_items: 0,
+                job_run_count: 0,
+                total_destination_size: 0,
+                last_refreshed: new Date(),
+            };
+        }
+
+        return {
+            total_destination_files: result.totalDestinationFiles,
+            total_destination_directories: result.totalDestinationDirectories,
+            total_destination_items: result.totalDestinationItems,
+            job_run_count: result.jobRunCount,
+            total_destination_size: result.totalDestinationSize,
+            last_refreshed: result.lastRefreshed,
+        };
     }
 
     getMigrationCoCColumns(protocol: string): string {

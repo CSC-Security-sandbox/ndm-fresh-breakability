@@ -512,6 +512,15 @@
          <sqlFile path="liquibase/rollback/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20260107_01_destination_files_count_mv.sql" author="ab">
+      <sqlFile
+              path="liquibase/20260107_01_destination_files_count_mv.sql"
+              splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260107_01_destination_files_count_mv_rollback.sql"/>
+      </rollback>
+   </changeSet>
    
    <changeSet id="20251224_01_alter_fileserver_table_add_columns_status_tracking.sql" author="dm">
       <sqlFile path="liquibase/20251224_01_alter_fileserver_table_add_columns_status_tracking.sql"/>

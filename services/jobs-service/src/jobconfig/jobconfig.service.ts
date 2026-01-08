@@ -89,6 +89,7 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { DestinationFilesCountMvEntity } from "src/entities/destination-files-count-mv.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -139,7 +140,9 @@ export class JobConfigService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(JobStatsSummaryMvEntity)
-    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>,
+    @InjectRepository(DestinationFilesCountMvEntity)
+    private destinationFilesCountMvRepo: Repository<DestinationFilesCountMvEntity>
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
   }
@@ -1084,6 +1087,11 @@ export class JobConfigService {
       })
     );
 
+    // Fetch destination files count from materialized view
+    const destinationFilesCount = await this.destinationFilesCountMvRepo.findOne({
+      where: { jobConfigId: id },
+    });
+
     const payload = {
       jobConfigId: id,
       jobType: jobConfig.jobType,
@@ -1124,6 +1132,23 @@ export class JobConfigService {
             .reduce((a, b) => (a ?? 0) + (b ?? 0), 0)
         ),
       },
+      destinationFilesCount: destinationFilesCount
+        ? {
+            totalDestinationFiles: destinationFilesCount.totalDestinationFiles,
+            totalDestinationDirectories: destinationFilesCount.totalDestinationDirectories,
+            totalDestinationItems: destinationFilesCount.totalDestinationItems,
+            jobRunCount: destinationFilesCount.jobRunCount,
+            totalDestinationSize: formatBytes(Number(destinationFilesCount.totalDestinationSize || 0)),
+            lastRefreshed: destinationFilesCount.lastRefreshed,
+          }
+        : {
+            totalDestinationFiles: 0,
+            totalDestinationDirectories: 0,
+            totalDestinationItems: 0,
+            jobRunCount: 0,
+            totalDestinationSize: formatBytes(0),
+            lastRefreshed: null,
+          },
       configurationsSetToJob: this.getConfigurationsSetToJob(jobConfig),
       errors: [],
     };

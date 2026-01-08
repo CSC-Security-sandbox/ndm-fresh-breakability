@@ -13,6 +13,7 @@ import { JobRunEntity } from "src/entities/jobrun.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { AuthKeycloakModule } from "@netapp-cloud-datamigrate/auth-lib";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { DestinationFilesCountMvEntity } from "src/entities/destination-files-count-mv.entity";
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 
@@ -25,7 +26,8 @@ import { ProjectIdCacheService } from '../utils/project-id-cache.service';
       ReportsEntity,
       OperationErrorEntity,
       WorkerJobRunMap,
-      JobStatsSummaryMvEntity
+      JobStatsSummaryMvEntity,
+      DestinationFilesCountMvEntity
     ]),
     AuthKeycloakModule,
     LoggerModule.forRoot(),
