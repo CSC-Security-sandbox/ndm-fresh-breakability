@@ -16,6 +16,7 @@ export const jobsApi = createApi({
     "JOB_CONFIG_DETAILS",
     "ALL_MIGRATION_PATHS",
     "SPEED_TEST_JOBS",
+    "JOB_IDENTITY_MAPPINGS",
   ],
   baseQuery: fetchBaseQuery({
     baseUrl:
@@ -272,6 +273,65 @@ export const jobsApi = createApi({
       transformErrorResponse: structuredErrorResponse,
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
+
+    getJobIdentityMappings: builder.query({
+      query: (jobConfigId: string) => ({
+        url: `jobs/${jobConfigId}/mappings-fetch`,
+        method: 'GET',
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      providesTags: (result, error, jobConfigId) => [
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId }
+      ],
+    }),
+
+    removeJobIdentityMappings: builder.mutation({
+      query: (jobConfigId: string) => ({
+        url: `jobs/${jobConfigId}/mappings-remove`,
+        method: 'DELETE',
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: (result, error, jobConfigId) => [
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId },
+        'JOB_CONFIG_DETAILS',
+        'ALL_JOB_CONFIGS',
+      ],
+    }),
+
+    updateDiscoveryJobConfig: builder.mutation({
+      query: ({ jobConfigId, updateData }: { jobConfigId: string; updateData: any }) => ({
+        url: `jobs/${jobConfigId}/discovery-config`,
+        method: 'PUT',
+        body: updateData,
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: ['JOB_CONFIG_DETAILS', 'ALL_JOB_CONFIGS'],
+    }),
+
+    updateMigrationJobConfig: builder.mutation({
+      query: ({ jobConfigId, updateData }: { jobConfigId: string; updateData: any }) => ({
+        url: `jobs/${jobConfigId}/migration-config`,
+        method: 'PUT',
+        body: updateData,
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: (result, error, { jobConfigId }) => [
+        'JOB_CONFIG_DETAILS',
+        'ALL_JOB_CONFIGS',
+        { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId },
+      ],
+    }),
   }),
 });
 
@@ -300,4 +360,9 @@ export const {
   useLazyGetNoticeBoardDetailsQuery,
   useGetFileServerWorkersQuery,
   useDeleteJobConfigMutation,
+  useGetJobIdentityMappingsQuery,
+  useRemoveJobIdentityMappingsMutation,
+  useLazyGetJobIdentityMappingsQuery,
+  useUpdateDiscoveryJobConfigMutation,
+  useUpdateMigrationJobConfigMutation,
 } = jobsApi;

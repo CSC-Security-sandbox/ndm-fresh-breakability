@@ -109,6 +109,99 @@ export class JobConfigDiscoverBulk {
   options: WorkFlowOptions = new WorkFlowOptions();
 }
 
+export class UpdateDiscoveryConfigDto {
+  @ApiProperty({ 
+    description: 'Patterns of files to exclude', 
+    required: false,
+    example: '*.log\n*.tmp\n/temp/*'
+  })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ 
+    description: 'Job schedule configuration', 
+    example: new Date().toISOString(),
+    required: false
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  firstRunAt?: Date;
+}
+
+export class UpdateMigrationConfigDto {
+  @ApiProperty({ 
+    description: 'Patterns of files to exclude', 
+    required: false,
+    example: '*.log\n*.tmp\n/temp/*'
+  })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ 
+    description: 'Job schedule configuration', 
+    example: new Date().toISOString(),
+    required: false
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  firstRunAt?: Date;
+
+  @ApiProperty({ 
+    description: 'Exclude files older than this date', 
+    required: false
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  excludeOlderThan?: Date;
+
+  @ApiProperty({ 
+    description: 'Preserve access time flag', 
+    example: false,
+    required: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  preserveAccessTime?: boolean;
+
+  @ApiProperty({ 
+    description: 'Skip file configuration', 
+    required: false,
+    example: '15-Mins'
+  })
+  @IsOptional()
+  @IsString()
+  skipFile?: string;
+
+  @ApiProperty({ 
+    description: 'Incremental job schedule configuration', 
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  futureScheduleAt?: string;
+
+  @ApiProperty({ 
+    description: 'Base64 encoded SID mapping file content', 
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  sidMapping?: string;
+
+  @ApiProperty({ 
+    description: 'Base64 encoded GID mapping file content', 
+    required: false 
+  })
+  @IsOptional()
+  @IsString()  
+  gidMapping?: string;
+}
+
 export class MigrateJobConfigOptions {
   @ApiProperty({
     description: "Exclude files older than this date",

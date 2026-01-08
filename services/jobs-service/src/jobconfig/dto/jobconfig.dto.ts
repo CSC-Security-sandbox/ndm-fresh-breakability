@@ -45,4 +45,9 @@ export class JobConfigDto {
   @IsOptional()
   @IsString()
   futureSchedule?: string;
+
+  @ApiProperty({ description: 'Skip file configuration', required: false })
+  @IsOptional()
+  @IsString()
+  skipFile?: string;
 }

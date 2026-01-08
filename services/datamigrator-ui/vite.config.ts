@@ -28,6 +28,7 @@ export default defineConfig({
       "@modules": path.resolve(__dirname, "src/modules"),
       "@auth": path.resolve(__dirname, "src/auth"),
       "@routes": path.resolve(__dirname, "src/routes"),
+      "@utils": path.resolve(__dirname, "src/utils"),
       crypto: "crypto-browserify",
       stream: "stream-browserify",
     },

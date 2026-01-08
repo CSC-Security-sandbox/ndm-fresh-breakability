@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Res, Inject } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Res, Inject } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
@@ -6,7 +6,8 @@ import { Auth, Permission, AuthWorker } from "@netapp-cloud-datamigrate/auth-lib
 import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
-import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig} from './dto/jobdicoverybulk.dto';
+import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, UpdateDiscoveryConfigDto, UpdateMigrationConfigDto} from './dto/jobdicoverybulk.dto';
+import { JobType } from 'src/constants/enums';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateFinalResponse, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
@@ -203,6 +204,73 @@ export class JobConfigController {
     return await this.jobConfigService.updateJobConfig(id, jobConfigData);
   }
 
+  @ApiOperation({ summary: 'Update discovery job configuration' })
+  @ApiResponse({ status: 200, description: 'Discovery job configuration has been successfully updated.' })
+  @ApiResponse({ status: 404, description: 'Job not found.' })
+  @ApiResponse({ status: 400, description: 'Invalid job type - only discovery jobs can be updated with this endpoint.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
+  @Put(':id/discovery-config')
+  async updateDiscoveryJobConfig(
+    @Param('id') id: string,
+    @Body() updateData: UpdateDiscoveryConfigDto,
+  ): Promise<JobConfigEntity> {
+    // Validate that this is a discovery job first
+    const jobEntity = await this.jobConfigService.getJobEntity(id);
+    if (jobEntity.jobType !== JobType.DISCOVER) {
+      throw new BadRequestException(`Only discovery jobs can be updated with this endpoint. Job type: ${jobEntity.jobType}`);
+    }
+    
+    // Convert UpdateDiscoveryConfigDto to JobConfigDto format
+    const jobConfigData: Partial<JobConfigDto> = {
+      excludeFilePatterns: updateData.excludeFilePatterns,
+      firstRunAt: updateData.firstRunAt,
+    };
+    
+    return await this.jobConfigService.updateJobConfig(id, jobConfigData);
+  }
+
+  @ApiOperation({ summary: 'Update migration job configuration' })
+  @ApiResponse({ status: 200, description: 'Migration job configuration has been successfully updated.' })
+  @ApiResponse({ status: 404, description: 'Job not found.' })
+  @ApiResponse({ status: 400, description: 'Invalid job type - only migration jobs can be updated with this endpoint.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - failed to update job configuration.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ManageJob)
+  @Put(':id/migration-config')
+  async updateMigrationJobConfig(
+    @Param('id') id: string,
+    @Body() updateData: UpdateMigrationConfigDto,
+  ): Promise<any> {
+    const jobEntity = await this.jobConfigService.getJobEntity(id);
+    if (jobEntity.jobType !== JobType.MIGRATE) {
+      throw new BadRequestException(`Only migration jobs can be updated with this endpoint. Job type: ${jobEntity.jobType}`);
+    }
+    const jobConfigData: Partial<JobConfigDto> = {
+      excludeFilePatterns: updateData.excludeFilePatterns,
+      firstRunAt: updateData.firstRunAt,
+      excludeOlderThan: updateData.excludeOlderThan,
+      preserveAccessTime: updateData.preserveAccessTime,
+      futureSchedule: updateData.futureScheduleAt,
+      skipFile: updateData.skipFile,
+    };
+
+    const { jobConfig: updatedJobConfig, identityMappings } =
+      await this.jobConfigService.updateJobConfigWithMappings(
+        id,
+        jobConfigData,
+        {
+          sidMapping: updateData.sidMapping,
+          gidMapping: updateData.gidMapping,
+        }
+      );
+
+    return {
+      ...updatedJobConfig,
+      identityMappings,
+    };
+  }
+
   @ApiOperation({ summary: 'Delete a job by ID' })
   @ApiResponse({ status: 200, description: 'The job has been successfully deleted.' })
   @ApiResponse({ status: 404, description: 'Job not found.' })
@@ -212,5 +280,24 @@ export class JobConfigController {
   async deleteJobConfig(@Param('id') id: string): Promise<{ message: string }> {
     return await this.jobConfigService.deleteJobConfig(id);
   }
-}
 
+  @ApiOperation({ summary: 'Get identity mappings for a job by ID' })
+  @Get(':id/mappings-fetch')
+  @Auth(Permission.ViewJob)
+  @ApiResponse({ status: 200, description: 'Identity mappings fetched successfully' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - failed to get identity mappings.' })
+  @ApiBearerAuth()
+  async getJobIdentityMappings(@Param('id') id: string): Promise<any> {
+    return await this.jobConfigService.getIdentityMappingsForJob(id);
+  }
+
+  @ApiOperation({ summary: 'Delete identity mappings for a job by ID' })
+  @Delete(':id/mappings-remove')
+  @Auth(Permission.ManageJob)
+  @ApiResponse({ status: 200, description: 'Identity mappings deleted successfully' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - failed to delete identity mappings.' })
+  @ApiBearerAuth()
+  async deleteJobIdentityMappings(@Param('id') id: string): Promise<any> {
+    return await this.jobConfigService.deleteIdentityMappingsForJob(id);
+  }
+}

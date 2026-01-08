@@ -1,11 +1,18 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { JobConfigController } from "./jobconfig.controller";
 import { JobConfigService } from "./jobconfig.service";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  NotFoundException,
+  HttpException,
+  HttpStatus,
+} from "@nestjs/common";
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import {
   JobConfigDiscoverBulk,
   JobConfigPrecheck,
+  UpdateDiscoveryConfigDto,
+  UpdateMigrationConfigDto,
 } from "./dto/jobdicoverybulk.dto";
 import { JobConfigBulkMigrateFinalResponse } from "./jobconfig.types";
 import { Response } from "express";
@@ -67,6 +74,7 @@ describe("JobConfigController", () => {
     initiatePreCheck: jest.fn(),
     getConfigsByProjectId: jest.fn(),
     updateJobConfig: jest.fn(),
+    updateJobConfigWithMappings: jest.fn(),
     deleteJobConfig: jest.fn(),
     getTemplateFilename: jest.fn(),
     sendCsvFile: jest.fn(),
@@ -77,6 +85,10 @@ describe("JobConfigController", () => {
     storeSpeedTestResult: jest.fn(),
     getSpeedTestById: jest.fn(),
     hasCommonWorkers: jest.fn(),
+    getJobEntity: jest.fn(),
+    updateJobIdentityMappings: jest.fn(),
+    getIdentityMappingsForJob: jest.fn(),
+    deleteIdentityMappingsForJob: jest.fn(),
   };
 
   const mockJwtService = {
@@ -97,6 +109,7 @@ describe("JobConfigController", () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     // Create mock logger
     mockLogger = {
       error: jest.fn(),
@@ -608,6 +621,181 @@ describe("JobConfigController", () => {
         });
       });
 
+      describe("updateDiscoveryJobConfig", () => {
+        it("should update discovery job config", async () => {
+          const jobId = "discover-job";
+          const updateDto: UpdateDiscoveryConfigDto = {
+            excludeFilePatterns: "*.tmp",
+            firstRunAt: new Date("2025-01-01T00:00:00Z"),
+          };
+          const mockJobEntity = { jobType: JobType.DISCOVER };
+          const updatedJob = { id: jobId } as JobConfigEntity;
+
+          mockJobConfigService.getJobEntity.mockResolvedValue(
+            mockJobEntity as any,
+          );
+          mockJobConfigService.updateJobConfig.mockResolvedValue(updatedJob);
+
+          const result = await controller.updateDiscoveryJobConfig(
+            jobId,
+            updateDto,
+          );
+          expect(result).toEqual(updatedJob);
+          expect(service.getJobEntity).toHaveBeenCalledWith(jobId);
+          expect(service.updateJobConfig).toHaveBeenCalledWith(jobId, {
+            excludeFilePatterns: updateDto.excludeFilePatterns,
+            firstRunAt: updateDto.firstRunAt,
+          });
+        });
+      });
+
+      describe("updateMigrationJobConfig", () => {
+        it("should update migration configs and identity mappings", async () => {
+          const jobId = "migrate-job";
+          const updateDto: UpdateMigrationConfigDto = {
+            excludeFilePatterns: "*.log",
+            firstRunAt: new Date("2025-02-02T00:00:00Z"),
+            excludeOlderThan: new Date("2024-12-31T00:00:00Z"),
+            preserveAccessTime: true,
+            futureScheduleAt: "0 2 * * *",
+            skipFile: "15-min",
+            sidMapping: "sid-base64",
+            gidMapping: "gid-base64",
+          };
+          const mockJobEntity = { jobType: JobType.MIGRATE };
+          const updatedJob = { id: jobId, jobType: JobType.MIGRATE } as JobConfigEntity;
+          const mockIdentityMappings = { sid: "sid" };
+
+          mockJobConfigService.getJobEntity.mockResolvedValue(
+            mockJobEntity as any,
+          );
+          mockJobConfigService.updateJobConfigWithMappings.mockResolvedValue({
+            jobConfig: updatedJob,
+            identityMappings: mockIdentityMappings,
+          });
+
+          const result = await controller.updateMigrationJobConfig(
+            jobId,
+            updateDto,
+          );
+
+          expect(result).toEqual({
+            ...updatedJob,
+            identityMappings: mockIdentityMappings,
+          });
+          expect(service.getJobEntity).toHaveBeenCalledWith(jobId);
+          expect(service.updateJobConfigWithMappings).toHaveBeenCalledWith(
+            jobId,
+            {
+              excludeFilePatterns: updateDto.excludeFilePatterns,
+              firstRunAt: updateDto.firstRunAt,
+              excludeOlderThan: updateDto.excludeOlderThan,
+              preserveAccessTime: updateDto.preserveAccessTime,
+              futureSchedule: updateDto.futureScheduleAt,
+              skipFile: updateDto.skipFile,
+            },
+            {
+              sidMapping: updateDto.sidMapping,
+              gidMapping: updateDto.gidMapping,
+            },
+          );
+        });
+
+        it("should skip identity mapping updates when no mapping data provided", async () => {
+          const jobId = "migrate-job-no-mapping";
+          const updateDto: UpdateMigrationConfigDto = {
+            excludeFilePatterns: "*.tmp",
+          };
+
+          mockJobConfigService.getJobEntity.mockResolvedValue({
+            jobType: JobType.MIGRATE,
+          });
+
+          const updatedJob = { id: jobId } as JobConfigEntity;
+          mockJobConfigService.updateJobConfigWithMappings.mockResolvedValue({
+            jobConfig: updatedJob,
+            identityMappings: undefined,
+          });
+
+          const result = await controller.updateMigrationJobConfig(
+            jobId,
+            updateDto,
+          );
+
+          expect(result).toEqual({
+            ...updatedJob,
+            identityMappings: undefined,
+          });
+          expect(service.updateJobConfigWithMappings).toHaveBeenCalledWith(
+            jobId,
+            {
+              excludeFilePatterns: updateDto.excludeFilePatterns,
+              firstRunAt: updateDto.firstRunAt,
+              excludeOlderThan: undefined,
+              preserveAccessTime: undefined,
+              futureSchedule: undefined,
+              skipFile: undefined,
+            },
+            {
+              sidMapping: undefined,
+              gidMapping: undefined,
+            },
+          );
+        });
+
+        it("should throw BadRequestException for non-migration jobs", async () => {
+          const jobId = "invalid-migrate";
+          const updateDto = {} as UpdateMigrationConfigDto;
+
+          mockJobConfigService.getJobEntity.mockResolvedValue({
+            jobType: JobType.DISCOVER,
+          });
+
+          await expect(
+            controller.updateMigrationJobConfig(jobId, updateDto),
+          ).rejects.toThrow(BadRequestException);
+          expect(service.updateJobConfig).not.toHaveBeenCalled();
+        });
+
+        it("should propagate InternalServerError from the transactional helper", async () => {
+          const jobId = "migrate-job-error";
+          const updateDto: UpdateMigrationConfigDto = {
+            excludeFilePatterns: "*.tmp",
+            sidMapping: "sid-base64",
+          };
+          const error = new HttpException(
+            "Transaction failed",
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+
+          mockJobConfigService.getJobEntity.mockResolvedValue({
+            jobType: JobType.MIGRATE,
+          });
+          mockJobConfigService.updateJobConfigWithMappings.mockRejectedValue(
+            error,
+          );
+
+          await expect(
+            controller.updateMigrationJobConfig(jobId, updateDto),
+          ).rejects.toBeInstanceOf(HttpException);
+          expect(service.updateJobConfigWithMappings).toHaveBeenCalledWith(
+            jobId,
+            {
+              excludeFilePatterns: updateDto.excludeFilePatterns,
+              firstRunAt: updateDto.firstRunAt,
+              excludeOlderThan: updateDto.excludeOlderThan,
+              preserveAccessTime: updateDto.preserveAccessTime,
+              futureSchedule: updateDto.futureScheduleAt,
+              skipFile: updateDto.skipFile,
+            },
+            {
+              sidMapping: updateDto.sidMapping,
+              gidMapping: updateDto.gidMapping,
+            },
+          );
+        });
+      });
+
       describe("deleteJobConfig", () => {
         it("should delete a job and return a success message", async () => {
           mockJobConfigService.deleteJobConfig.mockResolvedValue({
@@ -618,6 +806,40 @@ describe("JobConfigController", () => {
             message: "Deleted",
           });
           expect(service.deleteJobConfig).toHaveBeenCalledWith("1");
+        });
+      });
+
+      describe("getJobIdentityMappings", () => {
+        it("should return identity mappings for a job", async () => {
+          const jobId = "job-with-mapping";
+          const mockMappings = [{ sid: "S-1-1-0" }];
+
+          mockJobConfigService.getIdentityMappingsForJob.mockResolvedValue(
+            mockMappings as any,
+          );
+
+          const result = await controller.getJobIdentityMappings(jobId);
+
+          expect(result).toEqual(mockMappings);
+          expect(service.getIdentityMappingsForJob).toHaveBeenCalledWith(jobId);
+        });
+      });
+
+      describe("deleteJobIdentityMappings", () => {
+        it("should delete identity mappings for a job", async () => {
+          const jobId = "job-delete-mapping";
+          const mockResponse = { message: "Identity mappings removed" };
+
+          mockJobConfigService.deleteIdentityMappingsForJob.mockResolvedValue(
+            mockResponse,
+          );
+
+          const result = await controller.deleteJobIdentityMappings(jobId);
+
+          expect(result).toEqual(mockResponse);
+          expect(service.deleteIdentityMappingsForJob).toHaveBeenCalledWith(
+            jobId,
+          );
         });
       });
 

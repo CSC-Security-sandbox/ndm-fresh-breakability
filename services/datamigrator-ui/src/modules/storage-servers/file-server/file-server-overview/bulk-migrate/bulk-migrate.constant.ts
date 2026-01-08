@@ -12,6 +12,7 @@ import Mapping from "@modules/storage-servers/file-server/file-server-overview/b
 import Options from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Options/Options";
 import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review";
 import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
+import { isValidCron } from "cron-validator";
 
 export const STEPS_MAP_BULK_MIGRATION = {
   mapping: Mapping,
@@ -114,9 +115,16 @@ export const OPTIONS_FORM = Yup.object().shape({
       "Invalid selection."
     )
     .required("Incremental Sync Schedule Option is required."),
-  incremental_sync_schedule_cron_expression: Yup.string().required(
-    "This field is required"
-  ),
+  incremental_sync_schedule_cron_expression: Yup.string()
+    .required("This field is required")
+    .test(
+      "is-valid-cron",
+      "Invalid cron expression",
+      (value) => {
+        if (!value) return false;
+        return isValidCron(value);
+      }
+    ),
   skipFileNum: Yup.number().required(
     "This field is required and needs to be num."
   ),
@@ -210,7 +218,7 @@ export const SCHEDULE_OPTIONS = {
 
 export const DEFAULT_MINUTES_AHEAD = {
   START_NOW: 1,
-  SCHEDULE_DATE: 5,
+  SCHEDULE_DATE: 6,
 };
 
 export const DATE_FORMAT = "DD/MM/YYYY hh:mm:A UTC";
@@ -219,6 +227,6 @@ export const TIMESTAMP_VALIDATION = {
   SCHEDULE_FUTURE_TIMESTAMP: "Scheduled date and time must be in the future",
   SCHEDULE_LATER_TIMESTAMP:
     "Date and time is required when scheduling for later",
-  SCHEDULE_ONE_MINUTE_AHEAD_TIMESTAMP:
-    "Scheduled date and time must be at least 1 minute from now",
+  SCHEDULE_FIVE_MINUTE_AHEAD_TIMESTAMP:
+    "Scheduled date and time must be at least 5 minutes from now",
 };
