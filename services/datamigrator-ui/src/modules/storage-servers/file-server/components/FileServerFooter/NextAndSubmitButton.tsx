@@ -136,11 +136,10 @@ const NextAndSubmitButton = () => {
               creds.smbUsername?.trim() &&
               creds.smbPassword?.trim()
             );
-            // NFS is valid if: IP is selected AND username AND password are filled
+            // NFS is valid if: IP is selected AND username is filled (password NOT required for Isilon)
             const nfsValid = !!(
               creds.nfsIp &&
-              creds.nfsUsername?.trim() &&
-              creds.nfsPassword?.trim()
+              creds.nfsUsername?.trim()
             );
             
             // Edit mode additional validation
@@ -157,7 +156,8 @@ const NextAndSubmitButton = () => {
               if (configuredProtocols.hasSmb && !(creds.smbUsername?.trim() && creds.smbPassword?.trim())) {
                 return false;
               }
-              if (configuredProtocols.hasNfs && !(creds.nfsUsername?.trim() && creds.nfsPassword?.trim())) {
+              // NFS only requires username (password is optional for Isilon)
+              if (configuredProtocols.hasNfs && !creds.nfsUsername?.trim()) {
                 return false;
               }
             }
@@ -308,9 +308,9 @@ const NextAndSubmitButton = () => {
       const smbValid = creds.smbIp
         ? creds.smbUsername?.trim() && creds.smbPassword?.trim()
         : false;
-      // NFS validation: if NFS IP is chosen, username and password must be filled
+      // NFS validation: if NFS IP is chosen, only username is required (password NOT required for Isilon)
       const nfsValid = creds.nfsIp
-        ? creds.nfsUsername?.trim() && creds.nfsPassword?.trim()
+        ? creds.nfsUsername?.trim()
         : false;
       // At least one protocol must be fully filled
       return smbValid || nfsValid;

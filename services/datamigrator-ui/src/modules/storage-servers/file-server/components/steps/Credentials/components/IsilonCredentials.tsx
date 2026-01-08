@@ -249,7 +249,7 @@ const AddModeTable = ({
     [safeSelectedZoneIds, isJobRunning, handleCredChange]
   );
 
-  // Column definitions
+  // Column definitions - NFS Password removed (not required for Isilon)
   const columnDefs: any[] = useMemo(
     () => [
       { id: 1, header: "Name", accessor: "name", Renderer: NameCellRenderer },
@@ -258,9 +258,8 @@ const AddModeTable = ({
       { id: 4, header: "SMB Password", accessor: "smbPassword", Renderer: SMBPasswordCellRenderer, sort: { enabled: false } },
       { id: 5, header: "NFS IP", accessor: "nfsIp", Renderer: NFSIPCellRenderer, sort: { enabled: false } },
       { id: 6, header: "NFS Username", accessor: "nfsUsername", Renderer: NFSUsernameCellRenderer, sort: { enabled: false } },
-      { id: 7, header: "NFS Password", accessor: "nfsPassword", Renderer: NFSPasswordCellRenderer, sort: { enabled: false } },
     ],
-    [NameCellRenderer, SMBIPCellRenderer, SMBUsernameCellRenderer, SMBPasswordCellRenderer, NFSIPCellRenderer, NFSUsernameCellRenderer, NFSPasswordCellRenderer]
+    [NameCellRenderer, SMBIPCellRenderer, SMBUsernameCellRenderer, SMBPasswordCellRenderer, NFSIPCellRenderer, NFSUsernameCellRenderer]
   );
 
   // useTable hook - Add mode uses simple empty default selection
@@ -475,7 +474,7 @@ const EditModeTable = ({
     zoneCredentialsKeys: Object.keys(zoneCredentials || {}),
     zoneCredentialsSummary: Object.entries(zoneCredentials || {}).map(([zoneId, creds]: [string, any]) => ({
       zoneId,
-      hasNfs: !!(creds?.nfsIp && creds?.nfsUsername && creds?.nfsPassword),
+      hasNfs: !!(creds?.nfsIp && creds?.nfsUsername), // Password not required for Isilon NFS
       hasSmb: !!(creds?.smbIp && creds?.smbUsername && creds?.smbPassword),
       nfsIp: creds?.nfsIp || '(empty)',
       smbIp: creds?.smbIp || '(empty)',
@@ -742,7 +741,7 @@ const EditModeTable = ({
     [isJobRunning, handleCredChange]
   );
 
-  // Column definitions
+  // Column definitions - NFS Password removed (not required for Isilon)
   const columnDefs: any[] = useMemo(
     () => [
       { id: 1, header: "Name", accessor: "name", Renderer: NameCellRenderer },
@@ -751,9 +750,8 @@ const EditModeTable = ({
       { id: 4, header: "SMB Password", accessor: "smbPassword", Renderer: SMBPasswordCellRenderer, sort: { enabled: false } },
       { id: 5, header: "NFS IP", accessor: "nfsIp", Renderer: NFSIPCellRenderer, sort: { enabled: false } },
       { id: 6, header: "NFS Username", accessor: "nfsUsername", Renderer: NFSUsernameCellRenderer, sort: { enabled: false } },
-      { id: 7, header: "NFS Password", accessor: "nfsPassword", Renderer: NFSPasswordCellRenderer, sort: { enabled: false } },
     ],
-    [NameCellRenderer, SMBIPCellRenderer, SMBUsernameCellRenderer, SMBPasswordCellRenderer, NFSIPCellRenderer, NFSUsernameCellRenderer, NFSPasswordCellRenderer]
+    [NameCellRenderer, SMBIPCellRenderer, SMBUsernameCellRenderer, SMBPasswordCellRenderer, NFSIPCellRenderer, NFSUsernameCellRenderer]
   );
 
   // Build default selection state - configured zones should be pre-selected
