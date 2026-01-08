@@ -90,6 +90,42 @@ export const reportApi = createApi({
         return response?.data?.items || response?.data || response || [];
       }
     }),
+    
+    startConsolidatedDiscoveryReport: builder.mutation({
+      query: ({ fileServerId, configName }) => ({
+        url: `reports/consolidated/start`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: { fileServerId, configName },
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      }
+    }),
+
+    getConsolidatedReportStatus: builder.query({
+      query: ({ workflowId }) => `reports/consolidated/status/${workflowId}`,
+      transformResponse: (response) => {
+        return response?.data || response;
+      }
+    }),
+
+    getConsolidatedReportStatusByFileServer: builder.query({
+      query: ({ fileServerId }) => `reports/consolidated/status/fileserver/${fileServerId}`,
+      transformResponse: (response) => {
+        return response?.data?.items || response;
+      }
+    }),
+
+    downloadConsolidatedReport: builder.query({
+      query: ({ fileServerId }) => ({
+        url: `reports/consolidated/download/${fileServerId}`,
+        method: "GET",
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
   }),
 });
 
@@ -106,4 +142,8 @@ export const {
   useLazyDownloadErrorLogsCSVQuery,
   useLazyGenerateErrorLogsQuery,
   useIsErrorLogsCsvReadyQuery,
+  useStartConsolidatedDiscoveryReportMutation,
+  useLazyGetConsolidatedReportStatusQuery,
+  useLazyGetConsolidatedReportStatusByFileServerQuery,
+  useLazyDownloadConsolidatedReportQuery,
 } = reportApi;

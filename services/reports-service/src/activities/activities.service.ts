@@ -2,6 +2,15 @@ import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { DiscoveryReportService } from './discovery-report/discovery-report.service';
 import { GenerateDiscoveryReportInput, GetDiscoverySectionInput, UpdateDiscoveryReportInput } from './discovery-report/discovery-report.type';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
+import { 
+    ConsolidatedReportService,
+    GetDiscoveryJobsInput,
+    GeneratePdfForJobRunInput,
+    MergePdfFilesInput,
+    GetConsolidatedReportPathInput,
+    CleanupTempFilesInput,
+    UpdateConsolidatedReportStatusInput,
+} from './consolidated-report/consolidated-report.service';
 import {
   LoggerService,
   LoggerFactory,
@@ -14,6 +23,7 @@ export class ActivitiesService {
     constructor(
         private readonly discoveryReportService: DiscoveryReportService,
         private readonly projectIdCacheService: ProjectIdCacheService,
+        private readonly consolidatedReportService: ConsolidatedReportService,
         @Optional() @Inject(LoggerFactory) private readonly loggerFactory?: LoggerFactory,
     ) {
         if (this.loggerFactory) {
@@ -80,5 +90,81 @@ export class ActivitiesService {
             throw error;
         }
     }
-    /* ----------- Discovery Report Generation End  -------------*/
+    /* ----------- Consolidated Report Activities -------------*/
+
+    async getDiscoveryJobsForFileServer(input: GetDiscoveryJobsInput) {
+        this.logger.log(`Starting getDiscoveryJobsForFileServer for fileServerId: ${input.fileServerId}`);
+        
+        try {
+            const result = await this.consolidatedReportService.getDiscoveryJobsForFileServer(input);
+            this.logger.log(`Completed getDiscoveryJobsForFileServer for fileServerId: ${input.fileServerId}, found ${result.length} jobs`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in getDiscoveryJobsForFileServer for fileServerId: ${input.fileServerId}: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async generatePdfForJobRun(input: GeneratePdfForJobRunInput) {
+        this.logger.log(`Starting generatePdfForJobRun for jobRunId: ${input.jobRunId}`);
+        
+        try {
+            const result = await this.consolidatedReportService.generatePdfForJobRun(input);
+            this.logger.log(`Completed generatePdfForJobRun for jobRunId: ${input.jobRunId}`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in generatePdfForJobRun for jobRunId: ${input.jobRunId}: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async mergePdfFilesActivity(input: MergePdfFilesInput) {
+        this.logger.log(`Starting mergePdfFilesActivity with ${input.pdfFilePaths.length} files`);
+        
+        try {
+            const result = await this.consolidatedReportService.mergePdfFiles(input);
+            this.logger.log(`Completed mergePdfFilesActivity`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in mergePdfFilesActivity: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async getConsolidatedReportPathActivity(input: GetConsolidatedReportPathInput) {
+        this.logger.log(`Starting saveConsolidatedReport for fileServerId: ${input.fileServerId}`);
+        
+        try {
+            const result = await this.consolidatedReportService.getConsolidatedReportPath(input);
+            this.logger.log(`Completed getConsolidatedReportPath for fileServerId: ${input.fileServerId}`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in getConsolidatedReportPath for fileServerId: ${input.fileServerId}: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async cleanupTempFilesActivity(input: CleanupTempFilesInput) {
+        this.logger.log(`Starting cleanupTempFilesActivity for ${input.filePaths.length} files`);
+        
+        try {
+            await this.consolidatedReportService.cleanupTempFiles(input);
+            this.logger.log(`Completed cleanupTempFilesActivity`);
+        } catch (error) {
+            this.logger.error(`Error in cleanupTempFilesActivity: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async updateConsolidatedReportStatus(input: UpdateConsolidatedReportStatusInput) {
+        this.logger.log(`Starting updateConsolidatedReportStatus for fileServerId: ${input.fileServerId}, status: ${input.status}`);
+        
+        try {
+            await this.consolidatedReportService.updateConsolidatedReportStatus(input);
+            this.logger.log(`Completed updateConsolidatedReportStatus for fileServerId: ${input.fileServerId}`);
+        } catch (error) {
+            this.logger.error(`Error in updateConsolidatedReportStatus for fileServerId: ${input.fileServerId}: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
 }

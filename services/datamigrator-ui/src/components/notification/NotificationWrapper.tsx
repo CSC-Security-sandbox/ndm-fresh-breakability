@@ -68,18 +68,16 @@ export const notify = (() => {
       setTimeout(clearNotification, clearNotificationTime || 2000);
     }
     root.render(notificationElement);
-
-    setTimeout(clearNotification, clearNotificationTime || 2000);
   };
 
   return {
     success: (message: string | ReactNode, clearNotificationTime?: number) =>
       createNotification({ type: "success", message, clearNotificationTime }),
-    error: (message: string | ReactNode) =>
+    error: (message: string | ReactNode, clearNotificationTime?: number) =>
       createNotification({
         type: "error",
         message,
-        clearNotificationTime: 5000,
+        clearNotificationTime: clearNotificationTime ?? 5000,
       }),
     warning: (message: string) =>
       createNotification({ type: "warning", message }),

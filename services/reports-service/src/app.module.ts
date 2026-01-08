@@ -11,6 +11,7 @@ import { JobRunModule } from './job-run/job-run.module';
 import { OverviewModule } from './overview/overview.module';
 import { WorkerModule } from './worker/worker.module';
 import { GeneratorModule } from './generator/generator.module';
+import { ReportsModule } from './reports/reports.module';
 import temporalConfig from './config/temporal.config';
 import {
   LoggerModule,
@@ -29,6 +30,7 @@ import {
     }),
     DiscoveryModule,
     OverviewModule,
+    ReportsModule,
     TypeOrmModule.forFeature([InventoryEntity,ReportsEntity]),
     PdfModule,
     JobRunModule,

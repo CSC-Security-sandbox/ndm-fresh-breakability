@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { ActivitiesService } from './activities.service';
 import { DiscoveryReportService } from './discovery-report/discovery-report.service';
+import { ConsolidatedReportService } from './consolidated-report/consolidated-report.service';  
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import {
@@ -13,6 +14,7 @@ import {
 describe('ActivitiesService', () => {
   let service: ActivitiesService;
   let mockDiscoveryReportService: jest.Mocked<DiscoveryReportService>;
+  let mockConsolidatedReportService: jest.Mocked<ConsolidatedReportService>;
   let mockProjectIdCacheService: jest.Mocked<ProjectIdCacheService>;
   let mockLogger: any;
   let mockLoggerFactory: jest.Mocked<LoggerFactory>;
@@ -40,6 +42,21 @@ describe('ActivitiesService', () => {
       updateJsonReport: jest.fn(),
     } as any;
 
+    // Mock ConsolidatedReportService
+    mockConsolidatedReportService = {
+      getDiscoveryJobsForFileServer: jest.fn(),
+      generatePdfForJobRun: jest.fn(),
+      mergePdfFiles: jest.fn(),
+      getConsolidatedReportPath: jest.fn(),
+      cleanupTempFiles: jest.fn(),
+      updateConsolidatedReportStatus: jest.fn(),
+      getConsolidatedReportStatus: jest.fn(),
+      initializeStatus: jest.fn(),
+      getReportFilePath: jest.fn(),
+      readReportFile: jest.fn(),
+      clearStatus: jest.fn(),
+    } as any;
+
     // Mock ProjectIdCacheService
     mockProjectIdCacheService = {
       getProjectIdFromCache: jest.fn(),
@@ -51,6 +68,10 @@ describe('ActivitiesService', () => {
         {
           provide: DiscoveryReportService,
           useValue: mockDiscoveryReportService,
+        },
+        {
+          provide: ConsolidatedReportService,
+          useValue: mockConsolidatedReportService,
         },
         {
           provide: ProjectIdCacheService,
@@ -86,6 +107,10 @@ describe('ActivitiesService', () => {
           {
             provide: DiscoveryReportService,
             useValue: mockDiscoveryReportService,
+          },
+          {
+            provide: ConsolidatedReportService,
+            useValue: mockConsolidatedReportService,
           },
           {
             provide: ProjectIdCacheService,
@@ -423,6 +448,361 @@ describe('ActivitiesService', () => {
         `projectId: ${mockProjectId} Error in updateDiscoveryReport for jobRunId: ${mockInput.jobRunId}, updateType: ${mockInput.updateType}: ${mockError.message}`,
         mockError
       );
+    });
+  });
+
+  describe('Consolidated Report Activities', () => {
+    describe('getDiscoveryJobsForFileServer', () => {
+      it('should log and call service method', async () => {
+        const input = { fileServerId: 'test-fs' };
+        mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockResolvedValue([
+          { jobRunId: 'job-1', volumePath: '/vol1' },
+        ] as any);
+
+        const result = await service.getDiscoveryJobsForFileServer(input);
+
+        expect(result).toHaveLength(1);
+        expect(mockConsolidatedReportService.getDiscoveryJobsForFileServer).toHaveBeenCalledWith(input);
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Starting getDiscoveryJobsForFileServer'));
+      });
+
+      it('should handle errors from service', async () => {
+        const input = { fileServerId: 'test-fs' };
+        const error = new Error('Service error');
+        mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockRejectedValue(error);
+
+        await expect(service.getDiscoveryJobsForFileServer(input)).rejects.toThrow('Service error');
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
+
+      it('should return empty array when no jobs found', async () => {
+        const input = { fileServerId: 'test-fs' };
+        mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockResolvedValue([]);
+
+        const result = await service.getDiscoveryJobsForFileServer(input);
+
+        expect(result).toEqual([]);
+      });
+
+      it('should handle multiple jobs for a file server', async () => {
+        const input = { fileServerId: 'test-fs' };
+        const jobs = [
+          { jobRunId: 'job-1', volumePath: '/vol1' },
+          { jobRunId: 'job-2', volumePath: '/vol2' },
+          { jobRunId: 'job-3', volumePath: '/vol3' },
+        ];
+        mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockResolvedValue(jobs as any);
+
+        const result = await service.getDiscoveryJobsForFileServer(input);
+
+        expect(result).toHaveLength(3);
+        expect(result).toEqual(jobs);
+      });
+    });
+
+    describe('generatePdfForJobRun', () => {
+      it('should generate PDF successfully', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const pdfPath = '/tmp/pdf-1.pdf';
+        mockConsolidatedReportService.generatePdfForJobRun.mockResolvedValue(pdfPath);
+
+        const result = await service.generatePdfForJobRun(input);
+
+        expect(result).toBe(pdfPath);
+        expect(mockConsolidatedReportService.generatePdfForJobRun).toHaveBeenCalledWith(input);
+      });
+
+      it('should handle null when PDF generation returns null', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        mockConsolidatedReportService.generatePdfForJobRun.mockResolvedValue(null);
+
+        const result = await service.generatePdfForJobRun(input);
+
+        expect(result).toBeNull();
+      });
+
+      it('should log errors', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const error = new Error('PDF generation failed');
+        mockConsolidatedReportService.generatePdfForJobRun.mockRejectedValue(error);
+
+        await expect(service.generatePdfForJobRun(input)).rejects.toThrow();
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
+
+      it('should handle PDF generation for multiple volumes', async () => {
+        const inputs = [
+          { jobRunId: 'job-1', volumePath: '/vol1' },
+          { jobRunId: 'job-1', volumePath: '/vol2' },
+        ];
+        const paths = ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf'];
+
+        for (let i = 0; i < inputs.length; i++) {
+          mockConsolidatedReportService.generatePdfForJobRun.mockResolvedValueOnce(paths[i]);
+          const result = await service.generatePdfForJobRun(inputs[i]);
+          expect(result).toBe(paths[i]);
+        }
+
+        expect(mockConsolidatedReportService.generatePdfForJobRun).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('mergePdfFilesActivity', () => {
+      it('should merge PDFs successfully', async () => {
+        const input = {
+          pdfFilePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf'],
+          outputPath: '/tmp/merged.pdf',
+        };
+        mockConsolidatedReportService.mergePdfFiles.mockResolvedValue('/tmp/merged.pdf');
+
+        const result = await service.mergePdfFilesActivity(input);
+
+        expect(result).toBe('/tmp/merged.pdf');
+        expect(mockConsolidatedReportService.mergePdfFiles).toHaveBeenCalledWith(input);
+      });
+
+      it('should handle merge errors', async () => {
+        const input = {
+          pdfFilePaths: ['/tmp/pdf-1.pdf'],
+          outputPath: '/tmp/merged.pdf',
+        };
+        const error = new Error('Merge failed');
+        mockConsolidatedReportService.mergePdfFiles.mockRejectedValue(error);
+
+        await expect(service.mergePdfFilesActivity(input)).rejects.toThrow();
+      });
+
+      it('should handle single file merge', async () => {
+        const input = {
+          pdfFilePaths: ['/tmp/pdf-1.pdf'],
+          outputPath: '/tmp/merged.pdf',
+        };
+        mockConsolidatedReportService.mergePdfFiles.mockResolvedValue('/tmp/merged.pdf');
+
+        const result = await service.mergePdfFilesActivity(input);
+
+        expect(result).toBe('/tmp/merged.pdf');
+      });
+
+      it('should handle multiple file merge', async () => {
+        const input = {
+          pdfFilePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf', '/tmp/pdf-3.pdf', '/tmp/pdf-4.pdf'],
+          outputPath: '/tmp/merged.pdf',
+        };
+        mockConsolidatedReportService.mergePdfFiles.mockResolvedValue('/tmp/merged.pdf');
+
+        const result = await service.mergePdfFilesActivity(input);
+
+        expect(result).toBe('/tmp/merged.pdf');
+        expect(mockConsolidatedReportService.mergePdfFiles).toHaveBeenCalledWith(input);
+      });
+
+      it('should log merge activity', async () => {
+        const input = {
+          pdfFilePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf'],
+          outputPath: '/tmp/merged.pdf',
+        };
+        mockConsolidatedReportService.mergePdfFiles.mockResolvedValue('/tmp/merged.pdf');
+
+        await service.mergePdfFilesActivity(input);
+
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Completed mergePdfFilesActivity'));
+      });
+    });
+
+    describe('getConsolidatedReportPathActivity', () => {
+      it('should get report path successfully', async () => {
+        const input = { fileServerId: 'test-fs', configName: 'TestConfig' };
+        const path = '/reports/test-config-consolidated-report.pdf';
+        mockConsolidatedReportService.getConsolidatedReportPath.mockResolvedValue(path);
+
+        const result = await service.getConsolidatedReportPathActivity(input);
+
+        expect(result).toBe(path);
+        expect(mockConsolidatedReportService.getConsolidatedReportPath).toHaveBeenCalledWith(input);
+      });
+
+      it('should handle path generation errors', async () => {
+        const input = { fileServerId: 'test-fs', configName: 'TestConfig' };
+        const error = new Error('Path generation failed');
+        mockConsolidatedReportService.getConsolidatedReportPath.mockRejectedValue(error);
+
+        await expect(service.getConsolidatedReportPathActivity(input)).rejects.toThrow();
+      });
+
+      it('should log activity start and completion', async () => {
+        const input = { fileServerId: 'test-fs', configName: 'TestConfig' };
+        const path = '/reports/test-config-consolidated-report.pdf';
+        mockConsolidatedReportService.getConsolidatedReportPath.mockResolvedValue(path);
+
+        await service.getConsolidatedReportPathActivity(input);
+
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('getConsolidatedReportPath'));
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Completed'));
+      });
+
+      it('should handle different config names', async () => {
+        const configs = ['TestConfig', 'ProdConfig', 'DevConfig'];
+        
+        for (const configName of configs) {
+          const input = { fileServerId: 'test-fs', configName };
+          const path = `/reports/${configName}-consolidated-report.pdf`;
+          mockConsolidatedReportService.getConsolidatedReportPath.mockResolvedValueOnce(path);
+
+          const result = await service.getConsolidatedReportPathActivity(input);
+
+          expect(result).toBe(path);
+        }
+      });
+    });
+
+    describe('cleanupTempFilesActivity', () => {
+      it('should cleanup temp files successfully', async () => {
+        const input = { filePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf'] };
+        mockConsolidatedReportService.cleanupTempFiles.mockResolvedValue(undefined);
+        await service.cleanupTempFilesActivity(input);
+
+        expect(mockConsolidatedReportService.cleanupTempFiles).toHaveBeenCalledWith(input);
+      });
+
+      it('should handle cleanup errors gracefully', async () => {
+        const input = { filePaths: ['/tmp/pdf-1.pdf'] };
+        const error = new Error('Cleanup failed');
+        mockConsolidatedReportService.cleanupTempFiles.mockRejectedValue(error);
+        await expect(service.cleanupTempFilesActivity(input)).rejects.toThrow('Cleanup failed');
+      });
+
+      it('should handle empty file paths', async () => {
+        const input = { filePaths: [] };
+        mockConsolidatedReportService.cleanupTempFiles.mockResolvedValue(undefined);
+        await service.cleanupTempFilesActivity(input);
+        expect(mockConsolidatedReportService.cleanupTempFiles).toHaveBeenCalledWith(input);
+      });
+
+      it('should cleanup multiple files', async () => {
+        const input = { filePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf', '/tmp/pdf-3.pdf', '/tmp/pdf-4.pdf'] };
+        mockConsolidatedReportService.cleanupTempFiles.mockResolvedValue(undefined);
+        await service.cleanupTempFilesActivity(input);
+        expect(mockConsolidatedReportService.cleanupTempFiles).toHaveBeenCalledWith(input);
+      });
+
+      it('should log cleanup completion', async () => {
+        const input = { filePaths: ['/tmp/pdf-1.pdf', '/tmp/pdf-2.pdf'] };
+        mockConsolidatedReportService.cleanupTempFiles.mockResolvedValue(undefined);
+        await service.cleanupTempFilesActivity(input);
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Completed cleanupTempFilesActivity'));
+      });
+
+      it('should log errors during cleanup', async () => {
+        const input = { filePaths: ['/tmp/pdf-1.pdf'] };
+        const error = new Error('Cleanup failed');
+        mockConsolidatedReportService.cleanupTempFiles.mockRejectedValue(error);
+        await expect(service.cleanupTempFilesActivity(input)).rejects.toThrow('Cleanup failed');
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
+    });
+
+    describe('updateConsolidatedReportStatus', () => {
+      it('should update status successfully', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'COMPLETED' as const,
+          reportPath: '/path/to/report.pdf',
+        };
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockResolvedValue(undefined);
+
+        await service.updateConsolidatedReportStatus(input);
+
+        expect(mockConsolidatedReportService.updateConsolidatedReportStatus).toHaveBeenCalledWith(input);
+      });
+
+      it('should handle status update errors', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'FAILED' as const,
+          errorMessage: 'Generation failed',
+        };
+        const error = new Error('Status update failed');
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockRejectedValue(error);
+
+        await expect(service.updateConsolidatedReportStatus(input)).rejects.toThrow();
+      });
+
+      it('should handle PARTIAL status', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'PARTIAL' as const,
+          failedJobs: 2,
+          failedVolumes: ['/vol1', '/vol2'],
+        };
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockResolvedValue(undefined);
+
+        await service.updateConsolidatedReportStatus(input);
+
+        expect(mockConsolidatedReportService.updateConsolidatedReportStatus).toHaveBeenCalledWith(input);
+      });
+
+      it('should update to IN_PROGRESS status', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'IN_PROGRESS' as const,
+        };
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockResolvedValue(undefined);
+
+        await service.updateConsolidatedReportStatus(input);
+
+        expect(mockConsolidatedReportService.updateConsolidatedReportStatus).toHaveBeenCalledWith(input);
+      });
+
+      it('should log status update with fileServerId', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'COMPLETED' as const,
+          reportPath: '/path/to/report.pdf',
+        };
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockResolvedValue(undefined);
+
+        await service.updateConsolidatedReportStatus(input);
+
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          expect.stringContaining('Starting updateConsolidatedReportStatus for fileServerId: test-fs, status: COMPLETED')
+        );
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          expect.stringContaining('Completed updateConsolidatedReportStatus for fileServerId: test-fs')
+        );
+      });
+
+      it('should handle error with error message', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'FAILED' as const,
+          errorMessage: 'PDF generation timeout',
+        };
+        const error = new Error('Status update failed');
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockRejectedValue(error);
+
+        await expect(service.updateConsolidatedReportStatus(input)).rejects.toThrow();
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Error in updateConsolidatedReportStatus for fileServerId: test-fs'),
+          expect.anything()
+        );
+      });
+
+      it('should handle error without stack trace', async () => {
+        const input = {
+          fileServerId: 'test-fs',
+          status: 'COMPLETED' as const,
+          reportPath: '/path/to/report.pdf',
+        };
+        const error = new Error('Status update failed');
+        delete error.stack; // Remove stack property
+        mockConsolidatedReportService.updateConsolidatedReportStatus.mockRejectedValue(error);
+
+        await expect(service.updateConsolidatedReportStatus(input)).rejects.toThrow();
+
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
     });
   });
 });

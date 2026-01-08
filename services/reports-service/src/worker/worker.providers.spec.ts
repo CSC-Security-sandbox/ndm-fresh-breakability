@@ -25,6 +25,13 @@ describe('workerProviders', () => {
       generateDiscoveryPdfReport: jest.fn(),
       generateDiscoveryCsvReport: jest.fn(),
       updateDiscoveryReport: jest.fn(),
+      // Consolidated report activities
+      getDiscoveryJobsForFileServer: jest.fn(),
+      generatePdfForJobRun: jest.fn(),
+      mergePdfFilesActivity: jest.fn(),
+      getConsolidatedReportPathActivity: jest.fn(),
+      cleanupTempFilesActivity: jest.fn(),
+      updateConsolidatedReportStatus: jest.fn(),
     } as any;
 
     configService = {
@@ -79,6 +86,20 @@ describe('workerProviders', () => {
     expect(activitiesService.generateDiscoveryPdfReport).toHaveBeenCalled();
     expect(activitiesService.generateDiscoveryCsvReport).toHaveBeenCalled();
     expect(activitiesService.updateDiscoveryReport).toHaveBeenCalled();
+
+    activities.getDiscoveryJobsForFileServer();
+    activities.generatePdfForJobRun();
+    activities.mergePdfFilesActivity();
+    activities.getConsolidatedReportPathActivity();
+    activities.cleanupTempFilesActivity();
+    activities.updateConsolidatedReportStatus();
+
+    expect(activitiesService.getDiscoveryJobsForFileServer).toHaveBeenCalled();
+    expect(activitiesService.generatePdfForJobRun).toHaveBeenCalled();
+    expect(activitiesService.mergePdfFilesActivity).toHaveBeenCalled();
+    expect(activitiesService.getConsolidatedReportPathActivity).toHaveBeenCalled();
+    expect(activitiesService.cleanupTempFilesActivity).toHaveBeenCalled();
+    expect(activitiesService.updateConsolidatedReportStatus).toHaveBeenCalled();
 
     (require as any).resolve = require.resolve;
   });

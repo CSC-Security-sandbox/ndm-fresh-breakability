@@ -19,7 +19,14 @@ export const workerProviders = [
         generateDiscoveryPdfReport: activitiesService.generateDiscoveryPdfReport.bind(activitiesService),
         generateDiscoveryCsvReport: activitiesService.generateDiscoveryCsvReport.bind(activitiesService),
         updateDiscoveryReport: activitiesService.updateDiscoveryReport.bind(activitiesService),
-
+        
+        // consolidated report activities
+        getDiscoveryJobsForFileServer: activitiesService.getDiscoveryJobsForFileServer.bind(activitiesService),
+        generatePdfForJobRun: activitiesService.generatePdfForJobRun.bind(activitiesService),
+        mergePdfFilesActivity: activitiesService.mergePdfFilesActivity.bind(activitiesService),
+        getConsolidatedReportPathActivity: activitiesService.getConsolidatedReportPathActivity.bind(activitiesService),
+        cleanupTempFilesActivity: activitiesService.cleanupTempFilesActivity.bind(activitiesService),
+        updateConsolidatedReportStatus: activitiesService.updateConsolidatedReportStatus.bind(activitiesService),
       };
 
       const workflowOption = { workflowsPath: require.resolve('../temporal/workflows') };

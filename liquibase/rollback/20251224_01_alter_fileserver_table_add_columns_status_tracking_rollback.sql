@@ -1,0 +1,4 @@
+ALTER TABLE file_server DROP COLUMN consolidated_report_status,
+DROP COLUMN consolidated_report_path,
+DROP COLUMN consolidated_report_workflow_id,
+DROP COLUMN consolidated_report_updated_at;

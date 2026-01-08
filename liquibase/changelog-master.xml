@@ -512,4 +512,11 @@
          <sqlFile path="liquibase/rollback/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
       </rollback>
    </changeSet>
+   
+   <changeSet id="20251224_01_alter_fileserver_table_add_columns_status_tracking.sql" author="dm">
+      <sqlFile path="liquibase/20251224_01_alter_fileserver_table_add_columns_status_tracking.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/rollback/20251224_01_alter_fileserver_table_add_columns_status_tracking_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>

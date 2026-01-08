@@ -17,6 +17,13 @@ import { ConfigEntity } from "./config.entity";
 import { VolumeEntity } from "./volume.entity";
 import { FileServerWorkingDirectoryMappingEntity } from "./fileserver_workingdirectory_mapping.entity";
 
+export enum ConsolidatedReportStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  PARTIAL = 'PARTIAL',
+}
+
 @Entity({ name: "file_server" })
 export class FileServerEntity extends Base {
   @ApiProperty({ description: "configId" })
@@ -87,4 +94,20 @@ export class FileServerEntity extends Base {
   )
   @JoinColumn({ name: "config_id" })
   workingDirectory: FileServerWorkingDirectoryMappingEntity;
+
+  @ApiProperty({ description: 'Consolidated report generation status' })
+  @Column({ type: 'varchar', name: 'consolidated_report_status', nullable: true })
+  consolidatedReportStatus: ConsolidatedReportStatus;
+
+  @ApiProperty({ description: 'Path to the consolidated report file' })
+  @Column({ type: 'varchar', name: 'consolidated_report_path', nullable: true })
+  consolidatedReportPath: string;
+
+  @ApiProperty({ description: 'Temporal workflow ID for consolidated report' })
+  @Column({ type: 'varchar', name: 'consolidated_report_workflow_id', nullable: true })
+  consolidatedReportWorkflowId: string;
+
+  @ApiProperty({ description: 'Last update time for consolidated report' })
+  @Column({ type: 'timestamp with time zone', name: 'consolidated_report_updated_at', nullable: true })
+  consolidatedReportUpdatedAt: Date;
 }

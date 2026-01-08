@@ -1,0 +1,180 @@
+import { Controller, BadRequestException, Get, Post, Body, StreamableFile, Logger, Inject, Optional, Param, NotFoundException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { SkipResponseTransform } from '../decorators/skip-response-transform.decorator';
+import { TemporalClientService } from 'src/temporal/temporal-client.service';
+import { ConsolidatedReportService } from 'src/activities/consolidated-report/consolidated-report.service';
+
+// Workflow names constant for maintainability
+const WORKFLOWS = {
+  CONSOLIDATED_REPORT: 'GenerateConsolidatedReportWorkflow',
+} as const;
+
+
+@ApiTags('Reports')
+@Controller('reports')
+export class ReportsController {
+  private readonly logger: LoggerService;
+  constructor(
+    private readonly temporalClientService: TemporalClientService,
+    private readonly consolidatedReportService: ConsolidatedReportService,
+    @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
+  ) {
+    if (loggerFactory) {
+      this.logger = loggerFactory.create(ReportsController.name);
+    } else {
+      this.logger = new Logger(ReportsController.name) as any;
+    }
+  }
+
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
+  @Post('/consolidated/start')
+  @ApiOperation({ summary: 'Start generating consolidated discovery report for file server (async workflow)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fileServerId: {
+          type: 'string',
+          description: 'ID of the file server'
+        },
+        configName: {
+          type: 'string',
+          description: 'Name of the file server config (for filename)'
+        },
+      },
+      required: ['fileServerId', 'configName'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Consolidated report workflow started successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid fileServerId' })
+  async startConsolidatedDiscoveryReport(
+    @Body('fileServerId') fileServerId: string,
+    @Body('configName') configName: string,
+  ): Promise<{ workflowId: string; message: string }> {
+    if (!fileServerId) {
+      throw new BadRequestException('fileServerId is required');
+    }
+    if (!configName) {
+      throw new BadRequestException('configName is required');
+    }
+
+    this.logger.log(`Starting consolidated report workflow for fileServerId: ${fileServerId}`);
+
+    const workflowId = `consolidated-report-${fileServerId}-${Date.now()}`;
+    
+    // Initialize status in database before starting workflow
+    await this.consolidatedReportService.initializeStatus(fileServerId, workflowId, configName);
+
+    await this.temporalClientService.startWorkflow({
+      workflowName: WORKFLOWS.CONSOLIDATED_REPORT,
+      workflowId,
+      args: [{ fileServerId, configName }],
+    });
+
+    return {
+      workflowId,
+      message: 'Consolidated report generation started. Poll the status endpoint for progress.',
+    };
+  }
+
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
+  @Get('/consolidated/status/fileserver/:fileServerId')
+  @ApiOperation({ summary: 'Get status of consolidated report generation by file server ID' })
+  @ApiParam({ name: 'fileServerId', description: 'ID of the file server to check status' })
+  @ApiResponse({ status: 200, description: 'Report status retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'No report status found for this file server' })
+  async getConsolidatedReportStatusByFileServer(
+    @Param('fileServerId') fileServerId: string,
+  ): Promise<{ status: string; workflowId?: string; reportPath?: string; updatedAt?: Date }> {
+    if (!fileServerId) {
+      throw new BadRequestException('fileServerId is required');
+    }
+
+    this.logger.log(`Checking status for fileServerId: ${fileServerId}`);
+
+    const statusRecord = await this.consolidatedReportService.getConsolidatedReportStatus(fileServerId);
+    
+    if (!statusRecord || !statusRecord.status) {
+      return {
+        status: 'NOT_FOUND',
+      };
+    }
+
+    return {
+      status: statusRecord.status,
+      workflowId: statusRecord.workflowId,
+      reportPath: statusRecord.reportPath,
+      updatedAt: statusRecord.updatedAt,
+    };
+  }
+
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
+  @Get('/consolidated/status/:workflowId')
+  @ApiOperation({ summary: 'Get status of consolidated report generation workflow' })
+  @ApiParam({ name: 'workflowId', description: 'ID of the workflow to check status' })
+  @ApiResponse({ status: 200, description: 'Workflow status retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Workflow not found' })
+  async getConsolidatedReportStatus(
+    @Param('workflowId') workflowId: string,
+  ): Promise<{ status: string; result?: any; error?: string }> {
+    if (!workflowId) {
+      throw new BadRequestException('workflowId is required');
+    }
+
+    this.logger.log(`Checking status for workflow: ${workflowId}`);
+
+    try {
+      const status = await this.temporalClientService.getWorkflowStatus(workflowId);
+      return status;
+    } catch (error) {
+      this.logger.error(`Error getting workflow status: ${error.message}`);
+      throw new NotFoundException(`Workflow ${workflowId} not found or has expired`);
+    }
+  }
+
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
+  @Get('/consolidated/download/:fileServerId')
+  @SkipResponseTransform()
+  @ApiOperation({ summary: 'Download consolidated discovery report for file server' })
+  @ApiParam({ name: 'fileServerId', description: 'ID of the file server' })
+  @ApiResponse({ status: 200, description: 'Consolidated report downloaded successfully' })
+  @ApiResponse({ status: 404, description: 'Report not found' })
+  async downloadConsolidatedReport(
+    @Param('fileServerId') fileServerId: string,
+  ): Promise<StreamableFile> {
+    if (!fileServerId) {
+      throw new BadRequestException('fileServerId is required');
+    }
+
+    this.logger.log(`Downloading consolidated report for fileServerId: ${fileServerId}`);
+
+    try {
+      const reportPath = await this.consolidatedReportService.getReportFilePath(fileServerId);
+      
+      if (!reportPath) {
+        throw new NotFoundException(`Consolidated report not found for file server ${fileServerId}`);
+      }
+
+      const reportBuffer =  await this.consolidatedReportService.readReportFile(reportPath);
+ 
+      await this.consolidatedReportService.clearStatus(fileServerId);
+      
+      return new StreamableFile(reportBuffer, {
+        type: 'application/pdf',
+        disposition: `attachment; filename="consolidated-discovery-report-${fileServerId}.pdf"`,
+      });
+    } catch (error) {
+      this.logger.error(`Error downloading consolidated report: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new NotFoundException(`Consolidated report not found for file server ${fileServerId}`);
+    }
+  }
+}
