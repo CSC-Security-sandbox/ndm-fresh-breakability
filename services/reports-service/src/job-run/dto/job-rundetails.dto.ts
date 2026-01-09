@@ -67,6 +67,11 @@ class JobOptionsDto {
   @IsOptional()
   @IsUUID()
   identityMappingId?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  shouldScanADS?: boolean;
 }
 
 export class TaskDto {

@@ -148,6 +148,7 @@ export class JobRunService {
           excludeFilePatterns: true,
           skipFile: true,
           identityMappingId: true,
+          shouldScanADS: true,
         },
       },
       relations: {
@@ -186,6 +187,7 @@ export class JobRunService {
         excludeFilePatterns: jobRun.options.excludeFilePatterns,
         skipFile: jobRun.options.skipFile,
         identityMappingId: jobRun.options.identityMappingId,
+        shouldScanADS: jobRun.options.shouldScanADS,
       },
       worker: jobRun?.worker?.length ?? 0,
     };

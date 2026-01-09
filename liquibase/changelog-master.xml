@@ -521,7 +521,7 @@
    </changeSet>
 
    <changeSet id="20251223_01_alter_job_options_table_add_skip_file_identity_mapping_columns.sql" author="ss27372">
-      <sqlFile path="liquibase/apply/20251218_01_alter_job_options_table_add_skip_file_identity_mapping_id_columns.sql"/>
+      <sqlFile path="liquibase/20251218_01_alter_job_options_table_add_skip_file_identity_mapping_id_columns.sql"/>
       <rollback>
          <sqlFile path="liquibase/rollback/20251218_01_alter_job_options_table_delete_columns_skip_file_identity_mapping_id.sql"/>
       </rollback>

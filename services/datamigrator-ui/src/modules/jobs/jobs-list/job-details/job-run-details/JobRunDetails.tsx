@@ -147,25 +147,38 @@ const JobRunDetails = () => {
 
   const isDiscoveryJob = jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.DISCOVERY;
   const isMigrationJob = jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.MIGRATE;
-  
   const viewLogUrl = getGrafanaLogUrl(jobRunId);
 
   const showJobConfigDetails = () => {
+    const jobRunProtocol = jobRunDetails?.jobConfig?.sourceServer?.protocol;
     const jobRunConfig = jobRunDetails?.jobOptions;
     const preserveATime = jobRunConfig?.preserveAccessTime ? "Enabled" : "Disabled";
     const excludeOlderThan = jobRunConfig?.excludeOlderThan ? format(new Date(jobRunConfig.excludeOlderThan), "dd MMM yyyy, hh:mm a") : "-";
     const excludeFilePatterns = jobRunConfig?.excludeFilePatterns?.split(',').join('\n') || "-";
     if (isDiscoveryJob) {
+      const shouldScanAds = jobRunConfig?.shouldScanADS ? "Enabled" : "Disabled";
       dispatch(
         setModalProps({
           isOpen: true,
           modalHeader: "Job Configuration Details",
           modalContent: (
             <Box>
-              <Box className="w-3/6 !bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
-                <Box className="p-8 flex-col">
-                  <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
-                  <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
+              <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
+                <Box className="p-8 flex gap-8">
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
+                      <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
+                    </Box>
+                  </Box>
+                  <Box className="w-3/6 flex flex-col gap-8">
+                    { jobRunProtocol === 'SMB' &&
+                      <Box>
+                        <Text className="!mb-0 font-semibold">Scan Alternate Data Streams (ADS):</Text>
+                        <Text>{shouldScanAds}</Text>
+                      </Box>
+                    }
+                  </Box>
                 </Box>
               </Box> 
               <Box className="pt-3 flex justify-end mt-3">
@@ -215,7 +228,7 @@ const JobRunDetails = () => {
                           data: jobRunIdentityMappings?.items?.data
                         }
                       }}
-                      protocol={jobRunDetails?.jobConfig?.sourceServer?.protocol}
+                      protocol={jobRunProtocol}
                       jobId={jobId}
                       jobRunId={jobRunId}
                     />
@@ -262,7 +275,7 @@ const JobRunDetails = () => {
                 </Box>
               </Box> 
               <Box className="pt-3 flex justify-end mt-3">
-                <Button onClick={() => dispatch(setModalClose())}  color="secondary">
+                <Button onClick={() => dispatch(setModalClose())} color="secondary">
                   Close
                 </Button>
               </Box>
