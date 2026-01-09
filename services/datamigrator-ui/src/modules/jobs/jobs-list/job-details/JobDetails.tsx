@@ -71,6 +71,7 @@ import { useFormik } from "formik";
 import dayjs from "dayjs";
 import ExistingIdentityMappings from "@/hooks/useExistingIdentityMappings";
 import IncrementalSyncSchedule from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/IncrementalSyncSchedule";
+import ScanADSComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/components/ScanADSComponent";
 
 type DownloadTemplateTrigger = ReturnType<
   typeof useLazyDownloadTemplateQuery
@@ -706,11 +707,13 @@ const JobDetails = () => {
       [modalJobConfigDetails?.jobRuns]
     );
 
+    const shouldScanAds = configurationsSetToJob?.["Scan Alternate Data Streams (ADS)"];
     const bulkDiscoveryForm: BlueXpFormType<bulkDiscoveryFormType> = useForm({
       excludeFilePatterns: Array.isArray(excludeFilePatterns) ? excludeFilePatterns.join("\n") : "",
       scheduleTime: jobScheduledFor && isScheduledForFuture ? "schedule_date" : "start_now",
       firstRunAt: jobScheduledFor && isScheduledForFuture ? dayjs.utc(jobScheduledFor) : dayjs.utc().add(DISCOVERY_DEFAULT_MINUTES_AHEAD.SCHEDULE_DATE, "minute"),
-      protocol: { label: jobProtocol, value: jobProtocol }
+      protocol: { label: jobProtocol, value: jobProtocol },
+      shouldScanADS: shouldScanAds === "Enabled" ? "yes" : "no",
     },
       BULK_DISCOVERY_FORM_SCHEMA
     );
@@ -734,6 +737,7 @@ const JobDetails = () => {
       const updateData = {
         excludeFilePatterns: formData.excludeFilePatterns || "",
         firstRunAt: formData.scheduleTime === "schedule_date" ? formData.firstRunAt : null,
+        shouldScanADS: formData.shouldScanADS === "yes" ? "Enabled" : "Disabled",
       };
       onSave(updateData);
     };
@@ -775,6 +779,7 @@ const JobDetails = () => {
             </Box>
             <Box className="w-3/6 flex flex-col gap-8">
               <ScheduleComponent bulkDiscoveryForm={bulkDiscoveryForm} variant="edit_config" />
+              <ScanADSComponent bulkDiscoveryForm={bulkDiscoveryForm} variant="edit_config" />
             </Box>
           </Box>
         </Box>

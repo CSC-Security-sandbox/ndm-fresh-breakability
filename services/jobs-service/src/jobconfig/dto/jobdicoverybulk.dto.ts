@@ -128,6 +128,15 @@ export class UpdateDiscoveryConfigDto {
   @Type(() => Date)
   @IsDate()
   firstRunAt?: Date;
+
+  @ApiProperty({ 
+    description: 'Scan Alternate Data Streams flag (Windows/SMB only)', 
+    example: 'Enabled',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  shouldScanADS?: string;
 }
 
 export class UpdateMigrationConfigDto {

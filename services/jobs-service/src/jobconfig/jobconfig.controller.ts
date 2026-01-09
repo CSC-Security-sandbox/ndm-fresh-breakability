@@ -225,6 +225,7 @@ export class JobConfigController {
     const jobConfigData: Partial<JobConfigDto> = {
       excludeFilePatterns: updateData.excludeFilePatterns,
       firstRunAt: updateData.firstRunAt,
+      shouldScanADS: updateData.shouldScanADS === 'Enabled',
     };
     
     return await this.jobConfigService.updateJobConfig(id, jobConfigData);

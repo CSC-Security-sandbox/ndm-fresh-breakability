@@ -627,6 +627,7 @@ describe("JobConfigController", () => {
           const updateDto: UpdateDiscoveryConfigDto = {
             excludeFilePatterns: "*.tmp",
             firstRunAt: new Date("2025-01-01T00:00:00Z"),
+            shouldScanADS: "Enabled",
           };
           const mockJobEntity = { jobType: JobType.DISCOVER };
           const updatedJob = { id: jobId } as JobConfigEntity;
@@ -645,6 +646,7 @@ describe("JobConfigController", () => {
           expect(service.updateJobConfig).toHaveBeenCalledWith(jobId, {
             excludeFilePatterns: updateDto.excludeFilePatterns,
             firstRunAt: updateDto.firstRunAt,
+            shouldScanADS: true,
           });
         });
       });
