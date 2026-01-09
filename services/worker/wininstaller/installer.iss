@@ -370,6 +370,10 @@ begin
       'WORKER_JOB_SERVICE_URL=https://' + ConfigControlPlaneIP + #13#10 +
       'WORKER_REPORT_SERVICE_URL=https://' + ConfigControlPlaneIP + #13#10 +
       'TEMPORAL_ADDRESS=' + ConfigControlPlaneIP + ':7233' + #13#10 +
+      'TEMPORAL_TLS_ENABLED=true' + #13#10 +
+      'TEMPORAL_TLS_SERVER_NAME=datamigrator.local' + #13#10 +
+      'TEMPORAL_JWT_ENABLED=true' + #13#10 +
+      'NODE_TLS_REJECT_UNAUTHORIZED=0' + #13#10 +
       'KEYCLOAK_BASE_URL=https://' + ConfigControlPlaneIP + '/keycloak' + #13#10 +
       'WORKER_ID=' + ConfigWorkerID + #13#10 +
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +

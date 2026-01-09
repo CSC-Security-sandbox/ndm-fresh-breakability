@@ -46,11 +46,17 @@ istio_jwt_auth:
   auth_policy_name: require-jwt
   public_auth_policy_name: allow-public
   
+  # Selector to apply JWT validation at the ingress gateway
+  selector:
+    istio: ingressgateway
+  
   # Keycloak JWT validation
   # IMPORTANT: Two URLs required for JWT validation to work:
   # 1. issuer: External URL that matches JWT 'iss' claim (what clients see)
   # 2. jwks_uri: Internal cluster URL for Istio to fetch public keys
-  issuer: "https://{{ ansible_host }}/keycloak/realms/datamigrator"
+  # During packaging: ansible_host = 'local' → uses placeholder that gets patched by boot script
+  # During local deployment: ansible_host = actual VM IP from dynamic inventory
+  issuer: "https://{% if ansible_host == 'local' %}DEPLOYMENT_IP_PLACEHOLDER{% else %}{{ ansible_host }}{% endif %}/keycloak/realms/datamigrator"
   jwks_uri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
   # audiences:
   #   - datamigrator-client  # Commented out - some requests do not have audience claim

@@ -24,7 +24,10 @@ spec:
       {{- if and ($istio.gateway.tls.enabled | default false) ($istio.gateway.tls.secretName | default "") }}
       tls:
         mode: SIMPLE
-        credentialName: {{ $istio.gateway.tls.secretName | quote }}
+        # Use file-based certificates (mounted as volume) instead of SDS credentialName
+        # This works around Istio SDS issues where the gateway can't fetch secrets from istiod
+        serverCertificate: /etc/istio/datamigrator-certs/tls.crt
+        privateKey: /etc/istio/datamigrator-certs/tls.key
       {{- end }}
 {{- if and ($istio.enabled) ($istio.temporalMtls.enabled | default false) ($istio.temporalMtls.jwtAuth.enabled | default false) }}
     # HTTPS server for Temporal gRPC (external worker connections with TLS + JWT validation)
@@ -40,6 +43,8 @@ spec:
       {{- end }}
       tls:
         mode: SIMPLE
-        credentialName: {{ $istio.gateway.tls.secretName | quote }}
+        # Use file-based certificates (mounted as volume) instead of SDS credentialName
+        serverCertificate: /etc/istio/datamigrator-certs/tls.crt
+        privateKey: /etc/istio/datamigrator-certs/tls.key
 {{- end }}
 {{- end }}

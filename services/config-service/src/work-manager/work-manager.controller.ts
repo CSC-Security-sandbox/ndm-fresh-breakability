@@ -48,12 +48,15 @@ export class WorkManagerController {
     @Req() req: any,
     @Body() body: any,
   ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
+    // Use worker-provided IP if available, otherwise fall back to request source IP
+    const workerIp = body?.workerIpAddress || req.headers['x-worker-ip'] || ip;
+    
     this.logger.debug(
-      `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+      `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${workerIp} (source IP: ${ip}) for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );
     return await this.workManagerService.getConfiguration(
       req['worker_id'],
-      ip,
+      workerIp,
       req['project_id'],
       req?.headers['x-client-platform'],
       body?.envVariables,
@@ -73,12 +76,15 @@ export class WorkManagerController {
     @ClientIp() ip: string,
     @Req() req: any,
   ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
+    // Use worker-provided IP if available in header, otherwise fall back to request source IP
+    const workerIp = req.headers['x-worker-ip'] || ip;
+    
     this.logger.debug(
-      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${workerIp} (source IP: ${ip}) for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );
     return await this.workManagerService.getConfiguration(
       req['worker_id'],
-      ip,
+      workerIp,
       req['project_id'],
       req?.headers['x-client-platform'],
       {},     

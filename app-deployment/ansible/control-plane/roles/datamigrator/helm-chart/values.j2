@@ -12,8 +12,13 @@ global:
 {% endif %}
   istio:
     enabled: {{ enable_istio | default(false) | bool | string | lower }}
+    namespace: {{ istio_namespace | default('istio-system') | quote }}
     hosts:
-{% set _istio_route_hosts = istio_gateway_hosts_effective | default(istio_gateway.hosts | default(public_ingress_hosts | default(['*']))) %}
+{% if istio_gateway_allow_any_host | default(true) | bool %}
+{% set _istio_route_hosts = ['*'] %}
+{% else %}
+{% set _istio_route_hosts = istio_gateway_hosts_effective | default(istio_gateway.hosts | default(public_ingress_hosts | default(['datamigrator.local']))) %}
+{% endif %}
 {% for host in _istio_route_hosts %}
       - {{ host | quote }}
 {% endfor %}
@@ -43,8 +48,17 @@ global:
       requestAuthenticationName: {{ istio_jwt_auth.request_authentication_name | default('keycloak-jwt') | quote }}
       authPolicyName: {{ istio_jwt_auth.auth_policy_name | default('require-jwt') | quote }}
       publicAuthPolicyName: {{ istio_jwt_auth.public_auth_policy_name | default('allow-public') | quote }}
-      issuer: {{ istio_jwt_auth.issuer | default('') | quote }}
-      jwksUri: {{ istio_jwt_auth.jwks_uri | default('') | quote }}
+      selector:
+{% if istio_jwt_auth.selector is defined %}
+{% for key, value in istio_jwt_auth.selector | dictsort %}
+        {{ key }}: {{ value }}
+{% endfor %}
+{% else %}
+        istio: ingressgateway
+{% endif %}
+      # issuer URL will be patched at deployment time with actual VM IP
+      issuer: {{ istio_jwt_auth.issuer | default('https://DEPLOYMENT_IP_PLACEHOLDER/keycloak/realms/datamigrator') | quote }}
+      jwksUri: {{ istio_jwt_auth.jwks_uri | default('http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs') | quote }}
 {% if istio_jwt_auth.forward_original_token is defined %}
       forwardOriginalToken: {{ istio_jwt_auth.forward_original_token | bool | string | lower }}
 {% endif %}

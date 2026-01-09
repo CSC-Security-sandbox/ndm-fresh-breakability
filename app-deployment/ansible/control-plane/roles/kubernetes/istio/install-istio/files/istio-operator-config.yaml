@@ -6,14 +6,35 @@ metadata:
 spec:
   profile: default
   
+  # Ingress gateway configuration
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            ports:
+              - name: status-port
+                port: 15021
+                targetPort: 15021
+              - name: http2
+                port: 80
+                targetPort: 8080
+              - name: https
+                port: 443
+                targetPort: 8443
+              - name: grpc-temporal
+                port: 7233
+                targetPort: 7233
+  
   # Global sidecar proxy resource configuration
   values:
     global:
       proxy:
-        # Reduce sidecar resource requests for development/testing
+        # Reduce sidecar resource requests for constrained environments
         resources:
           requests:
-            cpu: 50m      # Reduced from default 100m
+            cpu: 25m      # Minimal CPU request to prevent scheduling issues
             memory: 128Mi
           limits:
             cpu: 2000m

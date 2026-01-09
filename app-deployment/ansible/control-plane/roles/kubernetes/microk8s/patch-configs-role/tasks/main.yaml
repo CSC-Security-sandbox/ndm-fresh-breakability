@@ -70,7 +70,7 @@
     src: istio-ingressgateway-service-patch.j2
     dest: $HOME/ingress/istio-ingressgateway-service-patch.yaml
   vars:
-    istio_lb_ip: "{{ istio_ingressgateway_loadbalancer_ip | default(private_ip, true) }}"
+    istio_lb_ip: "{{ istio_ingressgateway_loadbalancer_ip if istio_ingressgateway_loadbalancer_ip else 'DEPLOYMENT_IP_PLACEHOLDER' }}"
   when:
     - enable_istio | default(false) | bool
     - istio_namespace_status is defined
@@ -86,6 +86,9 @@
     - enable_istio | default(false) | bool
     - istio_namespace_status is defined
     - istio_namespace_status.rc == 0
+    - istio_ingressgateway_loadbalancer_ip is defined
+    - istio_ingressgateway_loadbalancer_ip | length > 0
+    - istio_ingressgateway_loadbalancer_ip != 'DEPLOYMENT_IP_PLACEHOLDER'
 
 - name: Delete ingress directory
   become: yes

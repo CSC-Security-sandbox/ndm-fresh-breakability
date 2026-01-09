@@ -21,6 +21,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { getLocalIpAddress } from 'src/utils/network.utils';
 
 @Injectable()
 export class WorkManagerService {
@@ -118,17 +119,23 @@ export class WorkManagerService {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
       
+      // Get worker's actual local IP address
+      const workerIp = getLocalIpAddress();
+      this.logger.log(`Worker local IP address: ${workerIp}`);
+      
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
           {
             envVariables: process.env,
             isRebootCall: true,
+            workerIpAddress: workerIp, // Send worker's actual IP
           },
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'x-worker-ip': workerIp, // Also send in header for backup
               'Content-Type': 'application/json',
             },
             timeout: 5000,

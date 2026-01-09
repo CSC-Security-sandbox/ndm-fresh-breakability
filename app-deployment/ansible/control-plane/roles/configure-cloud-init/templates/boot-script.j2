@@ -6,6 +6,9 @@ RETRY_DELAY=5
 WAIT_TIMEOUT=600
 MICROK8S_INIT_DELAY=80
 
+# Get VM IP once at the start
+VM_IP=$(hostname -I | awk '{print $1}')
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
@@ -103,6 +106,89 @@ install_keycloak_chart() {
     retry $MAX_RETRIES "kubectl wait --namespace keycloak --for=condition=ready pod --all --timeout=${WAIT_TIMEOUT}s" || handle_failure "Keycloak pods are not ready"
     
     log "Keycloak installation completed successfully"
+}
+
+patch_jwt_issuer() {
+    log "Patching JWT issuer with VM IP..."
+    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for JWT issuer"
+    
+    cat > /tmp/jwt-patch.yaml << EOF
+spec:
+  jwtRules:
+  - issuer: "https://${VM_IP}/keycloak/realms/datamigrator"
+    jwksUri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
+    forwardOriginalToken: true
+    fromHeaders:
+    - name: Authorization
+      prefix: "Bearer "
+EOF
+    
+    retry $MAX_RETRIES "kubectl patch requestauthentication keycloak-jwt -n istio-system --type merge --patch-file /tmp/jwt-patch.yaml" || handle_failure "Failed to patch JWT issuer in RequestAuthentication"
+    log "JWT issuer patched successfully with IP: ${VM_IP}"
+}
+
+regenerate_istio_certificate() {
+    log "Regenerating Istio Gateway TLS certificate with VM IP..."
+    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for certificate regeneration"
+    
+    local CERT_FILE=$(mktemp)
+    local KEY_FILE=$(mktemp)
+    local CFG_FILE=$(mktemp)
+    
+    log "Generating new certificate with SAN: DNS:datamigrator.local, IP:${VM_IP}"
+    
+    cat > "${CFG_FILE}" << EOF
+[ req ]
+default_bits = 2048
+prompt = no
+default_md = sha256
+x509_extensions = v3_req
+distinguished_name = dn
+
+[ dn ]
+CN = datamigrator.local
+
+[ v3_req ]
+subjectAltName = DNS:datamigrator.local,IP:${VM_IP}
+EOF
+    
+    openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+      -keyout "${KEY_FILE}" \
+      -out "${CERT_FILE}" \
+      -config "${CFG_FILE}" >/dev/null 2>&1 || handle_failure "Failed to generate certificate"
+    
+    kubectl create secret tls datamigrator-istio-tls \
+      --cert="${CERT_FILE}" \
+      --key="${KEY_FILE}" \
+      --namespace istio-system \
+      --dry-run=client -o yaml | kubectl apply -f - || handle_failure "Failed to update certificate secret"
+    
+    rm -f "${KEY_FILE}" "${CERT_FILE}" "${CFG_FILE}"
+    log "Istio Gateway TLS certificate regenerated successfully with IP: ${VM_IP}"
+}
+
+restart_keycloak_and_gateway() {
+    log "Restarting Keycloak to pick up correct hostname..."
+    if ! retry $MAX_RETRIES "kubectl rollout restart statefulset keycloak -n keycloak"; then
+        handle_failure "Failed to restart Keycloak StatefulSet"
+    fi
+    
+    if ! retry $MAX_RETRIES "kubectl rollout status statefulset keycloak -n keycloak --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Keycloak StatefulSet did not become ready after restart"
+    else
+        log "Keycloak restarted successfully and all pods are Ready."
+    fi
+    
+    log "Restarting Istio ingress gateway to reload JWT configuration..."
+    if ! retry $MAX_RETRIES "kubectl rollout restart deployment istio-ingressgateway -n istio-system"; then
+        handle_failure "Failed to restart Istio ingress gateway"
+    fi
+    
+    if ! retry $MAX_RETRIES "kubectl rollout status deployment istio-ingressgateway -n istio-system --timeout=${WAIT_TIMEOUT}s"; then
+        handle_failure "Istio ingress gateway did not become ready after restart"
+    else
+        log "Istio ingress gateway restarted successfully and all pods are Ready."
+    fi
 }
 
 apply_admin_configs() {
@@ -232,27 +318,43 @@ apply_postgres_cronjob_and_wait() {
     fi
 }
 
+patch_istio_gateway_service() {
+    log "Patching Istio ingressgateway service with VM IP..."
+    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP"
+    
+    local patch='{"spec":{"type":"LoadBalancer","loadBalancerIP":"'${VM_IP}'","externalIPs":["'${VM_IP}'"]}}'
+    
+    if ! retry $MAX_RETRIES "kubectl patch svc istio-ingressgateway -n istio-system --type merge -p '$patch'"; then
+        handle_failure "Failed to patch istio-ingressgateway service"
+    fi
+    
+    log "Istio ingressgateway service patched successfully"
+}
+
 setup_metallb() {
     log "Configuring MetalLB..."
-    local PRIVATE_IP=$(hostname -I | awk '{print $1}')
-    [ -z "$PRIVATE_IP" ] && handle_failure "Failed to get private IP"
-    retry $MAX_RETRIES "microk8s enable metallb:${PRIVATE_IP}/32" || handle_failure "Failed to enable MetalLB"
+    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP"
+    
+    log "Disabling existing MetalLB configuration..."
+    microk8s disable metallb || log "MetalLB was not enabled or failed to disable, continuing..."
+    
+    log "Enabling MetalLB with VM IP: ${VM_IP}/32"
+    retry $MAX_RETRIES "microk8s enable metallb:${VM_IP}/32" || handle_failure "Failed to enable MetalLB"
 }
 
 post_checks() {
     log "Starting post-deployment checks..."
     
-    local METALLB_IP=$(hostname -I | awk '{print $1}')
-    [ -z "$METALLB_IP" ] && handle_failure "Failed to get MetalLB IP for post-checks"
+    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for post-checks"
     
     # Define microservices and their health endpoints
     declare -A MICROSERVICES=(
-        ["keycloak"]="http://${METALLB_IP}:8080/auth/realms/master"
-        ["ui"]="http://${METALLB_IP}:3000/health"
-        ["vault"]="http://${METALLB_IP}:8200/v1/sys/health"
-        ["service1"]="http://${METALLB_IP}:4000/health"
-        ["service2"]="http://${METALLB_IP}:5000/health"
-        ["service3"]="http://${METALLB_IP}:6000/health"
+        ["keycloak"]="http://${VM_IP}:8080/auth/realms/master"
+        ["ui"]="http://${VM_IP}:3000/health"
+        ["vault"]="http://${VM_IP}:8200/v1/sys/health"
+        ["service1"]="http://${VM_IP}:4000/health"
+        ["service2"]="http://${VM_IP}:5000/health"
+        ["service3"]="http://${VM_IP}:6000/health"
     )
     
     # Check each microservice
@@ -290,10 +392,14 @@ main() {
     install_helm_chart
     apply_postgres_cronjob_and_wait
     restart_statefulsets
+    regenerate_istio_certificate
+    patch_jwt_issuer
+    restart_keycloak_and_gateway
     apply_admin_configs
     restart_temporal_deployments
     
     setup_metallb
+    patch_istio_gateway_service
     retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"
     touch /var/lib/boot-microk8s.done
     log "MicroK8s cloud init setup completed successfully"

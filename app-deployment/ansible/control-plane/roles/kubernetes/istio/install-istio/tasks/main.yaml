@@ -53,9 +53,9 @@
   environment:
     KUBECONFIG: "{{ istio_kubeconfig_path }}"
 
-- name: Copy Istio operator config
-  ansible.builtin.copy:
-    src: istio-operator-config.yaml
+- name: Template Istio operator config
+  ansible.builtin.template:
+    src: istio-operator-config.j2
     dest: "{{ istio_tmp_dir }}/istio-operator-config.yaml"
     mode: "0644"
 

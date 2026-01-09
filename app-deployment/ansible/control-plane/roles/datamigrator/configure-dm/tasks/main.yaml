@@ -190,6 +190,47 @@
     kubectl label namespace datamigrator istio-injection=enabled --overwrite
   when: enable_istio | default(false) | bool
 
+- name: Patch Istio ingress gateway to mount TLS certificate volume
+  become: yes
+  vars:
+    istio_secret_name: "{{ istio_gateway.tls.secretName | default('datamigrator-istio-tls') }}"
+  shell: |
+    set -euo pipefail
+    
+    # Add volume to deployment
+    kubectl patch deployment istio-ingressgateway -n istio-system --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/volumes/-",
+        "value": {
+          "name": "datamigrator-certs",
+          "secret": {
+            "secretName": "{{ istio_secret_name }}",
+            "optional": false
+          }
+        }
+      }
+    ]'
+    
+    # Add volume mount to istio-proxy container
+    kubectl patch deployment istio-ingressgateway -n istio-system --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/volumeMounts/-",
+        "value": {
+          "name": "datamigrator-certs",
+          "mountPath": "/etc/istio/datamigrator-certs",
+          "readOnly": true
+        }
+      }
+    ]'
+    
+    # Wait for rollout to complete
+    kubectl rollout status deployment istio-ingressgateway -n istio-system --timeout=300s
+  args:
+    executable: /bin/bash
+  when: enable_istio | default(false) | bool
+
 # ============================================================================
 # Temporal TLS Configuration for External Workers
 # ============================================================================

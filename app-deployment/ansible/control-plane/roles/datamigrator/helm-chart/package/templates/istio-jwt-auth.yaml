@@ -4,11 +4,12 @@
 {{- if and ($istio.enabled | default false) ($jwt.enabled | default false) }}
 ---
 # RequestAuthentication validates JWT tokens from Keycloak
+# MUST be in istio-system namespace to apply to istio-ingressgateway
 apiVersion: security.istio.io/v1
 kind: RequestAuthentication
 metadata:
   name: {{ $jwt.requestAuthenticationName | default "keycloak-jwt" }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $istio.namespace | default "istio-system" }}
 spec:
   {{- if $jwt.selector }}
   selector:

@@ -375,6 +375,9 @@ func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_PASSWORD=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^PROJECT_ID=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^OTEL_COLLECTOR_ENDPOINT=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^TEMPORAL_TLS_ENABLED=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^TEMPORAL_TLS_SERVER_NAME=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^TEMPORAL_JWT_ENABLED=/d' "$ENV_FILE"
 
 
 	echo "Successfully disabled worker service"
