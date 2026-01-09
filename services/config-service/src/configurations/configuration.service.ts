@@ -1382,18 +1382,17 @@ export class ConfigurationService {
               targetPathId: In(volumeIds),
           }]
       })
-      // check if any job config has schedule as SCHEDULING if yes then return false
-      if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
-        const userMessage = `Job scheduling in progress. Please retry shortly.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with SCHEDULING status : ${JSON.stringify(jobConfigs.filter((jc) => jc.scheduler === 'SCHEDULING'))}`;
-        this.logger.warn(logMessage);
-        return { isRefreshAvailable: false, message: userMessage };
-      }
 
-      // check if futureScheduleAt is not null for any job config, if yes then return false
-      if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
-        const userMessage = `Jobs are scheduled for future execution. Please cancel or reschedule these jobs before refreshing.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with futureScheduleAt set: ${JSON.stringify(jobConfigs.filter((jc) => !!jc.futureScheduleAt))}`;
+      // check if firstRunAt is not within next 5 min for any job config, if yes then return false
+      if (jobConfigs.some((jc) => {
+        if (!jc.firstRunAt) return false;
+        const firstRunTime = new Date(jc.firstRunAt.toString());
+        const currentTime = new Date();
+        const fiveMinutesFromNow = new Date(currentTime.getTime() + 5 * 60 * 1000);
+        return firstRunTime >= currentTime && firstRunTime <= fiveMinutesFromNow;
+      })) {
+        const userMessage = `A job is scheduled to run in the next 5 mins. Refresh is disabled until the job runs.`;
+        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with firstRunAt within the next 5 minutes`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }

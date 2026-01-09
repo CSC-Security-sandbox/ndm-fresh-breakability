@@ -3794,9 +3794,8 @@ describe('ConfigurationService', () => {
   });
 
   describe('isRefreshPossible', () => {
-    it('should return false if any job config has scheduler as SCHEDULING', async () => {
+    it('should return false if any job config has firstRunAt within the next five minutes', async () => {
       const configId = 'config-id';
-      const fileServerId = 'file-server-id';
       const mockConfig = [
         {
           id: 'config-id',
@@ -3808,22 +3807,24 @@ describe('ConfigurationService', () => {
           ],
         },
       ];
+      const upcomingRunTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
       jest
         .spyOn(jobConfigRepo, 'find')
         .mockResolvedValue([
-          { scheduler: 'SCHEDULING', id: 'job-config-id' } as any,
+          { id: 'job-config-id', firstRunAt: upcomingRunTime } as any,
         ]);
       const result = await service.isRefreshPossible(configId);
-      expect(result).toEqual({ 
-        isRefreshAvailable: false, 
-        message: 'Job scheduling in progress. Please retry shortly.'
+      expect(result).toEqual({
+        isRefreshAvailable: false,
+        message:
+          'A job is scheduled to run in the next 5 mins. Refresh is disabled until the job runs.',
       });
     });
 
-    it('SHould return false if any job config has job scheduled for future', async () => {
+    it('should allow refresh if future runs are scheduled beyond the five minute window', async () => {
       const configId = 'config-id';
       const mockConfig = [
         {
@@ -3836,22 +3837,18 @@ describe('ConfigurationService', () => {
           ],
         },
       ];
+      const laterRunTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       jest
         .spyOn(mockConfigRepository, 'find')
         .mockResolvedValue(mockConfig as any);
       jest
         .spyOn(jobConfigRepo, 'find')
         .mockResolvedValue([
-          {
-            id: 'job-config-id',
-            futureScheduleAt: '*/5 * * * *',
-          } as any,
+          { id: 'job-config-id', firstRunAt: laterRunTime } as any,
         ]);
+      jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0);
       const result = await service.isRefreshPossible(configId);
-      expect(result).toEqual({ 
-        isRefreshAvailable: false, 
-        message: 'Jobs are scheduled for future execution. Please cancel or reschedule these jobs before refreshing.'
-      });
+      expect(result).toEqual({ isRefreshAvailable: true });
     });
 
     it('Should return true if file server has no volumes', async () => {
@@ -3895,7 +3892,7 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(jobConfigRepo, 'find')
         .mockResolvedValue([
-          { id: 'job-config-id', futureScheduleAt: null } as any,
+          { id: 'job-config-id', firstRunAt: null } as any,
         ]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(1);
       const result = await service.isRefreshPossible(configId);
@@ -3924,7 +3921,7 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(jobConfigRepo, 'find')
         .mockResolvedValue([
-          { id: 'job-config-id', futureScheduleAt: null } as any,
+          { id: 'job-config-id', firstRunAt: null } as any,
         ]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0);
       const result = await service.isRefreshPossible(configId);
