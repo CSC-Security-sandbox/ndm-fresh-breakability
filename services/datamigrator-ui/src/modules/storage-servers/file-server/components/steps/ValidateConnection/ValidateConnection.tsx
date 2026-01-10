@@ -81,7 +81,7 @@ const ValidateConnection = () => {
     if (isDellIsilon && safeSelectedZoneIds.length > 0 && !activeZoneId) {
       setActiveZoneId(safeSelectedZoneIds[0]);
     }
-  }, [isDellIsilon, safeSelectedZoneIds, activeZoneId]);
+  }, [isDellIsilon, safeSelectedZoneIds, activeZoneId, setActiveZoneId]);
 
   // Get zone details with configured protocols
   const selectedZonesWithDetails = useMemo(() => {

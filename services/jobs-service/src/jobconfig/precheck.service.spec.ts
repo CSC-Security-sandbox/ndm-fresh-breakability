@@ -130,7 +130,7 @@ describe('PreCheckService', () => {
     expect(result).toEqual({ workflowId: 'wf1' });
     expect(volumeRepo.find).toHaveBeenCalledWith({
       where: { id: In(['src1', 'dest1']) },
-      relations: { fileServer: { workers: { stats: true } } },
+      relations: { fileServer: { workers: { stats: true }, config: true } },
     });
     expect(workflowService.startWorkflow).toHaveBeenCalled();
   });

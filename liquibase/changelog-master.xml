@@ -512,13 +512,6 @@
          <sqlFile path="liquibase/rollback/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
       </rollback>
    </changeSet>
-
-   <changeSet id="20251216_01_alter_config_and_file_server_table.sql" author="ashish">
-      <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table.sql"/>
-      <rollback>
-         <sqlFile path="liquibase/rollback/20251216_01_alter_config_and_file_server_table_rollback.sql"/>
-      </rollback>
-   </changeSet>
    
    <changeSet id="20251224_01_alter_fileserver_table_add_columns_status_tracking.sql" author="dm">
       <sqlFile path="liquibase/20251224_01_alter_fileserver_table_add_columns_status_tracking.sql"/>
@@ -533,4 +526,12 @@
          <sqlFile path="liquibase/rollback/20251218_01_alter_job_options_table_delete_columns_skip_file_identity_mapping_id.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20251216_01_alter_config_and_file_server_table.sql" author="ashish">
+      <sqlFile path="liquibase/20251216_01_alter_config_and_file_server_table.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/rollback/20251216_01_alter_config_and_file_server_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

@@ -1,11 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
+import { exec } from 'child_process';
 import * as fs from 'fs';
-import { unlinkSync, writeFileSync } from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { join } from 'path';
+import { promisify } from 'util';
 import { AuthService } from 'src/auth/auth.service';
+
+const execAsync = promisify(exec);
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
@@ -236,7 +240,7 @@ export class ValidateWorkingDirectoryActivity {
           this.logger.log(`Working Directory exists: ${fullPath}`);
           isDirectoryValid = true;
 
-          hasWritePermission = this.checkWritable(fullPath);
+          hasWritePermission = await this.checkWritable(fullPath);
 
         } else {
           this.logger.log(`Working Directory does not exist: ${fullPath}`);
@@ -260,11 +264,11 @@ export class ValidateWorkingDirectoryActivity {
     return isDirectoryValid && hasWritePermission;
   }
  
-  checkWritable(directoryPath: string): boolean {
+  async checkWritable(directoryPath: string): Promise<boolean> {
     const testFile = join(directoryPath, '.nfs_write_test');
     try {
-      writeFileSync(testFile, '');
-      unlinkSync(testFile);
+      await fsPromises.writeFile(testFile, '');
+      await fsPromises.unlink(testFile);
       this.logger.log(`Success: Directory ${directoryPath} is writable.`);
       return true;
     } catch (error) {
@@ -317,7 +321,7 @@ export class ValidateWorkingDirectoryActivity {
     // Read current resolv.conf
     let currentContent = '';
     try {
-      currentContent = fs.readFileSync(resolvConfPath, 'utf-8');
+      currentContent = await fsPromises.readFile(resolvConfPath, 'utf-8');
     } catch (readError) {
       this.logger.warn(`[${traceId}] Could not read ${resolvConfPath}: ${readError.message}`);
     }
@@ -358,7 +362,7 @@ export class ValidateWorkingDirectoryActivity {
     
     // Write updated resolv.conf
     const newContent = newLines.join('\n') + '\n';
-    fs.writeFileSync(resolvConfPath, newContent);
+    await fsPromises.writeFile(resolvConfPath, newContent);
     
     this.logger.log(`[${traceId}] Linux: SmartConnect DNS configured successfully`);
   }
@@ -372,22 +376,22 @@ export class ValidateWorkingDirectoryActivity {
     const resolverFile = path.join(resolverDir, dnsZone);
     
     // Check if already configured
-    if (fs.existsSync(resolverFile)) {
-      const content = fs.readFileSync(resolverFile, 'utf-8');
+    try {
+      const content = await fsPromises.readFile(resolverFile, 'utf-8');
       if (content.includes(ssip)) {
         this.logger.log(`[${traceId}] SmartConnect SSIP ${ssip} already configured for ${dnsZone}`);
         return;
       }
+    } catch (err) {
+      // File doesn't exist, continue to create it
     }
     
     // Create resolver directory if it doesn't exist
-    if (!fs.existsSync(resolverDir)) {
-      fs.mkdirSync(resolverDir, { recursive: true });
-    }
+    await fsPromises.mkdir(resolverDir, { recursive: true });
     
     // Create resolver file for the DNS zone
     const resolverContent = `# SmartConnect DNS resolver for Dell Isilon\nnameserver ${ssip}\n`;
-    fs.writeFileSync(resolverFile, resolverContent);
+    await fsPromises.writeFile(resolverFile, resolverContent);
     
     this.logger.log(`[${traceId}] macOS: SmartConnect DNS configured at ${resolverFile}`);
   }
@@ -397,15 +401,11 @@ export class ValidateWorkingDirectoryActivity {
    * Uses Add-DnsClientNrptRule to add a Name Resolution Policy Table rule
    */
   private async configureSmartConnectDnsWindows(traceId: string, ssip: string, dnsZone: string): Promise<void> {
-    const { exec } = require('child_process');
-    const util = require('util');
-    const execPromise = util.promisify(exec);
-    
     // Check if rule already exists
     const checkCmd = `powershell -Command "Get-DnsClientNrptRule | Where-Object { $_.Namespace -eq '.${dnsZone}' }"`;
     
     try {
-      const { stdout } = await execPromise(checkCmd);
+      const { stdout } = await execAsync(checkCmd);
       if (stdout && stdout.trim()) {
         this.logger.log(`[${traceId}] SmartConnect DNS rule already exists for ${dnsZone}`);
         return;
@@ -419,7 +419,7 @@ export class ValidateWorkingDirectoryActivity {
     const addCmd = `powershell -Command "Add-DnsClientNrptRule -Namespace '.${dnsZone}' -NameServers '${ssip}'"`;
     
     try {
-      await execPromise(addCmd);
+      await execAsync(addCmd);
       this.logger.log(`[${traceId}] Windows: SmartConnect DNS NRPT rule added for ${dnsZone} -> ${ssip}`);
     } catch (addError) {
       // Fallback: Try adding to hosts file or using netsh
@@ -428,7 +428,7 @@ export class ValidateWorkingDirectoryActivity {
       // Alternative: Use netsh to set DNS server (requires admin)
       const netshCmd = `netsh interface ip add dns name="Ethernet" addr=${ssip} index=1`;
       try {
-        await execPromise(netshCmd);
+        await execAsync(netshCmd);
         this.logger.log(`[${traceId}] Windows: SmartConnect DNS added via netsh`);
       } catch (netshError) {
         throw new Error(`Could not configure DNS: ${netshError.message}`);

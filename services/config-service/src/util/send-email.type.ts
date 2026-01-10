@@ -13,11 +13,13 @@ export enum SuccessEmailType {
 
 export type CreateConfigurationEmailContent = {
   configName: string;
-  serverType: string;
+  serverType?: string;
   fileServers: {
     host: string;
     protocol: string;
     workerNames: string[];
+    addedWorkers?: string[];
+    removedWorkers?: string[];
   }[];
 };
 

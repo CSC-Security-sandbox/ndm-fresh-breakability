@@ -13,7 +13,6 @@ export enum SuccessEmailType {
 
 export type CreateConfigurationEmailContent = {
   configName: string;
-  serverType: string;
   fileServers: {
     host: string;
     protocol: string;

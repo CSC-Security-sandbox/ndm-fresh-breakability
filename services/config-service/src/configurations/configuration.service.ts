@@ -894,7 +894,6 @@ export class ConfigurationService {
         projectId,
         createConfig: {
           configName: update.configName,
-          serverType: update.serverType,
           fileServers: update.fileServers.map((fs) => ({
             host: fs.host,
             protocol: fs.protocol,

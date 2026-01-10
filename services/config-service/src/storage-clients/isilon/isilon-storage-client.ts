@@ -11,6 +11,9 @@ import {
   SMBShareDTO,
 } from '../../configurations/dto/config.dto';
 
+/** Default Isilon Platform API version to use when version detection fails or for latest OneFS versions */
+const DEFAULT_ISILON_API_VERSION = 14;
+
 /**
  * Dell Isilon/PowerScale storage client implementation
  * Implements storage-specific operations for Isilon systems
@@ -71,8 +74,8 @@ export class IsilonStorageClient extends StorageClient {
       const oneFsVersion = clusterConfig?.onefs_version?.release || clusterConfig?.onefs_version?.version || '';
       
       if (!oneFsVersion) {
-        this.logger.warn(`Could not determine OneFS version from cluster config, defaulting to API v14`);
-        return { oneFsVersion: 'unknown', apiVersion: 14 };
+        this.logger.warn(`Could not determine OneFS version from cluster config, defaulting to API v${DEFAULT_ISILON_API_VERSION}`);
+        return { oneFsVersion: 'unknown', apiVersion: DEFAULT_ISILON_API_VERSION };
       }
 
       this.logger.log(`Detected OneFS version: ${oneFsVersion}`);
@@ -80,8 +83,8 @@ export class IsilonStorageClient extends StorageClient {
       // Parse major, minor, and patch version numbers
       const versionMatch = oneFsVersion.match(/^v?(\d+)\.(\d+)\.(\d+)/i);
       if (!versionMatch) {
-        this.logger.warn(`Could not parse OneFS version '${oneFsVersion}', defaulting to API v14`);
-        return { oneFsVersion, apiVersion: 14 };
+        this.logger.warn(`Could not parse OneFS version '${oneFsVersion}', defaulting to API v${DEFAULT_ISILON_API_VERSION}`);
+        return { oneFsVersion, apiVersion: DEFAULT_ISILON_API_VERSION };
       }
 
       const majorVersion = parseInt(versionMatch[1], 10);
@@ -93,10 +96,10 @@ export class IsilonStorageClient extends StorageClient {
 
       if (majorVersion >= 10) {
         // Future versions - use latest known API
-        apiVersion = 14;
+        apiVersion = DEFAULT_ISILON_API_VERSION;
       } else if (majorVersion === 9) {
         if (minorVersion >= 3) {
-          apiVersion = 14; // 9.3.0.0+
+          apiVersion = DEFAULT_ISILON_API_VERSION; // 9.3.0.0+
         } else if (minorVersion === 2 && patchVersion >= 1) {
           apiVersion = 13; // 9.2.1.0
         } else if (minorVersion === 2) {
@@ -144,8 +147,8 @@ export class IsilonStorageClient extends StorageClient {
       return { oneFsVersion, apiVersion };
     } catch (error) {
       this.logger.error(`Error detecting Isilon version: ${error?.message || 'Unknown error'}`);
-      // Default to v14 if detection fails - most common modern version
-      return { oneFsVersion: 'unknown', apiVersion: 14 };
+      // Default to latest API version if detection fails - most common modern version
+      return { oneFsVersion: 'unknown', apiVersion: DEFAULT_ISILON_API_VERSION };
     }
   }
 
