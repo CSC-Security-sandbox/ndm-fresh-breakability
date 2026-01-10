@@ -2100,7 +2100,6 @@ export class JobConfigService {
       throw new BadRequestException('Invalid jobConfigID format');
     }
 
-    // Verify job config exists
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigID },
     });
@@ -2109,12 +2108,10 @@ export class JobConfigService {
       throw new NotFoundException(`Job config with ID ${jobConfigID} not found`);
     }
 
-    // Only process Migration job configs
     if (jobConfig.jobType !== JobType.MIGRATE) {
       throw new BadRequestException(`Inventory stats are only available for Migration job configs. Current job type: ${jobConfig.jobType}`);
     }
-
-    // Get existing stats record
+    
     let statsEntity = await this.jobConfigInventoryStatsRepo.findOne({
       where: { jobConfigId: jobConfigID },
     });
@@ -2123,26 +2120,20 @@ export class JobConfigService {
     const latestJobRun = await this.jobRunRepo.findOne({
       where: { 
         jobConfigId: jobConfigID,
-        status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored]),
-
+        status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped]),
       },
       order: { endTime: 'DESC' },
     });
-
-    // Check if we need to recalculate
     let needsRecalculation = false;
-    
     if (!statsEntity) {
-      // No stats record exists, need to calculate
       needsRecalculation = true;
     } else if (latestJobRun && latestJobRun.endTime) {
-      // Compare latest jobRun endTime with stats lastUpdatedAt
       if (latestJobRun.endTime > statsEntity.lastUpdatedAt) {
         needsRecalculation = true;
       }
     }
 
-    // If no recalculation needed, return cached results
+    // If no recalculation needed, return already calculated results
     if (!needsRecalculation && statsEntity) {
       return {
         totalUniqueFiles: Number(statsEntity.fileCount),
@@ -2203,15 +2194,13 @@ export class JobConfigService {
       const totalSize = Number(result[0]?.total_size || '0');
       const lastUpdatedAt = new Date();
 
-      // Upsert: Insert or update the stats record
+      // Upsert stats record
       if (statsEntity) {
-        // Update existing record
         statsEntity.fileCount = totalUniqueFiles;
         statsEntity.dirCount = totalUniqueDirectories;
         statsEntity.totalSize = totalSize;
         statsEntity.lastUpdatedAt = lastUpdatedAt;
       } else {
-        // Create new record
         statsEntity = this.jobConfigInventoryStatsRepo.create({
           jobConfigId: jobConfigID,
           fileCount: totalUniqueFiles,

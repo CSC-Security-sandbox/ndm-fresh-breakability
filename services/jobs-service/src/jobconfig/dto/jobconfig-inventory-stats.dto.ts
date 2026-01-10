@@ -17,7 +17,7 @@ export class JobConfigInventoryStatsResponseDto {
   @ApiProperty({ description: 'Total number of unique directories' })
   totalUniqueDirectories: number;
 
-  @ApiProperty({ description: 'Total size of all files in bytes' })
+  @ApiProperty({ description: 'Total size of all files' })
   totalSize: string;
 
   @ApiProperty({ description: 'Last updated timestamp', example: new Date().toISOString() })
