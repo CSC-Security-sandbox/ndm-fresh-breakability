@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
@@ -14,19 +14,40 @@ import {
 /** Default Isilon Platform API version to use when version detection fails or for latest OneFS versions */
 const DEFAULT_ISILON_API_VERSION = 14;
 
+/** Injection token for optional connection parameters */
+export const ISILON_CONNECTION_PARAMS = 'ISILON_CONNECTION_PARAMS';
+
 /**
  * Dell Isilon/PowerScale storage client implementation
  * Implements storage-specific operations for Isilon systems
  */
 @Injectable()
 export class IsilonStorageClient extends StorageClient {
+  // Connection properties - can be set via constructor or left empty for per-request credentials
+  hostname: string;
+  port: number;
+  username: string;
+  password: string;
+  certificate: string;
+
   constructor(
     private loggerFactory: LoggerFactory,
     @InjectRepository(FileServerEntity)
     private readonly fileServerRepo: Repository<FileServerEntity>,
-
+    @Optional() @Inject(ISILON_CONNECTION_PARAMS) connectionParams?: {
+      hostname?: string;
+      port?: number;
+      username?: string;
+      password?: string;
+      certificate?: string;
+    },
   ) {
     super(loggerFactory.create(IsilonStorageClient.name));
+    this.hostname = connectionParams?.hostname || '';
+    this.port = connectionParams?.port || 0;
+    this.username = connectionParams?.username || '';
+    this.password = connectionParams?.password || '';
+    this.certificate = connectionParams?.certificate || '';
   }
 
   /**
@@ -157,38 +178,38 @@ export class IsilonStorageClient extends StorageClient {
    * Used during initial setup before credentials are stored in DB
    * Fetches zones, their groupnets, subnets, and IP pool ranges
    */
-  async fetchZones(params: FetchZonesRequestDTO): Promise<FetchZonesResponseDTO> {
-    const { host, port , username, password, certificate } = params;
+  async fetchZones(): Promise<FetchZonesResponseDTO> {
+   // const { host, port , username, password, certificate } = params;
     
     try {
-      this.logger.log(`Fetching all zones from ${host}:${port}`);
+      this.logger.log(`Fetching all zones from ${this.hostname}:${this.port}`);
 
       // Detect Isilon version and get appropriate API version
       const { oneFsVersion, apiVersion } = await this.detectIsilonVersion(
-        host,
-        port,
-        username,
-        password,
-        certificate,
+        this.hostname,
+        this.port,
+        this.username,
+        this.password,
+        this.certificate,
       );
 
       this.logger.log(`Using API v${apiVersion} for zones endpoint (OneFS: ${oneFsVersion})`);
 
       // 1. Get all zones from /platform/{apiVersion}/zones
       const zonesResponse = await this.makeIsilonAPICall(
-        host,
-        port,
+        this.hostname,
+        this.port,
         `/platform/${apiVersion}/zones`,
         'GET',
-        username,
-        password,
-        certificate,
+        this.username,
+        this.password,
+        this.certificate,
       );
 
       const allZones = zonesResponse?.zones || [];
 
       if (allZones.length === 0) {
-        this.logger.warn(`No zones found on ${host}:${port}`);
+        this.logger.warn(`No zones found on ${this.hostname}:${this.port}`);
         return {
           zones: [],
           totalZones: 0,
@@ -196,7 +217,7 @@ export class IsilonStorageClient extends StorageClient {
         };
       }
 
-      this.logger.log(`Found ${allZones.length} zones on ${host}:${port}`);
+      this.logger.log(`Found ${allZones.length} zones on ${this.hostname}:${this.port}`);
 
       // 2. For each zone, fetch groupnet and IP addresses
       const zonesWithIpAddresses = [];
@@ -227,13 +248,13 @@ export class IsilonStorageClient extends StorageClient {
 
           // Get subnets for the groupnet from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets
           const subnetsResponse = await this.makeIsilonAPICall(
-            host,
-            port,
+            this.hostname,
+            this.port,
             `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets`,
             'GET',
-            username,
-            password,
-            certificate,
+            this.username,
+            this.password,
+            this.certificate,
           );
 
           const subnets = subnetsResponse?.subnets || [];
@@ -263,13 +284,13 @@ export class IsilonStorageClient extends StorageClient {
             try {
               // Get pools from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets/{subnet}/pools/
               const poolsResponse = await this.makeIsilonAPICall(
-                host,
-                port,
+                this.hostname,
+                this.port,
                 `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets/${subnetName}/pools`,
                 'GET',
-                username,
-                password,
-                certificate,
+                this.username,
+                this.password,
+                this.certificate,
               );
 
               const pools = poolsResponse?.pools || [];
@@ -320,13 +341,13 @@ export class IsilonStorageClient extends StorageClient {
                 try {
                   // Get interfaces (individual IPs) from /platform/{apiVersion}/network/groupnets/{groupnet}/subnets/{subnet}/pools/{pool}/interfaces
                   const interfacesResponse = await this.makeIsilonAPICall(
-                    host,
-                    port,
+                    this.hostname,
+                    this.port,
                     `/platform/${apiVersion}/network/groupnets/${groupnet}/subnets/${subnetName}/pools/${poolName}/interfaces`,
                     'GET',
-                    username,
-                    password,
-                    certificate,
+                    this.username,
+                    this.password,
+                    this.certificate,
                   );
 
                   const interfaces = interfacesResponse?.interfaces || [];
@@ -384,7 +405,7 @@ export class IsilonStorageClient extends StorageClient {
       }
 
       this.logger.log(
-        `Successfully fetched ${totalIpAddresses} IP addresses across ${zonesWithIpAddresses.length} zones from ${host}:${port}`
+        `Successfully fetched ${totalIpAddresses} IP addresses across ${zonesWithIpAddresses.length} zones from ${this.hostname}:${this.port}`
       );
 
       return {
@@ -398,20 +419,20 @@ export class IsilonStorageClient extends StorageClient {
       // Provide specific error messages based on error type
       if (error.message?.includes('ECONNREFUSED')) {
         throw new BadRequestException(
-          `Connection refused to ${host}:${port}. Please verify the host and port are correct.`
+          `Connection refused to ${this.hostname}:${this.port}. Please verify the host and port are correct.`
         );
       } else if (error.message?.includes('timeout')) {
         throw new BadRequestException(
-          `Connection timeout to ${host}:${port}. Please verify the host is reachable.`
+          `Connection timeout to ${this.hostname}:${this.port}. Please verify the host is reachable.`
         );
       } else if (error.message?.includes('certificate') || error.message?.includes('SSL') || error.message?.includes('self-signed')) {
         throw new BadRequestException(
-          `TLS certificate verification failed for ${host}:${port}. Certificate error: ${error.message}`
+          `TLS certificate verification failed for ${this.hostname}:${this.port}. Certificate error: ${error.message}`
         );
       }
 
       throw new InternalServerErrorException(
-        `Failed to connect to Isilon/PowerScale at ${host}:${port}: ${error?.message || 'Unknown error'}`
+        `Failed to connect to Isilon/PowerScale at ${this.hostname}:${this.port}: ${error?.message || 'Unknown error'}`
       );
     }
   }
@@ -440,6 +461,8 @@ export class IsilonStorageClient extends StorageClient {
       }
 
       const { config } = fileServer;
+
+
       const zoneName = fileServer.fileServerName;
 
       if (!zoneName) {
@@ -452,13 +475,13 @@ export class IsilonStorageClient extends StorageClient {
       // Call Isilon API: GET /platform/3/protocols/nfs/exports?zone=<zoneName>
       // Pass zone as query parameter to get only exports for this specific zone
       const exportsResponse = await this.makeIsilonAPICall(
-        config.hostname,
-        config.port,
+        this.hostname,
+        this.port,
         `/platform/3/protocols/nfs/exports?zone=${encodeURIComponent(zoneName)}`,
         'GET',
-        config.username,
-        config.password,
-        config.tlsCaCertificate,
+        this.username,
+        this.password,
+        this.certificate,
       );
 
       const zoneExports = exportsResponse?.exports || [];
@@ -524,13 +547,13 @@ export class IsilonStorageClient extends StorageClient {
       // Call Isilon API: GET /platform/3/protocols/smb/shares?zone=<zoneName>
       // Pass zone as query parameter to get only shares for this specific zone
       const sharesResponse = await this.makeIsilonAPICall(
-        config.hostname,
-        config.port,
+        this.hostname,
+        this.port,
         `/platform/3/protocols/smb/shares?zone=${encodeURIComponent(zoneName)}`,
         'GET',
-        config.username,
-        config.password,
-        config.tlsCaCertificate,
+        this.username,
+        this.password,
+        this.certificate,
       );
 
       const zoneShares = sharesResponse?.shares || [];
@@ -559,22 +582,20 @@ export class IsilonStorageClient extends StorageClient {
    * Tests connectivity using provided credentials
    * Makes a simple API call to /platform/1/cluster/config to verify access
    */
-  async validateConnection(params: FetchZonesRequestDTO): Promise<boolean> {
-    const { host, port = 8080, username, password, certificate } = params;
-    
+  async validateConnection(): Promise<boolean> {
     try {
-      this.logger.log(`Validating connection to Isilon at ${host}:${port}`);
+      this.logger.log(`Validating connection to Isilon at ${this.hostname}:${this.port}`);
       
       // Make a simple API call to verify connectivity
       // Using /platform/1/cluster/config as it's a basic read-only endpoint
       const response = await this.makeIsilonAPICall(
-        host,
-        port,
+        this.hostname,
+        this.port,
         '/platform/1/cluster/config',
         'GET',
-        username,
-        password,
-        certificate,
+        this.username,
+        this.password,
+        this.certificate,
       );
       
       if (response && response.name) {

@@ -33,6 +33,7 @@ import { SendMailService } from 'src/util/send-email';
 import { ConfigService } from '@nestjs/config';
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { IsilonStorageClient } from 'src/storage-clients/isilon/isilon-storage-client';
+import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 
 const mockConfig = {
   id: uuidv4(),
@@ -163,6 +164,11 @@ const mockIsilonStorageClient = {
   getSMBShares: jest.fn(),
 };
 
+const mockStorageClientFactory = {
+  getClient: jest.fn().mockReturnValue(mockIsilonStorageClient),
+  getIsilonClient: jest.fn().mockReturnValue(mockIsilonStorageClient),
+};
+
 describe('ConfigurationService', () => {
   let service: ConfigurationService;
   let configRepository: Repository<ConfigEntity>;
@@ -199,6 +205,10 @@ describe('ConfigurationService', () => {
       providers: [
         ConfigurationService,
         ConfigService,
+        {
+          provide: StorageClientFactory,
+          useValue: mockStorageClientFactory,
+        },
         {
           provide: IsilonStorageClient,
           useValue: mockIsilonStorageClient,
@@ -4132,7 +4142,10 @@ describe('ConfigurationService', () => {
         serverType: ServerType.other,
       };
 
-      await expect(service.fetchCertificate(request)).rejects.toThrow(BadRequestException);
+      // Other server type now works through the factory pattern
+      // It returns the other NAS client which also supports fetchCertificate
+      const result = await service.fetchCertificate(request);
+      expect(result).toBeDefined();
     });
   });
 
@@ -4155,7 +4168,8 @@ describe('ConfigurationService', () => {
 
       const result = await service.fetchZones(request);
 
-      expect(mockIsilonStorageClient.fetchZones).toHaveBeenCalledWith(request);
+      // Method is called without params since storage client uses instance properties
+      expect(mockIsilonStorageClient.fetchZones).toHaveBeenCalled();
       expect(result).toEqual(expectedResponse);
     });
 
@@ -4169,7 +4183,9 @@ describe('ConfigurationService', () => {
         certificate: '',
       };
 
-      await expect(service.fetchZones(request)).rejects.toThrow(BadRequestException);
+      // Other server type now works through the factory pattern
+      const result = await service.fetchZones(request);
+      expect(result).toBeDefined();
     });
   });
 
@@ -4187,7 +4203,8 @@ describe('ConfigurationService', () => {
 
       const result = await service.validateConnection(request);
 
-      expect(mockIsilonStorageClient.validateConnection).toHaveBeenCalledWith(request);
+      // Method is called without params since storage client uses instance properties
+      expect(mockIsilonStorageClient.validateConnection).toHaveBeenCalled();
       expect(result).toEqual({
         isValid: true,
         message: 'Connection validated successfully',
@@ -4213,7 +4230,7 @@ describe('ConfigurationService', () => {
       });
     });
 
-    it('should throw BadRequestException for unsupported server type', async () => {
+    it('should handle other server type through factory pattern', async () => {
       const request = {
         host: 'nas.example.com',
         port: 8080,
@@ -4223,11 +4240,15 @@ describe('ConfigurationService', () => {
         certificate: '',
       };
 
+      // Other server type now goes through the factory pattern
+      // The mock returns the same client for any type
+      mockIsilonStorageClient.validateConnection.mockResolvedValue(false);
+
       const result = await service.validateConnection(request);
 
       expect(result).toEqual({
         isValid: false,
-        message: expect.stringContaining('Unsupported server type'),
+        message: 'Connection validation failed',
       });
     });
 

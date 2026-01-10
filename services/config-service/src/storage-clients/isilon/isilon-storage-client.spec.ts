@@ -430,6 +430,13 @@ describe('IsilonStorageClient', () => {
     };
 
     beforeEach(() => {
+      // Set instance properties for fetchZones tests
+      service.hostname = mockParams.host;
+      service.port = mockParams.port;
+      service.username = mockParams.username;
+      service.password = mockParams.password;
+      service.certificate = mockParams.certificate;
+      
       // Mock detectIsilonVersion for all fetchZones tests
       jest.spyOn(service, 'detectIsilonVersion').mockResolvedValue({
         oneFsVersion: '9.4.0.0',
@@ -481,7 +488,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockPoolsResponse) // pools for subnet
         .mockResolvedValueOnce(mockInterfacesResponse); // interfaces for pool
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result).toBeDefined();
       expect(result.zones).toHaveLength(2);
@@ -492,7 +499,7 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce({ zones: [] });
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toEqual([]);
       expect(result.totalZones).toBe(0);
@@ -509,7 +516,7 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce(mockZonesResponse);
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].zoneName).toBe('NoGroupnetZone');
@@ -520,28 +527,28 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValue(new Error('ECONNREFUSED'));
 
-      await expect(service.fetchZones(mockParams)).rejects.toThrow(BadRequestException);
+      await expect(service.fetchZones()).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException for timeout', async () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValue(new Error('Connection timeout'));
 
-      await expect(service.fetchZones(mockParams)).rejects.toThrow(BadRequestException);
+      await expect(service.fetchZones()).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException for certificate errors', async () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValue(new Error('self-signed certificate'));
 
-      await expect(service.fetchZones(mockParams)).rejects.toThrow(BadRequestException);
+      await expect(service.fetchZones()).rejects.toThrow(BadRequestException);
     });
 
     it('should throw InternalServerErrorException for unknown errors', async () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValueOnce(new Error('Unknown error'));
 
-      await expect(service.fetchZones(mockParams)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.fetchZones()).rejects.toThrow(InternalServerErrorException);
     });
 
     it('should handle subnet fetch failures gracefully', async () => {
@@ -555,7 +562,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockZonesResponse)
         .mockResolvedValueOnce({ subnets: [] }); // Empty subnets
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].ipAddresses).toEqual([]);
@@ -582,7 +589,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockPoolsResponse)
         .mockRejectedValueOnce(new Error('Interface fetch failed')); // interfaces error
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].zoneName).toBe('zone1');
@@ -605,7 +612,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockSubnetsResponse)
         .mockRejectedValueOnce(new Error('Pool fetch failed')); // pools error
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].zoneName).toBe('zone1');
@@ -624,7 +631,7 @@ describe('IsilonStorageClient', () => {
         .mockRejectedValueOnce(new Error('Zone processing failed')) // error for zone1
         .mockResolvedValueOnce({ subnets: [] }); // zone2 succeeds with empty subnets
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(2);
       expect(result.zones[0].zoneName).toBe('zone1');
@@ -669,7 +676,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockPoolsResponse)
         .mockResolvedValueOnce(mockInterfacesResponse);
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].smartConnectFqdn).toBe('smartconnect.example.com');
@@ -698,7 +705,7 @@ describe('IsilonStorageClient', () => {
         .mockResolvedValueOnce(mockSubnetsResponse)
         .mockResolvedValueOnce(mockPoolsResponse);
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toHaveLength(1);
       expect(result.zones[0].ipAddresses).toEqual([]);
@@ -708,7 +715,7 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValue(new Error('SSL connection failed'));
 
-      await expect(service.fetchZones(mockParams)).rejects.toThrow(BadRequestException);
+      await expect(service.fetchZones()).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -973,7 +980,7 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce(mockResponse);
 
-      const result = await service.validateConnection(mockParams);
+      const result = await service.validateConnection();
 
       expect(result).toBe(true);
     });
@@ -982,7 +989,7 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce({ guid: 'cluster-guid' });
 
-      const result = await service.validateConnection(mockParams);
+      const result = await service.validateConnection();
 
       expect(result).toBe(false);
     });
@@ -991,29 +998,29 @@ describe('IsilonStorageClient', () => {
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockRejectedValueOnce(new Error('Connection failed'));
 
-      const result = await service.validateConnection(mockParams);
+      const result = await service.validateConnection();
 
       expect(result).toBe(false);
     });
 
-    it('should use default port 8080 when not provided', async () => {
-      const paramsWithoutPort = {
-        host: 'isilon.example.com',
-        username: 'admin',
-        password: 'password123',
-        certificate: 'cert',
-        serverType: ServerType.dell,
-      };
+    it('should use port value from instance property', async () => {
+      // Set hostname and port
+      service.hostname = 'isilon.example.com';
+      service.port = 0;
+      service.username = 'admin';
+      service.password = 'password123';
+      service.certificate = 'cert';
 
       const mockResponse = { name: 'cluster' };
       const makeApiCallSpy = jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce(mockResponse);
 
-      await service.validateConnection(paramsWithoutPort);
+      await service.validateConnection();
 
+      // Port uses the instance value (0 in this case)
       expect(makeApiCallSpy).toHaveBeenCalledWith(
         'isilon.example.com',
-        8080,
+        0,
         '/platform/1/cluster/config',
         'GET',
         'admin',
@@ -1034,39 +1041,35 @@ describe('IsilonStorageClient', () => {
     });
 
     it('should handle successful API response', async () => {
-      const mockParams = {
-        host: 'isilon.example.com',
-        port: 8080,
-        username: 'admin',
-        password: 'password',
-        certificate: 'cert',
-        serverType: ServerType.dell,
-      };
+      // Set instance properties
+      service.hostname = 'isilon.example.com';
+      service.port = 8080;
+      service.username = 'admin';
+      service.password = 'password';
+      service.certificate = 'cert';
 
       // Mock zones response
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce({ zones: [] });
 
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
 
       expect(result.zones).toEqual([]);
     });
 
     it('should include certificate in PEM format', async () => {
-      const mockParams = {
-        host: 'isilon.example.com',
-        port: 8080,
-        username: 'admin',
-        password: 'password',
-        certificate: 'MIIC...', // Certificate without PEM headers
-        serverType: ServerType.dell,
-      };
+      // Set instance properties
+      service.hostname = 'isilon.example.com';
+      service.port = 8080;
+      service.username = 'admin';
+      service.password = 'password';
+      service.certificate = 'MIIC...'; // Certificate without PEM headers
 
       jest.spyOn(service as any, 'makeIsilonAPICall')
         .mockResolvedValueOnce({ zones: [] });
 
       // This verifies the method handles non-PEM formatted certificates
-      const result = await service.fetchZones(mockParams);
+      const result = await service.fetchZones();
       expect(result).toBeDefined();
     });
   });

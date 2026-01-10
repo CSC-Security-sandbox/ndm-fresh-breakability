@@ -8,11 +8,16 @@ jest.mock('tls');
 
 // Concrete implementation of abstract StorageClient for testing
 class TestStorageClient extends StorageClient {
+  hostname = 'test.example.com';
+  port = 8080;
+  username = 'testuser';
+  password = 'testpass';
+  
   constructor(logger: LoggerService) {
     super(logger);
   }
 
-  async fetchZones(params: any): Promise<any> {
+  async fetchZones(): Promise<any> {
     return { zones: [] };
   }
 
@@ -24,7 +29,7 @@ class TestStorageClient extends StorageClient {
     return [];
   }
 
-  async validateConnection(params: any): Promise<boolean> {
+  async validateConnection(): Promise<boolean> {
     return true;
   }
 
@@ -540,7 +545,7 @@ describe('StorageClient', () => {
 
   describe('abstract methods', () => {
     it('should have fetchZones implementation', async () => {
-      const result = await storageClient.fetchZones({});
+      const result = await storageClient.fetchZones();
       expect(result).toEqual({ zones: [] });
     });
 
@@ -555,7 +560,7 @@ describe('StorageClient', () => {
     });
 
     it('should have validateConnection implementation', async () => {
-      const result = await storageClient.validateConnection({});
+      const result = await storageClient.validateConnection();
       expect(result).toBe(true);
     });
   });
