@@ -22,7 +22,6 @@ import {
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { ConfigEntity } from 'src/entities/config.entity';
-
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { CreateRequestDto } from './dto/validate-connection.dto';
@@ -206,9 +205,9 @@ export class WorkManagerService {
         `Received validateWorkingDirectory callback: configId=${data.configId}, fileServerId=${data.fileServerId}, status=${data.status}`,
       );
 
-      // Check if this is a Dell per-zone callback (fileServerId present)
+      // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
       if (data.fileServerId) {
-        // Dell: Update file server status first
+        // Dell: Update file server status and aggregate config status in one save
         this.logger.log(`Dell per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
         
         const config = await this.configRepo.findOne({
@@ -217,14 +216,34 @@ export class WorkManagerService {
         });
         
         if (config) {
+          // Update the specific file server status
           const fileServer = config.fileServers.find(fs => fs.id === data.fileServerId);
           if (fileServer) {
             fileServer.status = data.status;
-            await this.configRepo.save(config);
           }
-          
-          // Then aggregate to config level
-          await this.aggregateDellConfigStatus(config);
+          // Aggregate config status from all file servers
+          const hasDraft = config.fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
+          const hasErrored = config.fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
+          const allActive = config.fileServers.every(fs => fs.status === ConfigStatus.ACTIVE);
+
+          if (hasDraft) {
+            config.status = ConfigStatus.DRAFT;
+            config.errorMessage = 'One or more zones have no workers assigned';
+          } else if (hasErrored) {
+            config.status = ConfigStatus.ERRORED;
+            config.errorMessage = 'One or more zones failed validation';
+          } else if (allActive) {
+            config.status = ConfigStatus.ACTIVE;
+            config.errorMessage = null;
+          } else {
+            config.status = ConfigStatus.IN_PROGRESS;
+            config.errorMessage = null;
+          }
+          this.logger.log(
+            `Dell config ${config.id}: Aggregated status = ${config.status} (${config.fileServers.length} file servers)`,
+          );
+          // Single save for both file server and config updates
+          await this.configRepo.save(config);
         }
       } else {
         // Other NAS: Update config status directly
@@ -249,57 +268,6 @@ export class WorkManagerService {
       this.logger.error(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
       );
-    }
-  }
-
-  /**
-   * Aggregate Dell config status from all file server statuses
-   * Priority order:
-   * 1. DRAFT if any file server is DRAFT (no workers assigned)
-   * 2. ERRORED if any file server is ERRORED
-   * 3. ACTIVE if all file servers are ACTIVE
-   * 4. IN_PROGRESS otherwise
-   */
-  private async aggregateDellConfigStatus(config: ConfigEntity) {
-    try {
-      if (!config.fileServers || config.fileServers.length === 0) {
-        this.logger.warn(`No file servers found for config ${config.id}`);
-        return;
-      }
-      
-      const fileServers = config.fileServers;
-
-      let aggregatedStatus: ConfigStatus;
-      let errorMessage: string | null = null;
-
-      const hasDraft = fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
-      const hasErrored = fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
-      const allActive = fileServers.every(fs => fs.status === ConfigStatus.ACTIVE);
-
-      if (hasDraft) {
-        aggregatedStatus = ConfigStatus.DRAFT;
-        errorMessage = 'One or more zones have no workers assigned';
-      } else if (hasErrored) {
-        aggregatedStatus = ConfigStatus.ERRORED;
-        errorMessage = 'One or more zones failed validation';
-      } else if (allActive) {
-        aggregatedStatus = ConfigStatus.ACTIVE;
-        errorMessage = null;
-      } else {
-        aggregatedStatus = ConfigStatus.IN_PROGRESS;
-        errorMessage = null;
-      }
-
-      this.logger.log(
-        `Dell config ${config.id}: Aggregated status = ${aggregatedStatus} (${fileServers.length} file servers, hasDraft=${hasDraft}, hasErrored=${hasErrored}, allActive=${allActive})`,
-      );
-
-      // Update config status
-      config.status = aggregatedStatus;
-      config.errorMessage = errorMessage;
-      await this.configRepo.save(config);
-    } catch (error) {
-      this.logger.error(`Error aggregating Dell config status: ${error.message}`);
     }
   }
 
