@@ -48,7 +48,6 @@ describe('ConfigurationController', () => {
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
-//on finish check here
   describe('createConfiguration', () => {
     it('should create a new configuration', async () => {
       const createConfigDTO: ConfigDTO = {

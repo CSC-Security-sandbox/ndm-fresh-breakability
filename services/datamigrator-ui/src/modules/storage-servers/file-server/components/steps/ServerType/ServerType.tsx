@@ -53,7 +53,7 @@ const ServerType = () => {
         }).unwrap();
         goToNextStep();
       } catch (err: any) {
-        console.log(err?.data?.message || "File Server creation error");
+        console.error(err?.data?.message || "File Server creation error");
         notify.error("File Server Name already exists.");
       }
     } else {
