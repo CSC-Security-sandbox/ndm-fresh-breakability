@@ -626,6 +626,7 @@
 #         echo ""
 #         echo "Multi-cloud deployment process completed!"
 
+
 name: Azure VHD Export & SAS URL Generation
 
 on:
@@ -673,7 +674,7 @@ jobs:
     steps:
       - name: Install SSH Tools
         run: |
-          sudo apt-get update -qq
+          # sudo apt-get update -qq
           sudo apt-get install -y sshpass openssh-client
 
       - name: Add VM SSH Host Key to known_hosts
@@ -743,6 +744,18 @@ jobs:
             exit 1
           fi
 
+      - name: Extract Branch Name
+        id: branch-info
+        run: |
+          # Extract branch name from github.ref
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
+          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          # Limit length to 30 chars for practical blob naming
+          BRANCH_SUFFIX="${BRANCH_SUFFIX:0:30}"
+          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
+          echo "Branch suffix for blob naming: $BRANCH_SUFFIX"
+
       - name: SSH into VM and Export VHDs
         run: |
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
@@ -758,8 +771,10 @@ jobs:
           export WINDOWS_INSTALLER_NAME="${{ env.WINDOWS_INSTALLER_NAME }}"
           export IMAGE_SIGNING_MOUNT="${{ env.IMAGE_SIGNING_MOUNT }}"
           export TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          export BRANCH_SUFFIX="${{ steps.branch-info.outputs.branch_suffix }}"
           
           echo "Starting VHD export - Timestamp: $TIMESTAMP"
+          echo "Branch suffix: $BRANCH_SUFFIX"
           echo "SAS Duration: ${SAS_DURATION_HOURS} hours"  
           
           # Get storage account key (using sudo for root's Azure CLI auth)
@@ -817,7 +832,7 @@ jobs:
             
             sudo az storage blob copy start \
               --source-uri "$DISK_SAS" \
-              --destination-blob "${blob_name}-${TIMESTAMP}.vhd" \
+              --destination-blob "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
               --destination-container "$SOURCE_CONTAINER_NAME" \
               --account-name "$SOURCE_STORAGE_ACCOUNT" \
               --account-key "$STORAGE_KEY" \
@@ -832,7 +847,7 @@ jobs:
               STATUS=$(sudo az storage blob show \
                 --account-name "$SOURCE_STORAGE_ACCOUNT" \
                 --container-name "$SOURCE_CONTAINER_NAME" \
-                --name "${blob_name}-${TIMESTAMP}.vhd" \
+                --name "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
                 --query "properties.copy.status" -o tsv \
                 --account-key "$STORAGE_KEY" 2>/dev/null)
               
@@ -871,9 +886,10 @@ jobs:
           VHD Export - $TIMESTAMP
           Account: $SOURCE_STORAGE_ACCOUNT
           Container: $SOURCE_CONTAINER_NAME
-          Worker Blob: worker-${TIMESTAMP}.vhd
-          Control Plane Blob: controlplane-${TIMESTAMP}.vhd
-          Checksum File: AZURE_Images_SHA256SUMS-${TIMESTAMP}.sha256
+          Branch: $BRANCH_SUFFIX
+          Worker Blob: worker-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd
+          Control Plane Blob: controlplane-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd
+          Checksum File: AZURE_Images_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256
           EOF
           
           # Upload Windows installer to blob storage if specified
@@ -883,8 +899,8 @@ jobs:
             INSTALLER_SOURCE="$HOME/installer-upload/${WINDOWS_INSTALLER_NAME}.exe"
             if [ -f "$INSTALLER_SOURCE" ]; then
               echo "Uploading Windows installer to blob storage..."
-              INSTALLER_BLOB_NAME="${WINDOWS_INSTALLER_NAME}.exe"
-              
+              INSTALLER_BLOB_NAME="${WINDOWS_INSTALLER_NAME}-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
+
               sudo az storage blob upload \
                 --account-name "$SOURCE_STORAGE_ACCOUNT" \
                 --account-key "$STORAGE_KEY" \
@@ -979,14 +995,14 @@ jobs:
           cd /mnt/azureblob
           
           # Create checksum file with all artifacts (include timestamp to prevent overwrites)
-          CHECKSUM_FILE="AZURE_Images_SHA256SUMS-${TIMESTAMP}.sha256"
+          CHECKSUM_FILE="AZURE_Images_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256"
           
           # Generate checksums for VHDs
           echo "Generating checksum for control plane VHD..."
-          sha256sum controlplane-${TIMESTAMP}.vhd > ~/${CHECKSUM_FILE}
+          sha256sum controlplane-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd > ~/${CHECKSUM_FILE}
           
           echo "Generating checksum for worker VHD..."
-          sha256sum worker-${TIMESTAMP}.vhd >> ~/${CHECKSUM_FILE}
+          sha256sum worker-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd >> ~/${CHECKSUM_FILE}
           
           # Add Windows installer checksum if it was uploaded
           if [ -n "$INSTALLER_BLOB_NAME" ] && [ -f "/mnt/azureblob/$INSTALLER_BLOB_NAME" ]; then
@@ -1145,7 +1161,7 @@ jobs:
     steps:
       - name: Install SSH Tools
         run: |
-          sudo apt-get update -qq
+          # sudo apt-get update -qq
           sudo apt-get install -y sshpass openssh-client
 
       - name: Cleanup Remote VM Files
