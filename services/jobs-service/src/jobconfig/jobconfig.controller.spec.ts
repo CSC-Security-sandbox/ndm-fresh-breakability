@@ -52,6 +52,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
@@ -89,6 +90,7 @@ describe("JobConfigController", () => {
     updateJobIdentityMappings: jest.fn(),
     getIdentityMappingsForJob: jest.fn(),
     deleteIdentityMappingsForJob: jest.fn(),
+    getJobConfigInventoryStats: jest.fn(),
   };
 
   const mockJwtService = {
@@ -1173,6 +1175,194 @@ describe("JobConfigController", () => {
           status: 'success',
         },
       ]);
+    });
+  });
+
+  describe('getJobConfigInventoryStats', () => {
+    const validJobConfigId = '123e4567-e89b-12d3-a456-426614174000';
+    const mockInventoryStatsResponse: JobConfigInventoryStatsResponseDto = {
+      totalUniqueFiles: 150,
+      totalUniqueDirectories: 75,
+      totalSize: '2.00 MiB',
+      lastUpdatedAt: new Date('2024-01-15T10:00:00Z'),
+    };
+
+    it('should return inventory statistics successfully', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockResolvedValue(
+        mockInventoryStatsResponse,
+      );
+
+      const result = await controller.getJobConfigInventoryStats(request);
+
+      expect(result).toEqual(mockInventoryStatsResponse);
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw BadRequestException for invalid UUID format', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: 'invalid-uuid-format',
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        new BadRequestException('Invalid jobConfigID format'),
+      );
+
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow('Invalid jobConfigID format');
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        'invalid-uuid-format',
+      );
+    });
+
+    it('should throw NotFoundException when job config does not exist', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        new NotFoundException(
+          `Job config with ID ${validJobConfigId} not found`,
+        ),
+      );
+
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(`Job config with ID ${validJobConfigId} not found`);
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
+    });
+
+    it('should throw BadRequestException when job type is not MIGRATE', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        new BadRequestException(
+          'Inventory stats are only available for Migration job configs. Current job type: DISCOVER',
+        ),
+      );
+
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(
+        'Inventory stats are only available for Migration job configs',
+      );
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
+    });
+
+    it('should throw HttpException for internal server errors', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      const error = new HttpException(
+        {
+          status: 'failed',
+          message: 'Database connection failed',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error);
+
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(HttpException);
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
+    });
+
+    it('should handle empty request body gracefully', async () => {
+      const request = {} as JobConfigInventoryStatsRequestDto;
+
+      // The validation will happen at the DTO level, but we test service call
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        new BadRequestException('Invalid jobConfigID format'),
+      );
+
+      await expect(
+        controller.getJobConfigInventoryStats(request),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return cached inventory stats when available', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      const cachedStats: JobConfigInventoryStatsResponseDto = {
+        totalUniqueFiles: 200,
+        totalUniqueDirectories: 100,
+        totalSize: '3.50 MiB',
+        lastUpdatedAt: new Date('2024-01-14T08:00:00Z'),
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockResolvedValue(
+        cachedStats,
+      );
+
+      const result = await controller.getJobConfigInventoryStats(request);
+
+      expect(result).toEqual(cachedStats);
+      expect(result.totalUniqueFiles).toBe(200);
+      expect(result.totalUniqueDirectories).toBe(100);
+      expect(result.totalSize).toBe('3.50 MiB');
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
+    });
+
+    it('should handle recalculated inventory stats', async () => {
+      const request: JobConfigInventoryStatsRequestDto = {
+        jobConfigID: validJobConfigId,
+      };
+
+      const recalculatedStats: JobConfigInventoryStatsResponseDto = {
+        totalUniqueFiles: 300,
+        totalUniqueDirectories: 150,
+        totalSize: '5.25 MiB',
+        lastUpdatedAt: new Date('2024-01-15T12:00:00Z'),
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockResolvedValue(
+        recalculatedStats,
+      );
+
+      const result = await controller.getJobConfigInventoryStats(request);
+
+      expect(result).toEqual(recalculatedStats);
+      expect(result.totalUniqueFiles).toBe(300);
+      expect(result.totalUniqueDirectories).toBe(150);
+      expect(result.lastUpdatedAt).toBeInstanceOf(Date);
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+      );
     });
   });
 });

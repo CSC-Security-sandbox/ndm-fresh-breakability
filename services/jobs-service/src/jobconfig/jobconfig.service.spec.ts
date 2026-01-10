@@ -57,6 +57,8 @@ import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
+import { DataSource } from "typeorm";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -92,6 +94,8 @@ describe("JobConfigService", () => {
   let workFlowService: WorkflowService;
   let sendMailService: SendMailService;
   let jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>;
+  let jobConfigInventoryStatsRepo: Repository<JobConfigInventoryStatsEntity>;
+  let dataSource: DataSource;
 
   let workerJobRunMapRepo: Repository<WorkerJobRunMap>;
 
@@ -353,6 +357,24 @@ describe("JobConfigService", () => {
           },
 
         },
+        {
+          provide: getRepositoryToken(JobConfigInventoryStatsEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -416,6 +438,12 @@ describe("JobConfigService", () => {
     jobStatsSummaryMvRepo = module.get<Repository<JobStatsSummaryMvEntity>>(
       getRepositoryToken(JobStatsSummaryMvEntity)
     );
+
+    jobConfigInventoryStatsRepo = module.get<Repository<JobConfigInventoryStatsEntity>>(
+      getRepositoryToken(JobConfigInventoryStatsEntity)
+    );
+
+    dataSource = module.get<DataSource>(DataSource);
 
     workerJobRunMapRepo = module.get<Repository<WorkerJobRunMap>>(
       getRepositoryToken(WorkerJobRunMap)
@@ -4999,6 +5027,454 @@ describe("JobConfigService", () => {
       await expect(service.deleteIdentityMappingsForJob(jobConfigId)).rejects.toThrow(
         HttpException
       );
+    });
+  });
+
+  describe('getJobConfigInventoryStats', () => {
+    const validJobConfigId = '123e4567-e89b-12d3-a456-426614174000';
+    const mockJobConfig = {
+      id: validJobConfigId,
+      jobType: JobType.MIGRATE,
+      status: JobStatus.Active,
+    };
+
+    beforeEach(() => {
+      // Set default environment variable
+      process.env.SCHEMA = 'public';
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should throw BadRequestException for invalid UUID format', async () => {
+      const invalidJobConfigId = 'invalid-uuid';
+
+      await expect(
+        service.getJobConfigInventoryStats(invalidJobConfigId)
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getJobConfigInventoryStats(invalidJobConfigId)
+      ).rejects.toThrow('Invalid jobConfigID format');
+    });
+
+    it('should throw NotFoundException when job config does not exist', async () => {
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow(`Job config with ID ${validJobConfigId} not found`);
+
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
+        where: { id: validJobConfigId },
+      });
+    });
+
+    it('should throw BadRequestException when job type is not MIGRATE', async () => {
+      const discoveryJobConfig = {
+        ...mockJobConfig,
+        jobType: JobType.DISCOVER,
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(discoveryJobConfig as any);
+
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow('Inventory stats are only available for Migration job configs');
+    });
+
+    it('should return cached stats when no recalculation is needed', async () => {
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 100,
+        dirCount: 50,
+        totalSize: 1024000,
+        lastUpdatedAt: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T09:00:00Z'), // Older than stats
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 100,
+        totalUniqueDirectories: 50,
+        totalSize: formatBytes(1024000),
+        lastUpdatedAt: mockStatsEntity.lastUpdatedAt,
+      });
+
+      expect(jobConfigInventoryStatsRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId: validJobConfigId },
+      });
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('should recalculate stats when no stats entity exists', async () => {
+      const mockQueryResult = [
+        {
+          total_unique_files: '150',
+          total_unique_directories: '75',
+          total_size: '2048000',
+        },
+      ];
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'create').mockReturnValue({
+        jobConfigId: validJobConfigId,
+        fileCount: 150,
+        dirCount: 75,
+        totalSize: 2048000,
+        lastUpdatedAt: expect.any(Date),
+      } as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        id: 'new-stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 150,
+        dirCount: 75,
+        totalSize: 2048000,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 150,
+        totalUniqueDirectories: 75,
+        totalSize: formatBytes(2048000),
+        lastUpdatedAt: expect.any(Date),
+      });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('WITH all_related_jobs AS'),
+        [validJobConfigId]
+      );
+      expect(jobConfigInventoryStatsRepo.create).toHaveBeenCalledWith({
+        jobConfigId: validJobConfigId,
+        fileCount: 150,
+        dirCount: 75,
+        totalSize: 2048000,
+        lastUpdatedAt: expect.any(Date),
+      });
+      expect(jobConfigInventoryStatsRepo.save).toHaveBeenCalled();
+    });
+
+    it('should recalculate stats when latest jobRun is newer than stats', async () => {
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 100,
+        dirCount: 50,
+        totalSize: 1024000,
+        lastUpdatedAt: new Date('2024-01-15T09:00:00Z'),
+      };
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'), // Newer than stats
+      };
+
+      const mockQueryResult = [
+        {
+          total_unique_files: '200',
+          total_unique_directories: '100',
+          total_size: '3072000',
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        ...mockStatsEntity,
+        fileCount: 200,
+        dirCount: 100,
+        totalSize: 3072000,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 200,
+        totalUniqueDirectories: 100,
+        totalSize: formatBytes(3072000),
+        lastUpdatedAt: expect.any(Date),
+      });
+
+      expect(dataSource.query).toHaveBeenCalled();
+      expect(jobConfigInventoryStatsRepo.save).toHaveBeenCalled();
+    });
+
+    it('should update existing stats entity when recalculating', async () => {
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 100,
+        dirCount: 50,
+        totalSize: 1024000,
+        lastUpdatedAt: new Date('2024-01-15T09:00:00Z'),
+      };
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      const mockQueryResult = [
+        {
+          total_unique_files: '250',
+          total_unique_directories: '125',
+          total_size: '4096000',
+        },
+      ];
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        ...mockStatsEntity,
+        fileCount: 250,
+        dirCount: 125,
+        totalSize: 4096000,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result.totalUniqueFiles).toBe(250);
+      expect(result.totalUniqueDirectories).toBe(125);
+      expect(result.totalSize).toBe(formatBytes(4096000));
+
+      // Verify that the existing entity was updated, not created
+      expect(jobConfigInventoryStatsRepo.create).not.toHaveBeenCalled();
+      expect(jobConfigInventoryStatsRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'stats-id',
+          fileCount: 250,
+          dirCount: 125,
+          totalSize: 4096000,
+        })
+      );
+    });
+
+    it('should handle query result with null or undefined values', async () => {
+      const mockQueryResult = [
+        {
+          total_unique_files: null,
+          total_unique_directories: undefined,
+          total_size: '0',
+        },
+      ];
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'create').mockReturnValue({
+        jobConfigId: validJobConfigId,
+        fileCount: 0,
+        dirCount: 0,
+        totalSize: 0,
+        lastUpdatedAt: expect.any(Date),
+      } as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        id: 'new-stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 0,
+        dirCount: 0,
+        totalSize: 0,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 0,
+        totalUniqueDirectories: 0,
+        totalSize: formatBytes(0),
+        lastUpdatedAt: expect.any(Date),
+      });
+    });
+
+    it('should handle case when no latest jobRun exists', async () => {
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 100,
+        dirCount: 50,
+        totalSize: 1024000,
+        lastUpdatedAt: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(null);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      // Should return cached stats when no jobRun exists
+      expect(result).toEqual({
+        totalUniqueFiles: 100,
+        totalUniqueDirectories: 50,
+        totalSize: formatBytes(1024000),
+        lastUpdatedAt: mockStatsEntity.lastUpdatedAt,
+      });
+
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('should handle database query errors', async () => {
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      const dbError = new Error('Database connection failed');
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockRejectedValue(dbError);
+
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow(HttpException);
+
+      // The service uses error.message when available, so expect the actual error message
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId)
+      ).rejects.toThrow('Database connection failed');
+
+      expect(loggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error getting inventory stats'),
+        dbError
+      );
+    });
+
+    it('should handle jobRun with no endTime', async () => {
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 100,
+        dirCount: 50,
+        totalSize: 1024000,
+        lastUpdatedAt: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Running,
+        endTime: null,
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      // Should return cached stats when jobRun has no endTime
+      expect(result).toEqual({
+        totalUniqueFiles: 100,
+        totalUniqueDirectories: 50,
+        totalSize: formatBytes(1024000),
+        lastUpdatedAt: mockStatsEntity.lastUpdatedAt,
+      });
+
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('should handle multiple job run statuses (Completed, Failed, Errored)', async () => {
+      const mockQueryResult = [
+        {
+          total_unique_files: '300',
+          total_unique_directories: '150',
+          total_size: '5120000',
+        },
+      ];
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Failed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'create').mockReturnValue({
+        jobConfigId: validJobConfigId,
+        fileCount: 300,
+        dirCount: 150,
+        totalSize: 5120000,
+        lastUpdatedAt: expect.any(Date),
+      } as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        id: 'new-stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 300,
+        dirCount: 150,
+        totalSize: 5120000,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+
+      expect(result.totalUniqueFiles).toBe(300);
+      expect(result.totalUniqueDirectories).toBe(150);
+      expect(result.totalSize).toBe(formatBytes(5120000));
+
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          jobConfigId: validJobConfigId,
+          status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored]),
+        },
+        order: { endTime: 'DESC' },
+      });
     });
   });
 });
