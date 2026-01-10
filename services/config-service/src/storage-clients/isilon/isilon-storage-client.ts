@@ -462,7 +462,7 @@ export class IsilonStorageClient extends StorageClient {
       this.logger.log(`Found ${zoneExports.length} NFS exports for zone '${zoneName}'`);
 
       // Extract export paths - flatten all paths from each export
-      // Isilon exports can have multiple paths per export (e.g., /ifs/ashish and /ifs/ashish/ndm)
+      // Isilon exports can have multiple paths per export (e.g., /ifs/test and /ifs/test/ndm)
       const exportPaths: NFSExportPathDTO[] = [];
       for (const exp of zoneExports) {
         if (exp?.paths && Array.isArray(exp.paths)) {
