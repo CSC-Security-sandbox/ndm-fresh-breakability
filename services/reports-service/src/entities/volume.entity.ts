@@ -43,8 +43,4 @@ export class VolumeEntity extends Base {
 
     @OneToMany(()=> InventoryEntity, inventory=>inventory.volume,{ cascade: true,  eager: false})
     inventory: InventoryEntity[]
-
-    @ApiProperty({ description: 'Directory path on the file system (for SMB this is different from share name)' })
-    @Column({ type: 'text', nullable: true, name: 'directory_path' })
-    directoryPath: string;
 }

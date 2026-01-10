@@ -3931,37 +3931,7 @@ describe('ConfigurationService', () => {
   });
 
   describe('isRefreshPossible', () => {
-    it('should return false if any job config has firstRunAt within the next five minutes', async () => {
-      const configId = 'config-id';
-      const mockConfig = [
-        {
-          id: 'config-id',
-          fileServers: [
-            {
-              id: 'file-server-id',
-              volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
-            },
-          ],
-        },
-      ];
-      const upcomingRunTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-      jest
-        .spyOn(mockConfigRepository, 'findOne')
-        .mockResolvedValue(mockConfig as any);
-      jest
-        .spyOn(jobConfigRepo, 'find')
-        .mockResolvedValue([
-          { id: 'job-config-id', firstRunAt: upcomingRunTime } as any,
-        ]);
-      const result = await service.isRefreshPossible(configId);
-      expect(result).toEqual({
-        isRefreshAvailable: false,
-        message:
-          'A job is scheduled to run in the next 5 mins. Refresh is disabled until the job runs.',
-      });
-    });
-
-    it('should allow refresh if future runs are scheduled beyond the five minute window', async () => {
+    it('should return false if any job config has scheduler status as SCHEDULING', async () => {
       const configId = 'config-id';
       const mockConfig = {
         id: 'config-id',
@@ -3978,7 +3948,33 @@ describe('ConfigurationService', () => {
       jest
         .spyOn(jobConfigRepo, 'find')
         .mockResolvedValue([
-          { id: 'job-config-id', firstRunAt: laterRunTime } as any,
+          { id: 'job-config-id', scheduler: 'SCHEDULING' } as any,
+        ]);
+      const result = await service.isRefreshPossible(configId);
+      expect(result).toEqual({
+        isRefreshAvailable: false,
+        message: 'Job scheduling in progress. Please retry shortly.',
+      });
+    });
+
+    it('should allow refresh if no jobs are scheduling or running', async () => {
+      const configId = 'config-id';
+      const mockConfig = {
+        id: 'config-id',
+        fileServers: [
+          {
+            id: 'file-server-id',
+            volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
+          },
+        ],
+      };
+      jest
+        .spyOn(mockConfigRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+      jest
+        .spyOn(jobConfigRepo, 'find')
+        .mockResolvedValue([
+          { id: 'job-config-id', scheduler: null, futureScheduleAt: null } as any,
         ]);
       jest.spyOn(jobRunRepo, 'count').mockResolvedValue(0);
       const result = await service.isRefreshPossible(configId);
