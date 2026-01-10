@@ -59,7 +59,7 @@ import escapeHtml from 'escape-html';
 
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { SuccessEmailType } from 'src/util/send-email.type';
-import { IsilonStorageClient } from 'src/storage-clients/isilon/isilon-storage-client';
+import { ClientConfig, StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 
 @Injectable()
 export class ConfigurationService {
@@ -68,7 +68,7 @@ export class ConfigurationService {
   private escapeHtml: typeof escapeHtml;
   private sanitizeHtml: typeof sanitizeHtml;
   constructor(
-    private readonly isilonStorageClient: IsilonStorageClient,
+    private readonly storageClientFactory: StorageClientFactory,
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
     @InjectRepository(FileServerEntity)
@@ -1572,11 +1572,14 @@ export class ConfigurationService {
 
       const volumeDataList: DiscoveredVolumeData[] = [];
       let apiError: string | null = null;
+      const clientConfig = new ClientConfig(config.serverType, config.hostname, config.port, config.username, config.password, config.tlsCaCertificate);
+      // Get the appropriate storage client based on server type
+      const storageClient = this.storageClientFactory.getClient(clientConfig);
 
       // Fetch NFS exports if protocol includes NFS
       if (fileServer.protocol === Protocol.NFS) {
         try {
-          const nfsExports = await this.isilonStorageClient.getNFSExportPaths(fileServer.id);
+          const nfsExports = await storageClient.getNFSExportPaths(fileServer.id);
           this.logger.log(`Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`);
 
           for (const nfsExport of nfsExports) {
@@ -1595,7 +1598,7 @@ export class ConfigurationService {
       // Fetch SMB shares if protocol includes SMB
       if (fileServer.protocol === Protocol.SMB) {
         try {
-          const smbShares = await this.isilonStorageClient.getSMBShares(fileServer.id);
+          const smbShares = await storageClient.getSMBShares(fileServer.id);
           this.logger.log(`Found ${smbShares.length} SMB shares for file server ${fileServer.id}`);
 
           for (const smbShare of smbShares) {
@@ -2247,45 +2250,25 @@ export class ConfigurationService {
 
   // fetch host name and port from host string
   async fetchCertificate(request: FetchCertificateRequestDTO): Promise<FetchCertificateResponseDTO> {
-    const { host } = request;
-    // Delegate to IsilonStorageClient which has the implementation
-    
-    switch (request.serverType) {
-      case ServerType.dell:
-        return await this.isilonStorageClient.fetchCertificate(host);  
-      default:
-        throw new BadRequestException(
-          `Unsupported server type: ${request.serverType}`
-        );
-    }
+    const clientConfig = new ClientConfig(request.serverType, request.host);
+    // Get the appropriate storage client based on server type
+    const storageClient = this.storageClientFactory.getClient(clientConfig);
+    return await storageClient.fetchCertificate(request.host);
   }
 
   async fetchZones(request: FetchZonesRequestDTO): Promise<FetchZonesResponseDTO> {
-    // Route to appropriate storage client based on server type
-    switch (request.serverType) {
-      case ServerType.dell:
-        return await this.isilonStorageClient.fetchZones(request);   
-      default:
-        throw new BadRequestException(
-          `Unsupported server type: ${request.serverType}`
-        );
-    }
+    const clientConfig = new ClientConfig(request.serverType, request.host, request.port, request.username, request.password, request.certificate);
+    // Get the appropriate storage client based on server type
+    const storageClient = this.storageClientFactory.getClient(clientConfig);
+    return await storageClient.fetchZones();
   }
 
   async validateConnection(request: FetchZonesRequestDTO): Promise<{ isValid: boolean; message: string }> {
     try {
-      // Route to appropriate storage client based on server type
-      let isValid = false;
-      
-      switch (request.serverType) {
-        case ServerType.dell:
-          isValid = await this.isilonStorageClient.validateConnection(request);
-          break;
-        default:
-          throw new BadRequestException(
-            `Unsupported server type: ${request.serverType}`
-          );
-      }
+       const clientConfig = new ClientConfig(request.serverType, request.host, request.port, request.username, request.password);
+    // Get the appropriate storage client based on server type
+    const storageClient = this.storageClientFactory.getClient(clientConfig);
+      const isValid = await storageClient.validateConnection();
 
       if (isValid) {
         return {

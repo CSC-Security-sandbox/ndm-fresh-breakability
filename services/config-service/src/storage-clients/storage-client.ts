@@ -8,6 +8,11 @@ import { FetchCertificateResponseDTO } from '../configurations/dto/config.dto';
  * Provides common functionality and defines interface for storage-specific implementations
  */
 export abstract class StorageClient {
+  abstract hostname: string;
+  abstract port: number;
+  abstract username: string;
+  abstract password: string;
+  
   protected logger: LoggerService;
 
   constructor(logger: LoggerService) {
@@ -23,7 +28,7 @@ export abstract class StorageClient {
    * Used during initial setup before credentials are stored in DB
    * @param params - Storage-specific parameters (varies by implementation)
    */
-  abstract fetchZones(params: any): Promise<any>;
+  abstract fetchZones(): Promise<any>;
 
   /**
    * Get NFS export paths for a file server
@@ -44,7 +49,7 @@ export abstract class StorageClient {
    * Fetches credentials from DB using fileServerId
    * @param fileServerId - UUID of the file server
    */
-  abstract validateConnection(params: any): Promise<boolean>;
+  abstract validateConnection(): Promise<boolean>;
 
   // ==========================================
   // Concrete methods - Common implementation for all storage types
