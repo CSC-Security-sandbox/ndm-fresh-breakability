@@ -76,7 +76,11 @@ func PtrExportPathSource(e ExportPathSource) *ExportPathSource {
 func CreateFileServer(params CreateServereParams, headers map[string]string) (string, *http.Response, error) {
 	createSourceURL := CONFIG_SERVICE_URL + FILESERVER_ENDPOINT
 
+	// Build fileServerName from config name and protocol (similar to UI logic)
+	fileServerName := fmt.Sprintf("%s-%s", params.ConfigName, params.Protocol)
+
 	fileServerParams := map[string]interface{}{
+		"fileServerName":  fileServerName,
 		"serverType":      params.ServerType,
 		"userName":        params.UserName,
 		"password":        params.Password,
@@ -96,6 +100,7 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"configName": params.ConfigName,
 		"configType": params.ConfigType,
 		"projectId":  params.ProjectID,
+		"serverType": params.ServerType,
 		"fileServers": []map[string]interface{}{
 			fileServerParams,
 		},

@@ -488,6 +488,8 @@ export class ConfigurationService {
               jobConfig: {
                 id: true,
                 jobType: true,
+                sourcePathId: true,
+                targetPathId: true,
                 status: true,
               },
             },
@@ -912,7 +914,6 @@ export class ConfigurationService {
       
       // refreshConfig handles Dell (via API) and non-Dell (via workers) internally
       this.refreshConfig(update.id, traceId);
-      this.logger.debug("############################# ASHISH  ENDS #############################");
       return update;
     } catch (error) {
       this.logger.error(

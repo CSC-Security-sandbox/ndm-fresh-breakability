@@ -3933,7 +3933,6 @@ describe('ConfigurationService', () => {
   describe('isRefreshPossible', () => {
     it('should return false if any job config has firstRunAt within the next five minutes', async () => {
       const configId = 'config-id';
-<<<<<<< HEAD
       const mockConfig = [
         {
           id: 'config-id',
@@ -3946,18 +3945,6 @@ describe('ConfigurationService', () => {
         },
       ];
       const upcomingRunTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-=======
-      const fileServerId = 'file-server-id';
-      const mockConfig = {
-        id: 'config-id',
-        fileServers: [
-          {
-            id: 'file-server-id',
-            volumes: [{ id: 'volume-id', volumePath: '/path/to/volume' }],
-          },
-        ],
-      };
->>>>>>> dca29146 (add test case (#994))
       jest
         .spyOn(mockConfigRepository, 'findOne')
         .mockResolvedValue(mockConfig as any);
