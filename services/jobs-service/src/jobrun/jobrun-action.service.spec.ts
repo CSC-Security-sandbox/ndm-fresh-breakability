@@ -307,6 +307,8 @@ describe("JobRunActionService", () => {
                     shouldScanADS: false,
                     firstRunAt: new Date(),
                     futureScheduleAt: "",
+                    skipFile: null,
+                    identityMappingId: null,
                     sourcePathId: "src1",
                     targetPathId: "tgt1",
                     createdBy: "user1",

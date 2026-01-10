@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { plainToClass } from 'class-transformer';
-import { IsString, IsUUID, IsNumber, IsOptional, IsObject } from 'class-validator';
+import { plainToClass, Type } from 'class-transformer';
+import { IsString, IsUUID, IsNumber, IsOptional, IsObject, IsBoolean, IsDate, } from 'class-validator';
 import { Protocol } from 'src/constants/enums';
 
 class FileServerConfigDto {
@@ -40,6 +40,38 @@ class JobConfigDto {
   @IsOptional()
   @IsObject()
   destinationServer: FileServerDto | null;
+}
+
+class JobOptionsDto {
+  @ApiProperty()
+  @IsBoolean()
+  preserveAccessTime: boolean;
+
+  @ApiProperty({ nullable: true, required: false })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  excludeOlderThan?: Date;
+
+  @ApiProperty({ nullable: true, required: false })
+  @IsOptional()
+  @IsString()
+  excludeFilePatterns?: string;
+
+  @ApiProperty({ nullable: true, required: false })
+  @IsOptional()
+  @IsString()
+  skipFile?: string;
+
+  @ApiProperty({ nullable: true, required: false })
+  @IsOptional()
+  @IsUUID()
+  identityMappingId?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  shouldScanADS?: boolean;
 }
 
 export class TaskDto {
@@ -115,6 +147,10 @@ export class JobRunDetailsResponseDto {
   @IsObject()
   jobConfig: JobConfigDto;
 
+  @ApiProperty()
+  @IsObject()
+  jobOptions: JobOptionsDto;
+  
   @ApiProperty()
   @IsObject()
   @IsOptional()

@@ -210,4 +210,15 @@ export class JobRunController {
   ) {
     return this.jobRunService.updateWorkerResponse(jobRunId, workerId, workerResponse);
   }
+
+  @ApiOperation({ summary: "Get identity mappings for a job run" })
+  @ApiResponse({ status: 200, description: "Returns identity mappings associated with the job run." })
+  @ApiResponse({ status: 404, description: "Job run not found." })
+  @ApiResponse({ status: 500, description: "Internal server error." })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
+  @Get(":jobRunId/mappings-fetch-jobrun")
+  async getJobRunIdentityMappings(@Param("jobRunId") jobRunId: string) {
+    return this.jobRunService.getJobRunIdentityMappings(jobRunId);
+  }
 }

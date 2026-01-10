@@ -68,6 +68,7 @@ describe('JobRunController', () => {
             getErrorOverview: jest.fn(),
             checkWorkerHealth: jest.fn(),
             updateWorkerResponse: jest.fn(),
+            getJobRunIdentityMappings: jest.fn(),
           },
         },
         {
@@ -220,6 +221,16 @@ describe('JobRunController', () => {
       jobRunService.updateWorkerResponse.mockResolvedValue(result as any);
       expect(await controller.updateWorkerResponse(jobRunId, workerId, workerResponse)).toBe(result);
       expect(jobRunService.updateWorkerResponse).toHaveBeenCalledWith(jobRunId, workerId, workerResponse);
+    });
+  });
+
+  describe('getJobRunIdentityMappings', () => {
+    it('should return identity mappings for a job run', async () => {
+      const jobRunId = 'run1';
+      const result = { mappings: [{ source: 'user1', target: 'user2' }] };
+      jobRunService.getJobRunIdentityMappings.mockResolvedValue(result as any);
+      expect(await controller.getJobRunIdentityMappings(jobRunId)).toBe(result);
+      expect(jobRunService.getJobRunIdentityMappings).toHaveBeenCalledWith(jobRunId);
     });
   });
 });

@@ -274,6 +274,16 @@ export const jobsApi = createApi({
       invalidatesTags: ["ALL_JOB_CONFIGS", "JOB_CONFIG_DETAILS"],
     }),
 
+    getJobRunIdentityMappings: builder.query({
+      query: (jobRunId: string) => ({
+        url: `job-run/${jobRunId}/mappings-fetch-jobrun`,
+        method: "GET",
+      }),
+      transformResponse: (response) => {
+        return response?.data || response;
+      },
+    }),
+    
     getJobIdentityMappings: builder.query({
       query: (jobConfigId: string) => ({
         url: `jobs/${jobConfigId}/mappings-fetch`,
@@ -365,4 +375,5 @@ export const {
   useLazyGetJobIdentityMappingsQuery,
   useUpdateDiscoveryJobConfigMutation,
   useUpdateMigrationJobConfigMutation,
+  useLazyGetJobRunIdentityMappingsQuery,
 } = jobsApi;
