@@ -19,7 +19,7 @@ export const ValidateWorkingDirectoryWorkflow = async ({traceId, payload, option
               payload: payload,
             }
           ],
-          workflowId: `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${workerId}${fileServerSuffix}`,
+          workflowId: `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${workerId}-${fileServerSuffix}`,
           taskQueue: `${workerId}-TaskQueue`,
           ...options,
           cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
