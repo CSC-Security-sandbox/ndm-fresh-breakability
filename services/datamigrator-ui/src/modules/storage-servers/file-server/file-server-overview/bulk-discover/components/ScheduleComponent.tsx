@@ -46,7 +46,7 @@ else {
         </Popover>
       </Box>
       <Box>
-        <Text className="flex gap-6">
+        <Text className="flex gap-6 !mb-0">
           <RadioButton
             form={bulkDiscoveryForm}
             name="scheduleTime"
@@ -56,7 +56,7 @@ else {
           </RadioButton>
         </Text>
         {bulkDiscoveryForm.formState.scheduleTime === "schedule_date" && (
-          <Box className="flex gap-3 mt-3">
+          <Box className="flex gap-3 mt-1">
             <DateTimePickerWrapper bulkDiscoveryForm={bulkDiscoveryForm} />
           </Box>
         )}
