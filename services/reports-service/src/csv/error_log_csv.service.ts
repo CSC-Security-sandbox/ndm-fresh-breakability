@@ -90,7 +90,7 @@ export class ErrorLogService {
       WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
         REGEXP_REPLACE(
           oe.error_message,
-          '[''"]?' || SUBSTRING(oe.file_path FROM 1 FOR 10) || '[^''"\\s]*([''".\\s]|$)',
+          '[''"]?' || REPLACE(SUBSTRING(oe.file_path FROM 1 FOR 10), E'\\\\', E'\\\\\\\\') || '[^''"\\s]*([''".\\s]|$)',
           oe.file_name,
           'g'
         )
