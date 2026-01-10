@@ -342,6 +342,16 @@ export const jobsApi = createApi({
         { type: 'JOB_IDENTITY_MAPPINGS', id: jobConfigId },
       ],
     }),
+
+    getJobConfigInventoryStats: builder.mutation({
+      query: (jobConfigId: string) => ({
+        url: `jobs/${jobConfigId}/inventory-stats`,
+        method: 'POST',
+      }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response;
+      },
+    }),
   }),
 });
 
@@ -376,4 +386,5 @@ export const {
   useUpdateDiscoveryJobConfigMutation,
   useUpdateMigrationJobConfigMutation,
   useLazyGetJobRunIdentityMappingsQuery,
+  useGetJobConfigInventoryStatsMutation,
 } = jobsApi;

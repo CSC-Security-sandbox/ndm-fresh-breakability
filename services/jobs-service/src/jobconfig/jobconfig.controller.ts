@@ -314,10 +314,10 @@ export class JobConfigController {
   @ApiResponse({ status: 500, description: 'Internal Server Error - failed to get inventory stats.' })
   @ApiBearerAuth()
   @Auth(Permission.ViewJob)
-  @Post('/inventory-stats')
+  @Post(':id/inventory-stats')
   async getJobConfigInventoryStats(
-    @Body() request: JobConfigInventoryStatsRequestDto
+    @Param('id') jobConfigID: string
   ): Promise<JobConfigInventoryStatsResponseDto> {
-    return await this.jobConfigService.getJobConfigInventoryStats(request.jobConfigID);
+    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID);
   }
 }

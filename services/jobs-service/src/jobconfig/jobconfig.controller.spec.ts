@@ -1188,15 +1188,11 @@ describe("JobConfigController", () => {
     };
 
     it('should return inventory statistics successfully', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       mockJobConfigService.getJobConfigInventoryStats.mockResolvedValue(
         mockInventoryStatsResponse,
       );
 
-      const result = await controller.getJobConfigInventoryStats(request);
+      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(mockInventoryStatsResponse);
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
@@ -1206,19 +1202,17 @@ describe("JobConfigController", () => {
     });
 
     it('should throw BadRequestException for invalid UUID format', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: 'invalid-uuid-format',
-      };
+      const invalidJobConfigId = 'invalid-uuid-format';
 
       mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
         new BadRequestException('Invalid jobConfigID format'),
       );
 
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(invalidJobConfigId),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(invalidJobConfigId),
       ).rejects.toThrow('Invalid jobConfigID format');
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
@@ -1227,10 +1221,6 @@ describe("JobConfigController", () => {
     });
 
     it('should throw NotFoundException when job config does not exist', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
         new NotFoundException(
           `Job config with ID ${validJobConfigId} not found`,
@@ -1238,10 +1228,10 @@ describe("JobConfigController", () => {
       );
 
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(validJobConfigId),
       ).rejects.toThrow(NotFoundException);
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(validJobConfigId),
       ).rejects.toThrow(`Job config with ID ${validJobConfigId} not found`);
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
@@ -1250,10 +1240,6 @@ describe("JobConfigController", () => {
     });
 
     it('should throw BadRequestException when job type is not MIGRATE', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
         new BadRequestException(
           'Inventory stats are only available for Migration job configs. Current job type: DISCOVER',
@@ -1261,10 +1247,10 @@ describe("JobConfigController", () => {
       );
 
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(validJobConfigId),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(validJobConfigId),
       ).rejects.toThrow(
         'Inventory stats are only available for Migration job configs',
       );
@@ -1275,10 +1261,6 @@ describe("JobConfigController", () => {
     });
 
     it('should throw HttpException for internal server errors', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       const error = new HttpException(
         {
           status: 'failed',
@@ -1290,7 +1272,7 @@ describe("JobConfigController", () => {
       mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error);
 
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(validJobConfigId),
       ).rejects.toThrow(HttpException);
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
@@ -1299,7 +1281,7 @@ describe("JobConfigController", () => {
     });
 
     it('should handle empty request body gracefully', async () => {
-      const request = {} as JobConfigInventoryStatsRequestDto;
+      const emptyJobConfigId = '';
 
       // The validation will happen at the DTO level, but we test service call
       mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
@@ -1307,15 +1289,11 @@ describe("JobConfigController", () => {
       );
 
       await expect(
-        controller.getJobConfigInventoryStats(request),
+        controller.getJobConfigInventoryStats(emptyJobConfigId),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should return cached inventory stats when available', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       const cachedStats: JobConfigInventoryStatsResponseDto = {
         totalUniqueFiles: 200,
         totalUniqueDirectories: 100,
@@ -1327,7 +1305,7 @@ describe("JobConfigController", () => {
         cachedStats,
       );
 
-      const result = await controller.getJobConfigInventoryStats(request);
+      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(cachedStats);
       expect(result.totalUniqueFiles).toBe(200);
@@ -1339,10 +1317,6 @@ describe("JobConfigController", () => {
     });
 
     it('should handle recalculated inventory stats', async () => {
-      const request: JobConfigInventoryStatsRequestDto = {
-        jobConfigID: validJobConfigId,
-      };
-
       const recalculatedStats: JobConfigInventoryStatsResponseDto = {
         totalUniqueFiles: 300,
         totalUniqueDirectories: 150,
@@ -1354,7 +1328,7 @@ describe("JobConfigController", () => {
         recalculatedStats,
       );
 
-      const result = await controller.getJobConfigInventoryStats(request);
+      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(recalculatedStats);
       expect(result.totalUniqueFiles).toBe(300);
