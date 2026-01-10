@@ -312,8 +312,8 @@ export class JobConfigController {
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid jobConfigID format.' })
   @ApiResponse({ status: 404, description: 'Job config not found.' })
   @ApiResponse({ status: 500, description: 'Internal Server Error - failed to get inventory stats.' })
-  //@ApiBearerAuth()
-  //@Auth(Permission.ViewJob)
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
   @Post('/inventory-stats')
   async getJobConfigInventoryStats(
     @Body() request: JobConfigInventoryStatsRequestDto
