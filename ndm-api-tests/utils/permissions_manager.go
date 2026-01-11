@@ -1454,7 +1454,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 	// Use PowerShell with domain credentials and SID pre-resolution (same approach as CreateSMBFilesForSIDMapping)
 	script := fmt.Sprintf(`powershell.exe -Command "$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, PROTOCOL_PASSWORD)
 	script += fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, PROTOCOL_USERNAME)
-	
+
 	// Create local directory structure
 	script += `$localDir = 'C:\permissions_test'; `
 	script += `if (Test-Path $localDir) { Remove-Item -Recurse -Force $localDir }; `
@@ -1462,7 +1462,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 	script += `New-Item -ItemType Directory -Path $localDir\valid_principals | Out-Null; `
 	script += `New-Item -ItemType Directory -Path $localDir\invalid_principals | Out-Null; `
 	script += `New-Item -ItemType Directory -Path $localDir\mixed_principals | Out-Null; `
-	
+
 	// Create test files
 	script += `'Valid user 1 file' | Out-File -FilePath $localDir\valid_principals\valid_user1_file.txt; `
 	script += `'Valid user 2 file' | Out-File -FilePath $localDir\valid_principals\valid_user2_file.txt; `
@@ -1471,20 +1471,20 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 	script += `'Invalid user 2 file' | Out-File -FilePath $localDir\invalid_principals\invalid_user2_file.txt; `
 	script += `'Invalid group file' | Out-File -FilePath $localDir\invalid_principals\invalid_group_file.txt; `
 	script += `'Mixed file' | Out-File -FilePath $localDir\mixed_principals\mixed_file.txt; `
-	
+
 	// Map SMB share
 	script += `net use Z: /delete /y 2>&1 | Out-Null; `
 	script += fmt.Sprintf(`$netUseResult = net use Z: %s /user:%s '%s' 2>&1; `, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD)
 	script += `if ($LASTEXITCODE -ne 0) { throw "Failed to map drive: $netUseResult" }; `
-	
+
 	// Copy files to SMB share
 	script += fmt.Sprintf(`$remotePath = '%s\permissions_test'; `, smbShare)
 	script += `if (Test-Path $remotePath) { Remove-Item -Recurse -Force $remotePath }; `
 	script += `New-Item -ItemType Directory -Path $remotePath -Force | Out-Null; `
 	script += `Copy-Item -Recurse -Force $localDir\* $remotePath; `
-	
+
 	script += `Write-Host 'Applying permissions with SID pre-resolution...'; `
-	
+
 	// Apply permissions for valid users using SID pre-resolution
 	if len(validUsers) > 0 {
 		username1 := strings.Split(validUsers[0], `\`)[1]
@@ -1496,7 +1496,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 		script += `$acl1.AddAccessRule($rule1); Set-Acl -Path $path1 -AclObject $acl1 -ErrorAction Stop; `
 		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, validUsers[0])
 		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
-		
+
 		if len(validUsers) > 1 {
 			username2 := strings.Split(validUsers[1], `\`)[1]
 			script += fmt.Sprintf(`try { $user2 = Get-ADUser -Identity '%s' -Credential $credential; `, username2)
@@ -1509,7 +1509,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 			script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 		}
 	}
-	
+
 	// Apply permissions for valid groups using Get-ADObject
 	if len(validGroups) > 0 {
 		groupname := strings.Split(validGroups[0], `\`)[1]
@@ -1522,7 +1522,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, validGroups[0])
 		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
-	
+
 	// Apply permissions for invalid users using SID pre-resolution
 	if len(invalidUsers) > 0 {
 		username1 := strings.Split(invalidUsers[0], `\`)[1]
@@ -1534,7 +1534,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 		script += `$iacl1.AddAccessRule($irule1); Set-Acl -Path $ipath1 -AclObject $iacl1 -ErrorAction Stop; `
 		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, invalidUsers[0])
 		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
-		
+
 		if len(invalidUsers) > 1 {
 			username2 := strings.Split(invalidUsers[1], `\`)[1]
 			script += fmt.Sprintf(`try { $iuser2 = Get-ADUser -Identity '%s' -Credential $credential; `, username2)
@@ -1547,7 +1547,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 			script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 		}
 	}
-	
+
 	// Apply permissions for invalid groups using Get-ADObject
 	if len(invalidGroups) > 0 {
 		groupname := strings.Split(invalidGroups[0], `\`)[1]
@@ -1560,7 +1560,7 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, invalidGroups[0])
 		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
-	
+
 	// Apply mixed permissions (both valid and invalid)
 	if len(validUsers) > 0 && len(invalidUsers) > 0 {
 		vusername := strings.Split(validUsers[0], `\`)[1]
@@ -1578,14 +1578,14 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 		script += `Write-Host 'Applied mixed permissions'; `
 		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
-	
+
 	// Cleanup
 	script += `Write-Host 'Listing created files...'; `
 	script += fmt.Sprintf(`Get-ChildItem -Recurse '%s\permissions_test' | Select-Object -ExpandProperty FullName; `, smbShare)
 	script += `net use Z: /delete /y 2>&1 | Out-Null; `
 	script += `Remove-Item -Recurse -Force $localDir; `
-	script += `Write-Host '===== Files and permissions created ====='"` 
-	
+	script += `Write-Host '===== Files and permissions created ====='"`
+
 	return script
 }
 

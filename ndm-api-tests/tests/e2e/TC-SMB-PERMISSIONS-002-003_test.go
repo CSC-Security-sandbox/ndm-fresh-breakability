@@ -66,7 +66,7 @@ var _ = FDescribe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without
 			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], clonedSourceVolumes[3])
 		})
 
-		XIt("TC-SMB-SID-MAPPING: Should apply SID mappings from CSV during migration", func() {
+		It("TC-SMB-SID-MAPPING: Should apply SID mappings from CSV during migration", func() {
 			testStartTime = time.Now()
 			By("########################## TC-SMB-SID-MAPPING start ################################")
 			LogDebug(fmt.Sprintf("[TC-SMB-SID-MAPPING START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
@@ -482,20 +482,39 @@ var _ = FDescribe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without
 
 			Wait(3)
 
-		By("Creating ALL test principals in AD (both valid and invalid)")
-		allTestUsers := append(validUsers, invalidUsers...)
-		allTestGroupsStr := strings.Join(append(validGroups, invalidGroups...), ",")
-		err = CreateADPrincipals(allTestUsers, allTestGroupsStr)
-		Expect(err).NotTo(HaveOccurred(), "Error creating test principals in AD")
-		LogDebug("All test principals created in AD")
+			By("Creating ALL test principals in AD (both valid and invalid)")
+			allTestUsers := append(validUsers, invalidUsers...)
+			allTestGroupsStr := strings.Join(append(validGroups, invalidGroups...), ",")
+			err = CreateADPrincipals(allTestUsers, allTestGroupsStr)
+			Expect(err).NotTo(HaveOccurred(), "Error creating test principals in AD")
+			LogDebug("All test principals created in AD")
 
-		By("Clearing SMB cache after AD principal creation")
-		err = ClearAllSMBSessions()
-		Expect(err).NotTo(HaveOccurred())
+			By("Clearing SMB cache after AD principal creation")
+			err = ClearAllSMBSessions()
+			Expect(err).NotTo(HaveOccurred())
 
-		By("Waiting for AD replication and Windows name resolution")
-		Wait(60)
+			By("Waiting for AD replication and Windows name resolution")
+			Wait(60)
 
+			By("Creating test files with valid and invalid principal permissions")
+			err = CreateSMBFilesWithMixedPrincipals(sourceVolumePath1, validUsers, invalidUsers, validGroups, invalidGroups)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for SMB to refresh permissions cache")
+			Wait(15)
+
+			By("Capturing source permissions BEFORE deletion")
+			sourcePermsWithSID, err := GetSMBPermissionsWithSID(sourceVolumePath1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(sourcePermsWithSID)).To(BeNumerically(">", 0))
+
+			LogDebug("=== SOURCE PERMISSIONS (BEFORE DELETION) ===")
+			for _, perm := range sourcePermsWithSID {
+				LogDebug(fmt.Sprintf("File: %s", perm.FilePath))
+				for _, acl := range perm.ACLEntries {
+					LogDebug(fmt.Sprintf("  - Name: %s, SID: %s, ExistsInAD: %v", acl.DisplayName, acl.SID, acl.ExistsInAD))
+				}
+			}
 
 			By("DELETING invalid principals from Active Directory")
 			err = DeleteADPrincipals(invalidUsers, invalidGroups)
