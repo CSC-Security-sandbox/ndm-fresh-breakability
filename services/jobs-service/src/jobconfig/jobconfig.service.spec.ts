@@ -5471,7 +5471,7 @@ describe("JobConfigService", () => {
       expect(jobRunRepo.findOne).toHaveBeenCalledWith({
         where: {
           jobConfigId: validJobConfigId,
-          status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored]),
+          status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped]),
         },
         order: { endTime: 'DESC' },
       });
