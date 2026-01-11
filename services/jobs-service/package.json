@@ -81,7 +81,17 @@
   },
   "overrides": {
     "form-data" : "^4.0.4",
-    "sha.js": "^2.4.12"
+    "sha.js": "^2.4.12",
+    "validator": "^13.15.22",
+    "jws": "^3.2.3",
+    "qs": "^6.14.1",
+    "js-yaml": "^4.1.1",
+    "typeorm": {
+      "glob": "^10.5.0"
+    },
+    "@nestjs/cli": {
+      "glob": "^10.5.0"
+    }
   },
   "jest-junit": {
     "suiteName": "Unit Tests",
