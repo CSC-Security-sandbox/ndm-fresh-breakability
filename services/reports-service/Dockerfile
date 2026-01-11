@@ -3,7 +3,6 @@ FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 # Install system dependencies and build tools first
 RUN apt-get update && apt-get install -y \
     wget \
-    gnupg \
     ca-certificates \
     build-essential \
     equivs \
@@ -54,6 +53,7 @@ RUN apt-get update && apt-get install -y \
 # Install global npm packages
 RUN npm install -g @nestjs/cli pm2@latest
 
+RUN npm install -g npm@11.7.0
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/firefox \
