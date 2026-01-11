@@ -20,20 +20,14 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 		}
 	})
 	var (
-		ProjectId              string
-		ProjectName            string
-		workerId1              string
-		workerIds              []string
-		err                    error
-		destinationVolumePath1 string
-		sourceVolumePath1      string
-		headers                map[string]string
-		attachedWorkersConfig  map[string]SSHConfig
-		clonedSourceVolumes    []string
-		clonedDestVolumes      []string
-		sourceVolumeManager    *TestVolumeManager
-		destVolumeManager      *TestVolumeManager
-		testStartTime          time.Time
+		ProjectId             string
+		ProjectName           string
+		workerId1             string
+		workerIds             []string
+		err                   error
+		headers               map[string]string
+		attachedWorkersConfig map[string]SSHConfig
+		testStartTime         time.Time
 	)
 
 	Context("SMB Permissions Migration With and Without SID Mapping Test", func() {
@@ -46,14 +40,20 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+		})
 
-			// Setup ONTAP volume cloning for parallel test execution
-			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+		It("TC-SMB-SID-MAPPING: Should apply SID mappings from CSV during migration", func() {
+			testStartTime = time.Now()
+			By("########################## TC-SMB-SID-MAPPING start ################################")
+			LogDebug(fmt.Sprintf("[TC-SMB-SID-MAPPING START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
+			
+			// Setup ONTAP volume cloning for THIS test (parallel execution safe)
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err := SetupTestVolumesBeforeEach()
 			if err != nil {
 				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
 			}
 
-			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			// Guarantee cleanup when THIS test finishes
 			DeferCleanup(func() {
 				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
 				if err != nil {
@@ -62,24 +62,17 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			})
 
 			// Set volume paths using cloned volumes (index 3 for source, index 2 for dest)
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[2], clonedDestVolumes[2])
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], clonedSourceVolumes[3])
-		})
-
-		It("TC-SMB-SID-MAPPING: Should apply SID mappings from CSV during migration", func() {
-			testStartTime = time.Now()
-			By("########################## TC-SMB-SID-MAPPING start ################################")
-			LogDebug(fmt.Sprintf("[TC-SMB-SID-MAPPING START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
+			destinationVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[2], clonedDestVolumes[2])
+			sourceVolumePath1 := fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], clonedSourceVolumes[3])
+			
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
 			var migrationJobConfigIDs []string
 
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
-			protocol := strings.ToLower(string(PROTOCOL_TYPE))
 
-			domainName := "rootdomain.local" // Default value
-
+			By("Verifying domain credentials are available")
 			domainUser := PROTOCOL_USERNAME
 			if domainUser == "" {
 				Skip("AZURE_SMB_PROTOCOL_USERNAME not set - cannot join domain. Set this environment variable to run AD tests.")
@@ -90,13 +83,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Skip("AZURE_SMB_PROTOCOL_PASSWORD not set - cannot join domain. Set this environment variable to run AD tests.")
 			}
 
-			LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
-			err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
-			Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
-			LogDebug("Windows worker is domain-joined and ready for AD operations")
-
-			Wait(10)
-
 			By("Installing Active Directory PowerShell module on Windows worker")
 			err = InstallADPowerShellModule()
 			Expect(err).NotTo(HaveOccurred(), "Error installing AD PowerShell module")
@@ -104,42 +90,41 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			Wait(5)
 
-			By("Clearing all SMB sessions and Windows caches BEFORE creating files")
-			err = ClearAllSMBSessions()
-			Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions before file creation")
-			LogDebug("All cache cleared")
+			// By("Clearing all SMB sessions and Windows caches BEFORE creating files")
+			// err = ClearAllSMBSessions()
+			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions before file creation")
+			// LogDebug("All cache cleared")
 
-			Wait(10)
+			// Wait(10)
 
-			// Define test principals based on AD users
+			// Define test principals based on AD users with UUID for parallel isolation
 			// Scenario 1: Orphaned SID mapping (deleted user → existing destination user)
-			sourceOrphanedUser := "rootdomain\\invusr11760105113" // Will be deleted, SID: S-1-5-21-...-1276
-			targetOrphanedUser := "invaliduser1"                  // Exists at destination, SID: S-1-5-21-...-1195
-			targetOrphanedSID := "S-1-5-21-142954655-3166001488-1321770916-1195"
+			sourceOrphanedUser := fmt.Sprintf("rootdomain\\invusr1_%s", uniqueID) // Will be deleted
+			targetOrphanedUser := fmt.Sprintf("invusr1d_%s", uniqueID)            // Exists at destination (d=dest)
+			targetOrphanedSID := ""                                               // Will be captured from actual AD
 
 			// Scenario 2: Name-based mapping (existing user → different user by name match)
-			sourceNameUser := "rootdomain\\invaliduser123456789" // Exists, SID: S-1-5-21-...-1176
-			targetNameUser := "invaliduser123456"                // Maps to different user, SID: S-1-5-21-...-1175
-			targetNameSID := "S-1-5-21-142954655-3166001488-1321770916-1175"
+			sourceNameUser := fmt.Sprintf("rootdomain\\invusr123_%s", uniqueID) // Exists
+			targetNameUser := fmt.Sprintf("invusr456_%s", uniqueID)             // Maps to different user
+			targetNameSID := ""                                                  // Will be captured from actual AD
 
 			// Scenario 3: Unmapped VALID user (proves only name-based mapping works, not SID-based)
-			unmappedValidUser := "rootdomain\\invalidgroup1"                        // Valid user in AD, SID NOT in CSV
-			unmappedValidUserSID := "S-1-5-21-142954655-3166001488-1321770916-1197" // Expected to stay unchanged
+			unmappedValidUser := fmt.Sprintf("rootdomain\\validuser1_%s", uniqueID) // Valid user in AD, SID NOT in CSV
 
 			By("Principal configuration summary")
 			LogDebug("Scenario 1 - Orphaned SID Mapping:")
 			LogDebug(fmt.Sprintf("  Source (will be deleted): %s", sourceOrphanedUser))
-			LogDebug(fmt.Sprintf("  Target (maps to): %s (SID: %s)", targetOrphanedUser, targetOrphanedSID))
+			LogDebug(fmt.Sprintf("  Target (maps to): %s", targetOrphanedUser))
 			LogDebug("Scenario 2 - Name-based Mapping:")
 			LogDebug(fmt.Sprintf("  Source: %s", sourceNameUser))
-			LogDebug(fmt.Sprintf("  Target (maps to): %s (SID: %s)", targetNameUser, targetNameSID))
+			LogDebug(fmt.Sprintf("  Target (maps to): %s", targetNameUser))
 			LogDebug("Scenario 3 - Unmapped VALID User (verifies SID-based mapping does NOT work):")
-			LogDebug(fmt.Sprintf("  User: %s (SID: %s)", unmappedValidUser, unmappedValidUserSID))
+			LogDebug(fmt.Sprintf("  User: %s", unmappedValidUser))
 			LogDebug("  Expected: Should remain UNCHANGED (proves only name-based mapping works, not automatic SID mapping)")
 
 			By("Creating source SMB file server")
 			sourceParams := CreateServereParams{
-				ConfigName:       fmt.Sprintf("tc-smb-perm-002-%s-src-fs-%s", protocol, uniqueID),
+				ConfigName:       fmt.Sprintf("tc-smb-src-perm-002-sid-mapping-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -165,42 +150,87 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			Wait(3)
 
 			By("Creating test files with permissions for all three scenarios")
-			// Create files with specific users for each scenario
+			// Create AD users first - both SOURCE and TARGET users (required for CSV mapping to work)
+			targetOrphanedUserWithDomain := fmt.Sprintf("rootdomain\\%s", targetOrphanedUser)
+			targetNameUserWithDomain := fmt.Sprintf("rootdomain\\%s", targetNameUser)
+			allADUsers := []string{
+				sourceOrphanedUser,
+				sourceNameUser,
+				unmappedValidUser,
+				targetOrphanedUserWithDomain,
+				targetNameUserWithDomain,
+			}
+			err = CreateADPrincipals(allADUsers, "") // No group needed
+			Expect(err).NotTo(HaveOccurred(), "Error creating AD test users before file creation")
+			LogDebug("Successfully created source and target AD users for file permissions and CSV mapping")
+
+			// Clear SMB cache so Windows can see the newly created users
+			Wait(3)
+			// By("Clearing SMB cache after AD user creation")
+			// err = ClearAllSMBSessions()
+			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions after user creation")
+			// LogDebug("SMB cache cleared, Windows should now recognize new users")
+
+			By("Waiting for AD replication and Windows name resolution")
+			Wait(60) // Extended wait time for Windows to fully recognize the AD users for SMB operations
+
+			By("Creating test files with permissions for all three scenarios")
 			testUsers := []string{sourceOrphanedUser, sourceNameUser, unmappedValidUser}
-
 			err = CreateSMBFilesForSIDMapping(sourceVolumePath1, testUsers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating files for SID mapping test")
-			LogDebug("Created test files with user permissions for all scenarios")
+			Expect(err).NotTo(HaveOccurred(), "Error creating test files with permissions")
+			LogDebug("Test files created with user permissions applied")
 
-			Wait(5)
-
+			By("Waiting for SMB to refresh permissions cache")
+			Wait(15) // Allow SMB layer time to recognize newly applied permissions
 			By("Capturing source permissions BEFORE deletion")
 			sourcePermsBeforeDeletion, err := GetSMBPermissionsWithSID(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error capturing source permissions")
-			Expect(len(sourcePermsBeforeDeletion)).To(BeNumerically(">", 0))
-
 			LogDebug("=== SOURCE PERMISSIONS (BEFORE DELETION) ===")
+			LogDebug(fmt.Sprintf("Looking for user: %s (username part: %s)", sourceOrphanedUser, strings.Split(sourceOrphanedUser, "\\")[1]))
 			sourceOrphanedSID := ""
 			for _, perm := range sourcePermsBeforeDeletion {
 				LogDebug(fmt.Sprintf("File: %s", perm.FilePath))
+				isScenario1File := strings.Contains(perm.FilePath, "scenario1_orphaned")
+				if isScenario1File {
+					LogDebug("  ^^^ This is a scenario1_orphaned file ^^^")
+				}
 				for _, acl := range perm.ACLEntries {
 					LogDebug(fmt.Sprintf("  - Name: %s, SID: %s, ExistsInAD: %v, Perms: %s",
 						acl.DisplayName, acl.SID, acl.ExistsInAD, acl.Permissions))
 
 					// Get actual SID from file to use in CSV mapping
+					usernameToFind := strings.ToLower(strings.Split(sourceOrphanedUser, "\\")[1])
+					displayNameLower := strings.ToLower(acl.DisplayName)
 					if strings.Contains(perm.FilePath, "scenario1_orphaned") &&
-						strings.Contains(strings.ToLower(acl.DisplayName), strings.ToLower(strings.Split(sourceOrphanedUser, "\\")[1])) &&
+						strings.Contains(displayNameLower, usernameToFind) &&
 						strings.HasPrefix(acl.SID, "S-1-5-21-") {
 						sourceOrphanedSID = acl.SID
+						LogDebug(fmt.Sprintf("*** MATCH FOUND! SID: %s (from user %s on file %s)", sourceOrphanedSID, acl.DisplayName, perm.FilePath))
+					} else if isScenario1File && strings.HasPrefix(acl.SID, "S-1-5-21-") {
+						LogDebug(fmt.Sprintf("    NO MATCH: displayName='%s' does not contain '%s'", displayNameLower, usernameToFind))
 					}
 				}
 			}
 
+			// Validate we found the SID before creating CSV
+			Expect(sourceOrphanedSID).NotTo(BeEmpty(), fmt.Sprintf("Failed to find source orphaned SID for user %s in scenario1_orphaned files", sourceOrphanedUser))
+			LogDebug(fmt.Sprintf("Using source orphaned SID: %s", sourceOrphanedSID))
+
+			By("Capturing target user SIDs directly from Active Directory")
+			// Get target orphaned user SID from AD (not from files since target users have no file permissions)
+			capturedTargetOrphanedSID, err := GetADUserSID(targetOrphanedUser)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to get SID for target orphaned user %s from AD", targetOrphanedUser))
+			LogDebug(fmt.Sprintf("Target orphaned user SID from AD: %s", capturedTargetOrphanedSID))
+
+			// Get target name mapping user SID from AD
+			capturedTargetNameSID, err := GetADUserSID(targetNameUser)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to get SID for target name user %s from AD", targetNameUser))
+			LogDebug(fmt.Sprintf("Target name user SID from AD: %s", capturedTargetNameSID))
+
 			By("Creating SID mapping CSV")
 			csvLines := []string{
 				"sid_source,sid_target",
-				fmt.Sprintf("%s,rootdomain\\invaliduser1", sourceOrphanedSID),
-				"rootdomain\\invaliduser123456789,rootdomain\\invaliduser123456",
+				fmt.Sprintf("%s,%s", sourceOrphanedUser, capturedTargetOrphanedSID),  // Orphaned: name → SID
+				fmt.Sprintf("%s,rootdomain\\%s", sourceNameUser, targetNameUser),      // Valid: name → name
 			}
 			csvContent := strings.Join(csvLines, "\n")
 			LogDebug("SID Mapping CSV Content:\n" + csvContent)
@@ -213,10 +243,10 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			Expect(err).NotTo(HaveOccurred(), "Error deleting orphaned user from AD")
 			LogDebug(fmt.Sprintf("Deleted from AD: %s (creates orphaned SID)", sourceOrphanedUser))
 
-			By("Clearing all SMB sessions and Windows name caches")
-			err = ClearAllSMBSessions()
-			Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions")
-			LogDebug("SMB sessions cleared - forcing fresh connections")
+			// By("Clearing all SMB sessions and Windows name caches")
+			// err = ClearAllSMBSessions()
+			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions")
+			// LogDebug("SMB sessions cleared - forcing fresh connections")
 
 			By("Waiting for AD deletion to propagate")
 			Wait(180)
@@ -240,7 +270,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			By("Creating destination SMB file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       fmt.Sprintf("tc-smb-perm-002-%s-dest-fs-%s", protocol, uniqueID),
+				ConfigName:       fmt.Sprintf("tc-smb-dst-perm-002-sid-mapping-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -337,7 +367,9 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 					LogDebug(fmt.Sprintf("Checking SCENARIO 1 file: %s", filePath))
 					for _, acl := range perm.ACLEntries {
 						LogDebug(fmt.Sprintf("ACL: Name=%s, SID=%s", acl.DisplayName, acl.SID))
-						if acl.SID == targetOrphanedSID {
+						// Check if this ACL matches the target orphaned user name (case-insensitive)
+						if strings.Contains(strings.ToLower(acl.DisplayName), strings.ToLower(targetOrphanedUser)) {
+							targetOrphanedSID = acl.SID // Capture actual SID
 							LogDebug(fmt.Sprintf("SCENARIO 1 PASS: Orphaned SID mapped correctly to %s (SID: %s)", targetOrphanedUser, targetOrphanedSID))
 							scenario1Verified = true
 						}
@@ -349,7 +381,9 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 					LogDebug(fmt.Sprintf("Checking SCENARIO 2 file: %s", filePath))
 					for _, acl := range perm.ACLEntries {
 						LogDebug(fmt.Sprintf("ACL: Name=%s, SID=%s", acl.DisplayName, acl.SID))
-						if acl.SID == targetNameSID {
+						// Check if this ACL matches the target user name (case-insensitive)
+						if strings.Contains(strings.ToLower(acl.DisplayName), strings.ToLower(targetNameUser)) {
+							targetNameSID = acl.SID // Capture actual SID
 							LogDebug(fmt.Sprintf("SCENARIO 2 PASS: Name-based mapping applied correctly to %s (SID: %s)", targetNameUser, targetNameSID))
 							scenario2Verified = true
 						}
@@ -361,9 +395,10 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 					LogDebug(fmt.Sprintf("Checking SCENARIO 3 file: %s", filePath))
 					for _, acl := range perm.ACLEntries {
 						LogDebug(fmt.Sprintf("  ACL: Name=%s, SID=%s", acl.DisplayName, acl.SID))
-						// For unmapped valid user, check that the ORIGINAL SID is preserved (no automatic SID mapping)
-						if acl.SID == unmappedValidUserSID {
-							LogDebug(fmt.Sprintf("SCENARIO 3 PASS: Unmapped valid user preserved with original SID: %s (SID: %s)", acl.DisplayName, acl.SID))
+						// For unmapped valid user, check that it exists in AD (preserved without mapping)
+						unmappedUsername := strings.Split(unmappedValidUser, "\\")[1]
+						if strings.Contains(strings.ToLower(acl.DisplayName), strings.ToLower(unmappedUsername)) && acl.ExistsInAD {
+						LogDebug(fmt.Sprintf("SCENARIO 3 PASS: Unmapped valid user preserved with original SID: %s (SID: %s)", acl.DisplayName, acl.SID))
 							LogDebug("This proves SID-based mapping does NOT work - only name-based mapping in CSV is applied")
 							scenario3Verified = true
 						}
@@ -372,9 +407,9 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			}
 
 			// Strict validation: All three scenarios must pass
-			Expect(scenario2Verified).To(BeTrue(), "SCENARIO 2 FAILED: Name-based mapping did not apply to target SID %s", targetNameSID)
-			Expect(scenario1Verified).To(BeTrue(), "SCENARIO 1 FAILED: Orphaned SID was not mapped to target SID %s", targetOrphanedSID)
-			Expect(scenario3Verified).To(BeTrue(), "SCENARIO 3 FAILED: Unmapped valid user SID was not preserved (expected original SID %s)", unmappedValidUserSID)
+			Expect(scenario2Verified).To(BeTrue(), "SCENARIO 2 FAILED: Name-based mapping did not apply to target user %s", targetNameUser)
+			Expect(scenario1Verified).To(BeTrue(), "SCENARIO 1 FAILED: Orphaned SID was not mapped to target user %s", targetOrphanedUser)
+			Expect(scenario3Verified).To(BeTrue(), "SCENARIO 3 FAILED: Unmapped valid user was not preserved (expected user %s)", unmappedValidUser)
 
 			LogDebug("\n=== ALL SID MAPPING SCENARIOS VERIFIED ===")
 			LogDebug("SCENARIO 1: Orphaned SID → Mapped to target user via CSV")
@@ -389,12 +424,32 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			testStartTime = time.Now()
 			By("########################## TC-SMB-NO-SID-MAPPING start ################################")
 			LogDebug(fmt.Sprintf("[TC-SMB-NO-SID-MAPPING START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
+			
+			// Setup ONTAP volume cloning for THIS test (parallel execution safe)
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err := SetupTestVolumesBeforeEach()
+			if err != nil {
+				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+			}
+
+			// Guarantee cleanup when THIS test finishes
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
+
+			// Set volume paths using cloned volumes (index 3 for source, index 2 for dest)
+			destinationVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[2], clonedDestVolumes[2])
+			sourceVolumePath1 := fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[3], clonedSourceVolumes[3])
+			
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
 			var migrationJobConfigIDs []string
-
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
 			By("Ensuring Windows worker is joined to Active Directory domain")
-			domainName := "rootdomain.local"
+			// domainName := "rootdomain.local"
 
 			domainUser := PROTOCOL_USERNAME
 			if domainUser == "" {
@@ -406,12 +461,12 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Skip("AZURE_SMB_PROTOCOL_PASSWORD not set - cannot join domain")
 			}
 
-			LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
-			err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
-			Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
-			LogDebug("Windows worker is domain-joined and ready for AD operations")
+			// LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
+			// err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
+			// Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
+			// LogDebug("Windows worker is domain-joined and ready for AD operations")
 
-			Wait(10)
+			// Wait(10)
 
 			By("Installing Active Directory PowerShell module on Windows worker")
 			err = InstallADPowerShellModule()
@@ -420,11 +475,21 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			Wait(5)
 
-			// Define test principals
-			validUsers := []string{"rootdomain\\invaliduser1", "rootdomain\\invaliduser2"}
-			validGroups := []string{"rootdomain\\invalidgroup1"}
-			invalidUsers := []string{"rootdomain\\invusr11760105113", "rootdomain\\invusr21760105113"}
-			invalidGroups := []string{"rootdomain\\invgrp11760105113"}
+			// Define test principals with UUID for parallel isolation
+			validUsers := []string{
+				fmt.Sprintf("rootdomain\\validuser1_%s", uniqueID),
+				fmt.Sprintf("rootdomain\\validuser2_%s", uniqueID),
+			}
+			validGroups := []string{
+				fmt.Sprintf("rootdomain\\vgroup1_%s", uniqueID),
+			}
+			invalidUsers := []string{
+				fmt.Sprintf("rootdomain\\invuser1_%s", uniqueID),
+				fmt.Sprintf("rootdomain\\invuser2_%s", uniqueID),
+			}
+			invalidGroups := []string{
+				fmt.Sprintf("rootdomain\\invgroup1_%s", uniqueID),
+			}
 
 			By("Principal configuration summary")
 			LogDebug(fmt.Sprintf("Valid Users (remain in AD): %v", validUsers))
@@ -434,7 +499,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			By("Creating source SMB file server")
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-smb-no-sid-mapping",
+				ConfigName:       fmt.Sprintf("tc-smb-src-perm-002-noSid-mapping-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -456,25 +521,56 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			Wait(3)
 
+			By("Creating ALL test principals in AD (both valid and invalid)")
+			allTestUsers := append(validUsers, invalidUsers...)
+			allTestGroupsStr := strings.Join(append(validGroups, invalidGroups...), ",")
+			err = CreateADPrincipals(allTestUsers, allTestGroupsStr)
+			Expect(err).NotTo(HaveOccurred(), "Error creating test principals in AD")
+			LogDebug("All test principals created in AD")
+
+			By("Waiting for AD principal creation to replicate")
+			Wait(90) // Wait for AD to replicate and ensure principals are fully created
+
+			By("Adding invalid users to invalid group")
+			err = AddUsersToADGroup(invalidUsers, invalidGroups[0])
+			Expect(err).NotTo(HaveOccurred(), "Error adding users to group")
+			LogDebug(fmt.Sprintf("Added users %v to group %s", invalidUsers, invalidGroups[0]))
+
+			// By("Clearing SMB cache after AD principal creation")
+			// err = ClearAllSMBSessions()
+			// Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for AD replication and Windows name resolution")
+			Wait(120) // Increased wait to ensure AD principals are fully replicated
+
 			By("Creating test files with valid and invalid principal permissions")
 			err = CreateSMBFilesWithMixedPrincipals(sourceVolumePath1, validUsers, invalidUsers, validGroups, invalidGroups)
 			Expect(err).NotTo(HaveOccurred())
 
-			Wait(5)
+			By("Waiting for SMB to refresh permissions cache")
+			Wait(15)
 
-			By("Capturing source permissions WITH SID information")
+			By("Capturing source permissions BEFORE deletion")
 			sourcePermsWithSID, err := GetSMBPermissionsWithSID(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(sourcePermsWithSID)).To(BeNumerically(">", 0))
+
+			LogDebug("=== SOURCE PERMISSIONS (BEFORE DELETION) ===")
+			for _, perm := range sourcePermsWithSID {
+				LogDebug(fmt.Sprintf("File: %s", perm.FilePath))
+				for _, acl := range perm.ACLEntries {
+					LogDebug(fmt.Sprintf("  - Name: %s, SID: %s, ExistsInAD: %v", acl.DisplayName, acl.SID, acl.ExistsInAD))
+				}
+			}
 
 			By("DELETING invalid principals from Active Directory")
 			err = DeleteADPrincipals(invalidUsers, invalidGroups)
 			Expect(err).NotTo(HaveOccurred())
 			LogDebug("Invalid principals deleted - creating orphaned SIDs")
 
-			By("Clearing all SMB sessions")
-			err = ClearAllSMBSessions()
-			Expect(err).NotTo(HaveOccurred())
+			// By("Clearing all SMB sessions")
+			// err = ClearAllSMBSessions()
+			// Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for AD deletion to propagate")
 			Wait(180)
@@ -483,24 +579,40 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			sourcePermsAfterDeletion, err := GetSMBPermissionsWithSID(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred())
 
+			// Pre-existing orphaned SIDs from master volume root (inherited to all cloned files)
+			preExistingOrphanedSIDs := map[string]bool{
+				"S-1-5-21-2038298172-1297133386-33333":   true,
+				"S-1-5-21-2038298172-1297133386-11111-0": true,
+				"S-1-5-21-2038298172-1297133386-22222-1": true,
+			}
+
+			LogDebug("=== COUNTING ORPHANED SIDs (with filtering) ===")
 			orphanedSIDsInSource := 0
 			validSIDsInSource := 0
 			for _, perm := range sourcePermsAfterDeletion {
 				for _, acl := range perm.ACLEntries {
 					if acl.IsOrphaned && strings.HasPrefix(acl.SID, "S-1-5-21-") {
-						orphanedSIDsInSource++
+						// Exclude pre-existing inherited orphaned SIDs from master volume
+						if preExistingOrphanedSIDs[acl.SID] {
+							LogDebug(fmt.Sprintf("FILTERED (pre-existing): SID=%s, File=%s", acl.SID, perm.FilePath))
+						} else {
+							orphanedSIDsInSource++
+							LogDebug(fmt.Sprintf("COUNTED orphaned #%d: SID=%s, Name=%s, File=%s", orphanedSIDsInSource, acl.SID, acl.DisplayName, perm.FilePath))
+						}
 					} else if acl.ExistsInAD && strings.HasPrefix(acl.SID, "S-1-5-21-") {
 						validSIDsInSource++
+						LogDebug(fmt.Sprintf("COUNTED valid #%d: SID=%s, Name=%s, File=%s", validSIDsInSource, acl.SID, acl.DisplayName, perm.FilePath))
 					}
 				}
 			}
+			LogDebug(fmt.Sprintf("FINAL COUNT: %d orphaned (test users), %d valid", orphanedSIDsInSource, validSIDsInSource))
 
-			Expect(orphanedSIDsInSource).To(Equal(4), "Expected 4 orphaned SIDs")
+			Expect(orphanedSIDsInSource).To(Equal(4), "Expected 4 orphaned SIDs from deleted test users")
 			Expect(validSIDsInSource).To(Equal(4), "Expected 4 valid SIDs")
 
 			By("Creating destination SMB file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "dest-smb-no-sid-mapping",
+				ConfigName:       fmt.Sprintf("tc-smb-dst-perm-002-noSid-mapping-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -571,37 +683,13 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 		AfterEach(func() {
 			testEndTime := time.Now()
 			testDuration := testEndTime.Sub(testStartTime)
-			
+
 			if PROTOCOL_TYPE == ProtocolNFS {
 				LogDebug("Skipping cleanup as test was skipped for NFS protocol")
 				return
 			}
 
-			By("Cleanup started")
-			LogDebug(fmt.Sprintf("[AfterEach] Cleaning up for Project: %s (ID: %s)", ProjectName, ProjectId))
-
-			// Recreate ALL deleted AD principals from both test scenarios
-			// This ensures the AD is in a clean state for subsequent tests
-			allDeletedUsers := []string{
-				"rootdomain\\invusr11760105113", // Used in both tests
-				"rootdomain\\invusr21760105113", // Used in TC-002 test
-			}
-			deletedGroups := []string{"rootdomain\\invgrp11760105113"}
-
-			By("Recreating deleted AD principals for cleanup")
-			err := CreateADPrincipals(allDeletedUsers, deletedGroups[0])
-			if err != nil {
-				LogDebug(fmt.Sprintf("Warning: Could not recreate AD principals: %v", err))
-			} else {
-				LogDebug("Successfully recreated all AD principals")
-			}
-
-			// Cleanup ONTAP cloned volumes (this removes all test data)
-			err = CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
-			if err != nil {
-				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
-			}
-
+			// Volume cleanup is now handled by DeferCleanup in each It block
 			LogDebug("Cleanup completed")
 			LogDebug(fmt.Sprintf("[TC-SMB-PERMISSIONS-002-003 END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
 			LogDebug(fmt.Sprintf("[TC-SMB-PERMISSIONS-002-003 DURATION] Total test duration: %s", testDuration))

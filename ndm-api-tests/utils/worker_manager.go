@@ -208,13 +208,17 @@ func GetAttachedWorkersConfig() map[string]SSHConfig {
 }
 
 func GetAttachedWorkerDetails() SSHConfig {
-	WorkerConfigs := GetAttachedWorkersConfig()
-	var firstWorkerConfig SSHConfig
-	for _, cfg := range WorkerConfigs {
-		firstWorkerConfig = cfg
-		break // Take only the first one
+	// Maintain order from EnvWorkersConfigList (preserves .env file order)
+	// This ensures we always return the first worker consistently
+	for _, workerConfig := range EnvWorkersConfigList {
+		for _, attachedConfig := range AttachedWorkersConfig {
+			if attachedConfig.Host == workerConfig.Host {
+				return attachedConfig
+			}
+		}
 	}
-	return firstWorkerConfig
+	// Fallback: return empty SSHConfig if no workers attached
+	return SSHConfig{}
 }
 
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
@@ -506,9 +510,15 @@ func GetWorkerIds() []string {
 		return workerIds // Return empty slice if no workers are attached.
 	}
 
-	// Collect worker IDs from the AttachedWorkersConfig map.
-	for workerId := range AttachedWorkersConfig {
-		workerIds = append(workerIds, workerId)
+	// Maintain order from EnvWorkersConfigList (preserves .env file order)
+	// This ensures consistent worker selection for tests that use workerIds[0]
+	for _, workerConfig := range EnvWorkersConfigList {
+		for workerId, attachedConfig := range AttachedWorkersConfig {
+			if attachedConfig.Host == workerConfig.Host {
+				workerIds = append(workerIds, workerId)
+				break
+			}
+		}
 	}
 	return workerIds
 }
