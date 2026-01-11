@@ -16,7 +16,7 @@ import (
 var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without SID mapping", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
-			Skip("SMBF permissions is skipped in CI/CD as it is not supported in NFS")
+			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
 		}
 	})
 	var (

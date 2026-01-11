@@ -169,7 +169,5 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 				LogError(fmt.Sprintf("Failed to cleanup test environment: %v", err))
 			}
 		})
-
 	})
-
 })
