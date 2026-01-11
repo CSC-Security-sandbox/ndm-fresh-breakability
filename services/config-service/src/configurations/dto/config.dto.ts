@@ -28,10 +28,6 @@ export class FileServersDTO {
     @IsOptional()
     id?: string;
 
-    @ApiProperty({ description: 'Server type', enum: ServerType, default: ServerType.other, example: ServerType.other })
-    @IsEnum(ServerType)
-    serverType: ServerType;
-
     @ApiProperty({ description: 'Protocol', enum: Protocol, example: Protocol.NFS })
     @IsNotEmpty()
     @IsEnum(Protocol)

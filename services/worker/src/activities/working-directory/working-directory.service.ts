@@ -142,19 +142,23 @@ export class ValidateWorkingDirectoryActivity {
 
         // For Dell Isilon with SmartConnect FQDN on Linux: configure DNS resolver
         // This allows the worker to resolve the SmartConnect FQDN using the SSIP
-        if (isDell && fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
-          await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
-        }
+        
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         // For Dell, get the export path from dellExportsMap for this specific host
         // This was discovered via Isilon API and stored in VolumeEntity
         let exportPath = payload.fetchedPath;
-        if (isDell && payload.dellExportsMap && payload.dellExportsMap[fileServer.host]) {
-          exportPath = payload.dellExportsMap[fileServer.host];
-          this.logger.log(`Dell Isilon: Using discovered export path ${exportPath} for host ${fileServer.host}`);
+        if (isDell){
+            if (fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
+            await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
+            }
+            if (payload.dellExportsMap && payload.dellExportsMap[fileServer.host]) {
+            exportPath = payload.dellExportsMap[fileServer.host];
+            this.logger.log(`Dell Isilon: Using discovered export path ${exportPath} for host ${fileServer.host}`);
+            }
         }
+       
 
         // For Dell per-zone, include fileServerId in path to prevent collision between zones
         const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
@@ -211,10 +215,11 @@ export class ValidateWorkingDirectoryActivity {
     try {
       for (const fileServer of payload.listPathPayload) {
         // For Dell Isilon with SmartConnect FQDN: configure DNS resolver
-        if (isDell && fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
-          await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
+        if (isDell){
+          if (fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
+            await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
+          }
         }
-
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
@@ -301,12 +306,11 @@ export class ValidateWorkingDirectoryActivity {
           await this.configureSmartConnectDnsWindows(traceId, ssip, dnsZone);
           break;
         default:
-          this.logger.warn(`[${traceId}] Unsupported platform for DNS configuration: ${process.platform}`);
+          throw new Error(`Unsupported platform for DNS configuration: ${process.platform}`);
       }
     } catch (error) {
-      // Don't fail the workflow if DNS configuration fails - the mount might still work
-      // if the host is an IP address or already resolvable
-      this.logger.warn(`[${traceId}] Failed to configure SmartConnect DNS: ${error.message}. Mount may fail if host is FQDN.`);
+      this.logger.error(`[${traceId}] Failed to configure SmartConnect DNS: ${error.message}`);
+      throw error;
     }
   }
 
@@ -323,7 +327,7 @@ export class ValidateWorkingDirectoryActivity {
     try {
       currentContent = await fsPromises.readFile(resolvConfPath, 'utf-8');
     } catch (readError) {
-      this.logger.warn(`[${traceId}] Could not read ${resolvConfPath}: ${readError.message}`);
+      this.logger.warn(`[${traceId}] Could not read ${resolvConfPath}: ${readError.message} Thus, creating new resolv.conf`);
     }
     
     // Check if SSIP is already configured
@@ -411,7 +415,7 @@ export class ValidateWorkingDirectoryActivity {
         return;
       }
     } catch (checkError) {
-      // Rule doesn't exist, continue to create it
+      this.logger.log(`[${traceId}] SmartConnect DNS rule not found for ${dnsZone}, creating new rule`);
     }
     
     // Add NRPT rule for the DNS zone

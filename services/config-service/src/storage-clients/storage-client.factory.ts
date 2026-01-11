@@ -17,11 +17,7 @@ export class ClientConfig {
   serverType: ServerType;
 
   /**
-   * Default constructor - initializes with empty values
-   */
-  constructor();
-  /**
-   * Parameterized constructor - initializes with provided values
+   * Constructor - initializes with provided values (all optional)
    * @param serverType - The type of server (Dell, Other)
    * @param hostname - The hostname or IP address of the storage server
    * @param port - The port number for the connection
@@ -29,8 +25,7 @@ export class ClientConfig {
    * @param password - The password for authentication
    * @param certificate - The TLS certificate for secure connections
    */
-  constructor(serverType?: ServerType, hostname?: string, port?: number, username?: string, password?: string, certificate?: string);
-  constructor(serverType?: ServerType, hostname?: string, port?: number, username?: string, password?: string, certificate?: string) {
+  constructor(serverType: ServerType, hostname?: string, port?: number, username?: string, password?: string, certificate?: string) {
     this.serverType = serverType || ServerType.other;
     this.hostname = hostname || '';
     this.port = port || 0;
@@ -81,13 +76,5 @@ export class StorageClientFactory {
           );
         }
     }
-  }
-
-  /**
-   * Get Dell Isilon storage client directly
-   * Use this when you specifically need Isilon-only methods like detectIsilonVersion
-   */
-  getIsilonClient(): IsilonStorageClient {
-    return this.isilonStorageClient;
   }
 }

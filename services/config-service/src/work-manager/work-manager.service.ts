@@ -207,8 +207,8 @@ export class WorkManagerService {
 
       // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
       if (data.fileServerId) {
-        // Dell: Update file server status and aggregate config status in one save
-        this.logger.log(`Dell per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
+        // Update file server status and aggregate config status in one save
+        this.logger.log(`Per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
         
         const config = await this.configRepo.findOne({
           where: { id: data.configId },
@@ -220,6 +220,7 @@ export class WorkManagerService {
           const fileServer = config.fileServers.find(fs => fs.id === data.fileServerId);
           if (fileServer) {
             fileServer.status = data.status;
+            fileServer.errorMessage = data.errorMessage;
           }
           // Aggregate config status from all file servers
           const hasDraft = config.fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
@@ -259,6 +260,7 @@ export class WorkManagerService {
           // Also sync status to all file servers for consistency
           config.fileServers.forEach(fs => {
             fs.status = data.status;
+            fs.errorMessage = data.errorMessage;
           });
           
           await this.configRepo.save(config);

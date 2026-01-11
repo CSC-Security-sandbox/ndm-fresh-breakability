@@ -3,6 +3,7 @@ DROP COLUMN IF EXISTS smart_connect_dns_zone,
 DROP COLUMN IF EXISTS smart_connect_ssip,
 DROP COLUMN IF EXISTS status,
 DROP COLUMN IF EXISTS file_server_name,
+DROP COLUMN IF EXISTS error_message text,
 ADD COLUMN server_type varchar NOT NULL;
 
 ALTER TABLE datamigrator.volume

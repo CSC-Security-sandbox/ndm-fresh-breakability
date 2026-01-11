@@ -82,7 +82,7 @@ export class ConfigurationController{
 
     @ApiOperation({ summary: 'Get Updated list of exports/shared paths' }) 
     @ApiResponse({ status: 200, description: 'Request created successfully' })
-    @ApiQuery({ name: 'fileServerId', type: 'string', required: false, description: 'Optional file server ID to refresh only a specific zone (Dell Isilon)' })
+    @ApiQuery({ name: 'fileServerId', type: 'string', required: false, description: 'Optional file server ID to refresh only a specific zone (Storage Aware)' })
     @Auth(Permission.ManageConfig)
     @Get('/refresh/:id')
     async refreshConfig(
@@ -93,11 +93,9 @@ export class ConfigurationController{
         return await this.configurationService.refreshConfig(id, userDetails?.trackId, fileServerId)
     }
 
-    // ==================== TLS Certificate API ==================== //
-
     @ApiOperation({ 
-        summary: 'Fetch TLS Certificate from Isilon Management Console',
-        description: 'Fetches the self-signed TLS certificate from an Isilon/PowerScale management console. Returns the certificate in PEM format for use in subsequent API calls.'
+        summary: 'Fetch TLS Certificate from Storage Box Management Console',
+        description: 'Fetches the self-signed TLS certificate from a Storage Box management console. Returns the certificate in PEM format for use in subsequent API calls.'
     })
     @ApiOkResponse({ 
         description: 'Certificate fetched successfully', 
@@ -122,7 +120,7 @@ export class ConfigurationController{
         return await this.configurationService.fetchCertificate(request);
     }
 
-    @ApiOperation({ summary: 'Fetch zones from Dell Isilon management server' })
+    @ApiOperation({ summary: 'Fetch zones from Storage Box management server' })
     @ApiBody({ 
         type: FetchZonesRequestDTO,
         description: 'Management server credentials and connection details'
@@ -144,8 +142,8 @@ export class ConfigurationController{
     }
 
     @ApiOperation({ 
-        summary: 'Validate connection to Dell Isilon management server',
-        description: 'Tests connectivity and authentication to the Isilon management console using provided credentials'
+        summary: 'Validate connection to Storage Box management server',
+        description: 'Tests connectivity and authentication to the Storage Box management console using provided credentials'
     })
     @ApiBody({ 
         type: FetchZonesRequestDTO,

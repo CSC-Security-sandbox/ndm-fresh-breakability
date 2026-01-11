@@ -807,7 +807,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             userName: 'user',
             workers: ['worker1'],
@@ -1039,7 +1038,6 @@ describe('ConfigurationService', () => {
           {
             host: 'localhost',
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             volumes: [
@@ -1110,7 +1108,6 @@ describe('ConfigurationService', () => {
           {
             host: 'localhost',
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             volumes: [
@@ -1168,7 +1165,6 @@ describe('ConfigurationService', () => {
           {
             host: 'localhost',
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             volumes: [
@@ -1215,7 +1211,6 @@ describe('ConfigurationService', () => {
           {
             host: 'localhost',
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             volumes: [
@@ -1254,7 +1249,6 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             host: 'test.com',
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             protocol: Protocol.NFS,
             userName: 'test',
@@ -1300,7 +1294,6 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             host: 'test.com',
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             protocol: Protocol.NFS,
             userName: 'test',
@@ -1334,7 +1327,6 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             host: 'test.com',
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             protocol: Protocol.NFS,
             userName: 'test',
@@ -1391,7 +1383,6 @@ describe('ConfigurationService', () => {
             id: mockFileServer.id,
             host: 'localhost',
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.emc,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             createdBy: '1234567',
@@ -1504,7 +1495,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'TEST',
@@ -1556,7 +1546,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'TEST',
@@ -1636,7 +1625,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'TEST',
@@ -1700,7 +1688,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             userName: 'test',
             workers: [mockWorker.id],
@@ -1771,7 +1758,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             userName: 'test', // userName provided in update
             workers: [mockWorker.id],
@@ -2356,6 +2342,7 @@ describe('ConfigurationService', () => {
     it('should start workflow when conditions are met', async () => {
       const configId = uuidv4();
       const traceId = uuidv4();
+      const fileServerId = uuidv4();
       const createConfig = {
         projectId: '123',
         configName: 'config',
@@ -2369,8 +2356,7 @@ describe('ConfigurationService', () => {
         },
         fileServers: [
           {
-            id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-            serverType: ServerType.other,
+            id: fileServerId,
             fileServerName: 'test-server',
             host: 'test.com',
             protocol: Protocol.NFS,
@@ -2382,6 +2368,20 @@ describe('ConfigurationService', () => {
           },
         ],
       };
+
+      // Mock configEntity.findOne to return config with fileServers
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.other,
+        fileServers: [
+          {
+            id: fileServerId,
+            host: 'test.com',
+            fileServerName: 'test-server',
+            workers: [{ workerId: 'worker1' }],
+          },
+        ],
+      });
 
       await service.startValidateWorkingDirectoryWorkflow(
         createConfig,
@@ -2400,6 +2400,7 @@ describe('ConfigurationService', () => {
 
     it('should not start workflow when no workers', async () => {
       const configId = uuidv4();
+      const fileServerId = uuidv4();
       const createConfig = {
         projectId: '123',
         configName: 'config',
@@ -2413,8 +2414,7 @@ describe('ConfigurationService', () => {
         },
         fileServers: [
           {
-            id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-            serverType: ServerType.other,
+            id: fileServerId,
             fileServerName: 'test-server',
             host: 'test.com',
             protocol: Protocol.NFS,
@@ -2426,6 +2426,20 @@ describe('ConfigurationService', () => {
           },
         ],
       };
+
+      // Mock configEntity.findOne to return config with fileServers having NO workers
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.other,
+        fileServers: [
+          {
+            id: fileServerId,
+            host: 'test.com',
+            fileServerName: 'test-server',
+            workers: [], // No workers
+          },
+        ],
+      });
 
       startWorkflowMock.mockClear();
       await service.startValidateWorkingDirectoryWorkflow(
@@ -2451,7 +2465,6 @@ describe('ConfigurationService', () => {
         fileServers: [
           {
             id: '36bfd77f-1d7c-47a3-8c62-3c8739e2f88f',
-            serverType: ServerType.other,
             host: 'test.com',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
@@ -3152,7 +3165,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3174,7 +3186,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3204,7 +3215,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [{ workerId: 'old-worker', workerName: 'Old Worker' }],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3226,7 +3236,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3301,7 +3310,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [{ workerId: mockWorker.id, workerName: 'Worker1' }],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3323,7 +3331,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3379,7 +3386,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3401,7 +3407,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3433,7 +3438,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3455,7 +3459,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3538,7 +3541,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3560,7 +3562,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3589,7 +3590,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [{ workerId: 'old-worker', workerName: 'Old Worker' }],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3611,7 +3611,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3685,7 +3684,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [{ workerId: mockWorker.id, workerName: 'Worker1' }],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3707,7 +3705,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3761,7 +3758,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3783,7 +3779,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3814,7 +3809,6 @@ describe('ConfigurationService', () => {
             protocol: Protocol.NFS,
             workers: [],
             volumes: [],
-            serverType: ServerType.emc,
             createdBy: userId,
           },
         ],
@@ -3836,7 +3830,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             workers: [mockWorker.id],
             userName: 'user',
@@ -3908,7 +3901,6 @@ describe('ConfigurationService', () => {
             host: 'localhost',
             protocol: Protocol.NFS,
             protocolVersion: ProtocolVersion.NFSv3,
-            serverType: ServerType.other,
             fileServerName: 'test-server',
             userName: 'test',
             workers: [mockWorker.id],
@@ -4429,60 +4421,7 @@ describe('ConfigurationService', () => {
     });
   });
 
-  describe('discoverIsilonExports', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should discover exports for Dell config', async () => {
-      const configId = uuidv4();
-      const fileServerId = uuidv4();
-      const mockConfig = {
-        id: configId,
-        serverType: ServerType.dell,
-        fileServers: [
-          {
-            id: fileServerId,
-            protocol: Protocol.NFS,
-            fileServerName: 'zone1',
-          },
-        ],
-      };
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-      mockIsilonStorageClient.getNFSExportPaths.mockResolvedValue([
-        { path: '/ifs/data/export1' },
-      ]);
-
-      const result = await service.discoverIsilonExports(configId, 'trace-123');
-
-      expect(result).toBeInstanceOf(Map);
-      expect(result.get(fileServerId)).toHaveLength(1);
-    });
-
-    it('should throw NotFoundException when config not found', async () => {
-      mockConfigRepository.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.discoverIsilonExports(uuidv4(), 'trace-123'),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should return empty map for non-Dell config', async () => {
-      const configId = uuidv4();
-      const mockConfig = {
-        id: configId,
-        serverType: ServerType.other,
-        fileServers: [],
-      };
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-
-      const result = await service.discoverIsilonExports(configId, 'trace-123');
-
-      expect(result.size).toBe(0);
-    });
-  });
-
-  describe('discoverIsilonExportsForFileServers', () => {
+  describe('discoverStorageExportsForFileServers', () => {
     beforeEach(() => {
       jest.clearAllMocks();
     });
@@ -4505,14 +4444,15 @@ describe('ConfigurationService', () => {
         { path: '/ifs/data/export2' },
       ]);
 
-      const result = await service.discoverIsilonExportsForFileServers(
+      const result = await service.discoverStorageExportsForFileServers(
         mockConfig,
         mockFileServers,
         'trace-123',
       );
 
-      expect(result.get(fileServerId)).toHaveLength(2);
-      expect(result.get(fileServerId)[0].volumePath).toBe('/ifs/data/export1');
+      expect(result.discoveredPathsMap.get(fileServerId)).toHaveLength(2);
+      expect(result.discoveredPathsMap.get(fileServerId)[0].volumePath).toBe('/ifs/data/export1');
+      expect(result.errorMap.size).toBe(0);
     });
 
     it('should discover SMB shares for file servers', async () => {
@@ -4532,18 +4472,18 @@ describe('ConfigurationService', () => {
         { name: 'share1', path: '/ifs/share1' },
       ]);
 
-      const result = await service.discoverIsilonExportsForFileServers(
+      const result = await service.discoverStorageExportsForFileServers(
         mockConfig,
         mockFileServers,
         'trace-123',
       );
 
-      expect(result.get(fileServerId)).toHaveLength(1);
-      expect(result.get(fileServerId)[0].volumePath).toBe('share1');
-      expect(result.get(fileServerId)[0].directoryPath).toBe('/ifs/share1');
+      expect(result.discoveredPathsMap.get(fileServerId)).toHaveLength(1);
+      expect(result.discoveredPathsMap.get(fileServerId)[0].volumePath).toBe('share1');
+      expect(result.discoveredPathsMap.get(fileServerId)[0].directoryPath).toBe('/ifs/share1');
     });
 
-    it('should throw BadRequestException when API fails', async () => {
+    it('should return errors in errorMap when API fails', async () => {
       const fileServerId = uuidv4();
       const mockConfig = {
         id: uuidv4(),
@@ -4560,28 +4500,31 @@ describe('ConfigurationService', () => {
         new Error('Connection refused'),
       );
 
-      await expect(
-        service.discoverIsilonExportsForFileServers(
-          mockConfig,
-          mockFileServers,
-          'trace-123',
-        ),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.discoverStorageExportsForFileServers(
+        mockConfig,
+        mockFileServers,
+        'trace-123',
+      );
+
+      expect(result.errorMap.has(fileServerId)).toBe(true);
+      expect(result.errorMap.get(fileServerId)).toContain('Connection refused');
+      expect(result.discoveredPathsMap.size).toBe(0);
     });
 
-    it('should return empty map for non-Dell config', async () => {
+    it('should return empty maps for non-Dell config', async () => {
       const mockConfig = {
         id: uuidv4(),
         serverType: ServerType.other,
       } as ConfigEntity;
 
-      const result = await service.discoverIsilonExportsForFileServers(
+      const result = await service.discoverStorageExportsForFileServers(
         mockConfig,
         [],
         'trace-123',
       );
 
-      expect(result.size).toBe(0);
+      expect(result.discoveredPathsMap.size).toBe(0);
+      expect(result.errorMap.size).toBe(0);
     });
   });
 
@@ -5012,37 +4955,6 @@ describe('ConfigurationService', () => {
     });
   });
 
-  describe('discoverIsilonExports - edge cases', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should handle SMB protocol file servers', async () => {
-      const configId = uuidv4();
-      const fileServerId = uuidv4();
-      const mockConfig = {
-        id: configId,
-        serverType: ServerType.dell,
-        fileServers: [
-          {
-            id: fileServerId,
-            protocol: Protocol.SMB,
-            fileServerName: 'zone1',
-          },
-        ],
-      };
-      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
-      mockIsilonStorageClient.getSMBShares.mockResolvedValue([
-        { name: 'share1', path: '/ifs/share1' },
-      ]);
-
-      const result = await service.discoverIsilonExports(configId, 'trace-123');
-
-      expect(result).toBeInstanceOf(Map);
-      expect(mockIsilonStorageClient.getSMBShares).toHaveBeenCalledWith(fileServerId);
-    });
-  });
-
   describe('extractValidJobConfigs - error handling', () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -5131,12 +5043,15 @@ describe('ConfigurationService', () => {
       });
       mockVolumeRepository.findOne.mockResolvedValue(null);
       mockWorkflowService.startWorkflow.mockResolvedValue({});
+      // Mock discoverStorageExportsForFileServers to return discovered paths
+      jest.spyOn(service, 'discoverStorageExportsForFileServers').mockResolvedValue({
+        discoveredPathsMap: new Map([
+          [fileServerId, [{ volumePath: '/ifs/export1', directoryPath: '/ifs/export1' }]],
+        ]),
+        errorMap: new Map(),
+      });
 
-      const discoveredPathsMap = new Map([
-        [fileServerId, [{ volumePath: '/ifs/export1', directoryPath: '/ifs/export1' }]],
-      ]);
-
-      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace-123', discoveredPathsMap);
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, 'trace-123');
 
       expect(mockWorkflowService.startWorkflow).toHaveBeenCalled();
     });

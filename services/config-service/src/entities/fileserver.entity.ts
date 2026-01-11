@@ -85,6 +85,10 @@ export class FileServerEntity extends Base {
     @IsOptional()
     zone_id?: number;
 
+    @ApiProperty({ description: 'File Server Error message' })
+    @Column({ name: 'error_message', type: 'text', nullable: true })
+    errorMessage: string;
+
     @ApiPropertyOptional({ description: 'SmartConnect Service IP (SSIP) for DNS resolution of FQDN', example: '10.192.7.110' })
     @Column({ type: 'text', nullable: true, name: 'smart_connect_ssip' })
     @IsOptional()
