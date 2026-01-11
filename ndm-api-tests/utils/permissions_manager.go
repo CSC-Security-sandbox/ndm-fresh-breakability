@@ -1422,6 +1422,73 @@ func deleteADPrincipalsScript(users, groups []string) string {
 	return strings.Join(parts, " ")
 }
 
+// AddUsersToADGroup adds users to an Active Directory group
+func AddUsersToADGroup(users []string, group string) error {
+	script := addUsersToADGroupScript(users, group)
+
+	LogDebug(fmt.Sprintf("Adding users to AD group script: %s", script))
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	output, err := sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("AddUsersToADGroup script output: %s", output))
+
+	if err != nil {
+		return fmt.Errorf("AddUsersToADGroup failed: %w\noutput: %s", err, output)
+	}
+
+	LogDebug(fmt.Sprintf("Successfully added users to group: %s", group))
+	return nil
+}
+
+func addUsersToADGroupScript(users []string, group string) string {
+	adUsername := PROTOCOL_USERNAME
+	adPassword := PROTOCOL_PASSWORD
+
+	var parts []string
+	parts = append(parts, `powershell.exe -Command "`)
+	parts = append(parts, fmt.Sprintf(`$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, adPassword))
+	parts = append(parts, fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, adUsername))
+	parts = append(parts, `Import-Module ActiveDirectory -ErrorAction Stop; `)
+
+	// Extract group name without domain prefix
+	groupname := group
+	if strings.Contains(group, "\\") {
+		groupParts := strings.Split(group, "\\")
+		groupname = groupParts[len(groupParts)-1]
+	}
+
+	// Add each user to the group
+	for _, user := range users {
+		username := user
+		if strings.Contains(user, "\\") {
+			userParts := strings.Split(user, "\\")
+			username = userParts[len(userParts)-1]
+		}
+
+		parts = append(parts, fmt.Sprintf(`try { `+
+			`$isMember = Get-ADGroupMember -Identity '%s' -Credential $credential -ErrorAction SilentlyContinue | Where-Object { $_.SamAccountName -eq '%s' }; `+
+			`if ($isMember) { `+
+			`Write-Host 'User %s is already a member of group %s'; `+
+			`} else { `+
+			`Add-ADGroupMember -Identity '%s' -Members '%s' -Credential $credential -ErrorAction Stop; `+
+			`Write-Host 'Added user %s to group %s'; `+
+			`}; `+
+			`} catch { Write-Host 'Error adding user %s to group %s: ' $_; }; `,
+			groupname, username, username, groupname, groupname, username, username, groupname, username, groupname))
+	}
+
+	parts = append(parts, `"`)
+
+	return strings.Join(parts, " ")
+}
+
 // CreateSMBFilesWithMixedPrincipals creates files with specific user/group permissions
 func CreateSMBFilesWithMixedPrincipals(export string, validUsers, invalidUsers, validGroups, invalidGroups []string) error {
 	script := createSMBFilesWithMixedPrincipalsScript(export, validUsers, invalidUsers, validGroups, invalidGroups)
@@ -1451,69 +1518,135 @@ func createSMBFilesWithMixedPrincipalsScript(export string, validUsers, invalidU
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	localTestDir := `C:\permissions_test`
-	mappedDrive := `Z:`
-	testDir := `permissions_test`
-	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+	// Use PowerShell with domain credentials and SID pre-resolution (same approach as CreateSMBFilesForSIDMapping)
+	script := fmt.Sprintf(`powershell.exe -Command "$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `, PROTOCOL_PASSWORD)
+	script += fmt.Sprintf(`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `, PROTOCOL_USERNAME)
 
-	var parts []string
-	parts = append(parts, `cmd /C`)
-	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\valid_principals &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\invalid_principals &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\mixed_principals &&`, localTestDir))
+	// Map SMB share first
+	script += `net use Z: /delete /y 2>&1 | Out-Null; `
+	script += fmt.Sprintf(`$netUseResult = net use Z: %s /user:%s '%s' 2>&1; `, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD)
+	script += `if ($LASTEXITCODE -ne 0) { throw "Failed to map drive: $netUseResult" }; `
 
-	parts = append(parts, fmt.Sprintf(`echo Valid user 1 file > %s\valid_principals\valid_user1_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Valid user 2 file > %s\valid_principals\valid_user2_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Valid group file > %s\valid_principals\valid_group_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Invalid user 1 file > %s\invalid_principals\invalid_user1_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Invalid user 2 file > %s\invalid_principals\invalid_user2_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Invalid group file > %s\invalid_principals\invalid_group_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Mixed file > %s\mixed_principals\mixed_file.txt &&`, localTestDir))
+	// Create remote directory structure directly on SMB share
+	script += fmt.Sprintf(`$remotePath = '%s\permissions_test'; `, smbShare)
+	script += `if (Test-Path $remotePath) { Remove-Item -Recurse -Force $remotePath }; `
+	script += `New-Item -ItemType Directory -Path $remotePath -Force | Out-Null; `
+	script += `New-Item -ItemType Directory -Path $remotePath\valid_principals -Force | Out-Null; `
+	script += `New-Item -ItemType Directory -Path $remotePath\invalid_principals -Force | Out-Null; `
+	script += `New-Item -ItemType Directory -Path $remotePath\mixed_principals -Force | Out-Null; `
 
-	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
-	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
-	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+	// Create test files directly on SMB share
+	script += `'Valid user 1 file' | Out-File -FilePath $remotePath\valid_principals\valid_user1_file.txt; `
+	script += `'Valid user 2 file' | Out-File -FilePath $remotePath\valid_principals\valid_user2_file.txt; `
+	script += `'Valid group file' | Out-File -FilePath $remotePath\valid_principals\valid_group_file.txt; `
+	script += `'Invalid user 1 file' | Out-File -FilePath $remotePath\invalid_principals\invalid_user1_file.txt; `
+	script += `'Invalid user 2 file' | Out-File -FilePath $remotePath\invalid_principals\invalid_user2_file.txt; `
+	script += `'Invalid group file' | Out-File -FilePath $remotePath\invalid_principals\invalid_group_file.txt; `
+	script += `'Mixed file' | Out-File -FilePath $remotePath\mixed_principals\mixed_file.txt; `
 
-	// Set permissions for valid users
+	script += `Write-Host 'Applying permissions with SID pre-resolution...'; `
+
+	// Apply permissions for valid users using SID pre-resolution
 	if len(validUsers) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_user1_file.txt" /grant "%s:F" &&`, share, validUsers[0]))
+		username1 := strings.Split(validUsers[0], `\`)[1]
+		script += fmt.Sprintf(`try { $user1 = Get-ADUser -Identity '%s' -Credential $credential; `, username1)
+		script += `$sid1 = New-Object System.Security.Principal.SecurityIdentifier($user1.SID); `
+		script += fmt.Sprintf(`$path1 = '%s\permissions_test\valid_principals\valid_user1_file.txt'; `, smbShare)
+		script += `$acl1 = Get-Acl $path1; $acl1.SetAccessRuleProtection($true, $true); `
+		script += `$rule1 = New-Object System.Security.AccessControl.FileSystemAccessRule($sid1, 'FullControl', 'Allow'); `
+		script += `$acl1.AddAccessRule($rule1); Set-Acl -Path $path1 -AclObject $acl1 -ErrorAction Stop; `
+		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, validUsers[0])
+		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
+
 		if len(validUsers) > 1 {
-			parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_user2_file.txt" /grant "%s:M" &&`, share, validUsers[1]))
+			username2 := strings.Split(validUsers[1], `\`)[1]
+			script += fmt.Sprintf(`try { $user2 = Get-ADUser -Identity '%s' -Credential $credential; `, username2)
+			script += `$sid2 = New-Object System.Security.Principal.SecurityIdentifier($user2.SID); `
+			script += fmt.Sprintf(`$path2 = '%s\permissions_test\valid_principals\valid_user2_file.txt'; `, smbShare)
+			script += `$acl2 = Get-Acl $path2; $acl2.SetAccessRuleProtection($true, $true); `
+			script += `$rule2 = New-Object System.Security.AccessControl.FileSystemAccessRule($sid2, 'Modify', 'Allow'); `
+			script += `$acl2.AddAccessRule($rule2); Set-Acl -Path $path2 -AclObject $acl2 -ErrorAction Stop; `
+			script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, validUsers[1])
+			script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 		}
 	}
 
-	// Set permissions for valid groups
+	// Apply permissions for valid groups using Get-ADObject
 	if len(validGroups) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\valid_principals\valid_group_file.txt" /grant "%s:M" &&`, share, validGroups[0]))
+		groupname := strings.Split(validGroups[0], `\`)[1]
+		script += fmt.Sprintf(`try { $group1 = Get-ADObject -Filter {SamAccountName -eq '%s'} -Properties ObjectSID -Credential $credential; `, groupname)
+		script += `$sidg1 = $group1.ObjectSID; `
+		script += fmt.Sprintf(`$pathg1 = '%s\permissions_test\valid_principals\valid_group_file.txt'; `, smbShare)
+		script += `$aclg1 = Get-Acl $pathg1; $aclg1.SetAccessRuleProtection($true, $true); `
+		script += `$ruleg1 = New-Object System.Security.AccessControl.FileSystemAccessRule($sidg1, 'Modify', 'Allow'); `
+		script += `$aclg1.AddAccessRule($ruleg1); Set-Acl -Path $pathg1 -AclObject $aclg1 -ErrorAction Stop; `
+		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, validGroups[0])
+		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
 
-	// Set permissions for invalid users
+	// Apply permissions for invalid users using SID pre-resolution
 	if len(invalidUsers) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_user1_file.txt" /grant "%s:F" &&`, share, invalidUsers[0]))
+		username1 := strings.Split(invalidUsers[0], `\`)[1]
+		script += fmt.Sprintf(`try { $iuser1 = Get-ADUser -Identity '%s' -Credential $credential; `, username1)
+		script += `$isid1 = New-Object System.Security.Principal.SecurityIdentifier($iuser1.SID); `
+		script += fmt.Sprintf(`$ipath1 = '%s\permissions_test\invalid_principals\invalid_user1_file.txt'; `, smbShare)
+		script += `$iacl1 = Get-Acl $ipath1; $iacl1.SetAccessRuleProtection($true, $true); `
+		script += `$irule1 = New-Object System.Security.AccessControl.FileSystemAccessRule($isid1, 'FullControl', 'Allow'); `
+		script += `$iacl1.AddAccessRule($irule1); Set-Acl -Path $ipath1 -AclObject $iacl1 -ErrorAction Stop; `
+		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, invalidUsers[0])
+		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
+
 		if len(invalidUsers) > 1 {
-			parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_user2_file.txt" /grant "%s:M" &&`, share, invalidUsers[1]))
+			username2 := strings.Split(invalidUsers[1], `\`)[1]
+			script += fmt.Sprintf(`try { $iuser2 = Get-ADUser -Identity '%s' -Credential $credential; `, username2)
+			script += `$isid2 = New-Object System.Security.Principal.SecurityIdentifier($iuser2.SID); `
+			script += fmt.Sprintf(`$ipath2 = '%s\permissions_test\invalid_principals\invalid_user2_file.txt'; `, smbShare)
+			script += `$iacl2 = Get-Acl $ipath2; $iacl2.SetAccessRuleProtection($true, $true); `
+			script += `$irule2 = New-Object System.Security.AccessControl.FileSystemAccessRule($isid2, 'Modify', 'Allow'); `
+			script += `$iacl2.AddAccessRule($irule2); Set-Acl -Path $ipath2 -AclObject $iacl2 -ErrorAction Stop; `
+			script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, invalidUsers[1])
+			script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 		}
 	}
 
-	// Set permissions for invalid groups
+	// Apply permissions for invalid groups using Get-ADObject
 	if len(invalidGroups) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\invalid_principals\invalid_group_file.txt" /grant "%s:M" &&`, share, invalidGroups[0]))
+		groupname := strings.Split(invalidGroups[0], `\`)[1]
+		script += fmt.Sprintf(`try { $igroup1 = Get-ADObject -Filter {SamAccountName -eq '%s'} -Properties ObjectSID -Credential $credential; `, groupname)
+		script += `$isidg1 = $igroup1.ObjectSID; `
+		script += fmt.Sprintf(`$ipathg1 = '%s\permissions_test\invalid_principals\invalid_group_file.txt'; `, smbShare)
+		script += `$iaclg1 = Get-Acl $ipathg1; $iaclg1.SetAccessRuleProtection($true, $true); `
+		script += `$iruleg1 = New-Object System.Security.AccessControl.FileSystemAccessRule($isidg1, 'Modify', 'Allow'); `
+		script += `$iaclg1.AddAccessRule($iruleg1); Set-Acl -Path $ipathg1 -AclObject $iaclg1 -ErrorAction Stop; `
+		script += fmt.Sprintf(`Write-Host 'Applied permissions for %s'; `, invalidGroups[0])
+		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
 
-	// Set mixed permissions
+	// Apply mixed permissions (both valid and invalid)
 	if len(validUsers) > 0 && len(invalidUsers) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\mixed_principals\mixed_file.txt" /grant "%s:F" &&`, share, validUsers[0]))
-		parts = append(parts, fmt.Sprintf(`icacls "%s\mixed_principals\mixed_file.txt" /grant "%s:R" &&`, share, invalidUsers[0]))
+		vusername := strings.Split(validUsers[0], `\`)[1]
+		iusername := strings.Split(invalidUsers[0], `\`)[1]
+		script += fmt.Sprintf(`try { $muser1 = Get-ADUser -Identity '%s' -Credential $credential; `, vusername)
+		script += `$msid1 = New-Object System.Security.Principal.SecurityIdentifier($muser1.SID); `
+		script += fmt.Sprintf(`$muser2 = Get-ADUser -Identity '%s' -Credential $credential; `, iusername)
+		script += `$msid2 = New-Object System.Security.Principal.SecurityIdentifier($muser2.SID); `
+		script += fmt.Sprintf(`$mpath = '%s\permissions_test\mixed_principals\mixed_file.txt'; `, smbShare)
+		script += `$macl = Get-Acl $mpath; $macl.SetAccessRuleProtection($true, $true); `
+		script += `$mrule1 = New-Object System.Security.AccessControl.FileSystemAccessRule($msid1, 'FullControl', 'Allow'); `
+		script += `$mrule2 = New-Object System.Security.AccessControl.FileSystemAccessRule($msid2, 'Read', 'Allow'); `
+		script += `$macl.AddAccessRule($mrule1); $macl.AddAccessRule($mrule2); `
+		script += `Set-Acl -Path $mpath -AclObject $macl -ErrorAction Stop; `
+		script += `Write-Host 'Applied mixed permissions'; `
+		script += `} catch { Write-Host 'ERROR:' $_; throw; }; `
 	}
 
-	parts = append(parts, `echo ===== Files and permissions created ===== &&`)
-	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
-	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
-	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+	// Cleanup
+	script += `Write-Host 'Listing created files...'; `
+	script += fmt.Sprintf(`Get-ChildItem -Recurse '%s\permissions_test' | Select-Object -ExpandProperty FullName; `, smbShare)
+	script += `net use Z: /delete /y 2>&1 | Out-Null; `
+	script += `Write-Host '===== Files and permissions created ====='"`
 
-	return strings.Join(parts, " ")
+	return script
 }
 
 // CreateSMBFilesForSIDMapping creates test files with permissions for specific users
@@ -1546,48 +1679,109 @@ func createSMBFilesForSIDMappingScript(export string, users []string) string {
 	split := strings.Split(export, ":")
 	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
 
-	localTestDir := `C:\permissions_test`
-	mappedDrive := `Z:`
-	testDir := `permissions_test`
-	share := fmt.Sprintf(`%s\%s`, smbShare, testDir)
+	// Use PowerShell with domain credentials to ensure AD user resolution works
+	// This avoids icacls silent failures when usernames can't be resolved
+	script := fmt.Sprintf(`powershell.exe -Command "`+
+		`$password = ConvertTo-SecureString '%s' -AsPlainText -Force; `+
+		`$credential = New-Object System.Management.Automation.PSCredential('%s', $password); `+
 
-	var parts []string
-	parts = append(parts, `cmd /C`)
-	parts = append(parts, fmt.Sprintf(`if exist %s rmdir /s /q %s &&`, localTestDir, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario1_orphaned &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario2_name_mapping &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`mkdir %s\scenario3_unmapped &&`, localTestDir))
+		`$localDir = 'C:\permissions_test'; `+
+		`if (Test-Path $localDir) { Remove-Item -Recurse -Force $localDir }; `+
+		`New-Item -ItemType Directory -Path $localDir | Out-Null; `+
+		`New-Item -ItemType Directory -Path $localDir\scenario1_orphaned | Out-Null; `+
+		`New-Item -ItemType Directory -Path $localDir\scenario2_name_mapping | Out-Null; `+
+		`New-Item -ItemType Directory -Path $localDir\scenario3_unmapped | Out-Null; `+
 
-	// Create files for each scenario
-	parts = append(parts, fmt.Sprintf(`echo Orphaned SID test file > %s\scenario1_orphaned\orphaned_user_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Name mapping test file > %s\scenario2_name_mapping\name_mapping_file.txt &&`, localTestDir))
-	parts = append(parts, fmt.Sprintf(`echo Unmapped user test file > %s\scenario3_unmapped\unmapped_user_file.txt &&`, localTestDir))
+		`'Orphaned SID test file' | Out-File -FilePath $localDir\scenario1_orphaned\orphaned_user_file.txt; `+
+		`'Name mapping test file' | Out-File -FilePath $localDir\scenario2_name_mapping\name_mapping_file.txt; `+
+		`'Unmapped user test file' | Out-File -FilePath $localDir\scenario3_unmapped\unmapped_user_file.txt; `+
 
-	parts = append(parts, fmt.Sprintf(`net use %s /delete /y >nul 2>&1 &`, mappedDrive))
-	parts = append(parts, fmt.Sprintf(`net use %s %s /user:%s "%s" &&`, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD))
-	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
+		`net use Z: /delete /y 2>&1 | Out-Null; `+
+		`$netUseResult = net use Z: %s /user:%s '%s' 2>&1; `+
+		`if ($LASTEXITCODE -ne 0) { throw \"Failed to map drive: $netUseResult\" }; `+
 
-	// Set permissions for each scenario file based on the users array
-	// users[0] = orphaned user (will be deleted)
-	// users[1] = name-based mapping user
-	// users[2] = unmapped user
+		`Write-Host 'Removing old permissions_test directory from SMB share...'; `+
+		`$remotePath = '%s\permissions_test'; `+
+		`if (Test-Path $remotePath) { Remove-Item -Recurse -Force $remotePath }; `+
+		`Write-Host 'Creating clean permissions_test directory...'; `+
+		`New-Item -ItemType Directory -Path $remotePath -Force | Out-Null; `+
+		`Write-Host 'Copying files to SMB share...'; `+
+		`Copy-Item -Recurse -Force $localDir\* $remotePath; `+
+
+		`Write-Host 'Applying permissions with domain credentials...'; `,
+		PROTOCOL_PASSWORD, PROTOCOL_USERNAME,
+		smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD,
+		smbShare)
+
+	// Apply permissions using AddAccessRule (not SetAccessRule) to ensure rules are added, not replaced
+	// Also disable inheritance to prevent parent ACLs from interfering
+	// Wrap in try/catch to capture Set-Acl failures
+	// CRITICAL: Resolve usernames to SIDs first using AD cmdlets to avoid IdentityNotMappedException
 	if len(users) > 0 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario1_orphaned\orphaned_user_file.txt" /grant "%s:F" &&`, share, users[0]))
+		// Extract just the username part (remove domain prefix if present)
+		username := users[0]
+		if strings.Contains(username, `\`) {
+			username = strings.Split(username, `\`)[1]
+		}
+		script += fmt.Sprintf(`try { `+
+			`$user1 = Get-ADUser -Identity '%s' -Credential $credential; `+
+			`$sid1 = New-Object System.Security.Principal.SecurityIdentifier($user1.SID); `+
+			`$path1 = '%s\permissions_test\scenario1_orphaned\orphaned_user_file.txt'; `+
+			`$acl1 = Get-Acl $path1; `+
+			`$acl1.SetAccessRuleProtection($true, $true); `+
+			`$rule1 = New-Object System.Security.AccessControl.FileSystemAccessRule($sid1, 'FullControl', 'Allow'); `+
+			`$acl1.AddAccessRule($rule1); `+
+			`Set-Acl -Path $path1 -AclObject $acl1 -ErrorAction Stop; `+
+			`Write-Host 'Applied permissions for %s'; `+
+			`} catch { Write-Host 'ERROR applying permissions for %s:' $_; throw; }; `,
+			username, smbShare, users[0], users[0])
 	}
 	if len(users) > 1 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario2_name_mapping\name_mapping_file.txt" /grant "%s:M" &&`, share, users[1]))
+		username := users[1]
+		if strings.Contains(username, `\`) {
+			username = strings.Split(username, `\`)[1]
+		}
+		script += fmt.Sprintf(`try { `+
+			`$user2 = Get-ADUser -Identity '%s' -Credential $credential; `+
+			`$sid2 = New-Object System.Security.Principal.SecurityIdentifier($user2.SID); `+
+			`$path2 = '%s\permissions_test\scenario2_name_mapping\name_mapping_file.txt'; `+
+			`$acl2 = Get-Acl $path2; `+
+			`$acl2.SetAccessRuleProtection($true, $true); `+
+			`$rule2 = New-Object System.Security.AccessControl.FileSystemAccessRule($sid2, 'Modify', 'Allow'); `+
+			`$acl2.AddAccessRule($rule2); `+
+			`Set-Acl -Path $path2 -AclObject $acl2 -ErrorAction Stop; `+
+			`Write-Host 'Applied permissions for %s'; `+
+			`} catch { Write-Host 'ERROR applying permissions for %s:' $_; throw; }; `,
+			username, smbShare, users[1], users[1])
 	}
 	if len(users) > 2 {
-		parts = append(parts, fmt.Sprintf(`icacls "%s\scenario3_unmapped\unmapped_user_file.txt" /grant "%s:R" &&`, share, users[2]))
+		username := users[2]
+		if strings.Contains(username, `\`) {
+			username = strings.Split(username, `\`)[1]
+		}
+		script += fmt.Sprintf(`try { `+
+			`$principal3 = Get-ADObject -Filter {SamAccountName -eq '%s'} -Properties ObjectSID -Credential $credential; `+
+			`$sid3 = $principal3.ObjectSID; `+
+			`$path3 = '%s\permissions_test\scenario3_unmapped\unmapped_user_file.txt'; `+
+			`$acl3 = Get-Acl $path3; `+
+			`$acl3.SetAccessRuleProtection($true, $true); `+
+			`$rule3 = New-Object System.Security.AccessControl.FileSystemAccessRule($sid3, 'Read', 'Allow'); `+
+			`$acl3.AddAccessRule($rule3); `+
+			`Set-Acl -Path $path3 -AclObject $acl3 -ErrorAction Stop; `+
+			`Write-Host 'Applied permissions for %s'; `+
+			`} catch { Write-Host 'ERROR applying permissions for %s:' $_; throw; }; `,
+			username, smbShare, users[2], users[2])
 	}
 
-	parts = append(parts, `echo ===== SID mapping test files and permissions created ===== &&`)
-	parts = append(parts, fmt.Sprintf(`dir %s /s /b &&`, share))
-	parts = append(parts, fmt.Sprintf(`net use %s /delete /y &&`, mappedDrive))
-	parts = append(parts, fmt.Sprintf(`rmdir /s /q %s`, localTestDir))
+	script += fmt.Sprintf(`Write-Host 'Listing created files...'; `+
+		`Get-ChildItem -Recurse '%s\permissions_test' | Select-Object -ExpandProperty FullName; `+
+		`net use Z: /delete /y 2>&1 | Out-Null; `+
+		`Remove-Item -Recurse -Force $localDir; `+
+		`Write-Host '===== SID mapping test files and permissions created ====='`+
+		`"`,
+		smbShare)
 
-	return strings.Join(parts, " ")
+	return script
 }
 
 // ClearAllSMBSessions forcefully clears all SMB sessions and Windows name/DNS caches

@@ -338,6 +338,8 @@ jobs:
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
       AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
       AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      AD_SMB_SOURCE_VOLUMES: ${{ vars.AD_SMB_SOURCE_VOLUMES }}
+      AD_SMB_SOURCE_HOST_IP: ${{ vars.AD_SMB_SOURCE_HOST_IP }}
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}

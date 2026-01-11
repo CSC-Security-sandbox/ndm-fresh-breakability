@@ -74,6 +74,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		GlobalProjectName, GlobalProjectId, len(GlobalAttachedWorkersConfig)))
 })
 
+
 // SynchronizedAfterSuite ensures cleanup happens after all parallel nodes finish.
 // It has 2 functions:
 // 1. First function: Runs on ALL parallel processes when they finish
@@ -86,7 +87,7 @@ var _ = SynchronizedAfterSuite(func() {
 }, func() {
 	// This runs ONLY on Process #1 after all other processes finish
 	By("Cleaning up global test environment (Process #1)")
-	
+
 	if len(GlobalAttachedWorkersConfig) > 0 {
 		LogDebug("Stopping and detaching workers")
 		err := StopAllWorkersAndWait()
