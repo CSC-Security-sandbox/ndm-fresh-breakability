@@ -33,6 +33,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 	Context("TC-001", func() {
 		BeforeEach(func() {
+			testStartTime = time.Now()
 			// Use globally created project and workers (created once in InitTestEnv)
 			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
 			Expect(err).To(BeNil(), "Error getting global test environment")
@@ -62,7 +63,6 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and scheduled migration", func() {
-			testStartTime = time.Now()
 			By("########################## TC-001 start ################################")
 			LogDebug(fmt.Sprintf("[TC-001 START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
 			LogDebug(fmt.Sprintf("[TC-001 It Block] Using Project: %s (ID: %s)", ProjectName, ProjectId))
