@@ -18,8 +18,12 @@ spec:
             vault.hashicorp.com/role: "datamigrator-role"
             vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
             vault.hashicorp.com/agent-pre-populate-only: "true"
-            vault.hashicorp.com/agent-inject-template-postgres.env: |
-{{ lookup('file', role_path ~ '/templates/postgres-vault-env.tpl') | indent(14, True) }}
+            vault.hashicorp.com/agent-inject-template-postgres.env: |{% raw %}
+              {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
+              export PGUSER="{{ .Data.POSTGRES_DMADMIN_USER }}"
+              export PGPASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+              {{- end -}}
+              {% endraw %}
 {% if enable_istio | default(false) %}
             sidecar.istio.io/inject: "false"
             traffic.sidecar.istio.io/excludeOutboundPorts: "8200,8201"

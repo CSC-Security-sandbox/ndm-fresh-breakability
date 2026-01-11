@@ -22,6 +22,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { getLocalIpAddress } from 'src/utils/network.utils';
+import { createTemporalConnections } from 'src/utils/temporal.utils';
 
 @Injectable()
 export class WorkManagerService {
@@ -67,42 +68,21 @@ export class WorkManagerService {
         this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
       }
       
-      // Build Temporal configuration dynamically (after env vars are set)
-      const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233';
-      const tlsEnabled = process.env.TEMPORAL_TLS_ENABLED === 'true';
-      
-      const temporalConfig: any = { address };
-      
-      if (tlsEnabled && process.env.TEMPORAL_TLS_CA_CERT) {
-        const caCertBuffer = Buffer.from(process.env.TEMPORAL_TLS_CA_CERT, 'base64');
-        this.logger.log(`[onApplicationBootstrap] - TLS certificate loaded: ${caCertBuffer.length} bytes`);
-        
-        temporalConfig.tls = {
-          serverNameOverride: process.env.TEMPORAL_TLS_SERVER_NAME,
-          serverRootCACertificate: caCertBuffer,
-        };
-      }
+      // Create Temporal connections using utility function
+      const connections = await createTemporalConnections(
+        {
+          address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+          tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
+          tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
+          tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+          jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
+          getAccessToken: () => this.authService.getAccessToken(),
+        },
+        this.logger,
+      );
 
-      // Add JWT to gRPC metadata if Temporal JWT authentication is enabled
-      if (process.env.TEMPORAL_JWT_ENABLED === 'true') {
-        this.logger.log('[onApplicationBootstrap] - JWT authentication enabled for Temporal connection');
-        try {
-          // Fetch access token from Keycloak
-          const accessToken = await this.authService.getAccessToken();
-          
-          // Add JWT to gRPC metadata
-          temporalConfig.metadata = {
-            authorization: `Bearer ${accessToken}`,
-          };
-          this.logger.log('[onApplicationBootstrap] - JWT added to Temporal connection metadata');
-        } catch (jwtError) {
-          this.logger.error(`Failed to obtain JWT for Temporal connection: ${jwtError}`);
-          throw new Error('JWT authentication required but token unavailable');
-        }
-      }
-
-      this.connection = await NativeConnection.connect(temporalConfig);
-      this.temporalClientConnection = await Connection.connect(temporalConfig);
+      this.connection = connections.nativeConnection;
+      this.temporalClientConnection = connections.clientConnection;
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
@@ -129,13 +109,12 @@ export class WorkManagerService {
           {
             envVariables: process.env,
             isRebootCall: true,
-            workerIpAddress: workerIp, // Send worker's actual IP
           },
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
-              'x-worker-ip': workerIp, // Also send in header for backup
+              'x-worker-ip': workerIp,
               'Content-Type': 'application/json',
             },
             timeout: 5000,
@@ -189,6 +168,9 @@ export class WorkManagerService {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
       
+      // Get worker's actual local IP address
+      const workerIp = getLocalIpAddress();
+      
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
@@ -196,6 +178,7 @@ export class WorkManagerService {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'x-worker-ip': workerIp,
             },
             timeout: 5000,
           },

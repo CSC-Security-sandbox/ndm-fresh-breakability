@@ -1,31 +1,30 @@
 import { networkInterfaces } from 'os';
 
+const IPV4_FAMILY = 'IPv4';
+const FALLBACK_IP = '127.0.0.1';
+
 /**
- * Get the local IPv4 address of the worker
- * Prioritizes non-internal (non-127.x.x.x, non-169.254.x.x) addresses
- * Returns the first valid IP found from network interfaces
+ * Detects the local IP address of the worker machine.
+ * 
+ * Returns the first non-loopback IPv4 address found. Whatever IP the worker has
+ * is its actual address on the network - no filtering or prioritization needed.
+ * 
+ * @returns The first non-loopback IPv4 address found, or '127.0.0.1' if none available
  */
 export function getLocalIpAddress(): string {
   const nets = networkInterfaces();
-  
-  // Collect all non-internal IPv4 addresses
-  const addresses: string[] = [];
-  
+
   for (const name of Object.keys(nets)) {
     const interfaces = nets[name];
     if (!interfaces) continue;
-    
+
     for (const net of interfaces) {
-      // Skip over non-IPv4 and internal (loopback) addresses
-      if (net.family === 'IPv4' && !net.internal) {
-        // Skip link-local addresses (169.254.x.x)
-        if (!net.address.startsWith('169.254.')) {
-          addresses.push(net.address);
-        }
+      // Return first IPv4 address that's not loopback
+      if (net.family === IPV4_FAMILY && !net.internal) {
+        return net.address;
       }
     }
   }
-  
-  // Return first valid address, or fallback to localhost
-  return addresses[0] || '127.0.0.1';
+
+  return FALLBACK_IP;
 }

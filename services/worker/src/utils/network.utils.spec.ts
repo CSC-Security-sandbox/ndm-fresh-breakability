@@ -56,34 +56,6 @@ describe('getLocalIpAddress', () => {
     expect(result).toBe('10.0.0.50');
   });
 
-  it('should skip link-local addresses (169.254.x.x)', () => {
-    mockedNetworkInterfaces.mockReturnValue({
-      eth0: [
-        {
-          address: '169.254.10.1',
-          netmask: '255.255.0.0',
-          family: 'IPv4',
-          mac: '00:00:00:00:00:00',
-          internal: false,
-          cidr: '169.254.10.1/16',
-        },
-      ],
-      eth1: [
-        {
-          address: '172.30.203.50',
-          netmask: '255.255.255.0',
-          family: 'IPv4',
-          mac: '00:00:00:00:00:01',
-          internal: false,
-          cidr: '172.30.203.50/24',
-        },
-      ],
-    });
-
-    const result = getLocalIpAddress();
-    expect(result).toBe('172.30.203.50');
-  });
-
   it('should skip IPv6 addresses', () => {
     mockedNetworkInterfaces.mockReturnValue({
       eth0: [

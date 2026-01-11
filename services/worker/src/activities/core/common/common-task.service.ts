@@ -13,6 +13,7 @@ import { calculateCommandHash } from "src/activities/utils/utils";
 import { buildTask } from "../utils/utils";
 import { InitTaskInput } from "../migrate/sync-activity.type";
 import { AuthService } from "src/auth/auth.service";
+import { createClientConnection } from 'src/utils/temporal.utils';
 
 
 @Injectable()
@@ -111,33 +112,18 @@ export class CommonTaskService {
   }
 
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
-    // Build connection config with TLS+JWT if enabled
-    const connectionConfig: any = { address: this.temporalAddress };
-    
-    if (process.env.TEMPORAL_TLS_ENABLED === 'true' && process.env.TEMPORAL_TLS_CA_CERT) {
-      const caCertBuffer = Buffer.from(process.env.TEMPORAL_TLS_CA_CERT, 'base64');
-      connectionConfig.tls = {
-        serverNameOverride: process.env.TEMPORAL_TLS_SERVER_NAME,
-        serverRootCACertificate: caCertBuffer,
-      };
-      this.logger.debug(`Using TLS configuration for workflow check activity`);
-    }
-
-    // Add JWT to metadata if enabled
-    if (process.env.TEMPORAL_JWT_ENABLED === 'true') {
-      try {
-        const accessToken = await this.authService.getAccessToken();
-        connectionConfig.metadata = {
-          authorization: `Bearer ${accessToken}`,
-        };
-        this.logger.debug(`JWT added to workflow check activity connection metadata`);
-      } catch (jwtError) {
-        this.logger.error(`Failed to obtain JWT for workflow check activity: ${jwtError}`);
-        throw new Error('JWT authentication required but token unavailable');
-      }
-    }
-
-    const connection = await Connection.connect(connectionConfig);
+    // Create Temporal client connection using utility function
+    const connection = await createClientConnection(
+      {
+        address: this.temporalAddress,
+        tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
+        tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
+        tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+        jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
+        getAccessToken: () => this.authService.getAccessToken(),
+      },
+      this.logger,
+    );
     this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
     
     try {
