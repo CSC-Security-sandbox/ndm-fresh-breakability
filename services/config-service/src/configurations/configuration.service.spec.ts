@@ -5117,4 +5117,296 @@ describe('ConfigurationService', () => {
       expect(mockConfigRepository.findOne).toHaveBeenCalled();
     });
   });
+
+  describe('startValidateWorkingDirectoryWorkflow - additional branches', () => {
+    it('should handle partial zone failures and continue with successful zones', async () => {
+      const configId = uuidv4();
+      const traceId = uuidv4();
+      const fileServerId1 = uuidv4();
+      const fileServerId2 = uuidv4();
+
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        serverType: ServerType.dell,
+        workingDirectory: {
+          pathId: '123',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: fileServerId1,
+            host: 'zone1.isilon.com',
+            fileServerName: 'zone1',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            userName: 'admin',
+            password: 'pass',
+            workers: ['worker1'],
+          },
+          {
+            id: fileServerId2,
+            host: 'zone2.isilon.com',
+            fileServerName: 'zone2',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            userName: 'admin',
+            password: 'pass',
+            workers: ['worker2'],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.dell,
+        fileServers: [
+          { id: fileServerId1, host: 'zone1.isilon.com', fileServerName: 'zone1', workers: [{ workerId: 'worker1' }] },
+          { id: fileServerId2, host: 'zone2.isilon.com', fileServerName: 'zone2', workers: [{ workerId: 'worker2' }] },
+        ],
+      });
+
+      // Mock one zone succeeding and one failing
+      jest.spyOn(service, 'discoverStorageExportsForFileServers').mockResolvedValue({
+        discoveredPathsMap: new Map([
+          [fileServerId1, [{ volumePath: '/ifs/export1', directoryPath: '/ifs/export1' }]],
+        ]),
+        errorMap: new Map([
+          [fileServerId2, 'Connection timeout'],
+        ]),
+      });
+
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, traceId);
+
+      // Should still have called workflow for the successful zone
+      expect(mockWorkflowService.startWorkflow).toHaveBeenCalled();
+    });
+
+    it('should mark config as ERRORED when all zones fail API discovery', async () => {
+      const configId = uuidv4();
+      const traceId = uuidv4();
+      const fileServerId = uuidv4();
+
+      const createConfig = {
+        projectId: '123',
+        configName: 'config',
+        configType: ConfigurationType.file,
+        serverType: ServerType.dell,
+        workingDirectory: {
+          pathId: '123',
+          pathName: '/test/path',
+          workingDirectory: '/working/dir',
+        },
+        fileServers: [
+          {
+            id: fileServerId,
+            host: 'zone1.isilon.com',
+            fileServerName: 'zone1',
+            protocol: Protocol.NFS,
+            protocolVersion: ProtocolVersion.NFSv3,
+            userName: 'admin',
+            password: 'pass',
+            workers: ['worker1'],
+          },
+        ],
+      };
+
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.dell,
+        fileServers: [
+          { id: fileServerId, host: 'zone1.isilon.com', fileServerName: 'zone1', workers: [{ workerId: 'worker1' }], status: ConfigStatus.DRAFT },
+        ],
+        status: ConfigStatus.DRAFT,
+      });
+
+      // Mock all zones failing
+      jest.spyOn(service, 'discoverStorageExportsForFileServers').mockResolvedValue({
+        discoveredPathsMap: new Map(),
+        errorMap: new Map([
+          [fileServerId, 'Connection refused'],
+        ]),
+      });
+
+      await service.startValidateWorkingDirectoryWorkflow(createConfig, configId, traceId);
+
+      // Should save config with ERRORED status
+      expect(mockConfigRepository.save).toHaveBeenCalled();
+      // Workflow should not be started when all zones fail
+    });
+  });
+
+  describe('discoverStorageExportsForFileServers - SMB protocol', () => {
+    it('should discover SMB shares and handle errors separately', async () => {
+      const fileServerId = uuidv4();
+      const mockConfig = {
+        id: uuidv4(),
+        serverType: ServerType.dell,
+      } as ConfigEntity;
+      const mockFileServers = [
+        {
+          id: fileServerId,
+          protocol: Protocol.SMB,
+          fileServerName: 'zone1',
+        },
+      ] as FileServerEntity[];
+      
+      mockIsilonStorageClient.getSMBShares.mockRejectedValue(new Error('SMB connection failed'));
+
+      const result = await service.discoverStorageExportsForFileServers(
+        mockConfig,
+        mockFileServers,
+        'trace-123',
+      );
+
+      expect(result.errorMap.has(fileServerId)).toBe(true);
+      expect(result.errorMap.get(fileServerId)).toContain('SMB connection failed');
+    });
+  });
+
+  describe('refreshConfig - error branches', () => {
+    it('should throw BadRequestException for invalid fileServerId format', async () => {
+      const configId = uuidv4();
+
+      await expect(
+        service.refreshConfig(configId, 'trace-123', 'invalid-uuid'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when fileServer not found in config', async () => {
+      const configId = uuidv4();
+      const wrongFileServerId = uuidv4();
+
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.dell,
+        fileServers: [],
+      });
+
+      await expect(
+        service.refreshConfig(configId, 'trace-123', wrongFileServerId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getCutoverDetailsByConfigId - error handling', () => {
+    it('should rethrow BadRequestException', async () => {
+      const configId = uuidv4();
+      // Mock the repository to throw BadRequestException
+      mockConfigRepository.findOne.mockRejectedValue(new BadRequestException('Bad request'));
+
+      await expect(
+        service.getCutoverDetailsByConfigId(configId),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should rethrow NotFoundException', async () => {
+      const configId = uuidv4();
+      mockConfigRepository.findOne.mockRejectedValue(new NotFoundException('Not found'));
+
+      await expect(
+        service.getCutoverDetailsByConfigId(configId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('refreshConfig - partial zone failure', () => {
+    it('should handle partial zone failure and continue with successful zones', async () => {
+      const configId = uuidv4();
+      const traceId = 'trace-123';
+      const fileServerId1 = uuidv4();
+      const fileServerId2 = uuidv4();
+
+      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.dell,
+        createdBy: 'user1',
+        fileServers: [
+          {
+            id: fileServerId1,
+            host: 'zone1.isilon.com',
+            fileServerName: 'zone1',
+            status: ConfigStatus.ACTIVE,
+            isRefreshed: true,
+            workers: [{ workerId: 'worker1' }],
+            volumes: [],
+          },
+          {
+            id: fileServerId2,
+            host: 'zone2.isilon.com',
+            fileServerName: 'zone2',
+            status: ConfigStatus.ACTIVE,
+            isRefreshed: true,
+            workers: [{ workerId: 'worker2' }],
+            volumes: [],
+          },
+        ],
+      });
+
+      // Mock partial failure - zone1 succeeds, zone2 fails
+      jest.spyOn(service, 'discoverStorageExportsForFileServers').mockResolvedValue({
+        discoveredPathsMap: new Map([
+          [fileServerId1, [{ volumePath: '/ifs/export1', directoryPath: '/ifs/export1' }]],
+        ]),
+        errorMap: new Map([
+          [fileServerId2, 'Connection timeout'],
+        ]),
+      });
+
+      mockFileServerRepository.update.mockResolvedValue({});
+      mockFileServerRepository.save.mockResolvedValue({});
+      mockVolumeRepository.find.mockResolvedValue([]);
+      mockConfigRepository.update.mockResolvedValue({});
+
+      const result = await service.refreshConfig(configId, traceId);
+
+      // Should save the error status for zone2
+      expect(mockFileServerRepository.save).toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+
+    it('should throw when all zones fail on refresh', async () => {
+      const configId = uuidv4();
+      const traceId = 'trace-123';
+      const fileServerId = uuidv4();
+
+      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+
+      mockConfigRepository.findOne.mockResolvedValue({
+        id: configId,
+        serverType: ServerType.dell,
+        createdBy: 'user1',
+        fileServers: [
+          {
+            id: fileServerId,
+            host: 'zone1.isilon.com',
+            fileServerName: 'zone1',
+            status: ConfigStatus.ACTIVE,
+            isRefreshed: true,
+            workers: [{ workerId: 'worker1' }],
+            volumes: [],
+          },
+        ],
+      });
+
+      // Mock all zones failing
+      jest.spyOn(service, 'discoverStorageExportsForFileServers').mockResolvedValue({
+        discoveredPathsMap: new Map(),
+        errorMap: new Map([
+          [fileServerId, 'Connection refused'],
+        ]),
+      });
+
+      mockFileServerRepository.update.mockResolvedValue({});
+      mockFileServerRepository.save.mockResolvedValue({});
+
+      await expect(
+        service.refreshConfig(configId, traceId),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });

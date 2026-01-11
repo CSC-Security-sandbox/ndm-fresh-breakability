@@ -20,7 +20,19 @@ jest.mock('@temporalio/activity', () => ({}));
 
 // Mock other dependencies
 jest.mock('axios');
-jest.mock('fs');
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  unlinkSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  promises: {
+    writeFile: jest.fn(),
+    unlink: jest.fn(),
+    readFile: jest.fn(),
+    mkdir: jest.fn(),
+  },
+}));
 jest.mock('src/protocols/protocols');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -483,38 +495,29 @@ describe('ValidateWorkingDirectoryActivity', () => {
   });
 
   describe('checkWritable', () => {
-    it('should return true for writable directory', () => {
-      // Mock writeFileSync and unlinkSync to succeed
-      const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-      const mockUnlinkSync = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
+    it('should return true for writable directory', async () => {
+      // Mock fsPromises.writeFile and fsPromises.unlink to succeed
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
 
-      const result = service.checkWritable('/test/directory');
+      const result = await service.checkWritable('/test/directory');
 
-      expect(mockWriteFileSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
-      expect(mockUnlinkSync).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
+      expect(fs.promises.writeFile).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
+      expect(fs.promises.unlink).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
       expect(result).toBe(true);
       expect(logger.log).toHaveBeenCalledWith('Success: Directory /test/directory is writable.');
-      
-      // Restore mocks
-      mockWriteFileSync.mockRestore();
-      mockUnlinkSync.mockRestore();
     });
 
-    it('should return false for non-writable directory', () => {
+    it('should return false for non-writable directory', async () => {
       const writeError = new Error('Permission denied');
       
-      // Mock writeFileSync to throw error
-      const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
-        throw writeError;
-      });
+      // Mock fsPromises.writeFile to reject with error
+      (fs.promises.writeFile as jest.Mock).mockRejectedValue(writeError);
 
-      const result = service.checkWritable('/test/directory');
+      const result = await service.checkWritable('/test/directory');
 
       expect(result).toBe(false);
       expect(logger.error).toHaveBeenCalledWith('Error: No write permission for directory /test/directory - Permission denied');
-      
-      // Restore mock
-      mockWriteFileSync.mockRestore();
     });
   });
 
