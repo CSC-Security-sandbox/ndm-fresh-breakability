@@ -19,16 +19,16 @@ spec:
             vault.hashicorp.com/role: "datamigrator-role"
             vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
             vault.hashicorp.com/agent-pre-populate-only: "true"
+{% if enable_istio | default(false) %}
+            sidecar.istio.io/inject: "false"
+            traffic.sidecar.istio.io/excludeOutboundPorts: "8200,8201"
+{% endif %}
             vault.hashicorp.com/agent-inject-template-postgres.env: |{% raw %}
               {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
               export PGUSER="{{ .Data.POSTGRES_DMADMIN_USER }}"
               export PGPASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
               {{- end -}}
               {% endraw %}
-{% if enable_istio | default(false) %}
-            sidecar.istio.io/inject: "false"
-            traffic.sidecar.istio.io/excludeOutboundPorts: "8200,8201"
-{%- endif %}
 
         spec:
           serviceAccountName: datamigrator-openbao-sa
