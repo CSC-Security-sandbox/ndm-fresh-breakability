@@ -20,16 +20,16 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
 ): Promise<any> {
   log(args.traceId, `Starting ListPathWorkerWorkflow in ValidateWorkingDirectoryWorkerWorkflow with args: ${JSON.stringify(args)}`);
   
-  // Check if this is Dell Isilon - exports already discovered via API
-  const isDell = args.payload.serverType === 'Dell';
+  // Check if this is a storage-aware type (Dell, etc.) - exports already discovered via API
+  const isStorageAware = args.payload.serverType !== 'OtherNAS';
   let paths = [];
   
-  if (isDell) {
-    // For Dell Isilon: Skip showmount, exports already discovered via API and stored in DB
+  if (isStorageAware) {
+    // For storage-aware types: Skip showmount, exports already discovered via API and stored in DB
     // Use discoveredPaths from payload (populated by config-service from VolumeEntity)
-    log(args.traceId, `Dell Isilon: Skipping showmount - exports already discovered via API`);
+    log(args.traceId, `Storage-aware: Skipping showmount - exports already discovered via API`);
     paths = args.payload.discoveredPaths || [];
-    log(args.traceId, `Dell Isilon: Using ${paths.length} discovered paths from DB`);
+    log(args.traceId, `Storage-aware: Using ${paths.length} discovered paths from DB`);
   } else {
     // For OtherNAS: Run showmount to discover exports
     log(args.traceId, `OtherNAS: Running showmount to discover exports`);
@@ -52,9 +52,9 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   args.payload.paths = paths;
   args.payload['hasManualUpload'] = args.payload.listPathPayload.some((item: any) => item.exportPathSource === ExportPathSource.MANUAL_UPLOAD);
   
-  // For Dell, also pass the dellExportsMap so activity can get export path per host
-  if (isDell && args.payload.dellExportsMap) {
-    args.payload['isDell'] = true;
+  // For storage-aware types, mark as such so activity knows to use exportsMap
+  if (isStorageAware && args.payload.exportsMap) {
+    args.payload['isStorageAware'] = true;
   }
   
   const exportPathWorkingDirectoryProvided = args?.payload?.exportPath?.length > 0;
@@ -66,11 +66,11 @@ export async function ValidateWorkingDirectoryWorkerWorkflow(
   args.payload['exportPathWorkingDirectoryProvided'] = exportPathWorkingDirectoryProvided;
 
   if(!exportPathWorkingDirectoryProvided) {
-    // For Dell, use dellExportsMap to get first path for the first host
-    if (isDell && args.payload.dellExportsMap) {
+    // For storage-aware types, use exportsMap to get first path for the first host
+    if (isStorageAware && args.payload.exportsMap) {
       const firstHost = args.payload.listPathPayload[0]?.host;
-      args.payload['fetchedPath'] = args.payload.dellExportsMap[firstHost] || paths[0];
-      log(args.traceId, `Dell Isilon: Using fetchedPath=${args.payload['fetchedPath']} for host ${firstHost}`);
+      args.payload['fetchedPath'] = args.payload.exportsMap[firstHost] || paths[0];
+      log(args.traceId, `Storage-aware: Using fetchedPath=${args.payload['fetchedPath']} for host ${firstHost}`);
     } else {
       args.payload['fetchedPath'] = paths[0];
     }

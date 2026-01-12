@@ -1404,11 +1404,11 @@ export class ConfigurationService {
           const discoveredPaths = volumeDataList.map((v) => v.volumePath);
           (payload as any).discoveredPaths = discoveredPaths;
 
-          // Build dellExportsMap with first path for this file server
+          // Build exportsMap with first path for this file server (storage-aware types)
           if (discoveredPaths.length > 0) {
-            const dellExportsMap: Record<string, string> = {};
-            dellExportsMap[fileServer.host] = discoveredPaths[0];
-            (payload as any).dellExportsMap = dellExportsMap;
+            const exportsMap: Record<string, string> = {};
+            exportsMap[fileServer.host] = discoveredPaths[0];
+            (payload as any).exportsMap = exportsMap;
           }
 
           this.logger.debug(

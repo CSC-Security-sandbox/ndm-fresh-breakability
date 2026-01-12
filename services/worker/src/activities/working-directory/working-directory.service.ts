@@ -1,19 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
-import { exec } from 'child_process';
 import * as fs from 'fs';
-import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { join } from 'path';
-import { promisify } from 'util';
+import { promises as fsPromises } from 'fs';
 import { AuthService } from 'src/auth/auth.service';
-
-const execAsync = promisify(exec);
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { configureSmartConnectDns } from '../utils/utils';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -43,17 +40,18 @@ export class ValidateWorkingDirectoryActivity {
       configId: payload.configId,
       status: null,
       errorMessage: null,
-      fileServerId: payload?.fileServerId || null, // Dell per-zone: pass fileServerId for per-zone status updates
+      fileServerId: payload?.fileServerId || null, // Storage-aware: pass fileServerId for per-zone status updates
     };
 
-    const isDell = payload?.isDell || payload?.serverType === 'Dell';
+    // Storage-aware types (Dell, etc.) use API-based discovery; OtherNAS uses showmount
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
     const isPathExists = !!payload?.paths?.length;
     
-    // For Dell Isilon, exports are already discovered via API (stored in VolumeEntity)
-    // so paths may be empty but we still have dellExportsMap to validate
-    const hasDellExports = isDell && payload?.dellExportsMap && Object.keys(payload.dellExportsMap).length > 0;
+    // For storage-aware types, exports are discovered via API (stored in VolumeEntity)
+    // so paths may be empty but we still have exportsMap to validate
+    const hasDiscoveredExports = isStorageAware && payload?.exportsMap && Object.keys(payload.exportsMap).length > 0;
     
-    if(!isPathExists && !payload.hasManualUpload && !hasDellExports) {
+    if(!isPathExists && !payload.hasManualUpload && !hasDiscoveredExports) {
       configStatusPayload.status = ConfigStatus.ERRORED;
       configStatusPayload.errorMessage = ConfigError.UNABLE_TO_DETECT_EXPORT_PATH;
       await this.updateConfigStatus(apiUrl, configStatusPayload);
@@ -131,7 +129,7 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
-    const isDell = payload?.isDell || payload?.serverType === 'Dell';
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
     
     try {
       for (const fileServer of payload.listPathPayload) {
@@ -140,27 +138,27 @@ export class ValidateWorkingDirectoryActivity {
           continue;
         }
 
-        // For Dell Isilon with SmartConnect FQDN on Linux: configure DNS resolver
+        // For storage-aware types with SmartConnect FQDN: configure DNS resolver
         // This allows the worker to resolve the SmartConnect FQDN using the SSIP
         
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
-        // For Dell, get the export path from dellExportsMap for this specific host
-        // This was discovered via Isilon API and stored in VolumeEntity
+        // For storage-aware types, get the export path from exportsMap for this specific host
+        // This was discovered via storage API and stored in VolumeEntity
         let exportPath = payload.fetchedPath;
-        if (isDell){
-            if (fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
-            await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
-            }
-            if (payload.dellExportsMap && payload.dellExportsMap[fileServer.host]) {
-            exportPath = payload.dellExportsMap[fileServer.host];
-            this.logger.log(`Dell Isilon: Using discovered export path ${exportPath} for host ${fileServer.host}`);
+        if (isStorageAware){
+            // Configure SmartConnect DNS if SSIP and zone are provided
+            await configureSmartConnectDns(traceId, fileServer, this.logger);
+            
+            if (payload.exportsMap && payload.exportsMap[fileServer.host]) {
+              exportPath = payload.exportsMap[fileServer.host];
+              this.logger.log(`Using discovered export path ${exportPath} for host ${fileServer.host}`);
             }
         }
        
 
-        // For Dell per-zone, include fileServerId in path to prevent collision between zones
+        // For storage-aware per-zone, include fileServerId in path to prevent collision between zones
         const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
 
         const mountPathPayload = {
@@ -208,17 +206,15 @@ export class ValidateWorkingDirectoryActivity {
     let isDirectoryValid = false;
     let hasWritePermission = false;
 
-    // For Dell per-zone, include fileServerId in path to prevent collision between zones
+    // For storage-aware per-zone, include fileServerId in path to prevent collision between zones
     const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
-    const isDell = payload?.isDell || payload?.serverType === 'Dell';
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        // For Dell Isilon with SmartConnect FQDN: configure DNS resolver
-        if (isDell){
-          if (fileServer.smartConnectSsip && fileServer.smartConnectDnsZone) {
-            await this.configureSmartConnectDns(traceId, fileServer.smartConnectSsip, fileServer.smartConnectDnsZone);
-          }
+        // For storage-aware types with SmartConnect FQDN: configure DNS resolver
+        if (isStorageAware){
+          await configureSmartConnectDns(traceId, fileServer, this.logger);
         }
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
@@ -279,164 +275,6 @@ export class ValidateWorkingDirectoryActivity {
     } catch (error) {
       this.logger.error(`Error: No write permission for directory ${directoryPath} - ${error.message}`);
       return false;
-    }
-  }
-
-  /**
-   * Configure DNS resolver for Dell Isilon SmartConnect FQDN resolution
-   * This adds the SmartConnect SSIP as a nameserver for the SmartConnect DNS zone
-   * Supports Linux, macOS, and Windows workers
-   * 
-   * @param traceId - Trace ID for logging
-   * @param ssip - SmartConnect Service IP (SSIP) - the DNS server for the zone
-   * @param dnsZone - SmartConnect DNS zone (e.g., "lab.local")
-   */
-  private async configureSmartConnectDns(traceId: string, ssip: string, dnsZone: string): Promise<void> {
-    this.logger.log(`[${traceId}] Configuring SmartConnect DNS: SSIP=${ssip}, Zone=${dnsZone}, Platform=${process.platform}`);
-    
-    try {
-      switch (process.platform) {
-        case 'linux':
-          await this.configureSmartConnectDnsLinux(traceId, ssip, dnsZone);
-          break;
-        case 'darwin':
-          await this.configureSmartConnectDnsMacOS(traceId, ssip, dnsZone);
-          break;
-        case 'win32':
-          await this.configureSmartConnectDnsWindows(traceId, ssip, dnsZone);
-          break;
-        default:
-          throw new Error(`Unsupported platform for DNS configuration: ${process.platform}`);
-      }
-    } catch (error) {
-      this.logger.error(`[${traceId}] Failed to configure SmartConnect DNS: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Configure DNS for Linux by modifying /etc/resolv.conf
-   */
-  private async configureSmartConnectDnsLinux(traceId: string, ssip: string, dnsZone: string): Promise<void> {
-    const resolvConfPath = '/etc/resolv.conf';
-    const nameserverEntry = `nameserver ${ssip}`;
-    const searchEntry = `search ${dnsZone}`;
-    
-    // Read current resolv.conf
-    let currentContent = '';
-    try {
-      currentContent = await fsPromises.readFile(resolvConfPath, 'utf-8');
-    } catch (readError) {
-      this.logger.warn(`[${traceId}] Could not read ${resolvConfPath}: ${readError.message} Thus, creating new resolv.conf`);
-    }
-    
-    // Check if SSIP is already configured
-    if (currentContent.includes(nameserverEntry)) {
-      this.logger.log(`[${traceId}] SmartConnect SSIP ${ssip} already configured in ${resolvConfPath}`);
-      return;
-    }
-    
-    // Prepend the SmartConnect SSIP as the first nameserver
-    const lines = currentContent.split('\n');
-    const newLines: string[] = [];
-    
-    // Add SmartConnect SSIP as first nameserver
-    newLines.push(nameserverEntry);
-    
-    // Add search domain if not already present
-    let hasSearchDomain = false;
-    for (const line of lines) {
-      if (line.startsWith('search ')) {
-        // Append our DNS zone to existing search line if not present
-        if (!line.includes(dnsZone)) {
-          newLines.push(`${line} ${dnsZone}`);
-        } else {
-          newLines.push(line);
-        }
-        hasSearchDomain = true;
-      } else if (line.trim()) {
-        newLines.push(line);
-      }
-    }
-    
-    // Add search line if none exists
-    if (!hasSearchDomain) {
-      newLines.push(searchEntry);
-    }
-    
-    // Write updated resolv.conf
-    const newContent = newLines.join('\n') + '\n';
-    await fsPromises.writeFile(resolvConfPath, newContent);
-    
-    this.logger.log(`[${traceId}] Linux: SmartConnect DNS configured successfully`);
-  }
-
-  /**
-   * Configure DNS for macOS by creating a resolver file in /etc/resolver/
-   * This is the recommended way to add DNS for specific domains on macOS
-   */
-  private async configureSmartConnectDnsMacOS(traceId: string, ssip: string, dnsZone: string): Promise<void> {
-    const resolverDir = '/etc/resolver';
-    const resolverFile = path.join(resolverDir, dnsZone);
-    
-    // Check if already configured
-    try {
-      const content = await fsPromises.readFile(resolverFile, 'utf-8');
-      if (content.includes(ssip)) {
-        this.logger.log(`[${traceId}] SmartConnect SSIP ${ssip} already configured for ${dnsZone}`);
-        return;
-      }
-    } catch (err) {
-      // File doesn't exist, continue to create it
-    }
-    
-    // Create resolver directory if it doesn't exist
-    await fsPromises.mkdir(resolverDir, { recursive: true });
-    
-    // Create resolver file for the DNS zone
-    const resolverContent = `# SmartConnect DNS resolver for Dell Isilon\nnameserver ${ssip}\n`;
-    await fsPromises.writeFile(resolverFile, resolverContent);
-    
-    this.logger.log(`[${traceId}] macOS: SmartConnect DNS configured at ${resolverFile}`);
-  }
-
-  /**
-   * Configure DNS for Windows using PowerShell to add DNS client configuration
-   * Uses Add-DnsClientNrptRule to add a Name Resolution Policy Table rule
-   */
-  private async configureSmartConnectDnsWindows(traceId: string, ssip: string, dnsZone: string): Promise<void> {
-    // Check if rule already exists
-    const checkCmd = `powershell -Command "Get-DnsClientNrptRule | Where-Object { $_.Namespace -eq '.${dnsZone}' }"`;
-    
-    try {
-      const { stdout } = await execAsync(checkCmd);
-      if (stdout && stdout.trim()) {
-        this.logger.log(`[${traceId}] SmartConnect DNS rule already exists for ${dnsZone}`);
-        return;
-      }
-    } catch (checkError) {
-      this.logger.log(`[${traceId}] SmartConnect DNS rule not found for ${dnsZone}, creating new rule`);
-    }
-    
-    // Add NRPT rule for the DNS zone
-    // This tells Windows to use the SSIP as DNS server for the specified zone
-    const addCmd = `powershell -Command "Add-DnsClientNrptRule -Namespace '.${dnsZone}' -NameServers '${ssip}'"`;
-    
-    try {
-      await execAsync(addCmd);
-      this.logger.log(`[${traceId}] Windows: SmartConnect DNS NRPT rule added for ${dnsZone} -> ${ssip}`);
-    } catch (addError) {
-      // Fallback: Try adding to hosts file or using netsh
-      this.logger.warn(`[${traceId}] Failed to add NRPT rule: ${addError.message}. Trying alternative method...`);
-      
-      // Alternative: Use netsh to set DNS server (requires admin)
-      const netshCmd = `netsh interface ip add dns name="Ethernet" addr=${ssip} index=1`;
-      try {
-        await execAsync(netshCmd);
-        this.logger.log(`[${traceId}] Windows: SmartConnect DNS added via netsh`);
-      } catch (netshError) {
-        throw new Error(`Could not configure DNS: ${netshError.message}`);
-      }
     }
   }
 

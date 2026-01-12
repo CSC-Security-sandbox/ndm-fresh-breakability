@@ -21,22 +21,18 @@ jest.mock('@temporalio/activity', () => ({}));
 // Mock other dependencies
 jest.mock('axios');
 jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
   existsSync: jest.fn(),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  unlinkSync: jest.fn(),
-  mkdirSync: jest.fn(),
   promises: {
-    writeFile: jest.fn(),
-    unlink: jest.fn(),
-    readFile: jest.fn(),
-    mkdir: jest.fn(),
+    writeFile: jest.fn().mockResolvedValue(undefined),
+    unlink: jest.fn().mockResolvedValue(undefined),
   },
 }));
 jest.mock('src/protocols/protocols');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedFs = fs as jest.Mocked<typeof fs>;
+const mockedFsPromises = fs.promises as jest.Mocked<typeof fs.promises>;
 
 describe('ValidateWorkingDirectoryActivity', () => {
   let service: ValidateWorkingDirectoryActivity;
@@ -407,7 +403,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       mockProtocol.mountPath.mockResolvedValue(undefined);
       mockProtocol.unmountPath.mockResolvedValue(undefined);
       mockedFs.existsSync.mockReturnValue(true);
-      jest.spyOn(service, 'checkWritable').mockReturnValue(true);
+      jest.spyOn(service, 'checkWritable').mockResolvedValue(true);
 
       const result = await service.isValidDirectory(mockPayload, 'trace-id');
 
@@ -433,7 +429,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       mockProtocol.mountPath.mockResolvedValue(undefined);
       mockProtocol.unmountPath.mockResolvedValue(undefined);
       mockedFs.existsSync.mockReturnValue(true);
-      jest.spyOn(service, 'checkWritable').mockReturnValue(false);
+      jest.spyOn(service, 'checkWritable').mockResolvedValue(false);
 
       await expect(service.isValidDirectory(mockPayload, 'trace-id'))
         .rejects.toThrow('Provided working directory working-dir has no writable permission');
@@ -463,7 +459,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
       mockProtocol.mountPath.mockResolvedValue(undefined);
       mockProtocol.unmountPath.mockResolvedValue(undefined);
       mockedFs.existsSync.mockReturnValue(true);
-      jest.spyOn(service, 'checkWritable').mockReturnValue(true);
+      jest.spyOn(service, 'checkWritable').mockResolvedValue(true);
 
       const result = await service.isValidDirectory(payloadWithMultipleServers, 'trace-id');
 
@@ -496,23 +492,17 @@ describe('ValidateWorkingDirectoryActivity', () => {
 
   describe('checkWritable', () => {
     it('should return true for writable directory', async () => {
-      // Mock fsPromises.writeFile and fsPromises.unlink to succeed
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
-
       const result = await service.checkWritable('/test/directory');
 
-      expect(fs.promises.writeFile).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
-      expect(fs.promises.unlink).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
+      expect(mockedFsPromises.writeFile).toHaveBeenCalledWith('/test/directory/.nfs_write_test', '');
+      expect(mockedFsPromises.unlink).toHaveBeenCalledWith('/test/directory/.nfs_write_test');
       expect(result).toBe(true);
       expect(logger.log).toHaveBeenCalledWith('Success: Directory /test/directory is writable.');
     });
 
     it('should return false for non-writable directory', async () => {
       const writeError = new Error('Permission denied');
-      
-      // Mock fsPromises.writeFile to reject with error
-      (fs.promises.writeFile as jest.Mock).mockRejectedValue(writeError);
+      mockedFsPromises.writeFile.mockRejectedValueOnce(writeError);
 
       const result = await service.checkWritable('/test/directory');
 
