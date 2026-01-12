@@ -14,7 +14,9 @@ import { validate as isUUID } from 'uuid';
 import {
   ConfigErrorMsg,
   ConfigStatus,
+  Protocol,
   ProtocolVersionError,
+  ServerType,
   WorkerStatus,
   WorkFlows,
 } from 'src/constants/enums';
@@ -30,7 +32,13 @@ import {
 } from 'src/entities/jobconfig.entity';
 import { JobRunEntity, JobRunStatus } from 'src/entities/jobrun.entity';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { ConfigDTO } from './dto/config.dto';
+import {
+  ConfigDTO,
+  FetchCertificateRequestDTO,
+  FetchCertificateResponseDTO,
+  FetchZonesRequestDTO,
+  FetchZonesResponseDTO,
+} from './dto/config.dto';
 import { ValidateExportPathAndWorkingDirectoryDTO } from './dto/validate-export-path-working-directory.dto';
 import { FindAllConfigPageDto } from './dto/findallconfig.dto';
 import {
@@ -44,6 +52,7 @@ import {
 } from 'src/workflow/workflow.types';
 import {
   Credentials,
+  DiscoveredVolumeData,
   ListPathWorkflowStatus,
   PathsMap,
 } from './configuration.types';
@@ -56,6 +65,11 @@ import escapeHtml from 'escape-html';
 
 import { PathUploadsEntity } from 'src/entities/pathupload.entity';
 import { SuccessEmailType } from 'src/util/send-email.type';
+import {
+  ClientConfig,
+  StorageClientFactory,
+} from 'src/storage-clients/storage-client.factory';
+
 @Injectable()
 export class ConfigurationService {
   private logger: LoggerService;
@@ -63,6 +77,7 @@ export class ConfigurationService {
   private escapeHtml: typeof escapeHtml;
   private sanitizeHtml: typeof sanitizeHtml;
   constructor(
+    private readonly storageClientFactory: StorageClientFactory,
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
     @InjectRepository(FileServerEntity)
@@ -111,6 +126,7 @@ export class ConfigurationService {
           'worker.workerName',
           'config.id',
           'config.configName',
+          'config.serverType',
           'config.status',
           'workingDirectory.workingDirectory',
           'fileServer.exportPathSource',
@@ -129,6 +145,7 @@ export class ConfigurationService {
                 ? true
                 : false,
             status: fileServer.config.status,
+            serverType: fileServer.config.serverType,
             fileServers: [],
           };
         }
@@ -183,10 +200,10 @@ export class ConfigurationService {
           scannedDate: true,
           status: true,
           errorMessage: true,
+          serverType: true,
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             userName: true,
             isRefreshed: true,
@@ -194,6 +211,10 @@ export class ConfigurationService {
             createdBy: true,
             protocolVersion: true,
             exportPathSource: true,
+            fileServerName: true,
+            zone_id: true,
+            status: true, // Per-zone status for Dell Isilon
+            errorMessage: true, // Per-zone error message for Dell Isilon
           },
         },
         relations: {
@@ -226,9 +247,11 @@ export class ConfigurationService {
     }
   }
 
-  async getConfigById(id: string) {
+  async getConfigById(id: string, fileServerId?: string) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
+      if (fileServerId && !isUUID(fileServerId))
+        throw new BadRequestException('Invalid fileServerId');
 
       const config = await this.configEntity.findOne({
         select: {
@@ -239,6 +262,14 @@ export class ConfigurationService {
           scannedDate: true,
           status: true,
           errorMessage: true,
+          // Dell Isilon management console fields
+          serverType: true,
+          hostname: true,
+          port: true,
+          username: true,
+          tlsAccepted: true,
+          tlsCaCertificate: true,
+          tlsExpiry: true,
           workingDirectory: {
             pathName: true,
             workingDirectory: true,
@@ -247,13 +278,16 @@ export class ConfigurationService {
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             userName: true,
             password: true,
             isRefreshed: true,
             protocolVersion: true,
             exportPathSource: true,
+            fileServerName: true,
+            zone_id: true,
+            status: true, // Per-zone status
+            errorMessage: true, // Per-zone error message
             workers: {
               workerId: true,
               workerName: true,
@@ -328,10 +362,14 @@ export class ConfigurationService {
 
       if ([ConfigStatus.ERRORED, ConfigStatus.DRAFT].includes(config.status)) {
         if (config.fileServers) {
-          config.fileServers = config.fileServers.map((server) => ({
-            ...server,
-            volumes: [],
-          }));
+          // For Storage Aware: Always show volumes regardless of status (per-zone visibility)
+          // For Other NAS: Clear volumes if config is DRAFT/ERRORED
+          if (config.serverType === ServerType.other) {
+            config.fileServers = config.fileServers.map((server) => ({
+              ...server,
+              volumes: [],
+            }));
+          }
         }
       }
       // Mask sensitive information
@@ -341,11 +379,25 @@ export class ConfigurationService {
           password: '',
         }));
       }
+
+      // Filter by fileServerId if provided
+      if (fileServerId && config?.fileServers) {
+        config.fileServers = config.fileServers.filter(
+          (fs) => fs.id === fileServerId,
+        );
+        if (config.fileServers.length === 0) {
+          throw new NotFoundException(
+            `File server with id ${fileServerId} not found in config ${id}`,
+          );
+        }
+      }
+
       const isUploadInProgress = await this.isUploadInProgress(
         config.fileServers.map((fs) => fs.id),
       );
       const refreshStatus = await this.isRefreshPossible(config.id);
-      const isRefreshAvailable = !isUploadInProgress && refreshStatus.isRefreshAvailable;
+      const isRefreshAvailable =
+        !isUploadInProgress && refreshStatus.isRefreshAvailable;
 
       return { ...config, isRefreshAvailable, isUploadInProgress };
     } catch (error) {
@@ -441,7 +493,6 @@ export class ConfigurationService {
           fileServers: {
             id: true,
             host: true,
-            serverType: true,
             protocol: true,
             exportPathSource: true,
             volumes: {
@@ -685,6 +736,8 @@ export class ConfigurationService {
   ) {
     this.logger.debug('Config creation started');
 
+    let managementServerId: string | null = null;
+
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(
       createConfig.configName,
@@ -697,6 +750,12 @@ export class ConfigurationService {
         createConfig.projectId,
         sanitizedConfigName,
       );
+
+      // Build hashmap of hasWorkers per file server (keyed by fileServerName)
+      const hasWorkersMap: Record<string, boolean> = {};
+      createConfig.fileServers.forEach((fs) => {
+        hasWorkersMap[fs.fileServerName] = (fs?.workers?.length ?? 0) > 0;
+      });
 
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
@@ -713,9 +772,10 @@ export class ConfigurationService {
             workers: workers.map((it) => it.workerId),
             exportPathSource: fileServer.exportPathSource,
           });
+
           return this.fileServerEntity.create({
             host: fileServer.host.trim(),
-            serverType: fileServer.serverType,
+            fileServerName: fileServer.fileServerName,
             workers: workers,
             createdBy: userId,
             protocol: fileServer.protocol,
@@ -725,36 +785,103 @@ export class ConfigurationService {
             isRefreshed: false,
             volumes: [],
             exportPathSource: fileServer.exportPathSource,
+            zone_id: fileServer.zone_id,
+            smartConnectSsip: fileServer.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+            smartConnectDnsZone: fileServer.smartConnectDnsZone, // DNS zone from Isilon API
+            status: hasWorkersMap[fileServer.fileServerName]
+              ? ConfigStatus.IN_PROGRESS
+              : ConfigStatus.DRAFT,
           });
         },
       );
+      const allWorkerIds = createConfig.fileServers.flatMap((fs) => fs.workers);
+      // To fetch all workers associated with all the file servers of the config
       const workers: WorkerEntity[] = await this.WorkerEntity.find({
-        where: { workerId: In(createConfig?.fileServers[0].workers) },
+        where: { workerId: In(allWorkerIds) },
         relations: { stats: true },
       });
 
-      const hasWorkers = createConfig?.fileServers?.some(
-        (fs) => fs?.workers?.length > 0,
-      );
-      const config = this.configEntity.create({
-        configName: sanitizedConfigName,
-        configType: createConfig.configType,
-        projectId: createConfig.projectId,
-        status: hasWorkers ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT,
-        fileServers: await Promise.all(fileServerPromises),
-        createdBy: userId,
-      });
+      // Config-level status check
+      // For Dell: DRAFT if ANY file server has no workers (priority over IN_PROGRESS)
+      // For Other NAS: Only one file server, so same logic applies
+      const hasDraft = Object.values(hasWorkersMap).some((v) => !v); // TRUE if any file server has no workers
+      const hasWorkers = Object.values(hasWorkersMap).some((v) => v); // TRUE if any file server has workers
 
+      // Determine initial config status
+      // Priority: DRAFT (if any zone has no workers) > IN_PROGRESS (if any zone has workers)
+      const initialConfigStatus = hasDraft
+        ? ConfigStatus.DRAFT
+        : hasWorkers
+          ? ConfigStatus.IN_PROGRESS
+          : ConfigStatus.DRAFT;
+
+      let config;
+      switch (createConfig.serverType) {
+        case ServerType.dell:
+          config = this.configEntity.create({
+            configName: sanitizedConfigName,
+            configType: createConfig.configType,
+            projectId: createConfig.projectId,
+            status: initialConfigStatus,
+            fileServers: await Promise.all(fileServerPromises),
+            createdBy: userId,
+            hostname: createConfig.managementHost,
+            port: createConfig.managementPort,
+            serverType: createConfig.serverType,
+            username: createConfig.managementUsername,
+            password: createConfig.managementPassword,
+            tlsAccepted: createConfig.tlsAccepted,
+            tlsCaCertificate: createConfig.tlsCertificate,
+            tlsExpiry: createConfig.tlsExpiry,
+          });
+          break;
+        default:
+          config = this.configEntity.create({
+            configName: sanitizedConfigName,
+            configType: createConfig.configType,
+            projectId: createConfig.projectId,
+            status: initialConfigStatus,
+            fileServers: await Promise.all(fileServerPromises),
+            createdBy: userId,
+            serverType: createConfig.serverType,
+          });
+          break;
+      }
+
+      // Check worker health at config level
       if (workers?.length > 0 && (await this.isAllWorkerUnHealthy(workers)))
         allUnHealthy = true;
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
       }
+
+      // Check worker health at file server level
+      for (const fileServer of config.fileServers) {
+        if (fileServer.workers?.length > 0) {
+          // Get worker IDs from the already-populated workers relation
+          const workerIds = fileServer.workers.map((w) => w.workerId);
+
+          const fsWorkers: WorkerEntity[] = await this.WorkerEntity.find({
+            where: { workerId: In(workerIds) },
+            relations: { stats: true },
+          });
+
+          if (
+            fsWorkers?.length > 0 &&
+            (await this.isAllWorkerUnHealthy(fsWorkers))
+          ) {
+            fileServer.status = ConfigStatus.ERRORED;
+            fileServer.errorMessage = ConfigErrorMsg.ERRORED;
+          }
+        }
+      }
       const update = await this.configEntity.save(config);
       if (allUnHealthy) {
         return update;
       }
+
+      // Start validation workflow - discovery is handled internally based on serverType
       await this.startValidateWorkingDirectoryWorkflow(
         createConfig,
         update.id,
@@ -774,7 +901,6 @@ export class ConfigurationService {
           configName: update.configName,
           fileServers: update.fileServers.map((fs) => ({
             host: fs.host,
-            serverType: fs.serverType,
             protocol: fs.protocol,
             workerNames: fs.workers.map((w) => w.workerName),
           })),
@@ -789,8 +915,9 @@ export class ConfigurationService {
           createdBy: userId,
         });
       await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
-      this.refreshConfig(update.id, traceId);
 
+      // refreshConfig handles Dell (via API) and non-Dell (via workers) internally
+      this.refreshConfig(update.id, traceId);
       return update;
     } catch (error) {
       this.logger.error(
@@ -813,7 +940,7 @@ export class ConfigurationService {
     updateConfig: ConfigDTO,
     userId: string,
     traceId: string,
-    projectId?: string
+    projectId?: string,
   ) {
     try {
       if (!isUUID(id)) throw new BadRequestException('Invalid configId');
@@ -841,12 +968,25 @@ export class ConfigurationService {
       config.configType = updateConfig.configType;
       config.createdBy = updateConfig.createdBy || userId;
       config.updatedBy = userId;
+      config.serverType = updateConfig.serverType;
       config.status = hasWorkers
         ? hasPathName
           ? ConfigStatus.IN_PROGRESS
           : ConfigStatus.ACTIVE
         : ConfigStatus.DRAFT;
 
+      // Update Dell serverType specific fields
+      if (updateConfig.serverType === ServerType.dell) {
+        config.hostname = updateConfig.managementHost;
+        config.port = updateConfig.managementPort;
+        config.username = updateConfig.managementUsername;
+        config.password = updateConfig.managementPassword;
+        config.tlsAccepted = updateConfig.tlsAccepted;
+        config.tlsCaCertificate = updateConfig.tlsCertificate;
+        config.tlsExpiry = updateConfig.tlsExpiry;
+      }
+
+      // Process existing file servers (update them)
       const fileServerPromises = config.fileServers.map(async (fileServer) => {
         const update = updateConfig.fileServers.find(
           (it) => it.id == fileServer.id,
@@ -883,7 +1023,7 @@ export class ConfigurationService {
         return this.fileServerEntity.create({
           id: fileServer.id,
           host: update.host.trim(),
-          serverType: fileServer.serverType,
+          fileServerName: update.fileServerName,
           workers: workers,
           createdBy: fileServer.createdBy,
           protocol: fileServer.protocol,
@@ -894,6 +1034,73 @@ export class ConfigurationService {
           updatedBy: userId,
           isRefreshed: false,
           exportPathSource: update.exportPathSource,
+          zone_id: update.zone_id,
+          smartConnectSsip: update.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+          smartConnectDnsZone: update.smartConnectDnsZone, // DNS zone from Isilon API
+          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
+        });
+      });
+
+      // Process new file servers (create them) - file servers with null or undefined id
+      const newFileServerDTOs = updateConfig.fileServers.filter(
+        (fs) => fs.id === null || fs.id === undefined,
+      );
+
+      this.logger.debug(
+        `Found ${newFileServerDTOs.length} new file servers to create for config ${id}`,
+      );
+
+      const newFileServerPromises = newFileServerDTOs.map(async (newFs) => {
+        const workers = Array.isArray(newFs.workers)
+          ? await this.WorkerEntity.find({
+              where: { workerId: In(newFs.workers) },
+            })
+          : [];
+
+        const workersWithStats: WorkerEntity[] = Array.isArray(newFs.workers)
+          ? await this.WorkerEntity.find({
+              where: { workerId: In(newFs.workers) },
+              relations: { stats: true },
+            })
+          : [];
+
+        if (
+          workersWithStats?.length > 0 &&
+          (await this.isAllWorkerUnHealthy(workersWithStats))
+        )
+          allUnHealthy = true;
+
+        credentials.push({
+          details: {
+            hostname: newFs.host,
+            username: newFs.userName,
+            password: newFs.password,
+          },
+          protocol: newFs.protocol,
+          workers: workers.map((it) => it.workerId),
+        });
+
+        this.logger.debug(
+          `Creating new file server: ${newFs.fileServerName} (${newFs.protocol}) with ${workers.length} workers`,
+        );
+
+        return this.fileServerEntity.create({
+          host: newFs.host.trim(),
+          fileServerName: newFs.fileServerName,
+          workers: workers,
+          createdBy: userId,
+          protocol: newFs.protocol,
+          protocolVersion: newFs.protocolVersion,
+          userName: newFs.userName,
+          password: newFs.password,
+          updatedBy: userId,
+          isRefreshed: false,
+          volumes: [], // Initialize with empty volumes array
+          exportPathSource: newFs.exportPathSource,
+          zone_id: newFs.zone_id,
+          smartConnectSsip: newFs.smartConnectSsip, // SSIP for SmartConnect DNS resolution
+          smartConnectDnsZone: newFs.smartConnectDnsZone, // DNS zone from Isilon API
+          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
 
@@ -921,7 +1128,16 @@ export class ConfigurationService {
       const existingWorkers = config.fileServers.flatMap(
         (fileServer) => fileServer.workers,
       );
-      config.fileServers = await Promise.all(fileServerPromises);
+
+      // Combine existing (updated) file servers and new file servers
+      const updatedFileServers = await Promise.all(fileServerPromises);
+      const createdFileServers = await Promise.all(newFileServerPromises);
+      config.fileServers = [...updatedFileServers, ...createdFileServers];
+
+      this.logger.debug(
+        `Config ${id}: ${updatedFileServers.length} updated file servers, ${createdFileServers.length} new file servers`,
+      );
+
       const newWorkers = updateConfig.fileServers.flatMap((fileServer) =>
         Array.isArray(fileServer.workers) ? fileServer.workers : [],
       );
@@ -947,6 +1163,31 @@ export class ConfigurationService {
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
+      } else if (updateConfig.serverType === ServerType.dell) {
+        // Aggregate per-zone statuses to config-level status for Dell Isilon
+        const fileServers = config.fileServers;
+        const hasDraft = fileServers.some(
+          (fs) => fs.status === ConfigStatus.DRAFT,
+        );
+        const hasErrored = fileServers.some(
+          (fs) => fs.status === ConfigStatus.ERRORED,
+        );
+
+        if (hasDraft) {
+          config.status = ConfigStatus.DRAFT;
+          config.errorMessage = 'One or more zones have no workers assigned';
+        } else if (hasErrored) {
+          config.status = ConfigStatus.ERRORED;
+          config.errorMessage = 'One or more zones failed validation';
+        } else {
+          // All zones have workers, set to IN_PROGRESS (workflow will set ACTIVE on success)
+          config.status = ConfigStatus.IN_PROGRESS;
+          config.errorMessage = null;
+        }
+
+        this.logger.debug(
+          `Dell config ${id}: Aggregated status = ${config.status} (hasDraft=${hasDraft}, hasErrored=${hasErrored})`,
+        );
       }
 
       const update = await this.configEntity.save(config);
@@ -959,9 +1200,9 @@ export class ConfigurationService {
         projectId,
         createConfig: {
           configName: update.configName,
+          serverType: update.serverType,
           fileServers: update.fileServers.map((fs) => ({
             host: fs.host,
-            serverType: fs.serverType,
             protocol: fs.protocol,
             workerNames: fs.workers.map((w) => w.workerName),
             addedWorkers: addedWorkers.map((w) => w.workerName),
@@ -970,6 +1211,7 @@ export class ConfigurationService {
         },
       });
 
+      // Start validation workflow - discovery is handled internally based on serverType
       await this.startValidateWorkingDirectoryWorkflow(
         updateConfig,
         update.id,
@@ -1003,56 +1245,186 @@ export class ConfigurationService {
     }
   }
 
+  /**
+   * Start validation workflows for each file server.
+   *
+   * Unified approach for all server types:
+   * - For non-Other NAS (e.g., Dell): Discovers exports via API, then starts per-zone workflows
+   * - For Other NAS: Skips API discovery, starts workflow (only 1 file server, so loop runs once)
+   *
+   * Each file server gets its own workflow with fileServerId for per-zone status updates.
+   */
   async startValidateWorkingDirectoryWorkflow(
     createConfig: ConfigDTO,
     configId: string,
     traceId: string,
   ) {
-    // Validate input parameters - throw InternalServerErrorException if any required parameter is empty
-    if (!createConfig || !configId || !traceId || !createConfig.fileServers || createConfig.fileServers.length === 0) {
+    // Validate input parameters
+    if (
+      !createConfig ||
+      !configId ||
+      !traceId ||
+      !createConfig.fileServers ||
+      createConfig.fileServers.length === 0
+    ) {
       throw new InternalServerErrorException(
-        'Failed to start ValidateWorkingDirectoryWorkflow. Invalid input parameters.'
+        'Failed to start ValidateWorkingDirectoryWorkflow. Invalid input parameters.',
       );
     }
 
     try {
-      const listPathPayload: ListPathDTO[] = [];
+      const isOtherNas = createConfig.serverType === ServerType.other;
 
-      createConfig?.fileServers?.forEach((fileServer) => {
-        const payload: ListPathDTO = {
-          type: fileServer?.protocol,
-          protocolVersion: fileServer?.protocolVersion?.replace(/^v/, ''),
-          host: fileServer?.host?.trim(),
-          username: fileServer?.userName,
-          password: fileServer?.password,
-          exportPathSource: fileServer.exportPathSource,
+      // Step 1: Fetch config with file servers from DB to get their IDs
+      const config = await this.configEntity.findOne({
+        where: { id: configId },
+        relations: ['fileServers', 'fileServers.workers'],
+      });
+
+      if (!config?.fileServers || config.fileServers.length === 0) {
+        this.logger.warn(`No file servers found for config ${configId}`);
+        return;
+      }
+
+      // Step 2: Build discoveredPathsMap conditionally
+      // - For Storage-Aware (Dell, future types): Call API to discover exports
+      // - For Other NAS: Skip discovery (map stays null, uses worker-based discovery)
+      let discoveredPathsMap: Map<string, DiscoveredVolumeData[]> | null = null;
+      let errorMap: Map<string, string> | null = null;
+
+      if (!isOtherNas) {
+        this.logger.log(
+          `Discovering exports via storage API for config ${configId} (serverType: ${createConfig.serverType})`,
+        );
+        const result = await this.discoverStorageExportsForFileServers(
+          config,
+          config.fileServers,
+          traceId,
+        );
+        discoveredPathsMap = result.discoveredPathsMap;
+        errorMap = result.errorMap;
+
+        this.logger.log(
+          `Discovered exports for ${discoveredPathsMap.size} file server(s), errors for ${errorMap.size} zone(s)`,
+        );
+
+        // Update file servers that had API errors with per-zone error messages
+        if (errorMap.size > 0) {
+          for (const fileServer of config.fileServers) {
+            const zoneError = errorMap.get(fileServer.id);
+            if (zoneError) {
+              fileServer.status = ConfigStatus.ERRORED;
+              fileServer.errorMessage = zoneError;
+              this.logger.error(
+                `Zone ${fileServer.fileServerName || fileServer.id} marked as ERRORED: ${zoneError}`,
+              );
+            }
+          }
+
+          // If ALL file servers failed, mark config as errored too
+          if (errorMap.size === config.fileServers.length) {
+            config.status = ConfigStatus.ERRORED;
+            config.errorMessage = 'Failed to connect to storage management server for all zones';
+            await this.configEntity.save(config);
+            this.logger.error(`Config ${configId} marked as ERRORED - all zones failed API discovery`);
+            return; // Don't start workflows if we can't discover exports for any zone
+          }
+
+          // Save the per-zone errors
+          await this.configEntity.save(config);
+        }
+      } else {
+        this.logger.debug(
+          `Skipping API discovery for Other NAS config ${configId}`,
+        );
+      }
+
+      // Step 3: Loop through each file server and start a workflow
+      // For Other NAS: Only 1 file server, so loop runs once
+      // For Dell: Multiple file servers (zones), each gets its own workflow
+      for (const fileServer of config.fileServers) {
+        // Skip file servers that had API discovery errors (already marked as ERRORED)
+        if (errorMap && errorMap.has(fileServer.id)) {
+          this.logger.debug(
+            `Skipping file server ${fileServer.id} - API discovery failed`,
+          );
+          continue;
+        }
+
+        // Get workers for this file server
+        const workerIds = fileServer.workers?.map((w) => w.workerId) || [];
+
+        if (workerIds.length === 0) {
+          this.logger.debug(
+            `Skipping file server ${fileServer.id} - no workers assigned`,
+          );
+          continue;
+        }
+
+        // Find matching fileServer from createConfig for credentials
+        const fileServerConfig = createConfig.fileServers.find(
+          (fs) =>
+            fs.host?.trim() === fileServer.host || fs.id === fileServer.id,
+        );
+
+        if (!fileServerConfig) {
+          this.logger.warn(`No config found for file server ${fileServer.id}`);
+          continue;
+        }
+
+        // Build listPathPayload for this file server
+        const listPathPayload: ListPathDTO[] = [{
+            type: fileServerConfig.protocol,
+            protocolVersion: fileServerConfig.protocolVersion?.replace(/^v/, ''),
+            host: fileServerConfig.host?.trim() || '',
+            username: fileServerConfig.userName,
+            password: fileServerConfig.password,
+            exportPathSource: fileServerConfig.exportPathSource,
+            smartConnectSsip: fileServerConfig.smartConnectSsip,
+            smartConnectDnsZone: fileServerConfig.smartConnectDnsZone,
+        }];
+
+        // Build base payload
+        const payload: ValidateExportPathAndWorkingDirectoryDTO = {
+          exportPath: createConfig?.workingDirectory?.pathName,
+          workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+          configId: configId,
+          workerIds: workerIds,
+          listPathPayload,
+          serverType: createConfig.serverType,
+          options: new Options(),
         };
-        listPathPayload.push(payload);
-      });
 
-      const payload: ValidateExportPathAndWorkingDirectoryDTO = {
-        exportPath: createConfig?.workingDirectory?.pathName,
-        workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-        configId: configId,
-        workerIds: [],
-        listPathPayload,
-        options: new Options(),
-      };
+        // Add fileServerId for per-zone status updates (works for both Dell and Other NAS)
+        (payload as any).fileServerId = fileServer.id;
 
-      createConfig?.fileServers?.forEach((fileServer) => {
-        fileServer?.workers?.forEach((worker) => {
-          if (!payload.workerIds.includes(worker))
-            payload.workerIds.push(worker);
-        });
-      });
+        // Add discovered paths if available (non-Other NAS only)
+        if (discoveredPathsMap?.has(fileServer.id)) {
+          const volumeDataList = discoveredPathsMap.get(fileServer.id) || [];
+          const discoveredPaths = volumeDataList.map((v) => v.volumePath);
+          (payload as any).discoveredPaths = discoveredPaths;
 
-      if (payload?.workerIds?.length > 0) {
-        this.logger.debug('started ValidateWorkingDirectoryWorkflow');
+          // Build exportsMap with first path for this file server (storage-aware types)
+          if (discoveredPaths.length > 0) {
+            const exportsMap: Record<string, string> = {};
+            exportsMap[fileServer.host] = discoveredPaths[0];
+            (payload as any).exportsMap = exportsMap;
+          }
+
+          this.logger.debug(
+            `Using ${discoveredPaths.length} discovered paths for file server ${fileServer.id}`,
+          );
+        }
+
+        // Generate unique workflow ID per file server
+        const workflowId = `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${fileServer.id}-${Date.now()}`;
+
+        this.logger.debug(
+          `Starting workflow for file server ${fileServer.fileServerName || fileServer.id} (fileServerId: ${fileServer.id})`,
+        );
+
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId:
-            WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY +
-            '-' +
-            traceId,
+          workflowId: workflowId,
           taskQueue: 'ParentWorkflow-TaskQueue',
           args: [
             {
@@ -1068,10 +1440,15 @@ export class ConfigurationService {
           WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY,
           startWorkFlowPayload,
         );
+
         this.logger.debug(
-          'completed ValidateWorkingDirectoryWorkflow successfully',
+          `Started workflow ${workflowId} for file server ${fileServer.id}`,
         );
       }
+
+      this.logger.debug(
+        `Completed starting per-file-server workflows for config ${configId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Error while starting ValidateWorkingDirectoryWorkflow - ${error.message}`,
@@ -1106,24 +1483,153 @@ export class ConfigurationService {
       throw new InternalServerErrorException('Failed to remove config.');
     }
   }
+  /**
+   * Discover exports/shares for specific file servers using storage array REST API.
+   * Used for per-zone refresh from UI.
+   *
+   * Works for any storage-aware server type (non-Other NAS).
+   * The StorageClientFactory handles creating the appropriate client based on serverType.
+   *
+   * IMPORTANT: If API discovery fails, we return per-zone errors to allow
+   * proper error reporting per file server.
+   *
+   * Returns { discoveredPathsMap, errorMap }
+   * - discoveredPathsMap: Map<fileServerId, DiscoveredVolumeData[]>
+   * - errorMap: Map<fileServerId, string> for per-zone errors
+   * - For NFS: volumePath = directoryPath (both are the export path)
+   * - For SMB: volumePath = share name, directoryPath = filesystem path
+   */
+  async discoverStorageExportsForFileServers(
+    config: ConfigEntity,
+    fileServers: FileServerEntity[],
+    traceId: string,
+  ): Promise<{
+    discoveredPathsMap: Map<string, DiscoveredVolumeData[]>;
+    errorMap: Map<string, string>;
+  }> {
+    const discoveredPathsMap = new Map<string, DiscoveredVolumeData[]>();
+    const errorMap = new Map<string, string>();
 
-  async refreshConfig(configId: string, traceId: string) {
+    this.logger.log(
+      `Discovering storage exports for ${fileServers.length} file server(s) (serverType: ${config.serverType}, trace: ${traceId})`,
+    );
+
+    // Only storage-aware types (non-Other NAS) use API discovery
+    if (config.serverType === ServerType.other) {
+      this.logger.warn(
+        `Config ${config.id} is Other NAS, skipping API discovery`,
+      );
+      return { discoveredPathsMap, errorMap };
+    }
+
+    // For each specified file server (zone), fetch exports and shares
+    for (const fileServer of fileServers) {
+      this.logger.log(
+        `Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`,
+      );
+
+      const volumeDataList: DiscoveredVolumeData[] = [];
+      let apiError: string | null = null;
+      const clientConfig = new ClientConfig(
+        config.serverType as ServerType,
+        config.hostname,
+        config.port,
+        config.username,
+        config.password,
+        config.tlsCaCertificate,
+      );
+      // Get the appropriate storage client based on server type
+      const storageClient = this.storageClientFactory.getClient(clientConfig);
+
+      // Fetch NFS exports if protocol includes NFS
+      if (fileServer.protocol === Protocol.NFS) {
+        try {
+          const nfsExports = await storageClient.getNFSExportPaths(
+            fileServer.id,
+          );
+          this.logger.log(
+            `Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`,
+          );
+
+          for (const nfsExport of nfsExports) {
+            // For NFS: volumePath and directoryPath are the same (both are the export path)
+            volumeDataList.push({
+              volumePath: nfsExport.path,
+              directoryPath: nfsExport.path,
+            });
+          }
+        } catch (error) {
+          apiError = error.message;
+          this.logger.error(
+            `Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`,
+          );
+        }
+      }
+
+      // Fetch SMB shares if protocol includes SMB
+      if (fileServer.protocol === Protocol.SMB) {
+        try {
+          const smbShares = await storageClient.getSMBShares(fileServer.id);
+          this.logger.log(
+            `Found ${smbShares.length} SMB shares for file server ${fileServer.id}`,
+          );
+
+          for (const smbShare of smbShares) {
+            // For SMB: volumePath = share name, directoryPath = filesystem path
+            volumeDataList.push({
+              volumePath: smbShare.name,
+              directoryPath: smbShare.path,
+            });
+          }
+        } catch (error) {
+          apiError = error.message;
+          this.logger.error(
+            `Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`,
+          );
+        }
+      }
+
+      // If API failed for this file server, collect the per-zone error
+      // We don't want to continue and disable volumes due to API failure
+      if (apiError) {
+        errorMap.set(fileServer.id, apiError);
+        continue; // Skip this file server, don't add empty paths
+      }
+
+      discoveredPathsMap.set(fileServer.id, volumeDataList);
+      this.logger.log(
+        `Discovered ${volumeDataList.length} paths for file server ${fileServer.id}`,
+      );
+    }
+
+    // Log errors if any, but don't throw - let caller handle per-zone errors
+    if (errorMap.size > 0) {
+      this.logger.error(
+        `Refresh had ${errorMap.size} zone(s) with API errors`,
+      );
+    }
+
+    return { discoveredPathsMap, errorMap };
+  }
+
+  async refreshConfig(
+    configId: string,
+    traceId: string,
+    fileServerId?: string,
+  ) {
     try {
+      // ==================== Validation ====================
       if (!isUUID(configId)) {
         throw new BadRequestException('Invalid UUID format');
       }
-      // check refresh eligibility
-      const refreshStatus = await this.isRefreshPossible(configId);
-      if (!refreshStatus.isRefreshAvailable) {
-        this.logger.warn(`Refresh not available for configId: ${configId}. Reason: ${refreshStatus.message}`);
-        throw new BadRequestException(
-          refreshStatus.message || 'Refresh not available for this configuration.',
-        );
+      if (fileServerId && !isUUID(fileServerId)) {
+        throw new BadRequestException('Invalid fileServerId format');
       }
 
+      // ==================== Fetch Config ====================
       const config = await this.configEntity.findOne({
         where: { id: configId },
-        relations: { fileServers: { workers: true } },
+        relations: { fileServers: { workers: true, volumes: true } },
       });
 
       if (!config) {
@@ -1132,55 +1638,35 @@ export class ConfigurationService {
         );
       }
 
-      const payload: CreateRequestDto = {
-        fileServer: {
-          hostname: '',
-          protocols: [],
-        },
-        options: new Options(),
-        workerIds: [],
-      };
+      // ==================== Determine File Servers to Refresh ====================
+      // With fileServerId (UI call): refresh only that file server/zone
+      // Without fileServerId (creation flow): refresh all file servers
+      const fileServersToRefresh = fileServerId
+        ? config.fileServers.filter((fs) => fs.id === fileServerId)
+        : config.fileServers;
 
-      config.fileServers?.forEach((fileServer) => {
-        payload.fileServer.hostname = fileServer.host;
-        payload.fileServer.protocols.push({
-          type: fileServer.protocol,
-          username: fileServer.userName,
-          password: fileServer.password,
-          exportPathSource: fileServer.exportPathSource,
-        });
-        fileServer?.workers?.forEach((worker) => {
-          if (!payload.workerIds.includes(worker.workerId))
-            payload.workerIds.push(worker.workerId);
-        });
-      });
+      if (fileServerId && fileServersToRefresh.length === 0) {
+        throw new NotFoundException(
+          `File server ${fileServerId} not found in config ${configId}`,
+        );
+      }
 
-      if (payload.workerIds.length === 0) return;
-
-      await this.fileServerEntity.update(
-        { id: In(config.fileServers.map((it) => it.id)) },
-        { isRefreshed: false },
-      );
-
-      const startWorkFlowPayload: StartWorkFlowPayload = {
-        workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
-        taskQueue: 'ParentWorkflow-TaskQueue',
-        args: [
-          {
-            traceId: traceId,
-            payload: { traceId, ...payload },
-            options: payload.options,
-          },
-        ],
-        ...payload.options,
-      };
-
-      const workflow = await this.workFlowService.startWorkflow(
-        WorkFlows.LIST_PATHS,
-        startWorkFlowPayload,
-      );
-      this.updateResult(workflow.workflowId, configId);
-      return { workflowId: workflow.workflowId };
+      // ==================== Server-Type Specific Refresh ====================
+      // Two categories:
+      // 1. Other NAS: Uses worker-based discovery (showmount)
+      // 2. Storage-Aware (Dell, future types): Uses API-based discovery via StorageClientFactory
+      if (config.serverType === ServerType.other) {
+        return await this.refreshOtherNAS(config, configId, traceId);
+      } else {
+        // All storage-aware types (Dell, future types) use API-based refresh
+        return await this.refreshStorageAware(
+          config,
+          fileServersToRefresh,
+          configId,
+          fileServerId,
+          traceId,
+        );
+      }
     } catch (error) {
       this.logger.error(`Error refreshing config: ${error.message}`);
       if (
@@ -1193,6 +1679,215 @@ export class ConfigurationService {
         `Failed to refresh config. ${error.message}`,
       );
     }
+  }
+
+  /**
+   * Refresh storage-aware configuration using API-based discovery.
+   * This is synchronous - exports are discovered via storage REST API and saved before returning.
+   *
+   * Works for any storage-aware server type (Dell, future types like NetApp, Pure, etc.).
+   * The StorageClientFactory handles creating the appropriate client based on serverType.
+   *
+   * Why API instead of showmount?
+   * - showmount doesn't understand storage array concepts (zones, tenants, etc.)
+   * - showmount returns ALL exports without filtering
+   * - API allows targeted, zone-specific export discovery
+   */
+  private async refreshStorageAware(
+    config: ConfigEntity,
+    fileServersToRefresh: FileServerEntity[],
+    configId: string,
+    fileServerId: string | undefined,
+    traceId: string,
+  ) {
+    this.logger.log(
+      `[Storage-Aware: ${config.serverType}] Refreshing config ${configId}${fileServerId ? ` (zone: ${fileServerId})` : ' (all zones)'}`,
+    );
+
+    const fileServerIds = fileServersToRefresh.map((fs) => fs.id);
+
+    // Check refresh eligibility per file server (jobs running, scheduled, etc.)
+    for (const fileServer of fileServersToRefresh) {
+      const refreshStatus = await this.isRefreshPossible(
+        configId,
+        fileServer.id,
+      );
+      if (!refreshStatus.isRefreshAvailable) {
+        this.logger.warn(
+          `Refresh not available for zone ${fileServer.fileServerName}. Reason: ${refreshStatus.message}`,
+        );
+        throw new BadRequestException(
+          refreshStatus.message ||
+            `Refresh not available for zone ${fileServer.fileServerName || fileServer.id}.`,
+        );
+      }
+    }
+
+    // Mark as refreshing
+    await this.fileServerEntity.update(
+      { id: In(fileServerIds) },
+      { isRefreshed: false },
+    );
+
+    try {
+      // Discover exports via storage REST API (zone-aware)
+      const { discoveredPathsMap, errorMap } =
+        await this.discoverStorageExportsForFileServers(
+          config,
+          fileServersToRefresh,
+          traceId,
+        );
+
+      // Update file servers that had API errors with per-zone error messages
+      if (errorMap.size > 0) {
+        for (const fileServer of fileServersToRefresh) {
+          const zoneError = errorMap.get(fileServer.id);
+          if (zoneError) {
+            fileServer.status = ConfigStatus.ERRORED;
+            fileServer.errorMessage = zoneError;
+            fileServer.isRefreshed = true; // Reset so they can retry
+          }
+        }
+        await this.fileServerEntity.save(fileServersToRefresh);
+
+        // If ALL file servers failed, throw error
+        if (errorMap.size === fileServersToRefresh.length) {
+          throw new BadRequestException(
+            'Failed to connect to storage management server for all zones',
+          );
+        }
+      }
+
+      // Filter out file servers that had errors for sync
+      const successfulFileServers = fileServersToRefresh.filter(
+        (fs) => !errorMap.has(fs.id),
+      );
+
+      // Sync volumes (create new, keep existing, mark removed as deleted)
+      await this.syncVolumesForFileServers(
+        successfulFileServers,
+        discoveredPathsMap,
+        config.createdBy,
+        config.updatedBy,
+        undefined, // pathsMap not used for Dell
+        config.serverType as ServerType,
+      );
+
+      // Update scan timestamp
+      await this.configEntity.update(
+        { id: configId },
+        { scannedDate: new Date() },
+      );
+    } catch (error) {
+      // On error, reset isRefreshed to true so user can retry
+      await this.fileServerEntity.update(
+        { id: In(fileServerIds) },
+        { isRefreshed: true },
+      );
+      throw error;
+    }
+
+    const refreshedZones = fileServersToRefresh.map(
+      (fs) => fs.fileServerName || fs.id,
+    );
+    return {
+      message: fileServerId
+        ? `Zone ${refreshedZones[0]} refreshed successfully`
+        : `Config refreshed successfully (${refreshedZones.length} zone(s))`,
+      refreshedFileServers: fileServerIds,
+    };
+  }
+
+  /**
+   * Refresh Other NAS configuration using worker-based showmount discovery.
+   * This is asynchronous - starts a workflow and returns workflowId for UI to poll.
+   *
+   * Flow:
+   * 1. Start ListPathsWorkflow on workers
+   * 2. Workers run showmount to discover exports
+   * 3. UI polls workflow status
+   * 4. On completion, updateResult() saves discovered paths
+   */
+  private async refreshOtherNAS(
+    config: ConfigEntity,
+    configId: string,
+    traceId: string,
+  ) {
+    this.logger.log(
+      `[Other NAS] Refreshing config ${configId} via worker showmount`,
+    );
+
+    // Check refresh eligibility at config level
+    const refreshStatus = await this.isRefreshPossible(configId);
+    if (!refreshStatus.isRefreshAvailable) {
+      this.logger.warn(
+        `Refresh not available for config ${configId}. Reason: ${refreshStatus.message}`,
+      );
+      throw new BadRequestException(
+        refreshStatus.message ||
+          'Refresh not available for this configuration.',
+      );
+    }
+
+    // Build payload for worker workflow
+    const payload: CreateRequestDto = {
+      fileServer: {
+        hostname: '',
+        protocols: [],
+      },
+      options: new Options(),
+      workerIds: [],
+    };
+
+    config.fileServers?.forEach((fileServer) => {
+      payload.fileServer.hostname = fileServer.host;
+      payload.fileServer.protocols.push({
+        type: fileServer.protocol,
+        username: fileServer.userName,
+        password: fileServer.password,
+        exportPathSource: fileServer.exportPathSource,
+      });
+      fileServer?.workers?.forEach((worker) => {
+        if (!payload.workerIds.includes(worker.workerId)) {
+          payload.workerIds.push(worker.workerId);
+        }
+      });
+    });
+
+    if (payload.workerIds.length === 0) {
+      this.logger.warn(`No workers found for config ${configId}`);
+      return { message: 'No workers available for refresh' };
+    }
+
+    // Mark as refreshing
+    await this.fileServerEntity.update(
+      { id: In(config.fileServers.map((it) => it.id)) },
+      { isRefreshed: false },
+    );
+
+    // Start async workflow
+    const startWorkFlowPayload: StartWorkFlowPayload = {
+      workflowId: WorkFlows.LIST_PATHS + '-' + traceId,
+      taskQueue: 'ParentWorkflow-TaskQueue',
+      args: [
+        {
+          traceId: traceId,
+          payload: { traceId, ...payload },
+          options: payload.options,
+        },
+      ],
+      ...payload.options,
+    };
+
+    const workflow = await this.workFlowService.startWorkflow(
+      WorkFlows.LIST_PATHS,
+      startWorkFlowPayload,
+    );
+
+    // Background polling to save results when workflow completes
+    this.updateResult(workflow.workflowId, configId);
+
+    return { workflowId: workflow.workflowId };
   }
 
   async updateResult(id: string, configId: string) {
@@ -1234,30 +1929,36 @@ export class ConfigurationService {
     }
   }
 
+  /**
+   * Updates volumes after Other NAS workflow (ListPathsWorkflow) completes.
+   * Called by updateResult() when polling detects workflow completion.
+   *
+   * Flow:
+   * 1. Parse workflow results to extract discovered paths per protocol
+   * 2. Build discoveredPathsMap (fileServerId -> paths[])
+   * 3. Use shared syncVolumesForFileServers to update DB
+   *
+   * Note: Dell Isilon does NOT use this method - it uses syncVolumesForFileServers directly.
+   */
   async updatePaths(id: string, details: ListPathWorkflowStatus) {
     try {
+      // ==================== Parse Workflow Results ====================
       const pathsMap: PathsMap = {
         NFS: { workers: 0, paths: [] },
         SMB: { workers: 0, paths: [] },
       };
+
       details.completed.forEach((workflow) => {
         pathsMap[workflow.protocolType].workers++;
         workflow.paths.forEach((path) => {
-          if (!pathsMap[workflow.protocolType].paths.includes(path))
+          if (!pathsMap[workflow.protocolType].paths.includes(path)) {
             pathsMap[workflow.protocolType].paths.push(path);
+          }
         });
       });
+
+      // ==================== Fetch Config with File Servers ====================
       const config = await this.configEntity.findOne({
-        select: {
-          fileServers: {
-            id: true,
-            protocol: true,
-            volumes: {
-              id: true,
-              volumePath: true,
-            },
-          },
-        },
         where: { id },
         relations: {
           fileServers: {
@@ -1265,134 +1966,285 @@ export class ConfigurationService {
           },
         },
       });
-      const fileServersIds = config.fileServers.map((it) => it.id);
+
+      if (!config) {
+        this.logger.warn(`Config ${id} not found in updatePaths`);
+        return;
+      }
+
+      // ==================== Build Discovered Paths Map ====================
+      // Map each file server to its discovered paths based on protocol
+      const discoveredPathsMap = new Map<string, string[]>();
       for (const fileServer of config.fileServers) {
-        await this.volumes.update(
-          {
-            fileServerId: fileServer.id,
-            volumePath: In(pathsMap[fileServer.protocol].paths),
-          },
-          {
-            reachableCount: pathsMap[fileServer.protocol].workers,
-            isValid: true,
-            isDisabled: false,
-          },
+        discoveredPathsMap.set(
+          fileServer.id,
+          pathsMap[fileServer.protocol].paths,
         );
-
-        const existingPaths = new Set(
-          fileServer.volumes.map((vol) => vol.volumePath),
-        );
-        const founds: VolumeEntity[] = [];
-        pathsMap[fileServer.protocol].paths.forEach((path) => {
-          if (!existingPaths.has(path))
-            founds.push(
-              this.volumes.create({
-                fileServerId: fileServer.id,
-                reachableCount: pathsMap[fileServer.protocol].workers,
-                volumePath: path,
-                isValid: true,
-                isDisabled: false,
-                createdBy: config.updatedBy ?? config.createdBy,
-              }),
-            );
-        });
-        await this.volumes.save(founds);
-        await this.fileServerEntity.update(
-          { id: fileServer.id },
-          { isRefreshed: true },
-        );
-
-        // Disable volumes that are no longer in the completed payload
-        const validPaths = new Set(pathsMap[fileServer.protocol].paths);
-        const pathsToDisable = fileServer.volumes
-          .filter((vol) => !validPaths.has(vol.volumePath))
-          .map((vol) => vol.volumePath);
-        if (pathsToDisable.length > 0)
-          await this.volumes.update(
-            { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
-            { isDisabled: true },
-          );
       }
 
-      // update job configurations to inactive if any volume is disabled or invalid associated with it
-      const volumeIds = await this.volumes
-        .createQueryBuilder('volume')
-        .select('volume.id')
-        .where('volume.file_server_id IN (:...fileServersIds)', {
-          fileServersIds: fileServersIds,
-        })
-        .andWhere('volume.is_valid = :isValid', { isValid: false })
-        .orWhere('volume.is_disabled = :isDisabled', { isDisabled: true })
-        .getMany();
+      // ==================== Sync Volumes ====================
+      await this.syncVolumesForFileServers(
+        config.fileServers,
+        discoveredPathsMap,
+        config.createdBy,
+        config.updatedBy,
+        pathsMap, // Pass pathsMap for reachableCount (worker count)
+        config.serverType as ServerType,
+      );
 
-      if (volumeIds.length > 0) {
-        const volumeIdList = volumeIds.map((vol) => vol.id);
-        await this.jobConfigRepo
-          .createQueryBuilder('jobConfig')
-          .update()
-          .set({ status: JobStatus.InActive })
-          .where(
-            'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
-            { volumeIds: volumeIdList },
-          )
-          .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
-          .execute();
-      }
-
+      // ==================== Update Scan Timestamp ====================
       await this.configEntity.update({ id }, { scannedDate: new Date() });
     } catch (error) {
       this.logger.error(`Error in updatePaths: ${error.message}`);
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Failed to update paths ${error.message}`,
+        `Failed to update paths: ${error.message}`,
       );
     }
   }
 
-  async isRefreshPossible(configId: string): Promise<{ isRefreshAvailable: boolean; message?: string }> {
-    try {
-      const fileServers = await this.configEntity.find({
-        where: { id: configId },
-        relations: { fileServers: { volumes: true } },
-      });
+  /**
+   * Shared method to synchronize volumes for file servers
+   * Used by both Dell (API discovery) and Other NAS (workflow discovery)
+   *
+   * Steps:
+   * 1. Re-enable existing volumes if path still exists on NAS
+   * 2. Create new volumes for paths that don't exist in DB
+   * 3. Disable volumes that no longer exist on NAS
+   * 4. Mark file servers as refreshed
+   * 5. Deactivate job configs with invalid/disabled volumes
+   */
+  private async syncVolumesForFileServers(
+    fileServers: FileServerEntity[],
+    discoveredPathsMap: Map<string, string[] | DiscoveredVolumeData[]>,
+    createdBy: string,
+    updatedBy?: string,
+    pathsMap?: PathsMap, // for reachableCount (Other NAS - from workflow)
+    serverType?: ServerType, // to determine reachableCount logic and directoryPath handling
+  ): Promise<void> {
+    const fileServersIds = fileServers.map((fs) => fs.id);
 
-      const volumeIds = fileServers.flatMap((fs) =>
-        fs.fileServers.flatMap((v) => v.volumes.map((vol) => vol.id)),
-      ); // volume ids from all file servers
-      if (volumeIds.length === 0) {
-        this.logger.warn(`No valid volumes found for config ID ${configId}.`);
-        return { isRefreshAvailable: true }; // No volumes means no jobs, so refresh is possible
+    for (const fileServer of fileServers) {
+      const discoveredData = discoveredPathsMap.get(fileServer.id) || [];
+
+      // Determine reachableCount based on server type
+      let reachableCount: number;
+      if (serverType === ServerType.dell) {
+        // Dell: use worker count per file server (zone)
+        reachableCount = fileServer.workers?.length ?? 0;
+      } else {
+        // Other NAS: use worker count from pathsMap (workflow result)
+        reachableCount = pathsMap?.[fileServer.protocol]?.workers ?? 0;
       }
+
+      // Normalize discovered data to DiscoveredVolumeData[]
+      // For Dell: already in DiscoveredVolumeData format
+      // For Other NAS: convert string[] to DiscoveredVolumeData[] (volumePath = directoryPath)
+      const volumeDataList: DiscoveredVolumeData[] = discoveredData.map(
+        (item) => {
+          if (typeof item === 'string') {
+            // Other NAS: volumePath = directoryPath (no separate directory path)
+            return { volumePath: item, directoryPath: item };
+          }
+          return item;
+        },
+      );
+
+      const discoveredPaths = volumeDataList.map((v) => v.volumePath);
+
+      // Build a map of volumePath -> directoryPath for quick lookup
+      const directoryPathMap = new Map<string, string>();
+      for (const vd of volumeDataList) {
+        directoryPathMap.set(vd.volumePath, vd.directoryPath);
+      }
+
+      // 1. Re-enable existing volumes if path still exists on NAS
+      // Also update directoryPath for Dell
+      if (discoveredPaths.length > 0) {
+        // For each discovered path, update with correct directoryPath
+        for (const vd of volumeDataList) {
+          await this.volumes.update(
+            {
+              fileServerId: fileServer.id,
+              volumePath: vd.volumePath,
+            },
+            {
+              reachableCount: reachableCount,
+              isValid: true,
+              isDisabled: false,
+              directoryPath: vd.directoryPath,
+            },
+          );
+        }
+      }
+
+      // 2. Create new volumes only for paths that don't exist in DB
+      const existingPaths = new Set(
+        fileServer.volumes?.map((vol) => vol.volumePath) || [],
+      );
+      const newVolumes: VolumeEntity[] = [];
+      for (const vd of volumeDataList) {
+        if (!existingPaths.has(vd.volumePath)) {
+          newVolumes.push(
+            this.volumes.create({
+              fileServerId: fileServer.id,
+              volumePath: vd.volumePath,
+              directoryPath: vd.directoryPath,
+              isValid: true,
+              isDisabled: false,
+              reachableCount: reachableCount,
+              createdBy: updatedBy ?? createdBy,
+            }),
+          );
+        }
+      }
+      if (newVolumes.length > 0) {
+        await this.volumes.save(newVolumes);
+        this.logger.log(
+          `Created ${newVolumes.length} new volumes for file server ${fileServer.id}`,
+        );
+      }
+
+      // 3. Disable volumes that no longer exist on the NAS
+      const validPaths = new Set(discoveredPaths);
+      const pathsToDisable = (fileServer.volumes || [])
+        .filter((vol) => !validPaths.has(vol.volumePath))
+        .map((vol) => vol.volumePath);
+      if (pathsToDisable.length > 0) {
+        await this.volumes.update(
+          { fileServerId: fileServer.id, volumePath: In(pathsToDisable) },
+          { isDisabled: true },
+        );
+        this.logger.log(
+          `Disabled ${pathsToDisable.length} volumes for file server ${fileServer.id}`,
+        );
+      }
+
+      // 4. Mark file server as refreshed
+      await this.fileServerEntity.update(
+        { id: fileServer.id },
+        { isRefreshed: true },
+      );
+    }
+
+    // 5. Deactivate job configs with invalid/disabled volumes
+    const volumeIds = await this.volumes
+      .createQueryBuilder('volume')
+      .select('volume.id')
+      .where('volume.file_server_id IN (:...fileServersIds)', {
+        fileServersIds: fileServersIds,
+      })
+      .andWhere(
+        '(volume.is_valid = :isValid OR volume.is_disabled = :isDisabled)',
+        {
+          isValid: false,
+          isDisabled: true,
+        },
+      )
+      .getMany();
+
+    if (volumeIds.length > 0) {
+      const volumeIdList = volumeIds.map((vol) => vol.id);
+      await this.jobConfigRepo
+        .createQueryBuilder('jobConfig')
+        .update()
+        .set({ status: JobStatus.InActive })
+        .where(
+          'jobConfig.source_path_id IN (:...volumeIds) OR jobConfig.target_path_id IN (:...volumeIds)',
+          { volumeIds: volumeIdList },
+        )
+        .andWhere('jobConfig.status = :status', { status: JobStatus.Active })
+        .execute();
+    }
+  }
+
+  async isRefreshPossible(
+    configId: string,
+    fileServerId?: string,
+  ): Promise<{ isRefreshAvailable: boolean; message?: string }> {
+    try {
+      let volumeIds: string[] = [];
+
+      if (fileServerId) {
+        // Per file server check (Dell per-zone refresh)
+        const fileServer = await this.fileServerEntity.findOne({
+          where: { id: fileServerId, configId: configId },
+          relations: ['volumes'],
+        });
+
+        if (!fileServer) {
+          this.logger.warn(
+            `File server ${fileServerId} not found in config ${configId}`,
+          );
+          return {
+            isRefreshAvailable: false,
+            message: 'File server not found',
+          };
+        }
+
+        volumeIds = fileServer.volumes?.map((vol) => vol.id) || [];
+
+        if (volumeIds.length === 0) {
+          this.logger.log(
+            `No volumes found for file server ${fileServerId}, refresh is possible`,
+          );
+          return { isRefreshAvailable: true };
+        }
+      } else {
+        // Config-level check (existing behavior)
+        const config = await this.configEntity.findOne({
+          where: { id: configId },
+          relations: { fileServers: { volumes: true } },
+        });
+
+        if (!config) {
+          return { isRefreshAvailable: false, message: 'Config not found' };
+        }
+
+        volumeIds = config.fileServers.flatMap(
+          (fs) => fs.volumes?.map((vol) => vol.id) || [],
+        );
+
+        if (volumeIds.length === 0) {
+          this.logger.warn(`No valid volumes found for config ID ${configId}.`);
+          return { isRefreshAvailable: true }; // No volumes means no jobs, so refresh is possible
+        }
+      }
+
+      const contextLabel = fileServerId
+        ? `file server ${fileServerId}`
+        : `configuration ${configId}`;
 
       /*
         fetch all the job configurations that has any of the volumeIds in
         their sourcePathId or targetPathId and status is ACTIVE
       */
       const jobConfigs = await this.jobConfigRepo.find({
-          where: [{
-              status: JobStatus.Active,
-              sourcePathId: In(volumeIds),
-            }, {
-              status: JobStatus.Active,
-              targetPathId: In(volumeIds),
-          }]
-      })
+        where: [
+          {
+            status: JobStatus.Active,
+            sourcePathId: In(volumeIds),
+          },
+          {
+            status: JobStatus.Active,
+            targetPathId: In(volumeIds),
+          },
+        ],
+      });
+      // check if any job config has schedule as SCHEDULING if yes then return false
+      if (jobConfigs.some((jc) => jc.scheduler === 'SCHEDULING')) {
+        const userMessage = `Job scheduling in progress. Please retry shortly.`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are jobs with SCHEDULING status`;
+        this.logger.warn(logMessage);
+        return { isRefreshAvailable: false, message: userMessage };
+      }
 
-      // check if firstRunAt is not within next 5 min for any job config, if yes then return false
-      if (jobConfigs.some((jc) => {
-        if (!jc.firstRunAt) return false;
-        const firstRunTime = new Date(jc.firstRunAt.toString());
-        const currentTime = new Date();
-        const fiveMinutesFromNow = new Date(currentTime.getTime() + 5 * 60 * 1000);
-        return firstRunTime >= currentTime && firstRunTime <= fiveMinutesFromNow;
-      })) {
-        const userMessage = `A job is scheduled to run in the next 5 mins. Refresh is disabled until the job runs.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are jobs with firstRunAt within the next 5 minutes`;
+      // check if futureScheduleAt is not null for any job config, if yes then return false
+      if (jobConfigs.some((jc) => !!jc.futureScheduleAt)) {
+        const userMessage = `Jobs are scheduled for future execution. Please cancel or reschedule these jobs before refreshing.`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are jobs with futureScheduleAt set`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }
@@ -1411,15 +2263,17 @@ export class ConfigurationService {
 
       if (runningJobs > 0) {
         const userMessage = `Jobs are currently running. Please wait for active jobs to complete and try again.`;
-        const logMessage = `Refresh is not possible for configuration ${configId} as there are currently running jobs`;
+        const logMessage = `Refresh is not possible for ${contextLabel} as there are currently running jobs`;
         this.logger.warn(logMessage);
         return { isRefreshAvailable: false, message: userMessage };
       }
 
-      this.logger.log(`Refresh is possible for configuration ${configId}`);
+      this.logger.log(`Refresh is possible for ${contextLabel}`);
       return { isRefreshAvailable: true };
     } catch (error) {
-      this.logger.error(`Error checking refresh possibility for config ${configId}: ${error.message}`);
+      this.logger.error(
+        `Error checking refresh possibility for config ${configId}: ${error.message}`,
+      );
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -1468,6 +2322,67 @@ export class ConfigurationService {
         throw error;
       }
       return false;
+    }
+  }
+
+  // fetch host name and port from host string
+  async fetchCertificate(
+    request: FetchCertificateRequestDTO,
+  ): Promise<FetchCertificateResponseDTO> {
+    const clientConfig = new ClientConfig(request.serverType, request.host);
+    // Get the appropriate storage client based on server type
+    const storageClient = this.storageClientFactory.getClient(clientConfig);
+    return await storageClient.fetchCertificate(request.host);
+  }
+
+  async fetchZones(
+    request: FetchZonesRequestDTO,
+  ): Promise<FetchZonesResponseDTO> {
+    const clientConfig = new ClientConfig(
+      request.serverType,
+      request.host,
+      request.port,
+      request.username,
+      request.password,
+      request.certificate,
+    );
+    // Get the appropriate storage client based on server type
+    const storageClient = this.storageClientFactory.getClient(clientConfig);
+    return await storageClient.fetchZones();
+  }
+
+  async validateConnection(
+    request: FetchZonesRequestDTO,
+  ): Promise<{ isValid: boolean; message: string }> {
+    try {
+      const clientConfig = new ClientConfig(
+        request.serverType,
+        request.host,
+        request.port,
+        request.username,
+        request.password,
+      );
+      // Get the appropriate storage client based on server type
+      const storageClient = this.storageClientFactory.getClient(clientConfig);
+      const isValid = await storageClient.validateConnection();
+
+      if (isValid) {
+        return {
+          isValid: true,
+          message: 'Connection validated successfully',
+        };
+      } else {
+        return {
+          isValid: false,
+          message: 'Connection validation failed',
+        };
+      }
+    } catch (error) {
+      this.logger.error(`Connection validation error: ${error.message}`);
+      return {
+        isValid: false,
+        message: error.message || 'Connection validation failed',
+      };
     }
   }
 }

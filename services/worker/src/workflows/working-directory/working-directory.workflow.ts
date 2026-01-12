@@ -8,6 +8,8 @@ async function log(traceId: string, message: string) {
 
 export const ValidateWorkingDirectoryWorkflow = async ({traceId, payload, options}) => {
   log(`traceId - ${traceId}`, `Starting ValidateWorkingDirectoryWorkflow with args: ${JSON.stringify(payload)}`);
+    // Include fileServerId in workflow ID to ensure uniqueness when same worker handles multiple zones (Dell)
+    const fileServerSuffix = payload.fileServerId ? `${payload.fileServerId}` : '';
     const responseArray = await Promise.all(
       payload.workerIds.map((workerId: string) =>
         executeChild(ValidateWorkingDirectoryWorkerWorkflow, {
@@ -17,7 +19,7 @@ export const ValidateWorkingDirectoryWorkflow = async ({traceId, payload, option
               payload: payload,
             }
           ],
-          workflowId: `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${workerId}`,
+          workflowId: `${WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY}-${traceId}-${workerId}-${fileServerSuffix}`,
           taskQueue: `${workerId}-TaskQueue`,
           ...options,
           cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

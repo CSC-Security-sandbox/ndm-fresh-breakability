@@ -5,8 +5,19 @@ import { memo } from "react";
 const ExportPathSourceCellRenderer = (
   props: BlueXpTableRowType<ConfigListTypeApiType, ConfigListTypeApiType>
 ) => {
+  // Dell Isilon parent rows don't have fileServers - show dash
+  if ((props?.row as any)?._isDellIsilonParent) {
+    return <>-</>;
+  }
+
+  // Dell Isilon child rows - the row IS the file server, use exportPathSource directly
+  if ((props?.row as any)?._isDellIsilonChild) {
+    const exportPathSource = (props?.row as any)?.exportPathSource;
+    return <>{FILE_SERVER_LIST_ENUM[exportPathSource] || "-"}</>;
+  }
+
   return (
-    <> {FILE_SERVER_LIST_ENUM[props?.row?.fileServers[0]?.exportPathSource]}</>
+    <>{FILE_SERVER_LIST_ENUM[props?.row?.fileServers?.[0]?.exportPathSource] || "-"}</>
   );
 };
 

@@ -28,6 +28,16 @@ export class ListPathDTO {
     @ApiProperty({ description: 'The export path for the protocol', example: '/export/path', enum: ExportPathSource })
     @IsString()
     exportPathSource: ExportPathSource;
+
+    @ApiProperty({ description: 'SmartConnect Service IP (SSIP) for DNS resolution of FQDN', required: false })
+    @IsOptional()
+    @IsString()
+    smartConnectSsip?: string;
+
+    @ApiProperty({ description: 'DNS zone derived from SmartConnect FQDN (e.g., lab.local)', required: false })
+    @IsOptional()
+    @IsString()
+    smartConnectDnsZone?: string;
 }
 
 export class ConfigStatusPayloadDTO {
@@ -49,4 +59,9 @@ export class ConfigStatusPayloadDTO {
     @IsOptional()
     @IsString()
     errorMessage: string;
+
+    @ApiProperty({ description: 'File server ID for Dell per-zone status updates', required: false })
+    @IsOptional()
+    @IsString()
+    fileServerId?: string;
 }

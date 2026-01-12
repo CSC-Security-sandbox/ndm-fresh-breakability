@@ -13,6 +13,7 @@ import {
 import { Repository, IsNull, Not, In } from 'typeorm';
 import { WorkerConfiguration } from 'src/constants/types';
 import {
+  ConfigStatus,
   Platform,
   WorkerStatus,
   WorkFlows,
@@ -200,13 +201,71 @@ export class WorkManagerService {
 
   async validateWorkingDirectory(data: ConfigStatusPayloadDTO) {
     try {
-      this.logger.debug(
-        'Updating config status after validating export path and working directory',
+      this.logger.log(
+        `Received validateWorkingDirectory callback: configId=${data.configId}, fileServerId=${data.fileServerId}, status=${data.status}`,
       );
-      await this.configRepo.update(
-        { id: data.configId },
-        { status: data.status, errorMessage: data.errorMessage },
-      );
+
+      // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
+      if (data.fileServerId) {
+        // Update file server status and aggregate config status in one save
+        this.logger.log(`Per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
+        
+        const config = await this.configRepo.findOne({
+          where: { id: data.configId },
+          relations: ['fileServers'],
+        });
+        
+        if (config) {
+          // Update the specific file server status
+          const fileServer = config.fileServers.find(fs => fs.id === data.fileServerId);
+          if (fileServer) {
+            fileServer.status = data.status;
+            fileServer.errorMessage = data.errorMessage;
+          }
+          // Aggregate config status from all file servers
+          const hasDraft = config.fileServers.some(fs => fs.status === ConfigStatus.DRAFT);
+          const hasErrored = config.fileServers.some(fs => fs.status === ConfigStatus.ERRORED);
+          const allActive = config.fileServers.every(fs => fs.status === ConfigStatus.ACTIVE);
+
+          if (hasDraft) {
+            config.status = ConfigStatus.DRAFT;
+            config.errorMessage = 'One or more zones have no workers assigned';
+          } else if (hasErrored) {
+            config.status = ConfigStatus.ERRORED;
+            config.errorMessage = 'One or more zones failed validation';
+          } else if (allActive) {
+            config.status = ConfigStatus.ACTIVE;
+            config.errorMessage = null;
+          } else {
+            config.status = ConfigStatus.IN_PROGRESS;
+            config.errorMessage = null;
+          }
+          this.logger.log(
+            `Dell config ${config.id}: Aggregated status = ${config.status} (${config.fileServers.length} file servers)`,
+          );
+          // Single save for both file server and config updates
+          await this.configRepo.save(config);
+        }
+      } else {
+        // Other NAS: Update config status directly
+        const config = await this.configRepo.findOne({
+          where: { id: data.configId },
+          relations: ['fileServers'],
+        });
+        
+        if (config) {
+          config.status = data.status;
+          config.errorMessage = data.errorMessage;
+          
+          // Also sync status to all file servers for consistency
+          config.fileServers.forEach(fs => {
+            fs.status = data.status;
+            fs.errorMessage = data.errorMessage;
+          });
+          
+          await this.configRepo.save(config);
+        }
+      }
     } catch (error) {
       this.logger.error(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,

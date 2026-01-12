@@ -34,6 +34,10 @@ export class FileServerEntity extends Base {
   @Column({ type: "text", nullable: true, name: "hostname" })
   host: string;
 
+  @ApiProperty({ description: 'File Server Name' })
+  @Column({ type: 'text', nullable: true, name: 'file_server_name' })
+  fileServerName: string;
+
   @ApiProperty({ description: "data" })
   @Column({ type: "text", nullable: true, name: "username" })
   userName: string;
@@ -41,9 +45,6 @@ export class FileServerEntity extends Base {
   @ApiProperty({ description: "protocol" })
   @Column({ type: "varchar", name: "protocol", nullable: true })
   protocol: Protocol;
-
-  @Column({ type: "varchar", name: "server_type" })
-  serverType: ServerType;
 
   @ApiProperty({ description: "password" })
   @Column({ type: "text", nullable: true, name: "password" })

@@ -110,7 +110,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
     private async fetchVolumesWithWorkers(pathIds: string[]): Promise<VolumeEntity[]> {
         return this.volumeRepo.find({
             where: { id: In([...pathIds]) },
-            relations: { fileServer: { workers: { stats: true } } },
+            relations: { fileServer: { workers: { stats: true }, config: true } },
         });
     }
 
@@ -124,7 +124,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
                     password: volume.fileServer.password,
                     protocol: volume.fileServer.protocol,
                     protocolVersion: volume.fileServer.protocolVersion?.replace(/^v/, ""),
-                    serverType: volume.fileServer.serverType,
+                    serverType: volume.fileServer.config.serverType,
                     exportPathSource: volume.fileServer.exportPathSource,
                 });
             }

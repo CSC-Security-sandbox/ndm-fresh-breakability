@@ -85,7 +85,7 @@ describe('PreCheckService', () => {
         id: 'src1',
         volumePath: '/src',
         fileServer: {
-          id: 'fs1', host: 'h1', userName: 'u1', password: 'p1', protocol: 'ftp', protocolVersion: 'v1', serverType: 't1',
+          id: 'fs1', host: 'h1', userName: 'u1', password: 'p1', protocol: 'ftp', protocolVersion: 'v1', config: { serverType: 't1' },
           workers: [
             { workerId: 'w1', stats: { healthStatus: HealthStatus.Healthy, updatedAt: new Date() } },
           ],
@@ -95,7 +95,7 @@ describe('PreCheckService', () => {
         id: 'dest1',
         volumePath: '/dest',
         fileServer: {
-          id: 'fs2', host: 'h2', userName: 'u2', password: 'p2', protocol: 'ftp', protocolVersion: 'v1', serverType: 't2',
+          id: 'fs2', host: 'h2', userName: 'u2', password: 'p2', protocol: 'ftp', protocolVersion: 'v1', config: { serverType: 't2' },
           workers: [
             { workerId: 'w1', stats: { healthStatus: HealthStatus.Healthy, updatedAt: new Date() } },
           ],
@@ -130,7 +130,7 @@ describe('PreCheckService', () => {
     expect(result).toEqual({ workflowId: 'wf1' });
     expect(volumeRepo.find).toHaveBeenCalledWith({
       where: { id: In(['src1', 'dest1']) },
-      relations: { fileServer: { workers: { stats: true } } },
+      relations: { fileServer: { workers: { stats: true }, config: true } },
     });
     expect(workflowService.startWorkflow).toHaveBeenCalled();
   });

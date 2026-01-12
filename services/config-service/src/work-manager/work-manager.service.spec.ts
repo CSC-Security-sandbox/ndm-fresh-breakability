@@ -77,6 +77,8 @@ describe('WorkManagerService', () => {
           provide: getRepositoryToken(ConfigEntity),
           useValue: {
             update: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
           },
         },
         {
@@ -106,6 +108,7 @@ describe('WorkManagerService', () => {
               debug: jest.fn(),
               error: jest.fn(),
               warn: jest.fn(),
+              log: jest.fn(),
             }),
           },
         },
@@ -309,29 +312,175 @@ describe('WorkManagerService', () => {
   });
 
   describe('validateWorkingDirectory', () => {
-    it('should update config repo with provided data', async () => {
+    it('should update config status directly for non-Dell NAS (no fileServerId)', async () => {
       const data = {
         configId: 'config-1',
-        status: 'SUCCESS',
+        status: 'ACTIVE',
         errorMessage: null,
       };
-      (configRepo.update as jest.Mock).mockResolvedValue({});
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [{ id: 'fs-1', status: 'IN_PROGRESS' }],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
 
       await service.validateWorkingDirectory(data as any);
-      expect(configRepo.update).toHaveBeenCalledWith(
-        { id: data.configId },
-        { status: data.status, errorMessage: data.errorMessage },
-      );
+
+      expect(configRepo.findOne).toHaveBeenCalledWith({
+        where: { id: data.configId },
+        relations: ['fileServers'],
+      });
+      expect(configRepo.save).toHaveBeenCalledWith({
+        ...mockConfig,
+        status: data.status,
+        errorMessage: data.errorMessage,
+      });
     });
 
-    it('should log an error when config repo update fails', async () => {
+    it('should update file server status for Dell per-zone callback (with fileServerId)', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [
+          { id: 'fs-1', status: 'IN_PROGRESS' },
+          { id: 'fs-2', status: 'ACTIVE' },
+        ],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      expect(configRepo.findOne).toHaveBeenCalledWith({
+        where: { id: data.configId },
+        relations: ['fileServers'],
+      });
+      // File server status should be updated
+      expect(mockConfig.fileServers[0].status).toBe('ACTIVE');
+      // save should be called twice - once for file server update, once for aggregation
+      expect(configRepo.save).toHaveBeenCalled();
+    });
+
+    it('should aggregate Dell config status to ACTIVE when all file servers are ACTIVE', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [
+          { id: 'fs-1', status: 'IN_PROGRESS' },
+          { id: 'fs-2', status: 'ACTIVE' },
+        ],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      // After updating fs-1 to ACTIVE, all file servers are ACTIVE
+      // So aggregated status should be ACTIVE
+      expect(mockConfig.status).toBe('ACTIVE');
+      expect(mockConfig.errorMessage).toBeNull();
+    });
+
+    it('should aggregate Dell config status to ERRORED when any file server is ERRORED', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'ERRORED',
+        errorMessage: 'Zone validation failed',
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [
+          { id: 'fs-1', status: 'IN_PROGRESS' },
+          { id: 'fs-2', status: 'ACTIVE' },
+        ],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      // After updating fs-1 to ERRORED, aggregated status should be ERRORED
+      expect(mockConfig.status).toBe('ERRORED');
+      expect(mockConfig.errorMessage).toBe('One or more zones failed validation');
+    });
+
+    it('should keep Dell config status as IN_PROGRESS when not all file servers are complete', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [
+          { id: 'fs-1', status: 'IN_PROGRESS' },
+          { id: 'fs-2', status: 'IN_PROGRESS' },
+        ],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      // fs-1 is now ACTIVE, but fs-2 is still IN_PROGRESS
+      // So aggregated status should remain IN_PROGRESS
+      expect(mockConfig.status).toBe('IN_PROGRESS');
+      expect(mockConfig.errorMessage).toBeNull();
+    });
+
+    it('should handle Dell callback when file server is not found in config', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-unknown',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [{ id: 'fs-1', status: 'IN_PROGRESS' }],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      // File server not found, so its status should not change
+      expect(mockConfig.fileServers[0].status).toBe('IN_PROGRESS');
+    });
+
+    it('should log an error when config repo operation fails', async () => {
       const data = {
         configId: 'config-1',
         status: 'FAIL',
         errorMessage: 'error',
       };
-      const error = new Error('update failure');
-      (configRepo.update as jest.Mock).mockRejectedValue(error);
+      const error = new Error('database failure');
+      (configRepo.findOne as jest.Mock).mockRejectedValue(error);
 
       await service.validateWorkingDirectory(data as any);
       expect(logger.error).toHaveBeenCalledWith(

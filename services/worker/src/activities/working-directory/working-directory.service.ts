@@ -2,14 +2,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from "axios";
 import * as fs from 'fs';
-import { unlinkSync, writeFileSync } from 'fs';
 import * as path from 'path';
 import { join } from 'path';
+import { promises as fsPromises } from 'fs';
 import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { ClientConfig, StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -18,18 +19,21 @@ export class ValidateWorkingDirectoryActivity {
   readonly workerConfigUrl: string;
   readonly projectId: string;
   private readonly logger: LoggerService;
+  private readonly storageClientFactory: StorageClientFactory;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly authService: AuthService,
-    private readonly protocols: Protocols
+    private readonly protocols: Protocols,
+    storageClientFactory: StorageClientFactory
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
     this.projectId = this.configService.get('worker.projectId');
     this.logger = loggerFactory.create(ValidateWorkingDirectoryActivity.name);
+    this.storageClientFactory = storageClientFactory;
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
@@ -38,11 +42,19 @@ export class ValidateWorkingDirectoryActivity {
     const configStatusPayload: ConfigStatusPayload = {
       configId: payload.configId,
       status: null,
-      errorMessage: null
+      errorMessage: null,
+      fileServerId: payload?.fileServerId || null, // Storage-aware: pass fileServerId for per-zone status updates
     };
 
+    // Storage-aware types (Dell, etc.) use API-based discovery; OtherNAS uses showmount
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
     const isPathExists = !!payload?.paths?.length;
-    if(!isPathExists && !payload.hasManualUpload) {
+    
+    // For storage-aware types, exports are discovered via API (stored in VolumeEntity)
+    // so paths may be empty but we still have exportsMap to validate
+    const hasDiscoveredExports = isStorageAware && payload?.exportsMap && Object.keys(payload.exportsMap).length > 0;
+    
+    if(!isPathExists && !payload.hasManualUpload && !hasDiscoveredExports) {
       configStatusPayload.status = ConfigStatus.ERRORED;
       configStatusPayload.errorMessage = ConfigError.UNABLE_TO_DETECT_EXPORT_PATH;
       await this.updateConfigStatus(apiUrl, configStatusPayload);
@@ -120,24 +132,51 @@ export class ValidateWorkingDirectoryActivity {
   }
 
   async handleMountAndUnmountPaths(traceId: string, payload: any): Promise<void> {
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
+    
     try {
       for (const fileServer of payload.listPathPayload) {
         if(fileServer.exportPathSource === ExportPathSource.MANUAL_UPLOAD) {
           this.logger.log(`Skipping mounting and unmounting for MANUAL_UPLOAD type for host ${fileServer.host}`);
           continue;
         }
+
+        // For storage-aware types with SmartConnect FQDN: configure DNS resolver
+        // This allows the worker to resolve the SmartConnect FQDN using the SSIP
+        
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
+
+        // For storage-aware types, get the export path from exportsMap for this specific host
+        // This was discovered via storage API and stored in VolumeEntity
+        let exportPath = payload.fetchedPath;
+        if (isStorageAware){
+            // Configure SmartConnect DNS if SSIP and zone are provided
+            let clientConfig = new ClientConfig(payload.serverType);
+            const storageClient = this.storageClientFactory.getClient(clientConfig);
+            if (storageClient) {
+              await storageClient.configureSmartConnectDns(traceId, fileServer);
+            }
+            
+            if (payload.exportsMap && payload.exportsMap[fileServer.host]) {
+              exportPath = payload.exportsMap[fileServer.host];
+              this.logger.log(`Using discovered export path ${exportPath} for host ${fileServer.host}`);
+            }
+        }
+       
+
+        // For storage-aware per-zone, include fileServerId in path to prevent collision between zones
+        const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
 
         const mountPathPayload = {
           hostname: fileServer.host,
           username: fileServer.username,
           password: fileServer.password,
           protocolVersion: fileServer.protocolVersion,
-          path: payload.fetchedPath,
+          path: exportPath,
           mountBasePath: this.baseWorkingPath,
-          pathId: traceId,
-          jobRunId: traceId,
+          pathId: uniquePathId,
+          jobRunId: uniquePathId,
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
@@ -174,8 +213,19 @@ export class ValidateWorkingDirectoryActivity {
     let isDirectoryValid = false;
     let hasWritePermission = false;
 
+    // For storage-aware per-zone, include fileServerId in path to prevent collision between zones
+    const uniquePathId = payload.fileServerId ? `${traceId}-${payload.fileServerId}` : traceId;
+    const isStorageAware = payload?.serverType !== 'OtherNAS';
+
     try {
       for (const fileServer of payload.listPathPayload) {
+        if (isStorageAware){
+          let clientConfig = new ClientConfig(payload.serverType);
+          const storageClient = this.storageClientFactory.getClient(clientConfig);
+          if (storageClient) {
+            await storageClient.configureSmartConnectDns(traceId, fileServer);
+          }
+        }
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
         const mountPathPayload = {
@@ -185,8 +235,8 @@ export class ValidateWorkingDirectoryActivity {
           protocolVersion: fileServer.protocolVersion,
           path: payload.exportPath,
           mountBasePath: this.baseWorkingPath,
-          pathId: traceId,
-          jobRunId: traceId
+          pathId: uniquePathId,
+          jobRunId: uniquePathId
         };
 
         this.logger.log(`Mounting export path for host ${fileServer.host}`);
@@ -194,14 +244,14 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log("Mounted export path successfully");
 
         this.logger.log("Started validating the working directory");
-        const mountPoint = path.join(this.baseWorkingPath, traceId, traceId);
+        const mountPoint = path.join(this.baseWorkingPath, uniquePathId, uniquePathId);
         const fullPath = path.join(mountPoint, payload.workingDirectory);
 
         if (fs.existsSync(fullPath)) {
           this.logger.log(`Working Directory exists: ${fullPath}`);
           isDirectoryValid = true;
 
-          hasWritePermission = this.checkWritable(fullPath);
+          hasWritePermission = await this.checkWritable(fullPath);
 
         } else {
           this.logger.log(`Working Directory does not exist: ${fullPath}`);
@@ -225,11 +275,11 @@ export class ValidateWorkingDirectoryActivity {
     return isDirectoryValid && hasWritePermission;
   }
  
-  checkWritable(directoryPath: string): boolean {
+  async checkWritable(directoryPath: string): Promise<boolean> {
     const testFile = join(directoryPath, '.nfs_write_test');
     try {
-      writeFileSync(testFile, '');
-      unlinkSync(testFile);
+      await fsPromises.writeFile(testFile, '');
+      await fsPromises.unlink(testFile);
       this.logger.log(`Success: Directory ${directoryPath} is writable.`);
       return true;
     } catch (error) {

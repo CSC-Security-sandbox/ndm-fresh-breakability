@@ -16,7 +16,6 @@ export type CreateConfigurationEmailContent = {
   configName: string;
   fileServers: {
     host: string;
-    serverType: string;
     protocol: string;
     workerNames: string[];
   }[];

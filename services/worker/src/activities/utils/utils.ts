@@ -1,12 +1,17 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from 'path';
+import { promises as fsPromises } from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
 import { E8Dot3CollisionError } from "../../errors/errors.types";
+
+const execAsync = promisify(exec);
 
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {

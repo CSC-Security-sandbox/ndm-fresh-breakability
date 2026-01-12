@@ -101,6 +101,7 @@ export class JobRunService {
       volumePath: true,
       fileServer: {
         protocol: true,
+        fileServerName: true,
         config: { configName: true },
       },
     };
@@ -172,13 +173,15 @@ export class JobRunService {
           protocol: jobRun?.jobConfig?.sourcePath?.fileServer?.protocol,
           path: jobRun?.jobConfig?.sourcePath?.volumePath,
           serverName:
-            jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
+            jobRun?.jobConfig?.sourcePath?.fileServer?.fileServerName,
+          configName: jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
         },
         destinationServer: {
           protocol: jobRun?.jobConfig?.destinationPath?.fileServer?.protocol,
           path: jobRun?.jobConfig?.destinationPath?.volumePath,
           serverName:
-            jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,
+            jobRun?.jobConfig?.destinationPath?.fileServer?.fileServerName,
+            configName: jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,
         },
       },
       jobOptions: jobRun.options && {

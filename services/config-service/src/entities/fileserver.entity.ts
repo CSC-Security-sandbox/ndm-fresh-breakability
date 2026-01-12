@@ -1,4 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsNumber, IsOptional } from "class-validator";
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 import { Base } from "./base.entity";
@@ -14,6 +15,10 @@ export class FileServerEntity extends Base {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    @ApiProperty({ description: 'File Server Name' })
+    @Column({ type: 'text', nullable: true, name: 'file_server_name' })
+    fileServerName: string;
+
     @ApiProperty({ description: 'Host' })
     @Column({ type: 'text', nullable: true,  name:'hostname' })
     host: string;
@@ -26,13 +31,13 @@ export class FileServerEntity extends Base {
     @Column({ type: 'varchar', name: 'protocol', nullable: true})
     protocol: Protocol;
 
-    @ApiProperty({ description: 'Server Type' })
-    @Column({ type: 'varchar', name:'server_type' })
-    serverType: ServerType;
+    @ApiProperty({ description: 'Status' })
+    @Column({ type: 'varchar', nullable: true, name: 'status' })
+    status: string;
 
     @ApiProperty({ description: 'password' })
     @Column({ type: 'text', nullable: true,  name:'password' })
-    password: string;
+    password: string; 
 
     @ApiProperty({ description: 'configId' })
     @Column({ type: 'uuid', nullable:true,  name: 'config_id'})
@@ -73,4 +78,25 @@ export class FileServerEntity extends Base {
 
     @OneToMany(() => PathUploadsEntity, (upload) => upload.fileServer)
     uploads: PathUploadsEntity[];
+
+    @ApiPropertyOptional({ description: 'zone_id', example: 1 })
+    @Column({ type: 'integer', nullable: true, name: 'zone_id' })
+    @IsNumber()
+    @IsOptional()
+    zone_id?: number;
+
+    @ApiProperty({ description: 'File Server Error message' })
+    @Column({ name: 'error_message', type: 'text', nullable: true })
+    errorMessage: string;
+
+    @ApiPropertyOptional({ description: 'SmartConnect Service IP (SSIP) for DNS resolution of FQDN', example: '10.192.7.110' })
+    @Column({ type: 'text', nullable: true, name: 'smart_connect_ssip' })
+    @IsOptional()
+    smartConnectSsip?: string;
+
+    @ApiPropertyOptional({ description: 'SmartConnect DNS Zone for resolver configuration', example: 'lab.local' })
+    @Column({ type: 'text', nullable: true, name: 'smart_connect_dns_zone' })
+    @IsOptional()
+    smartConnectDnsZone?: string;
+
 }

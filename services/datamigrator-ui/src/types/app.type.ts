@@ -157,6 +157,8 @@ export interface FileServerApiType {
   workers: WorkerApiType[];
   volumes: VolumeType[]; // Adjust this type if you have specific volume data structure
   exportPathSource?: string;
+  fileServerName?: string; // Zone name for Dell Isilon
+  zone_id?: number | null; // Zone ID for Dell Isilon
 }
 
 export type ConfigListTypeApiType = {
@@ -176,6 +178,14 @@ export type ConfigListTypeApiType = {
   status: FILE_SERVER_STATUS_ENUM;
   isRefreshAvailable?: boolean;
   isUploadInProgress?: boolean;
+  // Dell Isilon management console fields
+  hostname?: string;
+  port?: number;
+  serverType?: string;
+  username?: string;
+  tlsAccepted?: boolean;
+  tlsCaCertificate?: string;
+  tlsExpiry?: string;
 };
 
 export type FileServerDetailsType = ConfigListTypeApiType;

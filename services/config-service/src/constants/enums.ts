@@ -31,7 +31,7 @@ export enum ProtocolVersion {
 
 export enum ServerType {
     other = 'OtherNAS',
-    dell = 'dell',
+    dell = 'Dell',
     emc = 'emc'
 }
 

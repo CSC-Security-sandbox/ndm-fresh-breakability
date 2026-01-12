@@ -509,28 +509,36 @@
    <changeSet id="20251215_01_alter_jobconfig_add_should_scan_ads_column.sql" author="ab">
       <sqlFile path="liquibase/20251215_01_alter_jobconfig_add_should_scan_ads_column.sql"/>
       <rollback>
-         <sqlFile path="liquibase/rollback/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
+         <sqlFile path="liquibase/20251215_01_alter_jobconfig_add_should_scan_ads_column_rollback.sql"/>
       </rollback>
    </changeSet>
    
    <changeSet id="20251224_01_alter_fileserver_table_add_columns_status_tracking.sql" author="dm">
       <sqlFile path="liquibase/20251224_01_alter_fileserver_table_add_columns_status_tracking.sql"/>
       <rollback>
-         <sqlFile path="liquibase/rollback/20251224_01_alter_fileserver_table_add_columns_status_tracking_rollback.sql"/>
+         <sqlFile path="liquibase/20251224_01_alter_fileserver_table_add_columns_status_tracking_rollback.sql"/>
       </rollback>
    </changeSet>
 
    <changeSet id="20251223_01_alter_job_options_table_add_skip_file_identity_mapping_columns.sql" author="ss27372">
       <sqlFile path="liquibase/20251218_01_alter_job_options_table_add_skip_file_identity_mapping_id_columns.sql"/>
       <rollback>
-         <sqlFile path="liquibase/rollback/20251218_01_alter_job_options_table_delete_columns_skip_file_identity_mapping_id.sql"/>
+         <sqlFile path="liquibase/20251218_01_alter_job_options_table_delete_columns_skip_file_identity_mapping_id_rollback.sql"/>
       </rollback>
    </changeSet>
 
    <changeSet id="20260110_01_create_job_config_inventory_stats_table.sql" author="ab">
       <sqlFile path="liquibase/20260110_01_create_job_config_inventory_stats_table.sql"/>
       <rollback>
-         <sqlFile path="liquibase/rollback/20260110_01_create_job_config_inventory_stats_table_rollback.sql"/>
+         <sqlFile path="liquibase/20260110_01_create_job_config_inventory_stats_table_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20260111_01_alter_config_and_file_server_table.sql" author="ashish">
+      <sqlFile path="liquibase/20260111_01_alter_config_and_file_server_table.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260111_01_alter_config_and_file_server_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

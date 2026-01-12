@@ -90,10 +90,30 @@ const ExportPathsTable = ({
     setDisableRefresh(true);
     try {
       let retryCount = 0;
+      
+      // Dell Isilon: Pass configId and fileServerId separately for zone-specific refresh
+      // Other NAS: Only pass fileServerId (which is actually the config ID)
+      const isDellIsilon = fileServerDetails?.serverType === "Dell";
+      
       const response = await reFetchExportPathsApi({
-        fileServerId: fileServerDetails.id,
+        configId: isDellIsilon ? fileServerDetails.id : undefined,
+        fileServerId: isDellIsilon ? fileServerId : fileServerDetails.id,
       }).unwrap();
 
+      if (isDellIsilon) {
+        // Dell Isilon refresh is synchronous - already complete
+        dispatch(configApi.util.invalidateTags(["GET_FILE_SERVER_BY_ID"]));
+        notify.success(response?.message || "Successfully refreshed the mount / share paths.");
+        setDisableRefresh(false);
+        
+        if (refetch) {
+          refetch();
+        }
+        return;
+      }
+
+      // Other NAS: Refresh is asynchronous via workflow
+      // Response structure: { workflowId: "ListPathsWorkflow-..." }
       interval.current = setInterval(async () => {
         const data = await getWorkFlowStatus({
           id: response?.workflowId,

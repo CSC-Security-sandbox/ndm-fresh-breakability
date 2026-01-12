@@ -3,9 +3,10 @@ import { ApiBadRequestResponse, ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiN
 import { Auth, Permission } from "@netapp-cloud-datamigrate/auth-lib";
 import { ConfigurationService } from "./configuration.service";
 import { UserDetails } from "./configuration.types";
-import { ConfigDTO } from "./dto/config.dto";
+import { ConfigDTO, FetchCertificateRequestDTO, FetchCertificateResponseDTO, FetchZonesRequestDTO, FetchZonesResponseDTO } from "./dto/config.dto";
 import { ConfigResponseDto, FindAllConfigPageDto, FileServerInfo} from "./dto/findallconfig.dto";
 import { ConfigApiDoc } from "src/swaggerdoc/swagger.doc";
+
 
 @ApiTags("Configuration")
 @Controller('servers')
@@ -29,7 +30,6 @@ export class ConfigurationController{
     ) {
         return await this.configurationService.createConfiguration(createConfigurationDto, userDetails.user.id, userDetails?.trackId, projectId)
     }
-
 
     @ApiOperation({ summary: 'Get a paginated list of Config',  description: ConfigApiDoc.GET_ALL_CONFIG})
     @ApiOkResponse({ description: 'The list of Config has been retrieved successfully.',  type: ConfigResponseDto})
@@ -82,20 +82,107 @@ export class ConfigurationController{
 
     @ApiOperation({ summary: 'Get Updated list of exports/shared paths' }) 
     @ApiResponse({ status: 200, description: 'Request created successfully' })
+    @ApiQuery({ name: 'fileServerId', type: 'string', required: false, description: 'Optional file server ID to refresh only a specific zone (Storage Aware)' })
     @Auth(Permission.ManageConfig)
     @Get('/refresh/:id')
-    async refreshConfig(@Param('id') id: string ,  @Request() userDetails: UserDetails) {
-        return await this.configurationService.refreshConfig(id, userDetails?.trackId)
+    async refreshConfig(
+        @Param('id') id: string,
+        @Request() userDetails: UserDetails,
+        @Query('fileServerId') fileServerId?: string,
+    ) {
+        return await this.configurationService.refreshConfig(id, userDetails?.trackId, fileServerId)
+    }
+
+    @ApiOperation({ 
+        summary: 'Fetch TLS Certificate from Storage Box Management Console',
+        description: 'Fetches the self-signed TLS certificate from a Storage Box management console. Returns the certificate in PEM format for use in subsequent API calls.'
+    })
+    @ApiOkResponse({ 
+        description: 'Certificate fetched successfully', 
+        type: FetchCertificateResponseDTO 
+    })
+    @ApiBadRequestResponse({ 
+        description: 'Invalid host or connection failed' 
+    })
+    @ApiQuery({ 
+        name: 'host',
+        type: String,
+        description: 'Host address with optional port (e.g., "10.192.7.32" or "10.192.7.32:8080")',
+        required: true,
+        example: '10.192.7.32'
+    })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Get('fetch-certificate')
+    async fetchCertificate(
+        @Query() request: FetchCertificateRequestDTO,
+    ): Promise<FetchCertificateResponseDTO> {
+        return await this.configurationService.fetchCertificate(request);
+    }
+
+    @ApiOperation({ summary: 'Fetch zones from Storage Box management server' })
+    @ApiBody({ 
+        type: FetchZonesRequestDTO,
+        description: 'Management server credentials and connection details'
+    })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Successfully fetched zones',
+        type: FetchZonesResponseDTO
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request - Invalid parameters or connection failed' })
+    @ApiResponse({ status: 401, description: 'Unauthorized - Invalid credentials' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('fetch-zones')
+    async fetchZones(
+        @Body() request: FetchZonesRequestDTO,
+    ): Promise<FetchZonesResponseDTO> {
+        return await this.configurationService.fetchZones(request);
+    }
+
+    @ApiOperation({ 
+        summary: 'Validate connection to Storage Box management server',
+        description: 'Tests connectivity and authentication to the Storage Box management console using provided credentials'
+    })
+    @ApiBody({ 
+        type: FetchZonesRequestDTO,
+        description: 'Management server credentials and connection details'
+    })
+    @ApiResponse({ 
+        status: 200, 
+        description: 'Connection validated successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                isValid: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Connection successful' }
+            }
+        }
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request - Invalid parameters or connection failed' })
+    @ApiResponse({ status: 401, description: 'Unauthorized - Invalid credentials' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('validate-connection')
+    async validateConnection(
+        @Body() request: FetchZonesRequestDTO,
+    ): Promise<{ isValid: boolean; message: string }> {
+        return await this.configurationService.validateConnection(request);
     }
 
     @ApiOperation({ summary: 'Get Configuration by ID' , description: ConfigApiDoc.GET_CONFIG_BY_ID})
     @ApiOkResponse({ description: 'Configuration Found' ,  type: ConfigDTO})
     @ApiNotFoundResponse({ description: 'Configuration Not Found' })
+    @ApiQuery({ name: 'fileServerId', required: false, description: 'Optional file server ID to filter results to a specific file server' })
     @ApiBearerAuth()
     @Auth(Permission.ViewConfig)
     @Get(':id')
-    async getConfiguration(@Param('id') id: string) {
-        return await this.configurationService.getConfigById(id)
+    async getConfiguration(
+        @Param('id') id: string,
+        @Query('fileServerId') fileServerId?: string,
+    ) {
+        return await this.configurationService.getConfigById(id, fileServerId)
     }
 
     @ApiOperation({ summary: 'Update Configuration by ID', description: ConfigApiDoc.UPDATE_CONFIG_ID })

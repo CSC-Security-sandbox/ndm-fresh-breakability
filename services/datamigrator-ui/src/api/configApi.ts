@@ -67,8 +67,10 @@ export const configApi = createApi({
     }),
 
     getFileServerById: builder.query({
-      query: ({ fileServerId }) => ({
-        url: `/servers/${fileServerId}`,
+      query: ({ fileServerId, zoneFileServerId }) => ({
+        url: zoneFileServerId 
+          ? `/servers/${fileServerId}?fileServerId=${zoneFileServerId}`
+          : `/servers/${fileServerId}`,
         method: "GET",
       }),
       transformResponse: (response) => {
@@ -82,10 +84,16 @@ export const configApi = createApi({
     }),
 
     refetchConfigExportPaths: builder.query({
-      query: ({ fileServerId }) => ({
-        url: `/servers/refresh/${fileServerId}`,
-        method: "GET",
-      }),
+      query: ({ configId, fileServerId }) => {
+        // For Dell Isilon: configId is the config ID, fileServerId is the zone's file server ID
+        // For Other NAS: configId is used as the path param (legacy behavior)
+        const pathId = configId || fileServerId;
+        const queryParams = configId && fileServerId ? `?fileServerId=${fileServerId}` : '';
+        return {
+          url: `/servers/refresh/${pathId}${queryParams}`,
+          method: "GET",
+        };
+      },
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
       },
@@ -175,6 +183,113 @@ export const configApi = createApi({
     fetchProjectWithWorker: builder.query<Array<Record<string, string>>, void>({
       query: () => "support-bundle",
     }),
+
+    // Fetch TLS Certificate from Dell Isilon Management Console
+    fetchCertificate: builder.mutation<
+      {
+        isSelfSigned: boolean;
+        subject: {
+          CN?: string;
+          O?: string;
+          OU?: string;
+          C?: string;
+          ST?: string;
+          L?: string;
+        };
+        issuer: {
+          CN?: string;
+          O?: string;
+          OU?: string;
+          C?: string;
+          ST?: string;
+          L?: string;
+        };
+        validFrom: string;
+        validTo: string;
+        serialNumber: string;
+        fingerprint: string;
+        fingerprint256: string;
+        subjectAltNames: string[];
+        daysRemaining: number;
+        isExpired: boolean;
+        issuerChain: any[];
+        certificatePEM: string;
+        host: string;
+        port: number;
+      },
+      { host: string; serverType: string }
+    >({
+      query: ({ host, serverType }) => ({
+        url: `servers/fetch-certificate`,
+        method: "GET",
+        params: { host, serverType },
+      }),
+      transformResponse: (response: any) => {
+        return response?.data || response || {};
+      },
+    }),
+
+    // Create Management Server for Dell Isilon
+    createManagementServer: builder.mutation<
+      { message: string; createdBy: string; data: any },
+      {
+        configName: string;
+        projectId: string;
+        host: string;
+        port: number;
+        serverType: string;
+        username: string;
+        password: string;
+        tlsAccepted: boolean;
+        tlsCertificate: string;
+      }
+    >({
+      query: (body) => ({
+        url: `servers/management-server`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response || {};
+      },
+    }),
+
+    // Fetch Zones from Dell Isilon
+    fetchZones: builder.mutation<
+      {
+        zones: Array<{
+          zoneId: number;
+          zoneName: string;
+          ipAddresses: string[];
+          smartConnectFqdn?: string;
+          ssip?: string;
+        }>;
+        totalZones: number;
+        totalIpAddresses: number;
+      },
+      {
+        serverType: string;
+        host: string;
+        port?: number;
+        username: string;
+        password: string;
+        certificate: string;
+      }
+    >({
+      query: (body) => ({
+        url: `servers/fetch-zones`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: any) => {
+        return (
+          response?.data?.items ||
+          response?.data ||
+          response ||
+          { zones: [], totalZones: 0, totalIpAddresses: 0 }
+        );
+      },
+    }),
   }),
 });
 
@@ -198,4 +313,7 @@ export const {
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
   useFetchProjectWithWorkerQuery,
+  useFetchCertificateMutation,
+  useCreateManagementServerMutation,
+  useFetchZonesMutation,
 } = configApi;

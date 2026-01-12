@@ -282,7 +282,11 @@ export const JOB_RUN_DETAILS = (schema: string) => `
         v.volume_path,
         jr.status,
         c.config_name,
-        fsrv.protocol
+        fsrv.protocol,
+        CASE
+            WHEN c.server_type != 'OtherNAS' THEN fsrv.file_server_name
+            ELSE NULL
+        END as file_server_name
     from ${schema}.jobRun jr
     inner join ${schema}.jobconfig jc on jc.id = jr.job_config_id
     inner join ${schema}.volume v on v.id = jc.source_path_id
@@ -321,7 +325,7 @@ export const TRAILING_SPACE_FILE= (schema: string) => `
 export const ALTERNATE_DATA_STREAMS = (schema: string) => `
     SELECT
         i.path,
-        i.is_directory        
+        i.is_directory     
     FROM ${schema}.inventory i
     WHERE i.job_run_id = $1
     AND i.file_type = 'STREAM'
