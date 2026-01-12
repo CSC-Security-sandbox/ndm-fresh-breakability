@@ -1,0 +1,441 @@
+name: bds-security-docker-image-scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      bds_scan_folder_name:
+        description: 'black duck folder name (e.g., 2025.12.0_preview_docker_image) that we created on black duck portal'
+        required: true
+        type: string
+      branch:  
+        description: 'Branch to build and scan (leave empty for current)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  checks: write
+  packages: read
+
+env:
+  PROJECT_NAME: NetApp Data Migrator Scans
+  BLACKDUCK_URL: https://blackduck.eng.netapp.com
+  BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+  JAVA_VERSION: 17.0.11
+  SYNOPSYS_DETECT_VERSION: 9.10.1
+
+jobs:
+  # ============================================================================
+  # PRE-FLIGHT CHECKS
+  # ============================================================================
+  validate-environment:
+    name: Validate Environment
+    runs-on: openlab
+    steps:
+      - name: Check secrets configured
+        run: |
+          set -e
+          
+          if [ -z "${{ secrets.BLACKDUCK_API_TOKEN }}" ]; then
+            echo "BLACKDUCK_API_TOKEN is not configured"
+            exit 1
+          fi
+          
+          echo "BLACKDUCK_API_TOKEN configured"
+          echo "Environment validated"
+
+  # ============================================================================
+  # DOCKER BUILD STAGE
+  # ============================================================================
+  prepare-docker-matrix:
+    name: Prepare Docker Build Matrix
+    runs-on: openlab
+    needs: [validate-environment]
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          fetch-depth: 0
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          
+          cat > /tmp/matrix.json << 'EOF'
+          {
+            "include": [
+              {"service": "admin-service", "path": "services/admin-service", "needs_acr": false},
+              {"service": "config-service", "path": "services/config-service", "needs_acr": false},
+              {"service": "db-writer", "path": "services/db-writer", "needs_acr": false},
+              {"service": "jobs-service", "path": "services/jobs-service", "needs_acr": false},
+              {"service": "reports-service", "path": "services/reports-service", "needs_acr": false},
+              {"service": "support-service", "path": "services/support-service", "needs_acr": false},
+              {"service": "datamigrator-ui", "path": "services/datamigrator-ui", "needs_acr": true},
+              {"service": "keycloak-customizations", "path": "services/keycloak-customizations", "needs_acr": false}
+            ]
+          }
+          EOF
+          
+          MATRIX=$(cat /tmp/matrix.json | jq -c .)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "✓ Matrix configured with 8 services"
+
+  build-docker-images:
+    name: Build - ${{ matrix.service }}
+    runs-on: openlab
+    needs: [prepare-docker-matrix]
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-docker-matrix.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
+
+      - name: Login to ACR
+        if: matrix.needs_acr == true
+        uses: docker/login-action@9b3389107c4d9ea670f09a2402d36117a0b45339
+        with:
+          registry: datamigratedev.azurecr.io
+          username: ${{ secrets.AZURE_SP_USERNAME }}
+          password: ${{ secrets.AZURE_SP_PASSWORD }}
+        continue-on-error: false
+
+      - name: Build Docker image
+        uses: docker/build-push-action@aa179ca4f405fed7a76dad90a23bd02d6f2a8d2d
+        with:
+          context: ${{ matrix.path }}
+          push: false
+          load: true
+          tags: ${{ matrix.service }}:latest
+          secrets: |
+            git_token=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image
+        run: |
+          mkdir -p /tmp/docker-images
+          docker save -o "/tmp/docker-images/${{ matrix.service }}.tar" "${{ matrix.service }}:latest"
+          
+          # Fix permissions so Black Duck Inspector can read the file
+          chmod 644 "/tmp/docker-images/${{ matrix.service }}.tar"
+          
+          echo "✓ Image saved"
+          ls -lh "/tmp/docker-images/${{ matrix.service }}.tar"
+
+      - name: Save Docker image to artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: docker-image-${{ matrix.service }}
+          path: /tmp/docker-images/${{ matrix.service }}.tar
+          retention-days: 1
+
+
+  # ============================================================================
+  # BDS SCAN STAGE
+  # ============================================================================
+  prepare-scan-matrix:
+    name: Prepare Scan Matrix
+    runs-on: openlab
+    needs: [prepare-docker-matrix, validate-environment, build-docker-images]
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set scan matrix
+        id: set-matrix
+        run: |
+          
+          cat > /tmp/scan-matrix.json << 'EOF'
+          {
+            "include": [
+              {"display_name": "Admin Service", "service": "admin-service"},
+              {"display_name": "Config Service", "service": "config-service"},
+              {"display_name": "DB Writer", "service": "db-writer"},
+              {"display_name": "Jobs Service", "service": "jobs-service"},
+              {"display_name": "Reports Service", "service": "reports-service"},
+              {"display_name": "Support Service", "service": "support-service"},
+              {"display_name": "Datamigrator UI", "service": "datamigrator-ui"},
+              {"display_name": "Keycloak Customizations", "service": "keycloak-customizations"}
+            ]
+          }
+          EOF
+          
+          MATRIX=$(cat /tmp/scan-matrix.json | jq -c .)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  bds-docker-scan:
+    name: Scan - ${{ matrix.display_name }}
+    runs-on: openlab
+    timeout-minutes: 120
+    needs: [prepare-scan-matrix, build-docker-images, validate-environment]
+    if: always() && !cancelled()
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-scan-matrix.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          fetch-depth: 0
+
+      - name: Restore Docker image from artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: docker-image-${{ matrix.service }}
+          path: /tmp/docker-images/
+
+      - name: Verify image exists
+        run: |
+          TAR_FILE="/tmp/docker-images/${{ matrix.service }}.tar"
+
+          if [ ! -f "$TAR_FILE" ]; then
+            echo "Docker image not found: $TAR_FILE"
+            ls -la /tmp/docker-images/ 2>/dev/null || echo "No docker-images directory"
+            exit 1
+          fi
+          
+          # Ensure file is readable by Black Duck Inspector
+          chmod 644 "$TAR_FILE"
+          
+          SIZE=$(du -h "$TAR_FILE" | cut -f1)
+          echo "Docker image verified: $SIZE"
+          ls -la "$TAR_FILE"
+
+      - name: Set up Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Download Black Duck Detect
+        run: |
+          echo "Downloading Black Duck Detect..."
+          curl -s -L --connect-timeout 30 --max-time 300 \
+            https://detect.blackduck.com/detect10.sh -o detect10.sh
+          
+          if [ ! -s detect10.sh ]; then
+            echo "Failed to download detect10.sh"
+            exit 1
+          fi
+          
+          chmod +x detect10.sh
+          echo "✓ Black Duck Detect downloaded"
+
+      - name: Setup Docker Inspector
+        run: |
+          mkdir -p "$HOME/bds-inspector"
+          cd "$HOME/bds-inspector"
+          
+          if [ ! -d "packaged-inspectors/docker" ]; then
+            echo "Downloading Docker Inspector..."
+
+            ZIP_FILE="synopsys-detect-${{ env.SYNOPSYS_DETECT_VERSION }}-air-gap.zip"
+            curl -s -L --connect-timeout 30 --max-time 600 \
+              "https://sig-repo.synopsys.com/bds-integrations-release/com/synopsys/integration/synopsys-detect/${{ env.SYNOPSYS_DETECT_VERSION }}/$ZIP_FILE" \
+              -o "$ZIP_FILE"
+            
+            if [ ! -f "$ZIP_FILE" ]; then
+              echo "Failed to download Docker Inspector"
+              exit 1
+            fi
+            
+            unzip -q "$ZIP_FILE"
+            rm -f "$ZIP_FILE"
+            echo "Docker Inspector ready"
+          else
+            echo "Docker Inspector already available"
+          fi
+
+      - name: Run Black Duck Scan
+        shell: bash
+        env:
+          BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+          JAVA_OPTS: "-Dcom.blackduck.integration.trust.cert=true -Dtrust_cert=true -Dcom.blackduck.integration.verify.ssl=false -Xmx4g"
+        run: |
+          set +e
+          
+          SERVICE_NAME="${{ matrix.display_name }}"
+          SERVICE_ID="${{ matrix.service }}"
+          VERSION_NAME="${{ github.event.inputs.bds_scan_folder_name }}"
+
+          TAR_FILE="/tmp/docker-images/$SERVICE_ID.tar"
+          CODE_LOCATION_NAME="${{ env.PROJECT_NAME }}___${VERSION_NAME}___${SERVICE_NAME}"
+          OUTPUT_DIR="${{ github.workspace }}/bds-output/$SERVICE_ID"
+          
+          mkdir -p "$OUTPUT_DIR"
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          echo "SCANNING: $SERVICE_NAME"
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          ./detect10.sh \
+            --detect.project.name="${{ env.PROJECT_NAME }}" \
+            --blackduck.url="${{ env.BLACKDUCK_URL }}" \
+            --blackduck.api.token="$BLACKDUCK_API_TOKEN" \
+            --detect.project.version.name="$VERSION_NAME" \
+            --detect.code.location.name="$CODE_LOCATION_NAME" \
+            --detect.docker.tar="$TAR_FILE" \
+            --detect.docker.path="/usr/bin/docker" \
+            --detect.docker.inspector.air.gap.path="$HOME/bds-inspector/packaged-inspectors/docker" \
+            --detect.tools=DOCKER \
+            --detect.tools.excluded=DETECTOR \
+            --detect.cleanup=false \
+            --detect.output.path="$OUTPUT_DIR" \
+            --detect.cleanup.bdio.files=false \
+            --blackduck.trust.cert=true \
+            --blackduck.offline.mode=false \
+            --detect.accuracy.required=NONE \
+            --blackduck.timeout=1800 \
+            --detect.timeout=3600 \
+            --detect.wait.for.results=false \
+            --detect.risk.report.pdf=false
+          
+          SCAN_EXIT_CODE=$?
+          
+          # Write status to file for reporting
+          mkdir -p "${{ github.workspace }}/scan-status"
+          # Black Duck Detect returns exit code 1 if policy violations are found, but the scan completed successfully.
+          # Therefore, treat both exit code 0 (success) and 1 (policy violations) as successful scan completions.
+
+          if [ "$SCAN_EXIT_CODE" -eq 0 ] || [ "$SCAN_EXIT_CODE" -eq 1 ]; then
+            echo "SUCCESS" > "${{ github.workspace }}/scan-status/$SERVICE_ID.txt"
+            echo "Scan completed: $SERVICE_NAME"
+            exit 0
+          else
+            echo "FAILED" > "${{ github.workspace }}/scan-status/$SERVICE_ID.txt"
+            echo "Scan failed: $SERVICE_NAME (exit: $SCAN_EXIT_CODE)"
+            exit 1
+          fi
+
+      - name: Sanitize filenames for artifact upload
+        if: always() && !cancelled()
+        run: |
+          OUTPUT_DIR="bds-output/${{ matrix.service }}"
+          
+          if [ ! -d "$OUTPUT_DIR" ]; then
+            exit 0
+          fi
+          
+          echo "Sanitizing filenames in $OUTPUT_DIR..."
+          
+          # Find all files with invalid characters and rename them
+          find "$OUTPUT_DIR" -type f | while read file; do
+            # Get the directory and filename
+            dir=$(dirname "$file")
+            filename=$(basename "$file")
+            
+            # Sanitize: replace invalid chars with underscore using tr
+            # Invalid chars for artifacts: ? : " < > | *
+            sanitized=$(echo "$filename" | tr '?:"<>|*' '_______' | tr -d '\r\n')
+            
+            # Rename if different
+            if [ "$filename" != "$sanitized" ]; then
+              mv "$file" "$dir/$sanitized"
+              echo "  Renamed: $filename = $sanitized"
+            fi
+          done
+          
+          echo "✓ Filename sanitization complete"
+          echo "Total files: $(find "$OUTPUT_DIR" -type f | wc -l)"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: bds-results-${{ matrix.service }}
+          path: bds-output/${{ matrix.service }}
+          retention-days: 30
+
+      - name: Upload scan status
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scan-status-${{ matrix.service }}
+          path: scan-status/${{ matrix.service }}.txt
+          retention-days: 7
+
+  # ============================================================================
+  # REPORTING & RETRY TRACKING
+  # ============================================================================
+  scan-complete:
+    name: Scan Complete & Generate Report
+    runs-on: openlab
+    if: always() && !cancelled()
+    needs: [bds-docker-scan, prepare-scan-matrix]
+    steps:
+      - name: Download scan status files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: /tmp/scan-artifacts
+          pattern: scan-status-*
+
+      - name: Analyze results
+        id: analyze
+        run: |
+          TOTAL=0
+          SUCCESS=0
+          FAILED=0
+          FAILED_SERVICES=""
+          
+          for status_file in /tmp/scan-artifacts/scan-status-*/*.txt; do
+            if [ -f "$status_file" ]; then
+              TOTAL=$((TOTAL + 1))
+              SERVICE_NAME=$(basename "$status_file" .txt)
+              
+              if grep -q "SUCCESS" "$status_file"; then
+                SUCCESS=$((SUCCESS + 1))
+              else
+                FAILED=$((FAILED + 1))
+                FAILED_SERVICES="$FAILED_SERVICES\n- $SERVICE_NAME"
+              fi
+            fi
+          done
+          
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "failed_services=$FAILED_SERVICES" >> $GITHUB_OUTPUT
+
+      - name: Generate Report
+        run: |
+          echo "## BDS Docker Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** ${{ env.PROJECT_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Scan Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Services:** ${{ steps.analyze.outputs.total }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **✓ Successful:** ${{ steps.analyze.outputs.success }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **✗ Failed:** ${{ steps.analyze.outputs.failed }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.analyze.outputs.failed }}" -gt 0 ]; then
+            echo "### Failed Services" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.analyze.outputs.failed_services }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✓ All scans completed successfully!" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts available in workflow run**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on failure
+        if: failure() && github.event_name == 'workflow_dispatch'
+        run: |
+          echo "BDS Docker Scan workflow failed"
+          echo "Check artifacts for details"
+          
