@@ -10,6 +10,24 @@ import (
 	"strings"
 )
 
+// Security: Clear-text logging prevention
+//
+// This package implements multiple layers of protection against logging sensitive information:
+//
+// 1. Primary Defense: Structs with sensitive fields (Password, Secret, etc.) implement
+//    String() and GoString() methods to automatically redact sensitive data when formatted
+//    with %v, %+v, or %#v. Affected types:
+//    - OntapClient (utils/ontap_client.go)
+//    - SSHConfig (utils/utils.go)
+//    - KeycloakCredentials (utils/utils.go)
+//    - TestVolumeSetup (utils/test_setup_helper.go)
+//
+// 2. Secondary Defense: sanitizeMessage() function uses regex to detect and redact
+//    sensitive field patterns (password:, token:, secret:, etc.) as a fallback.
+//
+// 3. Usage: Always use LogDebug() and LogError() functions which automatically apply
+//    sanitization. Avoid using log.Print() or fmt.Print() directly for sensitive data.
+
 // getCallerInfo returns the test name (without line number) of the caller
 func getCallerInfo() string {
 	// Try to get current test name from Ginkgo environment variable
@@ -42,6 +60,11 @@ func getCallerInfo() string {
 }
 
 // sanitizeMessage redacts sensitive information from log messages
+// 
+// Security Note: This function provides defense-in-depth sanitization of sensitive data.
+// For primary protection, structs containing sensitive fields (Password, Secret, Token, etc.)
+// should implement String() and GoString() methods to prevent clear-text exposure.
+// See: OntapClient, SSHConfig, KeycloakCredentials, TestVolumeSetup
 func sanitizeMessage(msg string) string {
 	// List of sensitive field patterns to redact
 	// Matches patterns like: password:"value", Password:"value", adPassword:"value"

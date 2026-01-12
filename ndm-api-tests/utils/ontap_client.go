@@ -19,6 +19,16 @@ type OntapClient struct {
 	HTTPClient *http.Client
 }
 
+// String implements fmt.Stringer interface to redact sensitive Password field
+func (c *OntapClient) String() string {
+	return fmt.Sprintf("OntapClient{BaseURL:%s Username:%s Password:***REDACTED***}", c.BaseURL, c.Username)
+}
+
+// GoString implements fmt.GoStringer interface to redact sensitive Password field
+func (c *OntapClient) GoString() string {
+	return c.String()
+}
+
 // VolumeInfo represents ONTAP volume information
 type VolumeInfo struct {
 	UUID string `json:"uuid"`

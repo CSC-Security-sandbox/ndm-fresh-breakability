@@ -36,10 +36,30 @@ type SSHConfig struct {
 	Password string
 }
 
+// String implements fmt.Stringer interface to redact sensitive Password field
+func (s *SSHConfig) String() string {
+	return fmt.Sprintf("SSHConfig{Username:%s Host:%s Port:%d Password:***REDACTED***}", s.Username, s.Host, s.Port)
+}
+
+// GoString implements fmt.GoStringer interface to redact sensitive Password field
+func (s *SSHConfig) GoString() string {
+	return s.String()
+}
+
 type KeycloakCredentials struct {
 	AdminUser     string
 	AdminPassword string
 	ClientSecret  string
+}
+
+// String implements fmt.Stringer interface to redact sensitive AdminPassword and ClientSecret fields
+func (k *KeycloakCredentials) String() string {
+	return fmt.Sprintf("KeycloakCredentials{AdminUser:%s AdminPassword:***REDACTED*** ClientSecret:***REDACTED***}", k.AdminUser)
+}
+
+// GoString implements fmt.GoStringer interface to redact sensitive AdminPassword and ClientSecret fields
+func (k *KeycloakCredentials) GoString() string {
+	return k.String()
 }
 
 // =============================================================================

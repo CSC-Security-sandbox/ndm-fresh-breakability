@@ -27,6 +27,19 @@ type TestVolumeSetup struct {
 	CurrentTestCase     string // Current test case identifier
 }
 
+// String implements fmt.Stringer interface to redact sensitive password fields
+func (t *TestVolumeSetup) String() string {
+	return fmt.Sprintf("TestVolumeSetup{EnableCloning:%v SourceOntapURL:%s SourceOntapUsername:%s SourceOntapPassword:***REDACTED*** "+
+		"SourceSVMName:%s DestOntapURL:%s DestOntapUsername:%s DestOntapPassword:***REDACTED*** DestSVMName:%s CurrentTestCase:%s}",
+		t.EnableCloning, t.SourceOntapURL, t.SourceOntapUsername, t.SourceSVMName,
+		t.DestOntapURL, t.DestOntapUsername, t.DestSVMName, t.CurrentTestCase)
+}
+
+// GoString implements fmt.GoStringer interface to redact sensitive password fields
+func (t *TestVolumeSetup) GoString() string {
+	return t.String()
+}
+
 // Global test volume setup instance
 var GlobalVolumeSetup *TestVolumeSetup
 
