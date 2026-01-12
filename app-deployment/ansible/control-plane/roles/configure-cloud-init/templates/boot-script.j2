@@ -5,13 +5,53 @@ MAX_RETRIES=3
 RETRY_DELAY=5
 WAIT_TIMEOUT=600
 MICROK8S_INIT_DELAY=80
-
-# Get VM IP once at the start
-VM_IP=$(hostname -I | awk '{print $1}')
+IP_WAIT_RETRIES=30
+IP_WAIT_DELAY=2
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
+
+# Get VM IP with retry logic for vSphere environments where IP allocation happens after boot
+get_vm_ip() {
+    local retries=$IP_WAIT_RETRIES
+    local delay=$IP_WAIT_DELAY
+    local ip=""
+    local attempt=1
+    
+    while [ $attempt -le $retries ]; do
+        # Method 1: ip route get (most reliable)
+        ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+')
+        
+        # Method 2: fallback to hostname -I
+        if [ -z "$ip" ]; then
+            ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        fi
+        
+        # If we got an IP, return it
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+        
+        log "Waiting for IP address (attempt $attempt/$retries)..."
+        sleep "$delay"
+        attempt=$((attempt + 1))
+    done
+    
+    return 1
+}
+
+# Helper function to ensure VM_IP is set before use
+ensure_vm_ip() {
+    if [ -z "$VM_IP" ]; then
+        log "VM IP not set, attempting to retrieve..."
+        VM_IP=$(get_vm_ip)
+        [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP after retries"
+    fi
+}
+
+VM_IP=""
 
 retry() {
     local retries=$1
@@ -110,7 +150,7 @@ install_keycloak_chart() {
 
 patch_jwt_issuer() {
     log "Patching JWT issuer with VM IP..."
-    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for JWT issuer"
+    ensure_vm_ip
     
     cat > /tmp/jwt-patch.yaml << EOF
 spec:
@@ -129,7 +169,7 @@ EOF
 
 regenerate_istio_certificate() {
     log "Regenerating Istio Gateway TLS certificate with VM IP..."
-    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for certificate regeneration"
+    ensure_vm_ip
     
     local CERT_FILE=$(mktemp)
     local KEY_FILE=$(mktemp)
@@ -320,7 +360,7 @@ apply_postgres_cronjob_and_wait() {
 
 patch_istio_gateway_service() {
     log "Patching Istio ingressgateway service with VM IP..."
-    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP"
+    ensure_vm_ip
     
     local patch='{"spec":{"type":"LoadBalancer","loadBalancerIP":"'${VM_IP}'","externalIPs":["'${VM_IP}'"]}}'
     
@@ -333,7 +373,7 @@ patch_istio_gateway_service() {
 
 setup_metallb() {
     log "Configuring MetalLB..."
-    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP"
+    ensure_vm_ip
     
     log "Disabling existing MetalLB configuration..."
     microk8s disable metallb || log "MetalLB was not enabled or failed to disable, continuing..."
@@ -345,7 +385,7 @@ setup_metallb() {
 post_checks() {
     log "Starting post-deployment checks..."
     
-    [ -z "$VM_IP" ] && handle_failure "Failed to get VM IP for post-checks"
+    ensure_vm_ip
     
     # Define microservices and their health endpoints
     declare -A MICROSERVICES=(
