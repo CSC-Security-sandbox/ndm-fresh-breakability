@@ -43,3 +43,9 @@ export interface UpdateStatusInput{
     jobRunId: string;
     status: JobRunStatus
 }
+
+export enum ServerType {
+  other = 'OtherNAS',
+  dell = 'Dell',
+  emc = 'emc'
+}

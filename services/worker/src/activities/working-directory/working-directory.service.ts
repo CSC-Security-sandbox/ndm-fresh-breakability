@@ -10,7 +10,7 @@ import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { configureSmartConnectDns } from '../utils/utils';
+import { ClientConfig, StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -19,18 +19,21 @@ export class ValidateWorkingDirectoryActivity {
   readonly workerConfigUrl: string;
   readonly projectId: string;
   private readonly logger: LoggerService;
+  private readonly storageClientFactory: StorageClientFactory;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly authService: AuthService,
-    private readonly protocols: Protocols
+    private readonly protocols: Protocols,
+    storageClientFactory: StorageClientFactory
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.baseWorkingPath = this.configService.get('worker.baseWorkingPath');
     this.workerConfigUrl = this.configService.get('worker.connection.workerConfigUrl');
     this.projectId = this.configService.get('worker.projectId');
     this.logger = loggerFactory.create(ValidateWorkingDirectoryActivity.name);
+    this.storageClientFactory = storageClientFactory;
   }
 
   async validateWorkingDirectory(traceId: string, payload: any): Promise<any> {
@@ -149,7 +152,11 @@ export class ValidateWorkingDirectoryActivity {
         let exportPath = payload.fetchedPath;
         if (isStorageAware){
             // Configure SmartConnect DNS if SSIP and zone are provided
-            await configureSmartConnectDns(traceId, fileServer, this.logger);
+            let clientConfig = new ClientConfig(payload.serverType);
+            const storageClient = this.storageClientFactory.getClient(clientConfig);
+            if (storageClient) {
+              await storageClient.configureSmartConnectDns(traceId, fileServer);
+            }
             
             if (payload.exportsMap && payload.exportsMap[fileServer.host]) {
               exportPath = payload.exportsMap[fileServer.host];
@@ -212,9 +219,12 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        // For storage-aware types with SmartConnect FQDN: configure DNS resolver
         if (isStorageAware){
-          await configureSmartConnectDns(traceId, fileServer, this.logger);
+          let clientConfig = new ClientConfig(payload.serverType);
+          const storageClient = this.storageClientFactory.getClient(clientConfig);
+          if (storageClient) {
+            await storageClient.configureSmartConnectDns(traceId, fileServer);
+          }
         }
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
