@@ -58,6 +58,13 @@ export abstract class StorageClient {
   /**
    * Fetch TLS certificate from a storage server
    * Common implementation for all storage types
+   * 
+   * SECURITY NOTE: This method intentionally disables certificate validation
+   * (`rejectUnauthorized: false`) because its purpose is to retrieve and inspect
+   * certificates from servers BEFORE establishing trust. This allows administrators
+   * to review self-signed or untrusted certificates and make informed decisions.
+   * The retrieved certificate is validated for expiration and host matching before
+   * being returned to the caller for approval.
    */
   async fetchCertificate(host: string, port?: number): Promise<FetchCertificateResponseDTO> {
     const { host: resolvedHost, port: resolvedPort } = this.parseHostString(host, port);
@@ -69,7 +76,10 @@ export abstract class StorageClient {
         host: resolvedHost,
         port: resolvedPort,
         servername: resolvedHost, // SNI (Server Name Indication)
-        rejectUnauthorized: false, // Accept self-signed certificates
+        // lgtm[js/disabling-certificate-validation] - Intentional: This function's purpose
+        // is to fetch certificates for inspection, including self-signed certificates.
+        // The certificate is validated for expiration and host matching before use.
+        rejectUnauthorized: false,
       };
 
       const socket = tls.connect(options, () => {
