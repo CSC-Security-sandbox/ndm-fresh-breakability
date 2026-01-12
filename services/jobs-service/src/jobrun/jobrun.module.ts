@@ -34,13 +34,14 @@ import { SyncEmailEntity } from 'src/entities/sync-email.entity';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';import { JobRunActionService } from './jobrun-action.service';
 import { MigrationConflictModule } from 'src/migration-conflict/migration-conflict.module';
 import { JobStatsSummaryMvEntity } from 'src/entities/job-stats-summary-mv.entity';
+import { JobConfigInventoryStatsEntity } from 'src/entities/job-config-inventory-stats.entity';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
         ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity,JobStatsSummaryMvEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity,JobStatsSummaryMvEntity, JobConfigInventoryStatsEntity]),
         WorkerModule,
         RedisModule,
         AuthKeycloakModule,

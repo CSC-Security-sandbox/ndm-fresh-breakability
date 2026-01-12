@@ -18,6 +18,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -300,5 +301,23 @@ export class JobConfigController {
   @ApiBearerAuth()
   async deleteJobIdentityMappings(@Param('id') id: string): Promise<any> {
     return await this.jobConfigService.deleteIdentityMappingsForJob(id);
+  }
+
+  @ApiOperation({ summary: 'Get inventory statistics for a job configuration' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Inventory statistics retrieved successfully',
+    type: JobConfigInventoryStatsResponseDto
+  })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid jobConfigID format.' })
+  @ApiResponse({ status: 404, description: 'Job config not found.' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error - failed to get inventory stats.' })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
+  @Post(':id/inventory-stats')
+  async getJobConfigInventoryStats(
+    @Param('id') jobConfigID: string
+  ): Promise<JobConfigInventoryStatsResponseDto> {
+    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID);
   }
 }

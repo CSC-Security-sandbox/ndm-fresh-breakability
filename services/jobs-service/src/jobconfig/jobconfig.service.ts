@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
 import { Response } from "express";
 import { createReadStream, existsSync } from "fs";
 import { join } from "path";
@@ -30,7 +30,7 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { EntityManager, In, Raw, Repository } from "typeorm";
+import { DataSource, EntityManager, In, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import {
@@ -89,6 +89,8 @@ import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { JobConfigInventoryStatsResponseDto } from "./dto/jobconfig-inventory-stats.dto";
+import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
 
 @Injectable()
 export class JobConfigService {
@@ -139,7 +141,11 @@ export class JobConfigService {
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(JobStatsSummaryMvEntity)
-    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>,
+    @InjectRepository(JobConfigInventoryStatsEntity)
+    private jobConfigInventoryStatsRepo: Repository<JobConfigInventoryStatsEntity>,
+    @InjectDataSource()
+    private dataSource: DataSource
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
   }
@@ -2083,6 +2089,141 @@ export class JobConfigService {
         {
           status: "failed",
           message: error.message || "Failed to delete identity mappings",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async getJobConfigInventoryStats(jobConfigID: string): Promise<JobConfigInventoryStatsResponseDto> {
+    if (!isUUID(jobConfigID)) {
+      throw new BadRequestException('Invalid jobConfigID format');
+    }
+
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where: { id: jobConfigID },
+    });
+
+    if (!jobConfig) {
+      throw new NotFoundException(`Job config with ID ${jobConfigID} not found`);
+    }
+
+    if (jobConfig.jobType !== JobType.MIGRATE) {
+      throw new BadRequestException(`Inventory stats are only available for Migration job configs. Current job type: ${jobConfig.jobType}`);
+    }
+    
+    let statsEntity = await this.jobConfigInventoryStatsRepo.findOne({
+      where: { jobConfigId: jobConfigID },
+    });
+
+    // Get the latest completed/errored/failed jobRun for this jobConfig
+    const latestJobRun = await this.jobRunRepo.findOne({
+      where: { 
+        jobConfigId: jobConfigID,
+        status: In([JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped]),
+      },
+      order: { endTime: 'DESC' },
+    });
+    let needsRecalculation = false;
+    if (!statsEntity) {
+      needsRecalculation = true;
+    } else if (latestJobRun && latestJobRun.endTime) {
+      if (latestJobRun.endTime > statsEntity.lastUpdatedAt) {
+        needsRecalculation = true;
+      }
+    }
+
+    // If no recalculation needed, return already calculated results
+    if (!needsRecalculation && statsEntity) {
+      return {
+        totalUniqueFiles: Number(statsEntity.fileCount),
+        totalUniqueDirectories: Number(statsEntity.dirCount),
+        totalSize: formatBytes(Number(statsEntity.totalSize)),
+        lastUpdatedAt: statsEntity.lastUpdatedAt,
+      };
+    }
+
+    // Recalculate stats
+    const dbSchema = process.env.SCHEMA;
+    const query = `
+      WITH all_related_jobs AS (
+        SELECT jr.id, jr.start_time
+        FROM ${dbSchema}.jobrun jr
+        JOIN ${dbSchema}.jobconfig jc ON jr.job_config_id = jc.id
+        WHERE (jc.source_path_id, jc.target_path_id) = (
+          SELECT jc2.source_path_id, jc2.target_path_id
+          FROM ${dbSchema}.jobconfig jc2
+          WHERE jc2.id = $1
+        )
+        ORDER BY jr.start_time DESC
+      ),
+      inventory_with_latest_status AS (
+        SELECT 
+          i.path,
+          i.is_directory,
+          i.file_size,
+          FIRST_VALUE(i.is_deleted) OVER (
+            PARTITION BY i.path, i.is_directory
+            ORDER BY arj.start_time DESC
+          ) as latest_deletion_status
+        FROM ${dbSchema}.inventory i
+        JOIN all_related_jobs arj ON i.job_run_id = arj.id
+      ),
+      unique_paths_with_max_size AS (
+        SELECT 
+          path,
+          is_directory,
+          MAX(file_size) as max_file_size,
+          latest_deletion_status
+        FROM inventory_with_latest_status
+        WHERE (latest_deletion_status = false OR latest_deletion_status IS NULL)
+        GROUP BY path, is_directory, latest_deletion_status
+      )
+      SELECT 
+        COUNT(DISTINCT CASE WHEN is_directory = false THEN path END) as total_unique_files,
+        COUNT(DISTINCT CASE WHEN is_directory = true THEN path END) as total_unique_directories,
+        COALESCE(SUM(CASE WHEN is_directory = false THEN max_file_size ELSE 0 END), 0)::bigint as total_size
+      FROM unique_paths_with_max_size;
+    `;
+
+    try {
+      const result = await this.dataSource.query(query, [jobConfigID]);
+      
+      const totalUniqueFiles = parseInt(result[0]?.total_unique_files || '0', 10);
+      const totalUniqueDirectories = parseInt(result[0]?.total_unique_directories || '0', 10);
+      const totalSize = Number(result[0]?.total_size || '0');
+      const lastUpdatedAt = new Date();
+
+      // Upsert stats record
+      if (statsEntity) {
+        statsEntity.fileCount = totalUniqueFiles;
+        statsEntity.dirCount = totalUniqueDirectories;
+        statsEntity.totalSize = totalSize;
+        statsEntity.lastUpdatedAt = lastUpdatedAt;
+      } else {
+        statsEntity = this.jobConfigInventoryStatsRepo.create({
+          jobConfigId: jobConfigID,
+          fileCount: totalUniqueFiles,
+          dirCount: totalUniqueDirectories,
+          totalSize: totalSize,
+          lastUpdatedAt: lastUpdatedAt,
+        });
+      }
+
+      await this.jobConfigInventoryStatsRepo.save(statsEntity);
+
+      return {
+        totalUniqueFiles,
+        totalUniqueDirectories,
+        totalSize: formatBytes(totalSize),
+        lastUpdatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting inventory stats for jobConfigID ${jobConfigID}:`, error);
+      throw new HttpException(
+        {
+          status: 'failed',
+          message: error.message || 'Failed to get inventory stats',
         },
         HttpStatus.INTERNAL_SERVER_ERROR
       );

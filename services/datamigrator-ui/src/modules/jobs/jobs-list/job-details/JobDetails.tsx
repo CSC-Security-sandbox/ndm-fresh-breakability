@@ -8,6 +8,7 @@ import {
   JOBS_TYPE,
   ProtocolType,
 } from "@/types/app.type";
+import RefreshButton from "@components/refresh-button/RefreshButton";
 import {
   useGetJobConfigDetailsQuery,
   useLazyDownloadTemplateQuery,
@@ -15,7 +16,8 @@ import {
   useGetJobIdentityMappingsQuery,
   useUpdateDiscoveryJobConfigMutation,
   useUpdateMigrationJobConfigMutation,
-  useRemoveJobIdentityMappingsMutation, 
+  useRemoveJobIdentityMappingsMutation,
+  useGetJobConfigInventoryStatsMutation,
 } from "@api/jobsApi";
 import {
   useDownloadReportsMutation,
@@ -130,6 +132,31 @@ const JobDetails = () => {
       setIsFrequentInterval(false);
     }
   }, [jobConfigDetails?.jobRuns?.length]);
+
+  const [
+    getInventoryStats,
+    { data: inventoryStats, isLoading: isFetchingInventoryStats }
+  ] = useGetJobConfigInventoryStatsMutation();
+
+  useEffect(() => {
+    if (jobId && jobConfigDetails?.jobType === 'MIGRATE') {
+      getInventoryStats(jobId);
+    }
+  }, [jobId, jobConfigDetails?.jobType]);
+
+  const handleRefreshInventoryStats = async () => {
+    if (!jobId) return;
+    try {
+      const result = await getInventoryStats(jobId);
+      if (!result.error) {
+        notify.success("Inventory statistics refreshed successfully");
+      } else {
+        notify.error("Failed to refresh inventory statistics");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
@@ -884,6 +911,18 @@ const JobDetails = () => {
     }
   };
 
+  const showCardTitle = () => {
+    if (jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY) {
+      return "Summary of Last Run";
+    } 
+    else if (jobConfigDetails?.jobType === JOBS_TYPE.MIGRATE) {
+      return "Destination statistics";
+    }
+    else {
+      return "Total of All Runs";
+    }
+  }
+
   return (
     <Box className="flex flex-col gap-4">
       {openConfirmation && (
@@ -903,16 +942,20 @@ const JobDetails = () => {
           <TitleWithLastRefreshedDate
             title={
               <Heading level="16" bold className="flex">
-                {jobConfigDetails?.jobType === JOBS_TYPE.DISCOVERY
-                  ? "Summary of Last Run"
-                  : "Total of All Runs"}
+                {showCardTitle()}
               </Heading>
             }
             date={latestJobRun?.lastRefreshed}
           />
-
           <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
-            <Box className="flex flex-row gap-6 justify-end">
+            <Box className="flex flex-row gap-6 items-center justify-end">
+              {jobConfigDetails?.jobType === JOBS_TYPE.MIGRATE && (
+                <RefreshButton
+                  isLoading={isFetchingInventoryStats}
+                  onRefresh={handleRefreshInventoryStats}
+                  size="sm"
+                />
+              )}
               <Button
                 onClick={showEditJobConfigDetails}
                 disabled={!jobId}
@@ -933,7 +976,7 @@ const JobDetails = () => {
             </Box>
           </PermissionAuth>
         </Box>
-        <JobHeader jobConfigDetails={jobConfigDetails} />
+        <JobHeader jobConfigDetails={jobConfigDetails} inventoryStats={inventoryStats} />
       </Box>
       <Box className="flex gap-6 items-stretch">
         <Box className="grow basis-1/2">

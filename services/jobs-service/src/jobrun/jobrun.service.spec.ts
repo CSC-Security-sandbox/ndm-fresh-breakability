@@ -63,6 +63,8 @@ import { HealthStatus } from "src/workers/worker.types";
 import { WorkersService } from "src/workers/workers.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
+import { DataSource } from "typeorm";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -85,6 +87,8 @@ describe("JobRunService", () => {
   let errorRemedyService: ErrorRemedyService;
   let workerService: WorkersService;
   let jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>;
+  let jobConfigInventoryStatsRepo: Repository<JobConfigInventoryStatsEntity>;
+  let dataSource: DataSource;
 
   let loggerFactoryMock = {
     create: jest.fn().mockReturnValue({
@@ -423,6 +427,25 @@ describe("JobRunService", () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(JobConfigInventoryStatsEntity),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+            find: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn(),
+          },
+        },
         ConfigService,
         {
           provide: MigrationConflictService,
@@ -471,6 +494,10 @@ describe("JobRunService", () => {
     jobStatsSummaryMvRepo = module.get<Repository<JobStatsSummaryMvEntity>>(
       getRepositoryToken(JobStatsSummaryMvEntity)
     );
+    jobConfigInventoryStatsRepo = module.get<Repository<JobConfigInventoryStatsEntity>>(
+      getRepositoryToken(JobConfigInventoryStatsEntity)
+    );
+    dataSource = module.get<DataSource>(DataSource);
   });
 
   it("should update job config and job run status when cutover is rejected", async () => {
