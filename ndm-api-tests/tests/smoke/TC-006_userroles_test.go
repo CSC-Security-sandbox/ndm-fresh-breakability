@@ -110,7 +110,7 @@ var _ = Describe("User Roles Smoke", func() {
 
 			By("Keycloak Reset Password for User 1")
 			password = "Root@123"
-			keycloakAuthToken, err = GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakAuthToken, err = GetKeyCloakAdminToken()
 			Expect(err).To(BeNil())
 			userKeycloakID, err = FetchUserID(usernames[1], keycloakAuthToken)
 			Expect(err).To(BeNil())
@@ -178,7 +178,7 @@ var _ = Describe("User Roles Smoke", func() {
 
 			By("Keycloak Reset Password for User 1")
 			password = "Root@123"
-			keycloakAuthToken, err = GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakAuthToken, err = GetKeyCloakAdminToken()
 			Expect(err).To(BeNil())
 			userKeycloakID, err = FetchUserID(usernames[2], keycloakAuthToken)
 			Expect(err).To(BeNil())

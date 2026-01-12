@@ -139,8 +139,7 @@ var _ = Describe("User Operations - User functionality test", func() {
 			By("User role created successfully")
 
 			By("Resetting user password via Keycloak")
-			keycloakToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
-			Expect(err).NotTo(HaveOccurred(), "Error getting Keycloak admin token")
+			keycloakToken, err := GetKeyCloakAdminToken()
 			keycloakUserID, err := FetchUserID(userEmail, keycloakToken)
 			Expect(err).NotTo(HaveOccurred(), "Error fetching user ID from Keycloak")
 			err = ResetUserPassword(keycloakUserID, keycloakToken, PASSWORD)

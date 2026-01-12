@@ -53,7 +53,7 @@ var _ = Describe("Login Logout Smoke", func() {
 
 			By("Reset user password")
 			password = "Root@123"
-			keycloakAuthToken, err = GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakAuthToken, err = GetKeyCloakAdminToken()
 			Expect(err).To(BeNil())
 			userKeycloakID, err = FetchUserID(username, keycloakAuthToken)
 			Expect(err).To(BeNil())
@@ -84,7 +84,7 @@ var _ = Describe("Login Logout Smoke", func() {
 
 			By("Reset user password")
 			password = "Root@123"
-			keycloakAuthToken, err = GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakAuthToken, err = GetKeyCloakAdminToken()
 			Expect(err).To(BeNil())
 			userKeycloakID, err = FetchUserID(username, keycloakAuthToken)
 			Expect(err).To(BeNil())
@@ -115,7 +115,7 @@ var _ = Describe("Login Logout Smoke", func() {
 
 			By("Reset user password")
 			password = "Root@123"
-			keycloakAuthToken, err = GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakAuthToken, err = GetKeyCloakAdminToken()
 			Expect(err).To(BeNil())
 			userKeycloakID, err = FetchUserID(username, keycloakAuthToken)
 			Expect(err).To(BeNil())
