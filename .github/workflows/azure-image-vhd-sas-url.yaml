@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       release_sig_image_id_worker:
-        description: "Worker SIG Image ID"
+        description: "Worker SIG Image ID from Azure Image gallery(eg: /subscriptions/1630c6a9-d99b-498a-aca8-a271f7506bc0/resourceGroups/datamigrate-acr-resource-group/providers/Microsoft.Compute/galleries/datamigrator/images/ndm-worker/versions/2025.24.11172200)"
         required: true
       release_sig_image_id_controlplane:
-        description: "Control Plane SIG Image ID"
+        description: "Control Plane SIG Image ID from Azure Image gallery(eg: /subscriptions/1630c6a9-d99b-498a-aca8-a271f7506bc0/resourceGroups/datamigrate-acr-resource-group/providers/Microsoft.Compute/galleries/datamigrator/images/ndm-control-plane/versions/2025.24.11173418)"
         required: true
       windows_installer_name:
-        description: "Windows Installer filename (without .exe extension)"
+        description: "Windows Installer filename (without .exe extension) name of he installer that is in the scratch space"
         required: true
       copy_sas_duration_hours:
-        description: "SAS token(read-only-access) duration for copy of disk to blob in hours (default: 1)"
+        description: "SAS token (read-only-access) duration for copy of disk to blob in hours (default: 1)"
         required: false
         default: "1"
       sas_expiry_days:
@@ -26,12 +26,14 @@ env:
   SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
   SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
   SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION || 'eastus' }}
-  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST}}
+  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST }}
   SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
   AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID || 'ndm-vm-export-acr-rg' }}
   IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing' }}
   WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name || '' }}
 
+permissions:
+  contents: read 
 
 jobs:
   vhd-export:
@@ -153,6 +155,9 @@ jobs:
             --resource-group "$SOURCE_RESOURCE_GROUP" \
             --account-name "$SOURCE_STORAGE_ACCOUNT" \
             --query "[0].value" -o tsv)
+
+             # Mask storage key in GitHub Actions logs
+          echo "::add-mask::$STORAGE_KEY"
           
           # Save storage key
           mkdir -p ~/.vhd-export
@@ -210,8 +215,8 @@ jobs:
               --output none
 
             # Timeout configuration
-            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 30s check intervals and 10 iterations buffer before copy_sas_duration expiry(10*30sec=300sec=5min)
-            # so that means we are timeouting 5 minutes before copy_sas_duration expiry
+            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 30s check intervals and 10 iterations buffer before copy_sas_duration expiry (10*30sec=300sec=5min)
+            # so that means we are timing out 5 minutes before copy_sas_duration expiry
             local iteration=0
             
             while true; do
@@ -486,7 +491,7 @@ jobs:
     runs-on: openlab
     steps:
       - name: Download Export Info
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.7
         with:
           name: vhd-export-info
           path: /tmp/vhd-export
@@ -556,7 +561,7 @@ jobs:
     with:
       control_plane_blob_name: ${{ needs.vhd-export.outputs.controlplane_blob_name }}
       linux_worker_blob_name: ${{ needs.vhd-export.outputs.worker_blob_name }}
-      windows_worker_blob_name: ${{ needs.vhd-export.outputs.installer_blob_name}}
+      windows_worker_blob_name: ${{ needs.vhd-export.outputs.installer_blob_name }}
       storage_account_name: ${{ needs.vhd-export.outputs.storage_account }}
       container_name: ${{ needs.vhd-export.outputs.container_name }}
       sas_expiry_days: ${{ github.event.inputs.sas_expiry_days || '7' }}
