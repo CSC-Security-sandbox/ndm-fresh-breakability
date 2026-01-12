@@ -208,6 +208,142 @@ spec:
 {{- end }}
 {{- end }}
 
+{{/* Build an Istio HTTP match from an ingress-style config */}}
+{{- define "datamigrator.istioHttpMatch" -}}
+{{- $config := .config | default dict -}}
+{{- if $config.exactPaths }}
+{{/* Exact path matching for specific endpoints */}}
+{{- range $path := $config.exactPaths }}
+uri:
+  exact: {{ $path }}
+{{- end }}
+{{- else if $config.prefixPaths }}
+{{/* Prefix matching for endpoint groups (matches all subpaths automatically) */}}
+{{- range $prefix := $config.prefixPaths }}
+uri:
+  prefix: {{ $prefix }}
+{{- end }}
+{{- else if $config.useRegex }}
+{{/* Custom regex pattern (e.g., for negative lookahead) */}}
+uri:
+  regex: {{ $config.pathPattern | quote }}
+{{- else if and $config.pathPrefix $config.trailingPath }}
+{{/* Legacy regex approach - kept for backward compatibility */}}
+uri:
+  regex: "^/{{ $config.pathPrefix }}{{ $config.trailingPath }}(?:/|$)"
+{{- else if $config.trailingPath }}
+uri:
+  regex: "^/{{ $config.trailingPath }}(?:/|$)"
+{{- else if $config.pathPrefix }}
+{{/* Simple prefix matching */}}
+uri:
+  prefix: /{{ $config.pathPrefix }}
+{{- else }}
+{{/* Default catch-all */}}
+uri:
+  prefix: /
+{{- end }}
+{{- end }}
+
+{{/* Optional Istio VirtualService per workload */}}
+{{- define "datamigrator.istioVirtualService" -}}
+{{- $values := .Values -}}
+{{- $global := $values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- if and ($istio.enabled | default false) (or $values.ingress $values.ingressThrottle) }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ $values.appName }}-virtualservice
+spec:
+  hosts:
+  {{- range $host := $istio.hosts | default (list "*") }}
+  - {{ $host | quote }}
+  {{- end }}
+  gateways:
+  {{- $gatewayName := $istio.gateway.name | default "datamigrator-gateway" -}}
+  {{- $gatewayNamespace := $istio.gateway.namespace | default .Release.Namespace -}}
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+  {{- if $values.ingressThrottle }}
+  {{- if $values.ingressThrottle.prefixPaths }}
+  {{- range $index, $path := $values.ingressThrottle.prefixPaths }}
+  - name: {{ printf "%s-throttled-%d" $values.appName $index }}
+    match:
+      - uri:
+          prefix: {{ $path }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- else if $values.ingressThrottle.exactPaths }}
+  {{- range $index, $path := $values.ingressThrottle.exactPaths }}
+  - name: {{ printf "%s-throttled-%d" $values.appName $index }}
+    match:
+      - uri:
+          exact: {{ $path }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- else }}
+  - name: {{ printf "%s-throttled" $values.appName }}
+    match:
+      - {{ include "datamigrator.istioHttpMatch" (dict "config" $values.ingressThrottle) | nindent 8 }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- end }}
+  {{- if $values.ingress }}
+  {{- if $values.ingress.prefixPaths }}
+  {{- range $index, $path := $values.ingress.prefixPaths }}
+  - name: {{ printf "%s-default-%d" $values.appName $index }}
+    match:
+      - uri:
+          prefix: {{ $path }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- else if $values.ingress.exactPaths }}
+  {{- range $index, $path := $values.ingress.exactPaths }}
+  - name: {{ printf "%s-default-%d" $values.appName $index }}
+    match:
+      - uri:
+          exact: {{ $path }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- else }}
+  - name: {{ printf "%s-default" $values.appName }}
+    match:
+      - {{ include "datamigrator.istioHttpMatch" (dict "config" $values.ingress) | nindent 8 }}
+    route:
+      - destination:
+          host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
+          port:
+            number: {{ $values.service.port }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
 {{/* Default Template for HPA. All Sub-Charts under this Chart can include the below template. */}}
 {{- define "datamigrator.hpatemplate" }}
 {{- if .Values.hpa.enabled }}

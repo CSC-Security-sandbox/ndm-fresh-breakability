@@ -19,6 +19,12 @@ image:
 
 master:
   count: 1
+  service:
+    type: NodePort
+    ports:
+      redis: 6379
+    nodePorts:
+      redis: "30379"
   persistence:
     enabled: true
     storageClass: "local-storage-redis"

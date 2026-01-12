@@ -83,8 +83,9 @@ service:
   targetPort: 3000
 
 ingress:
-  pathPrefix: api/v1/
-  trailingPath: "(redis-consumer|db-writer-docs)"
+  prefixPaths:
+    - /api/v1/redis-consumer
+    - /api/v1/db-writer-docs
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

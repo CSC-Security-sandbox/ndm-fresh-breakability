@@ -1,0 +1,50 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $selector := $istio.gateway.selector | default (dict "istio" "ingressgateway") -}}
+{{- if $istio.enabled | default false }}
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ $istio.gateway.name | default "datamigrator-gateway" }}
+  namespace: {{ $istio.gateway.namespace | default .Release.Namespace }}
+spec:
+  selector:
+  {{- range $key, $value := $selector }}
+    {{ $key }}: {{ $value }}
+  {{- end }}
+  servers:
+    - port:
+        number: {{ $istio.gateway.port | default 80 }}
+        name: {{ $istio.gateway.portName | default "http" }}
+        protocol: {{ $istio.gateway.protocol | default "HTTP" }}
+      hosts:
+      {{- range $host := $istio.hosts | default (list "*") }}
+        - {{ $host | quote }}
+      {{- end }}
+      {{- if and ($istio.gateway.tls.enabled | default false) ($istio.gateway.tls.secretName | default "") }}
+      tls:
+        mode: SIMPLE
+        # Use file-based certificates (mounted as volume) instead of SDS credentialName
+        # This works around Istio SDS issues where the gateway can't fetch secrets from istiod
+        serverCertificate: /etc/istio/datamigrator-certs/tls.crt
+        privateKey: /etc/istio/datamigrator-certs/tls.key
+      {{- end }}
+{{- if and ($istio.enabled) ($istio.temporalMtls.enabled | default false) ($istio.temporalMtls.jwtAuth.enabled | default false) }}
+    # HTTPS server for Temporal gRPC (external worker connections with TLS + JWT validation)
+    # Gateway terminates TLS, validates JWT, then forwards to backend with Istio mTLS
+    # Protocol HTTPS allows HTTP/2 which is required for gRPC
+    - port:
+        number: 7233
+        name: grpc-temporal
+        protocol: HTTPS
+      hosts:
+      {{- range $host := $istio.hosts | default (list "*") }}
+        - {{ $host | quote }}
+      {{- end }}
+      tls:
+        mode: SIMPLE
+        # Use file-based certificates (mounted as volume) instead of SDS credentialName
+        serverCertificate: /etc/istio/datamigrator-certs/tls.crt
+        privateKey: /etc/istio/datamigrator-certs/tls.key
+{{- end }}
+{{- end }}

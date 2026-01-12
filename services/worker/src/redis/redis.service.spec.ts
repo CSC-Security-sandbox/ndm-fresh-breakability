@@ -96,6 +96,7 @@ describe('RedisService', () => {
       // Mock the HTTP response for Redis credentials
       const mockCredentials = {
         host: 'redis.example.com',
+        port: '6379',
         username: 'redis-user',
         password: 'redis-password',
       };
@@ -154,6 +155,7 @@ describe('RedisService', () => {
       // Mock successful credential fetch
       const mockCredentials = {
         host: 'redis.test.com',
+        port: '6379',
         username: 'test-user',
         password: 'test-pass',
       };
@@ -178,6 +180,7 @@ describe('RedisService', () => {
     it('should fetch credentials successfully', async () => {
       const mockCredentials = {
         host: 'redis.test.com',
+        port: '6379',
         username: 'test-user',
         password: 'test-pass',
       };
@@ -194,6 +197,7 @@ describe('RedisService', () => {
       expect(credentials).toEqual(mockCredentials);
       expect(mockLogger.log).toHaveBeenCalledWith('Redis credentials fetched successfully:');
       expect(mockLogger.debug).toHaveBeenCalledWith('  Host: redis.test.com');
+      expect(mockLogger.debug).toHaveBeenCalledWith('  Port: 6379');
       expect(mockLogger.debug).toHaveBeenCalledWith('  Username: test-user');
       expect(mockLogger.debug).toHaveBeenCalledWith('  Password length: 9');
     });
@@ -238,11 +242,14 @@ describe('RedisService', () => {
     it('should update all environment variables including REDIS_HOST', () => {
       const credentials = {
         host: 'test-host',
+        port: '6380',
         username: 'test-user',
         password: 'test-pass',
       };
 
       (service as any).updateRedisConfig(credentials);
+      expect(process.env.REDIS_HOST).toBe('test-host');
+      expect(process.env.REDIS_PORT).toBe('6380');
       expect(process.env.REDIS_USERNAME).toBe('test-user');
       expect(process.env.REDIS_PASSWORD).toBe('test-pass');
       expect(mockLogger.log).toHaveBeenCalledWith('Redis configuration updated successfully');
@@ -265,6 +272,7 @@ describe('RedisService', () => {
     it('should fetch and update credentials successfully', async () => {
       const mockCredentials = {
         host: 'redis.integration.com',
+        port: '6379',
         username: 'integration-user',
         password: 'integration-pass',
       };

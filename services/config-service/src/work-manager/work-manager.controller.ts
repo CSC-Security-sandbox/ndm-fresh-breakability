@@ -47,13 +47,16 @@ export class WorkManagerController {
     @ClientIp() ip: string,
     @Req() req: any,
     @Body() body: any,
-  ): Promise<WorkerConfiguration[]> {
+  ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
+    // Trust worker-provided IP from header (worker always sends this)
+    const workerIp = req.headers['x-worker-ip'];
+    
     this.logger.debug(
-      `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+      `Fetching configuration for worker ID: ${req['worker_id']} from IP: ${workerIp} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );
     return await this.workManagerService.getConfiguration(
       req['worker_id'],
-      ip,
+      workerIp,
       req['project_id'],
       req?.headers['x-client-platform'],
       body?.envVariables,
@@ -72,13 +75,15 @@ export class WorkManagerController {
   async getWorkerConfigurations(
     @ClientIp() ip: string,
     @Req() req: any,
-  ): Promise<WorkerConfiguration[]> {
+  ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
+    const workerIp = req.headers['x-worker-ip'];
+    
     this.logger.debug(
-      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${ip} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
+      `Fetching configurations for worker ID: ${req['worker_id']} from IP: ${workerIp} for project ID: ${req['project_id']} on platform: ${req?.headers['x-client-platform']}`,
     );
     return await this.workManagerService.getConfiguration(
       req['worker_id'],
-      ip,
+      workerIp,
       req['project_id'],
       req?.headers['x-client-platform'],
       {},     

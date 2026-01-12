@@ -83,7 +83,7 @@ env:
   - name: START_CONSUMER
     value: "http://db-writer-service:3000"
   - name: KEYCLOAK_BASE_URL
-    value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
+    value: "http://keycloak.keycloak.svc.cluster.local/keycloak"
   - name: KEYCLOAK_REALM
     value: "datamigrator"
   - name: SEND_EMAIL
@@ -100,8 +100,11 @@ service:
 # Ingress for User-facing APIs
 # ==============================
 ingressThrottle:
-  pathPrefix: api/v1/
-  trailingPath: "(workers|jobs|job-run|tasks)"
+  prefixPaths:
+    - /api/v1/workers
+    - /api/v1/jobs
+    - /api/v1/job-run
+    - /api/v1/tasks
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -116,8 +119,12 @@ ingressThrottle:
 # Ingress for CP and worker
 # ==============================
 ingress:
-  pathPrefix: api/v1/
-  trailingPath: "(bulk-discovery|bulk-migrate|bulk-cutover|jobs-docs|statscheck)"
+  prefixPaths:
+    - /api/v1/bulk-discovery
+    - /api/v1/bulk-migrate
+    - /api/v1/bulk-cutover
+    - /api/v1/jobs-docs
+    - /api/v1/statscheck
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

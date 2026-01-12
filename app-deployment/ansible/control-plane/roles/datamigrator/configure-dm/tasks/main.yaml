@@ -43,8 +43,215 @@
 - name: Create service account and namespace
   become: yes
   shell: |
-    kubectl create namespace datamigrator
-    kubectl create serviceaccount -n datamigrator datamigrator-openbao-sa
+    set -euo pipefail
+    kubectl get namespace datamigrator >/dev/null 2>&1 || kubectl create namespace datamigrator
+    kubectl get serviceaccount -n datamigrator datamigrator-openbao-sa >/dev/null 2>&1 || \
+      kubectl create serviceaccount -n datamigrator datamigrator-openbao-sa
+  args:
+    executable: /bin/bash
+
+- name: Copy RBAC configuration for config-service
+  become: yes
+  copy:
+    src: config-service-rbac.yaml
+    dest: /tmp/config-service-rbac.yaml
+    mode: '0644'
+  when: enable_istio | default(false) | bool
+
+- name: Apply RBAC for config-service to read Istio Gateway TLS certificate
+  become: yes
+  shell: kubectl apply -f /tmp/config-service-rbac.yaml
+  when: enable_istio | default(false) | bool
+
+- name: Check MicroK8s ingress TLS secret
+  become: yes
+  shell: kubectl get secret microk8s-cert -n ingress
+  register: microk8s_cert_secret
+  failed_when: false
+  changed_when: false
+  when: enable_istio | default(false) | bool
+
+- name: Discover Istio ingressgateway service IP
+  become: yes
+  shell: kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  register: istio_ingressgateway_service_ip
+  failed_when: false
+  changed_when: false
+  when: enable_istio | default(false) | bool
+
+- name: Build Istio routing host list
+  set_fact:
+    istio_gateway_hosts_base: "{{ (istio_gateway.hosts | default(public_ingress_hosts | default(['datamigrator.local']))) | list }}"
+    istio_gateway_hosts_effective: "{{ (istio_gateway.hosts | default(public_ingress_hosts | default(['datamigrator.local']))) | list }}"
+  when: enable_istio | default(false) | bool
+
+- name: Allow wildcard host for direct IP access
+  set_fact:
+    istio_gateway_hosts_effective: "{{ ['*'] }}"
+  when:
+    - enable_istio | default(false) | bool
+    - istio_gateway_allow_any_host | default(true) | bool
+    - istio_gateway_hosts_effective is defined
+
+- name: Prepare Istio TLS host list
+  set_fact:
+    istio_gateway_tls_hosts: "{{ (istio_gateway_hosts_base | default(public_ingress_hosts | default(['datamigrator.local'])) | reject('equalto','*') | list) | default(['datamigrator.local'], true) }}"
+  when: enable_istio | default(false) | bool
+
+- name: Cache Istio ingress IP for TLS SANs
+  set_fact:
+    istio_gateway_ingress_ip_effective: "{{ (istio_ingressgateway_loadbalancer_ip | default('') | trim) if (istio_ingressgateway_loadbalancer_ip | default('') | trim) else (istio_ingressgateway_service_ip.stdout | default('') | trim) }}"
+  when: enable_istio | default(false) | bool
+
+- name: Mirror MicroK8s TLS cert into Istio gateway secret
+  become: yes
+  vars:
+    istio_secret_namespace: "{{ istio_gateway.tls.secretNamespace | default(istio_namespace | default('istio-system')) }}"
+    istio_secret_name: "{{ istio_gateway.tls.secretName | default('datamigrator-istio-tls') }}"
+  shell: |
+    set -euo pipefail
+    CERT_FILE=$(mktemp)
+    KEY_FILE=$(mktemp)
+    kubectl get secret microk8s-cert -n ingress -o jsonpath='{.data.tls\.crt}' | base64 --decode > "${CERT_FILE}"
+    kubectl get secret microk8s-cert -n ingress -o jsonpath='{.data.tls\.key}' | base64 --decode > "${KEY_FILE}"
+    kubectl create secret tls {{ istio_secret_name }} \
+      --cert="${CERT_FILE}" \
+      --key="${KEY_FILE}" \
+      --namespace {{ istio_secret_namespace }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+    rm -f "${CERT_FILE}" "${KEY_FILE}"
+  args:
+    executable: /bin/bash
+  when:
+    - enable_istio | default(false) | bool
+    - microk8s_cert_secret is defined
+    - microk8s_cert_secret.rc == 0
+
+- name: Generate self-signed TLS cert for Istio gateway when MicroK8s cert is unavailable
+  become: yes
+  vars:
+    istio_secret_namespace: "{{ istio_gateway.tls.secretNamespace | default(istio_namespace | default('istio-system')) }}"
+    istio_secret_name: "{{ istio_gateway.tls.secretName | default('datamigrator-istio-tls') }}"
+    istio_primary_host: "{{ istio_gateway_tls_hosts | default(['datamigrator.local']) | first }}"
+    istio_dns_san_entries: "{{ istio_gateway_tls_hosts | map('regex_replace', '^(.*)$', 'DNS:\\1') | join(',') }}"
+    istio_lb_ip: "{{ istio_gateway_ingress_ip_effective | default('') | trim }}"
+  shell: |
+    set -euo pipefail
+    KEY_FILE=$(mktemp)
+    CERT_FILE=$(mktemp)
+    CFG_FILE=$(mktemp)
+    PRIMARY_HOST="{{ istio_primary_host }}"
+    SAN_ENTRIES="{{ istio_dns_san_entries }}"
+    LB_IP="{{ istio_lb_ip }}"
+    if [ -z "${LB_IP}" ]; then
+      LB_IP=$(kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+    fi
+    if [ -n "${LB_IP}" ]; then
+      if [ -n "${SAN_ENTRIES}" ]; then
+        SAN_ENTRIES="${SAN_ENTRIES},IP:${LB_IP}"
+      else
+        SAN_ENTRIES="IP:${LB_IP}"
+      fi
+    fi
+    {
+      echo "[ req ]"
+      echo "default_bits = 2048"
+      echo "prompt = no"
+      echo "default_md = sha256"
+      echo "x509_extensions = v3_req"
+      echo "distinguished_name = dn"
+      echo
+      echo "[ dn ]"
+      echo "CN = ${PRIMARY_HOST}"
+      echo
+      echo "[ v3_req ]"
+      echo "subjectAltName = ${SAN_ENTRIES}"
+    } > "${CFG_FILE}"
+    openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+      -keyout "${KEY_FILE}" \
+      -out "${CERT_FILE}" \
+      -config "${CFG_FILE}" >/dev/null 2>&1
+    kubectl create secret tls {{ istio_secret_name }} \
+      --cert="${CERT_FILE}" \
+      --key="${KEY_FILE}" \
+      --namespace {{ istio_secret_namespace }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+    rm -f "${KEY_FILE}" "${CERT_FILE}" "${CFG_FILE}"
+  args:
+    executable: /bin/bash
+  when:
+    - enable_istio | default(false) | bool
+    - microk8s_cert_secret is defined
+    - microk8s_cert_secret.rc != 0
+
+- name: Enable Istio sidecar injection on datamigrator namespace
+  become: yes
+  shell: |
+    kubectl label namespace datamigrator istio-injection=enabled --overwrite
+  when: enable_istio | default(false) | bool
+
+- name: Patch Istio ingress gateway to mount TLS certificate volume
+  become: yes
+  vars:
+    istio_secret_name: "{{ istio_gateway.tls.secretName | default('datamigrator-istio-tls') }}"
+  shell: |
+    set -euo pipefail
+    
+    # Add volume to deployment
+    kubectl patch deployment istio-ingressgateway -n istio-system --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/volumes/-",
+        "value": {
+          "name": "datamigrator-certs",
+          "secret": {
+            "secretName": "{{ istio_secret_name }}",
+            "optional": false
+          }
+        }
+      }
+    ]'
+    
+    # Add volume mount to istio-proxy container
+    kubectl patch deployment istio-ingressgateway -n istio-system --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/volumeMounts/-",
+        "value": {
+          "name": "datamigrator-certs",
+          "mountPath": "/etc/istio/datamigrator-certs",
+          "readOnly": true
+        }
+      }
+    ]'
+    
+    # Wait for rollout to complete
+    kubectl rollout status deployment istio-ingressgateway -n istio-system --timeout=300s
+  args:
+    executable: /bin/bash
+  when: enable_istio | default(false) | bool
+
+# ============================================================================
+# Temporal TLS Configuration for External Workers
+# ============================================================================
+- name: Patch Istio Ingress Gateway to expose Temporal TCP port 7233
+  become: yes
+  shell: |
+    kubectl patch service istio-ingressgateway -n istio-system --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/ports/-",
+        "value": {
+          "name": "tcp-temporal-grpc",
+          "port": 7233,
+          "protocol": "TCP",
+          "targetPort": 7233
+        }
+      }
+    ]'
+  when: temporal_mtls.enabled | default(false) | bool
+  register: temporal_port_patch
+  failed_when: false  # Don't fail if port already exists
 
 # - name: Create acr pull secert
 #   become: yes

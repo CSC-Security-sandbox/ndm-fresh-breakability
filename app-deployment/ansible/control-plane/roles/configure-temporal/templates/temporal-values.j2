@@ -46,6 +46,22 @@ server:
     service:
       type: ClusterIP
       port: 7233
+{% if temporal_mtls.enabled | default(false) %}
+    # Enable Istio sidecar for frontend (namespace injection enabled)
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+      traffic.sidecar.istio.io/includeInboundPorts: "7233"
+      traffic.sidecar.istio.io/includeOutboundIPRanges: "*"
+  history:
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+  matching:
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+  worker:
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+{% endif %}
 
 
 web:
@@ -54,6 +70,10 @@ web:
     repository: temporalio/ui
     tag: 2.39.0
     pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
+{% if temporal_mtls.enabled | default(false) %}
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
+{% endif %}
   ingress:
     enabled: true
     annotations:
@@ -72,6 +92,15 @@ admintools:
     repository: temporalio/admin-tools
     tag: 1.28.1-tctl-1.18.4-cli-1.4.1
     pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
+{% if temporal_mtls.enabled | default(false) %}
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
+{% endif %}
+
+schema:
+  # Disable sidecar injection for schema Job - Jobs with sidecars never complete
+  podAnnotations:
+    sidecar.istio.io/inject: "false"
 
 postgresql:
   enabled: false

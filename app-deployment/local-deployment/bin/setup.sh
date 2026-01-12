@@ -82,7 +82,7 @@ case $1 in
         
         echo "Launching $vm_name vm"
 
-        multipass launch -c 6 -m 8g -d 120g -n $vm_name
+        multipass launch -c 8 -m 8g -d 120g -n $vm_name
 
         # Wait for the VM to be in the 'Running' state
         while [ "$(multipass info $vm_name | grep 'State' | awk '{print $2}')" != "Running" ]; do

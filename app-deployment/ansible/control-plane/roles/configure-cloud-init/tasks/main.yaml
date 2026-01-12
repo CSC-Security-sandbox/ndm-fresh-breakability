@@ -17,6 +17,24 @@
     group: root
     mode: "0755"
 
+- name: Copy admin-entry configmap for Keycloak realm initialization
+  become: yes
+  template:
+    src: ../../post-install/templates/admin-entry-configmap.j2
+    dest: $HOME/admin-entry-configmap.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Copy admin-entry job for Keycloak realm initialization
+  become: yes
+  template:
+    src: ../../post-install/templates/admin-entry-job.j2
+    dest: $HOME/admin-entry-job.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Copy systemd service file for boot script
   become: yes
   template:

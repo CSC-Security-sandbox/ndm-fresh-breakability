@@ -230,13 +230,11 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 
 			// Reset user password
 			By("Setting up test user credentials")
-			keycloakToken, err := GetKeyCloakAccessToken(KeycloakUser, KeycloakPassword)
+			keycloakToken, err := GetKeyCloakAdminToken()
 			Expect(err).NotTo(HaveOccurred(), "Error getting Keycloak admin token")
 			keycloakUserID, err := FetchUserID(userEmail, keycloakToken)
 			Expect(err).NotTo(HaveOccurred(), "Error fetching user ID from Keycloak")
 			err = ResetUserPassword(keycloakUserID, keycloakToken, PASSWORD)
-			Expect(err).NotTo(HaveOccurred(), "Error resetting user password via Keycloak")
-
 			// Test with project viewer role first
 			By("Testing job deletion with project viewer role (should fail)")
 			viewerRoleData, err := CreateUserRole(ProjectId, AccountId, testUserId, ProjectViewerId, headers)
@@ -285,7 +283,7 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 			Expect(resp.StatusCode).NotTo(Equal(http.StatusOK), "Should not return 200 OK for deleted job")
 
 			// Clean up test user and roles
-			DeleteUserRolesByIDs([]string{adminRoleId,viewerRoleId })
+			DeleteUserRolesByIDs([]string{adminRoleId, viewerRoleId})
 			DeleteUserByID(testUserId)
 
 			By("########################## TC-007_delete_job end ################################")

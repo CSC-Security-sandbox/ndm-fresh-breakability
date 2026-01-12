@@ -21,6 +21,8 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { getLocalIpAddress } from 'src/utils/network.utils';
+import { createTemporalConnections } from 'src/utils/temporal.utils';
 
 @Injectable()
 export class WorkManagerService {
@@ -56,24 +58,50 @@ export class WorkManagerService {
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
     try {
-      this.connection = await NativeConnection.connect(
-        this.configService.get('temporal'),
+      // First, register with config service to get updated environment variables (including CA cert for TLS)
+      this.logger.log('[onApplicationBootstrap] - Registering with config service');
+      const updatedEnvVariables = await this.registerAndGetEnvironment();
+      
+      // Apply critical environment variables to process.env for Temporal config
+      if (updatedEnvVariables.TEMPORAL_TLS_CA_CERT) {
+        process.env.TEMPORAL_TLS_CA_CERT = updatedEnvVariables.TEMPORAL_TLS_CA_CERT;
+        this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
+      }
+      
+      // Create Temporal connections using utility function
+      const connections = await createTemporalConnections(
+        {
+          address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+          tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
+          tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
+          tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+          jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
+          getAccessToken: () => this.authService.getAccessToken(),
+        },
+        this.logger,
       );
-      this.temporalClientConnection = await Connection.connect(
-        this.configService.get('temporal'),
-      );
-      await this.notifyWorkerRestart();
+
+      this.connection = connections.nativeConnection;
+      this.temporalClientConnection = connections.clientConnection;
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
     }
   }
 
-  private async notifyWorkerRestart() {
-    this.logger.log('Notifying worker restart to config-service');
+  /**
+   * Register with config service and retrieve updated environment variables
+   * This must be called before connecting to Temporal to get CA certificate for TLS
+   */
+  private async registerAndGetEnvironment(): Promise<Record<string, any>> {
+    this.logger.log('Registering with config-service and fetching environment variables');
     try {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
+      
+      // Get worker's actual local IP address
+      const workerIp = getLocalIpAddress();
+      this.logger.log(`Worker local IP address: ${workerIp}`);
       
       const response = await firstValueFrom(
         this.httpService.post(
@@ -86,6 +114,7 @@ export class WorkManagerService {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'x-worker-ip': workerIp,
               'Content-Type': 'application/json',
             },
             timeout: 5000,
@@ -98,7 +127,28 @@ export class WorkManagerService {
           `Failed to register worker. Status: ${response.status}`,
         );
       }
+      
       this.logger.log('Worker registered successfully');
+      
+      // Extract updated environment variables from response (ResponseInterceptor wraps data in items)
+      const responseData = response.data?.data?.items || {};
+      const envVariables = responseData.envVariables || {};
+      this.logger.debug(`Received ${Object.keys(envVariables).length} environment variables from config service`);
+      
+      if (envVariables.TEMPORAL_TLS_CA_CERT) {
+        this.logger.debug(`TEMPORAL_TLS_CA_CERT present with ${envVariables.TEMPORAL_TLS_CA_CERT.length} characters`);
+        // Try to decode and verify the certificate
+        try {
+          const decoded = Buffer.from(envVariables.TEMPORAL_TLS_CA_CERT, 'base64').toString('utf8');
+          this.logger.debug(`Certificate decoded, starts with: ${decoded.substring(0, 50)}`);
+        } catch (err) {
+          this.logger.error(`Failed to decode certificate: ${err.message}`);
+        }
+      } else {
+        this.logger.debug('TEMPORAL_TLS_CA_CERT not received from config service');
+      }
+      
+      return envVariables;
     } catch (error) {
       this.logger.error(`Error registering worker: ${error.message}`);
       throw error;
@@ -118,6 +168,9 @@ export class WorkManagerService {
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
       
+      // Get worker's actual local IP address
+      const workerIp = getLocalIpAddress();
+      
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
@@ -125,6 +178,7 @@ export class WorkManagerService {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
+              'x-worker-ip': workerIp,
             },
             timeout: 5000,
           },
@@ -137,10 +191,14 @@ export class WorkManagerService {
         );
       }
       this.logger.debug(`Received response: ${JSON.stringify(response.data)}`);
+      
+      // Extract metaConfig from response (ResponseInterceptor wraps data in items)
+      const responseData = response.data.data.items || {};
+      const metaConfig = responseData.metaConfig || [];
       this.logger.debug(
-        `Fetched configurations: ${JSON.stringify(response.data.data.items)}`,
+        `Fetched configurations: ${JSON.stringify(metaConfig)}`,
       );
-      await this.handleConfigurations(response.data.data.items);
+      await this.handleConfigurations(metaConfig);
       await this.monitorTaskQueues();
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);

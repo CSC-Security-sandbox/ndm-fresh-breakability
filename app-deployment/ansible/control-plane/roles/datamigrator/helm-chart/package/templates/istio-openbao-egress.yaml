@@ -1,0 +1,54 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $egress := $istio.openbaoEgress | default dict -}}
+{{- if and ($istio.enabled | default false) ($egress.enabled | default false) }}
+{{- $host := $egress.host | default "openbao.openbao.svc.cluster.local" -}}
+{{- $resourcePrefix := $egress.resourcePrefix | default "openbao" -}}
+{{- $namespace := $egress.namespace | default .Release.Namespace -}}
+{{- $ports := $egress.ports | default (list (dict "number" 8200 "name" "http" "protocol" "HTTP")) -}}
+{{- $serviceEntry := $egress.serviceEntry | default dict -}}
+{{- $destinationRule := $egress.destinationRule | default dict -}}
+{{- $serviceEntryEnabled := $serviceEntry.enabled | default true -}}
+{{- $destinationRuleEnabled := $destinationRule.enabled | default true -}}
+{{- if $serviceEntryEnabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: {{ $egress.serviceEntryName | default (printf "%s-egress" $resourcePrefix) }}
+  namespace: {{ $namespace }}
+spec:
+  hosts:
+    - {{ $host | quote }}
+  location: {{ $serviceEntry.location | default "MESH_INTERNAL" }}
+  resolution: {{ $serviceEntry.resolution | default "DNS" }}
+  ports:
+{{- range $ports }}
+    - number: {{ .number | default 8200 }}
+      name: {{ .name | default "http" }}
+      protocol: {{ .protocol | default "HTTP" }}
+{{- end }}
+{{- if $serviceEntry.endpoints }}
+  endpoints:
+{{ toYaml $serviceEntry.endpoints | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- if and $serviceEntryEnabled $destinationRuleEnabled }}
+---
+{{- end }}
+{{- if $destinationRuleEnabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ $egress.destinationRuleName | default (printf "%s-destination" $resourcePrefix) }}
+  namespace: {{ $namespace }}
+spec:
+  host: {{ $host | quote }}
+  trafficPolicy:
+{{- if $destinationRule.trafficPolicy }}
+{{ toYaml $destinationRule.trafficPolicy | nindent 4 }}
+{{- else }}
+    tls:
+      mode: {{ $destinationRule.tlsMode | default "DISABLE" }}
+{{- end }}
+{{- end }}
+{{- end }}

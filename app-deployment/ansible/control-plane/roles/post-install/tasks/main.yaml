@@ -59,3 +59,47 @@
     - $HOME/admin-entry-configmap.yaml
     - $HOME/admin-entry-job.yaml
   when: local_cluster is defined
+
+- name: Wait for admin-service to be ready
+  become: yes
+  shell: |
+    kubectl wait --for=condition=ready pod -l app=admin-service -n datamigrator --timeout=300s
+  register: admin_service_ready
+  retries: 3
+  delay: 10
+  until: admin_service_ready.rc == 0
+  when: local_cluster is defined and istio_jwt_auth.enabled | default(false)
+
+- name: Restart Keycloak to refresh JWKS
+  become: yes
+  shell: |
+    echo "Restarting Keycloak StatefulSet to ensure fresh JWKS..."
+    kubectl rollout restart statefulset keycloak -n keycloak
+    kubectl rollout status statefulset keycloak -n keycloak --timeout=300s
+  when: local_cluster is defined and istio_jwt_auth.enabled | default(false)
+  ignore_errors: yes
+
+- name: Refresh Istio sidecar configuration to reload JWKS
+  become: yes
+  shell: |
+    # Get all deployments with Istio sidecars in datamigrator namespace
+    DEPLOYMENTS=$(kubectl get deployments -n datamigrator -o json | jq -r '.items[] | select(.spec.template.metadata.annotations."sidecar.istio.io/inject" == "true" or .spec.template.metadata.labels."sidecar.istio.io/inject" == "true") | .metadata.name')
+    
+    if [ -z "$DEPLOYMENTS" ]; then
+      echo "No deployments with Istio sidecars found, checking for istio-proxy containers..."
+      DEPLOYMENTS=$(kubectl get deployments -n datamigrator -o json | jq -r '.items[] | select(.spec.template.spec.containers[].name == "istio-proxy") | .metadata.name')
+    fi
+    
+    # Restart each deployment to refresh Istio configuration and JWKS cache
+    for deployment in $DEPLOYMENTS; do
+      echo "Restarting deployment: $deployment"
+      kubectl rollout restart deployment/$deployment -n datamigrator
+    done
+    
+    # Wait for rollouts to complete
+    for deployment in $DEPLOYMENTS; do
+      echo "Waiting for rollout of $deployment to complete..."
+      kubectl rollout status deployment/$deployment -n datamigrator --timeout=300s
+    done
+  when: local_cluster is defined and istio_jwt_auth.enabled | default(false)
+  ignore_errors: yes

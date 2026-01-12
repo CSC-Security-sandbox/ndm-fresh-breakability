@@ -1,0 +1,41 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: istio-control-plane
+  namespace: istio-system
+spec:
+  profile: default
+  
+  # Ingress gateway configuration
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            ports:
+              - name: status-port
+                port: 15021
+                targetPort: 15021
+              - name: http2
+                port: 80
+                targetPort: 8080
+              - name: https
+                port: 443
+                targetPort: 8443
+              - name: grpc-temporal
+                port: 7233
+                targetPort: 7233
+  
+  # Global sidecar proxy resource configuration
+  values:
+    global:
+      proxy:
+        # Reduce sidecar resource requests for constrained environments
+        resources:
+          requests:
+            cpu: 25m      # Minimal CPU request to prevent scheduling issues
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi

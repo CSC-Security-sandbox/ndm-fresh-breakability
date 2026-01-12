@@ -12,6 +12,8 @@ import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-l
 import { calculateCommandHash } from "src/activities/utils/utils";
 import { buildTask } from "../utils/utils";
 import { InitTaskInput } from "../migrate/sync-activity.type";
+import { AuthService } from "src/auth/auth.service";
+import { createClientConnection } from 'src/utils/temporal.utils';
 
 
 @Injectable()
@@ -28,6 +30,7 @@ export class CommonTaskService {
       @Inject(ConfigService) private readonly configService: ConfigService,
       @Inject(LoggerFactory) loggerFactory: LoggerFactory,
       private readonly redisService: RedisService,
+      private readonly authService: AuthService,
     ) {
       this.workerId = this.configService.get('worker.workerId');
       this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
@@ -109,15 +112,32 @@ export class CommonTaskService {
   }
 
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
-    const connection = await Connection.connect({address: this.temporalAddress});
+    // Create Temporal client connection using utility function
+    const connection = await createClientConnection(
+      {
+        address: this.temporalAddress,
+        tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
+        tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
+        tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+        jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
+        getAccessToken: () => this.authService.getAccessToken(),
+      },
+      this.logger,
+    );
     this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
-    const namespace = 'default'; // replace with your namespace if different
-    const resp = await connection.workflowService.describeWorkflowExecution({
-      namespace,
-      execution: { workflowId },
-    });
-    // Status 1 means RUNNING
-    return resp.workflowExecutionInfo?.status === 1;
+    
+    try {
+      const namespace = 'default'; // replace with your namespace if different
+      const resp = await connection.workflowService.describeWorkflowExecution({
+        namespace,
+        execution: { workflowId },
+      });
+      // Status 1 means RUNNING
+      return resp.workflowExecutionInfo?.status === 1;
+    } finally {
+      // Always close the connection to avoid leaks
+      await connection.close();
+    }
   }
 
 

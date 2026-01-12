@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 
 export interface RedisCredentials {
   host: string;
+  port?: string;
   username: string;
   password: string;
 }
@@ -65,6 +66,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (this.isLocalEnvironment(workerConfigUrl)) {
       return  {
         host: process.env.REDIS_HOST,
+        port: process.env.REDIS_PORT || '6379',
         username: process.env.REDIS_USERNAME,
         password: process.env.REDIS_PASSWORD,
       };
@@ -103,12 +105,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
       const redisCredentials: RedisCredentials = {
         host: data.host,
+        port: data.port || '6379',
         username: data.username,
         password: data.password,
       };
 
       this.logger.log('Redis credentials fetched successfully:');
       this.logger.debug(`  Host: ${redisCredentials.host}`);
+      this.logger.debug(`  Port: ${redisCredentials.port}`);
       this.logger.debug(`  Username: ${redisCredentials.username}`);
       this.logger.debug(`  Password length: ${redisCredentials.password.length}`);
 
@@ -126,6 +130,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Update environment variables with Redis credentials
+    process.env.REDIS_HOST = credentials.host;
+    process.env.REDIS_PORT = credentials.port || '6379';
     process.env.REDIS_USERNAME = credentials.username;
     process.env.REDIS_PASSWORD = credentials.password;
 

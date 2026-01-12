@@ -1,0 +1,72 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: istio-control-plane
+  namespace: istio-system
+spec:
+  profile: default
+  
+  # Ingress gateway configuration
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+{% if local_cluster is defined %}
+          resources:
+            requests:
+              cpu: 50m      # Lower request for constrained VMs
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+{% else %}
+          resources:
+            requests:
+              cpu: 50m      # Lower request to allow scheduling
+              memory: 128Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+{% endif %}
+
+          service:
+            ports:
+              - name: status-port
+                port: 15021
+                targetPort: 15021
+              - name: http2
+                port: 80
+                targetPort: 8080
+              - name: https
+                port: 443
+                targetPort: 8443
+{% if temporal_mtls.enabled | default(false) and temporal_mtls.jwt_auth.enabled | default(false) %}
+              # Temporal gRPC port for external worker connections
+              - name: grpc-temporal
+                port: 7233
+                targetPort: 7233
+{% endif %}
+  
+  # Global sidecar proxy resource configuration
+  values:
+    global:
+      proxy:
+        # Optimized sidecar resources for VM deployment with Istio
+{% if local_cluster is defined %}
+        resources:
+          requests:
+            cpu: 25m      # Balanced for constrained VMs
+            memory: 64Mi
+          limits:
+            cpu: 500m     # Cap at 0.5 CPU per sidecar
+            memory: 256Mi
+{% else %}
+        resources:
+          requests:
+            cpu: 25m      # Realistic baseline for scheduling
+            memory: 64Mi
+          limits:
+            cpu: 1000m    # Cap at 1 CPU per sidecar
+            memory: 512Mi
+{% endif %}

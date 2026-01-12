@@ -1,0 +1,147 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- if $istio.enabled | default false }}
+---
+# IMPORTANT: VirtualService Route Ordering
+# ===========================================
+# These infrastructure VirtualServices define specific routes that should take precedence
+# over the catch-all UI route (prefix: /). Istio evaluates routes in order, so more specific
+# paths (like /ui/vault, /ui/assets, /api/v1, etc.) are defined here and will be matched first.
+# The datamigrator-ui VirtualService with prefix: / acts as a fallback for React app routing.
+#
+# Route Priority (most specific to least specific):
+# 1. /ui/assets/*          → OpenBao assets
+# 2. /ui/vault/*           → OpenBao UI
+# 3. /keycloak/*           → Keycloak
+# 4. /temporal/*           → Temporal Web
+# 5. /grafana/*            → Grafana
+# 6. /prometheus/*         → Prometheus
+# 7. /v1/*                 → OpenBao API
+# 8. /api/v1/*             → Backend services
+# 9. /*                    → React UI (catch-all, defined in datamigrator-ui chart)
+---
+# VirtualService for Temporal Web UI
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: temporal-web-virtualservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+  - "*"
+  gateways:
+  {{- $gatewayName := $istio.gateway.name | default "datamigrator-gateway" -}}
+  {{- $gatewayNamespace := $istio.gateway.namespace | default .Release.Namespace -}}
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+  - name: temporal-web
+    match:
+      - uri:
+          prefix: /temporal
+    route:
+      - destination:
+          host: temporaltest-web.temporal.svc.cluster.local
+          port:
+            number: 8080
+---
+# VirtualService for OpenBao/Vault UI
+# Note: Keycloak routing is handled by istio-keycloak-virtualservice.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: openbao-virtualservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+  - "*"
+  gateways:
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+  - name: openbao-ui-assets
+    match:
+      - uri:
+          prefix: /ui/assets
+    route:
+      - destination:
+          host: openbao.openbao.svc.cluster.local
+          port:
+            number: 8200
+  - name: openbao-ui
+    match:
+      - uri:
+          prefix: /ui/vault
+    route:
+      - destination:
+          host: openbao.openbao.svc.cluster.local
+          port:
+            number: 8200
+  - name: openbao-api
+    match:
+      - uri:
+          prefix: /v1
+    route:
+      - destination:
+          host: openbao.openbao.svc.cluster.local
+          port:
+            number: 8200
+---
+# VirtualService for Grafana
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: grafana-virtualservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+  - "*"
+  gateways:
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+  - name: grafana
+    match:
+      - uri:
+          prefix: /grafana
+    route:
+      - destination:
+          host: grafana-service.grafana.svc.cluster.local
+          port:
+            number: 3000
+---
+# VirtualService for Prometheus
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: prometheus-virtualservice
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+  - "*"
+  gateways:
+  {{- if eq $gatewayNamespace .Release.Namespace }}
+  - {{ $gatewayName }}
+  {{- else }}
+  - {{ printf "%s/%s" $gatewayNamespace $gatewayName }}
+  {{- end }}
+  http:
+  - name: prometheus
+    match:
+      - uri:
+          prefix: /prometheus
+    route:
+      - destination:
+          host: prometheus-service.prometheus.svc.cluster.local
+          port:
+            number: 9090
+{{- end }}

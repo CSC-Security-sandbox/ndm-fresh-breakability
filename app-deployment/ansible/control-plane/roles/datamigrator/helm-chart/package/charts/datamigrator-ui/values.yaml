@@ -99,6 +99,7 @@ service:
   targetPort: 80
 
 ingress:
+
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
