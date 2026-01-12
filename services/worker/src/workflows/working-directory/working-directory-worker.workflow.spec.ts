@@ -20,10 +20,11 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
     jest.clearAllMocks();
   });
 
-  it('should fetch paths and set fetchedPath when exportPath is not provided', async () => {
+  it('should fetch paths and set fetchedPath when exportPath is not provided (OtherNAS)', async () => {
     const args: any = {
       traceId,
       payload: {
+        serverType: 'OtherNAS',
         listPathPayload: [
           { type: 'nfs', host: 'host1', username: 'user', password: 'pass' }
         ]
@@ -49,6 +50,7 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
     const args: any = {
       traceId,
       payload: {
+        serverType: 'OtherNAS',
         listPathPayload: [
           { type: 'nfs', host: 'host1', username: 'user', password: 'pass' }
         ],
@@ -71,6 +73,7 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
     const args: any = {
       traceId,
       payload: {
+        serverType: 'OtherNAS',
         listPathPayload: [
           { type: 'nfs', host: 'host1', username: 'user', password: 'pass' }
         ],
@@ -88,10 +91,11 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
     expect(result).toBe('validated');
   });
 
-  it('should handle multiple listPathPayload entries', async () => {
+  it('should handle multiple listPathPayload entries (OtherNAS)', async () => {
     const args: any = {
       traceId,
       payload: {
+        serverType: 'OtherNAS',
         listPathPayload: [
           { type: 'nfs', host: 'host1', username: 'user', password: 'pass' },
           { type: 'nfs', host: 'host2', username: 'user2', password: 'pass2' }
@@ -107,6 +111,33 @@ describe('ValidateWorkingDirectoryWorkerWorkflow', () => {
 
     expect(args.payload.fetchedPath).toBe('/mnt/data2');
     expect(args.payload.exportPathWorkingDirectoryProvided).toBe(false);
+    expect(mockValidateWorkingDirectory).toHaveBeenCalledWith(traceId, args.payload);
+    expect(result).toBe('validated');
+  });
+
+  it('should use discoveredPaths for storage-aware types (Dell)', async () => {
+    const args: any = {
+      traceId,
+      payload: {
+        serverType: 'Dell',
+        discoveredPaths: ['/ifs/shardul', '/ifs/testdp'],
+        exportsMap: { 'isilon.lab.global': '/ifs/shardul' },
+        listPathPayload: [
+          { type: 'nfs', host: 'isilon.lab.global', username: 'root', password: '' }
+        ]
+      }
+    };
+    mockValidateWorkingDirectory.mockResolvedValueOnce('validated');
+
+    const result = await ValidateWorkingDirectoryWorkerWorkflow(args);
+
+    // Should NOT call listPath for storage-aware types
+    expect(mockListPath).not.toHaveBeenCalled();
+    // Should use discoveredPaths
+    expect(args.payload.paths).toEqual(['/ifs/shardul', '/ifs/testdp']);
+    // Should use exportsMap for fetchedPath
+    expect(args.payload.fetchedPath).toBe('/ifs/shardul');
+    expect(args.payload.isStorageAware).toBe(true);
     expect(mockValidateWorkingDirectory).toHaveBeenCalledWith(traceId, args.payload);
     expect(result).toBe('validated');
   });
