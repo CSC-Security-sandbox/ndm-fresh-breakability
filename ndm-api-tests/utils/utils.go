@@ -1187,9 +1187,41 @@ func HandleKeycloakResetPassword(scData parser.Scenario, sharedVars map[string]i
 }
 
 func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
-	keycloakAuthToken, err := GetKeyCloakAccessToken(keycloakUser, keycloakPassword)
+	// Use client credentials grant for admin-cli service account in datamigrator realm
+	// This service account has manage-users role configured by post-install job
+	tokenUrl := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP,TOKEN_URL)
+
+	data := url.Values{}
+	data.Set("client_id", "admin-cli")
+	data.Set("client_secret", CLIENT_SECRET)
+	data.Set("grant_type", "client_credentials")
+	requestBody := data.Encode()
+
+	headers := GetHeaders("", ContentTypeForm)
+	resp, err := SendAPIRequest("POST", tokenUrl, []byte(requestBody), headers)
 	if err != nil {
-		return fmt.Errorf("error getting Keycloak access token: %v", err)
+		return fmt.Errorf("error getting admin-cli service account token: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to get service account token: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("error reading token response: %v", err)
+	}
+
+	var jsonResponse map[string]interface{}
+	if err = json.Unmarshal(bodyBytes, &jsonResponse); err != nil {
+		return fmt.Errorf("error parsing token response: %v", err)
+	}
+
+	keycloakAuthToken, ok := jsonResponse["access_token"].(string)
+	if !ok {
+		return fmt.Errorf("access_token not found in response")
 	}
 
 	userID, err := FetchUserID(USERNAME, keycloakAuthToken)
