@@ -1,0 +1,291 @@
+name: GCP Image Upload to Scratch Space
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_worker_image_name:
+        description: "GCP Worker Image Name from gcp image gallery(eg: datamigrator-control-plane-24-11-2025-17-28-39)"
+        required: true
+      release_controlplane_image_name:
+        description: "GCP Control Plane Image Name from gcp image gallery(eg: datamigrator-worker-24-11-2025-17-21-59) "
+        required: true
+      release_folder:
+        description: "Release folder name (e.g. preview_x). If this folder already exists in scratch space (created by Vsphere or Windows installer workflows), use it; otherwise, create a new one."
+        required: true
+        
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'app-microservices-cm' }}
+  GCS_BUCKET: ${{ vars.GCP_GCS_BUCKET || 'ndm-vmdk-files' }}
+  VPC_NAME: ${{ vars.GCP_VPC_NAME || 'appmicro-vpc1' }}
+  SUBNET_NAME: ${{ vars.GCP_SUBNET_NAME || 'appmicro-vpc-subnet-02' }}
+  ZONE: ${{ vars.GCP_ZONE || 'us-east4-a' }}
+  LOCAL_EXPORT_PATH: ${{ vars.LOCAL_BASE_PATH || '/home/ubuntu/' }}
+  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space' }}
+
+jobs:
+  gcp-image-export:
+    runs-on: openlab
+    outputs:
+      worker_archive: ${{ steps.set-outputs.outputs.worker_archive }}
+      controlplane_archive: ${{ steps.set-outputs.outputs.controlplane_archive }}
+      scratch_space_folder_name: ${{ steps.set-outputs.outputs.export_prefix }}
+      timestamp: ${{ steps.set-outputs.outputs.timestamp }}
+
+    steps:
+      - name: Install SSH Tools
+        run: |
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client
+
+      - name: Add VM SSH Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Execute GCP Operations
+        id: execute-gcp
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+        run: |
+          # Capture SSH output to a file
+          SSH_OUTPUT_FILE=$(mktemp)
+          
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} << 'ENDSSH' | tee "$SSH_OUTPUT_FILE"
+          set -e
+
+          WORKER_IMAGE="${{ github.event.inputs.release_worker_image_name }}"
+          CP_IMAGE="${{ github.event.inputs.release_controlplane_image_name }}"
+          EXPORT_PREFIX="${{ github.event.inputs.release_folder }}"
+          BRANCH_NAME="${{ github.ref_name }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          WORKER_ARCHIVE="${WORKER_IMAGE}-${TIMESTAMP}-${BRANCH_NAME}-signed.tar.gz"
+          CP_ARCHIVE="${CP_IMAGE}-${TIMESTAMP}-${BRANCH_NAME}-signed.tar.gz"
+          CHECKSUM_FILE="GCP_SHA256SUMS-${TIMESTAMP}-${BRANCH_NAME}.sha256"
+          LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
+          SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
+          
+          echo "Exporting Worker Image: $WORKER_IMAGE"
+          WORKER_EXPORT_OUTPUT=$(sudo gcloud compute images export \
+            --project=${{ env.PROJECT_ID }} \
+            --image="$WORKER_IMAGE" \
+            --destination-uri="gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" \
+            --network=${{ env.VPC_NAME }} \
+            --subnet=${{ env.SUBNET_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --export-format=vmdk \
+            --async \
+            --quiet 2>&1)
+          
+          WORKER_BUILD_ID=$(echo "$WORKER_EXPORT_OUTPUT" | grep -oP 'builds/\K[a-f0-9-]+' | head -1)
+          [ -n "$WORKER_BUILD_ID" ] && echo "Worker Build ID: $WORKER_BUILD_ID" || echo "Warning: No Worker Build ID"
+          
+          echo "Monitoring Worker Export..."
+          MAX_WAIT=$((3600*4))  # 4 hour timeout for worker image export
+          ELAPSED=0
+          SLEEP_INTERVAL=30
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            WORKER_EXISTS="no"
+            timeout 10s sudo gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" 2>/dev/null && WORKER_EXISTS="yes"
+            
+            BUILD_STATUS="UNKNOWN"
+            if [ -n "$WORKER_BUILD_ID" ]; then
+              BUILD_STATUS=$(timeout 60s sudo gcloud builds describe "$WORKER_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+              
+              [ "$BUILD_STATUS" == "SUCCESS" ] && WORKER_EXISTS="yes"
+              
+              # If build failed, show logs and exit
+              if [ "$BUILD_STATUS" == "FAILURE" ] || [ "$BUILD_STATUS" == "TIMEOUT" ] || [ "$BUILD_STATUS" == "CANCELLED" ]; then
+                echo ""
+                echo "=========================================="
+                echo "Worker Build Failed: $BUILD_STATUS"
+                echo "=========================================="
+                echo ""
+                echo "Cloud Build Logs:"
+                echo "------------------------------------------"
+                sudo gcloud builds log "$WORKER_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
+                echo "------------------------------------------"
+                echo ""
+                echo "View full logs in Cloud Console:"
+                echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
+                echo ""
+                exit 1
+              fi
+            fi
+            
+            [ "$WORKER_EXISTS" == "yes" ] && echo "Worker export complete (${ELAPSED}s)" && break
+            
+            echo "Worker status: $BUILD_STATUS | ${ELAPSED}s"
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+          done
+          
+          [ $ELAPSED -ge $MAX_WAIT ] && echo "Worker export timeout" && exit 1
+          
+          # Display Cloud Build log URL
+          if [ -n "$WORKER_BUILD_ID" ]; then
+            echo ""
+            echo "Worker Cloud Build Logs:"
+            echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
+            echo ""
+          fi
+          
+          echo "Exporting Control Plane Image: $CP_IMAGE"
+          CP_EXPORT_OUTPUT=$(sudo gcloud compute images export \
+            --project=${{ env.PROJECT_ID }} \
+            --image="$CP_IMAGE" \
+            --destination-uri="gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" \
+            --network=${{ env.VPC_NAME }} \
+            --subnet=${{ env.SUBNET_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --export-format=vmdk \
+            --async \
+            --quiet 2>&1)
+          
+          CP_BUILD_ID=$(echo "$CP_EXPORT_OUTPUT" | grep -oP 'builds/\K[a-f0-9-]+' | head -1)
+          [ -n "$CP_BUILD_ID" ] && echo "CP Build ID: $CP_BUILD_ID" || echo "Warning: No CP Build ID"
+          
+          echo "Monitoring Control Plane Export..."
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            CP_EXISTS="no"
+            timeout 10s sudo gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" 2>/dev/null && CP_EXISTS="yes"
+            
+            BUILD_STATUS="UNKNOWN"
+            if [ -n "$CP_BUILD_ID" ]; then
+              BUILD_STATUS=$(timeout 60s sudo gcloud builds describe "$CP_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+              
+              [ "$BUILD_STATUS" == "SUCCESS" ] && CP_EXISTS="yes"
+              
+              # If build failed, show logs and exit
+              if [ "$BUILD_STATUS" == "FAILURE" ] || [ "$BUILD_STATUS" == "TIMEOUT" ] || [ "$BUILD_STATUS" == "CANCELLED" ]; then
+                echo ""
+                echo "=========================================="
+                echo "Control Plane Build Failed: $BUILD_STATUS"
+                echo "=========================================="
+                echo ""
+                echo "Cloud Build Logs:"
+                echo "------------------------------------------"
+                sudo gcloud builds log "$CP_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
+                echo "------------------------------------------"
+                echo ""
+                echo "View full logs in Cloud Console:"
+                echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
+                echo ""
+                exit 1
+              fi
+            fi
+            
+            [ "$CP_EXISTS" == "yes" ] && echo "CP export complete (${ELAPSED}s)" && break
+            
+            echo "CP status: $BUILD_STATUS | ${ELAPSED}s"
+            sleep $SLEEP_INTERVAL
+            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+          done
+          
+          [ $ELAPSED -ge $MAX_WAIT ] && echo "CP export timeout" && exit 1
+          
+          # Display Cloud Build log URL
+          if [ -n "$CP_BUILD_ID" ]; then
+            echo ""
+            echo "Control Plane Cloud Build Logs:"
+            echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
+            echo ""
+          fi
+          
+          echo "Downloading from GCS..."
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
+          cd "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
+          sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" .
+          sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" .
+          
+          echo "Generating checksums..."
+          sha256sum "${CP_ARCHIVE}" "${WORKER_ARCHIVE}" > "${CHECKSUM_FILE}"
+          sudo gsutil cp "${CHECKSUM_FILE}" "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/"
+
+          # Function: Copy with retry
+          copy_with_retry() {
+            local file="$1"
+            local dest="$2"
+            local RETRY_COUNT=3
+            for i in $(seq 1 "$RETRY_COUNT"); do
+              echo "Copying $file (attempt $i/$RETRY_COUNT)"
+              sudo cp "$file" "$dest/" && echo "$file copied" && return 0
+              [ "$i" -eq "$RETRY_COUNT" ] && echo "Failed to copy $file" && return 1
+              sleep 2
+            done
+          }
+          
+          echo "Copying to scratch space..."
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/gcp"
+          copy_with_retry "${WORKER_ARCHIVE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/gcp" || exit 1
+          copy_with_retry "${CP_ARCHIVE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/gcp" || exit 1
+          copy_with_retry "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/gcp" || exit 1
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/gcp"/*
+          
+          echo "Export complete"
+          
+          # Output data in pipe-delimited format
+          echo "OUTPUT_DATA:${TIMESTAMP}|${WORKER_ARCHIVE}|${CP_ARCHIVE}|${EXPORT_PREFIX}"
+          
+          ENDSSH
+          
+          # Extract OUTPUT_DATA from the captured SSH output
+          echo "ssh_output<<EOFMARKER" >> $GITHUB_OUTPUT
+          cat "$SSH_OUTPUT_FILE" >> $GITHUB_OUTPUT
+          echo "EOFMARKER" >> $GITHUB_OUTPUT
+          rm -f "$SSH_OUTPUT_FILE"
+
+      - name: Set Outputs
+        id: set-outputs
+        run: |
+          # Extract pipe-delimited data from previous step
+          OUTPUT='${{ steps.execute-gcp.outputs.ssh_output }}'
+          
+          echo "Raw output from remote:"
+          echo "$OUTPUT"
+          
+          # Extract data line (ignores SSH banner)
+          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
+          
+          # Validate data was found
+          if [ -z "$DATA_LINE" ]; then
+            echo "ERROR: Could not find OUTPUT_DATA in remote output" >&2
+            exit 1
+          fi
+          
+          # Parse pipe-delimited values
+          TIMESTAMP=$(echo "$DATA_LINE" | cut -d'|' -f1 | xargs)
+          WORKER_ARCHIVE=$(echo "$DATA_LINE" | cut -d'|' -f2 | xargs)
+          CP_ARCHIVE=$(echo "$DATA_LINE" | cut -d'|' -f3 | xargs)
+          EXPORT_PREFIX=$(echo "$DATA_LINE" | cut -d'|' -f4 | xargs)
+          
+          # Validate each value
+          [ -z "$TIMESTAMP" ] && echo "ERROR: Missing timestamp" >&2 && exit 1
+          [ -z "$WORKER_ARCHIVE" ] && echo "ERROR: Missing worker archive" >&2 && exit 1
+          [ -z "$CP_ARCHIVE" ] && echo "ERROR: Missing controlplane archive" >&2 && exit 1
+          [ -z "$EXPORT_PREFIX" ] && echo "ERROR: Missing export prefix" >&2 && exit 1
+          
+          # Set GitHub outputs
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "worker_archive=$WORKER_ARCHIVE" >> $GITHUB_OUTPUT
+          echo "controlplane_archive=$CP_ARCHIVE" >> $GITHUB_OUTPUT
+          echo "export_prefix=$EXPORT_PREFIX" >> $GITHUB_OUTPUT
+          
+          # Display for verification
+          echo "Captured outputs:"
+          echo "  Timestamp: $TIMESTAMP"
+          echo "  Worker: $WORKER_ARCHIVE"
+          echo "  CP: $CP_ARCHIVE"
+          echo "  Prefix: $EXPORT_PREFIX"
+      - name: Display Summary
+        run: |
+          echo "Timestamp: ${{ steps.set-outputs.outputs.timestamp }}"
+          echo "Worker: ${{ steps.set-outputs.outputs.worker_archive }}"
+          echo "CP: ${{ steps.set-outputs.outputs.controlplane_archive }}"
+          echo "GCS: gs://${{ env.GCS_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/"
+          
