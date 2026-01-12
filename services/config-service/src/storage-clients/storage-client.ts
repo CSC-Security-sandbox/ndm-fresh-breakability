@@ -7,17 +7,25 @@ import { FetchCertificateResponseDTO } from '../configurations/dto/config.dto';
  * Abstract base class for storage clients
  * Provides common functionality and defines interface for storage-specific implementations
  */
+
+export interface SmartConnectFileServer {
+  smartConnectSsip?: string;
+  smartConnectDnsZone?: string;
+}
+
 export abstract class StorageClient {
   abstract hostname: string;
   abstract port: number;
   abstract username: string;
   abstract password: string;
+  abstract certificate: string;
   
   protected logger: LoggerService;
 
   constructor(logger: LoggerService) {
     this.logger = logger;
   }
+  
 
   // ==========================================
   // Abstract methods to be implemented by child classes
@@ -29,6 +37,14 @@ export abstract class StorageClient {
    * @param params - Storage-specific parameters (varies by implementation)
    */
   abstract fetchZones(): Promise<any>;
+
+  /**
+   * Configure DNS resolver for SmartConnect FQDN resolution
+   * @param traceId - Trace ID for logging
+   * @param fileServer - FileServer object containing smartConnectSsip and smartConnectDnsZone
+   * @returns true if DNS was configured, false if skipped (no SSIP/zone provided)
+   */
+  abstract configureSmartConnectDns(traceId: string, fileServer: SmartConnectFileServer): Promise<boolean>;
 
   /**
    * Get NFS export paths for a file server

@@ -11,14 +11,24 @@ import { ServerType } from 'src/activities/common/enums';
  */
 export class ClientConfig {
   serverType: ServerType;
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  certificate?: string; 
 
   /**
    * Constructor - initializes with connection parameters
    */
-  constructor(
-    serverType: ServerType
-  ) {
+
+  
+constructor(serverType: ServerType, hostname?: string, port?: number, username?: string, password?: string, certificate?: string) {
     this.serverType = serverType || ServerType.other;
+    this.hostname = hostname || '';
+    this.port = port || 0;
+    this.username = username || '';
+    this.password = password || '';
+    this.certificate = certificate || '';
   }
 }
 
@@ -39,7 +49,13 @@ export class StorageClientFactory {
 
     switch (serverType) {
       case ServerType.dell:
-        return new IsilonStorageClient(this.loggerFactory);
+        return new IsilonStorageClient(this.loggerFactory, null, {
+          hostname: config.hostname,
+          port: config.port,
+          username: config.username,
+          password: config.password,
+          certificate: config.certificate,  
+        });
       default:
         return null;
     }
