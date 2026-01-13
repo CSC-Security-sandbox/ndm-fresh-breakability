@@ -42,8 +42,8 @@ istio_keycloak_route:
 # Istio Rate Limiting
 istio_rate_limit:
   enabled: true
-  max_tokens: 25        # Maximum tokens in bucket
-  tokens_per_fill: 25   # Tokens added per interval
+  max_tokens: 2500       # Maximum tokens in bucket
+  tokens_per_fill: 2500   # Tokens added per interval
   fill_interval: "1s"   # Refill interval (allows ~25 requests/second)
 
 # JWT Authentication at Istio Gateway
