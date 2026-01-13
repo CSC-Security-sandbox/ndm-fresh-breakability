@@ -37,8 +37,8 @@ global:
         secretName: {{ istio_gateway.tls.secretName | default('') | quote }}
     rateLimit:
       enabled: {{ istio_rate_limit.enabled | default(true) | bool | string | lower }}
-      maxTokens: {{ istio_rate_limit.max_tokens | default(25) }}
-      tokensPerFill: {{ istio_rate_limit.tokens_per_fill | default(25) }}
+      maxTokens: {{ istio_rate_limit.max_tokens | default(2500) }}
+      tokensPerFill: {{ istio_rate_limit.tokens_per_fill | default(2500) }}
       fillInterval: {{ istio_rate_limit.fill_interval | default('1s') | quote }}
     keycloakRoute:
       enabled: {{ istio_keycloak_route.enabled | default(true) | bool | string | lower }}

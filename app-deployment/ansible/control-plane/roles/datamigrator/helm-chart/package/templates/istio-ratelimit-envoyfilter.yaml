@@ -32,18 +32,18 @@ spec:
           value:
             stat_prefix: http_local_rate_limiter
             token_bucket:
-              max_tokens: {{ $rateLimit.maxTokens | default 25 }}
-              tokens_per_fill: {{ $rateLimit.tokensPerFill | default 25 }}
+              max_tokens: {{ $rateLimit.maxTokens | default 2500 }}
+              tokens_per_fill: {{ $rateLimit.tokensPerFill | default 2500 }}
               fill_interval: {{ $rateLimit.fillInterval | default "1s" }}
             filter_enabled:
               runtime_key: local_rate_limit_enabled
               default_value:
-                numerator: 100
+                numerator: 1000
                 denominator: HUNDRED
             filter_enforced:
               runtime_key: local_rate_limit_enforced
               default_value:
-                numerator: 100
+                numerator: 1000
                 denominator: HUNDRED
             response_headers_to_add:
               - append: false
