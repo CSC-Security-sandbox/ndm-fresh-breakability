@@ -82,23 +82,32 @@ jobs:
           fi
           echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
 
-          aws iam create-role \
-            --role-name vmimport \
-            --assume-role-policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [
-                {
-                  "Effect": "Allow",
-                  "Principal": {
-                    "Service": "ec2.amazonaws.com"
-                  },
-                  "Action": "sts:AssumeRole",
-                  "Condition": {}
-                }
-              ]
-            }'
-          
+          # Create IAM role for VM import (if it doesn't exist)
+          echo "Setting up IAM role for VM import..."
+          if ! aws iam get-role --role-name vmimport &>/dev/null; then
+            echo "Creating IAM role 'vmimport'..."
+            aws iam create-role \
+              --role-name vmimport \
+              --assume-role-policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole",
+                    "Condition": {}
+                  }
+                ]
+              }'
+            echo "✅ IAM role created"
+          else
+            echo "✅ IAM role 'vmimport' already exists"
+          fi
 
+          # Attach policy to role
+          echo "Attaching policy to IAM role..."
           aws iam put-role-policy \
             --role-name vmimport \
             --policy-name vmimport \
