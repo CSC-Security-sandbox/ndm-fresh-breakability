@@ -156,9 +156,18 @@ export class WorkManagerService {
     isRebootCall: boolean,
   ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
     try {
+      // Debug: Log what we received
+      this.logger.debug(`Worker ${id}: Received envVariables keys: ${Object.keys(envVariables || {}).join(', ')}`);
+      this.logger.debug(`Worker ${id}: TEMPORAL_TLS_ENABLED = ${envVariables?.TEMPORAL_TLS_ENABLED} (type: ${typeof envVariables?.TEMPORAL_TLS_ENABLED})`);
+      
       // Inject Gateway CA certificate for TLS-enabled external workers
       const temporalTlsEnabled = envVariables?.TEMPORAL_TLS_ENABLED === 'true';
+      this.logger.debug(`Worker ${id}: temporalTlsEnabled = ${temporalTlsEnabled}`);
+      
+      this.logger.log(`Worker ${id}: About to check TLS condition - temporalTlsEnabled=${temporalTlsEnabled}`);
+      
       if (temporalTlsEnabled) {
+        this.logger.log(`Worker ${id}: Inside TLS enabled block`);
         // Only fetch if not already provided
         if (!envVariables.TEMPORAL_TLS_CA_CERT) {
           this.logger.log(`Worker ${id}: TLS enabled, fetching Gateway CA certificate`);
@@ -172,6 +181,8 @@ export class WorkManagerService {
         } else {
           this.logger.debug(`Worker ${id}: CA certificate already present in envVariables`);
         }
+      } else {
+        this.logger.log(`Worker ${id}: TLS not enabled, skipping certificate injection`);
       }
 
       const workerMetaConfig = await this.workerEntity.findOne({
