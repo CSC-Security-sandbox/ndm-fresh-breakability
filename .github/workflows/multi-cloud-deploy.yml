@@ -736,36 +736,13 @@ jobs:
 
           # Attach policy to role
           echo "Attaching policy to IAM role..."
+          S3_BUCKET_NAME="${{ env.S3_BUCKET }}"
+          echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:GetObject","s3:ListBucket","s3:PutObject"],"Resource":["arn:aws:s3:::'"${S3_BUCKET_NAME}"'","arn:aws:s3:::'"${S3_BUCKET_NAME}"'/*"]},{"Effect":"Allow","Action":["ec2:ModifySnapshotAttribute","ec2:CopySnapshot","ec2:Describe*"],"Resource":"*"}]}' > /tmp/vmimport-policy.json
           aws iam put-role-policy \
             --role-name vmimport \
             --policy-name vmimport \
-            --policy-document "{
-    \"Version\": \"2012-10-17\",
-    \"Statement\": [
-        {
-            \"Effect\": \"Allow\",
-            \"Action\": [
-                \"s3:GetBucketLocation\",
-                \"s3:GetObject\",
-                \"s3:ListBucket\",
-                \"s3:PutObject\"
-            ],
-            \"Resource\": [
-                \"arn:aws:s3:::${{ env.S3_BUCKET }}\",
-                \"arn:aws:s3:::${{ env.S3_BUCKET }}/*\"
-            ]
-        },
-        {
-            \"Effect\": \"Allow\",
-            \"Action\": [
-                \"ec2:ModifySnapshotAttribute\",
-                \"ec2:CopySnapshot\",
-                \"ec2:Describe*\"
-            ],
-            \"Resource\": \"*\"
-        }
-    ]
-}"
+            --policy-document file:///tmp/vmimport-policy.json
+          rm -f /tmp/vmimport-policy.json
           # Export Worker Node AMI
           echo "Exporting Worker Node AMI: $WORKER_AMI"
           WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
