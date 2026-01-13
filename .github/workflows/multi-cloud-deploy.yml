@@ -827,18 +827,42 @@ jobs:
           MAX_WAIT=7200  # 2 hours
           ELAPSED=0
           SLEEP_INTERVAL=30
+          PREV_PROGRESS=""
           
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            WORKER_STATUS=$(aws ec2 describe-export-image-tasks \
+            # Get status and progress separately for better reliability
+            WORKER_TASK_STATUS=$(aws ec2 describe-export-image-tasks \
               --region ${{ env.AWS_REGION }} \
               --export-image-task-ids $WORKER_EXPORT_TASK \
-              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --query 'ExportImageTasks[0].Status' \
               --output text 2>/dev/null || echo "UNKNOWN")
             
-            WORKER_TASK_STATUS=$(echo "$WORKER_STATUS" | awk '{print $1}')
-            WORKER_PROGRESS=$(echo "$WORKER_STATUS" | awk '{print $3}')
+            WORKER_PROGRESS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $WORKER_EXPORT_TASK \
+              --query 'ExportImageTasks[0].Progress' \
+              --output text 2>/dev/null || echo "0")
+            
+            # Get status message for debugging
+            WORKER_STATUS_MSG=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $WORKER_EXPORT_TASK \
+              --query 'ExportImageTasks[0].StatusMessage' \
+              --output text 2>/dev/null || echo "")
+            
+            # Debug output every 5 minutes or on first run
+            if [ $ELAPSED -eq 0 ] || [ $((ELAPSED % 300)) -eq 0 ]; then
+              echo "DEBUG - Full task details:"
+              aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $WORKER_EXPORT_TASK \
+                --output json | jq -r '.ExportImageTasks[0] | {Status, StatusMessage, Progress, S3ExportLocation}' 2>/dev/null || echo "Could not get full details"
+            fi
             
             echo "Worker status: $WORKER_TASK_STATUS | Progress: ${WORKER_PROGRESS}% | ${ELAPSED}s"
+            if [ -n "$WORKER_STATUS_MSG" ] && [ "$WORKER_STATUS_MSG" != "None" ]; then
+              echo "  Status Message: $WORKER_STATUS_MSG"
+            fi
             
             if [ "$WORKER_TASK_STATUS" = "completed" ]; then
               echo "✅ Worker export completed (${ELAPSED}s)"
@@ -858,11 +882,19 @@ jobs:
               echo "Worker Export Failed: $WORKER_TASK_STATUS"
               echo "=========================================="
               echo ""
-              echo "Status Message:"
-              echo "$WORKER_STATUS" | awk '{print $2}'
+              echo "Status Message: $WORKER_STATUS_MSG"
               echo ""
               exit 1
             fi
+            
+            # Check if progress is stuck (no change for 10 minutes)
+            if [ $ELAPSED -gt 600 ] && [ -n "$PREV_PROGRESS" ]; then
+              if [ "$WORKER_PROGRESS" = "$PREV_PROGRESS" ] && [ "$WORKER_PROGRESS" != "100" ]; then
+                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at ${WORKER_PROGRESS}%)"
+                echo "   This might indicate the export is stuck. Continuing to monitor..."
+              fi
+            fi
+            PREV_PROGRESS="$WORKER_PROGRESS"
             
             sleep $SLEEP_INTERVAL
             ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
@@ -876,18 +908,42 @@ jobs:
           # Monitor Control Plane export
           echo "Monitoring Control Plane Export..."
           ELAPSED=0
+          PREV_PROGRESS=""
           
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            CP_STATUS=$(aws ec2 describe-export-image-tasks \
+            # Get status and progress separately for better reliability
+            CP_TASK_STATUS=$(aws ec2 describe-export-image-tasks \
               --region ${{ env.AWS_REGION }} \
               --export-image-task-ids $CP_EXPORT_TASK \
-              --query 'ExportImageTasks[0].[Status,StatusMessage,Progress]' \
+              --query 'ExportImageTasks[0].Status' \
               --output text 2>/dev/null || echo "UNKNOWN")
             
-            CP_TASK_STATUS=$(echo "$CP_STATUS" | awk '{print $1}')
-            CP_PROGRESS=$(echo "$CP_STATUS" | awk '{print $3}')
+            CP_PROGRESS=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $CP_EXPORT_TASK \
+              --query 'ExportImageTasks[0].Progress' \
+              --output text 2>/dev/null || echo "0")
+            
+            # Get status message for debugging
+            CP_STATUS_MSG=$(aws ec2 describe-export-image-tasks \
+              --region ${{ env.AWS_REGION }} \
+              --export-image-task-ids $CP_EXPORT_TASK \
+              --query 'ExportImageTasks[0].StatusMessage' \
+              --output text 2>/dev/null || echo "")
+            
+            # Debug output every 5 minutes or on first run
+            if [ $ELAPSED -eq 0 ] || [ $((ELAPSED % 300)) -eq 0 ]; then
+              echo "DEBUG - Full task details:"
+              aws ec2 describe-export-image-tasks \
+                --region ${{ env.AWS_REGION }} \
+                --export-image-task-ids $CP_EXPORT_TASK \
+                --output json | jq -r '.ExportImageTasks[0] | {Status, StatusMessage, Progress, S3ExportLocation}' 2>/dev/null || echo "Could not get full details"
+            fi
             
             echo "CP status: $CP_TASK_STATUS | Progress: ${CP_PROGRESS}% | ${ELAPSED}s"
+            if [ -n "$CP_STATUS_MSG" ] && [ "$CP_STATUS_MSG" != "None" ]; then
+              echo "  Status Message: $CP_STATUS_MSG"
+            fi
             
             if [ "$CP_TASK_STATUS" = "completed" ]; then
               echo "✅ Control Plane export completed (${ELAPSED}s)"
@@ -907,11 +963,19 @@ jobs:
               echo "Control Plane Export Failed: $CP_TASK_STATUS"
               echo "=========================================="
               echo ""
-              echo "Status Message:"
-              echo "$CP_STATUS" | awk '{print $2}'
+              echo "Status Message: $CP_STATUS_MSG"
               echo ""
               exit 1
             fi
+            
+            # Check if progress is stuck (no change for 10 minutes)
+            if [ $ELAPSED -gt 600 ] && [ -n "$PREV_PROGRESS" ]; then
+              if [ "$CP_PROGRESS" = "$PREV_PROGRESS" ] && [ "$CP_PROGRESS" != "100" ]; then
+                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at ${CP_PROGRESS}%)"
+                echo "   This might indicate the export is stuck. Continuing to monitor..."
+              fi
+            fi
+            PREV_PROGRESS="$CP_PROGRESS"
             
             sleep $SLEEP_INTERVAL
             ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
