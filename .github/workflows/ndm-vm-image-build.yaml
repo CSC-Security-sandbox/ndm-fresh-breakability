@@ -32,6 +32,7 @@ on:
           - azure
           - vsphere
           - gcp
+          - aws
       services_config:
         description: 'JSON configuration for service tags and branches'
         required: false
@@ -556,7 +557,7 @@ jobs:
 
           # Set providers based on input
           if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
-            PROVIDERS='["azure", "vsphere", "gcp"]'
+            PROVIDERS='["azure", "vsphere", "gcp", "aws"]'
           else
             PROVIDERS='["${{ github.event.inputs.provider }}"]'
           fi
@@ -1053,6 +1054,7 @@ jobs:
             IMAGE_ID=$(cat $GITHUB_WORKSPACE/ami.txt)
             
             echo "aws_image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+            echo "image_name=$IMAGE_ID" >> $GITHUB_OUTPUT
       
             echo "Captured image info for ${{ matrix.provider }}-${{ matrix.component }}"
             echo "AMI ID: $IMAGE_ID"
@@ -1084,6 +1086,9 @@ jobs:
             azure)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
               echo "${{ steps.image-info.outputs.build_image_version }}" > ${{ matrix.component }}-${{ matrix.provider }}-version.txt
+              ;;
+            aws)
+              echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
               ;;
             vsphere)
               echo "${{ steps.image-info.outputs.image_name }}" > ${{ matrix.component }}-${{ matrix.provider }}-image.txt
@@ -1429,7 +1434,7 @@ jobs:
 
           INSTALLER_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/builds/${BUILD_TYPE}/${BUILD_VERSION}/windows-installer/windows-worker-installer-${BUILD_VERSION}.exe"
           
-          for provider in "azure" "vsphere" "gcp"; do
+          for provider in "azure" "vsphere" "gcp" "aws"; do
             CONTROL_PLANE_FILE="./image-info/control-plane-${provider}-image.txt"
             WORKER_FILE="./image-info/worker-${provider}-image.txt"
             CONTROL_PLANE_VERSION_FILE="./image-info/control-plane-${provider}-version.txt"
@@ -1445,6 +1450,9 @@ jobs:
                   ;;
                 "gcp")
                   PROVIDER_NAME="GCP"
+                  ;;
+                "aws")
+                  PROVIDER_NAME="AWS"
                   ;;
               esac
               
