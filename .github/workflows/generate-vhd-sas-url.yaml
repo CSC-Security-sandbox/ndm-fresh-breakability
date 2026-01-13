@@ -25,6 +25,43 @@ on:
         description: 'SAS URL expiry in days (ex: 7)'
         required: true
 
+  workflow_call:
+    inputs:
+      control_plane_blob_name:
+        description: 'Control Plane VHD blob name'
+        required: true
+        type: string
+      linux_worker_blob_name:
+        description: 'Linux Worker VHD blob name'
+        required: true
+        type: string
+      windows_worker_blob_name:
+        description: 'Windows Worker installer blob name'
+        required: true
+        type: string
+      storage_account_name:
+        description: 'Azure Storage Account name'
+        required: true
+        type: string
+      container_name:
+        description: 'Storage Container name'
+        required: true
+        type: string
+      sas_expiry_days:
+        description: 'SAS URL expiry in days'
+        required: true
+        type: string
+    outputs:
+      control_plane_url:
+        description: 'SAS URL for Control Plane VHD'
+        value: ${{ jobs.generate-sas-urls.outputs.control_plane_url }}
+      linux_worker_url:
+        description: 'SAS URL for Linux Worker VHD'
+        value: ${{ jobs.generate-sas-urls.outputs.linux_worker_url }}
+      windows_worker_url:
+        description: 'SAS URL for Windows Worker installer'
+        value: ${{ jobs.generate-sas-urls.outputs.windows_worker_url }}
+
 jobs:
   generate-sas-urls:
     runs-on: openlab
@@ -41,7 +78,7 @@ jobs:
 
       - name: Install SSH client
         run: |
-          sudo apt-get update
+          # sudo apt-get update
           sudo apt-get install -y sshpass
 
       - name: Generate SAS URLs via SSH
@@ -51,12 +88,12 @@ jobs:
           SSH_USER: 'ubuntu'
           SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
           STORAGE_ACCOUNT_KEY: ${{ secrets.SAS_AZURE_STORAGE_ACCOUNT_KEY }}
-          STORAGE_ACCOUNT_NAME: ${{ github.event.inputs.storage_account_name }}
-          CONTAINER_NAME: ${{ github.event.inputs.container_name }}
-          CP_BLOB_NAME: ${{ github.event.inputs.control_plane_blob_name }}
-          LINUX_WORKER_BLOB_NAME: ${{ github.event.inputs.linux_worker_blob_name }}
-          WINDOWS_WORKER_BLOB_NAME: ${{ github.event.inputs.windows_worker_blob_name }}
-          EXPIRY_DAYS: ${{ github.event.inputs.sas_expiry_days }}
+          STORAGE_ACCOUNT_NAME: ${{ inputs.storage_account_name }}
+          CONTAINER_NAME: ${{ inputs.container_name }}
+          CP_BLOB_NAME: ${{ inputs.control_plane_blob_name }}
+          LINUX_WORKER_BLOB_NAME: ${{ inputs.linux_worker_blob_name }}
+          WINDOWS_WORKER_BLOB_NAME: ${{ inputs.windows_worker_blob_name }}
+          EXPIRY_DAYS: ${{ inputs.sas_expiry_days }}
         run: |
           # Create SSH commands script
           cat > generate_sas.sh <<'EOFSCRIPT'
@@ -144,15 +181,17 @@ jobs:
             ${SSH_USER}@${SSH_HOST} "rm -f /tmp/generate_sas.sh"
 
       - name: Display SAS URLs
+        env:
+          SAS_EXPIRY_DAYS: ${{ inputs.sas_expiry_days }}
         run: |
           # Calculate expiry date
-          EXPIRY_DATE=$(date -u -d "+${{ github.event.inputs.sas_expiry_days }} days" +"%d/%m/%Y")
+          EXPIRY_DATE=$(date -u -d "+${SAS_EXPIRY_DAYS} days" +"%d/%m/%Y")
           RUN_DATE=$(date -u +"%d/%m/%Y")
           
           echo "### Azure Artifact SAS URLs Generated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Generated on:** ${RUN_DATE}" >> $GITHUB_STEP_SUMMARY
-          echo "**Expires on:** ${EXPIRY_DATE} (${{ github.event.inputs.sas_expiry_days }} days from run)" >> $GITHUB_STEP_SUMMARY
+          echo "**Expires on:** ${EXPIRY_DATE} (${SAS_EXPIRY_DAYS} days from run)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Control Plane VHD:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -170,16 +209,18 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Create artifact with URLs
+        env:
+          SAS_EXPIRY_DAYS: ${{ inputs.sas_expiry_days }}
         run: |
           mkdir -p vhd-urls
           
           # Calculate dates
-          EXPIRY_DATE=$(date -u -d "+${{ github.event.inputs.sas_expiry_days }} days" +"%d/%m/%Y")
+          EXPIRY_DATE=$(date -u -d "+${SAS_EXPIRY_DAYS} days" +"%d/%m/%Y")
           RUN_DATE=$(date -u +"%d/%m/%Y")
           
           cat > vhd-urls/sas-urls-$(date +%Y%m%d-%H%M%S).txt <<EOF
           Azure Artifact SAS URLs Generated on ${RUN_DATE}
-          Expires on ${EXPIRY_DATE} (${{ github.event.inputs.sas_expiry_days }} days from run)
+          Expires on ${EXPIRY_DATE} (${SAS_EXPIRY_DAYS} days from run)
           
           Control Plane VHD:
           ${{ steps.generate-sas.outputs.control_plane_url }}

@@ -1,0 +1,568 @@
+name: Azure VHD Export & SAS URL Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sig_image_id_worker:
+        description: "Worker SIG Image ID from Azure Image gallery(eg: /subscriptions/1630c6a9-d99b-498a-aca8-a271f7506bc0/resourceGroups/datamigrate-acr-resource-group/providers/Microsoft.Compute/galleries/datamigrator/images/ndm-worker/versions/2025.24.11172200)"
+        required: true
+      release_sig_image_id_controlplane:
+        description: "Control Plane SIG Image ID from Azure Image gallery(eg: /subscriptions/1630c6a9-d99b-498a-aca8-a271f7506bc0/resourceGroups/datamigrate-acr-resource-group/providers/Microsoft.Compute/galleries/datamigrator/images/ndm-control-plane/versions/2025.24.11173418)"
+        required: true
+      windows_installer_name:
+        description: "Windows Installer filename (without .exe extension) name of he installer that is in the scratch space"
+        required: true
+      copy_sas_duration_hours:
+        description: "SAS token (read-only-access) duration for copy of disk to blob in hours (default: 1)"
+        required: false
+        default: "1"
+      sas_expiry_days:
+        description: "SAS URL expiry in days for customer download (default: 7)"
+        required: false
+        default: "7"
+
+env:
+  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'datamigrate-acr-resource-group' }}
+  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
+  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
+  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION || 'eastus' }}
+  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST }}
+  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
+  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID || 'ndm-vm-export-acr-rg' }}
+  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing' }}
+  WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name || '' }}
+
+permissions:
+  contents: read 
+
+jobs:
+  vhd-export:
+    runs-on: openlab
+    outputs:
+      storage_account: ${{ steps.blob-info.outputs.storage_account }}
+      container_name: ${{ steps.blob-info.outputs.container_name }}
+      worker_blob_name: ${{ steps.blob-info.outputs.worker_blob_name }}
+      controlplane_blob_name: ${{ steps.blob-info.outputs.controlplane_blob_name }}
+      installer_blob_name: ${{ steps.blob-info.outputs.installer_blob_name }}
+    steps:
+      - name: Install SSH Tools
+        run: |
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client
+
+      - name: Add VM SSH Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ env.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Copy Windows Installer to Azure VM
+        if: ${{ env.WINDOWS_INSTALLER_NAME != '' }}
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          AZURE_VM_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+        run: |
+          INSTALLER_SOURCE="${{ env.IMAGE_SIGNING_MOUNT }}/${{ env.WINDOWS_INSTALLER_NAME }}.exe"
+          RUNNER_IP="${{ vars.RUNNER_GITHUB_IP_66 }}"
+          AZURE_VM="${{ env.AZURE_VM_HOST }}"
+          INSTALLER_NAME="${{ env.WINDOWS_INSTALLER_NAME }}"
+          
+          echo "Checking for installer on runner at $RUNNER_IP..."
+          
+          # Verify installer exists on IP 66 runner (use sudo for root-owned files)
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "sudo ls -la '${INSTALLER_SOURCE}'" || {
+              echo "ERROR: Windows installer not found at $INSTALLER_SOURCE on runner $RUNNER_IP"
+              sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+                "sudo ls -la '${{ env.IMAGE_SIGNING_MOUNT }}/' 2>/dev/null || echo 'Directory not accessible'"
+              exit 1
+            }
+          
+          echo "Found installer at: $INSTALLER_SOURCE on $RUNNER_IP"
+          echo "Copying to Azure VM at $AZURE_VM..."
+          
+          # Add Azure VM to known_hosts on IP 66 runner
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "ssh-keyscan -H '${AZURE_VM}' >> ~/.ssh/known_hosts 2>/dev/null || true"
+          
+          # Create temp directory on Azure VM (via IP 66 runner)
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "sshpass -p '${AZURE_VM_PASSWORD}' ssh -o StrictHostKeyChecking=no ubuntu@${AZURE_VM} 'mkdir -p ~/installer-upload'"
+          
+          # Copy file to temp location with sudo and fix ownership/permissions
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "sudo cp '${INSTALLER_SOURCE}' '/tmp/${INSTALLER_NAME}.exe' && sudo chown ubuntu:ubuntu '/tmp/${INSTALLER_NAME}.exe' && sudo chmod 644 '/tmp/${INSTALLER_NAME}.exe'"
+          
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to copy installer to temp location with proper permissions"
+            exit 1
+          fi
+          
+          # SCP installer from temp location on IP 66 runner to Azure VM
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "sshpass -p '${AZURE_VM_PASSWORD}' scp -o StrictHostKeyChecking=no '/tmp/${INSTALLER_NAME}.exe' 'ubuntu@${AZURE_VM}:~/installer-upload/${INSTALLER_NAME}.exe'"
+          
+          SCP_EXIT=$?
+          
+          # Cleanup temp file on IP 66 runner
+          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
+            "rm -f '/tmp/${INSTALLER_NAME}.exe'"
+          
+          if [ $SCP_EXIT -eq 0 ]; then
+            echo "Installer copied successfully to Azure VM"
+          else
+            echo "ERROR: Failed to copy installer to Azure VM"
+            exit 1
+          fi
+
+      - name: Extract Branch Name
+        id: branch-info
+        run: |
+          # Extract branch name from github.ref
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
+          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          # Limit length to 30 chars for practical blob naming
+          BRANCH_SUFFIX="${BRANCH_SUFFIX:0:30}"
+          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
+          echo "Branch suffix for blob naming: $BRANCH_SUFFIX"
+
+      - name: SSH into VM and Export VHDs
+        run: |
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
+          
+          export SOURCE_RESOURCE_GROUP="${{ env.SOURCE_RESOURCE_GROUP }}"
+          export SOURCE_STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
+          export SOURCE_CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
+          export SOURCE_AZURE_REGION="${{ env.SOURCE_AZURE_REGION }}"
+          export SIG_IMAGE_WORKER="${{ github.event.inputs.release_sig_image_id_worker }}"
+          export SIG_IMAGE_CP="${{ github.event.inputs.release_sig_image_id_controlplane }}"
+          export SAS_DURATION_HOURS="${{ env.SAS_DURATION_HOURS }}" 
+          export DISK_ACCESS_ID="${{ env.AZURE_DISK_ACCESS_ID }}"
+          export WINDOWS_INSTALLER_NAME="${{ env.WINDOWS_INSTALLER_NAME }}"
+          export IMAGE_SIGNING_MOUNT="${{ env.IMAGE_SIGNING_MOUNT }}"
+          export TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          export BRANCH_SUFFIX="${{ steps.branch-info.outputs.branch_suffix }}"
+          
+          echo "Starting VHD export - Timestamp: $TIMESTAMP"
+          echo "Branch suffix: $BRANCH_SUFFIX"
+          echo "SAS Duration: ${SAS_DURATION_HOURS} hours"  
+          
+          # Get storage account key (using sudo for root's Azure CLI auth)
+          STORAGE_KEY=$(sudo az storage account keys list \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --account-name "$SOURCE_STORAGE_ACCOUNT" \
+            --query "[0].value" -o tsv)
+
+             # Mask storage key in GitHub Actions logs
+          echo "::add-mask::$STORAGE_KEY"
+          
+          # Save storage key
+          mkdir -p ~/.vhd-export
+          echo "$STORAGE_KEY" > ~/.vhd-export/storage-key-${TIMESTAMP}.txt
+          chmod 600 ~/.vhd-export/storage-key-${TIMESTAMP}.txt
+          
+          # Create disks
+          DISK_ACCESS_ID="$DISK_ACCESS_ID"
+          WORKER_DISK_NAME="ndm-worker-vhd-$TIMESTAMP"
+          CONTROLPLANE_DISK_NAME="ndm-controlplane-vhd-$TIMESTAMP"
+          
+          echo "Creating worker disk..."
+          sudo az disk create \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --name "$WORKER_DISK_NAME" \
+            --location "$SOURCE_AZURE_REGION" \
+            --gallery-image-reference "$SIG_IMAGE_WORKER" \
+            --network-access-policy AllowPrivate \
+            --disk-access "$DISK_ACCESS_ID" \
+            --output none
+          
+          echo "Creating control plane disk..."
+          sudo az disk create \
+            --resource-group "$SOURCE_RESOURCE_GROUP" \
+            --name "$CONTROLPLANE_DISK_NAME" \
+            --location "$SOURCE_AZURE_REGION" \
+            --gallery-image-reference "$SIG_IMAGE_CP" \
+            --network-access-policy AllowPrivate \
+            --disk-access "$DISK_ACCESS_ID" \
+            --output none
+          
+          # Function to copy disk to blob
+          copy_disk() {
+            local disk_name=$1
+            local blob_name=$2
+            
+            echo "Copying $disk_name to blob storage..."
+
+            local sas_seconds=$(( ${SAS_DURATION_HOURS} * 3600 ))
+
+            
+            DISK_SAS=$(sudo az disk grant-access \
+              --resource-group "$SOURCE_RESOURCE_GROUP" \
+              --name "$disk_name" \
+              --access-level Read \
+              --duration-in-seconds $sas_seconds \
+              --query accessSAS -o tsv)
+            
+            sudo az storage blob copy start \
+              --source-uri "$DISK_SAS" \
+              --destination-blob "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
+              --destination-container "$SOURCE_CONTAINER_NAME" \
+              --account-name "$SOURCE_STORAGE_ACCOUNT" \
+              --account-key "$STORAGE_KEY" \
+              --output none
+
+            # Timeout configuration
+            local max_iterations=$(( ${SAS_DURATION_HOURS} * 3600 / 30 - 10 ))  # 30s check intervals and 10 iterations buffer before copy_sas_duration expiry (10*30sec=300sec=5min)
+            # so that means we are timing out 5 minutes before copy_sas_duration expiry
+            local iteration=0
+            
+            while true; do
+              STATUS=$(sudo az storage blob show \
+                --account-name "$SOURCE_STORAGE_ACCOUNT" \
+                --container-name "$SOURCE_CONTAINER_NAME" \
+                --name "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
+                --query "properties.copy.status" -o tsv \
+                --account-key "$STORAGE_KEY" 2>/dev/null)
+              
+              [ "$STATUS" = "success" ] && break
+              if [ "$STATUS" = "failed" ] || [ "$STATUS" = "aborted" ]; then
+                echo "ERROR: Copy failed with status: $STATUS"
+                sudo az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+                return 1
+              fi
+              
+              iteration=$((iteration + 1))
+              if [ $iteration -ge $max_iterations ]; then
+                echo "ERROR: Copy timeout after $((iteration * 30)) seconds"
+                sudo az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+                return 1
+              fi
+
+              echo "Copy status: $STATUS (${iteration}/${max_iterations})"
+              sleep 30
+            done
+            
+            echo "Copy completed for $blob_name"
+            sudo az disk revoke-access --resource-group "$SOURCE_RESOURCE_GROUP" --name "$disk_name" --output none
+          }
+          
+          # Copy both disks
+          copy_disk "$WORKER_DISK_NAME" "worker" || exit 1
+          copy_disk "$CONTROLPLANE_DISK_NAME" "controlplane" || exit 1
+          
+          # Cleanup temporary disks
+          sudo az disk delete --resource-group "$SOURCE_RESOURCE_GROUP" --name "$WORKER_DISK_NAME" --yes --output none
+          sudo az disk delete --resource-group "$SOURCE_RESOURCE_GROUP" --name "$CONTROLPLANE_DISK_NAME" --yes --output none
+          
+          # Save export info
+          cat >> ~/vhd-export-info.txt << EOF
+          VHD Export - $TIMESTAMP
+          Account: $SOURCE_STORAGE_ACCOUNT
+          Container: $SOURCE_CONTAINER_NAME
+          Branch: $BRANCH_SUFFIX
+          Worker Blob: worker-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd
+          Control Plane Blob: controlplane-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd
+          Checksum File: AZURE_Images_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256
+          EOF
+          
+          # Upload Windows installer to blob storage if specified
+          INSTALLER_BLOB_NAME=""
+          if [ -n "$WINDOWS_INSTALLER_NAME" ]; then
+            # Installer was copied from GitHub runner to ~/installer-upload/ on this VM
+            INSTALLER_SOURCE="$HOME/installer-upload/${WINDOWS_INSTALLER_NAME}.exe"
+            if [ -f "$INSTALLER_SOURCE" ]; then
+              echo "Uploading Windows installer to blob storage..."
+              INSTALLER_BLOB_NAME="${WINDOWS_INSTALLER_NAME}-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
+
+              sudo az storage blob upload \
+                --account-name "$SOURCE_STORAGE_ACCOUNT" \
+                --account-key "$STORAGE_KEY" \
+                --container-name "$SOURCE_CONTAINER_NAME" \
+                --file "$INSTALLER_SOURCE" \
+                --name "$INSTALLER_BLOB_NAME" \
+                --overwrite \
+                --output none
+              
+              if [ $? -eq 0 ]; then
+                echo "Windows installer uploaded: $INSTALLER_BLOB_NAME"
+                echo "Windows Installer Blob: $INSTALLER_BLOB_NAME" >> ~/vhd-export-info.txt
+              else
+                echo "WARNING: Failed to upload Windows installer"
+              fi
+            else
+              echo "WARNING: Windows installer not found at $INSTALLER_SOURCE"
+            fi
+          else
+            echo "No Windows installer specified, skipping upload"
+          fi
+          
+          # Mount blob storage with blobfuse2 and generate SHA256 checksums
+          echo "Mounting blob storage with blobfuse2..."
+          
+          # Ensure any existing mount is unmounted first to avoid "directory is already mounted" error
+          echo "Checking for existing mount at /mnt/azureblob..."
+          if mountpoint -q /mnt/azureblob 2>/dev/null; then
+            echo "Directory is currently mounted, unmounting..."
+            sudo umount /mnt/azureblob
+            if [ $? -ne 0 ]; then
+              echo "Standard unmount failed, trying lazy unmount..."
+              sudo umount -l /mnt/azureblob
+            fi
+            sleep 2
+          fi
+          
+          # Create mount and cache directories (if they don't exist)
+          sudo mkdir -p /mnt/azureblob /mnt/blobfuse_blockcache /mnt/blobfuse_filecache /root/.blobfuse2
+          
+          # Generate blobfuse2 config
+          cat > /tmp/blobfuse2-config-${TIMESTAMP}.yaml << BLOBFUSE_CONFIG
+          allow-other: true
+          
+          logging:
+            type: base
+            level: log_info
+            file-path: /root/.blobfuse2/blobfuse2.log
+          
+          components:
+            - libfuse
+            - block_cache
+            - attr_cache
+            - azstorage
+          
+          libfuse:
+            attribute-expiration-sec: 120
+            entry-expiration-sec: 120
+            negative-entry-expiration-sec: 240
+          
+          block_cache:
+            block-size-mb: 64
+            mem-size-mb: 32768
+            path: /mnt/blobfuse_blockcache
+            disk-size-mb: 80000
+            disk-timeout-sec: 600
+            prefetch: 32
+            parallelism: 64
+          
+          file_cache:
+            path: /mnt/blobfuse_filecache
+            max-size-mb: 80000
+            timeout-sec: 600
+          
+          attr_cache:
+            timeout-sec: 300
+          
+          azstorage:
+            type: block
+            account-name: $SOURCE_STORAGE_ACCOUNT
+            account-key: $STORAGE_KEY
+            mode: key
+            container: $SOURCE_CONTAINER_NAME
+          BLOBFUSE_CONFIG
+          
+          # Mount blob storage
+          echo "Mounting blob storage..."
+          sudo blobfuse2 mount /mnt/azureblob --config-file=/tmp/blobfuse2-config-${TIMESTAMP}.yaml || exit 1
+          
+          # Generate SHA256 checksums for all files
+          echo "Generating SHA256 checksums..."
+          cd /mnt/azureblob
+          
+          # Create checksum file with all artifacts (include timestamp to prevent overwrites)
+          CHECKSUM_FILE="AZURE_Images_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256"
+          
+          # Generate checksums for VHDs
+          echo "Generating checksum for control plane VHD..."
+          sha256sum controlplane-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd > ~/${CHECKSUM_FILE}
+          
+          echo "Generating checksum for worker VHD..."
+          sha256sum worker-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd >> ~/${CHECKSUM_FILE}
+          
+          # Add Windows installer checksum if it was uploaded
+          if [ -n "$INSTALLER_BLOB_NAME" ] && [ -f "/mnt/azureblob/$INSTALLER_BLOB_NAME" ]; then
+            echo "Generating checksum for Windows installer..."
+            sha256sum "$INSTALLER_BLOB_NAME" >> ~/${CHECKSUM_FILE}
+          fi
+          
+          echo "Checksums generated:"
+          cat ~/${CHECKSUM_FILE}
+          
+          # Copy checksum file to blob storage (will be visible after remount or via Azure CLI)
+          cp ~/${CHECKSUM_FILE} /mnt/azureblob/${CHECKSUM_FILE}
+          
+          # Also save a timestamped copy locally for artifact upload
+          cp ~/${CHECKSUM_FILE} ~/vhd-checksums-${TIMESTAMP}.txt
+          
+          # Unmount blob storage
+          cd ~
+          sudo umount /mnt/azureblob
+          
+          # Cleanup blobfuse2 config
+          rm -f /tmp/blobfuse2-config-${TIMESTAMP}.yaml
+          
+          echo "VHD export completed successfully"
+          REMOTE_SCRIPT
+
+      - name: Retrieve Files from VM
+        run: |
+          mkdir -p /tmp/vhd-export
+          
+          echo "Retrieving vhd-export-info.txt..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve vhd-export-info.txt from remote VM." >&2
+            exit 1
+          fi
+          
+          echo "Retrieving storage key file..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            'ubuntu@${{ env.AZURE_VM_HOST }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve storage-key-*.txt from remote VM." >&2
+            exit 1
+          fi
+          
+          echo "Retrieving checksum file..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
+            'ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to retrieve vhd-checksums-*.txt from remote VM." >&2
+            exit 1
+          fi
+          
+          echo "All files retrieved successfully"
+          ls -lh /tmp/vhd-export/
+
+      - name: Parse and Output Blob Information
+        id: blob-info
+        run: |
+          STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
+          CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
+
+          # Extract blob names from info file
+          WORKER_BLOB_NAME=$(grep "Worker Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Worker Blob: //' | xargs)
+          CONTROLPLANE_BLOB_NAME=$(grep "Control Plane Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Control Plane Blob: //' | xargs)
+          INSTALLER_BLOB_NAME=$(grep "Windows Installer Blob:" /tmp/vhd-export/info.txt | tail -1 | sed 's/.*Windows Installer Blob: //' | xargs || echo "")
+          
+          if [ -z "$WORKER_BLOB_NAME" ]; then
+            echo "ERROR: Worker blob name not found in export info" >&2
+            exit 1
+          fi
+          if [ -z "$CONTROLPLANE_BLOB_NAME" ]; then
+            echo "ERROR: Control Plane blob name not found in export info" >&2
+            exit 1
+          fi
+
+          # Get storage key
+          STORAGE_KEY_FILE=$(ls -t /tmp/vhd-export/storage-key-*.txt 2>/dev/null | head -1)
+          STORAGE_KEY=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$STORAGE_KEY_FILE" 2>/dev/null)
+
+          # Mask storage key immediately after retrieval
+          [ ! -z "$STORAGE_KEY" ] && echo "::add-mask::$STORAGE_KEY"
+
+          if [ -z "$STORAGE_KEY_FILE" ] || [ ! -f "$STORAGE_KEY_FILE" ]; then
+            echo "ERROR: Storage key file not found." >&2
+            exit 1
+          fi
+          if [ -z "$STORAGE_KEY" ]; then
+            echo "ERROR: Storage key is empty." >&2
+            exit 1
+          fi
+          
+          echo "storage_account=$STORAGE_ACCOUNT" >> $GITHUB_OUTPUT
+          echo "container_name=$CONTAINER_NAME" >> $GITHUB_OUTPUT
+          echo "worker_blob_name=$WORKER_BLOB_NAME" >> $GITHUB_OUTPUT
+          echo "controlplane_blob_name=$CONTROLPLANE_BLOB_NAME" >> $GITHUB_OUTPUT
+          echo "installer_blob_name=$INSTALLER_BLOB_NAME" >> $GITHUB_OUTPUT
+          
+
+      - name: Upload Export Info
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.3.3
+        with:
+          name: vhd-export-info
+          path: /tmp/vhd-export/
+          retention-days: 30
+
+  display-results:
+    needs: vhd-export
+    runs-on: openlab
+    steps:
+      - name: Download Export Info
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.7
+        with:
+          name: vhd-export-info
+          path: /tmp/vhd-export
+
+      - name: Display Results
+        run: |
+          echo "VHD Export Complete"
+          echo "==================="
+          echo "Storage Account: ${{ needs.vhd-export.outputs.storage_account }}"
+          echo "Container: ${{ needs.vhd-export.outputs.container_name }}"
+          echo "Worker Blob: ${{ needs.vhd-export.outputs.worker_blob_name }}"
+          echo "Control Plane Blob: ${{ needs.vhd-export.outputs.controlplane_blob_name }}"
+          
+          INSTALLER_BLOB="${{ needs.vhd-export.outputs.installer_blob_name }}"
+          if [ -n "$INSTALLER_BLOB" ]; then
+            echo "Windows Installer Blob: $INSTALLER_BLOB"
+          else
+            echo "Windows Installer Blob: (not uploaded)"
+          fi
+          
+          echo ""
+          echo "All files are available in Azure Blob Storage for customer download."
+          echo ""
+          
+          # Display SHA256 checksums if available
+          CHECKSUM_FILE=$(ls -t /tmp/vhd-export/vhd-checksums-*.txt 2>/dev/null | head -1)
+          if [ -f "$CHECKSUM_FILE" ]; then
+            # Extract actual checksum filename from the path
+            CHECKSUM_BLOB_NAME=$(basename "$CHECKSUM_FILE" | sed 's/vhd-checksums-/AZURE_Images_SHA256SUMS-/' | sed 's/\.txt$/.sha256/')
+            echo "Checksum File: $CHECKSUM_BLOB_NAME"
+            echo ""
+            echo "SHA256 Checksums:"
+            echo "==========================================="
+            cat "$CHECKSUM_FILE"
+          else
+            echo "No checksum file found"
+          fi
+    
+  cleanup-remote-vm:
+    needs: display-results
+    runs-on: openlab
+    if: always()  # Run even if previous jobs fail
+    steps:
+      - name: Install SSH Tools
+        run: |
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client
+
+      - name: Cleanup Remote VM Files
+        run: |
+          echo "Cleaning up remote VM files..."
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'CLEANUP'
+          rm -f ~/vhd-export-info.txt
+          rm -f ~/vhd-checksums-*.txt
+          rm -f ~/AZURE_SHA256SUMS.sha256
+          rm -rf ~/.vhd-export
+          rm -rf ~/installer-upload
+          echo "Remote VM cleanup completed"
+          CLEANUP
+        continue-on-error: true  # Don't fail workflow if cleanup fails
+
+  # Trigger the SAS URL generation workflow after VHD export completes
+  generate-sas-urls:
+    needs: [vhd-export, display-results]
+    if: success()
+    uses: ./.github/workflows/generate-vhd-sas-url.yaml
+    with:
+      control_plane_blob_name: ${{ needs.vhd-export.outputs.controlplane_blob_name }}
+      linux_worker_blob_name: ${{ needs.vhd-export.outputs.worker_blob_name }}
+      windows_worker_blob_name: ${{ needs.vhd-export.outputs.installer_blob_name }}
+      storage_account_name: ${{ needs.vhd-export.outputs.storage_account }}
+      container_name: ${{ needs.vhd-export.outputs.container_name }}
+      sas_expiry_days: ${{ github.event.inputs.sas_expiry_days || '7' }}
+    secrets: inherit
