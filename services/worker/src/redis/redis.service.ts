@@ -130,8 +130,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Update environment variables with Redis credentials
-    process.env.REDIS_HOST = credentials.host;
-    process.env.REDIS_PORT = credentials.port || '6379';
     process.env.REDIS_USERNAME = credentials.username;
     process.env.REDIS_PASSWORD = credentials.password;
 
