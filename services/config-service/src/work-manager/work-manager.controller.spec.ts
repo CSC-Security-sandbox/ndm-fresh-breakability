@@ -32,14 +32,17 @@ describe('WorkManagerController', () => {
       const workerId = '123123';
       const ip = '127.0.0.1';
       const projectId = 'projectId';
-      const mockConfig: WorkerConfiguration[] = [
-        {
-          configName: 'TestConfig',
-          dynamicTaskQueue: false,
-          taskQueueId: null,
-          workerId: workerId,
-        },
-      ];
+      const mockConfig = {
+        metaConfig: [
+          {
+            configName: 'TestConfig',
+            dynamicTaskQueue: false,
+            taskQueueId: null,
+            workerId: workerId,
+          },
+        ] as WorkerConfiguration[],
+        envVariables: { TEST_VAR: 'test_value' },
+      };
 
       jest.spyOn(serviceMock, 'getConfiguration').mockResolvedValue(mockConfig);
 
@@ -48,6 +51,7 @@ describe('WorkManagerController', () => {
         worker_id: '123123',
         headers: {
           'x-client-platform': Platform.WINDOWS,
+          'x-worker-ip': ip,
         },
       };
 
@@ -75,14 +79,17 @@ describe('WorkManagerController', () => {
       const workerId = '123123';
       const ip = '127.0.0.1';
       const projectId = 'projectId';
-      const mockConfig: WorkerConfiguration[] = [
-        {
-          configName: 'TestConfig',
-          dynamicTaskQueue: false,
-          taskQueueId: null,
-          workerId: workerId,
-        }
-      ];
+      const mockConfig = {
+        metaConfig: [
+          {
+            configName: 'TestConfig',
+            dynamicTaskQueue: false,
+            taskQueueId: null,
+            workerId: workerId,
+          },
+        ] as WorkerConfiguration[],
+        envVariables: {},
+      };
 
       jest.spyOn(serviceMock, 'getConfiguration').mockResolvedValue(mockConfig);
 
@@ -91,6 +98,7 @@ describe('WorkManagerController', () => {
         worker_id: '123123',
         headers: {
           'x-client-platform': Platform.LINUX,
+          'x-worker-ip': ip,
         },
       };
 

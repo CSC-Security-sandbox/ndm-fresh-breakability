@@ -23,8 +23,14 @@ import {
   WorkFlowType,
   WorkFlows,
   Platform,
+  ConfigStatus,
 } from 'src/constants/enums';
 import { WorkerConfiguration } from 'src/constants/types';
+import { readFileSync } from 'fs';
+import { request } from 'https';
+
+jest.mock('fs');
+jest.mock('https');
 
 describe('WorkManagerService', () => {
   let service: WorkManagerService;
@@ -140,6 +146,9 @@ describe('WorkManagerService', () => {
     loggerFactory = module.get<LoggerFactory>(LoggerFactory);
     // Capture the logger mock for expectations on logging
     logger = service.logger;
+    
+    // Reset mocks before each test
+    jest.clearAllMocks();
   });
 
   describe('getConfiguration', () => {
@@ -174,9 +183,12 @@ describe('WorkManagerService', () => {
         { TEST_VAR: 'test_value' },
         false,
       );
-      expect(result).toEqual([{ key: 'value1' }, { key: 'value2' }]);
+      expect(result.metaConfig).toEqual([{ key: 'value1' }, { key: 'value2' }]);
+      expect(result.envVariables).toEqual({ TEST_VAR: 'test_value' });
       // Verify that debug logging is called for each workerMap entry
-      expect(logger.debug).toHaveBeenCalledTimes(2);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('JobRunId: job1'),
+      );
     });
 
     it('should create a new worker when not found, send email and update worker name', async () => {
@@ -210,7 +222,8 @@ describe('WorkManagerService', () => {
         {},
         true,
       );
-      expect(result).toEqual(savedWorker.metaConfig);
+      expect(result.metaConfig).toEqual(savedWorker.metaConfig);
+      expect(result.envVariables).toEqual({});
       expect(sendMailService.sendMail).toHaveBeenCalledWith({
         projectId: 'project-123',
         successEmailType: 'worker_usage',
@@ -244,6 +257,443 @@ describe('WorkManagerService', () => {
         ),
       ).rejects.toThrow('Error while fetching worker configuration');
       expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should inject TLS CA certificate when TEMPORAL_TLS_ENABLED is true and certificate is not present', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const mockCert = 'base64-encoded-cert';
+      const mockToken = 'k8s-token';
+      const mockCA = 'ca-cert';
+
+      (readFileSync as jest.Mock)
+        .mockReturnValueOnce(mockToken)
+        .mockReturnValueOnce(mockCA);
+      
+      const mockRequest = jest.fn().mockImplementation((options, callback) => {
+        const mockResponse = {
+          statusCode: 200,
+          on: jest.fn((event, handler) => {
+            if (event === 'data') {
+              handler(JSON.stringify({ data: { 'tls.crt': mockCert } }));
+            }
+            if (event === 'end') {
+              handler();
+            }
+          }),
+        };
+        callback(mockResponse);
+        return {
+          on: jest.fn(),
+          end: jest.fn(),
+        };
+      });
+      (request as unknown as jest.Mock).mockImplementation(mockRequest);
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBe(mockCert);
+      expect(logger.log).toHaveBeenCalledWith(
+        expect.stringContaining('TLS enabled, fetching Gateway CA certificate'),
+      );
+    });
+
+    it('should not fetch certificate when TEMPORAL_TLS_CA_CERT is already present', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const existingCert = 'existing-cert';
+
+      (readFileSync as jest.Mock).mockClear();
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = {
+        TEMPORAL_TLS_ENABLED: 'true',
+        TEMPORAL_TLS_CA_CERT: existingCert,
+      };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBe(existingCert);
+      // readFileSync should not be called because certificate is already present
+      expect(readFileSync).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('CA certificate already present'),
+      );
+    });
+
+    it('should handle TLS certificate fetch failure gracefully when API returns non-200', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const mockToken = 'k8s-token';
+      const mockCA = 'ca-cert';
+
+      (readFileSync as jest.Mock)
+        .mockReturnValueOnce(mockToken)
+        .mockReturnValueOnce(mockCA);
+      
+      const mockRequest = jest.fn().mockImplementation((options, callback) => {
+        const mockResponse = {
+          statusCode: 404,
+          on: jest.fn((event, handler) => {
+            if (event === 'data') {
+              handler('Not found');
+            }
+            if (event === 'end') {
+              handler();
+            }
+          }),
+        };
+        callback(mockResponse);
+        return {
+          on: jest.fn(),
+          end: jest.fn(),
+        };
+      });
+      (request as unknown as jest.Mock).mockImplementation(mockRequest);
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Gateway CA certificate'),
+      );
+    });
+
+    it('should handle TLS certificate fetch failure when secret does not contain tls.crt', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const mockToken = 'k8s-token';
+      const mockCA = 'ca-cert';
+
+      (readFileSync as jest.Mock)
+        .mockReturnValueOnce(mockToken)
+        .mockReturnValueOnce(mockCA);
+      
+      const mockRequest = jest.fn().mockImplementation((options, callback) => {
+        const mockResponse = {
+          statusCode: 200,
+          on: jest.fn((event, handler) => {
+            if (event === 'data') {
+              handler(JSON.stringify({ data: {} }));
+            }
+            if (event === 'end') {
+              handler();
+            }
+          }),
+        };
+        callback(mockResponse);
+        return {
+          on: jest.fn(),
+          end: jest.fn(),
+        };
+      });
+      (request as unknown as jest.Mock).mockImplementation(mockRequest);
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Gateway CA certificate'),
+      );
+    });
+
+    it('should handle TLS certificate fetch failure when JSON parsing fails', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const mockToken = 'k8s-token';
+      const mockCA = 'ca-cert';
+
+      (readFileSync as jest.Mock)
+        .mockReturnValueOnce(mockToken)
+        .mockReturnValueOnce(mockCA);
+      
+      const mockRequest = jest.fn().mockImplementation((options, callback) => {
+        const mockResponse = {
+          statusCode: 200,
+          on: jest.fn((event, handler) => {
+            if (event === 'data') {
+              handler('invalid json');
+            }
+            if (event === 'end') {
+              handler();
+            }
+          }),
+        };
+        callback(mockResponse);
+        return {
+          on: jest.fn(),
+          end: jest.fn(),
+        };
+      });
+      (request as unknown as jest.Mock).mockImplementation(mockRequest);
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Gateway CA certificate'),
+      );
+    });
+
+    it('should handle TLS certificate fetch failure when request errors', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const mockToken = 'k8s-token';
+      const mockCA = 'ca-cert';
+
+      (readFileSync as jest.Mock)
+        .mockReturnValueOnce(mockToken)
+        .mockReturnValueOnce(mockCA);
+      
+      let errorHandler: (error: Error) => void;
+      const mockRequest = jest.fn().mockImplementation((options, callback) => {
+        const mockReq = {
+          on: jest.fn((event, handler) => {
+            if (event === 'error') {
+              errorHandler = handler;
+            }
+          }),
+          end: jest.fn(() => {
+            // Trigger error after end is called to simulate network error
+            if (errorHandler) {
+              setImmediate(() => errorHandler(new Error('Network error')));
+            }
+          }),
+        };
+        return mockReq;
+      });
+      (request as unknown as jest.Mock).mockImplementation(mockRequest);
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      // Wait for async error to be handled
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Gateway CA certificate'),
+      );
+    });
+
+    it('should handle TLS certificate fetch failure when file read fails', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+
+      (readFileSync as jest.Mock).mockImplementation(() => {
+        throw new Error('File not found');
+      });
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'true' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Gateway CA certificate'),
+      );
+    });
+
+    it('should skip TLS certificate injection when TEMPORAL_TLS_ENABLED is false', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const envVariables = { TEMPORAL_TLS_ENABLED: 'false' };
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        envVariables,
+        false,
+      );
+
+      expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
+      expect(readFileSync).not.toHaveBeenCalled();
+      expect(logger.log).toHaveBeenCalledWith(
+        expect.stringContaining('TLS not enabled, skipping certificate injection'),
+      );
+    });
+
+    it('should update worker when isRebootCall is true', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue([]);
+      (workerRepo.update as jest.Mock).mockResolvedValue({});
+
+      const envVariables = { TEST_VAR: 'test_value' };
+      await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.WINDOWS,
+        envVariables,
+        true,
+      );
+
+      expect(workerRepo.update).toHaveBeenCalledWith(
+        { workerId },
+        {
+          workerName: expect.any(String),
+          platform: Platform.WINDOWS,
+          envVariables,
+        },
+      );
+    });
+
+    it('should handle workerMap that is not an array', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const jobRunConfig = [
+        {
+          id: 'job1',
+          workerMap: null,
+        },
+      ];
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue(jobRunConfig);
+
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        {},
+        false,
+      );
+
+      expect(result.metaConfig).toEqual([]);
+    });
+
+    it('should skip workerMap entries without metaConfig', async () => {
+      const workerFromDb = {
+        workerId,
+        metaConfig: [],
+      };
+      const jobRunConfig = [
+        {
+          id: 'job1',
+          workerMap: [
+            { workerId, metaConfig: { key: 'value1' } },
+            { workerId, metaConfig: null },
+            { workerId },
+          ],
+        },
+      ];
+
+      (workerRepo.findOne as jest.Mock).mockResolvedValue(workerFromDb);
+      (jobRunRepo.find as jest.Mock).mockResolvedValue(jobRunConfig);
+
+      const result = await service.getConfiguration(
+        workerId,
+        ip,
+        projectId,
+        Platform.LINUX,
+        {},
+        false,
+      );
+
+      expect(result.metaConfig).toEqual([{ key: 'value1' }]);
+      // Verify debug was called for the entry with metaConfig
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('JobRunId: job1'),
+      );
     });
   });
 
@@ -487,6 +937,58 @@ describe('WorkManagerService', () => {
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
       );
     });
+
+    it('should aggregate Dell config status to DRAFT when any file server is DRAFT', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'DRAFT',
+        errorMessage: null,
+      };
+      const mockConfig = {
+        id: 'config-1',
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+        fileServers: [
+          { id: 'fs-1', status: 'IN_PROGRESS' },
+          { id: 'fs-2', status: 'DRAFT' },
+        ],
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(mockConfig);
+      (configRepo.save as jest.Mock).mockResolvedValue(mockConfig);
+
+      await service.validateWorkingDirectory(data as any);
+
+      expect(mockConfig.status).toBe(ConfigStatus.DRAFT);
+      expect(mockConfig.errorMessage).toBe('One or more zones have no workers assigned');
+    });
+
+    it('should handle Dell callback when config is not found', async () => {
+      const data = {
+        configId: 'config-1',
+        fileServerId: 'fs-1',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      await service.validateWorkingDirectory(data as any);
+
+      expect(configRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should handle non-Dell callback when config is not found', async () => {
+      const data = {
+        configId: 'config-1',
+        status: 'ACTIVE',
+        errorMessage: null,
+      };
+      (configRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      await service.validateWorkingDirectory(data as any);
+
+      expect(configRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('getChildWorkFlowRes', () => {
@@ -553,6 +1055,98 @@ describe('WorkManagerService', () => {
           errors: [`Pre-check with ID child-id is terminated. Please check the workflow logs for more details.`],
           sourcePathId: 'source-path',
           destinationPathIds: ['dest1', 'dest2'],
+        },
+      });
+    });
+
+    it('should handle FAILED workflow status', async () => {
+      const response = {
+        status: 'FAILED',
+        id: 'child-id',
+        pending: [],
+        completed: [],
+      };
+      const payload = [
+        {
+          payload: {
+            preChecks: [
+              {
+                pathId: 'source-path',
+                destinations: [{ pathId: 'dest1' }],
+              },
+            ],
+          },
+        },
+      ];
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(response);
+      jest.spyOn(workflowService, 'getWorkFlowPayload').mockResolvedValue(payload);
+
+      const result = await service.getChildWorkFlowRes('child-id');
+      expect(result).toEqual({
+        ...response,
+        workflow: {
+          errors: [`Pre-check with ID child-id is failed. Please check the workflow logs for more details.`],
+          sourcePathId: 'source-path',
+          destinationPathIds: ['dest1'],
+        },
+      });
+    });
+
+    it('should handle TIMED_OUT workflow status', async () => {
+      const response = {
+        status: 'TIMED_OUT',
+        id: 'child-id',
+        pending: [],
+        completed: [],
+      };
+      const payload = [
+        {
+          payload: {
+            preChecks: [
+              {
+                pathId: 'source-path',
+                destinations: [],
+              },
+            ],
+          },
+        },
+      ];
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(response);
+      jest.spyOn(workflowService, 'getWorkFlowPayload').mockResolvedValue(payload);
+
+      const result = await service.getChildWorkFlowRes('child-id');
+      expect(result).toEqual({
+        ...response,
+        workflow: {
+          errors: [`Pre-check with ID child-id is timed_out. Please check the workflow logs for more details.`],
+          sourcePathId: 'source-path',
+          destinationPathIds: [],
+        },
+      });
+    });
+
+    it('should handle workflow payload with missing preChecks', async () => {
+      const response = {
+        status: 'TERMINATED',
+        id: 'child-id',
+        pending: [],
+        completed: [],
+      };
+      const payload = [
+        {
+          payload: {},
+        },
+      ];
+      (workflowService.getWorkFlowRes as jest.Mock).mockResolvedValue(response);
+      jest.spyOn(workflowService, 'getWorkFlowPayload').mockResolvedValue(payload);
+
+      const result = await service.getChildWorkFlowRes('child-id');
+      expect(result).toEqual({
+        ...response,
+        workflow: {
+          errors: [`Pre-check with ID child-id is terminated. Please check the workflow logs for more details.`],
+          sourcePathId: null,
+          destinationPathIds: null,
         },
       });
     });
