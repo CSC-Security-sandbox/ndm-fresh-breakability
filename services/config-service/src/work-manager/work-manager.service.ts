@@ -164,8 +164,6 @@ export class WorkManagerService {
       const temporalTlsEnabled = envVariables?.TEMPORAL_TLS_ENABLED === 'true';
       this.logger.debug(`Worker ${id}: temporalTlsEnabled = ${temporalTlsEnabled}`);
       
-      this.logger.log(`Worker ${id}: About to check TLS condition - temporalTlsEnabled=${temporalTlsEnabled}`);
-      
       if (temporalTlsEnabled) {
         this.logger.log(`Worker ${id}: Inside TLS enabled block`);
         // Only fetch if not already provided

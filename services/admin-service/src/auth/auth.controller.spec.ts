@@ -207,4 +207,177 @@ describe('AuthController', () => {
       );
     });
   });
+
+  describe('getRedisCredentials', () => {
+    const originalEnv = { ...process.env };
+    const redisEnvKeys = [
+      'REDIS_EXTERNAL_HOST',
+      'REDIS_HOST',
+      'REDIS_EXTERNAL_PORT',
+      'REDIS_USERNAME',
+      'REDIS_PASSWORD',
+    ];
+
+    // Helper function to set up environment variables for a test
+    const setRedisEnv = (env: {
+      REDIS_EXTERNAL_HOST?: string;
+      REDIS_HOST?: string;
+      REDIS_EXTERNAL_PORT?: string;
+      REDIS_USERNAME?: string;
+      REDIS_PASSWORD?: string;
+    }) => {
+      // Clear all Redis-related env vars first
+      redisEnvKeys.forEach(key => {
+        delete process.env[key];
+      });
+      // Set the provided env vars
+      Object.entries(env).forEach(([key, value]) => {
+        if (value !== undefined) {
+          process.env[key] = value;
+        }
+      });
+    };
+
+    beforeEach(() => {
+      // Clear Redis env vars before each test
+      redisEnvKeys.forEach(key => {
+        delete process.env[key];
+      });
+    });
+
+    afterEach(() => {
+      // Restore original Redis env vars after each test
+      redisEnvKeys.forEach(key => {
+        if (key in originalEnv) {
+          process.env[key] = originalEnv[key];
+        } else {
+          delete process.env[key];
+        }
+      });
+    });
+
+    it('should return Redis credentials with REDIS_EXTERNAL_HOST when set', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_HOST: 'external-redis.example.com',
+        REDIS_HOST: 'internal-redis.example.com',
+        REDIS_EXTERNAL_PORT: '6380',
+        REDIS_USERNAME: 'redis-user',
+        REDIS_PASSWORD: 'redis-pass',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result).toEqual({
+        host: 'external-redis.example.com',
+        port: '6380',
+        username: 'redis-user',
+        password: 'redis-pass',
+      });
+    });
+
+    it('should return Redis credentials with REDIS_HOST when REDIS_EXTERNAL_HOST is not set', async () => {
+      setRedisEnv({
+        REDIS_HOST: 'internal-redis.example.com',
+        REDIS_EXTERNAL_PORT: '6380',
+        REDIS_USERNAME: 'redis-user',
+        REDIS_PASSWORD: 'redis-pass',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result).toEqual({
+        host: 'internal-redis.example.com',
+        port: '6380',
+        username: 'redis-user',
+        password: 'redis-pass',
+      });
+    });
+
+    it('should return default port 6379 when REDIS_EXTERNAL_PORT is not set', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_HOST: 'external-redis.example.com',
+        REDIS_USERNAME: 'redis-user',
+        REDIS_PASSWORD: 'redis-pass',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result).toEqual({
+        host: 'external-redis.example.com',
+        port: '6379',
+        username: 'redis-user',
+        password: 'redis-pass',
+      });
+    });
+
+    it('should return Redis credentials with all optional fields undefined', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_HOST: 'external-redis.example.com',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result).toEqual({
+        host: 'external-redis.example.com',
+        port: '6379',
+        username: undefined,
+        password: undefined,
+      });
+    });
+
+    it('should return Redis credentials when both REDIS_EXTERNAL_HOST and REDIS_HOST are not set', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_PORT: '6380',
+        REDIS_USERNAME: 'redis-user',
+        REDIS_PASSWORD: 'redis-pass',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result).toEqual({
+        host: undefined,
+        port: '6380',
+        username: 'redis-user',
+        password: 'redis-pass',
+      });
+    });
+
+    it('should prioritize REDIS_EXTERNAL_HOST over REDIS_HOST when both are set', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_HOST: 'external-redis.example.com',
+        REDIS_HOST: 'internal-redis.example.com',
+        REDIS_USERNAME: 'redis-user',
+        REDIS_PASSWORD: 'redis-pass',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      expect(result.host).toBe('external-redis.example.com');
+      expect(result.port).toBe('6379');
+      expect(result.username).toBe('redis-user');
+      expect(result.password).toBe('redis-pass');
+    });
+
+    it('should handle empty string values correctly', async () => {
+      setRedisEnv({
+        REDIS_EXTERNAL_HOST: '',
+        REDIS_HOST: 'internal-redis.example.com',
+        REDIS_EXTERNAL_PORT: '',
+      });
+
+      const mockRequest = {};
+      const result = await authController.getRedisCredentials(mockRequest);
+
+      // Empty string is falsy, so it should fall back to REDIS_HOST
+      expect(result.host).toBe('internal-redis.example.com');
+      // Empty string for port should fall back to default
+      expect(result.port).toBe('6379');
+    });
+  });
 });
