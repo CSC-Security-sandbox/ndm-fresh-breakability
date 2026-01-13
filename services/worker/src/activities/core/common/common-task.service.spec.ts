@@ -19,6 +19,9 @@ jest.mock('@temporalio/client', () => ({
         connect: jest.fn(),
     },
 }));
+jest.mock('src/utils/temporal.utils', () => ({
+    createClientConnection: jest.fn(),
+}));
 jest.mock('@temporalio/workflow', () => ({
     uuid4: jest.fn(() => 'mock-uuid'),
 }));
@@ -110,6 +113,7 @@ describe('CommonTaskService', () => {
 
     describe('isWorkflowRunningActivity', () => {
         it('should return true if workflow is running', async () => {
+            const { createClientConnection } = require('src/utils/temporal.utils');
             const mockDescribe = jest.fn().mockResolvedValue({
                 workflowExecutionInfo: { status: 1 },
             });
@@ -117,15 +121,18 @@ describe('CommonTaskService', () => {
                 workflowService: {
                     describeWorkflowExecution: mockDescribe,
                 },
+                close: jest.fn().mockResolvedValue(undefined),
             };
-            Connection.connect.mockResolvedValue(mockConnection);
+            createClientConnection.mockResolvedValue(mockConnection);
 
             const result = await service.isWorkflowRunningActivity('wf-1');
             expect(result).toBe(true);
             expect(mockDescribe).toHaveBeenCalled();
+            expect(mockConnection.close).toHaveBeenCalled();
         });
 
         it('should return false if workflow is not running', async () => {
+            const { createClientConnection } = require('src/utils/temporal.utils');
             const mockDescribe = jest.fn().mockResolvedValue({
                 workflowExecutionInfo: { status: 2 },
             });
@@ -133,14 +140,17 @@ describe('CommonTaskService', () => {
                 workflowService: {
                     describeWorkflowExecution: mockDescribe,
                 },
+                close: jest.fn().mockResolvedValue(undefined),
             };
-            Connection.connect.mockResolvedValue(mockConnection);
+            createClientConnection.mockResolvedValue(mockConnection);
 
             const result = await service.isWorkflowRunningActivity('wf-2');
             expect(result).toBe(false);
+            expect(mockConnection.close).toHaveBeenCalled();
         });
 
         it('should return false if workflowExecutionInfo is undefined', async () => {
+            const { createClientConnection } = require('src/utils/temporal.utils');
             const mockDescribe = jest.fn().mockResolvedValue({
             workflowExecutionInfo: undefined,
             });
@@ -148,15 +158,18 @@ describe('CommonTaskService', () => {
             workflowService: {
                 describeWorkflowExecution: mockDescribe,
             },
+            close: jest.fn().mockResolvedValue(undefined),
             };
-            Connection.connect.mockResolvedValue(mockConnection);
+            createClientConnection.mockResolvedValue(mockConnection);
 
             const result = await service.isWorkflowRunningActivity('wf-3');
             expect(result).toBe(false);
+            expect(mockConnection.close).toHaveBeenCalled();
         });
 
-        it('should throw if Connection.connect fails', async () => {
-            Connection.connect.mockRejectedValue(new Error('connection error'));
+        it('should throw if createClientConnection fails', async () => {
+            const { createClientConnection } = require('src/utils/temporal.utils');
+            createClientConnection.mockRejectedValue(new Error('connection error'));
             await expect(service.isWorkflowRunningActivity('wf-err')).rejects.toThrow('connection error');
         });
         });

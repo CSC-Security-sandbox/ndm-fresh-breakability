@@ -133,7 +133,7 @@ describe('WorkManagerService', () => {
     it('should fetch configs, handle them, and monitor task queues', async () => {
       service['loadingConfigs'] = false;
       const mockData = [{ id: 1 }];
-      httpService.get.mockReturnValue(of({ status: 200, data: { data: { items: mockData } } }));
+      httpService.get.mockReturnValue(of({ status: 200, data: { data: { items: { metaConfig: mockData } } } }));
       jest.spyOn(service, 'handleConfigurations').mockResolvedValue(undefined);
       jest.spyOn(service, 'monitorTaskQueues').mockResolvedValue(undefined);
 

@@ -140,6 +140,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
           useValue: {
             getClient: jest.fn().mockReturnValue({
               getExports: jest.fn().mockResolvedValue([]),
+              configureSmartConnectDns: jest.fn().mockResolvedValue(undefined),
             }),
           },
         },

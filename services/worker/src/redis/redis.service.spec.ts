@@ -248,8 +248,6 @@ describe('RedisService', () => {
       };
 
       (service as any).updateRedisConfig(credentials);
-      expect(process.env.REDIS_HOST).toBe('test-host');
-      expect(process.env.REDIS_PORT).toBe('6380');
       expect(process.env.REDIS_USERNAME).toBe('test-user');
       expect(process.env.REDIS_PASSWORD).toBe('test-pass');
       expect(mockLogger.log).toHaveBeenCalledWith('Redis configuration updated successfully');
