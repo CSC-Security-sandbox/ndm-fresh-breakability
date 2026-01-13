@@ -674,11 +674,6 @@ jobs:
         run: |
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@10.192.7.66 << 'ENDSSH'
           set -e
-
-          # ✅ EXPORT credentials INSIDE the SSH session
-          export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
-          export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          export AWS_DEFAULT_REGION="us-east-1"
           
           CP_AMI="${{ github.event.inputs.cp_ami_id }}"
           WORKER_AMI="${{ github.event.inputs.worker_ami_id }}"
@@ -687,31 +682,6 @@ jobs:
           LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
           SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
           CHECKSUM_FILE="AWS_SHA256SUMS-${TIMESTAMP}.sha256"
-
-          # Install AWS CLI if not present
-          if ! command -v aws &> /dev/null; then
-            echo "Installing AWS CLI v2..."
-            cd /tmp
-            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            
-            if ! command -v unzip &> /dev/null; then
-              sudo apt-get update -qq
-              sudo apt-get install -y unzip
-            fi
-            
-            unzip -q awscliv2.zip
-            sudo ./aws/install
-            rm -rf awscliv2.zip aws/
-            echo "✅ AWS CLI v2 installed"
-          fi
-          
-          # Verify AWS credentials work (WITHOUT sudo)
-          echo "Verifying AWS credentials..."
-          aws sts get-caller-identity --region $AWS_DEFAULT_REGION || {
-            echo "❌ AWS authentication failed"
-            exit 1
-          }
-          echo "✅ AWS credentials verified"
           
           # Validate AMIs exist
           echo "Validating Control Plane AMI: $CP_AMI"
@@ -739,7 +709,63 @@ jobs:
             exit 1
           fi
           echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
-          
+
+          # Create IAM role for VM import (if it doesn't exist)
+          echo "Setting up IAM role for VM import..."
+          if ! aws iam get-role --role-name vmimport &>/dev/null; then
+            echo "Creating IAM role 'vmimport'..."
+            aws iam create-role \
+              --role-name vmimport \
+              --assume-role-policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole",
+                    "Condition": {}
+                  }
+                ]
+              }'
+            echo "✅ IAM role created"
+          else
+            echo "✅ IAM role 'vmimport' already exists"
+          fi
+
+          # Attach policy to role
+          echo "Attaching policy to IAM role..."
+          aws iam put-role-policy \
+            --role-name vmimport \
+            --policy-name vmimport \
+            --policy-document "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
+        {
+            \"Effect\": \"Allow\",
+            \"Action\": [
+                \"s3:GetBucketLocation\",
+                \"s3:GetObject\",
+                \"s3:ListBucket\",
+                \"s3:PutObject\"
+            ],
+            \"Resource\": [
+                \"arn:aws:s3:::${{ env.S3_BUCKET }}\",
+                \"arn:aws:s3:::${{ env.S3_BUCKET }}/*\"
+            ]
+        },
+        {
+            \"Effect\": \"Allow\",
+            \"Action\": [
+                \"ec2:ModifySnapshotAttribute\",
+                \"ec2:CopySnapshot\",
+                \"ec2:Describe*\"
+            ],
+            \"Resource\": \"*\"
+        }
+    ]
+}"
           # Export Worker Node AMI
           echo "Exporting Worker Node AMI: $WORKER_AMI"
           WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
