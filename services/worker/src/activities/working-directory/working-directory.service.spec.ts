@@ -9,14 +9,37 @@ import { ValidateWorkingDirectoryActivity } from './working-directory.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { SMBProtocol } from '../../protocols/smb/smb.protocol';
 import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
-import { WorkersConfig } from 'src/config/app.config';
-import { CommandConfig } from 'src/config/command.config';
+import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 import { mockLogger } from 'src/auth/auth.service.spec';
 
 // Mock Temporal dependencies to avoid native binary issues
 jest.mock('@temporalio/core-bridge', () => ({}));
 jest.mock('@temporalio/worker', () => ({}));
 jest.mock('@temporalio/activity', () => ({}));
+
+// Mock WorkersConfig and CommandConfig BEFORE importing them to avoid DataCloneError
+// This prevents Jest from trying to serialize ConfigService in worker threads
+jest.mock('src/config/app.config', () => ({
+  WorkersConfig: {
+    get: jest.fn((key: string) => {
+      const configMap: Record<string, any> = {
+        'workerId': 'test-worker-id',
+        'baseMountDir': '/base/working/path',
+        'platform': 'linux',
+      };
+      return configMap[key];
+    }),
+  },
+}));
+
+jest.mock('src/config/command.config', () => ({
+  CommandConfig: {
+    getSMBCommand: jest.fn(() => 'mock-smb-command'),
+    getNFSCommand: jest.fn(() => 'mock-nfs-command'),
+    getFstabPath: jest.fn(() => '/etc/fstab'),
+  },
+  CommandPattern: {},
+}));
 
 // Mock other dependencies
 jest.mock('axios');
@@ -63,8 +86,8 @@ describe('ValidateWorkingDirectoryActivity', () => {
       }),
     };
 
-    WorkersConfig.configService = mockConfigService as unknown as ConfigService;
-    CommandConfig.configService = mockConfigService as unknown as ConfigService;
+    // WorkersConfig and CommandConfig are mocked at module level to avoid DataCloneError
+    // No need to assign ConfigService to static properties
 
     // Create mock protocol
     mockProtocol = {
@@ -111,6 +134,14 @@ describe('ValidateWorkingDirectoryActivity', () => {
         {
           provide: Protocols,
           useValue: mockProtocols,
+        },
+        {
+          provide: StorageClientFactory,
+          useValue: {
+            getClient: jest.fn().mockReturnValue({
+              getExports: jest.fn().mockResolvedValue([]),
+            }),
+          },
         },
       ],
     }).compile();
