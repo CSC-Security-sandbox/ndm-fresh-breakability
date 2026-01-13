@@ -7,10 +7,8 @@ import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus } from './working-directory.type';
 import { ValidateWorkingDirectoryActivity } from './working-directory.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { SMBProtocol } from '../../protocols/smb/smb.protocol';
-import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
-import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
 
 // Mock Temporal dependencies to avoid native binary issues
 jest.mock('@temporalio/core-bridge', () => ({}));
@@ -70,7 +68,6 @@ describe('ValidateWorkingDirectoryActivity', () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-
     const mockConfigService = {
       get: jest.fn((key: string) => {
         switch (key) {
@@ -80,14 +77,13 @@ describe('ValidateWorkingDirectoryActivity', () => {
             return '/base/working/path';
           case 'worker.connection.workerConfigUrl':
             return 'http://test-url';
+          case 'worker.projectId':
+            return 'test-project-id';
           default:
             return undefined;
         }
       }),
     };
-
-    // WorkersConfig and CommandConfig are mocked at module level to avoid DataCloneError
-    // No need to assign ConfigService to static properties
 
     // Create mock protocol
     mockProtocol = {
@@ -100,11 +96,6 @@ describe('ValidateWorkingDirectoryActivity', () => {
     };
 
     loggerFactory = mockLoggerFactory as unknown as LoggerFactory;
-
-    protocols = new Protocols(
-      new NFSProtocol(loggerFactory),
-      new SMBProtocol(loggerFactory)
-    );
 
     const mockProtocols = {
       getProtocol: jest.fn().mockReturnValue(mockProtocol),
@@ -138,10 +129,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
         {
           provide: StorageClientFactory,
           useValue: {
-            getClient: jest.fn().mockReturnValue({
-              getExports: jest.fn().mockResolvedValue([]),
-              configureSmartConnectDns: jest.fn().mockResolvedValue(undefined),
-            }),
+            getClient: jest.fn(),
           },
         },
       ],
@@ -383,6 +371,7 @@ describe('ValidateWorkingDirectoryActivity', () => {
           headers: {
             'Content-Type': 'application/json',
             Authorization: 'Bearer test-token',
+            projectId: 'test-project-id',
           },
         }
       );
