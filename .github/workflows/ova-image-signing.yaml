@@ -1,0 +1,296 @@
+name: OVA Image Signing & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_worker_ova_name:
+        description: "Worker OVA filename (without .ova extension) to be taken from artifactory from release folder"
+        required: true
+        type: string
+      release_controlplane_ova_name:
+        description: "Control Plane OVA filename (without .ova extension) to be taken from artifactory from release folder"
+        required: true
+        type: string
+      release_folder:
+        description: "Release folder name (e.g. preview_x). If this folder already exists in scratch space (created by GCP or Windows installer workflows), use it; otherwise, create a new one."
+        required: true
+        type: string
+      artifactory_path:
+        description: "Artifactory path (e.g., releases/preview_version/ova) to download these cp and worker file"
+        required: true
+        type: string
+
+env:
+  ARTIFACTORY_BASE_URL: ${{ vars.ARTIFACTORY_BASE_URL || 'https://artifactory.example.com/artifactory' }}
+  LOCAL_BASE_PATH: ${{vars.LOCAL_BASE_PATH || '/home/ubuntu'}}
+  SIGNING_CERTS_PATH: ${{vars.OVA_SIGNING_CERTS_PATH || '/home/ubuntu/ova-signing-certificates'}}
+  PRIVATE_KEY: ${{ vars.OVA_PRIVATE_KEY || 'NDM-OVA-private.key' }}
+  CERTIFICATE: ${{ vars.OVA_CERTIFICATE || 'NDM-OVA.cer' }}
+  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ova-signing:
+    runs-on: openlab
+    outputs:
+      worker_signed_ova: ${{ steps.set-outputs.outputs.worker_signed_ova }}
+      controlplane_signed_ova: ${{ steps.set-outputs.outputs.controlplane_signed_ova }}
+      checksum_file: ${{ steps.set-outputs.outputs.checksum_file }}
+      release_folder: ${{ steps.set-outputs.outputs.release_folder }}
+    
+    steps:
+      - name: Install SSH Tools
+        run: |
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client curl
+
+      - name: Extract Branch Name
+        id: branch-info
+        run: |
+          # Extract branch name from github.ref
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
+          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
+          echo "Branch suffix for file naming: $BRANCH_SUFFIX"
+
+      - name: Add VM SSH Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Execute OVA Signing Process
+        id: execute-ova-signing
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          RUNNER_HOST: ${{ vars.RUNNER_GITHUB_IP_66 }}
+          INPUT_WORKER_OVA: ${{ github.event.inputs.release_worker_ova_name }}
+          INPUT_CP_OVA: ${{ github.event.inputs.release_controlplane_ova_name }}
+          INPUT_RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          INPUT_ARTIFACTORY_PATH: ${{ github.event.inputs.artifactory_path }}
+          INPUT_BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+          INPUT_LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
+          INPUT_SIGNING_CERTS_PATH: ${{ env.SIGNING_CERTS_PATH }}
+          INPUT_SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
+          INPUT_ARTIFACTORY_BASE_URL: ${{ env.ARTIFACTORY_BASE_URL }}
+          INPUT_PRIVATE_KEY: ${{ env.PRIVATE_KEY }}
+          INPUT_CERTIFICATE: ${{ env.CERTIFICATE }}
+        run: |
+          # Capture SSH output to a file
+          SSH_OUTPUT_FILE=$(mktemp)
+          
+          # Use unquoted heredoc so local variables expand, escape $ for remote variables
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@"$RUNNER_HOST" << ENDSSH | tee "$SSH_OUTPUT_FILE"
+          set -e
+          
+          WORKER_OVA="${INPUT_WORKER_OVA}"
+          CP_OVA="${INPUT_CP_OVA}"
+          RELEASE_FOLDER="${INPUT_RELEASE_FOLDER}"
+          ARTIFACTORY_PATH="${INPUT_ARTIFACTORY_PATH}"
+          BRANCH_SUFFIX="${INPUT_BRANCH_SUFFIX}"
+          TIMESTAMP=\$(date +%Y%m%d-%H%M%S)
+          
+          LOCAL_PATH="${INPUT_LOCAL_BASE_PATH}/\${RELEASE_FOLDER}/ova"
+          SIGNING_PATH="${INPUT_SIGNING_CERTS_PATH}"
+          SCRATCH_SPACE="${INPUT_SCRATCH_SPACE}"
+          ARTIFACTORY_BASE="${INPUT_ARTIFACTORY_BASE_URL}"
+          PRIVATE_KEY="${INPUT_PRIVATE_KEY}"
+          CERTIFICATE="${INPUT_CERTIFICATE}"
+          
+          echo "Starting OVA Signing Process"
+          echo "Release Folder: \${RELEASE_FOLDER}"
+          echo "Branch Suffix: \${BRANCH_SUFFIX}"
+          echo "Worker OVA: \${WORKER_OVA}.ova"
+          echo "Control Plane OVA: \${CP_OVA}.ova"
+          
+          # Create directory structure and set permissions
+          echo "Creating directory..."
+          sudo mkdir -p "\${LOCAL_PATH}"
+          sudo chown -R ubuntu:ubuntu "\${LOCAL_PATH}"
+          
+          # Download Worker OVA from Artifactory
+          echo "Downloading Worker OVA from Artifactory..."
+          cd "\${LOCAL_PATH}"
+          WORKER_OVA_URL="\${ARTIFACTORY_BASE}/\${ARTIFACTORY_PATH}/\${WORKER_OVA}.ova"
+          curl -fSO "\${WORKER_OVA_URL}"
+          CURL_EXIT_CODE=\$?
+          if [ \$CURL_EXIT_CODE -ne 0 ] || [ ! -f "\${WORKER_OVA}.ova" ]; then
+            echo "Failed to download Worker OVA from \${WORKER_OVA_URL} (curl exit code: \$CURL_EXIT_CODE)"
+            exit 1
+          fi
+          echo "Worker OVA downloaded"
+          
+          # Download Control Plane OVA from Artifactory
+          echo "Downloading Control Plane OVA from Artifactory..."
+          CP_OVA_URL="\${ARTIFACTORY_BASE}/\${ARTIFACTORY_PATH}/\${CP_OVA}.ova"
+          curl -fSO "\${CP_OVA_URL}"
+          CURL_EXIT_CODE_CP=\$?
+          if [ \$CURL_EXIT_CODE_CP -ne 0 ] || [ ! -f "\${CP_OVA}.ova" ]; then
+            echo "Failed to download Control Plane OVA from \${CP_OVA_URL} (curl exit code: \$CURL_EXIT_CODE_CP)"
+            exit 1
+          fi
+          echo "Control Plane OVA downloaded"
+          
+          # Sign Worker OVA
+          echo "Signing Worker OVA..."
+          cd "\${SIGNING_PATH}"
+          WORKER_SIGN_LOG="/tmp/worker_signing.log"
+          sudo "\${SIGNING_PATH}/ova_signing_new_v2.sh" "\${LOCAL_PATH}/\${WORKER_OVA}.ova" "\${PRIVATE_KEY}" "\${CERTIFICATE}" > "\${WORKER_SIGN_LOG}" 2>&1
+          WORKER_SIGN_EXIT_CODE=\$?
+
+          WORKER_SIGNED="\${LOCAL_PATH}/signed-v2/\${WORKER_OVA}_signed.ova"
+          if [ \$WORKER_SIGN_EXIT_CODE -ne 0 ] || [ ! -f "\${WORKER_SIGNED}" ]; then
+            echo "Worker OVA signing failed (exit code: \$WORKER_SIGN_EXIT_CODE)"
+            echo "Signing script output:"
+            cat "\${WORKER_SIGN_LOG}"
+            exit 1
+          fi
+          echo "Worker OVA signed: \${WORKER_SIGNED}"
+          
+          # Sign Control Plane OVA
+          echo "Signing Control Plane OVA..."
+          CP_SIGN_LOG="/tmp/cp_signing.log"
+          sudo "\${SIGNING_PATH}/ova_signing_new_v2.sh" "\${LOCAL_PATH}/\${CP_OVA}.ova" "\${PRIVATE_KEY}" "\${CERTIFICATE}" > "\${CP_SIGN_LOG}" 2>&1
+          CP_SIGN_EXIT_CODE=\$?
+
+          CP_SIGNED="\${LOCAL_PATH}/signed-v2/\${CP_OVA}_signed.ova"
+          if [ \$CP_SIGN_EXIT_CODE -ne 0 ] || [ ! -f "\${CP_SIGNED}" ]; then
+            echo "Control Plane OVA signing failed (exit code: \$CP_SIGN_EXIT_CODE)"
+            echo "Signing script output:"
+            cat "\${CP_SIGN_LOG}"
+            exit 1
+          fi
+          echo "Control Plane OVA signed: \${CP_SIGNED}"
+          
+          # Fix permissions on signed directory
+          sudo chown -R ubuntu:ubuntu "\${LOCAL_PATH}/signed-v2"
+          
+          # Generate SHA256 Checksums
+          echo "Generating SHA256 checksums..."
+          cd "\${LOCAL_PATH}"
+          CHECKSUM_FILE="VSPHERE_SHA256SUMS-\${TIMESTAMP}-\${BRANCH_SUFFIX}.sha256"
+          
+          # Create new signed OVA names with branch suffix
+          WORKER_SIGNED_NAME="\${WORKER_OVA}-\${BRANCH_SUFFIX}_signed.ova"
+          CP_SIGNED_NAME="\${CP_OVA}-\${BRANCH_SUFFIX}_signed.ova"
+          
+          # Rename signed OVAs to include branch suffix, with error checking
+          if ! mv "signed-v2/\${WORKER_OVA}_signed.ova" "signed-v2/\${WORKER_SIGNED_NAME}"; then
+            echo "Error: Failed to rename Worker OVA from signed-v2/\${WORKER_OVA}_signed.ova to signed-v2/\${WORKER_SIGNED_NAME}"
+            exit 1
+          fi
+          if [ ! -f "signed-v2/\${WORKER_SIGNED_NAME}" ]; then
+            echo "Error: Renamed Worker OVA not found at signed-v2/\${WORKER_SIGNED_NAME}"
+            exit 1
+          fi
+          
+          if ! mv "signed-v2/\${CP_OVA}_signed.ova" "signed-v2/\${CP_SIGNED_NAME}"; then
+            echo "Error: Failed to rename Control Plane OVA from signed-v2/\${CP_OVA}_signed.ova to signed-v2/\${CP_SIGNED_NAME}"
+            exit 1
+          fi
+          if [ ! -f "signed-v2/\${CP_SIGNED_NAME}" ]; then
+            echo "Error: Renamed Control Plane OVA not found at signed-v2/\${CP_SIGNED_NAME}"
+            exit 1
+          fi
+
+          
+          echo "Renamed Worker OVA to: signed-v2/\${WORKER_SIGNED_NAME}"
+          echo "Renamed CP OVA to: signed-v2/\${CP_SIGNED_NAME}"
+          
+          # Generate checksum file
+          ( cd "signed-v2" && sha256sum "\${WORKER_SIGNED_NAME}" "\${CP_SIGNED_NAME}" > "../\${CHECKSUM_FILE}" ) || { echo "ERROR: Failed to generate checksum file"; exit 1; }
+          echo "Checksums generated:"
+          cat "\${CHECKSUM_FILE}"
+          
+          # Copy to Scratch Space
+          echo "Copying signed OVAs to scratch space..."
+          SCRATCH_DEST="\${SCRATCH_SPACE}/\${RELEASE_FOLDER}/ova"
+          sudo mkdir -p "\${SCRATCH_DEST}"
+          
+          sudo cp "signed-v2/\${WORKER_SIGNED_NAME}" "\${SCRATCH_DEST}/" || { echo "ERROR: Failed to copy worker OVA to scratch space"; exit 1; }
+          sudo cp "signed-v2/\${CP_SIGNED_NAME}" "\${SCRATCH_DEST}/" || { echo "ERROR: Failed to copy control plane OVA to scratch space"; exit 1; }
+          sudo cp "\${CHECKSUM_FILE}" "\${SCRATCH_DEST}/" || { echo "ERROR: Failed to copy checksum file to scratch space"; exit 1; }
+          
+          sudo chmod 644 "\${SCRATCH_DEST}/\${WORKER_SIGNED_NAME}"
+          sudo chmod 644 "\${SCRATCH_DEST}/\${CP_SIGNED_NAME}"
+          sudo chmod 644 "\${SCRATCH_DEST}/\${CHECKSUM_FILE}"
+          
+          echo "Files copied to scratch space: \${SCRATCH_DEST}"
+          echo "Files ready for NSS upload at: /x/eng/NDM/\${RELEASE_FOLDER}/ova/"
+          
+          echo "OVA signing process completed successfully"
+          
+          # Output data in pipe-delimited format
+          echo "OUTPUT_DATA:\${WORKER_SIGNED_NAME}|\${CP_SIGNED_NAME}|\${CHECKSUM_FILE}|\${RELEASE_FOLDER}"
+          
+          ENDSSH
+          
+          # Extract OUTPUT_DATA from the captured SSH output
+          echo "ssh_output<<EOFMARKER" >> $GITHUB_OUTPUT
+          cat "$SSH_OUTPUT_FILE" >> $GITHUB_OUTPUT
+          echo "EOFMARKER" >> $GITHUB_OUTPUT
+          rm -f "$SSH_OUTPUT_FILE"
+
+      - name: Set Outputs
+        id: set-outputs
+        run: |
+          # Extract pipe-delimited data from previous step
+          OUTPUT='${{ steps.execute-ova-signing.outputs.ssh_output }}'
+
+          echo "Raw output from remote:"
+          echo "$OUTPUT"
+
+          # Extract data line (ignores SSH banner)
+          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
+
+          # Validate data was found
+          if [ -z "$DATA_LINE" ]; then
+            echo "ERROR: Could not find OUTPUT_DATA in remote output" >&2
+            exit 1
+          fi
+
+          # Parse pipe-delimited values
+          WORKER_SIGNED=$(echo "$DATA_LINE" | cut -d'|' -f1 | xargs)
+          CP_SIGNED=$(echo "$DATA_LINE" | cut -d'|' -f2 | xargs)
+          CHECKSUM_FILE=$(echo "$DATA_LINE" | cut -d'|' -f3 | xargs)
+          RELEASE_FOLDER=$(echo "$DATA_LINE" | cut -d'|' -f4 | xargs)
+
+          # Validate each value
+          [ -z "$WORKER_SIGNED" ] && echo "ERROR: Missing worker signed OVA" >&2 && exit 1
+          [ -z "$CP_SIGNED" ] && echo "ERROR: Missing controlplane signed OVA" >&2 && exit 1
+          [ -z "$CHECKSUM_FILE" ] && echo "ERROR: Missing checksum file" >&2 && exit 1
+          [ -z "$RELEASE_FOLDER" ] && echo "ERROR: Missing release folder" >&2 && exit 1
+
+          # Set GitHub outputs
+          echo "worker_signed_ova=$WORKER_SIGNED" >> $GITHUB_OUTPUT
+          echo "controlplane_signed_ova=$CP_SIGNED" >> $GITHUB_OUTPUT
+          echo "checksum_file=$CHECKSUM_FILE" >> $GITHUB_OUTPUT
+          echo "release_folder=$RELEASE_FOLDER" >> $GITHUB_OUTPUT
+          
+          # Display for verification
+          echo "Captured outputs:"
+          echo "  Worker: $WORKER_SIGNED"
+          echo "  CP: $CP_SIGNED"
+          echo "  Checksum: $CHECKSUM_FILE"
+          echo "  Folder: $RELEASE_FOLDER"
+
+      - name: Display Summary
+        run: |
+          echo "=== OVA Signing Complete ==="
+          echo "Worker Signed OVA: ${{ steps.set-outputs.outputs.worker_signed_ova }}"
+          echo "Control Plane Signed OVA: ${{ steps.set-outputs.outputs.controlplane_signed_ova }}"
+          echo "Checksum File: ${{ steps.set-outputs.outputs.checksum_file }}"
+          echo ""
+          echo "Files Location:"
+          echo "  Local: ${{ env.LOCAL_BASE_PATH }}/${{ steps.set-outputs.outputs.release_folder }}/ova/"
+          echo "  Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.set-outputs.outputs.release_folder }}/ova/"
+          echo "  NSS Ready: /x/eng/NDM/${{ steps.set-outputs.outputs.release_folder }}/ova/"
+          echo ""
+          echo "Next Steps:"
+          echo "1. Files are now in scratch space (/mnt/scratch_space)"
+          echo "2. Files are accessible at /x/eng/NDM on cyclortp7.rtp.openeng.netapp.com"
+          echo "3. Coordinate with team for NSS upload"
