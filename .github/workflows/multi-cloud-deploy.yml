@@ -674,6 +674,25 @@ jobs:
         run: |
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@10.192.7.66 << 'ENDSSH'
           set -e
+
+          # Export AWS credentials INSIDE the SSH session
+          export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+          export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          export AWS_DEFAULT_REGION="${{ env.AWS_REGION }}"
+          
+          # Verify AWS CLI is installed and credentials work
+          echo "Verifying AWS CLI and credentials..."
+          if ! command -v aws &> /dev/null; then
+            echo "❌ AWS CLI is not installed"
+            exit 1
+          fi
+          
+          # Test AWS credentials
+          aws sts get-caller-identity --region "${{ env.AWS_REGION }}" || {
+            echo "❌ AWS authentication failed"
+            exit 1
+          }
+          echo "✅ AWS credentials verified"
           
           CP_AMI="${{ github.event.inputs.cp_ami_id }}"
           WORKER_AMI="${{ github.event.inputs.worker_ami_id }}"
