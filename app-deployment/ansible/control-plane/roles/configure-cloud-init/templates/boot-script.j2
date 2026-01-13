@@ -163,27 +163,8 @@ spec:
       prefix: "Bearer "
 EOF
     
-    retry $MAX_RETRIES "kubectl patch requestauthentication keycloak-jwt -n istio-system --type merge --patch-file /tmp/jwt-patch.yaml" || handle_failure "Failed to patch keycloak-jwt RequestAuthentication"
-    log "keycloak-jwt issuer patched successfully with IP: ${VM_IP}"
-    
-    # Patch temporal-jwt-validation RequestAuthentication (if it exists)
-    if kubectl get requestauthentication temporal-jwt-validation -n istio-system &>/dev/null; then
-        cat > /tmp/temporal-jwt-patch.yaml << EOF
-spec:
-  jwtRules:
-  - issuer: "https://${VM_IP}/keycloak/realms/datamigrator"
-    jwksUri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
-    forwardOriginalToken: true
-    fromHeaders:
-    - name: authorization
-      prefix: "Bearer "
-EOF
-        
-        retry $MAX_RETRIES "kubectl patch requestauthentication temporal-jwt-validation -n istio-system --type merge --patch-file /tmp/temporal-jwt-patch.yaml" || handle_failure "Failed to patch temporal-jwt-validation RequestAuthentication"
-        log "temporal-jwt-validation issuer patched successfully with IP: ${VM_IP}"
-    else
-        log "temporal-jwt-validation RequestAuthentication not found, skipping"
-    fi
+    retry $MAX_RETRIES "kubectl patch requestauthentication keycloak-jwt -n istio-system --type merge --patch-file /tmp/jwt-patch.yaml" || handle_failure "Failed to patch JWT issuer in RequestAuthentication"
+    log "JWT issuer patched successfully with IP: ${VM_IP}"
 }
 
 regenerate_istio_certificate() {
