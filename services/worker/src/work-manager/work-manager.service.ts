@@ -68,6 +68,14 @@ export class WorkManagerService {
         this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
       }
       
+      // Debug: Log Temporal-related environment variables
+      this.logger.log(`[onApplicationBootstrap] - Current Temporal env vars:
+        TEMPORAL_ADDRESS=${process.env.TEMPORAL_ADDRESS}
+        TEMPORAL_TLS_ENABLED=${process.env.TEMPORAL_TLS_ENABLED}
+        TEMPORAL_TLS_SERVER_NAME=${process.env.TEMPORAL_TLS_SERVER_NAME}
+        TEMPORAL_TLS_CA_CERT=${process.env.TEMPORAL_TLS_CA_CERT ? `present (${process.env.TEMPORAL_TLS_CA_CERT.length} chars)` : 'not set'}
+        TEMPORAL_JWT_ENABLED=${process.env.TEMPORAL_JWT_ENABLED}`);
+      
       // Create Temporal connections using utility function
       const connections = await createTemporalConnections(
         {
