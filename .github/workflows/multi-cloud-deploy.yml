@@ -730,6 +730,7 @@ jobs:
           echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
 
           # Create IAM role for VM import (if it doesn't exist)
+                    # Create IAM role for VM import (if it doesn't exist)
           echo "Setting up IAM role for VM import..."
           if ! aws iam get-role --role-name vmimport &>/dev/null; then
             echo "Creating IAM role 'vmimport'..."
@@ -741,16 +742,40 @@ jobs:
                   {
                     "Effect": "Allow",
                     "Principal": {
-                      "Service": "ec2.amazonaws.com"
+                      "Service": "vmie.amazonaws.com"
                     },
                     "Action": "sts:AssumeRole",
-                    "Condition": {}
+                    "Condition": {
+                      "StringEquals": {
+                        "sts:ExternalId": "vmimport"
+                      }
+                    }
                   }
                 ]
               }'
             echo "✅ IAM role created"
           else
-            echo "✅ IAM role 'vmimport' already exists"
+            echo "IAM role 'vmimport' already exists, updating trust policy..."
+            aws iam update-assume-role-policy \
+              --role-name vmimport \
+              --policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "vmie.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                      "StringEquals": {
+                        "sts:ExternalId": "vmimport"
+                      }
+                    }
+                  }
+                ]
+              }'
+            echo "✅ IAM role trust policy updated"
           fi
 
           # Attach policy to role
@@ -762,6 +787,11 @@ jobs:
             --policy-name vmimport \
             --policy-document file:///tmp/vmimport-policy.json
           rm -f /tmp/vmimport-policy.json
+          
+          # Wait for IAM propagation (important for newly created/updated roles)
+          echo "Waiting for IAM role propagation..."
+          sleep 10
+          
           # Export Worker Node AMI
           echo "Exporting Worker Node AMI: $WORKER_AMI"
           WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
