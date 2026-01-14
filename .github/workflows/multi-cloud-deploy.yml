@@ -669,10 +669,12 @@ jobs:
           sudo apt-get install -y sshpass
 
       - name: Execute AWS Operations
+        id: execute-aws
         env:
           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
         run: |
-          sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@10.192.7.66 << 'ENDSSH'
+          SSH_OUTPUT_FILE=$(mktemp)
+          sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH'
           set -e
 
           # Export AWS credentials INSIDE the SSH session
@@ -1042,54 +1044,60 @@ jobs:
             "s3://${{ env.S3_BUCKET }}/${EXPORT_PREFIX}/aws/${CHECKSUM_FILE}" \
             --region ${{ env.AWS_REGION }}
           
-          # # Copy to scratch space
-          # echo "Copying to scratch space..."
-          # sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"
-          # sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"
+          # Copy to scratch space
+          echo "Copying to scratch space..."
+          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"
           
-          # sudo cp "worker-node/$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node/"
-          # sudo cp "control-plane/$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane/"
-          # sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          sudo cp "$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          sudo cp "$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
           
-          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
-          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"/*
-          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"/*
+          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
+
           
           echo "Export complete"
           
-          # Save outputs to temp files
-          echo "$TIMESTAMP" > /tmp/aws_timestamp.txt
-          echo "$WORKER_VHD" > /tmp/aws_worker.txt
-          echo "$CP_VHD" > /tmp/aws_cp.txt
-          echo "$EXPORT_PREFIX" > /tmp/aws_prefix.txt
+          # Output data in pipe-delimited format
+          echo "OUTPUT_DATA:${TIMESTAMP}|${WORKER_VHD}|${CP_VHD}|${EXPORT_PREFIX}"
           
           ENDSSH
+          > "$SSH_OUTPUT_FILE" || true
+          
+          # Extract OUTPUT_DATA from the captured SSH output
+          echo "ssh_output<<EOFMARKER" >> $GITHUB_OUTPUT
+          cat "$SSH_OUTPUT_FILE" >> $GITHUB_OUTPUT
+          echo "EOFMARKER" >> $GITHUB_OUTPUT
+          rm -f "$SSH_OUTPUT_FILE"
 
       - name: Set Outputs
         id: set-outputs
-        env:
-          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
         run: |
-          # Read outputs from temp files via SSH
-          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH'
-          cat /tmp/aws_timestamp.txt
-          cat /tmp/aws_worker.txt
-          cat /tmp/aws_cp.txt
-          cat /tmp/aws_prefix.txt
-          ENDSSH
-          )
+          # Extract pipe-delimited data from previous step
+          OUTPUT='${{ steps.execute-aws.outputs.ssh_output }}'
           
           echo "Raw output from remote:"
           echo "$OUTPUT"
           
-          # Get only the last 4 lines (actual data, skip banner)
-          CLEAN_OUTPUT=$(echo "$OUTPUT" | tail -4)
+          # Extract data line (ignores SSH banner)
+          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
           
-          # Parse the output
-          TIMESTAMP=$(echo "$CLEAN_OUTPUT" | sed -n '1p')
-          WORKER_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '2p')
-          CP_VHD=$(echo "$CLEAN_OUTPUT" | sed -n '3p')
-          EXPORT_PREFIX=$(echo "$CLEAN_OUTPUT" | sed -n '4p')
+          # Validate data was found
+          if [ -z "$DATA_LINE" ]; then
+            echo "ERROR: Could not find OUTPUT_DATA in remote output" >&2
+            exit 1
+          fi
+          
+          # Parse pipe-delimited values
+          TIMESTAMP=$(echo "$DATA_LINE" | cut -d'|' -f1 | xargs)
+          WORKER_VHD=$(echo "$DATA_LINE" | cut -d'|' -f2 | xargs)
+          CP_VHD=$(echo "$DATA_LINE" | cut -d'|' -f3 | xargs)
+          EXPORT_PREFIX=$(echo "$DATA_LINE" | cut -d'|' -f4 | xargs)
+          
+          # Validate each value
+          [ -z "$TIMESTAMP" ] && echo "ERROR: Missing timestamp" >&2 && exit 1
+          [ -z "$WORKER_VHD" ] && echo "ERROR: Missing worker VHD" >&2 && exit 1
+          [ -z "$CP_VHD" ] && echo "ERROR: Missing controlplane VHD" >&2 && exit 1
+          [ -z "$EXPORT_PREFIX" ] && echo "ERROR: Missing export prefix" >&2 && exit 1
           
           # Set GitHub outputs
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
