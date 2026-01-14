@@ -865,7 +865,7 @@ jobs:
               
               # Construct VHD filename: {prefix_last_part}{task_id}.vhd
               WORKER_VHD="${PREFIX_LAST_PART}${WORKER_EXPORT_TASK}.vhd"
-              WORKER_S3_KEY="${WORKER_S3_PREFIX_RESULT}/${WORKER_VHD}"
+              WORKER_S3_KEY="${WORKER_S3_PREFIX_RESULT}${WORKER_EXPORT_TASK}.vhd"
               
               echo "Worker Task ID: $WORKER_EXPORT_TASK"
               echo "Worker S3 Prefix: $WORKER_S3_PREFIX_RESULT"
@@ -971,7 +971,7 @@ jobs:
               
               # Construct VHD filename: {prefix_last_part}{task_id}.vhd
               CP_VHD="${PREFIX_LAST_PART}${CP_EXPORT_TASK}.vhd"
-              CP_S3_KEY="${CP_S3_PREFIX_RESULT}/${CP_VHD}"
+              CP_S3_KEY="${CP_S3_PREFIX_RESULT}${CP_EXPORT_TASK}.vhd"
               
               echo "Control Plane Task ID: $CP_EXPORT_TASK"
               echo "Control Plane S3 Prefix: $CP_S3_PREFIX_RESULT"
@@ -1009,20 +1009,20 @@ jobs:
           
           # Download from S3
           echo "Downloading from S3..."
-          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node"
-          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane"
+          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws"
+          
           
           echo "Downloading Worker Node VHD..."
           aws s3 cp \
-            "s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/$WORKER_VHD" \
-            "$LOCAL_PATH/$EXPORT_PREFIX/aws/worker-node/$WORKER_VHD" \
+            "s3://${{ env.S3_BUCKET }}/$WORKER_S3_KEY" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/$WORKER_VHD" \
             --region ${{ env.AWS_REGION }} \
             --no-progress
           
           echo "Downloading Control Plane VHD..."
           aws s3 cp \
-            "s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/$CP_VHD" \
-            "$LOCAL_PATH/$EXPORT_PREFIX/aws/control-plane/$CP_VHD" \
+            "s3://${{ env.S3_BUCKET }}/$CP_S3_KEY" \
+            "$LOCAL_PATH/$EXPORT_PREFIX/aws/$CP_VHD" \
             --region ${{ env.AWS_REGION }} \
             --no-progress
           
@@ -1030,7 +1030,7 @@ jobs:
           echo "Generating checksums..."
           cd "$LOCAL_PATH/$EXPORT_PREFIX/aws"
           
-          sha256sum "worker-node/$WORKER_VHD" "control-plane/$CP_VHD" > "${CHECKSUM_FILE}"
+          sha256sum "${WORKER_VHD}" "${CP_VHD}" > "${CHECKSUM_FILE}"
 
           echo "Checksum file: $CHECKSUM_FILE"
         
