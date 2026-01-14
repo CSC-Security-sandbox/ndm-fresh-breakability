@@ -460,20 +460,26 @@ export const TRAILING_SPACE_FILE_MAPPER = (input: TrailingSpaceInput[]) : Discov
 
 export const ALTERNATE_DATA_STREAMS_MAPPER = (input: any[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
-    const adsFiles = input.filter(item => item.is_directory === false).map(item=> item.path);
-    const adsDirectories = input.filter(item => item.is_directory === true).map(item=> item.path);
-    output.push({
-        value: adsFiles.join('; '),
-        category: 'Alternative Data Streams',
-        valueType: 'string',
-        sub_category: "Files"
-    });
-    output.push({
-        value: adsDirectories.join('; '),
-        category: 'Alternative Data Streams',
-        valueType: 'string',
-        sub_category: "Directories"
-    });    
+    const adsFiles = input.filter(item => item.is_directory === false).map(item=> item.path).filter(path => path && path.trim().length > 0);
+    const adsDirectories = input.filter(item => item.is_directory === true).map(item=> item.path).filter(path => path && path.trim().length > 0);
+    
+    if (adsFiles.length > 0) {
+        output.push({
+            value: adsFiles.join('; '),
+            category: 'Alternative Data Streams',
+            valueType: 'string',
+            sub_category: "Files"
+        });
+    }
+    
+    if (adsDirectories.length > 0) {
+        output.push({
+            value: adsDirectories.join('; '),
+            category: 'Alternative Data Streams',
+            valueType: 'string',
+            sub_category: "Directories"
+        });
+    }
     return output;
 }
 

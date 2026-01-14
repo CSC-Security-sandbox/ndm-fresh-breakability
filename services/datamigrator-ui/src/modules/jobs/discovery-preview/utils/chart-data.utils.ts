@@ -503,6 +503,18 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
       (item: DataItemType) =>
         item.sub_category === FileSystemSubCategory.VOLUME_MOUNT_COUNT
     )?.value || 0;
+    const adsFiles =
+      data?.find(
+        (item: DataItemType) =>
+          item.category === FileSystemCategory.ALTERNATIVE_DATA_STREAMS &&
+          item.sub_category === FileSystemSubCategory.ADS_FILES
+      )?.value || 0;
+    const adsDirectories =
+      data?.find(
+        (item: DataItemType) =>
+          item.category === FileSystemCategory.ALTERNATIVE_DATA_STREAMS &&
+          item.sub_category === FileSystemSubCategory.ADS_DIRECTORIES
+      )?.value || 0;
   return {
     regularFiles,
     symbolicLinks,
@@ -517,6 +529,8 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
     fileServerName,
     fileServerPath,
     fileServerProtocol,
+    adsFiles, 
+    adsDirectories, 
   };
 }
 

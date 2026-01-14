@@ -1,5 +1,4 @@
 import {
-
 NUMBER_OF_FILES_BY_SIZE_MAPPER,
 MODIFIED_TIME_DISTRIBUTION_MAPPER,
 CREATED_TIME_DISTRIBUTION_MAPPER,
@@ -20,7 +19,8 @@ QueryMapper,
 QueryList,
 REDIRECTS_FILE_NAME_MAPPER,
 TRAILING_SPACE_FILE_MAPPER,
-CASE_ERRORS_MAPPER
+CASE_ERRORS_MAPPER,
+ALTERNATE_DATA_STREAMS_MAPPER
 } from './discovery-report.query-mapper';
 
 describe('discovery-report.query-mapper', () => {
@@ -727,5 +727,65 @@ it('CASE_ERRORS_MAPPER handles empty input array', () => {
     const input: any[] = [];
     const result = CASE_ERRORS_MAPPER(input);
     expect(result).toEqual([]);
+});
+
+describe('ALTERNATE_DATA_STREAMS_MAPPER', () => {
+    it('should map ADS files when present', () => {
+        const input = [
+            { path: '\\Root\\file1.txt:hidden1', is_directory: false },
+            { path: '\\Root\\file1.txt:hidden2', is_directory: false }
+        ];
+        const result = ALTERNATE_DATA_STREAMS_MAPPER(input);
+        
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({
+            value: '\\Root\\file1.txt:hidden1; \\Root\\file1.txt:hidden2',
+            category: 'Alternative Data Streams',
+            valueType: 'string',
+            sub_category: 'Files'
+        });
+    });
+
+    it('should map ADS directories when present', () => {
+        const input = [
+            { path: '\\Root\\file1.txt:hidden1', is_directory: false },
+            { path: '\\Root\\DIR:stream1', is_directory: true }
+        ];
+        const result = ALTERNATE_DATA_STREAMS_MAPPER(input);
+        
+        expect(result).toHaveLength(2);
+        expect(result[0].sub_category).toBe('Files');
+        expect(result[1].sub_category).toBe('Directories');
+        expect(result[1].value).toBe('\\Root\\DIR:stream1');
+    });
+
+    it('should only include files section when no directories exist', () => {
+        const input = [
+            { path: '\\Root\\file1.txt:hidden1', is_directory: false },
+            { path: '\\Root\\file1.txt:hidden2', is_directory: false },
+            { path: '\\Root\\DIR\\dirfile.txt:hidden1', is_directory: false }
+        ];
+        const result = ALTERNATE_DATA_STREAMS_MAPPER(input);
+        
+        expect(result).toHaveLength(1);
+        expect(result[0].sub_category).toBe('Files');
+    });
+
+    it('should return empty array when no ADS data exists', () => {
+        const input: any[] = [];
+        const result = ALTERNATE_DATA_STREAMS_MAPPER(input);
+        
+        expect(result).toHaveLength(0);
+    });
+
+    it('should not include empty directories section', () => {
+        const input = [
+            { path: '\\Root\\file1.txt:hidden1', is_directory: false }
+        ];
+        const result = ALTERNATE_DATA_STREAMS_MAPPER(input);
+        
+        expect(result).toHaveLength(1);
+        expect(result[0].sub_category).toBe('Files');
+    });
 });
 });

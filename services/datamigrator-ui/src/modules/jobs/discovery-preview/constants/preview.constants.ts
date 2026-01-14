@@ -22,6 +22,7 @@ export enum FileSystemCategory {
   TOP_5_FILE_EXTENSIONS_SUMMERY = "Top File Extensions Summary",
   FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
   CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
+  ALTERNATIVE_DATA_STREAMS = "Alternative Data Streams",
 }
 
 export enum FileSystemSubCategory {
@@ -60,6 +61,10 @@ export enum FileSystemSubCategory {
   PROTOCOL = "Protocol",
   CONFIG_NAME = "Config Name",
   FILE_SERVER_NAME = "File Server Name",
+
+  //ADS subcategories
+  ADS_FILES = "Files",
+  ADS_DIRECTORIES = "Directories",
 
   // Biggest subcategories
   TOP_5_LONGEST_FILE_NAMES = "Top 5 Longest File Names",

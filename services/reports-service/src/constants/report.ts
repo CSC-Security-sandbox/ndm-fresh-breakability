@@ -15,7 +15,8 @@ export const PDFReportHeaders = {
     "Biggest",
     "Redirects",
     "Case Sensitivity Conflicts",
-    "Files without extensions and trailing spaces"
+    "Files without extensions and trailing spaces",
+    "Alternative Data Streams"
   ],
 };
 export enum formatStringTypeCategories {
@@ -162,6 +163,10 @@ export const ReportSubCategoriesHeader = {
     "Top 5 Biggest File Names",
     "Top 5 Biggest Directory With Count",
     "Top 5 Biggest Directory With Capacity",
+  ],
+   "Alternative Data Streams": [
+    "Files",
+    "Directories",  
   ],
 };
 

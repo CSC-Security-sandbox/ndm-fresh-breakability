@@ -160,4 +160,7 @@ export enum ReportHeaders {
   TOP_FILE_EXTENSIONS = "Top File Extensions (with file count and Capacity)",
   CASE_SENSITIVITY_CONFLICTS = "Case Sensitivity Conflicts",
   FILE_NAME_TRAILING_SPACES = "Files without extensions and trailing spaces",
+  ALTERNATIVE_DATA_STREAMS = "Alternative Data Streams",
+  ADS_FILES = "Files",
+  ADS_DIRECTORIES = "Directories",
 }

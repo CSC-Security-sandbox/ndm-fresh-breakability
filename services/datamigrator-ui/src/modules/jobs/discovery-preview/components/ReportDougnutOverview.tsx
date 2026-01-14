@@ -67,6 +67,8 @@ const ReportDougnutOverview = () => {
     totalSpaceUsed,
     directories,
     fileServerProtocol,
+    adsFiles,
+    adsDirectories,
   } = extractSystemFileStatAndDirectories(dataItems);
  
   const protocolString = String(fileServerProtocol || '').toUpperCase().trim();
@@ -125,7 +127,8 @@ const ReportDougnutOverview = () => {
   ];
  
   const showLinkDetailsCard = true;
- 
+  const showADSCard = isSMBProtocol;
+
   return (
     <Box className="mb-4 space-y-4">
       <Card>
@@ -171,6 +174,35 @@ const ReportDougnutOverview = () => {
           </Box>
         </CardContent>
       </Card>
+
+      {showADSCard && (
+        <Card>
+          <CardContent>
+            <Box className="flex flex-col gap-2 grow">
+              <Box className="flex items-center gap-2 mb-2">
+                <FileIcon className="w-4 h-4" />
+                <Text className="font-semibold">
+                  Alternate Data Streams
+                </Text>
+              </Box>
+              <Box className="flex gap-8">
+                <LegendMetric
+                  Icon={FileIcon}
+                  iconBgColor={colorClassMap["i9"]}
+                  label="Files"
+                  value={formatLargeNumber(adsFiles as number)}
+                />
+                <LegendMetric
+                  Icon={FolderIcon}
+                  iconBgColor={colorClassMap["i4"]}
+                  label="Directories"
+                  value={formatLargeNumber(adsDirectories as number)}
+                />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
  
       {showLinkDetailsCard && (
         <Card>
