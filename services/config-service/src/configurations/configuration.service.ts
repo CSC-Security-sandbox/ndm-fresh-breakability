@@ -1361,41 +1361,30 @@ export class ConfigurationService {
           continue;
         }
 
-        // Find matching fileServer from createConfig for credentials
-        const fileServerConfig = createConfig.fileServers.find(
-          (fs) =>
-            fs.host?.trim() === fileServer.host || fs.id === fileServer.id,
-        );
-
-        if (!fileServerConfig) {
-          this.logger.warn(`No config found for file server ${fileServer.id}`);
-          continue;
-        }
-
         // Build listPathPayload for this file server
         const listPathPayload: ListPathDTO[] = [{
-            type: fileServerConfig.protocol,
-            protocolVersion: fileServerConfig.protocolVersion?.replace(/^v/, ''),
-            host: fileServerConfig.host?.trim() || '',
-            username: fileServerConfig.userName,
-            password: fileServerConfig.password,
-            exportPathSource: fileServerConfig.exportPathSource,
-            smartConnectSsip: fileServerConfig.smartConnectSsip,
-            smartConnectDnsZone: fileServerConfig.smartConnectDnsZone,
+            type: fileServer.protocol,
+            protocolVersion: fileServer.protocolVersion?.replace(/^v/, ''),
+            host: fileServer.host?.trim() || '',
+            username: fileServer.userName,
+            password: fileServer.password,
+            exportPathSource: fileServer.exportPathSource,
+            smartConnectSsip: fileServer.smartConnectSsip,
+            smartConnectDnsZone: fileServer.smartConnectDnsZone,
         }];
 
         // Build base payload
         const payload: ValidateExportPathAndWorkingDirectoryDTO = {
-          exportPath: createConfig?.workingDirectory?.pathName,
-          workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+          exportPath: config?.workingDirectory?.pathName,
+          workingDirectory: config?.workingDirectory?.workingDirectory,
           configId: configId,
           workerIds: workerIds,
           listPathPayload,
-          serverType: createConfig.serverType,
+          serverType: config.serverType as ServerType,
           options: new Options(),
         };
-
-        // Add fileServerId for per-zone status updates (works for both Dell and Other NAS)
+        
+        // Add fileServerId for per-zone status updates 
         (payload as any).fileServerId = fileServer.id;
 
         // Add discovered paths if available (non-Other NAS only)
