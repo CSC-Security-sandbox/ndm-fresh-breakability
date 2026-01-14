@@ -806,21 +806,7 @@ jobs:
             --output text)
           
           echo "Worker Export Task ID: $WORKER_EXPORT_TASK"
-          
-          # Export Control Plane AMI
-          echo "Exporting Control Plane AMI: $CP_AMI"
-          CP_S3_PREFIX="${EXPORT_PREFIX}/aws/control-plane"
-          
-          CP_EXPORT_TASK=$(aws ec2 export-image \
-            --region ${{ env.AWS_REGION }} \
-            --image-id "$CP_AMI" \
-            --disk-image-format ${{ env.EXPORT_FORMAT }} \
-            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$CP_S3_PREFIX \
-            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
-            --query 'ExportImageTaskId' \
-            --output text)
-          
-          echo "Control Plane Export Task ID: $CP_EXPORT_TASK"
+        
           
           # Monitor Worker Node export
           echo "Monitoring Worker Node Export..."
@@ -867,11 +853,55 @@ jobs:
             if [ "$WORKER_TASK_STATUS" = "completed" ]; then
               echo "✅ Worker export completed (${ELAPSED}s)"
               
-              WORKER_S3_KEY=$(aws ec2 describe-export-image-tasks \
+              # Debug: Show full task details on completion
+              echo "DEBUG - Full Worker export task details on completion:"
+              aws ec2 describe-export-image-tasks \
                 --region ${{ env.AWS_REGION }} \
                 --export-image-task-ids $WORKER_EXPORT_TASK \
-                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
-                --output text)
+                --output json 2>&1 | tee /tmp/worker_export_details.json
+              
+              # Try to get S3Key, with retry if needed
+              for RETRY in 1 2 3; do
+                WORKER_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                  --region ${{ env.AWS_REGION }} \
+                  --export-image-task-ids $WORKER_EXPORT_TASK \
+                  --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                  --output text 2>/dev/null)
+                
+                echo "DEBUG - Attempt $RETRY: Worker S3 Key raw value: '$WORKER_S3_KEY'"
+                
+                if [ -n "$WORKER_S3_KEY" ] && [ "$WORKER_S3_KEY" != "None" ] && [ "$WORKER_S3_KEY" != "null" ]; then
+                  break
+                fi
+                
+                echo "DEBUG - S3Key not available yet, waiting 10 seconds before retry..."
+                sleep 10
+              done
+              
+              # Fallback: Try to find VHD by listing S3
+              if [ -z "$WORKER_S3_KEY" ] || [ "$WORKER_S3_KEY" = "None" ] || [ "$WORKER_S3_KEY" = "null" ]; then
+                echo "DEBUG - S3Key query returned None, trying S3 listing fallback..."
+                
+                # List the S3 location to find the VHD file
+                echo "DEBUG - Listing S3 location: s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/"
+                aws s3 ls "s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/" --region ${{ env.AWS_REGION }} 2>&1
+                
+                # Get the VHD file from S3 listing
+                FOUND_VHD=$(aws s3 ls "s3://${{ env.S3_BUCKET }}/$WORKER_S3_PREFIX/" --region ${{ env.AWS_REGION }} 2>/dev/null | grep -iE "\.vhd$" | awk '{print $NF}' | head -1)
+                if [ -n "$FOUND_VHD" ]; then
+                  WORKER_S3_KEY="${WORKER_S3_PREFIX}/${FOUND_VHD}"
+                  echo "DEBUG - Found VHD via S3 listing: '$WORKER_S3_KEY'"
+                fi
+              fi
+
+              echo "Worker S3 Key: $WORKER_S3_KEY"
+              
+              if [ -z "$WORKER_S3_KEY" ] || [ "$WORKER_S3_KEY" = "None" ] || [ "$WORKER_S3_KEY" = "null" ]; then
+                echo "❌ ERROR: Could not determine Worker VHD S3 key"
+                echo "DEBUG - Raw export task JSON:"
+                cat /tmp/worker_export_details.json
+                exit 1
+              fi
               
               WORKER_VHD=$(basename "$WORKER_S3_KEY")
               echo "Worker VHD: $WORKER_VHD"
@@ -904,6 +934,21 @@ jobs:
             echo "❌ Worker export timeout after $MAX_WAIT seconds"
             exit 1
           fi
+
+           # Export Control Plane AMI
+          echo "Exporting Control Plane AMI: $CP_AMI"
+          CP_S3_PREFIX="${EXPORT_PREFIX}/aws/control-plane"
+          
+          CP_EXPORT_TASK=$(aws ec2 export-image \
+            --region ${{ env.AWS_REGION }} \
+            --image-id "$CP_AMI" \
+            --disk-image-format ${{ env.EXPORT_FORMAT }} \
+            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$CP_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+            --query 'ExportImageTaskId' \
+            --output text)
+          
+          echo "Control Plane Export Task ID: $CP_EXPORT_TASK"
           
           # Monitor Control Plane export
           echo "Monitoring Control Plane Export..."
@@ -948,11 +993,55 @@ jobs:
             if [ "$CP_TASK_STATUS" = "completed" ]; then
               echo "✅ Control Plane export completed (${ELAPSED}s)"
               
-              CP_S3_KEY=$(aws ec2 describe-export-image-tasks \
+              # Debug: Show full task details on completion
+              echo "DEBUG - Full Control Plane export task details on completion:"
+              aws ec2 describe-export-image-tasks \
                 --region ${{ env.AWS_REGION }} \
                 --export-image-task-ids $CP_EXPORT_TASK \
-                --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
-                --output text)
+                --output json 2>&1 | tee /tmp/cp_export_details.json
+              
+              # Try to get S3Key, with retry if needed
+              for RETRY in 1 2 3; do
+                CP_S3_KEY=$(aws ec2 describe-export-image-tasks \
+                  --region ${{ env.AWS_REGION }} \
+                  --export-image-task-ids $CP_EXPORT_TASK \
+                  --query 'ExportImageTasks[0].S3ExportLocation.S3Key' \
+                  --output text 2>/dev/null)
+                
+                echo "DEBUG - Attempt $RETRY: Control Plane S3 Key raw value: '$CP_S3_KEY'"
+                
+                if [ -n "$CP_S3_KEY" ] && [ "$CP_S3_KEY" != "None" ] && [ "$CP_S3_KEY" != "null" ]; then
+                  break
+                fi
+                
+                echo "DEBUG - S3Key not available yet, waiting 10 seconds before retry..."
+                sleep 10
+              done
+              
+              # Fallback: Try to find VHD by listing S3
+              if [ -z "$CP_S3_KEY" ] || [ "$CP_S3_KEY" = "None" ] || [ "$CP_S3_KEY" = "null" ]; then
+                echo "DEBUG - S3Key query returned None, trying S3 listing fallback..."
+                
+                # List the S3 location to find the VHD file
+                echo "DEBUG - Listing S3 location: s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/"
+                aws s3 ls "s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/" --region ${{ env.AWS_REGION }} 2>&1
+                
+                # Get the VHD file from S3 listing
+                FOUND_VHD=$(aws s3 ls "s3://${{ env.S3_BUCKET }}/$CP_S3_PREFIX/" --region ${{ env.AWS_REGION }} 2>/dev/null | grep -iE "\.vhd$" | awk '{print $NF}' | head -1)
+                if [ -n "$FOUND_VHD" ]; then
+                  CP_S3_KEY="${CP_S3_PREFIX}/${FOUND_VHD}"
+                  echo "DEBUG - Found VHD via S3 listing: '$CP_S3_KEY'"
+                fi
+              fi
+
+              echo "Control Plane S3 Key: $CP_S3_KEY"
+              
+              if [ -z "$CP_S3_KEY" ] || [ "$CP_S3_KEY" = "None" ] || [ "$CP_S3_KEY" = "null" ]; then
+                echo "❌ ERROR: Could not determine Control Plane VHD S3 key"
+                echo "DEBUG - Raw export task JSON:"
+                cat /tmp/cp_export_details.json
+                exit 1
+              fi
               
               CP_VHD=$(basename "$CP_S3_KEY")
               echo "Control Plane VHD: $CP_VHD"
@@ -1010,25 +1099,29 @@ jobs:
           cd "$LOCAL_PATH/$EXPORT_PREFIX/aws"
           
           sha256sum "worker-node/$WORKER_VHD" "control-plane/$CP_VHD" > "${CHECKSUM_FILE}"
+
+          echo "Checksum file: $CHECKSUM_FILE"
+        
           
           # Upload checksum to S3
+          echo "Uploading checksum to S3..."
           aws s3 cp \
             "${CHECKSUM_FILE}" \
             "s3://${{ env.S3_BUCKET }}/${EXPORT_PREFIX}/aws/${CHECKSUM_FILE}" \
             --region ${{ env.AWS_REGION }}
           
-          # Copy to scratch space
-          echo "Copying to scratch space..."
-          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"
-          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"
+          # # Copy to scratch space
+          # echo "Copying to scratch space..."
+          # sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"
+          # sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"
           
-          sudo cp "worker-node/$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node/"
-          sudo cp "control-plane/$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane/"
-          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          # sudo cp "worker-node/$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node/"
+          # sudo cp "control-plane/$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane/"
+          # sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
           
-          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
-          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"/*
-          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"/*
+          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
+          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/worker-node"/*
+          # sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/control-plane"/*
           
           echo "Export complete"
           
