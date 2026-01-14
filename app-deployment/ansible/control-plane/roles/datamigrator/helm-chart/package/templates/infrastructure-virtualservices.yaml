@@ -115,7 +115,7 @@ spec:
           prefix: /grafana
     route:
       - destination:
-          host: grafana-service.grafana.svc.cluster.local
+          host: grafana.grafana.svc.cluster.local
           port:
             number: 3000
 ---
@@ -141,7 +141,7 @@ spec:
           prefix: /prometheus
     route:
       - destination:
-          host: prometheus-service.prometheus.svc.cluster.local
+          host: prometheus-server.prometheus.svc.cluster.local
           port:
-            number: 9090
+            number: 80
 {{- end }}

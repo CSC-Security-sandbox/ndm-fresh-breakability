@@ -2,20 +2,22 @@
 {{- $istio := $global.istio | default dict -}}
 {{- $rateLimit := $istio.rateLimit | default dict -}}
 {{- if and ($istio.enabled | default false) ($rateLimit.enabled | default false) }}
+{{- $services := list "admin-service" "config-service" "jobs-service" "reports-service" "db-writer" "support-service" }}
+{{- range $service := $services }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: datamigrator-ratelimit
-  namespace: {{ $istio.gateway.namespace | default "istio-system" }}
+  name: {{ $service }}-ratelimit
+  namespace: {{ $.Release.Namespace }}
 spec:
   workloadSelector:
     labels:
-      istio: ingressgateway
+      app: {{ $service }}
   configPatches:
   - applyTo: HTTP_FILTER
     match:
-      context: GATEWAY
+      context: SIDECAR_INBOUND
       listener:
         filterChain:
           filter:
@@ -27,28 +29,27 @@ spec:
       value:
         name: envoy.filters.http.local_ratelimit
         typed_config:
-          "@type": type.googleapis.com/udpa.type.v1.TypedStruct
-          type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
-          value:
-            stat_prefix: http_local_rate_limiter
-            token_bucket:
-              max_tokens: {{ $rateLimit.maxTokens | default 2500 }}
-              tokens_per_fill: {{ $rateLimit.tokensPerFill | default 2500 }}
-              fill_interval: {{ $rateLimit.fillInterval | default "1s" }}
-            filter_enabled:
-              runtime_key: local_rate_limit_enabled
-              default_value:
-                numerator: 1000
-                denominator: HUNDRED
-            filter_enforced:
-              runtime_key: local_rate_limit_enforced
-              default_value:
-                numerator: 1000
-                denominator: HUNDRED
-            response_headers_to_add:
-              - append: false
-                header:
-                  key: x-local-rate-limit
-                  value: 'true'
-            local_rate_limit_per_downstream_connection: false
+          "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          stat_prefix: http_local_rate_limiter
+          token_bucket:
+            max_tokens: {{ $rateLimit.maxTokens | default 25 }}
+            tokens_per_fill: {{ $rateLimit.tokensPerFill | default 25 }}
+            fill_interval: {{ $rateLimit.fillInterval | default "1s" }}
+          filter_enabled:
+            runtime_key: local_rate_limit_enabled
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+          filter_enforced:
+            runtime_key: local_rate_limit_enforced
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+          response_headers_to_add:
+            - append: false
+              header:
+                key: x-local-rate-limit
+                value: 'true'
+          local_rate_limit_per_downstream_connection: false
+{{- end }}
 {{- end }}
