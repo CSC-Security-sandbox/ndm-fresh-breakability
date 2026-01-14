@@ -2144,50 +2144,59 @@ export class JobConfigService {
     }
 
     // Recalculate stats
+    // Optimization: Get source_path_id and target_path_id upfront to avoid subquery in SQL
+    // This allows the query planner to use indexes more effectively
+    const sourcePathId = jobConfig.sourcePathId;
+    const targetPathId = jobConfig.targetPathId;
+    
     const dbSchema = process.env.SCHEMA;
+    // Optimized query using DISTINCT ON instead of window functions for better performance
+    // DISTINCT ON is more efficient than FIRST_VALUE window function in PostgreSQL
+    // Recommended index: CREATE INDEX idx_jobconfig_source_target ON jobconfig(source_path_id, target_path_id);
     const query = `
-      WITH all_related_jobs AS (
+      WITH all_related_job_runs AS (
         SELECT jr.id, jr.start_time
         FROM ${dbSchema}.jobrun jr
-        JOIN ${dbSchema}.jobconfig jc ON jr.job_config_id = jc.id
-        WHERE (jc.source_path_id, jc.target_path_id) = (
-          SELECT jc2.source_path_id, jc2.target_path_id
-          FROM ${dbSchema}.jobconfig jc2
-          WHERE jc2.id = $1
-        )
-        ORDER BY jr.start_time DESC
+        INNER JOIN ${dbSchema}.jobconfig jc ON jr.job_config_id = jc.id
+        WHERE jc.source_path_id = $1
+          AND (jc.target_path_id = $2 OR (jc.target_path_id IS NULL AND $2 IS NULL))
       ),
-      inventory_with_latest_status AS (
+      latest_deletion_status AS (
+        SELECT DISTINCT ON (i.path, i.is_directory)
+          i.path,
+          i.is_directory,
+          i.is_deleted
+        FROM ${dbSchema}.inventory i
+        INNER JOIN all_related_job_runs arjr ON i.job_run_id = arjr.id
+        ORDER BY i.path, i.is_directory, arjr.start_time DESC
+      ),
+      max_file_sizes AS (
         SELECT 
           i.path,
           i.is_directory,
-          i.file_size,
-          FIRST_VALUE(i.is_deleted) OVER (
-            PARTITION BY i.path, i.is_directory
-            ORDER BY arj.start_time DESC
-          ) as latest_deletion_status
+          MAX(i.file_size) as max_file_size
         FROM ${dbSchema}.inventory i
-        JOIN all_related_jobs arj ON i.job_run_id = arj.id
+        INNER JOIN all_related_job_runs arjr ON i.job_run_id = arjr.id
+        GROUP BY i.path, i.is_directory
       ),
-      unique_paths_with_max_size AS (
+      active_paths AS (
         SELECT 
-          path,
-          is_directory,
-          MAX(file_size) as max_file_size,
-          latest_deletion_status
-        FROM inventory_with_latest_status
-        WHERE (latest_deletion_status = false OR latest_deletion_status IS NULL)
-        GROUP BY path, is_directory, latest_deletion_status
+          lds.path,
+          lds.is_directory,
+          mfs.max_file_size
+        FROM latest_deletion_status lds
+        INNER JOIN max_file_sizes mfs ON lds.path = mfs.path AND lds.is_directory = mfs.is_directory
+        WHERE lds.is_deleted = false OR lds.is_deleted IS NULL
       )
       SELECT 
         COUNT(DISTINCT CASE WHEN is_directory = false THEN path END) as total_unique_files,
         COUNT(DISTINCT CASE WHEN is_directory = true THEN path END) as total_unique_directories,
         COALESCE(SUM(CASE WHEN is_directory = false THEN max_file_size ELSE 0 END), 0)::bigint as total_size
-      FROM unique_paths_with_max_size;
+      FROM active_paths;
     `;
 
     try {
-      const result = await this.dataSource.query(query, [jobConfigID]);
+      const result = await this.dataSource.query(query, [sourcePathId, targetPathId]);
       
       const totalUniqueFiles = parseInt(result[0]?.total_unique_files || '0', 10);
       const totalUniqueDirectories = parseInt(result[0]?.total_unique_directories || '0', 10);
