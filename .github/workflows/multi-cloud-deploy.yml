@@ -674,7 +674,7 @@ jobs:
           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
         run: |
           SSH_OUTPUT_FILE=$(mktemp)
-          sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH'
+          sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH' | tee "$SSH_OUTPUT_FILE"
           set -e
 
           # Export AWS credentials INSIDE the SSH session
@@ -1061,7 +1061,6 @@ jobs:
           echo "OUTPUT_DATA:${TIMESTAMP}|${WORKER_VHD}|${CP_VHD}|${EXPORT_PREFIX}"
           
           ENDSSH
-          > "$SSH_OUTPUT_FILE" || true
           
           # Extract OUTPUT_DATA from the captured SSH output
           echo "ssh_output<<EOFMARKER" >> $GITHUB_OUTPUT
