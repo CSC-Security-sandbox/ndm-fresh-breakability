@@ -1773,6 +1773,8 @@ export class ConfigurationService {
         { id: In(fileServerIds) },
         { isRefreshed: true },
       );
+      this.logger.error(`[Storage-Aware: ${config.serverType}] ${error.message}`);
+      error.message = "An error occurred, please try again";
       throw error;
     }
 
