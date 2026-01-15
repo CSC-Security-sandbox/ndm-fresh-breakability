@@ -39,6 +39,7 @@ const NextAndSubmitButton = () => {
     certificateAccepted,
     selectedZoneIds,
     zoneCredentials,
+    zonesError,
   } = useContext(CommonFileServerContext);
 
   // Ensure safe defaults for zone state
@@ -118,6 +119,12 @@ const NextAndSubmitButton = () => {
       case STEP_1_CREDENTIALS: {
         // Dell Isilon: Check if all selected zones have valid credentials
         if (isDellIsilon) {
+          // In edit mode, if zones fetch failed, disable Next button
+          if (isEditMode && zonesError) {
+            console.debug("[NextAndSubmitButton] Dell Isilon edit mode - zones fetch failed, disabling Next", { zonesError });
+            return true; // Disabled - zones fetch failed in edit mode
+          }
+
           // Must have at least one zone selected
           if (safeSelectedZoneIds.length === 0) {
             return true; // Disabled - no zones selected

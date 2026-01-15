@@ -78,6 +78,9 @@ export interface FileServerStateContextType {
   // Active zone for worker assignment (Dell Isilon)
   activeZoneId: string | null;
   setActiveZoneId: (arg: string | null) => void;
+  // Zones fetch error (Dell Isilon - prevents navigation in edit mode)
+  zonesError: string | null;
+  setZonesError: (arg: string | null) => void;
 }
 
 // Management Console Form Type for Dell Isilon
