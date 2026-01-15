@@ -350,6 +350,8 @@ export type FileServerApiPropType = {
   serverName: string;
   path: string;
   protocol: "NFS" | "SMB";
+  fileServerName: string;
+  serverType: string;
 };
 
 type JobErrors = any[]; // API is in development, so response is not yet fixed.

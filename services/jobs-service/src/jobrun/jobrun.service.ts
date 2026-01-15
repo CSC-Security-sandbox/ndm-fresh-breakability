@@ -398,9 +398,13 @@ export class JobRunService {
         "jobConfig.futureScheduleAt AS nextSchedule",
         "sourceVolume.volumePath AS volumePath",
         "sourceFileServer.protocol AS sourceFileServerProtocol",
+        "sourceFileServer.fileServerName AS sourceFileServerName",
         "sourceConfig.configName AS sourceConfigName",
+        "sourceConfig.serverType AS sourceServerType",
         "targetVolume.volumePath AS targetVolumePath",
         "targetFileServer.protocol AS targetFileServerProtocol",
+        "targetFileServer.fileServerName AS targetFileServerName",
+        "targetConfig.serverType AS targetServerType",
         "targetConfig.configName AS targetConfigName",
         "jobRun.subStatus AS subStatus",
         "jobRun.status AS status",
@@ -426,14 +430,18 @@ export class JobRunService {
           nextSchedule: jobRun?.nextschedule,
           sourceServer: {
             serverName: jobRun.sourceconfigname,
+            fileServerName: jobRun.sourcefileservername,
             path: jobRun.volumepath,
             protocol: jobRun.sourcefileserverprotocol,
+            serverType: jobRun.sourceservertype,
           },
           destinationServer: jobRun.targetvolumepath
             ? {
                 serverName: jobRun.targetconfigname,
+                fileServerName: jobRun.targetfileservername,
                 path: jobRun.targetvolumepath,
                 protocol: jobRun.targetfileserverprotocol,
+                serverType: jobRun.targetservertype,
               }
             : undefined,
           timeElapsed: jobRun.endtime
