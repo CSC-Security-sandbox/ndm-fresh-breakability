@@ -5032,10 +5032,14 @@ describe("JobConfigService", () => {
 
   describe('getJobConfigInventoryStats', () => {
     const validJobConfigId = '123e4567-e89b-12d3-a456-426614174000';
+    const mockSourcePathId = 'source-path-id-123';
+    const mockTargetPathId = 'target-path-id-456';
     const mockJobConfig = {
       id: validJobConfigId,
       jobType: JobType.MIGRATE,
       status: JobStatus.Active,
+      sourcePathId: mockSourcePathId,
+      targetPathId: mockTargetPathId,
     };
 
     beforeEach(() => {
@@ -5171,8 +5175,8 @@ describe("JobConfigService", () => {
       });
 
       expect(dataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining('WITH all_related_jobs AS'),
-        [validJobConfigId]
+        expect.stringContaining('WITH all_related_job_runs AS'),
+        [mockSourcePathId, mockTargetPathId]
       );
       expect(jobConfigInventoryStatsRepo.create).toHaveBeenCalledWith({
         jobConfigId: validJobConfigId,
