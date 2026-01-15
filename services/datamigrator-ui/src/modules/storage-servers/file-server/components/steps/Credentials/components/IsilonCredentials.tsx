@@ -883,12 +883,13 @@ const IsilonCredentials = () => {
     certificateData,
     isEditMode,
     editingFileServerDetails,
+    zonesError,
+    setZonesError,
   } = useContext(CommonFileServerContext);
 
   // State for zones fetched from API
   const [zones, setZones] = useState<ZoneData[]>([]);
   const [zonesLoading, setZonesLoading] = useState<boolean>(false);
-  const [zonesError, setZonesError] = useState<string | null>(null);
 
   // API mutation for fetching zones
   const [fetchZonesApi] = useFetchZonesMutation();
