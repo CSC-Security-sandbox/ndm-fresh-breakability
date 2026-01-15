@@ -82,31 +82,31 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
             Wait(10)
 
-            // Define test principals based on AD users
-            // Scenario 1: Orphaned SID mapping (deleted user → existing destination user)
-            sourceOrphanedUser := "rootdomain\\invusr11760105113" // Will be deleted, SID: S-1-5-21-...-1276
-            targetOrphanedUser := "invaliduser1"                  // Exists at destination, SID: S-1-5-21-...-1195
-            targetOrphanedSID := "S-1-5-21-142954655-3166001488-1321770916-1195"
+			// Define test principals based on AD users
+			// Scenario 1: Orphaned SID mapping (deleted user → existing destination user)
+			sourceOrphanedUser := "rootdomain\\invusr11760105113" // Will be deleted, SID: S-1-5-21-...-1276
+			targetOrphanedUser := "invaliduser1"                  // Exists at destination, SID: S-1-5-21-...-1195
+			targetOrphanedSID := "S-1-5-21-142954655-3166001488-1321770916-1855"
 
-            // Scenario 2: Name-based mapping (existing user → different user by name match)
-            sourceNameUser := "rootdomain\\invaliduser123456789" // Exists, SID: S-1-5-21-...-1176
-            targetNameUser := "invaliduser123456"        // Maps to different user, SID: S-1-5-21-...-1175
-            targetNameSID := "S-1-5-21-142954655-3166001488-1321770916-1175"
+			// Scenario 2: SID-based mapping (existing user → different user by SID in CSV)
+			sourceNameUser := "rootdomain\\invaliduser123456789" // Exists, SID: S-1-5-21-...-1176
+			targetNameUser := "invaliduser123456"                // Maps to different user via CSV, SID: S-1-5-21-...-1175
+			targetNameSID := "S-1-5-21-142954655-3166001488-1321770916-1175"
 
-            // Scenario 3: Unmapped VALID user (proves only name-based mapping works, not SID-based)
-            unmappedValidUser := "rootdomain\\invalidgroup1"                        // Valid user in AD, SID NOT in CSV
-            unmappedValidUserSID := "S-1-5-21-142954655-3166001488-1321770916-1197" // Expected to stay unchanged
+			// Scenario 3: Unmapped VALID user (proves only name-based mapping works, not SID-based)
+			unmappedValidUser := "rootdomain\\invalidgroup1"                        // Valid user in AD, SID NOT in CSV
+			unmappedValidUserSID := "S-1-5-21-142954655-3166001488-1321770916-1857" // Expected to stay unchanged
 
-            By("Principal configuration summary")
-            LogDebug("Scenario 1 - Orphaned SID Mapping:")
-            LogDebug(fmt.Sprintf("  Source (will be deleted): %s", sourceOrphanedUser))
-            LogDebug(fmt.Sprintf("  Target (maps to): %s (SID: %s)", targetOrphanedUser, targetOrphanedSID))
-            LogDebug("Scenario 2 - Name-based Mapping:")
-            LogDebug(fmt.Sprintf("  Source: %s", sourceNameUser))
-            LogDebug(fmt.Sprintf("  Target (maps to): %s (SID: %s)", targetNameUser, targetNameSID))
-            LogDebug("Scenario 3 - Unmapped VALID User (verifies SID-based mapping does NOT work):")
-            LogDebug(fmt.Sprintf("  User: %s (SID: %s)", unmappedValidUser, unmappedValidUserSID))
-            LogDebug("  Expected: Should remain UNCHANGED (proves only name-based mapping works, not automatic SID mapping)")
+			By("Principal configuration summary")
+			LogDebug("Scenario 1 - Orphaned SID Mapping:")
+			LogDebug(fmt.Sprintf("  Source (will be deleted): %s", sourceOrphanedUser))
+			LogDebug(fmt.Sprintf("  Target (maps to): %s (SID: %s)", targetOrphanedUser, targetOrphanedSID))
+			LogDebug("Scenario 2 - SID-based Mapping (via CSV):")
+			LogDebug(fmt.Sprintf("  Source: %s", sourceNameUser))
+			LogDebug(fmt.Sprintf("  Target (maps to via CSV): %s (SID: %s)", targetNameUser, targetNameSID))
+			LogDebug("Scenario 3 - Unmapped VALID User (verifies SID-based mapping does NOT work):")
+			LogDebug(fmt.Sprintf("  User: %s (SID: %s)", unmappedValidUser, unmappedValidUserSID))
+			LogDebug("  Expected: Should remain UNCHANGED (proves only name-based mapping works, not automatic SID mapping)")
 
             By("Creating source SMB file server")
             sourceParams := CreateServereParams{
@@ -167,16 +167,30 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
                 }
             }
 
-            By("Creating SID mapping CSV")
-            csvLines := []string{
-                "sid_source,sid_target",
-                fmt.Sprintf("%s,rootdomain\\invaliduser1", sourceOrphanedSID),
-                "rootdomain\\invaliduser123456789,rootdomain\\invaliduser123456",
-            }
-            csvContent := strings.Join(csvLines, "\n")
-            LogDebug("SID Mapping CSV Content:\n" + csvContent)
-            base64Data := base64.StdEncoding.EncodeToString([]byte(csvContent))
-            sidMappingBase64 := fmt.Sprintf("data:text/csv;base64,%s", base64Data)
+			By("Creating SID mapping CSV")
+			// Extract source name-based user SID for CSV mapping
+			sourceNameUserSID := ""
+			for _, perm := range sourcePermsBeforeDeletion {
+				if strings.Contains(perm.FilePath, "scenario2_name_mapping") {
+					for _, acl := range perm.ACLEntries {
+						if strings.Contains(strings.ToLower(acl.DisplayName), "invaliduser123456789") &&
+							strings.HasPrefix(acl.SID, "S-1-5-21-") {
+							sourceNameUserSID = acl.SID
+							LogDebug(fmt.Sprintf("Found source name-based user SID: %s", sourceNameUserSID))
+						}
+					}
+				}
+			}
+
+			csvLines := []string{
+				"sid_source,sid_target",
+				fmt.Sprintf("%s,rootdomain\\invaliduser1", sourceOrphanedSID),
+				fmt.Sprintf("%s,rootdomain\\invaliduser123456", sourceNameUserSID),
+			}
+			csvContent := strings.Join(csvLines, "\n")
+			LogDebug("SID Mapping CSV Content:\n" + csvContent)
+			base64Data := base64.StdEncoding.EncodeToString([]byte(csvContent))
+			sidMappingBase64 := fmt.Sprintf("data:text/csv;base64,%s", base64Data)
 
             By("DELETING source orphaned user from Active Directory (Scenario 1)")
             By("This simulates a user that exists in source domain but not in destination domain")
@@ -281,10 +295,10 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
                 }
             }
 
-            By("Verifying SID Mapping Results at Destination")
-            By("SCENARIO 1 (Orphaned SID): Source orphaned SID should be MAPPED to targetOrphanedSID")
-            By("SCENARIO 2 (Name-based): Source invaliduser123456789 should be MAPPED to targetNameUser (invaliduser123456)")
-            By("SCENARIO 3 (Unmapped Valid User): Source valid user NOT in CSV should remain AS-IS with ORIGINAL SID (proves no automatic SID mapping)")
+			By("Verifying SID Mapping Results at Destination")
+			By("SCENARIO 1 (Orphaned SID): Source orphaned SID should be MAPPED to targetOrphanedSID")
+			By("SCENARIO 2 (SID-based via CSV): Source invaliduser123456789 should be MAPPED to targetNameUser (invaliduser123456)")
+			By("SCENARIO 3 (Unmapped Valid User): Source valid user NOT in CSV should remain AS-IS with ORIGINAL SID (proves no automatic SID mapping)")
 
             // Verification approach:
             // 1. Find the file with orphaned user permissions (scenario1_orphaned)
@@ -315,17 +329,17 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
                     }
                 }
 
-                // SCENARIO 2: Name-based mapping
-                if strings.Contains(filePath, "scenario2_name_mapping") && strings.Contains(filePath, "name_mapping_file.txt") {
-                    LogDebug(fmt.Sprintf("Checking SCENARIO 2 file: %s", filePath))
-                    for _, acl := range perm.ACLEntries {
-                        LogDebug(fmt.Sprintf("ACL: Name=%s, SID=%s", acl.DisplayName, acl.SID))
-                        if acl.SID == targetNameSID {
-                            LogDebug(fmt.Sprintf("SCENARIO 2 PASS: Name-based mapping applied correctly to %s (SID: %s)", targetNameUser, targetNameSID))
-                            scenario2Verified = true
-                        }
-                    }
-                }
+				// SCENARIO 2: SID-based mapping via CSV
+				if strings.Contains(filePath, "scenario2_name_mapping") && strings.Contains(filePath, "name_mapping_file.txt") {
+					LogDebug(fmt.Sprintf("Checking SCENARIO 2 file: %s", filePath))
+					for _, acl := range perm.ACLEntries {
+						LogDebug(fmt.Sprintf("ACL: Name=%s, SID=%s", acl.DisplayName, acl.SID))
+						if acl.SID == targetNameSID {
+							LogDebug(fmt.Sprintf("SCENARIO 2 PASS: SID-based CSV mapping applied correctly to %s (SID: %s)", targetNameUser, targetNameSID))
+							scenario2Verified = true
+						}
+					}
+				}
 
                 // SCENARIO 3: Unmapped valid user (verifies SID-based mapping does NOT work)
                 if strings.Contains(filePath, "scenario3_unmapped") && strings.Contains(filePath, "unmapped_user_file.txt") {
@@ -347,10 +361,10 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
             Expect(scenario1Verified).To(BeTrue(), "SCENARIO 1 FAILED: Orphaned SID was not mapped to target SID %s", targetOrphanedSID)
             Expect(scenario3Verified).To(BeTrue(), "SCENARIO 3 FAILED: Unmapped valid user SID was not preserved (expected original SID %s)", unmappedValidUserSID)
 
-            LogDebug("\n=== ALL SID MAPPING SCENARIOS VERIFIED ===")
-            LogDebug("SCENARIO 1: Orphaned SID → Mapped to target user via CSV")
-            LogDebug("SCENARIO 2: Name-based mapping → Applied correctly via CSV")
-            LogDebug("SCENARIO 3: Unmapped valid user → Original SID preserved (proves only CSV name-based mapping works, not automatic SID mapping)")
+			LogDebug("\n=== ALL SID MAPPING SCENARIOS VERIFIED ===")
+			LogDebug("SCENARIO 1: Orphaned SID → Mapped to target user via CSV")
+			LogDebug("SCENARIO 2: SID-based mapping via CSV → Applied correctly")
+			LogDebug("SCENARIO 3: Unmapped valid user → Original SID preserved (proves only explicit CSV SID mapping works, not automatic SID mapping)")
 
             By("TC-SMB-SID-MAPPING-WITH-CSV: Test completed!")
             By("########################## TC-SMB-SID-MAPPING-WITH-CSV end ################################")
