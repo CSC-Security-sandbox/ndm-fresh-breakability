@@ -73,6 +73,8 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
       React.createElement(ServerPathRenderer, {
         server: value?.serverName,
         path: value?.path,
+        fileServerName: value?.fileServerName,
+        serverType: value?.serverType,
       }),
   },
   {
@@ -101,6 +103,8 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
       React.createElement(ServerPathRenderer, {
         server: value?.serverName,
         path: value?.path,
+        fileServerName: value?.fileServerName,
+        serverType: value?.serverType,
       }),
   },
   {
