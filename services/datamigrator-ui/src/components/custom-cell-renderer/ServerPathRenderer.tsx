@@ -4,8 +4,8 @@ import Box from "@/components/container/Box";
 interface ServerPathRendererProps {
   server: string;
   path: string;
-  fileServerName?: string;
-  serverType?: string;
+  fileServerName: string;
+  serverType: string;
 }
 
 const ServerPathRenderer = ({
