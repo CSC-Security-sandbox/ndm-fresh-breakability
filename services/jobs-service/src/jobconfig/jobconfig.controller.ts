@@ -304,10 +304,21 @@ export class JobConfigController {
   }
 
   @ApiOperation({ summary: 'Get inventory statistics for a job configuration' })
+  @ApiQuery({ 
+    name: 'fetch-latest', 
+    required: false, 
+    type: String, 
+    description: 'If true, recalculates stats from database. If false, returns cached stats. Default: false',
+    example: 'false'
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Inventory statistics retrieved successfully',
     type: JobConfigInventoryStatsResponseDto
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Too Many Requests - Calculation is in progress or no data available. Use fetch-latest=true to trigger calculation.'
   })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid jobConfigID format.' })
   @ApiResponse({ status: 404, description: 'Job config not found.' })
@@ -316,8 +327,10 @@ export class JobConfigController {
   @Auth(Permission.ViewJob)
   @Post(':id/inventory-stats')
   async getJobConfigInventoryStats(
-    @Param('id') jobConfigID: string
+    @Param('id') jobConfigID: string,
+    @Query('fetch-latest') fetchLatest?: string
   ): Promise<JobConfigInventoryStatsResponseDto> {
-    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID);
+    const shouldFetchLatest = fetchLatest === 'true';
+    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID, shouldFetchLatest);
   }
 }

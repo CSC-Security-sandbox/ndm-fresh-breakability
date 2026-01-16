@@ -2095,7 +2095,7 @@ export class JobConfigService {
     }
   }
 
-  async getJobConfigInventoryStats(jobConfigID: string): Promise<JobConfigInventoryStatsResponseDto> {
+  async getJobConfigInventoryStats(jobConfigID: string, fetchLatest: boolean = false): Promise<JobConfigInventoryStatsResponseDto> {
     if (!isUUID(jobConfigID)) {
       throw new BadRequestException('Invalid jobConfigID format');
     }
@@ -2110,12 +2110,29 @@ export class JobConfigService {
 
     if (jobConfig.jobType !== JobType.MIGRATE) {
       throw new BadRequestException(`Inventory stats are only available for Migration job configs. Current job type: ${jobConfig.jobType}`);
-    }
-    
+    }    
     let statsEntity = await this.jobConfigInventoryStatsRepo.findOne({
       where: { jobConfigId: jobConfigID },
     });
+    // If fetchLatest is false, just return cached data from repository
+    if (!fetchLatest) {
+      if (!statsEntity) {
+        throw new HttpException(
+          {
+            status: 'pending',
+            message: 'Calculation is in progress or Nothing to Show',
+          },
+          HttpStatus.TOO_MANY_REQUESTS // 429
+        );
+      }
 
+      return {
+        totalUniqueFiles: Number(statsEntity.fileCount),
+        totalUniqueDirectories: Number(statsEntity.dirCount),
+        totalSize: formatBytes(Number(statsEntity.totalSize)),
+        lastUpdatedAt: statsEntity.lastUpdatedAt,
+      };
+    }
     // Get the latest completed/errored/failed jobRun for this jobConfig
     const latestJobRun = await this.jobRunRepo.findOne({
       where: { 
