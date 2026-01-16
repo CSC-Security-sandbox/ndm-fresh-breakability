@@ -646,7 +646,8 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  S3_BUCKET: dk-test-workflow
+  S3_BUCKET_1: dk-test-workflow
+  S3_BUCKET_2: hello-dk-first
   EXPORT_FORMAT: VHD
   LOCAL_EXPORT_PATH: /home/ubuntu/
   SCRATCH_SPACE: /mnt/scratch_space
@@ -675,7 +676,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
-          S3_BUCKET: ${{ env.S3_BUCKET }}
+          S3_BUCKET_1: ${{ env.S3_BUCKET_1 }}
+          S3_BUCKET_2: ${{ env.S3_BUCKET_2 }}
           EXPORT_FORMAT: ${{ env.EXPORT_FORMAT }}
           LOCAL_EXPORT_PATH: ${{ env.LOCAL_EXPORT_PATH }}
           SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
@@ -727,7 +729,7 @@ jobs:
           LOCAL_PATH="${LOCAL_EXPORT_PATH}"
           SCRATCH="${SCRATCH_SPACE}"
           CHECKSUM_FILE="AWS_SHA256SUMS-\${TIMESTAMP}.sha256"
-          S3_BUCKET_NAME="${S3_BUCKET}"
+          S3_BUCKET_NAME="${S3_BUCKET_1}"
           DISK_FORMAT="${EXPORT_FORMAT}"
           REGION="${AWS_DEFAULT_REGION}"
           
@@ -798,7 +800,23 @@ jobs:
 
           # Attach policy to role
           echo "Attaching policy to IAM role..."
-          echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:GetObject","s3:ListBucket","s3:PutObject"],"Resource":["arn:aws:s3:::'""\${S3_BUCKET_NAME}""'","arn:aws:s3:::'""\${S3_BUCKET_NAME}""'/*"]},{"Effect":"Allow","Action":["ec2:ModifySnapshotAttribute","ec2:CopySnapshot","ec2:Describe*"],"Resource":"*"}]}' > /tmp/vmimport-policy.json
+          echo '{"Version":"2012-10-17","Statement":[
+            {
+              "Effect":"Allow",
+              "Action":["s3:GetBucketLocation","s3:GetObject","s3:ListBucket","s3:PutObject"],
+              "Resource":[
+                "arn:aws:s3:::'"${S3_BUCKET_1}"'",
+                "arn:aws:s3:::'"${S3_BUCKET_1}"'/*",
+                "arn:aws:s3:::'"${S3_BUCKET_2}"'",
+                "arn:aws:s3:::'"${S3_BUCKET_2}"'/*"
+              ]
+            },
+            {
+              "Effect":"Allow",
+              "Action":["ec2:ModifySnapshotAttribute","ec2:CopySnapshot","ec2:RegisterImage","ec2:Describe*"],
+              "Resource":"*"
+            }
+          ]}' > /tmp/vmimport-policy.json
           aws iam put-role-policy \
             --role-name vmimport \
             --policy-name vmimport \
@@ -1137,9 +1155,9 @@ jobs:
           echo "Control Plane VHD: ${{ steps.set-outputs.outputs.controlplane_vhd }}"
           echo ""
           echo "S3 Locations:"
-          echo "  Bucket: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
-          echo "  Worker: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/worker-node/${{ steps.set-outputs.outputs.worker_vhd }}"
-          echo "  CP: s3://${{ env.S3_BUCKET }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/control-plane/${{ steps.set-outputs.outputs.controlplane_vhd }}"
+          echo "  Bucket: s3://${{ env.S3_BUCKET_1 }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
+          echo "  Worker: s3://${{ env.S3_BUCKET_1 }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/worker-node/${{ steps.set-outputs.outputs.worker_vhd }}"
+          echo "  CP: s3://${{ env.S3_BUCKET_1 }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/control-plane/${{ steps.set-outputs.outputs.controlplane_vhd }}"
           echo ""
           echo "Local Path: ${{ env.LOCAL_EXPORT_PATH }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
           echo "Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.set-outputs.outputs.export_prefix }}/aws/"
