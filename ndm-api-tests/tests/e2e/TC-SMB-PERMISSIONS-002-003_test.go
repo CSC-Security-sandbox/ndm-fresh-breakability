@@ -90,13 +90,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			Wait(5)
 
-			// By("Clearing all SMB sessions and Windows caches BEFORE creating files")
-			// err = ClearAllSMBSessions()
-			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions before file creation")
-			// LogDebug("All cache cleared")
-
-			// Wait(10)
-
 			// Define test principals based on AD users with UUID for parallel isolation
 			// Scenario 1: Orphaned SID mapping (deleted user → existing destination user)
 			sourceOrphanedUser := fmt.Sprintf("rootdomain\\invusr1_%s", uniqueID) // Will be deleted
@@ -166,10 +159,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 
 			// Clear SMB cache so Windows can see the newly created users
 			Wait(3)
-			// By("Clearing SMB cache after AD user creation")
-			// err = ClearAllSMBSessions()
-			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions after user creation")
-			// LogDebug("SMB cache cleared, Windows should now recognize new users")
 
 			By("Waiting for AD replication and Windows name resolution")
 			Wait(60) // Extended wait time for Windows to fully recognize the AD users for SMB operations
@@ -242,11 +231,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			err = DeleteADPrincipals([]string{sourceOrphanedUser}, []string{})
 			Expect(err).NotTo(HaveOccurred(), "Error deleting orphaned user from AD")
 			LogDebug(fmt.Sprintf("Deleted from AD: %s (creates orphaned SID)", sourceOrphanedUser))
-
-			// By("Clearing all SMB sessions and Windows name caches")
-			// err = ClearAllSMBSessions()
-			// Expect(err).NotTo(HaveOccurred(), "Error clearing SMB sessions")
-			// LogDebug("SMB sessions cleared - forcing fresh connections")
 
 			By("Waiting for AD deletion to propagate")
 			Wait(180)
@@ -461,13 +445,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Skip("AZURE_SMB_PROTOCOL_PASSWORD not set - cannot join domain")
 			}
 
-			// LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
-			// err = EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
-			// Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
-			// LogDebug("Windows worker is domain-joined and ready for AD operations")
-
-			// Wait(10)
-
 			By("Installing Active Directory PowerShell module on Windows worker")
 			err = InstallADPowerShellModule()
 			Expect(err).NotTo(HaveOccurred(), "Error installing AD PowerShell module")
@@ -536,10 +513,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			Expect(err).NotTo(HaveOccurred(), "Error adding users to group")
 			LogDebug(fmt.Sprintf("Added users %v to group %s", invalidUsers, invalidGroups[0]))
 
-			// By("Clearing SMB cache after AD principal creation")
-			// err = ClearAllSMBSessions()
-			// Expect(err).NotTo(HaveOccurred())
-
 			By("Waiting for AD replication and Windows name resolution")
 			Wait(120) // Increased wait to ensure AD principals are fully replicated
 
@@ -567,10 +540,6 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			err = DeleteADPrincipals(invalidUsers, invalidGroups)
 			Expect(err).NotTo(HaveOccurred())
 			LogDebug("Invalid principals deleted - creating orphaned SIDs")
-
-			// By("Clearing all SMB sessions")
-			// err = ClearAllSMBSessions()
-			// Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for AD deletion to propagate")
 			Wait(180)

@@ -174,7 +174,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 
-			By("Getting volume details for the second path")
+			By("Getting volume details for the invalid path")
 		invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath2)
 		Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath2)
 			Expect(invalidVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
