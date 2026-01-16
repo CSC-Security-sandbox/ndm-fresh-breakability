@@ -5105,7 +5105,7 @@ describe("JobConfigService", () => {
       expect(thrownError.getStatus()).toBe(HttpStatus.ACCEPTED);
       expect(thrownError.getResponse()).toEqual({
         status: 'pending',
-        message: 'Calculation is in progress or Nothing to Show',
+        message: 'Calculation in progress or no results to display',
       });
 
       expect(jobConfigInventoryStatsRepo.findOne).toHaveBeenCalledWith({
@@ -5131,7 +5131,7 @@ describe("JobConfigService", () => {
       expect(thrownError.getResponse()).toHaveProperty('status', 'pending');
       expect(thrownError.getResponse()).toHaveProperty(
         'message',
-        'Calculation is in progress or Nothing to Show',
+        'Calculation in progress or no results to display',
       );
     });
 

@@ -2120,7 +2120,7 @@ export class JobConfigService {
         throw new HttpException(
           {
             status: 'pending',
-            message: 'Calculation is in progress or Nothing to Show',
+            message: 'Calculation in progress or no results to display',
           },
           HttpStatus.ACCEPTED // 202
         );
