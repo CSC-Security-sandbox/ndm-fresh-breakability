@@ -14,11 +14,11 @@ vpc_id                       = "vpc-0cce6fb6ec77a8daf" // OnPremisesConnectivity
 subnet_id                    = "subnet-0ba24aac108bca5ca" // OnPremises-us-east1a
 
 // AWS AMI and Instance Configuration
-aws_ami_name                 = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20250921"
+aws_ami_name                 = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20251015"
 aws_root_device_type         = "ebs"
 aws_virtualization_type      = "hvm"
 aws_ami_owner                = "099720109477"
-aws_packer_instance_type     = "t3a.2xlarge"
+aws_packer_instance_type     = "t3a.xlarge"
 
 // AWS Block Device Configuration
 aws_block_device_name                  = "/dev/sda1"
