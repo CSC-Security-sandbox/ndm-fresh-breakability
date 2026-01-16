@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Res, Inject } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, ParseBoolPipe, Patch, Post, Put, Query, Res, Inject } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
@@ -304,10 +304,21 @@ export class JobConfigController {
   }
 
   @ApiOperation({ summary: 'Get inventory statistics for a job configuration' })
+  @ApiQuery({ 
+    name: 'fetch-latest', 
+    required: false, 
+    type: Boolean, 
+    description: 'If true, recalculates stats from database. If false, returns cached stats. Default: false',
+    example: false
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Inventory statistics retrieved successfully',
     type: JobConfigInventoryStatsResponseDto
+  })
+  @ApiResponse({ 
+    status: 202, 
+    description: 'Accepted - Calculation is in progress or no data available. Use fetch-latest=true to trigger calculation.'
   })
   @ApiResponse({ status: 400, description: 'Bad Request - Invalid jobConfigID format.' })
   @ApiResponse({ status: 404, description: 'Job config not found.' })
@@ -316,8 +327,10 @@ export class JobConfigController {
   @Auth(Permission.ViewJob)
   @Post(':id/inventory-stats')
   async getJobConfigInventoryStats(
-    @Param('id') jobConfigID: string
+    @Param('id') jobConfigID: string,
+    @Query('fetch-latest', new ParseBoolPipe({ optional: true })) fetchLatest?: boolean
   ): Promise<JobConfigInventoryStatsResponseDto> {
-    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID);
+    const shouldFetchLatest = fetchLatest ?? false;
+    return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID, shouldFetchLatest);
   }
 }
