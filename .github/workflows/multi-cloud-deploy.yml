@@ -1,4 +1,4 @@
-# name: Multi-Cloud Deployment
+name: Multi-Cloud Deployment
 
 # on:
 #   workflow_dispatch:
@@ -626,7 +626,7 @@
 #         echo ""
 #         echo "Multi-cloud deployment process completed!"
 
-name: AWS Image Export & SHA256 Generation
+# name: AWS Image Export & SHA256 Generation
 
 on:
   workflow_dispatch:
