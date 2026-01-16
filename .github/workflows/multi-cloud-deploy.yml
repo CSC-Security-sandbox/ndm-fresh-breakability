@@ -772,12 +772,7 @@ jobs:
                     "Principal": {
                       "Service": "vmie.amazonaws.com"
                     },
-                    "Action": "sts:AssumeRole",
-                    "Condition": {
-                      "StringEquals": {
-                        "sts:ExternalId": "vmimport"
-                      }
-                    }
+                    "Action": "sts:AssumeRole"
                   }
                 ]
               }'
@@ -794,12 +789,7 @@ jobs:
                     "Principal": {
                       "Service": "vmie.amazonaws.com"
                     },
-                    "Action": "sts:AssumeRole",
-                    "Condition": {
-                      "StringEquals": {
-                        "sts:ExternalId": "vmimport"
-                      }
-                    }
+                    "Action": "sts:AssumeRole"
                   }
                 ]
               }'
