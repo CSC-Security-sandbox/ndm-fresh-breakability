@@ -574,9 +574,13 @@ export type JobDescriptionColumnPropType = {
 export interface AllFileServerWithVolumesApiType {
   id: string;
   configName: string;
+  configType?: string;
+  status?: string;
   fileServers: {
     id: string;
     protocol: string;
+    fileServerName?: string; // Zone name for Dell Isilon
+    status?: string; // Zone status for Dell Isilon
     volumes: {
       id: string;
       volumePath: string;

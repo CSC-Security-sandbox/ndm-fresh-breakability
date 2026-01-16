@@ -22,6 +22,10 @@ export class FileServerEntity extends Base {
     @Column({ type: 'text', nullable: true, name: 'file_server_name' })
     fileServerName: string;
 
+    @ApiProperty({ description: 'Status' })
+    @Column({ type: 'varchar', nullable: true, name: 'status' })
+    status: string;
+
     @ApiProperty({ description: 'data' })
     @Column({ type: 'text', nullable: true,  name:'username' })
     userName: string;

@@ -1261,10 +1261,13 @@ export class JobConfigService {
         configs: {
           id: true,
           configName: true,
+          configType: true,
           status: true,
           fileServers: {
             id: true,
             protocol: true,
+            fileServerName: true,
+            status: true,
             volumes: {
               id: true,
               volumePath: true,

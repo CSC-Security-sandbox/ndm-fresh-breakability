@@ -179,28 +179,58 @@ export function withBulkMigrateCreateForm(
           const notReachableVolumes = [];
           const sourceDisabledPathsHashSet = [];
           allFileServers.forEach((config) => {
-            const _destinationPaths: DestinationPathsOptionsType[] = [];
-            config?.fileServers?.flatMap((fileServer) =>
-              fileServer?.volumes?.map((volume) => {
-                _destinationPaths.push({
-                  protocol: fileServer.protocol,
-                  pathId: volume?.id,
-                  pathName: volume?.volumePath,
-                  isDisabled: volume?.isDisabled,
-                  isValid: volume?.isValid,
-                  reachableCount: volume?.reachableCount,
+            // Check if it's OtherNAS - only OtherNAS uses config-level keying
+            const isOtherNas = config?.configType === "OtherNAS";
+
+            if (!isOtherNas) {
+              // For Dell Isilon (or other multi-zone configs): create separate entries for each zone (fileServer)
+              config?.fileServers?.forEach((fileServer) => {
+                const _destinationPaths: DestinationPathsOptionsType[] = [];
+                fileServer?.volumes?.forEach((volume) => {
+                  _destinationPaths.push({
+                    protocol: fileServer.protocol,
+                    pathId: volume?.id,
+                    pathName: volume?.volumePath,
+                    isDisabled: volume?.isDisabled,
+                    isValid: volume?.isValid,
+                    reachableCount: volume?.reachableCount,
+                  });
+                  if (volume?.reachableCount === 0) {
+                    notReachableVolumes.push(volume.id);
+                  }
+                  if (volume?.isDisabled) {
+                    sourceDisabledPathsHashSet.push(volume.id);
+                  }
                 });
-                if (volume?.reachableCount === 0) {
-                  notReachableVolumes.push(volume.id);
-                }
-                if (volume?.isDisabled) {
-                  sourceDisabledPathsHashSet.push(volume.id);
-                }
-              })
-            );
+                // Key by fileServer.id (zone ID) for Dell Isilon
+                _fileServerDetailsMap.set(fileServer?.id, _destinationPaths);
+              });
+            } else {
+              // For OtherNAS: keep existing behavior - key by config.id
+              const _destinationPaths: DestinationPathsOptionsType[] = [];
+              config?.fileServers?.flatMap((fileServer) =>
+                fileServer?.volumes?.map((volume) => {
+                  _destinationPaths.push({
+                    protocol: fileServer.protocol,
+                    pathId: volume?.id,
+                    pathName: volume?.volumePath,
+                    isDisabled: volume?.isDisabled,
+                    isValid: volume?.isValid,
+                    reachableCount: volume?.reachableCount,
+                  });
+                  if (volume?.reachableCount === 0) {
+                    notReachableVolumes.push(volume.id);
+                  }
+                  if (volume?.isDisabled) {
+                    sourceDisabledPathsHashSet.push(volume.id);
+                  }
+                })
+              );
+              _fileServerDetailsMap.set(config?.id, _destinationPaths);
+            }
+
             setSourceDisabledPaths(sourceDisabledPathsHashSet);
             setListOfNotReachableExportPaths(notReachableVolumes);
-            _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
 
           mappingStepForm.setValues({
