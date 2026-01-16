@@ -5089,7 +5089,7 @@ describe("JobConfigService", () => {
       ).rejects.toThrow('Inventory stats are only available for Migration job configs');
     });
 
-    it('should throw HttpException with 429 status when fetchLatest is false and no stats entity exists', async () => {
+    it('should throw HttpException with 202 status when fetchLatest is false and no stats entity exists', async () => {
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
       jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
 
@@ -5102,7 +5102,7 @@ describe("JobConfigService", () => {
         .catch((e) => e);
 
       expect(thrownError).toBeInstanceOf(HttpException);
-      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getStatus()).toBe(HttpStatus.ACCEPTED);
       expect(thrownError.getResponse()).toEqual({
         status: 'pending',
         message: 'Calculation is in progress or Nothing to Show',
@@ -5114,7 +5114,7 @@ describe("JobConfigService", () => {
       expect(dataSource.query).not.toHaveBeenCalled();
     });
 
-    it('should throw HttpException with 429 status when fetchLatest is not provided (defaults to false) and no stats exist', async () => {
+    it('should throw HttpException with 202 status when fetchLatest is not provided (defaults to false) and no stats exist', async () => {
       jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
       jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
 
@@ -5127,7 +5127,7 @@ describe("JobConfigService", () => {
         .catch((e) => e);
 
       expect(thrownError).toBeInstanceOf(HttpException);
-      expect(thrownError.getStatus()).toBe(429);
+      expect(thrownError.getStatus()).toBe(202);
       expect(thrownError.getResponse()).toHaveProperty('status', 'pending');
       expect(thrownError.getResponse()).toHaveProperty(
         'message',
@@ -5135,7 +5135,7 @@ describe("JobConfigService", () => {
       );
     });
 
-    it('should NOT throw 429 error when fetchLatest is true and no stats exist (should recalculate)', async () => {
+    it('should NOT throw 202 error when fetchLatest is true and no stats exist (should recalculate)', async () => {
       const mockQueryResult = [
         {
           total_unique_files: '150',
@@ -5180,7 +5180,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: expect.any(Date),
       });
 
-      // Should not throw 429, should recalculate instead
+      // Should not throw 202, should recalculate instead
       expect(dataSource.query).toHaveBeenCalled();
       expect(jobConfigInventoryStatsRepo.save).toHaveBeenCalled();
     });

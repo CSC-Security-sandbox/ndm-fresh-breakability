@@ -2122,7 +2122,7 @@ export class JobConfigService {
             status: 'pending',
             message: 'Calculation is in progress or Nothing to Show',
           },
-          HttpStatus.TOO_MANY_REQUESTS // 429
+          HttpStatus.ACCEPTED // 202
         );
       }
 

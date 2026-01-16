@@ -1346,16 +1346,16 @@ describe("JobConfigController", () => {
       );
     });
 
-    it('should throw HttpException with 429 status when no stats exist and fetch-latest is not provided', async () => {
-      const error429 = new HttpException(
+    it('should throw HttpException with 202 status when no stats exist and fetch-latest is not provided', async () => {
+      const error202 = new HttpException(
         {
           status: 'pending',
           message: 'Calculation is in progress or Nothing to Show',
         },
-        HttpStatus.TOO_MANY_REQUESTS,
+        HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
 
       await expect(
         controller.getJobConfigInventoryStats(validJobConfigId),
@@ -1366,7 +1366,7 @@ describe("JobConfigController", () => {
         .catch((e) => e);
 
       expect(thrownError).toBeInstanceOf(HttpException);
-      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getStatus()).toBe(HttpStatus.ACCEPTED);
       expect(thrownError.getResponse()).toEqual({
         status: 'pending',
         message: 'Calculation is in progress or Nothing to Show',
@@ -1379,27 +1379,27 @@ describe("JobConfigController", () => {
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(2);
     });
 
-    it('should throw HttpException with 429 status when no stats exist and fetch-latest is explicitly false', async () => {
-      const error429 = new HttpException(
+    it('should throw HttpException with 202 status when no stats exist and fetch-latest is explicitly false', async () => {
+      const error202 = new HttpException(
         {
           status: 'pending',
           message: 'Calculation is in progress or Nothing to Show',
         },
-        HttpStatus.TOO_MANY_REQUESTS,
+        HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
 
       await expect(
-        controller.getJobConfigInventoryStats(validJobConfigId, 'false'),
+        controller.getJobConfigInventoryStats(validJobConfigId, false),
       ).rejects.toThrow(HttpException);
 
       const thrownError = await controller
-        .getJobConfigInventoryStats(validJobConfigId, 'false')
+        .getJobConfigInventoryStats(validJobConfigId, false)
         .catch((e) => e);
 
       expect(thrownError).toBeInstanceOf(HttpException);
-      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getStatus()).toBe(HttpStatus.ACCEPTED);
       expect(thrownError.getResponse()).toEqual({
         status: 'pending',
         message: 'Calculation is in progress or Nothing to Show',
@@ -1412,7 +1412,7 @@ describe("JobConfigController", () => {
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(2);
     });
 
-    it('should NOT throw 429 error when fetch-latest is true and no stats exist (should recalculate)', async () => {
+    it('should NOT throw 202 error when fetch-latest is true and no stats exist (should recalculate)', async () => {
       const recalculatedStats: JobConfigInventoryStatsResponseDto = {
         totalUniqueFiles: 150,
         totalUniqueDirectories: 75,
@@ -1426,7 +1426,7 @@ describe("JobConfigController", () => {
 
       const result = await controller.getJobConfigInventoryStats(
         validJobConfigId,
-        'true',
+        true,
       );
 
       expect(result).toEqual(recalculatedStats);
@@ -1436,23 +1436,23 @@ describe("JobConfigController", () => {
       );
     });
 
-    it('should handle 429 error with correct error response structure', async () => {
-      const error429 = new HttpException(
+    it('should handle 202 error with correct error response structure', async () => {
+      const error202 = new HttpException(
         {
           status: 'pending',
           message: 'Calculation is in progress or Nothing to Show',
         },
-        HttpStatus.TOO_MANY_REQUESTS,
+        HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
 
       try {
         await controller.getJobConfigInventoryStats(validJobConfigId);
         fail('Expected HttpException to be thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(HttpException);
-        expect(error.getStatus()).toBe(429);
+        expect(error.getStatus()).toBe(202);
         expect(error.getResponse()).toHaveProperty('status', 'pending');
         expect(error.getResponse()).toHaveProperty(
           'message',
