@@ -414,12 +414,15 @@ export class ConfigurationService {
     }
   }
 
-  async getCutoverDetailsByConfigId(configId: string) {
+  async getCutoverDetailsByConfigId(configId: string, fileServerId?: string) {
     try {
       if (!isUUID(configId)) {
         throw new BadRequestException('Invalid configId');
       }
-      const config = await this.fetchConfigWithRelations(configId);
+      if (fileServerId && !isUUID(fileServerId)) {
+        throw new BadRequestException('Invalid fileServerId');
+      }
+      const config = await this.fetchConfigWithRelations(configId, fileServerId);
       const validJobConfigs = this.extractValidJobConfigs(config);
       if (validJobConfigs.length === 0) return [];
 
@@ -483,8 +486,27 @@ export class ConfigurationService {
     }).trim();
   }
 
-  private async fetchConfigWithRelations(configId: string) {
+  private async fetchConfigWithRelations(configId: string, fileServerId?: string) {
     try {
+      // Build the where clause - optionally filter by fileServerId for Dell Isilon zones
+      const whereClause: any = {
+        id: configId,
+        fileServers: {
+          volumes: {
+            isValid: true,
+            isDisabled: false,
+            jobConfig: {
+              status: JobStatus.Active,
+            },
+          },
+        },
+      };
+
+      // If fileServerId is provided, filter to only that specific zone
+      if (fileServerId) {
+        whereClause.fileServers.id = fileServerId;
+      }
+
       const config = await this.configEntity.findOne({
         select: {
           id: true,
@@ -510,18 +532,7 @@ export class ConfigurationService {
             },
           },
         },
-        where: {
-          id: configId,
-          fileServers: {
-            volumes: {
-              isValid: true,
-              isDisabled: false,
-              jobConfig: {
-                status: JobStatus.Active,
-              },
-            },
-          },
-        },
+        where: whereClause,
         relations: {
           fileServers: {
             volumes: {

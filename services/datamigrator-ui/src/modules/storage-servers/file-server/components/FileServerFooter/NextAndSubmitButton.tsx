@@ -130,45 +130,39 @@ const NextAndSubmitButton = () => {
             return true; // Disabled - no zones selected
           }
           
-          // Validation rules:
-          // 1. If NFS IP is selected → NFS Username is required
-          // 2. If SMB IP is selected → SMB Username AND Password are required
-          // 3. At least one protocol must be fully configured per zone
           const allZonesValid = safeSelectedZoneIds.every((zoneId) => {
             const creds = safeZoneCredentials[zoneId] || {};
             const configuredProtocols = originalConfiguredZones.get(zoneId);
-            
-            // Check if IPs are selected
-            const nfsIpSelected = !!creds.nfsIp;
-            const smbIpSelected = !!creds.smbIp;
-            
-            // If NFS IP is selected, username is required (password is optional for Isilon)
-            const nfsCredsValid = !nfsIpSelected || !!creds.nfsUsername?.trim();
-            
-            // If SMB IP is selected, both username AND password are required
-            const smbCredsValid = !smbIpSelected || (!!creds.smbUsername?.trim() && !!creds.smbPassword?.trim());
-            
-            // A protocol is "fully configured" when IP + required credentials are present
-            const nfsFullyConfigured = nfsIpSelected && !!creds.nfsUsername?.trim();
-            const smbFullyConfigured = smbIpSelected && !!creds.smbUsername?.trim() && !!creds.smbPassword?.trim();
-            
-            // Edit mode additional validation
+
+            const nfs = {
+              ipSelected: !!creds.nfsIp,
+              usernameEntered: !!creds.nfsUsername?.trim(),
+            };
+
+            const smb = {
+              ipSelected: !!creds.smbIp,
+              usernameEntered: !!creds.smbUsername?.trim(),
+              passwordEntered: !!creds.smbPassword?.trim(),
+            };
+
+            // Validation: IP and credentials must be paired (no partial configs)
+            const isNfsValid = nfs.ipSelected === nfs.usernameEntered || (!nfs.ipSelected && !nfs.usernameEntered);
+            const isSmbValid = smb.ipSelected 
+              ? (smb.usernameEntered && smb.passwordEntered) 
+              : (!smb.usernameEntered && !smb.passwordEntered);
+
+            // Fully configured = IP + all required credentials present
+            const nfsFullyConfigured = nfs.ipSelected && nfs.usernameEntered;
+            const smbFullyConfigured = smb.ipSelected && smb.usernameEntered && smb.passwordEntered;
+
+            // Edit mode: previously configured protocols must retain their IPs
             if (isEditMode && configuredProtocols) {
-              // If SMB was configured, it must still have a valid IP
-              if (configuredProtocols.hasSmb && !smbIpSelected) {
-                return false; // SMB IP is required for configured protocols
-              }
-              // If NFS was configured, it must still have a valid IP
-              if (configuredProtocols.hasNfs && !nfsIpSelected) {
-                return false; // NFS IP is required for configured protocols
-              }
+              if (configuredProtocols.hasSmb && !smb.ipSelected) return false;
+              if (configuredProtocols.hasNfs && !nfs.ipSelected) return false;
             }
-            
-            // Zone is valid if:
-            // 1. All selected IPs have their required credentials filled, AND
-            // 2. At least one protocol is fully configured
-            const hasAtLeastOneProtocol = nfsFullyConfigured || smbFullyConfigured;
-            return nfsCredsValid && smbCredsValid && hasAtLeastOneProtocol;
+
+            // Valid if: no partial configs AND at least one protocol fully configured
+            return isNfsValid && isSmbValid && (nfsFullyConfigured || smbFullyConfigured);
           });
           console.debug("[NextAndSubmitButton] Dell Isilon STEP_1_CREDENTIALS validation", {
             safeSelectedZoneIds,
