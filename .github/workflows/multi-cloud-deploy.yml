@@ -672,15 +672,39 @@ jobs:
         id: execute-aws
         env:
           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          S3_BUCKET: ${{ env.S3_BUCKET }}
+          EXPORT_FORMAT: ${{ env.EXPORT_FORMAT }}
+          LOCAL_EXPORT_PATH: ${{ env.LOCAL_EXPORT_PATH }}
+          SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
+          CP_AMI_ID: ${{ github.event.inputs.cp_ami_id }}
+          WORKER_AMI_ID: ${{ github.event.inputs.worker_ami_id }}
+          EXPORT_PREFIX: ${{ github.event.inputs.export_prefix }}
         run: |
           SSH_OUTPUT_FILE=$(mktemp)
-          sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << 'ENDSSH' | tee "$SSH_OUTPUT_FILE"
+          sshpass -p "$RUNNER_PASSWORD" ssh -T -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@10.192.7.66 << ENDSSH | tee "$SSH_OUTPUT_FILE"
           set -e
 
-          # Export AWS credentials INSIDE the SSH session
-          export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
-          export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          export AWS_DEFAULT_REGION="${{ env.AWS_REGION }}"
+          # Export AWS credentials for this session
+          export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+          export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+          export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}"
+
+          # Persist AWS credentials to ~/.bashrc (only if not already present)
+          if ! grep -q "AWS_ACCESS_KEY_ID" ~/.bashrc 2>/dev/null; then
+            echo "export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> ~/.bashrc
+            echo "export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> ~/.bashrc
+            echo "export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}" >> ~/.bashrc
+            echo "✅ AWS credentials added to ~/.bashrc"
+          else
+            # Update existing credentials
+            sed -i "s|^export AWS_ACCESS_KEY_ID=.*|export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}|" ~/.bashrc
+            sed -i "s|^export AWS_SECRET_ACCESS_KEY=.*|export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}|" ~/.bashrc
+            sed -i "s|^export AWS_DEFAULT_REGION=.*|export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}|" ~/.bashrc
+            echo "✅ AWS credentials updated in ~/.bashrc"
+          fi
           
           # Verify AWS CLI is installed and credentials work
           echo "Verifying AWS CLI and credentials..."
@@ -690,49 +714,51 @@ jobs:
           fi
           
           # Test AWS credentials
-          aws sts get-caller-identity --region "${{ env.AWS_REGION }}" || {
+          aws sts get-caller-identity --region "${AWS_DEFAULT_REGION}" || {
             echo "❌ AWS authentication failed"
             exit 1
           }
           echo "✅ AWS credentials verified"
           
-          CP_AMI="${{ github.event.inputs.cp_ami_id }}"
-          WORKER_AMI="${{ github.event.inputs.worker_ami_id }}"
-          EXPORT_PREFIX="${{ github.event.inputs.export_prefix }}"
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
-          SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
-          CHECKSUM_FILE="AWS_SHA256SUMS-${TIMESTAMP}.sha256"
+          CP_AMI="${CP_AMI_ID}"
+          WORKER_AMI="${WORKER_AMI_ID}"
+          EXPORT_PREFIX_VAR="${EXPORT_PREFIX}"
+          TIMESTAMP=\$(date +%Y%m%d-%H%M%S)
+          LOCAL_PATH="${LOCAL_EXPORT_PATH}"
+          SCRATCH="${SCRATCH_SPACE}"
+          CHECKSUM_FILE="AWS_SHA256SUMS-\${TIMESTAMP}.sha256"
+          S3_BUCKET_NAME="${S3_BUCKET}"
+          DISK_FORMAT="${EXPORT_FORMAT}"
+          REGION="${AWS_DEFAULT_REGION}"
           
           # Validate AMIs exist
-          echo "Validating Control Plane AMI: $CP_AMI"
-          CP_AMI_INFO=$(aws ec2 describe-images \
-            --region ${{ env.AWS_REGION }} \
-            --image-ids "$CP_AMI" \
+          echo "Validating Control Plane AMI: \$CP_AMI"
+          CP_AMI_INFO=\$(aws ec2 describe-images \
+            --region "\$REGION" \
+            --image-ids "\$CP_AMI" \
             --query 'Images[0].[Name,State,Architecture]' \
             --output text 2>/dev/null || echo "")
           
-          if [ -z "$CP_AMI_INFO" ]; then
-            echo "❌ Control Plane AMI $CP_AMI not found"
+          if [ -z "\$CP_AMI_INFO" ]; then
+            echo "❌ Control Plane AMI \$CP_AMI not found"
             exit 1
           fi
-          echo "✅ Control Plane AMI found: $CP_AMI_INFO"
+          echo "✅ Control Plane AMI found: \$CP_AMI_INFO"
           
-          echo "Validating Worker Node AMI: $WORKER_AMI"
-          WORKER_AMI_INFO=$(aws ec2 describe-images \
-            --region ${{ env.AWS_REGION }} \
-            --image-ids "$WORKER_AMI" \
+          echo "Validating Worker Node AMI: \$WORKER_AMI"
+          WORKER_AMI_INFO=\$(aws ec2 describe-images \
+            --region "\$REGION" \
+            --image-ids "\$WORKER_AMI" \
             --query 'Images[0].[Name,State,Architecture]' \
             --output text 2>/dev/null || echo "")
           
-          if [ -z "$WORKER_AMI_INFO" ]; then
-            echo "❌ Worker Node AMI $WORKER_AMI not found"
+          if [ -z "\$WORKER_AMI_INFO" ]; then
+            echo "❌ Worker Node AMI \$WORKER_AMI not found"
             exit 1
           fi
-          echo "✅ Worker Node AMI found: $WORKER_AMI_INFO"
+          echo "✅ Worker Node AMI found: \$WORKER_AMI_INFO"
 
           # Create IAM role for VM import (if it doesn't exist)
-                    # Create IAM role for VM import (if it doesn't exist)
           echo "Setting up IAM role for VM import..."
           if ! aws iam get-role --role-name vmimport &>/dev/null; then
             echo "Creating IAM role 'vmimport'..."
@@ -782,8 +808,7 @@ jobs:
 
           # Attach policy to role
           echo "Attaching policy to IAM role..."
-          S3_BUCKET_NAME="${{ env.S3_BUCKET }}"
-          echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:GetObject","s3:ListBucket","s3:PutObject"],"Resource":["arn:aws:s3:::'"${S3_BUCKET_NAME}"'","arn:aws:s3:::'"${S3_BUCKET_NAME}"'/*"]},{"Effect":"Allow","Action":["ec2:ModifySnapshotAttribute","ec2:CopySnapshot","ec2:Describe*"],"Resource":"*"}]}' > /tmp/vmimport-policy.json
+          echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:GetObject","s3:ListBucket","s3:PutObject"],"Resource":["arn:aws:s3:::'""\${S3_BUCKET_NAME}""'","arn:aws:s3:::'""\${S3_BUCKET_NAME}""'/*"]},{"Effect":"Allow","Action":["ec2:ModifySnapshotAttribute","ec2:CopySnapshot","ec2:Describe*"],"Resource":"*"}]}' > /tmp/vmimport-policy.json
           aws iam put-role-policy \
             --role-name vmimport \
             --policy-name vmimport \
@@ -795,19 +820,19 @@ jobs:
           sleep 10
           
           # Export Worker Node AMI
-          echo "Exporting Worker Node AMI: $WORKER_AMI"
-          WORKER_S3_PREFIX="${EXPORT_PREFIX}/aws/worker-node"
+          echo "Exporting Worker Node AMI: \$WORKER_AMI"
+          WORKER_S3_PREFIX="\${EXPORT_PREFIX_VAR}/aws/worker-node"
           
-          WORKER_EXPORT_TASK=$(aws ec2 export-image \
-            --region ${{ env.AWS_REGION }} \
-            --image-id "$WORKER_AMI" \
-            --disk-image-format ${{ env.EXPORT_FORMAT }} \
-            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$WORKER_S3_PREFIX \
-            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=worker-node},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+          WORKER_EXPORT_TASK=\$(aws ec2 export-image \
+            --region "\$REGION" \
+            --image-id "\$WORKER_AMI" \
+            --disk-image-format "\$DISK_FORMAT" \
+            --s3-export-location S3Bucket=\${S3_BUCKET_NAME},S3Prefix=\$WORKER_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=worker-node},{Key=ExportPrefix,Value=\${EXPORT_PREFIX_VAR}},{Key=Timestamp,Value=\${TIMESTAMP}}]" \
             --query 'ExportImageTaskId' \
             --output text)
           
-          echo "Worker Export Task ID: $WORKER_EXPORT_TASK"
+          echo "Worker Export Task ID: \$WORKER_EXPORT_TASK"
         
           
           # Monitor Worker Node export
@@ -817,248 +842,248 @@ jobs:
           SLEEP_INTERVAL=30
           PREV_PROGRESS=""
           
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
+          while [ \$ELAPSED -lt \$MAX_WAIT ]; do
             # Get status and progress separately for better reliability
-            WORKER_TASK_STATUS=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $WORKER_EXPORT_TASK \
+            WORKER_TASK_STATUS=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$WORKER_EXPORT_TASK \
               --query 'ExportImageTasks[0].Status' \
               --output text 2>/dev/null || echo "UNKNOWN")
             
-            WORKER_PROGRESS=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $WORKER_EXPORT_TASK \
+            WORKER_PROGRESS=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$WORKER_EXPORT_TASK \
               --query 'ExportImageTasks[0].Progress' \
               --output text 2>/dev/null || echo "0")
             
             # Get status message for debugging
-            WORKER_STATUS_MSG=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $WORKER_EXPORT_TASK \
+            WORKER_STATUS_MSG=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$WORKER_EXPORT_TASK \
               --query 'ExportImageTasks[0].StatusMessage' \
               --output text 2>/dev/null || echo "")
             
             # Debug output every 5 minutes or on first run
-            if [ $ELAPSED -eq 0 ] || [ $((ELAPSED % 300)) -eq 0 ]; then
+            if [ \$ELAPSED -eq 0 ] || [ \$((ELAPSED % 300)) -eq 0 ]; then
               echo "DEBUG - Full task details:"
               aws ec2 describe-export-image-tasks \
-                --region ${{ env.AWS_REGION }} \
-                --export-image-task-ids $WORKER_EXPORT_TASK \
+                --region "\$REGION" \
+                --export-image-task-ids \$WORKER_EXPORT_TASK \
                 --output json | jq -r '.ExportImageTasks[0] | {Status, StatusMessage, Progress, S3ExportLocation}' 2>/dev/null || echo "Could not get full details"
             fi
             
-            echo "Worker status: $WORKER_TASK_STATUS | Progress: ${WORKER_PROGRESS}% | ${ELAPSED}s"
-            if [ -n "$WORKER_STATUS_MSG" ] && [ "$WORKER_STATUS_MSG" != "None" ]; then
-              echo "  Status Message: $WORKER_STATUS_MSG"
+            echo "Worker status: \$WORKER_TASK_STATUS | Progress: \${WORKER_PROGRESS}% | \${ELAPSED}s"
+            if [ -n "\$WORKER_STATUS_MSG" ] && [ "\$WORKER_STATUS_MSG" != "None" ]; then
+              echo "  Status Message: \$WORKER_STATUS_MSG"
             fi
             
-            if [ "$WORKER_TASK_STATUS" = "completed" ]; then
-              echo "✅ Worker export completed (${ELAPSED}s)"
+            if [ "\$WORKER_TASK_STATUS" = "completed" ]; then
+              echo "✅ Worker export completed (\${ELAPSED}s)"
               
               # Get the S3 prefix from the API response
-              WORKER_S3_PREFIX_RESULT=$(aws ec2 describe-export-image-tasks \
-                --region ${{ env.AWS_REGION }} \
-                --export-image-task-ids $WORKER_EXPORT_TASK \
+              WORKER_S3_PREFIX_RESULT=\$(aws ec2 describe-export-image-tasks \
+                --region "\$REGION" \
+                --export-image-task-ids \$WORKER_EXPORT_TASK \
                 --query 'ExportImageTasks[0].S3ExportLocation.S3Prefix' \
                 --output text)
               
               # Extract last part of prefix (e.g., "worker-node" from "fin/aws/worker-node")
-              PREFIX_LAST_PART=$(basename "$WORKER_S3_PREFIX_RESULT")
+              PREFIX_LAST_PART=\$(basename "\$WORKER_S3_PREFIX_RESULT")
               
               # Construct VHD filename: {prefix_last_part}{task_id}.vhd
-              WORKER_VHD="${PREFIX_LAST_PART}${WORKER_EXPORT_TASK}.vhd"
-              WORKER_S3_KEY="${WORKER_S3_PREFIX_RESULT}${WORKER_EXPORT_TASK}.vhd"
+              WORKER_VHD="\${PREFIX_LAST_PART}\${WORKER_EXPORT_TASK}.vhd"
+              WORKER_S3_KEY="\${WORKER_S3_PREFIX_RESULT}\${WORKER_EXPORT_TASK}.vhd"
               
-              echo "Worker Task ID: $WORKER_EXPORT_TASK"
-              echo "Worker S3 Prefix: $WORKER_S3_PREFIX_RESULT"
-              echo "Worker VHD: $WORKER_VHD"
-              echo "Worker S3 Key: $WORKER_S3_KEY"
+              echo "Worker Task ID: \$WORKER_EXPORT_TASK"
+              echo "Worker S3 Prefix: \$WORKER_S3_PREFIX_RESULT"
+              echo "Worker VHD: \$WORKER_VHD"
+              echo "Worker S3 Key: \$WORKER_S3_KEY"
               break
-            elif [ "$WORKER_TASK_STATUS" = "cancelled" ] || [ "$WORKER_TASK_STATUS" = "cancelling" ] || [ "$WORKER_TASK_STATUS" = "deleted" ]; then
+            elif [ "\$WORKER_TASK_STATUS" = "cancelled" ] || [ "\$WORKER_TASK_STATUS" = "cancelling" ] || [ "\$WORKER_TASK_STATUS" = "deleted" ]; then
               echo ""
               echo "=========================================="
-              echo "Worker Export Failed: $WORKER_TASK_STATUS"
+              echo "Worker Export Failed: \$WORKER_TASK_STATUS"
               echo "=========================================="
               echo ""
-              echo "Status Message: $WORKER_STATUS_MSG"
+              echo "Status Message: \$WORKER_STATUS_MSG"
               echo ""
               exit 1
             fi
             
             # Check if progress is stuck (no change for 10 minutes)
-            if [ $ELAPSED -gt 600 ] && [ -n "$PREV_PROGRESS" ]; then
-              if [ "$WORKER_PROGRESS" = "$PREV_PROGRESS" ] && [ "$WORKER_PROGRESS" != "100" ]; then
-                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at ${WORKER_PROGRESS}%)"
+            if [ \$ELAPSED -gt 600 ] && [ -n "\$PREV_PROGRESS" ]; then
+              if [ "\$WORKER_PROGRESS" = "\$PREV_PROGRESS" ] && [ "\$WORKER_PROGRESS" != "100" ]; then
+                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at \${WORKER_PROGRESS}%)"
                 echo "   This might indicate the export is stuck. Continuing to monitor..."
               fi
             fi
-            PREV_PROGRESS="$WORKER_PROGRESS"
+            PREV_PROGRESS="\$WORKER_PROGRESS"
             
-            sleep $SLEEP_INTERVAL
-            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+            sleep \$SLEEP_INTERVAL
+            ELAPSED=\$((ELAPSED + SLEEP_INTERVAL))
           done
           
-          if [ $ELAPSED -ge $MAX_WAIT ]; then
-            echo "❌ Worker export timeout after $MAX_WAIT seconds"
+          if [ \$ELAPSED -ge \$MAX_WAIT ]; then
+            echo "❌ Worker export timeout after \$MAX_WAIT seconds"
             exit 1
           fi
 
-           # Export Control Plane AMI
-          echo "Exporting Control Plane AMI: $CP_AMI"
-          CP_S3_PREFIX="${EXPORT_PREFIX}/aws/control-plane"
+          # Export Control Plane AMI
+          echo "Exporting Control Plane AMI: \$CP_AMI"
+          CP_S3_PREFIX="\${EXPORT_PREFIX_VAR}/aws/control-plane"
           
-          CP_EXPORT_TASK=$(aws ec2 export-image \
-            --region ${{ env.AWS_REGION }} \
-            --image-id "$CP_AMI" \
-            --disk-image-format ${{ env.EXPORT_FORMAT }} \
-            --s3-export-location S3Bucket=${{ env.S3_BUCKET }},S3Prefix=$CP_S3_PREFIX \
-            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=${EXPORT_PREFIX}},{Key=Timestamp,Value=${TIMESTAMP}}]" \
+          CP_EXPORT_TASK=\$(aws ec2 export-image \
+            --region "\$REGION" \
+            --image-id "\$CP_AMI" \
+            --disk-image-format "\$DISK_FORMAT" \
+            --s3-export-location S3Bucket=\${S3_BUCKET_NAME},S3Prefix=\$CP_S3_PREFIX \
+            --tag-specifications "ResourceType=export-image-task,Tags=[{Key=Component,Value=control-plane},{Key=ExportPrefix,Value=\${EXPORT_PREFIX_VAR}},{Key=Timestamp,Value=\${TIMESTAMP}}]" \
             --query 'ExportImageTaskId' \
             --output text)
           
-          echo "Control Plane Export Task ID: $CP_EXPORT_TASK"
+          echo "Control Plane Export Task ID: \$CP_EXPORT_TASK"
           
           # Monitor Control Plane export
           echo "Monitoring Control Plane Export..."
           ELAPSED=0
           PREV_PROGRESS=""
           
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
+          while [ \$ELAPSED -lt \$MAX_WAIT ]; do
             # Get status and progress separately for better reliability
-            CP_TASK_STATUS=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $CP_EXPORT_TASK \
+            CP_TASK_STATUS=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$CP_EXPORT_TASK \
               --query 'ExportImageTasks[0].Status' \
               --output text 2>/dev/null || echo "UNKNOWN")
             
-            CP_PROGRESS=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $CP_EXPORT_TASK \
+            CP_PROGRESS=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$CP_EXPORT_TASK \
               --query 'ExportImageTasks[0].Progress' \
               --output text 2>/dev/null || echo "0")
             
             # Get status message for debugging
-            CP_STATUS_MSG=$(aws ec2 describe-export-image-tasks \
-              --region ${{ env.AWS_REGION }} \
-              --export-image-task-ids $CP_EXPORT_TASK \
+            CP_STATUS_MSG=\$(aws ec2 describe-export-image-tasks \
+              --region "\$REGION" \
+              --export-image-task-ids \$CP_EXPORT_TASK \
               --query 'ExportImageTasks[0].StatusMessage' \
               --output text 2>/dev/null || echo "")
             
             # Debug output every 5 minutes or on first run
-            if [ $ELAPSED -eq 0 ] || [ $((ELAPSED % 300)) -eq 0 ]; then
+            if [ \$ELAPSED -eq 0 ] || [ \$((ELAPSED % 300)) -eq 0 ]; then
               echo "DEBUG - Full task details:"
               aws ec2 describe-export-image-tasks \
-                --region ${{ env.AWS_REGION }} \
-                --export-image-task-ids $CP_EXPORT_TASK \
+                --region "\$REGION" \
+                --export-image-task-ids \$CP_EXPORT_TASK \
                 --output json | jq -r '.ExportImageTasks[0] | {Status, StatusMessage, Progress, S3ExportLocation}' 2>/dev/null || echo "Could not get full details"
             fi
             
-            echo "CP status: $CP_TASK_STATUS | Progress: ${CP_PROGRESS}% | ${ELAPSED}s"
-            if [ -n "$CP_STATUS_MSG" ] && [ "$CP_STATUS_MSG" != "None" ]; then
-              echo "  Status Message: $CP_STATUS_MSG"
+            echo "CP status: \$CP_TASK_STATUS | Progress: \${CP_PROGRESS}% | \${ELAPSED}s"
+            if [ -n "\$CP_STATUS_MSG" ] && [ "\$CP_STATUS_MSG" != "None" ]; then
+              echo "  Status Message: \$CP_STATUS_MSG"
             fi
             
-            if [ "$CP_TASK_STATUS" = "completed" ]; then
-              echo "✅ Control Plane export completed (${ELAPSED}s)"
+            if [ "\$CP_TASK_STATUS" = "completed" ]; then
+              echo "✅ Control Plane export completed (\${ELAPSED}s)"
               
               # Get the S3 prefix from the API response
-              CP_S3_PREFIX_RESULT=$(aws ec2 describe-export-image-tasks \
-                --region ${{ env.AWS_REGION }} \
-                --export-image-task-ids $CP_EXPORT_TASK \
+              CP_S3_PREFIX_RESULT=\$(aws ec2 describe-export-image-tasks \
+                --region "\$REGION" \
+                --export-image-task-ids \$CP_EXPORT_TASK \
                 --query 'ExportImageTasks[0].S3ExportLocation.S3Prefix' \
                 --output text)
               
               # Extract last part of prefix (e.g., "control-plane" from "fin/aws/control-plane")
-              PREFIX_LAST_PART=$(basename "$CP_S3_PREFIX_RESULT")
+              PREFIX_LAST_PART=\$(basename "\$CP_S3_PREFIX_RESULT")
               
               # Construct VHD filename: {prefix_last_part}{task_id}.vhd
-              CP_VHD="${PREFIX_LAST_PART}${CP_EXPORT_TASK}.vhd"
-              CP_S3_KEY="${CP_S3_PREFIX_RESULT}${CP_EXPORT_TASK}.vhd"
+              CP_VHD="\${PREFIX_LAST_PART}\${CP_EXPORT_TASK}.vhd"
+              CP_S3_KEY="\${CP_S3_PREFIX_RESULT}\${CP_EXPORT_TASK}.vhd"
               
-              echo "Control Plane Task ID: $CP_EXPORT_TASK"
-              echo "Control Plane S3 Prefix: $CP_S3_PREFIX_RESULT"
-              echo "Control Plane VHD: $CP_VHD"
-              echo "Control Plane S3 Key: $CP_S3_KEY"
+              echo "Control Plane Task ID: \$CP_EXPORT_TASK"
+              echo "Control Plane S3 Prefix: \$CP_S3_PREFIX_RESULT"
+              echo "Control Plane VHD: \$CP_VHD"
+              echo "Control Plane S3 Key: \$CP_S3_KEY"
               break
-            elif [ "$CP_TASK_STATUS" = "cancelled" ] || [ "$CP_TASK_STATUS" = "cancelling" ] || [ "$CP_TASK_STATUS" = "deleted" ]; then
+            elif [ "\$CP_TASK_STATUS" = "cancelled" ] || [ "\$CP_TASK_STATUS" = "cancelling" ] || [ "\$CP_TASK_STATUS" = "deleted" ]; then
               echo ""
               echo "=========================================="
-              echo "Control Plane Export Failed: $CP_TASK_STATUS"
+              echo "Control Plane Export Failed: \$CP_TASK_STATUS"
               echo "=========================================="
               echo ""
-              echo "Status Message: $CP_STATUS_MSG"
+              echo "Status Message: \$CP_STATUS_MSG"
               echo ""
               exit 1
             fi
             
             # Check if progress is stuck (no change for 10 minutes)
-            if [ $ELAPSED -gt 600 ] && [ -n "$PREV_PROGRESS" ]; then
-              if [ "$CP_PROGRESS" = "$PREV_PROGRESS" ] && [ "$CP_PROGRESS" != "100" ]; then
-                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at ${CP_PROGRESS}%)"
+            if [ \$ELAPSED -gt 600 ] && [ -n "\$PREV_PROGRESS" ]; then
+              if [ "\$CP_PROGRESS" = "\$PREV_PROGRESS" ] && [ "\$CP_PROGRESS" != "100" ]; then
+                echo "⚠️  Warning: Export progress has not changed in 10+ minutes (stuck at \${CP_PROGRESS}%)"
                 echo "   This might indicate the export is stuck. Continuing to monitor..."
               fi
             fi
-            PREV_PROGRESS="$CP_PROGRESS"
+            PREV_PROGRESS="\$CP_PROGRESS"
             
-            sleep $SLEEP_INTERVAL
-            ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+            sleep \$SLEEP_INTERVAL
+            ELAPSED=\$((ELAPSED + SLEEP_INTERVAL))
           done
           
-          if [ $ELAPSED -ge $MAX_WAIT ]; then
-            echo "❌ Control Plane export timeout after $MAX_WAIT seconds"
+          if [ \$ELAPSED -ge \$MAX_WAIT ]; then
+            echo "❌ Control Plane export timeout after \$MAX_WAIT seconds"
             exit 1
           fi
           
           # Download from S3
           echo "Downloading from S3..."
-          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/aws"
+          mkdir -p "\$LOCAL_PATH/\$EXPORT_PREFIX_VAR/aws"
           
           
           echo "Downloading Worker Node VHD..."
           aws s3 cp \
-            "s3://${{ env.S3_BUCKET }}/$WORKER_S3_KEY" \
-            "$LOCAL_PATH/$EXPORT_PREFIX/aws/$WORKER_VHD" \
-            --region ${{ env.AWS_REGION }} \
+            "s3://\${S3_BUCKET_NAME}/\$WORKER_S3_KEY" \
+            "\$LOCAL_PATH/\$EXPORT_PREFIX_VAR/aws/\$WORKER_VHD" \
+            --region "\$REGION" \
             --no-progress
           
           echo "Downloading Control Plane VHD..."
           aws s3 cp \
-            "s3://${{ env.S3_BUCKET }}/$CP_S3_KEY" \
-            "$LOCAL_PATH/$EXPORT_PREFIX/aws/$CP_VHD" \
-            --region ${{ env.AWS_REGION }} \
+            "s3://\${S3_BUCKET_NAME}/\$CP_S3_KEY" \
+            "\$LOCAL_PATH/\$EXPORT_PREFIX_VAR/aws/\$CP_VHD" \
+            --region "\$REGION" \
             --no-progress
           
           # Generate checksums
           echo "Generating checksums..."
-          cd "$LOCAL_PATH/$EXPORT_PREFIX/aws"
+          cd "\$LOCAL_PATH/\$EXPORT_PREFIX_VAR/aws"
           
-          sha256sum "${WORKER_VHD}" "${CP_VHD}" > "${CHECKSUM_FILE}"
+          sha256sum "\${WORKER_VHD}" "\${CP_VHD}" > "\${CHECKSUM_FILE}"
 
-          echo "Checksum file: $CHECKSUM_FILE"
+          echo "Checksum file: \$CHECKSUM_FILE"
         
           
           # Upload checksum to S3
           echo "Uploading checksum to S3..."
           aws s3 cp \
-            "${CHECKSUM_FILE}" \
-            "s3://${{ env.S3_BUCKET }}/${EXPORT_PREFIX}/aws/${CHECKSUM_FILE}" \
-            --region ${{ env.AWS_REGION }}
+            "\${CHECKSUM_FILE}" \
+            "s3://\${S3_BUCKET_NAME}/\${EXPORT_PREFIX_VAR}/aws/\${CHECKSUM_FILE}" \
+            --region "\$REGION"
           
           # Copy to scratch space
           echo "Copying to scratch space..."
-          sudo mkdir -p "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"
+          sudo mkdir -p "\${SCRATCH}/\${EXPORT_PREFIX_VAR}/aws"
           
-          sudo cp "$WORKER_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
-          sudo cp "$CP_VHD" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
-          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws/"
+          sudo cp "\$WORKER_VHD" "\${SCRATCH}/\${EXPORT_PREFIX_VAR}/aws/"
+          sudo cp "\$CP_VHD" "\${SCRATCH}/\${EXPORT_PREFIX_VAR}/aws/"
+          sudo cp "\${CHECKSUM_FILE}" "\${SCRATCH}/\${EXPORT_PREFIX_VAR}/aws/"
           
-          sudo chmod 644 "${SCRATCH_SPACE}/${EXPORT_PREFIX}/aws"/*
+          sudo chmod 644 "\${SCRATCH}/\${EXPORT_PREFIX_VAR}/aws"/*
 
           
           echo "Export complete"
           
           # Output data in pipe-delimited format
-          echo "OUTPUT_DATA:${TIMESTAMP}|${WORKER_VHD}|${CP_VHD}|${EXPORT_PREFIX}"
+          echo "OUTPUT_DATA:\${TIMESTAMP}|\${WORKER_VHD}|\${CP_VHD}|\${EXPORT_PREFIX_VAR}"
           
           ENDSSH
           
