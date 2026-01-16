@@ -1197,6 +1197,7 @@ describe("JobConfigController", () => {
       expect(result).toEqual(mockInventoryStatsResponse);
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(1);
     });
@@ -1217,6 +1218,7 @@ describe("JobConfigController", () => {
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         'invalid-uuid-format',
+        false,
       );
     });
 
@@ -1236,6 +1238,7 @@ describe("JobConfigController", () => {
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
     });
 
@@ -1257,6 +1260,7 @@ describe("JobConfigController", () => {
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
     });
 
@@ -1277,6 +1281,7 @@ describe("JobConfigController", () => {
 
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
     });
 
@@ -1313,6 +1318,7 @@ describe("JobConfigController", () => {
       expect(result.totalSize).toBe('3.50 MiB');
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
     });
 
@@ -1336,7 +1342,123 @@ describe("JobConfigController", () => {
       expect(result.lastUpdatedAt).toBeInstanceOf(Date);
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
         validJobConfigId,
+        false,
       );
+    });
+
+    it('should throw HttpException with 429 status when no stats exist and fetch-latest is not provided', async () => {
+      const error429 = new HttpException(
+        {
+          status: 'pending',
+          message: 'Calculation is in progress or Nothing to Show',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+
+      await expect(
+        controller.getJobConfigInventoryStats(validJobConfigId),
+      ).rejects.toThrow(HttpException);
+
+      const thrownError = await controller
+        .getJobConfigInventoryStats(validJobConfigId)
+        .catch((e) => e);
+
+      expect(thrownError).toBeInstanceOf(HttpException);
+      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getResponse()).toEqual({
+        status: 'pending',
+        message: 'Calculation is in progress or Nothing to Show',
+      });
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+        false,
+      );
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw HttpException with 429 status when no stats exist and fetch-latest is explicitly false', async () => {
+      const error429 = new HttpException(
+        {
+          status: 'pending',
+          message: 'Calculation is in progress or Nothing to Show',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+
+      await expect(
+        controller.getJobConfigInventoryStats(validJobConfigId, 'false'),
+      ).rejects.toThrow(HttpException);
+
+      const thrownError = await controller
+        .getJobConfigInventoryStats(validJobConfigId, 'false')
+        .catch((e) => e);
+
+      expect(thrownError).toBeInstanceOf(HttpException);
+      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getResponse()).toEqual({
+        status: 'pending',
+        message: 'Calculation is in progress or Nothing to Show',
+      });
+
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+        false,
+      );
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledTimes(2);
+    });
+
+    it('should NOT throw 429 error when fetch-latest is true and no stats exist (should recalculate)', async () => {
+      const recalculatedStats: JobConfigInventoryStatsResponseDto = {
+        totalUniqueFiles: 150,
+        totalUniqueDirectories: 75,
+        totalSize: '2.00 MiB',
+        lastUpdatedAt: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      mockJobConfigService.getJobConfigInventoryStats.mockResolvedValue(
+        recalculatedStats,
+      );
+
+      const result = await controller.getJobConfigInventoryStats(
+        validJobConfigId,
+        'true',
+      );
+
+      expect(result).toEqual(recalculatedStats);
+      expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
+        validJobConfigId,
+        true,
+      );
+    });
+
+    it('should handle 429 error with correct error response structure', async () => {
+      const error429 = new HttpException(
+        {
+          status: 'pending',
+          message: 'Calculation is in progress or Nothing to Show',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error429);
+
+      try {
+        await controller.getJobConfigInventoryStats(validJobConfigId);
+        fail('Expected HttpException to be thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpException);
+        expect(error.getStatus()).toBe(429);
+        expect(error.getResponse()).toHaveProperty('status', 'pending');
+        expect(error.getResponse()).toHaveProperty(
+          'message',
+          'Calculation is in progress or Nothing to Show',
+        );
+      }
     });
   });
 });

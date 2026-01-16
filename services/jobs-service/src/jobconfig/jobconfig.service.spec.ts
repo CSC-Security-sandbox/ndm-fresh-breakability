@@ -5089,6 +5089,102 @@ describe("JobConfigService", () => {
       ).rejects.toThrow('Inventory stats are only available for Migration job configs');
     });
 
+    it('should throw HttpException with 429 status when fetchLatest is false and no stats entity exists', async () => {
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId, false),
+      ).rejects.toThrow(HttpException);
+
+      const thrownError = await service
+        .getJobConfigInventoryStats(validJobConfigId, false)
+        .catch((e) => e);
+
+      expect(thrownError).toBeInstanceOf(HttpException);
+      expect(thrownError.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(thrownError.getResponse()).toEqual({
+        status: 'pending',
+        message: 'Calculation is in progress or Nothing to Show',
+      });
+
+      expect(jobConfigInventoryStatsRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId: validJobConfigId },
+      });
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('should throw HttpException with 429 status when fetchLatest is not provided (defaults to false) and no stats exist', async () => {
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.getJobConfigInventoryStats(validJobConfigId),
+      ).rejects.toThrow(HttpException);
+
+      const thrownError = await service
+        .getJobConfigInventoryStats(validJobConfigId)
+        .catch((e) => e);
+
+      expect(thrownError).toBeInstanceOf(HttpException);
+      expect(thrownError.getStatus()).toBe(429);
+      expect(thrownError.getResponse()).toHaveProperty('status', 'pending');
+      expect(thrownError.getResponse()).toHaveProperty(
+        'message',
+        'Calculation is in progress or Nothing to Show',
+      );
+    });
+
+    it('should NOT throw 429 error when fetchLatest is true and no stats exist (should recalculate)', async () => {
+      const mockQueryResult = [
+        {
+          total_unique_files: '150',
+          total_unique_directories: '75',
+          total_size: '2048000',
+        },
+      ];
+
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-15T10:00:00Z'),
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+      jest.spyOn(dataSource, 'query').mockResolvedValue(mockQueryResult);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'create').mockReturnValue({
+        jobConfigId: validJobConfigId,
+        fileCount: 150,
+        dirCount: 75,
+        totalSize: 2048000,
+        lastUpdatedAt: expect.any(Date),
+      } as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'save').mockResolvedValue({
+        id: 'new-stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 150,
+        dirCount: 75,
+        totalSize: 2048000,
+        lastUpdatedAt: new Date(),
+      } as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 150,
+        totalUniqueDirectories: 75,
+        totalSize: formatBytes(2048000),
+        lastUpdatedAt: expect.any(Date),
+      });
+
+      // Should not throw 429, should recalculate instead
+      expect(dataSource.query).toHaveBeenCalled();
+      expect(jobConfigInventoryStatsRepo.save).toHaveBeenCalled();
+    });
+
     it('should return cached stats when no recalculation is needed', async () => {
       const mockStatsEntity = {
         id: 'stats-id',
@@ -5161,7 +5257,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: new Date(),
       } as any);
 
-      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
 
       expect(result).toEqual({
         totalUniqueFiles: 150,
@@ -5221,7 +5317,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: new Date(),
       } as any);
 
-      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
 
       expect(result).toEqual({
         totalUniqueFiles: 200,
@@ -5271,7 +5367,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: new Date(),
       } as any);
 
-      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
 
       expect(result.totalUniqueFiles).toBe(250);
       expect(result.totalUniqueDirectories).toBe(125);
@@ -5325,7 +5421,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: new Date(),
       } as any);
 
-      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
 
       expect(result).toEqual({
         totalUniqueFiles: 0,
@@ -5378,12 +5474,12 @@ describe("JobConfigService", () => {
       jest.spyOn(dataSource, 'query').mockRejectedValue(dbError);
 
       await expect(
-        service.getJobConfigInventoryStats(validJobConfigId)
+        service.getJobConfigInventoryStats(validJobConfigId, true)
       ).rejects.toThrow(HttpException);
 
       // The service uses error.message when available, so expect the actual error message
       await expect(
-        service.getJobConfigInventoryStats(validJobConfigId)
+        service.getJobConfigInventoryStats(validJobConfigId, true)
       ).rejects.toThrow('Database connection failed');
 
       expect(loggerService.error).toHaveBeenCalledWith(
@@ -5462,7 +5558,7 @@ describe("JobConfigService", () => {
         lastUpdatedAt: new Date(),
       } as any);
 
-      const result = await service.getJobConfigInventoryStats(validJobConfigId);
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
 
       expect(result.totalUniqueFiles).toBe(300);
       expect(result.totalUniqueDirectories).toBe(150);
