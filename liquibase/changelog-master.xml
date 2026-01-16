@@ -541,4 +541,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260116_01_jobs_report_proc.sql" author="ashish">
+      <sqlFile path="liquibase/20260116_01_jobs_report_proc.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260116_01_jobs_report_proc_rollback.sql"/>
+      </rollback>
+   </changeSet>
+   
 </databaseChangeLog>

@@ -369,7 +369,7 @@ it('JOB_RUN_DETAILS_MAPPER maps input correctly', () => {
     const result = JOB_RUN_DETAILS_MAPPER(input as any);
     expect(result).toEqual([
         { value: '/mnt/data', category: 'File Server Info', valueType: 'string', sub_category: 'Path' },
-        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
+        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Server Profile' },
         { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
         { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
         { value: '2mins 3sec', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
@@ -475,7 +475,7 @@ it('JOB_RUN_DETAILS_MAPPER includes file_server_name when present (non-OtherNAS)
     const result = JOB_RUN_DETAILS_MAPPER(input as any);
     expect(result).toEqual([
         { value: '/mnt/data', category: 'File Server Info', valueType: 'string', sub_category: 'Path' },
-        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
+        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Server Profile' },
         { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
         { value: 'zone1', category: 'File Server Info', valueType: 'string', sub_category: 'File Server Name' },
         { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
@@ -495,7 +495,7 @@ it('JOB_RUN_DETAILS_MAPPER excludes file_server_name when null (OtherNAS)', () =
     const result = JOB_RUN_DETAILS_MAPPER(input as any);
     expect(result).toEqual([
         { value: '/mnt/data', category: 'File Server Info', valueType: 'string', sub_category: 'Path' },
-        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Config Name' },
+        { value: 'config1', category: 'File Server Info', valueType: 'string', sub_category: 'Server Profile' },
         { value: 'NFS', category: 'File Server Info', valueType: 'string', sub_category: 'Protocol' },
         { value: 'SUCCESS', category: 'Job Run Stats', valueType: 'status', sub_category: 'Status' },
         { value: '1min', category: 'Job Run Stats', valueType: 'string', sub_category: 'Total Time' }
