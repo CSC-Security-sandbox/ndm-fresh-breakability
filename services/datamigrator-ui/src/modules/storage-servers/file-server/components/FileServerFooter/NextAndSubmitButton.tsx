@@ -132,8 +132,10 @@ const NextAndSubmitButton = () => {
           
           // Validation rules:
           // 1. If NFS IP is selected → NFS Username is required
-          // 2. If SMB IP is selected → SMB Username AND Password are required
-          // 3. At least one protocol must be fully configured per zone
+          // 2. If NFS Username is filled → NFS IP is required (prevent partial config)
+          // 3. If SMB IP is selected → SMB Username AND Password are required
+          // 4. If SMB Username or Password is filled → SMB IP is required (prevent partial config)
+          // 5. At least one protocol must be fully configured per zone
           const allZonesValid = safeSelectedZoneIds.every((zoneId) => {
             const creds = safeZoneCredentials[zoneId] || {};
             const configuredProtocols = originalConfiguredZones.get(zoneId);
@@ -142,15 +144,28 @@ const NextAndSubmitButton = () => {
             const nfsIpSelected = !!creds.nfsIp;
             const smbIpSelected = !!creds.smbIp;
             
-            // If NFS IP is selected, username is required (password is optional for Isilon)
-            const nfsCredsValid = !nfsIpSelected || !!creds.nfsUsername?.trim();
+            // Check if credentials are filled
+            const nfsUsernameEntered = !!creds.nfsUsername?.trim();
+            const smbUsernameEntered = !!creds.smbUsername?.trim();
+            const smbPasswordEntered = !!creds.smbPassword?.trim();
             
-            // If SMB IP is selected, both username AND password are required
-            const smbCredsValid = !smbIpSelected || (!!creds.smbUsername?.trim() && !!creds.smbPassword?.trim());
+            // NFS validation:
+            // - If NFS IP is selected, username is required
+            // - If NFS username is entered, IP must be selected (prevent partial config)
+            const nfsIpRequiresUsername = !nfsIpSelected || nfsUsernameEntered;
+            const nfsUsernameRequiresIp = !nfsUsernameEntered || nfsIpSelected;
+            const nfsCredsValid = nfsIpRequiresUsername && nfsUsernameRequiresIp;
+            
+            // SMB validation:
+            // - If SMB IP is selected, both username AND password are required
+            // - If SMB username or password is entered, IP must be selected (prevent partial config)
+            const smbIpRequiresCreds = !smbIpSelected || (smbUsernameEntered && smbPasswordEntered);
+            const smbCredsRequireIp = !(smbUsernameEntered || smbPasswordEntered) || smbIpSelected;
+            const smbCredsValid = smbIpRequiresCreds && smbCredsRequireIp;
             
             // A protocol is "fully configured" when IP + required credentials are present
-            const nfsFullyConfigured = nfsIpSelected && !!creds.nfsUsername?.trim();
-            const smbFullyConfigured = smbIpSelected && !!creds.smbUsername?.trim() && !!creds.smbPassword?.trim();
+            const nfsFullyConfigured = nfsIpSelected && nfsUsernameEntered;
+            const smbFullyConfigured = smbIpSelected && smbUsernameEntered && smbPasswordEntered;
             
             // Edit mode additional validation
             if (isEditMode && configuredProtocols) {
@@ -165,7 +180,7 @@ const NextAndSubmitButton = () => {
             }
             
             // Zone is valid if:
-            // 1. All selected IPs have their required credentials filled, AND
+            // 1. All credentials are properly paired with IPs (no partial configs), AND
             // 2. At least one protocol is fully configured
             const hasAtLeastOneProtocol = nfsFullyConfigured || smbFullyConfigured;
             return nfsCredsValid && smbCredsValid && hasAtLeastOneProtocol;
