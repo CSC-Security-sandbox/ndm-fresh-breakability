@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       release_worker_image_name:
-        description: "GCP Worker Image Name from gcp image gallery(eg: datamigrator-control-plane-24-11-2025-17-28-39)"
+        description: "GCP Worker Image Name from gcp image gallery(eg: datamigrator-worker-24-11-2025-17-21-59)"
         required: true
       release_controlplane_image_name:
-        description: "GCP Control Plane Image Name from gcp image gallery(eg: datamigrator-worker-24-11-2025-17-21-59) "
+        description: "GCP Control Plane Image Name from gcp image gallery(eg: datamigrator-control-plane-24-11-2025-17-28-39)"
         required: true
       release_folder:
         description: "Release folder name (e.g. preview_x). If this folder already exists in scratch space (created by Vsphere or Windows installer workflows), use it; otherwise, create a new one."
@@ -75,7 +75,6 @@ jobs:
             --network=${{ env.VPC_NAME }} \
             --subnet=${{ env.SUBNET_NAME }} \
             --zone=${{ env.ZONE }} \
-            --export-format=vmdk \
             --async \
             --quiet 2>&1)
           
@@ -141,7 +140,6 @@ jobs:
             --network=${{ env.VPC_NAME }} \
             --subnet=${{ env.SUBNET_NAME }} \
             --zone=${{ env.ZONE }} \
-            --export-format=vmdk \
             --async \
             --quiet 2>&1)
           
