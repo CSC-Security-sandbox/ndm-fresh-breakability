@@ -3,7 +3,7 @@ import { BulkCutOverContext } from "@modules/storage-servers/file-server/file-se
 import { Box } from "@components/container/index";
 import TableWrapperWithoutFilter from "@components/table-wrapper/TableWrapperWithoutFilter";
 import { Card, CardContent, Text } from "@netapp/bxp-design-system-react";
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { SELECT_PATH_WARNING_MESSAGE } from "@modules/storage-servers/file-server/file-server-overview/bulk-cutover/components/SelectPath/selectPath.constant";
 
 const SelectPath = () => {
@@ -16,13 +16,28 @@ const SelectPath = () => {
     refetchCutOverPaths,
   } = useContext(BulkCutOverContext);
 
+  const sourceFileServerDisplayName = useMemo(() => {
+    if (!fileServerDetails?.configName) return "";
+    
+    const configName = fileServerDetails.configName;
+    const serverType = fileServerDetails?.serverType || fileServerDetails?.configType;
+    const fileServerName = fileServerDetails?.fileServers?.[0]?.fileServerName;
+    
+    // If not OtherNAS and has a zone/fileServerName, show configName:fileServerName
+    if (serverType && serverType !== "OtherNAS" && fileServerName) {
+      return `${configName}:${fileServerName}`;
+    }
+    
+    return configName;
+  }, [fileServerDetails]);
+
   return (
     <>
       <Card>
         <CardContent className="flex gap-4 flex-col">
           <Text>Source File Server</Text>
           <Box className="text-sm font-semibold">
-            {fileServerDetails?.configName}
+            {sourceFileServerDisplayName}
           </Box>
         </CardContent>
       </Card>

@@ -179,7 +179,7 @@ const getFileServerDetails = (
     // Build fileServerName from config name and protocol
     const configName = serverTypeForm?.formState?.configName || "";
     const protocol = credentialsForm.formState?.protocol || "";
-    const fileServerName = `${configName}-${protocol}`;
+    const fileServerName = backendServerType === "OtherNAS" ? configName : `${configName}-${protocol}`;
  
     const fileServerDetails: any = {
       serverType: backendServerType,

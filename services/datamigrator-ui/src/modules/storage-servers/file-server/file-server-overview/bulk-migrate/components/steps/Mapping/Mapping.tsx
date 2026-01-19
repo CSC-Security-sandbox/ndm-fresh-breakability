@@ -27,6 +27,21 @@ const Mapping = () => {
 
   const [key, setKey] = useState(nanoid());
 
+  const sourceFileServerDisplayName = useMemo(() => {
+    if (!sourceFileServerDetails?.configName) return "";
+    
+    const configName = sourceFileServerDetails.configName;
+    const serverType = sourceFileServerDetails?.serverType || sourceFileServerDetails?.configType;
+    const fileServerName = sourceFileServerDetails?.fileServers?.[0]?.fileServerName;
+    
+    // If not OtherNAS and has a zone/fileServerName, show configName:fileServerName
+    if (serverType && serverType !== "OtherNAS" && fileServerName) {
+      return `${configName}:${fileServerName}`;
+    }
+    
+    return configName;
+  }, [sourceFileServerDetails]);
+
   const options = useMemo(() => {
     const _options = getOptionsFromArray(
       sourceFileServerDetails?.fileServers?.map((data) => data.protocol) || [
@@ -50,7 +65,7 @@ const Mapping = () => {
       <Card className="min-h-24 flex p-6 justify-between">
         <Box>
           <Text>Source File Server</Text>
-          <Text bold>{sourceFileServerDetails?.configName}</Text>
+          <Text bold>{sourceFileServerDisplayName}</Text>
         </Box>
         <BulkMigrateScheduleComponent mappingStepForm={mappingStepForm} variant="normal_run" />
       </Card>

@@ -100,7 +100,12 @@ export const configApi = createApi({
     }),
 
     getAllCutOverPaths: builder.query({
-      query: ({ fileServerId }) => `/servers/cutover/${fileServerId}`,
+      query: ({ fileServerId, zoneFileServerId }) => {
+        // For Dell Isilon: fileServerId is the config ID, zoneFileServerId is the zone's file server ID
+        // For Other NAS: fileServerId is used directly (no zoneFileServerId)
+        const queryParams = zoneFileServerId ? `?fileServerId=${zoneFileServerId}` : '';
+        return `/servers/cutover/${fileServerId}${queryParams}`;
+      },
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
       },

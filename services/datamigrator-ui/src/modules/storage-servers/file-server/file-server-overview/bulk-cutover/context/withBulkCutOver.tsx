@@ -57,14 +57,16 @@ export function withBulkCutOver(WrappedComponent: ComponentType<any>) {
         }),
       }
     );
-    const { fileServerDetails } = useFileServerDetails();
+    const { fileServerDetails, zoneFileServerId } = useFileServerDetails();
     const {
       data: allCutOverPaths = [],
       isFetching: isCutOverPathsFetching,
       refetch: refetchCutOverPaths,
       error: cutOverPathsError,
     } = useGetAllCutOverPathsQuery(
-      fileServerDetails?.id ? { fileServerId: fileServerDetails.id } : skipToken
+      fileServerDetails?.id 
+        ? { fileServerId: fileServerDetails.id, zoneFileServerId } 
+        : skipToken
     );
 
     useEffect(() => {
