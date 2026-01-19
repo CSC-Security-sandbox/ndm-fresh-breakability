@@ -42,7 +42,7 @@ spec:
     match:
       - uri:
           prefix: /temporal
-    timeout: 0s  # Disable timeout for long-lived connections (0s = infinite)
+    timeout: 3600s  # 1 hour - effectively infinite for long-lived WebSocket/SSE connections
     route:
       - destination:
           host: temporaltest-web.temporal.svc.cluster.local
