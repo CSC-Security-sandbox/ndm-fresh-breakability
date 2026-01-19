@@ -542,7 +542,7 @@
    </changeSet>
 
    <changeSet id="20260116_01_jobs_report_proc.sql" author="ashish">
-      <sqlFile path="liquibase/20260116_01_jobs_report_proc.sql"/>
+      <sqlFile path="liquibase/20260116_01_jobs_report_proc.sql" splitStatements="false"/>
       <rollback>
          <sqlFile path="liquibase/20260116_01_jobs_report_proc_rollback.sql"/>
       </rollback>
