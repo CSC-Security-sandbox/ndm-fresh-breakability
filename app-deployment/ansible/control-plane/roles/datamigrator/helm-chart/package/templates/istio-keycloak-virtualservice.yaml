@@ -31,6 +31,7 @@ spec:
             {{- else }}
             prefix: "/keycloak"
             {{- end }}
+      timeout: 60s  # Keycloak login/auth operations
       route:
         - destination:
             host: {{ $route.serviceHost | quote }}
