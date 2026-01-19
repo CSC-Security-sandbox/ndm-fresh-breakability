@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -88,13 +89,12 @@ var _ = Describe("Rate Limiting Smoke", func() {
 			LogDebug(fmt.Sprintf("Test Results - Successful: %d, Rate Limited: %d, Other Errors: %d",
 				successfulRequests, rateLimitedRequests, otherErrors))
 
-			// Verify that successful requests were less than or equal to 50 (the actual cap)
-			Expect(successfulRequests).To(BeNumerically("<=", 50),
-				fmt.Sprintf("Expected less than or equal to 50 successful requests, got %d", successfulRequests))
+			// it can be 60 when we are starting at a second and going to next second for token refresh
+			Expect(successfulRequests).To(BeNumerically("<=", 60),
+				fmt.Sprintf("Expected less than or equal to 60 successful requests, got %d", successfulRequests))
 
-			// Verify that most requests were rate limited
-			Expect(rateLimitedRequests).To(BeNumerically(">=", 50),
-				fmt.Sprintf("Expected greater than or equal to 50 rate limited requests, got %d", rateLimitedRequests))
+			Expect(rateLimitedRequests).To(BeNumerically(">=", 40),
+				fmt.Sprintf("Expected greater than or equal to 40 rate limited requests, got %d", rateLimitedRequests))
 
 			By("########################## RATE LIMITING END ################################")
 
