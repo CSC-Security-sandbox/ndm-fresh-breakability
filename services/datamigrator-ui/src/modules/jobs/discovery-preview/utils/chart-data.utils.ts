@@ -503,18 +503,24 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
       (item: DataItemType) =>
         item.sub_category === FileSystemSubCategory.VOLUME_MOUNT_COUNT
     )?.value || 0;
-    const adsFiles =
+    const adsFilesRaw =
       data?.find(
         (item: DataItemType) =>
           item.category === FileSystemCategory.ALTERNATIVE_DATA_STREAMS &&
           item.sub_category === FileSystemSubCategory.ADS_FILES
       )?.value || 0;
-    const adsDirectories =
+    const adsFiles = typeof adsFilesRaw === 'string' 
+      ? adsFilesRaw.split(';').filter(p => p.trim()).length 
+      : adsFilesRaw;
+    const adsDirectoriesRaw =
       data?.find(
         (item: DataItemType) =>
           item.category === FileSystemCategory.ALTERNATIVE_DATA_STREAMS &&
           item.sub_category === FileSystemSubCategory.ADS_DIRECTORIES
       )?.value || 0;
+    const adsDirectories = typeof adsDirectoriesRaw === 'string'
+      ? adsDirectoriesRaw.split(';').filter(p => p.trim()).length
+      : adsDirectoriesRaw;
   return {
     regularFiles,
     symbolicLinks,
