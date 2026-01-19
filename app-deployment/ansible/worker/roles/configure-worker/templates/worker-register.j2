@@ -96,7 +96,11 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "WORKER_CONFIG_URL=https://${CONTROL_PLANE_IP}"
     echo "WORKER_JOB_SERVICE_URL=https://${CONTROL_PLANE_IP}"
     echo "WORKER_REPORT_SERVICE_URL=https://${CONTROL_PLANE_IP}"
+{% if enable_istio | default(true) | bool %}
     echo "TEMPORAL_ADDRESS=${CONTROL_PLANE_IP}:7233"
+{% else %}
+    echo "TEMPORAL_ADDRESS=${CONTROL_PLANE_IP}:30233"
+{% endif %}
 {% if temporal_mtls.enabled | default(false) %}
     echo "# Temporal TLS + JWT Configuration"
     echo "# External workers use TLS with self-signed certificates"

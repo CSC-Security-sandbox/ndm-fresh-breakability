@@ -22,9 +22,9 @@ remote_binary_path: /opt/datamigrator/binary/dm-worker-linux-x64-v1.0.0
 # When temporal_mtls.enabled is false:
 # - Worker connects to Temporal without TLS (legacy mode)
 temporal_mtls:
-  enabled: true  # Must match control plane setting
+  enabled: false  # Must match control plane setting
   jwt_auth:
-    enabled: true  # Must match control plane setting
+    enabled: false  # Must match control plane setting
   # TLS server name must match the CN or SAN in the Istio Gateway certificate
   # For local dev: 'datamigrator.local'
   # For deployed env: set to your gateway's hostname (e.g., 'temporal.company.com')

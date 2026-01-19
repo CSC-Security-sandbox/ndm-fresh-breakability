@@ -207,7 +207,7 @@ EOF
     log "Istio Gateway TLS certificate regenerated successfully with IP: ${VM_IP}"
 }
 
-restart_keycloak_and_gateway() {
+restart_keycloak() {
     log "Restarting Keycloak to pick up correct hostname..."
     if ! retry $MAX_RETRIES "kubectl rollout restart statefulset keycloak -n keycloak"; then
         handle_failure "Failed to restart Keycloak StatefulSet"
@@ -218,7 +218,9 @@ restart_keycloak_and_gateway() {
     else
         log "Keycloak restarted successfully and all pods are Ready."
     fi
-    
+}
+
+restart_istio_gateway() {
     log "Restarting Istio ingress gateway to reload JWT configuration..."
     if ! retry $MAX_RETRIES "kubectl rollout restart deployment istio-ingressgateway -n istio-system"; then
         handle_failure "Failed to restart Istio ingress gateway"
@@ -432,14 +434,19 @@ main() {
     install_helm_chart
     apply_postgres_cronjob_and_wait
     restart_statefulsets
+{% if enable_istio | default(true) | bool %}
     regenerate_istio_certificate
     patch_jwt_issuer
-    restart_keycloak_and_gateway
+{% endif %}
+    restart_keycloak
     apply_admin_configs
     restart_temporal_deployments
     
+{% if enable_istio | default(true) | bool %}
     setup_metallb
     patch_istio_gateway_service
+    restart_istio_gateway
+{% endif %}
     retry $MAX_RETRIES "systemctl disable boot-microk8s.service" || handle_failure "Failed to disable boot-microk8s.service"
     touch /var/lib/boot-microk8s.done
     log "MicroK8s cloud init setup completed successfully"

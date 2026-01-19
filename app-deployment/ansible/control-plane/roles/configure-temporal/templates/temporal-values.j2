@@ -44,8 +44,9 @@ server:
       
   frontend:
     service:
-      type: ClusterIP
+      type: NodePort
       port: 7233
+      nodePort: 30233
 {% if temporal_mtls.enabled | default(false) %}
     # Enable Istio sidecar for frontend (namespace injection enabled)
     podAnnotations:
@@ -61,6 +62,19 @@ server:
   worker:
     podAnnotations:
       sidecar.istio.io/inject: "true"
+{% else %}
+    # Disable Istio sidecar injection
+    podAnnotations:
+      sidecar.istio.io/inject: "false"
+  history:
+    podAnnotations:
+      sidecar.istio.io/inject: "false"
+  matching:
+    podAnnotations:
+      sidecar.istio.io/inject: "false"
+  worker:
+    podAnnotations:
+      sidecar.istio.io/inject: "false"
 {% endif %}
 
 
@@ -73,6 +87,9 @@ web:
 {% if temporal_mtls.enabled | default(false) %}
   podAnnotations:
     sidecar.istio.io/inject: "true"
+{% else %}
+  podAnnotations:
+    sidecar.istio.io/inject: "false"
 {% endif %}
   ingress:
     enabled: true
@@ -95,6 +112,9 @@ admintools:
 {% if temporal_mtls.enabled | default(false) %}
   podAnnotations:
     sidecar.istio.io/inject: "true"
+{% else %}
+  podAnnotations:
+    sidecar.istio.io/inject: "false"
 {% endif %}
 
 schema:

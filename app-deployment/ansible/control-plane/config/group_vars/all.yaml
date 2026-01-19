@@ -3,7 +3,7 @@
 build_version: "0.1.0"
 
 # Istio configuration
-enable_istio: true
+enable_istio: false
 istio_version: "1.24.0"
 istio_install_profile: "default"
 istio_namespace: "istio-system"
@@ -161,12 +161,12 @@ chart_names:
 # Temporal mTLS Configuration
 # ============================================================================
 temporal_mtls:
-  enabled: true
+  enabled: false
   mode: PERMISSIVE
   
   # JWT authentication for external workers (via Istio Gateway)
   jwt_auth:
-    enabled: true  # External workers send JWT in gRPC metadata
+    enabled: false  # External workers send JWT in gRPC metadata
   
   # TLS server name for certificate validation
   # Defaults to the first host in istio_gateway.hosts (e.g., 'datamigrator.local')
