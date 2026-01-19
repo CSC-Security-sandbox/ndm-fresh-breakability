@@ -770,6 +770,7 @@ describe('WorkManagerService', () => {
       };
       const mockConfig = {
         id: 'config-1',
+        serverType: 'OtherNAS',
         status: 'IN_PROGRESS',
         errorMessage: null,
         fileServers: [{ id: 'fs-1', status: 'IN_PROGRESS' }],
@@ -783,11 +784,11 @@ describe('WorkManagerService', () => {
         where: { id: data.configId },
         relations: ['fileServers'],
       });
-      expect(configRepo.save).toHaveBeenCalledWith({
-        ...mockConfig,
-        status: data.status,
-        errorMessage: data.errorMessage,
-      });
+      // For Other NAS, status is updated directly on config and all file servers
+      expect(mockConfig.status).toBe(data.status);
+      expect(mockConfig.errorMessage).toBe(data.errorMessage);
+      expect(mockConfig.fileServers[0].status).toBe(data.status);
+      expect(configRepo.save).toHaveBeenCalledWith(mockConfig);
     });
 
     it('should update file server status for Dell per-zone callback (with fileServerId)', async () => {
@@ -871,7 +872,8 @@ describe('WorkManagerService', () => {
 
       // After updating fs-1 to ERRORED, aggregated status should be ERRORED
       expect(mockConfig.status).toBe('ERRORED');
-      expect(mockConfig.errorMessage).toBe('One or more zones failed validation');
+      // Service uses the actual error message from the errored file server
+      expect(mockConfig.errorMessage).toBe('Zone validation failed');
     });
 
     it('should keep Dell config status as IN_PROGRESS when not all file servers are complete', async () => {

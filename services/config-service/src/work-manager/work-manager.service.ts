@@ -10,7 +10,8 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { Repository, IsNull, Not, In } from 'typeorm';
+import { Repository, IsNull, Not, In} from 'typeorm';
+import {ServerType} from 'src/constants/enums';
 import { WorkerConfiguration } from 'src/constants/types';
 import {
   ConfigStatus,
@@ -327,17 +328,15 @@ export class WorkManagerService {
       this.logger.log(
         `Received validateWorkingDirectory callback: configId=${data.configId}, fileServerId=${data.fileServerId}, status=${data.status}`,
       );
-
-      // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
-      if (data.fileServerId) {
-        // Update file server status and aggregate config status in one save
-        this.logger.log(`Per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
-        
-        const config = await this.configRepo.findOne({
+      const config = await this.configRepo.findOne({
           where: { id: data.configId },
           relations: ['fileServers'],
-        });
-        
+        }); 
+      const isOtherNas = config.serverType === ServerType.other;
+      // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
+      if (!isOtherNas) {
+        // Update file server status and aggregate config status in one save
+        this.logger.log(`Per-zone callback: Updating file server ${data.fileServerId} status to ${data.status}`);
         if (config) {
           // Update the specific file server status
           const fileServer = config.fileServers.find(fs => fs.id === data.fileServerId);
@@ -355,7 +354,9 @@ export class WorkManagerService {
             config.errorMessage = 'One or more zones have no workers assigned';
           } else if (hasErrored) {
             config.status = ConfigStatus.ERRORED;
-            config.errorMessage = 'One or more zones failed validation';
+            // Use actual error message from the errored file server
+            const erroredFs = config.fileServers.find(fs => fs.status === ConfigStatus.ERRORED);
+            config.errorMessage = erroredFs?.errorMessage || 'One or more zones failed validation';
           } else if (allActive) {
             config.status = ConfigStatus.ACTIVE;
             config.errorMessage = null;
@@ -364,31 +365,21 @@ export class WorkManagerService {
             config.errorMessage = null;
           }
           this.logger.log(
-            `Dell config ${config.id}: Aggregated status = ${config.status} (${config.fileServers.length} file servers)`,
+            `Non Other NAS :config ${config.id}: Aggregated status = ${config.status} (${config.fileServers.length} file servers)`,
           );
-          // Single save for both file server and config updates
-          await this.configRepo.save(config);
         }
       } else {
         // Other NAS: Update config status directly
-        const config = await this.configRepo.findOne({
-          where: { id: data.configId },
-          relations: ['fileServers'],
-        });
-        
         if (config) {
           config.status = data.status;
           config.errorMessage = data.errorMessage;
-          
-          // Also sync status to all file servers for consistency
           config.fileServers.forEach(fs => {
             fs.status = data.status;
             fs.errorMessage = data.errorMessage;
-          });
-          
-          await this.configRepo.save(config);
-        }
+          });        
+        }     
       }
+      await this.configRepo.save(config);
     } catch (error) {
       this.logger.error(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,

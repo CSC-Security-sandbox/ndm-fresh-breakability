@@ -8,6 +8,10 @@ import { UserDetails } from './configuration.types';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
+// Storage-aware server types that use API-based discovery
+// Add new storage types here as they are supported
+const STORAGE_AWARE_SERVER_TYPES: ServerType[] = [ServerType.dell];
+
 describe('ConfigurationController', () => {
   let controller: ConfigurationController;
   let service: ConfigurationService;
@@ -262,75 +266,80 @@ describe('ConfigurationController', () => {
   });
 
   describe('validateConnection', () => {
-    it('should validate connection successfully', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: '10.192.7.32',
-        port: 8080,
-        username: 'root',
-        password: 'password123',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
-      const validationResult = { isValid: true, message: 'Connection successful' };
+    // Storage-aware validate connection tests - runs for all STORAGE_AWARE_SERVER_TYPES
+    STORAGE_AWARE_SERVER_TYPES.forEach((storageType) => {
+      it(`should validate ${storageType} connection successfully`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: '10.192.7.32',
+          port: 8080,
+          username: 'root',
+          password: 'password123',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
+        const validationResult = { isValid: true, message: 'Connection successful' };
 
-      mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
+        mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
 
-      const result = await controller.validateConnection(request);
-      expect(result).toEqual(validationResult);
-      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
-    });
+        const result = await controller.validateConnection(request);
+        expect(result).toEqual(validationResult);
+        expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+      });
 
-    it('should return invalid connection when validation fails', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: '10.192.7.32',
-        port: 8080,
-        username: 'wronguser',
-        password: 'wrongpassword',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
-      const validationResult = { isValid: false, message: 'Invalid credentials' };
+      it(`should return invalid ${storageType} connection when validation fails`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: '10.192.7.32',
+          port: 8080,
+          username: 'wronguser',
+          password: 'wrongpassword',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
+        const validationResult = { isValid: false, message: 'Invalid credentials' };
 
-      mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
+        mockConfigurationService.validateConnection.mockResolvedValue(validationResult);
 
-      const result = await controller.validateConnection(request);
-      expect(result).toEqual(validationResult);
-      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
-    });
+        const result = await controller.validateConnection(request);
+        expect(result).toEqual(validationResult);
+        expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+      });
 
-    it('should handle connection validation errors', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: 'invalid.host',
-        port: 8080,
-        username: 'root',
-        password: 'password123',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
+      it(`should handle ${storageType} connection validation errors`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: 'invalid.host',
+          port: 8080,
+          username: 'root',
+          password: 'password123',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
 
-      mockConfigurationService.validateConnection.mockRejectedValue(new Error('Network error'));
+        mockConfigurationService.validateConnection.mockRejectedValue(new Error('Network error'));
 
-      await expect(controller.validateConnection(request)).rejects.toThrow('Network error');
-      expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+        await expect(controller.validateConnection(request)).rejects.toThrow('Network error');
+        expect(mockConfigurationService.validateConnection).toHaveBeenCalledWith(request);
+      });
     });
   });
 
   describe('fetchCertificate', () => {
-    it('should fetch certificate successfully', async () => {
-      const request: FetchCertificateRequestDTO = {
-        host: '10.192.7.32',
-        serverType: ServerType.dell
-      };
+    // Storage-aware fetch certificate tests - runs for all STORAGE_AWARE_SERVER_TYPES
+    STORAGE_AWARE_SERVER_TYPES.forEach((storageType) => {
+      it(`should fetch ${storageType} certificate successfully`, async () => {
+        const request: FetchCertificateRequestDTO = {
+          host: '10.192.7.32',
+          serverType: storageType
+        };
       const certificateResponse: FetchCertificateResponseDTO = {
         isSelfSigned: true,
         subject: {
-          CN: 'isilon.example.com',
-          O: 'Dell Technologies',
+          CN: 'storage.example.com',
+          O: 'Storage Technologies',
           C: 'US'
         },
         issuer: {
-          CN: 'isilon.example.com',
-          O: 'Dell Technologies',
+          CN: 'storage.example.com',
+          O: 'Storage Technologies',
           C: 'US'
         },
         validFrom: '2024-01-01T00:00:00.000Z',
@@ -338,7 +347,7 @@ describe('ConfigurationController', () => {
         serialNumber: '01:23:45:67:89:AB:CD:EF',
         fingerprint: 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD',
         fingerprint256: '12:34:56:78:9A:BC:DE:F0:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00',
-        subjectAltNames: ['DNS:isilon.example.com', 'IP:10.192.7.32'],
+        subjectAltNames: ['DNS:storage.example.com', 'IP:10.192.7.32'],
         daysRemaining: 365,
         isExpired: false,
         issuerChain: [],
@@ -346,7 +355,7 @@ describe('ConfigurationController', () => {
         host: '10.192.7.32',
         port: 443,
         hostMatches: true,
-        certificateHosts: ['isilon.example.com', '10.192.7.32']
+        certificateHosts: ['storage.example.com', '10.192.7.32']
       };
 
       mockConfigurationService.fetchCertificate.mockResolvedValue(certificateResponse);
@@ -354,38 +363,41 @@ describe('ConfigurationController', () => {
       const result = await controller.fetchCertificate(request);
       expect(result).toEqual(certificateResponse);
       expect(mockConfigurationService.fetchCertificate).toHaveBeenCalledWith(request);
-    });
+      });
 
-    it('should handle certificate fetch errors', async () => {
-      const request: FetchCertificateRequestDTO = {
-        host: 'invalid.host',
-        serverType: ServerType.dell
-      };
+      it(`should handle ${storageType} certificate fetch errors`, async () => {
+        const request: FetchCertificateRequestDTO = {
+          host: 'invalid.host',
+          serverType: storageType
+        };
 
-      mockConfigurationService.fetchCertificate.mockRejectedValue(new Error('Connection timeout'));
+        mockConfigurationService.fetchCertificate.mockRejectedValue(new Error('Connection timeout'));
 
-      await expect(controller.fetchCertificate(request)).rejects.toThrow('Connection timeout');
-      expect(mockConfigurationService.fetchCertificate).toHaveBeenCalledWith(request);
+        await expect(controller.fetchCertificate(request)).rejects.toThrow('Connection timeout');
+        expect(mockConfigurationService.fetchCertificate).toHaveBeenCalledWith(request);
+      });
     });
   });
 
   describe('fetchZones', () => {
-    it('should fetch zones successfully', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: '10.192.7.32',
-        port: 8080,
-        username: 'root',
-        password: 'password123',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
+    // Storage-aware fetch zones tests - runs for all STORAGE_AWARE_SERVER_TYPES
+    STORAGE_AWARE_SERVER_TYPES.forEach((storageType) => {
+      it(`should fetch ${storageType} zones successfully`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: '10.192.7.32',
+          port: 8080,
+          username: 'root',
+          password: 'password123',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
       const zonesResponse: FetchZonesResponseDTO = {
         zones: [
           {
             zoneId: 1,
             zoneName: 'System',
             ipAddresses: ['192.168.1.10', '192.168.1.11'],
-            smartConnectFqdn: 'isilon.lab.local',
+            smartConnectFqdn: 'storage.lab.local',
             ssip: '192.168.1.100'
           },
           {
@@ -405,42 +417,43 @@ describe('ConfigurationController', () => {
       expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
     });
 
-    it('should handle empty zones response', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: '10.192.7.32',
-        port: 8080,
-        username: 'root',
-        password: 'password123',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
-      const emptyZonesResponse: FetchZonesResponseDTO = {
-        zones: [],
-        totalZones: 0,
-        totalIpAddresses: 0
-      };
+      it(`should handle empty ${storageType} zones response`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: '10.192.7.32',
+          port: 8080,
+          username: 'root',
+          password: 'password123',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
+        const emptyZonesResponse: FetchZonesResponseDTO = {
+          zones: [],
+          totalZones: 0,
+          totalIpAddresses: 0
+        };
 
-      mockConfigurationService.fetchZones.mockResolvedValue(emptyZonesResponse);
+        mockConfigurationService.fetchZones.mockResolvedValue(emptyZonesResponse);
 
-      const result = await controller.fetchZones(request);
-      expect(result).toEqual(emptyZonesResponse);
-      expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
-    });
+        const result = await controller.fetchZones(request);
+        expect(result).toEqual(emptyZonesResponse);
+        expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
+      });
 
-    it('should handle zones fetch errors', async () => {
-      const request: FetchZonesRequestDTO = {
-        serverType: ServerType.dell,
-        host: '10.192.7.32',
-        port: 8080,
-        username: 'wronguser',
-        password: 'wrongpassword',
-        certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
-      };
+      it(`should handle ${storageType} zones fetch errors`, async () => {
+        const request: FetchZonesRequestDTO = {
+          serverType: storageType,
+          host: '10.192.7.32',
+          port: 8080,
+          username: 'wronguser',
+          password: 'wrongpassword',
+          certificate: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----'
+        };
 
-      mockConfigurationService.fetchZones.mockRejectedValue(new Error('Authentication failed'));
+        mockConfigurationService.fetchZones.mockRejectedValue(new Error('Authentication failed'));
 
-      await expect(controller.fetchZones(request)).rejects.toThrow('Authentication failed');
-      expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
+        await expect(controller.fetchZones(request)).rejects.toThrow('Authentication failed');
+        expect(mockConfigurationService.fetchZones).toHaveBeenCalledWith(request);
+      });
     });
   });
 });

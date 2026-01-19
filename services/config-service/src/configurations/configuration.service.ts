@@ -826,37 +826,34 @@ export class ConfigurationService {
           ? ConfigStatus.IN_PROGRESS
           : ConfigStatus.DRAFT;
 
-      let config;
-      switch (createConfig.serverType) {
-        case ServerType.dell:
-          config = this.configEntity.create({
-            configName: sanitizedConfigName,
-            configType: createConfig.configType,
-            projectId: createConfig.projectId,
-            status: initialConfigStatus,
-            fileServers: await Promise.all(fileServerPromises),
-            createdBy: userId,
-            hostname: createConfig.managementHost,
-            port: createConfig.managementPort,
-            serverType: createConfig.serverType,
-            username: createConfig.managementUsername,
-            password: createConfig.managementPassword,
-            tlsAccepted: createConfig.tlsAccepted,
-            tlsCaCertificate: createConfig.tlsCertificate,
-            tlsExpiry: createConfig.tlsExpiry,
-          });
-          break;
-        default:
-          config = this.configEntity.create({
-            configName: sanitizedConfigName,
-            configType: createConfig.configType,
-            projectId: createConfig.projectId,
-            status: initialConfigStatus,
-            fileServers: await Promise.all(fileServerPromises),
-            createdBy: userId,
-            serverType: createConfig.serverType,
-          });
-          break;
+      let config;    
+      if (createConfig.serverType !== ServerType.other) {
+        config = this.configEntity.create({
+          configName: sanitizedConfigName,
+          configType: createConfig.configType,
+          projectId: createConfig.projectId,
+          status: initialConfigStatus,
+          fileServers: await Promise.all(fileServerPromises),
+          createdBy: userId,
+          hostname: createConfig.managementHost,
+          port: createConfig.managementPort,
+          serverType: createConfig.serverType,
+          username: createConfig.managementUsername,
+          password: createConfig.managementPassword,
+          tlsAccepted: createConfig.tlsAccepted,
+          tlsCaCertificate: createConfig.tlsCertificate,
+          tlsExpiry: createConfig.tlsExpiry,
+        });
+      } else {
+        config = this.configEntity.create({
+          configName: sanitizedConfigName,
+          configType: createConfig.configType,
+          projectId: createConfig.projectId,
+          status: initialConfigStatus,
+          fileServers: await Promise.all(fileServerPromises),
+          createdBy: userId,
+          serverType: createConfig.serverType,
+        });
       }
 
       // Check worker health at config level
@@ -986,8 +983,7 @@ export class ConfigurationService {
           : ConfigStatus.ACTIVE
         : ConfigStatus.DRAFT;
 
-      // Update Dell serverType specific fields
-      if (updateConfig.serverType === ServerType.dell) {
+      if (updateConfig.serverType !== ServerType.other) {
         config.hostname = updateConfig.managementHost;
         config.port = updateConfig.managementPort;
         config.username = updateConfig.managementUsername;
@@ -1018,9 +1014,9 @@ export class ConfigurationService {
         if (
           workersWithStats?.length > 0 &&
           (await this.isAllWorkerUnHealthy(workersWithStats))
-        )
+        ){
           allUnHealthy = true;
-
+        }
         credentials.push({
           details: {
             hostname: update.host,
@@ -1174,8 +1170,31 @@ export class ConfigurationService {
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
         config.errorMessage = ConfigErrorMsg.ERRORED;
-      } else if (updateConfig.serverType === ServerType.dell) {
-        // Aggregate per-zone statuses to config-level status for Dell Isilon
+      }
+
+      // Check worker health at file server level (same as createConfiguration)
+      for (const fileServer of config.fileServers) {
+        if (fileServer.workers?.length > 0) {
+          // Get worker IDs from the already-populated workers relation
+          const workerIds = fileServer.workers.map((w) => w.workerId);
+
+          const fsWorkers: WorkerEntity[] = await this.WorkerEntity.find({
+            where: { workerId: In(workerIds) },
+            relations: { stats: true },
+          });
+
+          if (
+            fsWorkers?.length > 0 &&
+            (await this.isAllWorkerUnHealthy(fsWorkers))
+          ) {
+            fileServer.status = ConfigStatus.ERRORED;
+            fileServer.errorMessage = ConfigErrorMsg.ERRORED;
+          }
+        }
+      }
+
+      // Aggregate per-zone statuses to config-level status (for all server types)
+      if (!allUnHealthy) {
         const fileServers = config.fileServers;
         const hasDraft = fileServers.some(
           (fs) => fs.status === ConfigStatus.DRAFT,
@@ -1186,18 +1205,20 @@ export class ConfigurationService {
 
         if (hasDraft) {
           config.status = ConfigStatus.DRAFT;
-          config.errorMessage = 'One or more zones have no workers assigned';
+          config.errorMessage = null;
         } else if (hasErrored) {
           config.status = ConfigStatus.ERRORED;
-          config.errorMessage = 'One or more zones failed validation';
+          // Get the actual error message from the errored file server
+          const erroredFs = fileServers.find(fs => fs.status === ConfigStatus.ERRORED);
+          config.errorMessage = erroredFs?.errorMessage || ConfigErrorMsg.ERRORED;
         } else {
-          // All zones have workers, set to IN_PROGRESS (workflow will set ACTIVE on success)
+          // All zones have workers and are healthy, set to IN_PROGRESS (workflow will set ACTIVE on success)
           config.status = ConfigStatus.IN_PROGRESS;
           config.errorMessage = null;
         }
 
         this.logger.debug(
-          `Dell config ${id}: Aggregated status = ${config.status} (hasDraft=${hasDraft}, hasErrored=${hasErrored})`,
+          `Config ${id}: Aggregated status = ${config.status} (hasDraft=${hasDraft}, hasErrored=${hasErrored})`,
         );
       }
 
@@ -1722,13 +1743,7 @@ export class ConfigurationService {
         );
       }
     }
-
-    // Mark as refreshing
-    await this.fileServerEntity.update(
-      { id: In(fileServerIds) },
-      { isRefreshed: false },
-    );
-
+    
     try {
       // Discover exports via storage REST API (zone-aware)
       const { discoveredPathsMap, errorMap } =
@@ -1737,7 +1752,10 @@ export class ConfigurationService {
           fileServersToRefresh,
           traceId,
         );
-
+      await this.fileServerEntity.update(
+        { id: In(fileServerIds) },
+        { isRefreshed: false },
+      );    
       // Update file servers that had API errors with per-zone error messages
       if (errorMap.size > 0) {
         for (const fileServer of fileServersToRefresh) {
@@ -2033,8 +2051,8 @@ export class ConfigurationService {
 
       // Determine reachableCount based on server type
       let reachableCount: number;
-      if (serverType === ServerType.dell) {
-        // Dell: use worker count per file server (zone)
+      if (serverType !== ServerType.other) {
+        // For not otherNas: use worker count per file server (zone)
         reachableCount = fileServer.workers?.length ?? 0;
       } else {
         // Other NAS: use worker count from pathsMap (workflow result)
@@ -2042,7 +2060,7 @@ export class ConfigurationService {
       }
 
       // Normalize discovered data to DiscoveredVolumeData[]
-      // For Dell: already in DiscoveredVolumeData format
+      // For not otherNas: already in DiscoveredVolumeData format
       // For Other NAS: convert string[] to DiscoveredVolumeData[] (volumePath = directoryPath)
       const volumeDataList: DiscoveredVolumeData[] = discoveredData.map(
         (item) => {
