@@ -55,8 +55,15 @@ const ExportPathsTable = ({
 
   const isDraftStatus =
     fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.DRAFT;
+
+  const isManualUploadPath = useMemo(() => {
+    if (fileServerDetails?.fileServers)
+      return hasManualUploadPath(fileServerDetails);
+    return false;
+  }, [fileServerDetails?.fileServers]);
+
   const isRefreshDisabled =
-    !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus;
+    !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus || isManualUploadPath;
 
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
@@ -87,6 +94,11 @@ const ExportPathsTable = ({
 
   // REFETCH EXPORT PATHS
   const handleRefetchExportPaths = async () => {
+    // Skip refresh for manually uploaded paths - no backend discovery needed
+    if (isManualUploadPath) {
+      return;
+    }
+
     setDisableRefresh(true);
     try {
       let retryCount = 0;
@@ -153,11 +165,6 @@ const ExportPathsTable = ({
     };
   }, []);
 
-  const isManualUploadPath = useMemo(() => {
-    if (fileServerDetails?.fileServers)
-      return hasManualUploadPath(fileServerDetails);
-  }, [fileServerDetails?.fileServers]);
-
   const FETCHING_DETAILS = (
     <Box className="flex gap-1 justify-end">
       <ReFreshExportPathsTime fileServerDetails={fileServerDetails} />
@@ -206,7 +213,7 @@ const ExportPathsTable = ({
       showLabel={false}
       refetchTableData={handleRefetchExportPaths}
       isRefreshing={isFetching || disableRefresh}  
-      showRefresh={true}
+      showRefresh={!isManualUploadPath}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }
