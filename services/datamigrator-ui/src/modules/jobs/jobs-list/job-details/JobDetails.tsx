@@ -65,7 +65,7 @@ import {
   Breadcrumbs, Button, FormFieldInputNew, FormFieldSelect, FormFieldTextArea,
   FormFieldUploadFile, Heading, Popover, RadioButton, Text, Toggle, useForm,
 } from "@netapp/bxp-design-system-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setModalClose, setModalProps } from "@store/reducer/commonComponentSlice";
@@ -90,6 +90,7 @@ const JobDetails = () => {
   const [isFrequentInterval, setIsFrequentInterval] = useState<boolean>(false);
   const [showGeneratingReportBtn, setShowGeneratingReportBtn] =
     useState<Record<string, boolean>>();
+  const [inventoryStatsMessage, setInventoryStatsMessage] = useState<string | null>(null);
   const {
     data: jobConfigDetails,
     isLoading,
@@ -138,24 +139,46 @@ const JobDetails = () => {
     { data: inventoryStats, isLoading: isFetchingInventoryStats }
   ] = useGetJobConfigInventoryStatsMutation();
 
+  const fetchInventoryStats = useCallback(
+    async ({ fetchLatest}: { fetchLatest: boolean }) => {
+      if (!jobId) return;
+      try {
+        const result = await getInventoryStats({ jobConfigId: jobId, fetchLatest });
+        const pendingMessage = result.data?.error?.message;
+        if (result.data?.error?.status === "pending" && pendingMessage) {
+          setInventoryStatsMessage(pendingMessage);
+          return;
+        }
+        if (result.error) {
+          setInventoryStatsMessage(null);
+          if (fetchLatest) {
+            notify.error("Failed to refresh inventory statistics");
+          }
+        } else {
+          setInventoryStatsMessage(null);
+          if (fetchLatest) {
+            notify.success("Inventory statistics refreshed successfully");
+          }
+        }
+      } catch (error) {
+        setInventoryStatsMessage(null);
+        if (fetchLatest) {
+          notify.error("Failed to refresh inventory statistics");
+        }
+        console.error(error);
+      }
+    },
+    [jobId, getInventoryStats]
+  );
+
   useEffect(() => {
-    if (jobId && jobConfigDetails?.jobType === 'MIGRATE') {
-      getInventoryStats(jobId);
+    if (jobConfigDetails?.jobType === 'MIGRATE') {
+      fetchInventoryStats({ fetchLatest: false });
     }
-  }, [jobId, jobConfigDetails?.jobType]);
+  }, [jobId, jobConfigDetails?.jobType, fetchInventoryStats]);
 
   const handleRefreshInventoryStats = async () => {
-    if (!jobId) return;
-    try {
-      const result = await getInventoryStats(jobId);
-      if (!result.error) {
-        notify.success("Inventory statistics refreshed successfully");
-      } else {
-        notify.error("Failed to refresh inventory statistics");
-      }
-    } catch (error) {
-      console.error(error);
-    }
+    await fetchInventoryStats({ fetchLatest: true });
   };
 
   const [downloadReportApi] = useDownloadReportsMutation();
@@ -916,7 +939,7 @@ const JobDetails = () => {
       return "Summary of Last Run";
     } 
     else if (jobConfigDetails?.jobType === JOBS_TYPE.MIGRATE) {
-      return "Destination statistics";
+      return `Destination statistics${inventoryStatsMessage ? ` (${inventoryStatsMessage})` : ""}`;
     }
     else {
       return "Total of All Runs";

@@ -344,12 +344,12 @@ export const jobsApi = createApi({
     }),
 
     getJobConfigInventoryStats: builder.mutation({
-      query: (jobConfigId: string) => ({
-        url: `jobs/${jobConfigId}/inventory-stats`,
+      query: ({ jobConfigId, fetchLatest }: { jobConfigId: string; fetchLatest?: boolean }) => ({
+        url: `jobs/${jobConfigId}/inventory-stats${fetchLatest ? '?fetch-latest=true' : ''}`,
         method: 'POST',
       }),
       transformResponse: (response) => {
-        return response?.data?.items || response?.data || response;
+        return response?.data || response;
       },
     }),
   }),
