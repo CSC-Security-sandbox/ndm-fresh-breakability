@@ -5,7 +5,7 @@ ssh_username                 = "packer"
 // Azure Control Plane Values
 azure_ubuntu_release_version = "24.04.202502210"
 azure_resource_group         = "datamigrate-acr-resource-group"
-azure_packer_vm_size         = "Standard_D8s_v4"
+azure_packer_vm_size         = "Standard_D16s_v4"
 azure_region                 = "East US"
 
 // Azure Base Image Values
