@@ -349,7 +349,7 @@ export const jobsApi = createApi({
         method: 'POST',
       }),
       transformResponse: (response) => {
-        return response?.data || response;
+        return response?.data?.items || response?.data || response;
       },
     }),
   }),
