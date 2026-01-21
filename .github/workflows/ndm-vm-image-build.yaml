@@ -874,8 +874,8 @@ jobs:
               echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
               ;;
             aws)
-              echo "PKR_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-              echo "PKR_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+              echo "PKR_VAR_aws_access_key=${{ secrets.AMI_AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+              echo "PKR_VAR_aws_secret_key=${{ secrets.AMI_AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
               ;;
             vsphere)
               echo "Decoding and exporting vSphere credentials..."

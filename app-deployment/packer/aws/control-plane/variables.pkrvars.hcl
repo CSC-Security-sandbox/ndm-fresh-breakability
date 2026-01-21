@@ -10,8 +10,8 @@ aws_region                   = "us-east-1"
 ssh_username                 = "ubuntu"
 
 // VPC and Subnet Configuration
-vpc_id                       = "vpc-0cce6fb6ec77a8daf" // OnPremisesConnectivity
-subnet_id                    = "subnet-0ba24aac108bca5ca" // OnPremises-us-east1a
+vpc_id                       = "vpc-065b68f0083bb1656" // OnPremisesConnectivity
+subnet_id                    = "subnet-05c45fc0b10753005" // OnPremises-us-east1a
 
 // AWS AMI and Instance Configuration
 aws_ami_name                 = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20250921"
