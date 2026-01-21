@@ -746,9 +746,6 @@ export class ConfigurationService {
     projectId?: string,
   ) {
     this.logger.debug('Config creation started');
-
-    let managementServerId: string | null = null;
-
     // Sanitize configName input
     const sanitizedConfigName = await this.sanitizeConfigName(
       createConfig.configName,
@@ -762,10 +759,11 @@ export class ConfigurationService {
         sanitizedConfigName,
       );
 
-      // Build hashmap of hasWorkers per file server (keyed by fileServerName)
+      // Build hashmap of hasWorkers per file server (keyed by fileServerName + protocol to handle multiple protocols per zone)
       const hasWorkersMap: Record<string, boolean> = {};
       createConfig.fileServers.forEach((fs) => {
-        hasWorkersMap[fs.fileServerName] = (fs?.workers?.length ?? 0) > 0;
+        const key = `${fs.fileServerName}-${fs.protocol}`;
+        hasWorkersMap[key] = (fs?.workers?.length ?? 0) > 0;
       });
 
       const fileServerPromises = createConfig.fileServers.map(
@@ -799,7 +797,7 @@ export class ConfigurationService {
             zone_id: fileServer.zone_id,
             smartConnectSsip: fileServer.smartConnectSsip, // SSIP for SmartConnect DNS resolution
             smartConnectDnsZone: fileServer.smartConnectDnsZone, // DNS zone from Isilon API
-            status: hasWorkersMap[fileServer.fileServerName]
+            status: workers.length > 0
               ? ConfigStatus.IN_PROGRESS
               : ConfigStatus.DRAFT,
           });
@@ -895,11 +893,6 @@ export class ConfigurationService {
         update.id,
         traceId,
       );
-      const workerNames = config.fileServers.flatMap((fileServer) => {
-        return fileServer.workers.map((worker) => {
-          return worker?.workerName;
-        });
-      });
 
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.CREATE_CONFIGURATION,
