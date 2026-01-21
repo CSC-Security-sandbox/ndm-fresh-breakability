@@ -12,14 +12,14 @@ const JobTaskErrorsBreadcrumbs = () => {
       {!isJobRunErrorsScreen && (
         <Breadcrumbs>
           <Link to="/jobs-list">Jobs</Link>
-          <Link to={`/job-details/${jobId}`}>Job Details</Link>
+          <Link to={`/job-details/${jobId}`}>Job Config Details</Link>
 
           <Box>Errors</Box>
         </Breadcrumbs>
       )}
       {isJobRunErrorsScreen && (
         <Breadcrumbs>
-          <Link to={`/job-details/${jobId}`}>Job Details</Link>
+          <Link to={`/job-details/${jobId}`}>Job Config Details</Link>
           <Link to={`/job-details/${jobId}/run/${jobRunId}`}>
             Job Run Details
           </Link>

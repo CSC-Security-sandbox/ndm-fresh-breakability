@@ -164,7 +164,7 @@ const JobTasks = () => {
     <Box className="flex flex-col gap-6">
       <Breadcrumbs>
         <Link to="/jobs-list">Jobs</Link>
-        <Link to={`/job-details/${jobId}`}>Job Details</Link>
+        <Link to={`/job-details/${jobId}`}>Job Config Details</Link>
         <Link to={`/job-details/${jobId}/run/${jobRunId}`}>
           Job Run Details
         </Link>

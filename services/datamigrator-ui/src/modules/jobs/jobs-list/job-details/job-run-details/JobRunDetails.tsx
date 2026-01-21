@@ -317,7 +317,7 @@ const JobRunDetails = () => {
           onClick={() => navigate(`/job-details/${jobId}`)}
           variant="text"
         >
-          Job Details
+          Job Config Details
         </Button>
         <Box>Job Run Details</Box>
       </Breadcrumbs>
