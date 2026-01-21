@@ -155,7 +155,7 @@
     fi
     {
       echo "[ req ]"
-      echo "default_bits = 2048"
+      echo "default_bits = 256"
       echo "prompt = no"
       echo "default_md = sha256"
       echo "x509_extensions = v3_req"
@@ -167,10 +167,11 @@
       echo "[ v3_req ]"
       echo "subjectAltName = ${SAN_ENTRIES}"
     } > "${CFG_FILE}"
-    openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
-      -keyout "${KEY_FILE}" \
-      -out "${CERT_FILE}" \
-      -config "${CFG_FILE}" >/dev/null 2>&1
+    # Generate ECC P-256 key (5x faster than RSA 2048)
+    openssl ecparam -name prime256v1 -genkey -noout -out "${KEY_FILE}"
+    # Generate self-signed certificate with ECC key
+    openssl req -new -x509 -key "${KEY_FILE}" -out "${CERT_FILE}" \
+      -days 825 -config "${CFG_FILE}" >/dev/null 2>&1
     kubectl create secret tls {{ istio_secret_name }} \
       --cert="${CERT_FILE}" \
       --key="${KEY_FILE}" \

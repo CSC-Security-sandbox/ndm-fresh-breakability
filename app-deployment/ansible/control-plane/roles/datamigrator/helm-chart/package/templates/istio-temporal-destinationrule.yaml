@@ -4,17 +4,15 @@
 {{- if $temporalMtls.enabled | default false }}
 ---
 # DestinationRule for Temporal Frontend
-# Enables Istio mTLS for secure service-to-service communication
+# Connection pool settings without mTLS (mTLS disabled via PeerAuthentication)
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
-  name: temporal-frontend-mtls
+  name: temporal-frontend
   namespace: {{ .Release.Namespace }}
 spec:
   host: temporaltest-frontend.temporal.svc.cluster.local
   trafficPolicy:
-    tls:
-      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
     connectionPool:
       tcp:
         maxConnections: 100  # Limit concurrent connections
@@ -22,17 +20,15 @@ spec:
       simple: ROUND_ROBIN
 ---
 # DestinationRule for Temporal History
-# Enables Istio mTLS for secure service-to-service communication
+# Connection pool settings without mTLS (mTLS disabled via PeerAuthentication)
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
-  name: temporal-history-mtls
+  name: temporal-history
   namespace: {{ .Release.Namespace }}
 spec:
   host: temporaltest-history.temporal.svc.cluster.local
   trafficPolicy:
-    tls:
-      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
     connectionPool:
       tcp:
         maxConnections: 100
@@ -40,17 +36,15 @@ spec:
       simple: ROUND_ROBIN
 ---
 # DestinationRule for Temporal Matching
-# Enables Istio mTLS for secure service-to-service communication
+# Connection pool settings without mTLS (mTLS disabled via PeerAuthentication)
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
-  name: temporal-matching-mtls
+  name: temporal-matching
   namespace: {{ .Release.Namespace }}
 spec:
   host: temporaltest-matching.temporal.svc.cluster.local
   trafficPolicy:
-    tls:
-      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
     connectionPool:
       tcp:
         maxConnections: 100
@@ -58,17 +52,15 @@ spec:
       simple: ROUND_ROBIN
 ---
 # DestinationRule for Temporal Internal Worker
-# Enables Istio mTLS for secure service-to-service communication
+# Connection pool settings without mTLS (mTLS disabled via PeerAuthentication)
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
-  name: temporal-worker-mtls
+  name: temporal-worker
   namespace: {{ .Release.Namespace }}
 spec:
   host: temporaltest-worker.temporal.svc.cluster.local
   trafficPolicy:
-    tls:
-      mode: ISTIO_MUTUAL  # Use Istio mTLS for secure communication
     connectionPool:
       tcp:
         maxConnections: 100

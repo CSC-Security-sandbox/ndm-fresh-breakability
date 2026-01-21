@@ -27,6 +27,7 @@ spec:
           headers:
             content-type:
               prefix: application/grpc
+      timeout: 24h  # CRITICAL: Very long timeout for persistent gRPC connections (prevents 15s default)
       route:
         - destination:
             host: temporaltest-frontend.temporal.svc.cluster.local
@@ -35,6 +36,7 @@ spec:
     # Fallback match for any other traffic on port 7233
     - match:
         - port: 7233
+      timeout: 24h  # 24 hours - very long timeout for persistent gRPC connections (prevents 15s default)
       route:
         - destination:
             host: temporaltest-frontend.temporal.svc.cluster.local

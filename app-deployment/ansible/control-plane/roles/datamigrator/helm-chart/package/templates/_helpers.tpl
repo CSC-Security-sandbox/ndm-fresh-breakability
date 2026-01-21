@@ -276,6 +276,7 @@ spec:
     match:
       - uri:
           prefix: {{ $path }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
@@ -288,6 +289,7 @@ spec:
     match:
       - uri:
           exact: {{ $path }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
@@ -298,6 +300,7 @@ spec:
   - name: {{ printf "%s-throttled" $values.appName }}
     match:
       - {{ include "datamigrator.istioHttpMatch" (dict "config" $values.ingressThrottle) | nindent 8 }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
@@ -312,6 +315,7 @@ spec:
     match:
       - uri:
           prefix: {{ $path }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
@@ -324,6 +328,7 @@ spec:
     match:
       - uri:
           exact: {{ $path }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}
@@ -334,6 +339,7 @@ spec:
   - name: {{ printf "%s-default" $values.appName }}
     match:
       - {{ include "datamigrator.istioHttpMatch" (dict "config" $values.ingress) | nindent 8 }}
+    timeout: 300s  # 5 minutes for API operations
     route:
       - destination:
           host: {{ printf "%s-service.%s.svc.cluster.local" $values.appName $.Release.Namespace }}

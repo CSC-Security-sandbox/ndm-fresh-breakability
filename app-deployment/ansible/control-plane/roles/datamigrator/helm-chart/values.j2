@@ -119,7 +119,8 @@ global:
       destinationRule:
         enabled: true
         tlsMode: DISABLE
-    # Temporal mTLS Configuration
+    # Temporal Worker→Control Plane TLS+JWT Configuration
+    # This is for external worker authentication, NOT internal Istio mTLS
     temporalMtls:
       enabled: {{ temporal_mtls.enabled | default(false) | bool | string | lower }}
       mode: {{ temporal_mtls.mode | default('PERMISSIVE') | quote }}

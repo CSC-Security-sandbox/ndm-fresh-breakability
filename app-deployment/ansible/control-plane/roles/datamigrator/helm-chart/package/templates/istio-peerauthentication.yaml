@@ -1,0 +1,13 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- if $istio.enabled | default false }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: datamigrator-disable-mtls
+  namespace: {{ .Release.Namespace }}
+spec:
+  mtls:
+    mode: DISABLE
+{{- end }}

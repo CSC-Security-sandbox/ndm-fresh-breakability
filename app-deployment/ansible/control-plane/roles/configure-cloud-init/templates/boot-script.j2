@@ -175,11 +175,11 @@ regenerate_istio_certificate() {
     local KEY_FILE=$(mktemp)
     local CFG_FILE=$(mktemp)
     
-    log "Generating new certificate with SAN: DNS:datamigrator.local, IP:${VM_IP}"
+    log "Generating new ECC P-256 certificate with SAN: DNS:datamigrator.local, IP:${VM_IP}"
     
     cat > "${CFG_FILE}" << EOF
 [ req ]
-default_bits = 2048
+default_bits = 256
 prompt = no
 default_md = sha256
 x509_extensions = v3_req
@@ -192,10 +192,12 @@ CN = datamigrator.local
 subjectAltName = DNS:datamigrator.local,IP:${VM_IP}
 EOF
     
-    openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
-      -keyout "${KEY_FILE}" \
-      -out "${CERT_FILE}" \
-      -config "${CFG_FILE}" >/dev/null 2>&1 || handle_failure "Failed to generate certificate"
+    # Generate ECC P-256 key (5x faster than RSA 2048)
+    openssl ecparam -name prime256v1 -genkey -noout -out "${KEY_FILE}" || handle_failure "Failed to generate ECC key"
+    
+    # Generate self-signed certificate with ECC key
+    openssl req -new -x509 -key "${KEY_FILE}" -out "${CERT_FILE}" \
+      -days 825 -config "${CFG_FILE}" >/dev/null 2>&1 || handle_failure "Failed to generate certificate"
     
     kubectl create secret tls datamigrator-istio-tls \
       --cert="${CERT_FILE}" \
@@ -204,7 +206,7 @@ EOF
       --dry-run=client -o yaml | kubectl apply -f - || handle_failure "Failed to update certificate secret"
     
     rm -f "${KEY_FILE}" "${CERT_FILE}" "${CFG_FILE}"
-    log "Istio Gateway TLS certificate regenerated successfully with IP: ${VM_IP}"
+    log "Istio Gateway TLS certificate regenerated successfully with ECC P-256 and IP: ${VM_IP}"
 }
 
 restart_keycloak_and_gateway() {

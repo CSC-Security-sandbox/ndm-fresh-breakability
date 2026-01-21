@@ -31,6 +31,10 @@
   become: yes
   template: src=./templates/temporal-values.j2 dest=$HOME/temporal/temporal-values.yaml
 
+- name: temporal-peerauthentication template
+  become: yes
+  template: src=./templates/temporal-peerauthentication.yaml dest=$HOME/temporal/temporal-peerauthentication.yaml
+
 - name: Cleanup service account
   become: yes
   shell: |
@@ -53,6 +57,7 @@
   shell: |
     kubectl apply -f $HOME/temporal/temporal-namespace.yaml
     kubectl apply -f $HOME/temporal/temporal-secret.yaml
+    kubectl apply -f $HOME/temporal/temporal-peerauthentication.yaml
   args:
     chdir: $HOME
 
