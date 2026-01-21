@@ -3,6 +3,7 @@ package utils
 import (
 	"log"
 	"os"
+	"strconv"
 )
 
 type ConfigType string
@@ -43,6 +44,8 @@ var (
 	REF_TYPE                 string
 	NDM_NEXUS_USERNAME       string
 	NDM_NEXUS_PASSWORD       string
+
+	RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ int
 
 	ProtocolVersion3 ProtocolVersion
 
@@ -206,6 +209,13 @@ func init() {
 	REF_TYPE = os.Getenv("REF_TYPE")
 	NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
 	NDM_NEXUS_PASSWORD = os.Getenv("NDM_NEXUS_PASSWORD")
+
+	// Rate limiting test configuration
+	if envVal := os.Getenv("RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ"); envVal != "" {
+		if parsedVal, err := strconv.Atoi(envVal); err == nil && parsedVal > 0 {
+			RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ = parsedVal
+		}
+	}
 }
 
 func UpdateConfVariables(protocolType, environment string) {
