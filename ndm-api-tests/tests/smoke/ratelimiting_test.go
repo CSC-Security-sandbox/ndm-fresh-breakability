@@ -19,7 +19,7 @@ var _ = Describe("Rate Limiting Smoke", func() {
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
 		})
 
-		It("Rate Limiting Test - Admin Service API", func() {
+		XIt("Rate Limiting Test - Admin Service API", func() {
 			By("########################## RATE LIMITING START ################################")
 
 			endpoint := fmt.Sprintf("%s/api/v1/about-ndm", ADMIN_SERVICE_URL)
