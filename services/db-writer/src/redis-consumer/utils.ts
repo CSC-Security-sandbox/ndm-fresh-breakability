@@ -2,7 +2,8 @@
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 import { WorkFlows } from '../enum/redis-consumer.enum';
 
-export const getWorkflowId = (jobRunId: string, jobType: string) => {
+export const getWorkflowId = (jobRunId: string, jobType: string, isRetryRun: boolean = false) => {
+    if (isRetryRun) return `${WorkFlows.RETRY}-${jobRunId}`;
     if (jobType === 'CUT_OVER') return `${WorkFlows.CUT_OVER}-${jobRunId}`;
     if (jobType === 'MIGRATE') return `${WorkFlows.MIGRATE}-${jobRunId}`;
     if (jobType === 'PRECHECK') return `${WorkFlows.PRECHECK}-${jobRunId}`;

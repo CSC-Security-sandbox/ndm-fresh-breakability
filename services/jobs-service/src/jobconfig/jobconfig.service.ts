@@ -1119,6 +1119,7 @@ export class JobConfigService {
           startTime: jobRun.startTime,
           endTime: jobRun.endTime,
           jobType: jobConfig.jobType,
+          jobRunType: jobRun.jobRunType,
           timeElapsed: jobRun.endTime
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),

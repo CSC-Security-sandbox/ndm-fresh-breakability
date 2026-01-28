@@ -28,11 +28,14 @@ import { MappingResolverService } from './core/initializer/mapping-resolver.serv
 import { SetupExportsPathPermissionService } from './core/initializer/setup-exports-path-permission.service';
 import { FileTypeDetectionService } from './core/utils/file-type-detection.service';
 import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
+import { FetchFailedOperationsActivity } from './core/retry/fetch-failed-operations.activity';
+import { ProcessRetryBatchActivity } from './core/retry/process-retry-batch.activity';
+import { CommandGenerationService } from './core/shared/command-generation.service';
 
 @Module({
   imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule ],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, FileTypeDetectionService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory],
-  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory],
+  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, FileTypeDetectionService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService],
+  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService],
 })
 export class ActivitiesModule {}

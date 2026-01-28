@@ -547,5 +547,19 @@
          <sqlFile path="liquibase/20260116_01_jobs_report_proc_rollback.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
-   
+
+    <changeSet id="20251211_01_add_error_status_column.sql" author="achyutas">
+        <sqlFile path="liquibase/20251211_01_add_error_status_column.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/rollback/20251211_01_add_error_status_column.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20251211_02_add_operations_indexes.sql" author="achyutas">
+        <sqlFile path="liquibase/20251211_02_add_operations_indexes.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/rollback/20251211_02_add_operations_indexes.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

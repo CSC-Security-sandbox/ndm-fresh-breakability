@@ -27,6 +27,22 @@ describe('Utils', () => {
       expect(result).toBe(`PreCheckValidationWorkflow-${mockJobRunId}`);
     });
 
+    it('should return correct workflow ID for RETRY when isRetryRun is true', () => {
+      const result = getWorkflowId(mockJobRunId, 'MIGRATE', true);
+      expect(result).toBe(`${WorkFlows.RETRY}-${mockJobRunId}`);
+      expect(result).toBe(`RetryMigrationWorkflow-${mockJobRunId}`);
+    });
+
+    it('should return normal workflow ID when isRetryRun is false', () => {
+      const result = getWorkflowId(mockJobRunId, 'MIGRATE', false);
+      expect(result).toBe(`${WorkFlows.MIGRATE}-${mockJobRunId}`);
+    });
+
+    it('should return normal workflow ID when isRetryRun is undefined', () => {
+      const result = getWorkflowId(mockJobRunId, 'MIGRATE');
+      expect(result).toBe(`${WorkFlows.MIGRATE}-${mockJobRunId}`);
+    });
+
     it('should return DISCOVERY workflow ID for unknown job type', () => {
       const result = getWorkflowId(mockJobRunId, 'UNKNOWN_TYPE');
       expect(result).toBe(`${WorkFlows.DISCOVERY}-${mockJobRunId}`);

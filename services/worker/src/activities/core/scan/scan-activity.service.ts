@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Context } from '@temporalio/activity';
-import { basePrefix, dmError, isSourceFatalError } from "src/activities/utils/utils";
+import { basePrefix, dmError, getScanSettings, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -96,21 +96,13 @@ export class ScanService {
         }        
     }
 
-    getScanSettings(jobContext: JobManagerContext ): ScanDirectorySettings {
-        const settings: ScanDirectorySettings = {
-            skipFile: jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '',
-            excludePatterns: jobContext.jobConfig.options?.excludeFilePattern ? jobContext.jobConfig.options.excludeFilePattern.split(",") : []
-        }
-        return settings;
-    }
-
     async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
         const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
         let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
-        const settings = this.getScanSettings(jobContext);
+        const settings = getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             const batch = task.commands.slice(i, i + this.maxConcurrency);
             await Promise.allSettled(

@@ -707,41 +707,6 @@ describe('JobRunInitService', () => {
     });
   });
 
-  describe('getWorkFlowId', () => {
-    it('should return the workflow ID based on the job type DISCOVER', () => {
-      const jobRunId = 'jobRunId';
-      const workflowId = `${WorkFlows.DISCOVERY}-${jobRunId}`;
-
-      const result = service.getWorkFlowId(jobRunId, JobType.DISCOVER);
-
-      expect(result).toEqual(workflowId);
-    });
-    it('should return the workflow ID based on the job type CUT_OVER', () => {
-      const jobRunId = 'jobRunId';
-      const workflowId = `${WorkFlows.CUT_OVER}-${jobRunId}`;
-
-      const result = service.getWorkFlowId(jobRunId, JobType.CUT_OVER);
-
-      expect(result).toEqual(workflowId);
-    });
-    it('should return the workflow ID based on the job type PRECHECK', () => {
-      const jobRunId = 'jobRunId';
-      const workflowId = `${WorkFlows.PRECHECK}-${jobRunId}`;
-
-      const result = service.getWorkFlowId(jobRunId, JobType.PRECHECK);
-
-      expect(result).toEqual(workflowId);
-    });
-    it('should return the workflow ID based on the job type MIGRATE', () => {
-      const jobRunId = 'jobRunId';
-      const workflowId = `${WorkFlows.MIGRATE}-${jobRunId}`;
-
-      const result = service.getWorkFlowId(jobRunId, JobType.MIGRATE);
-
-      expect(result).toEqual(workflowId);
-    });
-  });
-
   describe('buildSpeedTestJobContext', () => {
     it('should build the job context for speed test job', async () => {
       const jobRunId = 'jobRunId';
@@ -1861,15 +1826,6 @@ describe('createJobRun', () => {
         const result = await service.getJobConfig(jobConfigId);
 
         expect(result.workers).toEqual([]);
-      });
-    });
-
-    describe('getWorkFlowId', () => {
-      it('should return correct workflow id for each job type', () => {
-        expect(service.getWorkFlowId('id', JobType.DISCOVER)).toBe(`${WorkFlows.DISCOVERY}-id`);
-        expect(service.getWorkFlowId('id', JobType.CUT_OVER)).toBe(`${WorkFlows.CUT_OVER}-id`);
-        expect(service.getWorkFlowId('id', JobType.PRECHECK)).toBe(`${WorkFlows.PRECHECK}-id`);
-        expect(service.getWorkFlowId('id', JobType.MIGRATE)).toBe(`${WorkFlows.MIGRATE}-id`);
       });
     });
   });

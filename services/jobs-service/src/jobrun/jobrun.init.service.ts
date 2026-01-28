@@ -17,6 +17,7 @@ import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-stat
 import axios from "axios";
 import {
   JobRunStatus,
+  JobRunType,
   JobStatus,
   JobType,
   Protocol,
@@ -138,9 +139,14 @@ export class JobRunInitService {
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string) {
+  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string, jobRunId?: string) {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
+    
+    // If this is a retry run, set the jobRunId
+    if (jobRunId) {
+      details.jobRunId = jobRunId;
+    }
 
     // check if source and target paths are flagged as valid
     const source = details.connection?.sourceCredential;
@@ -199,10 +205,12 @@ export class JobRunInitService {
         jobConfigId: jobConfigId,
         workerMap: workerMap,
         options: options,
+        //if jobRunId is provided, it is a retry run
+        jobRunType: jobRunId ? JobRunType.RETRY : JobRunType.REGULAR,
       });
       await this.buildJobContext(jobRun.id, details);
       await this.initiateWorkflow(jobRun.id, details, projectId);
-      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType);
+      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId);
       return await this.jobRunRepo.save(jobRun);
     } catch (error) {
       this.logger.error(`Failed to create job run for ${jobConfigId}: ${error.message}`);
@@ -391,6 +399,20 @@ export class JobRunInitService {
     options.workflowExecutionTimeout = "120s";
     options.workflowTaskTimeout = "120s";
     options.workflowRunTimeout = "120s";
+
+    // If jobRunId is set in config, this is a retry run - use RetryMigrationWorkflow
+    if (jobRunConfig.jobRunId) {
+      const startWorkFlowPayload: StartWorkFlowPayload = {
+        workflowId: `${WorkFlows.RETRY}-${jobRunId}`,
+        taskQueue: "ParentWorkflow-TaskQueue",
+        args: [{ traceId: jobRunId, payload: jobRunConfig, options }],
+        options,
+      };
+      await this.workFlowService.startWorkflow(WorkFlows.RETRY, startWorkFlowPayload);
+      await this.startStreamConsumer(jobRunId, projectId);
+      return;
+    }
+
     switch (jobRunConfig.jobType) {
       case JobType.DISCOVER: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
@@ -456,7 +478,7 @@ export class JobRunInitService {
 
       default: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: WorkFlows.MIGRATE + "-" + jobRunId,
+          workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
           taskQueue: "ParentWorkflow-TaskQueue",
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
@@ -613,6 +635,7 @@ export class JobRunInitService {
         isIdentityMappingAvailable: isIdentityMapping,
       },
       jobRunConfig.skipDelete,
+      jobRunConfig.jobRunId,  // Pass retry job run ID if this is a retry
     );
     const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
     const jobContext = await redisProvider.buildContext(
@@ -706,13 +729,4 @@ export class JobRunInitService {
     }
   }
 
-  getWorkFlowId(jobRunId: string, jobType: JobType): string {
-    if (jobType === JobType.DISCOVER)
-      return `${WorkFlows.DISCOVERY}-${jobRunId}`;
-    if (jobType === JobType.CUT_OVER)
-      return `${WorkFlows.CUT_OVER}-${jobRunId}`;
-    if (jobType === JobType.PRECHECK)
-      return `${WorkFlows.PRECHECK}-${jobRunId}`;
-    return `${WorkFlows.MIGRATE}-${jobRunId}`;
-  }
 }

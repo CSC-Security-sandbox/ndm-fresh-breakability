@@ -779,7 +779,8 @@ export class RedisConsumerService implements OnModuleDestroy {
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 const jobType = jobContext.jobConfig.jobType;
-                const workflowId = getWorkflowId(jobRunId, jobType);
+                const isRetryRun = !!jobContext.jobConfig.jobRunId;
+                const workflowId = getWorkflowId(jobRunId, jobType, isRetryRun);
 
                 await this.workflowService.signalWorkflow({
                     namespace: 'default',
