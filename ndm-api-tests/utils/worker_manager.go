@@ -208,13 +208,17 @@ func GetAttachedWorkersConfig() map[string]SSHConfig {
 }
 
 func GetAttachedWorkerDetails() SSHConfig {
-	WorkerConfigs := GetAttachedWorkersConfig()
-	var firstWorkerConfig SSHConfig
-	for _, cfg := range WorkerConfigs {
-		firstWorkerConfig = cfg
-		break // Take only the first one
+	// Maintain order from EnvWorkersConfigList (preserves .env file order)
+	// This ensures we always return the first worker consistently
+	for _, workerConfig := range EnvWorkersConfigList {
+		for _, attachedConfig := range AttachedWorkersConfig {
+			if attachedConfig.Host == workerConfig.Host {
+				return attachedConfig
+			}
+		}
 	}
-	return firstWorkerConfig
+	// Fallback: return empty SSHConfig if no workers attached
+	return SSHConfig{}
 }
 
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
@@ -476,6 +480,18 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 		return
 	}
 
+	// First, clean up any existing worker registration
+	var cleanupScript string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		cleanupScript = GetDetachWorkerScriptForNFS(workerConfig)
+	case ProtocolSMB:
+		cleanupScript = GetDetachWorkerScriptForSMB()
+	}
+	LogDebug(fmt.Sprintf("Cleaning up existing worker registration on %s", workerConfig.Host))
+	_, _ = sshRunScript(workerConfig, cleanupScript) // Ignore errors if worker wasn't registered
+
+	// Now register the worker
 	LogDebug(fmt.Sprintf("Attaching Worker %s and running script: \n%s", workerConfig.Host, script))
 	_, err = sshRunScript(workerConfig, script)
 	if err != nil {
@@ -494,9 +510,15 @@ func GetWorkerIds() []string {
 		return workerIds // Return empty slice if no workers are attached.
 	}
 
-	// Collect worker IDs from the AttachedWorkersConfig map.
-	for workerId := range AttachedWorkersConfig {
-		workerIds = append(workerIds, workerId)
+	// Maintain order from EnvWorkersConfigList (preserves .env file order)
+	// This ensures consistent worker selection for tests that use workerIds[0]
+	for _, workerConfig := range EnvWorkersConfigList {
+		for workerId, attachedConfig := range AttachedWorkersConfig {
+			if attachedConfig.Host == workerConfig.Host {
+				workerIds = append(workerIds, workerId)
+				break
+			}
+		}
 	}
 	return workerIds
 }

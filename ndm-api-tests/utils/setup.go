@@ -19,6 +19,11 @@ var (
 	ScenarioFiles                                                                                        []string
 	AccountId                                                                                            = DEFAULT_ACCOUNT_ID
 	AuthToken, RefreshToken, KeycloakUser, KeycloakPassword, AppAdminId, ProjectAdminId, ProjectViewerId string
+
+	// Global project and workers - created once in InitTestEnv and reused across all tests
+	GlobalProjectId             string
+	GlobalProjectName           string
+	GlobalAttachedWorkersConfig map[string]SSHConfig
 )
 
 // InitTestEnvForSMoke sets up variables, loads configuration,
@@ -78,7 +83,8 @@ func InitTestEnvForSMoke() {
 }
 
 // InitTestEnv sets up variables, loads configuration,
-// and performs one‑time setup tasks for the smoke(yaml) tests.
+// and performs one‑time setup tasks for the smoke and e2e tests.
+// This creates global workers that are shared across tests.
 func InitTestEnv() {
 	var tokenErr, keycloakErr, roleIdsErr error
 
@@ -106,43 +112,130 @@ func InitTestEnv() {
 	if roleIdsErr != nil {
 		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
 	}
+
+	// Create project and attach 2 workers once for all tests
+	LogDebug("Creating project and attaching 2 workers for all test cases")
+	GlobalProjectId, GlobalProjectName, GlobalAttachedWorkersConfig, err = SetupTestEnv(2)
+	if err != nil {
+		LogFatalf("Error setting up test environment with workers: %v", err)
+	}
+	LogDebug(fmt.Sprintf("Global project created: %s (name: %s) with %d workers attached", GlobalProjectId, GlobalProjectName, len(GlobalAttachedWorkersConfig)))
 }
 
-func SetupTestEnv(workerCount int) (string, map[string]SSHConfig, error) {
-	// Create the project first.
-	projectId, err := CreateProject(AuthToken, AccountId)
+// InitTestEnvWithoutWorkers sets up auth tokens and configuration WITHOUT creating global workers.
+// Use this for regression tests where each test creates its own isolated project and workers.
+func InitTestEnvWithoutWorkers() {
+	var tokenErr, keycloakErr, roleIdsErr error
+
+	creds, keycloakErr := GetKeyCloakAdminCredentials()
+	if keycloakErr != nil {
+		LogFatalf("Error getting Keycloak secrets: %v", keycloakErr)
+	} else {
+		KeycloakUser = creds.AdminUser
+		KeycloakPassword = creds.AdminPassword
+		CLIENT_SECRET = creds.ClientSecret
+	}
+
+	// Update the app admin profile during the first login.
+	err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create project: %w", err)
+		LogFatalf("Error updating app admin: %v", err)
+	}
+
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
+	if tokenErr != nil {
+		LogFatalf("Error getting bearer token: %v", tokenErr)
+	}
+
+	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
+	if roleIdsErr != nil {
+		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
+	}
+
+	LogDebug("Test environment initialized (auth tokens and configs only, no global workers)")
+}
+
+func SetupTestEnv(workerCount int) (string, string, map[string]SSHConfig, error) {
+	// Create the project first.
+	projectId, projectName, err := CreateProject(AuthToken, AccountId)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to create project: %w", err)
 	}
 
 	attachedWorkersConfig, err := AttachWorkers(workerCount, AuthToken, AccountId, projectId)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to attach workers: %w", err)
+		return "", "", nil, fmt.Errorf("failed to attach workers: %w", err)
 	}
 	if len(attachedWorkersConfig) == 0 {
-		return "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
+		return "", "", nil, fmt.Errorf("failed to attach workers: worker may have been already attached")
 	}
 	workerIds := GetWorkerIds()
-	for i := 0; i < MaxPollRetries; i++ {
+	for i := 0; i < MaxWorkerStatusRetries; i++ {
 		workerIdWithStatus, err := GetWorkerStatus(projectId, workerIds)
 		if err != nil {
-			return "", nil, fmt.Errorf("error getting worker status: %w", err)
+			return "", "", nil, fmt.Errorf("error getting worker status: %w", err)
 		}
 		onlineWorkers := 0
 		for _, workerId := range workerIds {
 			if workerIdWithStatus[workerId] == "Online" {
 				LogDebug(fmt.Sprintf("Worker %s is Online", workerId))
 				onlineWorkers++
+			} else {
+				LogDebug(fmt.Sprintf("Worker %s status: %s (waiting for Online)", workerId, workerIdWithStatus[workerId]))
 			}
 		}
 		if onlineWorkers == len(workerIds) {
 			LogDebug("All workers are Online")
-			break
+			LogDebug("Test environment setup complete and all workers are Online")
+			return projectId, projectName, attachedWorkersConfig, nil
 		}
+		LogDebug(fmt.Sprintf("Workers online: %d/%d (attempt %d/%d)", onlineWorkers, len(workerIds), i+1, MaxWorkerStatusRetries))
 		Wait(DefaultPollInterval)
 	}
-	LogDebug("Test environment setup complete and all worker are Online")
-	return projectId, attachedWorkersConfig, nil
+	
+	// If we exit the loop, workers didn't come online in time
+	return "", "", nil, fmt.Errorf("timeout waiting for workers to come online after %d seconds", MaxWorkerStatusRetries*DefaultPollInterval)
+}
+
+// GetGlobalTestEnv returns the globally created project and workers
+// This should be used in test cases instead of SetupTestEnv to reuse the same workers
+func GetGlobalTestEnv() (string, string, map[string]SSHConfig, error) {
+	if GlobalProjectId == "" || GlobalAttachedWorkersConfig == nil {
+		return "", "", nil, fmt.Errorf("global test environment not initialized. Make sure InitTestEnv() is called in BeforeSuite")
+	}
+	return GlobalProjectId, GlobalProjectName, GlobalAttachedWorkersConfig, nil
+}
+
+// SharedSuiteData holds data to be shared across parallel Ginkgo processes
+type SharedSuiteData struct {
+	AuthToken                   string
+	RefreshToken                string
+	KeycloakUser                string
+	KeycloakPassword            string
+	ClientSecret                string
+	AppAdminId                  string
+	ProjectAdminId              string
+	ProjectViewerId             string
+	GlobalProjectId             string
+	GlobalProjectName           string
+	GlobalAttachedWorkersConfig map[string]SSHConfig
+}
+
+// SetGlobalTestVariables sets global variables from shared suite data
+// Used by parallel Ginkgo processes that didn't run InitTestEnv()
+func SetGlobalTestVariables(data SharedSuiteData) {
+	AuthToken = data.AuthToken
+	RefreshToken = data.RefreshToken
+	KeycloakUser = data.KeycloakUser
+	KeycloakPassword = data.KeycloakPassword
+	CLIENT_SECRET = data.ClientSecret
+	AppAdminId = data.AppAdminId
+	ProjectAdminId = data.ProjectAdminId
+	ProjectViewerId = data.ProjectViewerId
+	GlobalProjectId = data.GlobalProjectId
+	GlobalProjectName = data.GlobalProjectName
+	GlobalAttachedWorkersConfig = data.GlobalAttachedWorkersConfig
+	AttachedWorkersConfig = data.GlobalAttachedWorkersConfig
 }
 
 func CleanupTestEnv() error {

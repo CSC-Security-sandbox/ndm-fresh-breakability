@@ -4,11 +4,15 @@ import (
 	"fmt"
 	. "ndm-api-tests/utils"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
+// TC-SMB-REDIRECTS uses AD Server volumes (not cloneable)
 var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
@@ -17,34 +21,49 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 	})
 	var (
 		ProjectId             string
+		ProjectName           string
 		workerId1             string
 		err                   error
 		headers               map[string]string
 		attachedWorkersConfig map[string]SSHConfig
+		adServerVolumes       []string
+		adServerHostIPs       []string
+		testStartTime         time.Time
 	)
 
 	Context("SMB Redirects Discovery Test", func() {
 		BeforeEach(func() {
-			numberOfWorker := 1
+			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
 
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-
-			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			LogDebug(fmt.Sprintf("[BeforeEach] Using Project: %s (ID: %s)", ProjectName, ProjectId))
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">=", 1), "Expected at least 1 worker to be attached")
 			workerIds := GetWorkerIds()
 			workerId1 = workerIds[0]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+
+			// Get AD Server volumes (not cloneable)
+			adServerVolumes, adServerHostIPs = GetADServerSMBVolumes()
+			if len(adServerVolumes) == 0 {
+				Skip("AD_SMB_SOURCE_VOLUMES not configured, skipping test")
+			}
 		})
 
 		It("TC-SMB-REDIRECTS: Should discover redirects in SMB", func() {
+			testStartTime = time.Now()
 			By("########################## TC-SMB-REDIRECTS start ################################")
+			LogDebug(fmt.Sprintf("[TC-SMB-REDIRECTS START] Test execution started at: %s", testStartTime.Format("2006-01-02 15:04:05")))
 
 			var sourceConfigID, sourcePathID1 string
 			var sourceJobConfigIDs []string
 
-			By("Creating source SMB file server")
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+
+			By("Creating source SMB file server using AD Server volume")
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-smb-permissions-server",
+				ConfigName:       fmt.Sprintf("tc-smb-redirects-%s-src-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -52,7 +71,7 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 				Password:         PROTOCOL_PASSWORD,
 				Protocol:         PROTOCOL_TYPE,
 				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IPs[4],
+				Host:             adServerHostIPs[0], // Use AD Server host
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
@@ -62,7 +81,7 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 			defer resp.Body.Close()
 
 			By("Getting the source file server export path ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[4], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", adServerVolumes[0], sourceConfigID, headers) // Use AD Server volume
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting source export path, err : %s", err))
 
 			By("Creating a Bulk Discovery Job for the Source File Server")
@@ -102,16 +121,14 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 		})
 
 		AfterEach(func() {
-			if PROTOCOL_TYPE == ProtocolNFS {
-				LogDebug("Skipping cleanup as test was ")
-				return
-			}
-			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			testEndTime := time.Now()
+			testDuration := testEndTime.Sub(testStartTime)
+			
+			// Note: No volume cleanup needed
+			// This test uses GetGlobalTestEnv() (shared workers/project) and AD Server volumes (not cloned)
+			
+			LogDebug(fmt.Sprintf("[TC-SMB-REDIRECTS END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-SMB-REDIRECTS DURATION] Total test duration: %s", testDuration))
 		})
 	})
 })

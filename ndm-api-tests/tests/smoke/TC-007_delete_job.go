@@ -5,35 +5,49 @@ import (
 	. "ndm-api-tests/utils"
 	"net/http"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("TC-007_delete_job: Test job deletion with and without active job runs", func() {
 	var (
-		ProjectId              string
-		workerId               string
-		workerIds              []string
-		err                    error
-		headers                map[string]string
-		attachedWorkersConfig  map[string]SSHConfig
-		destinationVolumePath  string
-		destinationVolumePath2 string
-		migrationJobID1        string
-		migrationJobID2        string
+		ProjectId             string
+		workerId              string
+		workerIds             []string
+		err                   error
+		headers               map[string]string
+		attachedWorkersConfig map[string]SSHConfig
+		migrationJobID1       string
+		migrationJobID2       string
+		clonedSourceVolumes   []string
+		clonedDestVolumes     []string
+		sourceVolumeManager   *TestVolumeManager
+		destVolumeManager     *TestVolumeManager
 	)
 
 	Context("TC-007_delete_job", func() {
 		BeforeEach(func() {
-			numberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-			Expect(err).To(BeNil(), "Error during test environment setup")
-			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 1), "Expected 1 worker to be attached")
+			// Use global shared project and workers instead of creating new ones
+			ProjectId, _, attachedWorkersConfig, err = GetGlobalTestEnv()
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			Expect(len(attachedWorkersConfig)).Should(BeNumerically(">=", 1), "Expected at least 1 worker in global environment")
+
 			workerIds = GetWorkerIds()
 			workerId = workerIds[0]
-			destinationVolumePath = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[1])
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+
+			// Setup test volumes (create clones for test isolation)
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			Expect(err).To(BeNil(), "Error setting up test volumes")
+
+			// DeferCleanup ensures cleanup happens even if test fails or is interrupted
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes in DeferCleanup: %v", err))
+				}
+			})
 		})
 
 		It("TC-007_delete_job: Test job deletion scenarios with active and inactive job runs", func() {
@@ -49,8 +63,9 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 			)
 
 			By("Creating source file server")
+			uniqueID := uuid.New().String()[:8]
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server-delete-test",
+				ConfigName:       fmt.Sprintf("source-delete-test-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -68,17 +83,17 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 			defer resp.Body.Close()
 
 			By("Getting source export path IDs")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 1")
 			Expect(sourcePathID1).NotTo(BeEmpty(), "Source path ID 1 should not be empty")
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 2")
 			Expect(sourcePathID2).NotTo(BeEmpty(), "Source path ID 2 should not be empty")
 
 			By("Creating destination file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server-delete-test",
+				ConfigName:       fmt.Sprintf("dest-delete-test-%s", uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -96,11 +111,11 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 			defer resp.Body.Close()
 
 			By("Getting destination export path IDs")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 1")
 			Expect(destinationPathID1).NotTo(BeEmpty(), "Destination path ID 1 should not be empty")
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 2")
 			Expect(destinationPathID2).NotTo(BeEmpty(), "Destination path ID 2 should not be empty")
 
@@ -290,20 +305,12 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 		})
 
 		AfterEach(func() {
-			By("Cleanup started")
-
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-
-			err = ClearVolume(destinationVolumePath)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath)
-
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
-
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			By("Cleaning up test volumes after test run")
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
+			// Workers and project cleanup handled by SynchronizedAfterSuite
 		})
 	})
 })

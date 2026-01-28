@@ -21,6 +21,10 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 		DestinationConfigID     string
 		FileServerId            string
 		DestinationFileServerId string
+		clonedSourceVolumes     []string
+		clonedDestVolumes       []string
+		sourceVolumeManager     *TestVolumeManager
+		destVolumeManager       *TestVolumeManager
 	)
 
 	BeforeAll(func() {
@@ -28,19 +32,39 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Skip("GCNV Flex Test regression is skipped in CI/CD as it is not supported in SMB")
 		}
 		var err error
+		var ProjectName string
 		numberOfWorker := 2
-		ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
+		_ = ProjectName
 		Expect(err).To(BeNil(), "Error during test environment setup")
 		Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 		workerIds = GetWorkerIds()
 		workerId1 = workerIds[0]
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
+
+		// Setup ONTAP volume cloning for test execution
+		clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+		if err != nil {
+			Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+		}
 	})
 
 	AfterAll(func() {
+		if PROTOCOL_TYPE == ProtocolSMB {
+			LogDebug("Skipping cleanup as test was skipped for SMB protocol")
+			return
+		}
+
 		By("Cleanup started")
-		err := StopAllWorkersAndWait()
+
+		// Cleanup ONTAP cloned volumes using volume manager
+		err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+		if err != nil {
+			LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+		}
+
+		err = StopAllWorkersAndWait()
 		Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
 		err = CleanupTestEnv()
 		Expect(err).To(BeNil(), "Error during test environment cleanup")
@@ -134,10 +158,12 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should upload a path file with a single valid path to the file server", func() {
 			By("Uploading a path file with a single valid path to the file server")
+			// Format cloned volume name as NFS export path (add leading /)
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 			fileContent := FileContent{
 				FileName: "test_single_path_file.csv",
 				FileSize: 1024,
-				Contents: fmt.Sprintf("path\n%s", SOURCE_VOLUMES[1]),
+				Contents: fmt.Sprintf("path\n%s", sourcePath1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -161,13 +187,15 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 1), "Expected one volumes to be present in the file server")
-			Expect(fileServerDetails.FileServers[0].Volumes[0].VolumePath).To(Equal(SOURCE_VOLUMES[1]), "Expected volume export path to match the uploaded path")
+		    sourcePath1 = fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			Expect(fileServerDetails.FileServers[0].Volumes[0].VolumePath).To(Equal(sourcePath1), "Expected volume export path to match the uploaded path")
 			Expect(fileServerDetails.FileServers[0].Volumes[0].IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(fileServerDetails.FileServers[0].Volumes[0].IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
 		})
 
 		It("Should upload a path file with single invalid path to the file server", func() {
 			By("Uploading a path file with single invalid path to the file server")
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 			fileContent := FileContent{
 				FileName: "test_single_invalid_path_file.csv",
 				FileSize: 1024,
@@ -204,7 +232,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the valid path
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
+			sourcePath1 = fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeTrue(), "Expected volume to not be disabled")
@@ -212,10 +241,11 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should reupload a path file with a single valid path to the file server", func() {
 			By("Reuploading a path file with a single valid path to the file server")
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 			fileContent := FileContent{
 				FileName: "test_single_path_file.csv",
 				FileSize: 1024,
-				Contents: fmt.Sprintf("path\n%s", SOURCE_VOLUMES[1]),
+				Contents: fmt.Sprintf("path\n%s", sourcePath1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -242,7 +272,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the invalid path
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
+			sourcePath1 = fmt.Sprintf("/%s", clonedSourceVolumes[1])
+		validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
@@ -287,9 +318,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the invalid path
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
-			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(validVolume.IsDisabled).To(BeTrue(), "Expected volume to not be disabled")
 
 			// GetVolumeDetailsFromFileServer for the invalid path
@@ -302,10 +332,11 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should reupload a path file with multiple paths to the file server", func() {
 			By("Reuploading a path file with multiple paths to the file server")
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 			fileContent := FileContent{
 				FileName: "test_multiple_paths_file.csv",
 				FileSize: 2048,
-				Contents: fmt.Sprintf("path\n%s\n/srv/invalid_share", SOURCE_VOLUMES[1]),
+				Contents: fmt.Sprintf("path\n%s\n/srv/invalid_share", sourcePath1),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -332,7 +363,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the invalid path
 			By("Getting volume details for the valid path")
-			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
+			sourcePath1 = fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validVolume.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validVolume.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
@@ -347,10 +379,11 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should reupload a path file with 1 new valid path", func() {
 			By("Uploading a path file with a single valid path to the file server")
+			sourcePath0 := fmt.Sprintf("/%s", clonedSourceVolumes[0])
 			fileContent := FileContent{
 				FileName: "test_single_path_file.csv",
 				FileSize: 1024,
-				Contents: fmt.Sprintf("path\n%s", SOURCE_VOLUMES[0]),
+				Contents: fmt.Sprintf("path\n%s", sourcePath0),
 			}
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -378,7 +411,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the invalid path
 			By("Getting volume details for the valid path")
-			validPath1, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			validPath1, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validPath1.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validPath1.IsDisabled).To(BeTrue(), "Expected volume to not be disabled")
@@ -392,7 +426,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for gcnv_share
 			By("Getting volume details for the gcnv_share path")
-			validPath2, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[0])
+	sourcePath0 = fmt.Sprintf("/%s", clonedSourceVolumes[0])
+			validPath2, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath0)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validPath2.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validPath2.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
@@ -400,10 +435,11 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 		It("Should reupload a path file with 1 valid path and 1 invalid path", func() {
 			By("Uploading a path file with a single valid path and a single invalid path to the file server")
+			sourcePath0 := fmt.Sprintf("/%s", clonedSourceVolumes[0])
 			fileContent := FileContent{
 				FileName: "test_single_path_file.csv",
 				FileSize: 1024,
-				Contents: fmt.Sprintf("path\n%s\n/srv/invalid_share1", SOURCE_VOLUMES[0]),
+				Contents: fmt.Sprintf("path\n%s\n/srv/invalid_share1", sourcePath0),
 			}
 
 			resp, uploadStats, err := UploadPathFile(FileServerId, fileContent, headers)
@@ -432,7 +468,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 
 			// GetVolumeDetailsFromFileServer for the valid path
 			By("Getting volume details for the valid path")
-			validPath1, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[0])
+		sourcePath0 = fmt.Sprintf("/%s", clonedSourceVolumes[0])
+			validPath1, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath0)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validPath1.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validPath1.IsDisabled).To(BeFalse(), "Expected volume to not be disabled")
@@ -445,8 +482,9 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(invalidVolume.IsDisabled).To(BeFalse(), "Expected volume to be disabled")
 
 			// GetVolumeDetailsFromFileServer for NFS_SOURCE_VOLUME_1
-			By(fmt.Sprintf("Getting volume details for the %s path", SOURCE_VOLUMES[1]))
-			validPath2, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			By(fmt.Sprintf("Getting volume details for the %s path", sourcePath1))
+			validPath2, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume path")
 			Expect(validPath2.IsValid).To(BeTrue(), "Expected volume to be valid")
 			Expect(validPath2.IsDisabled).To(BeTrue(), "Expected volume to be disabled")
@@ -467,7 +505,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '/srv/invalid_share'")
 
 			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{invalidVolume.ID},
+		SourcePathIDs:            []string{invalidVolume.ID},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
@@ -531,11 +569,12 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			By("Running discovery job on the invalid enabled volume")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", SOURCE_VOLUMES[1])
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			validVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath1)
 
 			jobParams := DiscoveryJobParams{
-				SourcePathIDs:            []string{invalidVolume.ID},
+			SourcePathIDs:            []string{validVolume.ID},
 				ExcludeOlderThan:         nil,
 				ExcludeFilePatterns:      "",
 				PreserveAccessTime:       false,
@@ -583,7 +622,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			_, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], DestinationConfigID, headers)
+			destPath := fmt.Sprintf("/%s", clonedDestVolumes[0])
+			_, err = GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 			
 		})
@@ -611,7 +651,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, "/srv/invalid_share1")
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '/srv/invalid_share1'")
-			destinationPathID1, err := GetExportPathID("destination", DESTINATION_VOLUMES[1], DestinationConfigID, headers)
+			destPath := fmt.Sprintf("/%s", clonedDestVolumes[1])
+			destinationPathID1, err := GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			migrationParams := MigrationJobParams{
@@ -646,7 +687,8 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, "/srv/invalid_share")
 			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '/srv/invalid_share'")
-			destinationPathID1, err := GetExportPathID("destination", DESTINATION_VOLUMES[1], DestinationConfigID, headers)
+			destPath := fmt.Sprintf("/%s", clonedDestVolumes[1])
+			destinationPathID1, err := GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			migrationParams := MigrationJobParams{
@@ -679,9 +721,11 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			By("Running migration job on the valid disabled volume")
 			fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, SOURCE_VOLUMES[1])
-			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", SOURCE_VOLUMES[1])
-			destinationPathID1, err := GetExportPathID("destination", DESTINATION_VOLUMES[1], DestinationConfigID, headers)
+			sourcePath1 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
+			invalidVolume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, sourcePath1)
+			Expect(err).NotTo(HaveOccurred(), "Expected to find volume with path '%s'", sourcePath1)
+			destPath := fmt.Sprintf("/%s", clonedDestVolumes[1])
+			destinationPathID1, err := GetExportPathID("destination", destPath, DestinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			migrationParams := MigrationJobParams{

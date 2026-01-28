@@ -8,40 +8,63 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Support Bundle Test e2e", func() {
 	var (
-		ProjectId              string
-		workerId1              string
-		workerId2              string
-		workerIds              []string
-		destinationVolumePath1 string
-		destinationVolumePath2 string
-		headers                map[string]string
-		attachedWorkersConfig  map[string]SSHConfig
-		sourceVolumePath1      string
-		sourceVolumePath2      string
+		ProjectId             string
+		ProjectName           string
+		workerId1             string
+		workerId2             string
+		workerIds             []string
+		headers               map[string]string
+		attachedWorkersConfig map[string]SSHConfig
+		sourceVolumePath1     string
+		sourceVolumePath2     string
+		testStartTime         time.Time
+
+		// Volume cloning - using standard approach
+		clonedSourceVolumes []string
+		clonedDestVolumes   []string
+		sourceVolumeManager *TestVolumeManager
+		destVolumeManager   *TestVolumeManager
 	)
 
 	Context("SUPPORT BUNDLE E2E", Ordered, func() {
 
 		BeforeAll(func() {
+			testStartTime = time.Now()
 			var err error
-			numberOfWorker := 2
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(numberOfWorker)
-			Expect(err).To(BeNil(), "Error during test environment setup")
+			ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
+			Expect(err).To(BeNil(), "Error getting global test environment")
+			LogDebug(fmt.Sprintf("[BeforeAll] Using Project: %s (ID: %s)", ProjectName, ProjectId))
 			Expect(len(attachedWorkersConfig)).Should(BeNumerically("==", 2), "Expected 2 workers to be attached")
 			workerIds = GetWorkerIds()
 			workerId1 = workerIds[0]
 			workerId2 = workerIds[1]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
-			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], SOURCE_VOLUMES[0])
-			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], SOURCE_VOLUMES[1])
-			destinationVolumePath1 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0])
-			destinationVolumePath2 = fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[1], DESTINATION_VOLUMES[1])
+
+			// Setup ONTAP volume cloning for parallel test execution
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			if err != nil {
+				Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
+			}
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				LogDebug(fmt.Sprintf("[DeferCleanup] Cleaning up volumes for Project: %s (ID: %s)", ProjectName, ProjectId))
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
+
+			// Set volume paths using THIS test's cloned volumes
+			sourceVolumePath1 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[0], clonedSourceVolumes[0])
+			sourceVolumePath2 = fmt.Sprintf("%s:%s", SOURCE_HOST_IPs[1], clonedSourceVolumes[1])
 		})
 
 		It("TC-001: Create a fileserver with 2 workers and check discovery and migration for support bundle", func() {
@@ -50,9 +73,13 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
 
+			// Generate unique ID for FileServer names
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+
 			Wait(20)
 			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
+				ConfigName:       fmt.Sprintf("tc-support-bundle-%s-src-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -72,10 +99,10 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", SOURCE_VOLUMES[0], sourceConfigID, headers)
+			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			sourcePathID2, err = GetExportPathID("source", SOURCE_VOLUMES[1], sourceConfigID, headers)
+			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for the source")
@@ -114,7 +141,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server",
+				ConfigName:       fmt.Sprintf("tc-support-bundle-%s-dest-fs-%s", protocol, uniqueID),
 				ConfigType:       ConfigTypeFile,
 				ProjectID:        ProjectId,
 				ServerType:       ServerTypeOtherNAS,
@@ -133,10 +160,10 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			destinationPathID2, err = GetExportPathID("destination", DESTINATION_VOLUMES[1], destinationConfigID, headers)
+			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job for destination")
@@ -204,9 +231,9 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			}
 
 			By("Adding Delta Data")
-			err = AddDataToVolume(sourceVolumePath1)
+			_, err = AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
-			err = AddDataToVolume(sourceVolumePath2)
+			_, err = AddDataToVolume(sourceVolumePath2)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath2)
 
 			By("Creating bulk cutover job")
@@ -328,29 +355,15 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			By("Cleaning up the extraction directory and zip file")
 			Expect(os.RemoveAll(extractDir)).To(Succeed(), "Error deleting extraction directory")
 			Expect(os.Remove(zipPath)).To(Succeed(), "Error deleting zip file")
-			By("########################## START-TC-SUPPORT-BUNDLE END ################################")
 		})
 
 		AfterAll(func() {
-			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = RemoveDeltaFromVolume(sourceVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath1)
-
-			err = RemoveDeltaFromVolume(sourceVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error restoring original data to %s", sourceVolumePath2)
-
-			err = ClearVolume(destinationVolumePath1)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath1)
-
-			err = ClearVolume(destinationVolumePath2)
-			Expect(err).NotTo(HaveOccurred(), "Error clearing volume of %s", destinationVolumePath2)
-
-			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			testEndTime := time.Now()
+			testDuration := testEndTime.Sub(testStartTime)
+			
+			LogDebug(fmt.Sprintf("[TC-SUPPORT-BUNDLE END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
+			LogDebug(fmt.Sprintf("[TC-SUPPORT-BUNDLE DURATION] Total test execution time: %s (%.2f minutes)", testDuration, testDuration.Minutes()))
+			By("########################## START-TC-SUPPORT-BUNDLE END ################################")
 		})
-
 	})
 })

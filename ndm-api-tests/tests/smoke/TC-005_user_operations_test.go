@@ -31,7 +31,9 @@ var _ = Describe("User Operations - User functionality test", func() {
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
 
 		// Create a new project for testing
-		projectId, err = CreateProject(AuthToken, AccountId)
+		var projectName string
+		projectId, projectName, err = CreateProject(AuthToken, AccountId)
+		_ = projectName
 		Expect(err).NotTo(HaveOccurred(), "Error creating project for user operations test")
 	})
 

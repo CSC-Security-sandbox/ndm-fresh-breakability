@@ -17,16 +17,34 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 		err                   error
 		attachedWorkersConfig map[string]SSHConfig
 		headers               map[string]string
+		clonedSourceVolumes   []string
+		clonedDestVolumes     []string
+		sourceVolumeManager   *TestVolumeManager
+		destVolumeManager     *TestVolumeManager
 	)
 	Context("RTC-004", func() {
 		BeforeEach(func() {
+			var ProjectName string
 			NumberOfWorker := 1
-			ProjectId, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			ProjectId, ProjectName, attachedWorkersConfig, err = SetupTestEnv(NumberOfWorker)
+			_ = ProjectName
 			Expect(err).To(BeNil(), "Error during test environment setup")
 			Expect(len(attachedWorkersConfig)).To(Equal(1), "Expected one worker to be attached")
 			workerIds = GetWorkerIds()
 			workerId = workerIds[0]
 			headers = GetHeaders(AuthToken, ContentTypeJSON)
+
+			// Setup test volumes (create clones for test isolation)
+			clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
+			Expect(err).To(BeNil(), "Error setting up test volumes")
+
+			// Guarantee cleanup even on manual interrupt (Ctrl+C)
+			DeferCleanup(func() {
+				err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+				if err != nil {
+					LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+				}
+			})
 		})
 
 		It("RTC-004: Test migration with single worker and make worker unhealthy during migration", func() {
@@ -54,7 +72,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID and fetching the volumes")
-			sourceVolumeId, err := GetExportPathID("source", SOURCE_VOLUMES[0], SourceConfigId, headers)
+			sourceVolumeId, err := GetExportPathID("source", clonedSourceVolumes[0], SourceConfigId, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating the destination file server")
@@ -79,7 +97,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
-			destinationVolumeID, err := GetExportPathID("destination", DESTINATION_VOLUMES[0], destinationConfigID, headers)
+			destinationVolumeID, err := GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job")
@@ -134,15 +152,24 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 
 		AfterEach(func() {
 			By("Cleanup started")
-			err := StopAllWorkersAndWait()
-			Expect(err).NotTo(HaveOccurred(), "Error stopping workers")
-			err = ClearVolume(fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], DESTINATION_VOLUMES[0]))
-			Expect(err).To(BeNil(), "Error during clearing destination volume")
+			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
+
+			// Cleanup workers and project created by SetupTestEnv
+			By("Stopping workers")
+			err = StopAllWorkersAndWait()
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to stop workers: %v", err))
+			}
+
 			err = CleanupTestEnv()
-			Expect(err).To(BeNil(), "Error during test environment cleanup")
-			LogDebug("Cleanup complete.")
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test environment: %v", err))
+			}
 		})
 
 	})
-
 })
