@@ -69,6 +69,12 @@ export enum JobRunStatus {
   Blocked = "BLOCKED",
 }
 
+
+export enum JobRunType {
+  REGULAR = "REGULAR",
+  RETRY = "RETRY",
+}
+
 export enum TaskType {
   Scan = "SCAN",
   Migrate = "MIGRATE",
@@ -98,6 +104,11 @@ export enum OperationStatus {
   COMPLETED = "COMPLETED",
 }
 
+export enum ErrorStatus {
+  UNRESOLVED = "UNRESOLVED",
+  RESOLVED = "RESOLVED",
+}
+
 export enum OperationType {
   SCAN = "SCAN",
 }
@@ -118,6 +129,7 @@ export enum WorkFlows {
   SPEED_TEST = "SpeedTestWorkflow",
   PRECHECK = "PreCheckValidationWorkflow",
   MIGRATE = "MigrationWorkflow",
+  RETRY = "RetryMigrationWorkflow",
   CUT_OVER = "CutOverWorkFlow",
 }
 

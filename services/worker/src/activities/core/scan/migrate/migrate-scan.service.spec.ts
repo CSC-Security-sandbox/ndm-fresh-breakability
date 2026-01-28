@@ -8,6 +8,7 @@ import { MigrateScanService } from './migrate-scan.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
+import { CommandGenerationService } from '../../shared/command-generation.service';
 
 // --- Mocks ---
 jest.mock('fs', () => {
@@ -90,6 +91,7 @@ describe('MigrateScanService', () => {
     let jobContext: any;
     let commandInput: any;
     let fileTypeDetectionService: Partial<FileTypeDetectionService>;
+    let commandGenerationService: Partial<CommandGenerationService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -113,10 +115,20 @@ describe('MigrateScanService', () => {
             detectFileType: jest.fn().mockResolvedValue('mockFileType'),
         } as Partial<FileTypeDetectionService>;
 
+        commandGenerationService = {
+            processItems: jest.fn().mockResolvedValue({
+                fileCount: 0,
+                dirCount: 0,
+                subDirs: [],
+                commands: [],
+            }),
+        } as Partial<CommandGenerationService>;
+
         service = new MigrateScanService(
             configService,
             mockLoggerFactory as LoggerFactory,
-            fileTypeDetectionService as FileTypeDetectionService
+            fileTypeDetectionService as FileTypeDetectionService,
+            commandGenerationService as CommandGenerationService
         );
 
         jobContext = {
@@ -147,6 +159,8 @@ describe('MigrateScanService', () => {
     });
 
         // --- scanDirectory with Trailing Spaces ---
+        // Note: Trailing space detection has been moved to CommandGenerationService.
+        // These tests verify that the mock processItems correctly simulates the behavior.
     describe('scanDirectory - Trailing Space Detection', () => {
         it('should skip file with trailing spaces on Windows (SMB)', async () => {
             // Mock process.platform
@@ -178,6 +192,14 @@ describe('MigrateScanService', () => {
 
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            // Mock processItems to simulate trailing space error publishing
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({
+                    error: { code: 'ETRAILSPACE', message: 'File has trailing spaces' },
+                });
+                return { fileCount: 0, dirCount: 0, subDirs: [], commands: [] };
+            });
 
             await service.scanDirectory(commandInput);
 
@@ -216,6 +238,14 @@ describe('MigrateScanService', () => {
 
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            // Mock processItems to simulate trailing space error publishing
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({
+                    error: { code: 'ETRAILSPACE', message: 'File has trailing tab' },
+                });
+                return { fileCount: 0, dirCount: 0, subDirs: [], commands: [] };
+            });
 
             await service.scanDirectory(commandInput);
 
@@ -256,6 +286,14 @@ describe('MigrateScanService', () => {
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
 
+            // Mock processItems to return 1 file processed (non-Windows allows trailing spaces)
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 1,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }],
+            });
+
             const result = await service.scanDirectory(commandInput);
 
             // File should be processed on non-Windows, not skipped
@@ -292,6 +330,18 @@ describe('MigrateScanService', () => {
 
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+
+            // Mock processItems to simulate trailing space error with full details
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({
+                    type: 'OPERATION',
+                    origin: Origin.SOURCE,
+                    operation: Operation.READ_FILE,
+                    errorType: ErrorType.TRANSIENT_ERROR,
+                    error: { code: 'ETRAILSPACE', message: 'File has trailing spaces' },
+                });
+                return { fileCount: 0, dirCount: 0, subDirs: [], commands: [] };
+            });
 
             await service.scanDirectory(commandInput);
 
@@ -337,6 +387,14 @@ describe('MigrateScanService', () => {
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
+
+            // Mock processItems to simulate one error for trailing space + one successful file
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({
+                    error: { code: 'ETRAILSPACE', message: 'File has trailing spaces' },
+                });
+                return { fileCount: 1, dirCount: 0, subDirs: [], commands: [{ id: 'cmd1' }] };
+            });
 
             await service.scanDirectory(commandInput);
 
@@ -472,7 +530,7 @@ describe('MigrateScanService', () => {
     // --- scanDirectory ---
     describe('scanDirectory', () => {
         beforeEach(() => {
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
             (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
                 category,
                 origin,
@@ -482,6 +540,13 @@ describe('MigrateScanService', () => {
                 error,
                 metadata,
             }));
+            // Reset processItems mock to default behavior
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 0,
+                dirCount: 0,
+                subDirs: [],
+                commands: [],
+            });
         });
         it('should skip excluded items', async () => {
             jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
@@ -524,15 +589,22 @@ describe('MigrateScanService', () => {
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
 
-            service.getDirContents.bind(service);
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ path, origin }) => {
                 if (origin === Origin.SOURCE) return new Set(['file1', 'file2', 'file3']);
                 return new Set();
             });
 
+            // Mock processItems to return commands (simulating chunked behavior)
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 3,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }, { id: 'cmd2' }, { id: 'cmd3' }],
+            });
+
             await service.scanDirectory(commandInput);
 
-            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(2);
+            expect(jobContext.publishBulkToCommandStream).toHaveBeenCalledTimes(1);
         });
 
         it('should detect and skip files with case collisions in source directory on SMB', async () => {
@@ -564,6 +636,23 @@ describe('MigrateScanService', () => {
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/path' });
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
+
+            // Mock processItems to simulate case collision detection (3 errors for colliding items, 2 commands for non-colliding)
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                // Simulate 3 case collision errors
+                await ctx.publishToErrorStream({ error: { message: 'File not migrated: Another file with same name but different case exists' } });
+                await ctx.publishToErrorStream({ error: { message: 'File not migrated: Another file with same name but different case exists' } });
+                await ctx.publishToErrorStream({ error: { message: 'Directory not migrated: Another directory with same name but different case exists' } });
+                return {
+                    fileCount: 1,
+                    dirCount: 1,
+                    subDirs: [],
+                    commands: [
+                        { fPath: '/src/file1.txt', isDir: false },
+                        { fPath: '/src/MyFolder', isDir: true }
+                    ],
+                };
+            });
 
             await service.scanDirectory(commandInput);
 
@@ -622,6 +711,14 @@ describe('MigrateScanService', () => {
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
 
+            // Mock processItems to simulate case collision detection
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({ error: { message: 'same name but different case' } });
+                await ctx.publishToErrorStream({ error: { message: 'same name but different case' } });
+                await ctx.publishToErrorStream({ error: { message: 'same name but different case' } });
+                return { fileCount: 1, dirCount: 0, subDirs: [], commands: [{ id: 'cmd1' }] };
+            });
+
             await service.scanDirectory(commandInput);
 
             expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(3);
@@ -665,6 +762,14 @@ describe('MigrateScanService', () => {
             (isContentUpdate as jest.Mock).mockReturnValue(true);
             (checkCaseSensitiveConflict as jest.Mock).mockImplementation(createCaseSensitiveConflictMock());
 
+            // Mock processItems to return both files (no case collision check on Linux)
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 2,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }, { id: 'cmd2' }],
+            });
+
             await service.scanDirectory(commandInput);
 
             expect(jobContext.publishToErrorStream).not.toHaveBeenCalledWith(
@@ -701,6 +806,14 @@ describe('MigrateScanService', () => {
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ path, origin }) => {
                 if (origin === Origin.SOURCE) return new Set(['dir1']);
                 return new Set();
+            });
+
+            // Mock processItems to return dirCount=1 with subDirs
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 0,
+                dirCount: 1,
+                subDirs: ['/src/dir1'],
+                commands: [{ id: 'cmd1', isDir: true }],
             });
 
             const result = await service.scanDirectory(commandInput);
@@ -760,6 +873,14 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
 
+            // Mock processItems to return fileCount=1
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 1,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }],
+            });
+
             const result = await service.scanDirectory(commandInput);
             expect(result.fileCount).toBe(1);
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
@@ -803,6 +924,14 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
 
+            // Mock processItems to return fileCount=1 (content update detected)
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 1,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }],
+            });
+
             const result = await service.scanDirectory(commandInput);
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
@@ -830,15 +959,11 @@ describe('MigrateScanService', () => {
                 return new Set();
             });
             
-            // First lstat call for isExists returns successfully, second lstat call throws
-            (fs.promises.lstat as jest.Mock)
-                .mockResolvedValueOnce({
-                    isDirectory: () => false,
-                    isSymbolicLink: () => false,
-                    size: 100,
-                    mtime: new Date(),
-                }) // isExists check passes
-                .mockRejectedValueOnce(new Error('fail')); // actual lstat call fails
+            // Mock processItems to throw an error and publish to error stream
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({ error: { message: 'fail' } });
+                throw new Error('fail');
+            });
 
             await expect(service.scanDirectory(commandInput)).rejects.toThrow('fail');
             expect(jobContext.publishToErrorStream).toHaveBeenCalled();
@@ -867,6 +992,12 @@ describe('MigrateScanService', () => {
             (removePrefix as jest.Mock).mockImplementation((full, prefix) => full.replace(prefix, ''));
             (getFileInfo as jest.Mock).mockResolvedValue({ path: 'mock/file1' });
             (isContentUpdate as jest.Mock).mockImplementation(() => { throw new Error('buildCommand error'); });
+
+            // Mock processItems to throw an error and publish to error stream
+            (commandGenerationService.processItems as jest.Mock).mockImplementation(async ({ jobContext: ctx }) => {
+                await ctx.publishToErrorStream({ error: { message: 'buildCommand error' } });
+                throw new Error('buildCommand error');
+            });
 
             await expect(service.scanDirectory(commandInput)).rejects.toThrow('buildCommand error');
             expect(jobContext.publishToErrorStream).toHaveBeenCalled();
@@ -901,6 +1032,14 @@ describe('MigrateScanService', () => {
                 command: { ...commandInput.command, retryCount: 3 }
             };
 
+            // Mock processItems to return fileCount=1
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 1,
+                dirCount: 0,
+                subDirs: [],
+                commands: [{ id: 'cmd1' }],
+            });
+
             await service.scanDirectory(highRetryInput);
             expect(jobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
@@ -933,7 +1072,7 @@ describe('MigrateScanService', () => {
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
             (service as any).maxMigrationCommand = 2;
 
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -1001,6 +1140,7 @@ describe('MigrateScanService', () => {
     let jobContext: any;
     let commandInput: any;
     let fileTypeDetectionService: Partial<FileTypeDetectionService>;
+    let commandGenerationService: Partial<CommandGenerationService>;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -1025,7 +1165,16 @@ describe('MigrateScanService', () => {
             detectFileType: jest.fn().mockResolvedValue('mockFileType'),
         } as Partial<FileTypeDetectionService>;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService);
+        commandGenerationService = {
+            processItems: jest.fn().mockResolvedValue({
+                fileCount: 0,
+                dirCount: 0,
+                subDirs: [],
+                commands: [],
+            }),
+        } as Partial<CommandGenerationService>;
+
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
 
         jobContext = {
             publishToErrorStream: jest.fn(),

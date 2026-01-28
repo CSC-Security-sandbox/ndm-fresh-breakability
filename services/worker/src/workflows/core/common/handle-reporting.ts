@@ -21,7 +21,8 @@ const {
 export  enum  JobReportType {
   MIGRATE = 'MIGRATE_REPORTED',
   CUT_OVER = 'CUT_OVER_REPORTED',
-  DISCOVER= 'DISCOVER_REPORTED'
+  DISCOVER= 'DISCOVER_REPORTED',
+  RETRY = 'RETRY_REPORTED'
 }
 
 const generateReport = async (jobRunId: string, generator: string) => {
@@ -47,10 +48,12 @@ export const handleReporting = async (
       if(
             (input === JobReportType.CUT_OVER) ||
             (input === JobReportType.MIGRATE) ||
-            (input === JobReportType.DISCOVER) 
-        ) 
+            (input === JobReportType.DISCOVER) ||
+            (input === JobReportType.RETRY)
+        ) {
         reportType = input;
         isBlocked = false;
+      }
     });
 
     wf.log.info('Waiting for reporting signal...');
@@ -69,6 +72,11 @@ export const handleReporting = async (
             break
         }
         case JobReportType.MIGRATE: {            
+            await generateCOCReportActivity(traceId)
+            break
+        }
+        case JobReportType.RETRY: {            
+            // Retry uses the same reporting as regular migration
             await generateCOCReportActivity(traceId)
             break
         }

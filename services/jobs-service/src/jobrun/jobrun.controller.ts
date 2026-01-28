@@ -94,6 +94,25 @@ export class JobRunController {
     return this.jobRunService.getJobRunErrors(jobErrorQuery);
   }
 
+  @ApiOperation({ summary: "Get failed operations for a job run" })
+  @ApiResponse({
+    status: 200,
+    description: "Failed operations retrieved successfully.",
+  })
+  @AuthWorker()
+  @Get("/failed-operations")
+  async getFailedOperations(
+    @Query("jobRunId") jobRunId: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit: string = "1000"
+  ) {
+    return this.jobRunService.getFailedOperations(
+      jobRunId,
+      cursor || null,
+      parseInt(limit, 10)
+    );
+  }
+
   @ApiOperation({ summary: "Get job run by ID" })
   @ApiResponse({ status: 200, description: "Returns a job run by its ID." })
   @ApiResponse({ status: 404, description: "Job run not found." })
@@ -129,10 +148,14 @@ export class JobRunController {
     return this.jobRunService.approveCutoverRequest(approval);
   }
 
-  @ApiOperation({ summary: "Creates excesive job run based on job config" })
+  @ApiOperation({ summary: "Creates ad-hoc job run based on job config. Optionally retry failed items from a previous job run." })
   @ApiResponse({
     status: 200,
-    description: "The job run created completed successfully .",
+    description: "The job run created successfully.",
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Job run is not in terminal state or no failed operations found (when retrying).",
   })
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
@@ -141,7 +164,7 @@ export class JobRunController {
     @Body() adhocRun: AdHocRunDTO,
     @Headers("projectId") projectId?: string
   ) {
-    return this.jobRunService.addHocRun(adhocRun.jobConfigId, projectId);
+    return this.jobRunService.addHocRun(adhocRun.jobConfigId, projectId, adhocRun.jobRunId);
   }
 
   @ApiOperation({ summary: "Update Job Run Status" })

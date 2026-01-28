@@ -13,6 +13,7 @@ import {
   OperationError,
   TaskError,
   TaskStatus,
+  CommandStatus,
   ItemInfo,
   ItemMeta,
 } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -513,6 +514,252 @@ describe("InventoryService", () => {
         error?.stack || error
       );
     });
+
+    it("should call syncErrorToOriginalJobRun when originalJobRunId is present", async () => {
+      const data: OperationError = {
+        errorCode: "ERR001",
+        errorMessage: "File not found",
+        operationId: "opId-retry",
+        errorType: ErrorType.FATAL_ERROR,
+        errorFiles: { fileName: "file.txt", filePath: "/path/to/file.txt" },
+        operationName: "COPY",
+        origin: "source",
+        originalJobRunId: "original-job-run-123",
+      };
+
+      operationErrorRepo.create.mockReturnValue({} as any);
+      operationErrorRepo.save.mockResolvedValue({} as any);
+      // Mock operation not existing in original job run
+      operationRepo.findOne.mockResolvedValue(null);
+      operationRepo.create.mockReturnValue({ id: "new-op-id" } as any);
+      operationRepo.save.mockResolvedValue({ id: "new-op-id" } as any);
+      operationErrorRepo.upsert.mockResolvedValue({} as any);
+
+      await service.saveOperationError(data);
+
+      // Verify syncErrorToOriginalJobRun was triggered
+      expect(operationRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          fPath: "/path/to/file.txt",
+          jobRunId: "original-job-run-123"
+        }
+      });
+    });
+
+    it("should not sync to original job when originalJobRunId is not present", async () => {
+      const data: OperationError = {
+        errorCode: "ERR001",
+        errorMessage: "File not found",
+        operationId: "opId",
+        errorType: ErrorType.FATAL_ERROR,
+        errorFiles: { fileName: "file.txt", filePath: "/path/to/file.txt" },
+        operationName: "COPY",
+        origin: "source",
+        // No originalJobRunId
+      };
+
+      operationErrorRepo.create.mockReturnValue({} as any);
+      operationErrorRepo.save.mockResolvedValue({} as any);
+
+      await service.saveOperationError(data);
+
+      // Should not attempt to find operation in original job run
+      expect(operationRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it("should create operation in original job run for new files during retry", async () => {
+      const data: OperationError = {
+        errorCode: "ERR001",
+        errorMessage: "Permission denied",
+        operationId: "opId-retry",
+        errorType: ErrorType.FATAL_ERROR,
+        errorFiles: { fileName: "newfile.txt", filePath: "/new/path/newfile.txt" },
+        operationName: "COPY",
+        origin: "source",
+        originalJobRunId: "original-job-run-456",
+      };
+
+      operationErrorRepo.create.mockReturnValue({} as any);
+      operationErrorRepo.save.mockResolvedValue({} as any);
+      // No existing operation in original job
+      operationRepo.findOne
+        .mockResolvedValueOnce(null) // Check if operation exists - it doesn't
+        .mockResolvedValueOnce({ sPathId: "src-path", tPathId: "tgt-path" } as any); // Get path IDs
+      operationRepo.create.mockReturnValue({ id: "new-op-id" } as any);
+      operationRepo.save.mockResolvedValue({ id: "new-op-id" } as any);
+      operationErrorRepo.upsert.mockResolvedValue({} as any);
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+
+      await service.saveOperationError(data);
+
+      expect(operationRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fPath: "/new/path/newfile.txt",
+          jobRunId: "original-job-run-456",
+          status: OperationStatus.ERROR,
+        })
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Synced new error to original job run")
+      );
+    });
+
+    it("should not create operation when file already exists in original job run", async () => {
+      const data: OperationError = {
+        errorCode: "ERR001",
+        errorMessage: "File not found",
+        operationId: "opId-retry",
+        errorType: ErrorType.FATAL_ERROR,
+        errorFiles: { fileName: "existingfile.txt", filePath: "/existing/path/existingfile.txt" },
+        operationName: "COPY",
+        origin: "source",
+        originalJobRunId: "original-job-run-789",
+      };
+
+      operationErrorRepo.create.mockReturnValue({} as any);
+      operationErrorRepo.save.mockResolvedValue({} as any);
+      // Operation already exists in original job run
+      operationRepo.findOne.mockResolvedValue({ id: "existing-op-id", fPath: "/existing/path/existingfile.txt" } as any);
+
+      await service.saveOperationError(data);
+
+      // Should not create a new operation
+      expect(operationRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("should handle errors in syncErrorToOriginalJobRun gracefully without throwing", async () => {
+      const data: OperationError = {
+        errorCode: "ERR001",
+        errorMessage: "File error",
+        operationId: "opId-retry",
+        errorType: ErrorType.FATAL_ERROR,
+        errorFiles: { fileName: "file.txt", filePath: "/path/file.txt" },
+        operationName: "COPY",
+        origin: "source",
+        originalJobRunId: "original-job-run-error",
+      };
+
+      operationErrorRepo.create.mockReturnValue({} as any);
+      operationErrorRepo.save.mockResolvedValue({} as any);
+      // Simulate error in finding operation
+      operationRepo.findOne.mockRejectedValue(new Error("Database connection failed"));
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      // Should not throw - the main error save should succeed
+      await expect(service.saveOperationError(data)).resolves.not.toThrow();
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to sync error to original job run"),
+        expect.anything()
+      );
+    });
+  });
+
+  describe("resolveOperationErrors", () => {
+    it("should resolve operation errors for completed retry commands", async () => {
+      const errors = [
+        { operationId: "op-1", filePath: "/path/file1.txt" },
+        { operationId: "op-2", filePath: "/path/file2.txt" },
+      ];
+
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 2 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      await service.resolveOperationErrors(errors);
+
+      expect(mockQueryBuilder.update).toHaveBeenCalled();
+      expect(mockQueryBuilder.set).toHaveBeenCalledWith({ errorStatus: 'RESOLVED' });
+      expect(mockQueryBuilder.where).toHaveBeenCalled();
+      expect(mockQueryBuilder.execute).toHaveBeenCalled();
+    });
+
+    it("should return early for empty errors array", async () => {
+      operationErrorRepo.createQueryBuilder = jest.fn();
+      await service.resolveOperationErrors([]);
+
+      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it("should return early for null errors", async () => {
+      operationErrorRepo.createQueryBuilder = jest.fn();
+      await service.resolveOperationErrors(null as any);
+
+      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it("should log the number of resolved errors", async () => {
+      const errors = [
+        { operationId: "op-1", filePath: "/path/file1.txt" },
+      ];
+
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+
+      await service.resolveOperationErrors(errors);
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Resolved 1 operation errors")
+      );
+    });
+
+    it("should handle database errors gracefully", async () => {
+      const errors = [
+        { operationId: "op-1", filePath: "/path/file1.txt" },
+      ];
+
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockRejectedValue(new Error("Database error")),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      const loggerSpy = jest.spyOn(service["logger"], "error");
+
+      // Should not throw
+      await expect(service.resolveOperationErrors(errors)).resolves.not.toThrow();
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to resolve operation errors"),
+        expect.anything()
+      );
+    });
+
+    it("should build correct WHERE clause with operationId AND filePath pairs", async () => {
+      const errors = [
+        { operationId: "op-a", filePath: "/path/a.txt" },
+        { operationId: "op-b", filePath: "/path/b.txt" },
+      ];
+
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 2 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      await service.resolveOperationErrors(errors);
+
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining("operation_id = :opId0 AND file_path = :fPath0"),
+        expect.objectContaining({
+          opId0: "op-a",
+          fPath0: "/path/a.txt",
+          opId1: "op-b",
+          fPath1: "/path/b.txt",
+        })
+      );
+    });
   });
 
   describe("saveTaskError", () => {
@@ -700,6 +947,168 @@ describe("InventoryService", () => {
       await service.saveTasks(data);
 
       expect(loggerSpy).toHaveBeenCalledWith("Task ID not found");
+    });
+
+    it("should resolve operation errors when retry commands complete successfully", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.COMPLETED,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "retry-cmd-1", fPath: "/path/to/file1.txt", originalCmdId: "original-cmd-1", status: CommandStatus.COMPLETED },
+          { id: "retry-cmd-2", fPath: "/path/to/file2.txt", originalCmdId: "original-cmd-2", status: CommandStatus.COMPLETED },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+      
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 2 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      await service.saveTasks(data);
+
+      // Should call resolveOperationErrors with the completed retry commands
+      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockQueryBuilder.set).toHaveBeenCalledWith({ errorStatus: 'RESOLVED' });
+    });
+
+    it("should not resolve errors for retry commands that did not complete", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.COMPLETED,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "retry-cmd-1", fPath: "/path/to/file1.txt", originalCmdId: "original-cmd-1", status: CommandStatus.COMPLETED },
+          { id: "retry-cmd-2", fPath: "/path/to/file2.txt", originalCmdId: "original-cmd-2", status: CommandStatus.ERROR },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+      
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      await service.saveTasks(data);
+
+      // Should only resolve the completed command (original-cmd-1)
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining("operation_id = :opId0"),
+        expect.objectContaining({
+          opId0: "original-cmd-1",
+          fPath0: "/path/to/file1.txt",
+        })
+      );
+    });
+
+    it("should not resolve errors for non-retry commands (no originalCmdId)", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.COMPLETED,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "cmd-1", fPath: "/path/to/file1.txt", status: CommandStatus.COMPLETED },
+          { id: "cmd-2", fPath: "/path/to/file2.txt", status: CommandStatus.COMPLETED },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+      operationErrorRepo.createQueryBuilder = jest.fn();
+
+      await service.saveTasks(data);
+
+      // Should not call resolveOperationErrors since no commands have originalCmdId
+      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it("should only resolve errors when task status is COMPLETED or COMPLETED_WITH_ERROR", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.RUNNING,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "retry-cmd-1", fPath: "/path/to/file1.txt", originalCmdId: "original-cmd-1", status: CommandStatus.COMPLETED },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+      operationErrorRepo.createQueryBuilder = jest.fn();
+
+      await service.saveTasks(data);
+
+      // Should not call resolveOperationErrors for IN_PROGRESS status
+      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it("should resolve errors for COMPLETED_WITH_ERROR task status", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.COMPLETED_WITH_ERROR,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "retry-cmd-1", fPath: "/path/to/file1.txt", originalCmdId: "original-cmd-1", status: CommandStatus.COMPLETED },
+          { id: "retry-cmd-2", fPath: "/path/to/file2.txt", originalCmdId: "original-cmd-2", status: CommandStatus.ERROR },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+      
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      await service.saveTasks(data);
+
+      // Should resolve errors for COMPLETED_WITH_ERROR status
+      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalled();
     });
   });
 

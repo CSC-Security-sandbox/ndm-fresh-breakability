@@ -4,12 +4,13 @@ import * as path from 'path';
 import { promises as fsPromises } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo, CommandStatus} from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
+import { isPathExists } from "../core/utils/utils";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
-import { E8Dot3CollisionError } from "../../errors/errors.types";
+import { E8Dot3CollisionError, FatalError } from "../../errors/errors.types";
 
 const execAsync = promisify(exec);
 
@@ -405,3 +406,19 @@ export const  calculateCommandHash = (commands: Cmd[]): string => {
   return crypto.createHash('sha256').update(concatenatedIds).digest('hex');
 
 }
+
+/**
+ * Extracts scan settings from job context configuration.
+ * Shared utility used by scan and retry activities.
+ *
+ * @param jobContext - The job context containing job configuration
+ * @returns Object with skipFile and excludePatterns
+ */
+export const getScanSettings = (jobContext: JobManagerContext) => {
+  return {
+    skipFile: jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '',
+    excludePatterns: jobContext.jobConfig.options?.excludeFilePattern
+      ? jobContext.jobConfig.options.excludeFilePattern.split(",")
+      : []
+  };
+};

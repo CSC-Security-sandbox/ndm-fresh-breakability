@@ -28,6 +28,21 @@ const mockTaskMap = {
     getValue: jest.fn(),
     deleteValue: jest.fn(),
 };
+const mockDirBatchMap = {
+    setValue: jest.fn(),
+    getValue: jest.fn(),
+    deleteValue: jest.fn(),
+};
+const mockCursorMap = {
+    setValue: jest.fn(),
+    getValue: jest.fn(),
+    deleteValue: jest.fn(),
+};
+const mockRetryBatches = {
+    setValue: jest.fn(),
+    getValue: jest.fn(),
+    deleteValue: jest.fn(),
+};
 
 const jobConfig = { some: "config" } as any;
 const jobRunId = "run-123";
@@ -43,6 +58,9 @@ describe("JobManagerContext", () => {
         ctx.commandStream = mockCommandStream as any;
         ctx.taskStream = mockTaskStream as any;
         ctx.taskMap = mockTaskMap as any;
+        ctx.dirBatchMap = mockDirBatchMap as any;
+        ctx.cursorMap = mockCursorMap as any;
+        ctx.retryBatches = mockRetryBatches as any;
 
         jest.clearAllMocks();
     });
@@ -202,6 +220,122 @@ describe("JobManagerContext", () => {
         it("deserialize should parse JSON string", () => {
             const obj = { a: 1, b: 2 };
             expect(ctx.deserialize(JSON.stringify(obj))).toEqual(obj);
+        });
+    });
+
+    describe("Dir Batch Map Methods", () => {
+        it("setBatchDir should call setValue", async () => {
+            await ctx.setBatchDir("batch-1", ["/dir1", "/dir2"]);
+            expect(mockDirBatchMap.setValue).toHaveBeenCalledWith("batch-1", ["/dir1", "/dir2"]);
+        });
+
+        it("getBatchDir should call getValue", async () => {
+            mockDirBatchMap.getValue.mockResolvedValue(["/dir1", "/dir2"]);
+            const res = await ctx.getBatchDir("batch-1");
+            expect(mockDirBatchMap.getValue).toHaveBeenCalledWith("batch-1");
+            expect(res).toEqual(["/dir1", "/dir2"]);
+        });
+
+        it("deleteBatchDir should call deleteValue", async () => {
+            await ctx.deleteBatchDir("batch-1");
+            expect(mockDirBatchMap.deleteValue).toHaveBeenCalledWith("batch-1");
+        });
+    });
+
+    describe("Retry Batch Methods", () => {
+        it("setRetryBatch should call setValue", async () => {
+            const batch = {
+                parentPath: "/data/folder",
+                operations: [{ id: "op-1", fPath: "/data/folder/file.txt" }]
+            };
+            await ctx.setRetryBatch("retry-batch-1", batch);
+            expect(mockRetryBatches.setValue).toHaveBeenCalledWith("retry-batch-1", batch);
+        });
+
+        it("getRetryBatch should call getValue", async () => {
+            const batch = {
+                parentPath: "/test/path",
+                operations: [{ id: "op-2", fPath: "/test/path/f.txt" }]
+            };
+            mockRetryBatches.getValue.mockResolvedValue(batch);
+            const res = await ctx.getRetryBatch("retry-batch-2");
+            expect(mockRetryBatches.getValue).toHaveBeenCalledWith("retry-batch-2");
+            expect(res).toEqual(batch);
+        });
+
+        it("getRetryBatch should return null when batch not found", async () => {
+            mockRetryBatches.getValue.mockResolvedValue(null);
+            const res = await ctx.getRetryBatch("non-existent");
+            expect(res).toBeNull();
+        });
+
+        it("deleteRetryBatch should call deleteValue", async () => {
+            await ctx.deleteRetryBatch("retry-batch-3");
+            expect(mockRetryBatches.deleteValue).toHaveBeenCalledWith("retry-batch-3");
+        });
+    });
+
+    describe("Retry Cursor Methods", () => {
+        it("getRetryCursor should return cursor value", async () => {
+            mockCursorMap.getValue.mockResolvedValue("cursor-abc123");
+            const res = await ctx.getRetryCursor();
+            expect(mockCursorMap.getValue).toHaveBeenCalledWith("retryCursor");
+            expect(res).toBe("cursor-abc123");
+        });
+
+        it("getRetryCursor should return empty string when no cursor exists", async () => {
+            mockCursorMap.getValue.mockResolvedValue(null);
+            const res = await ctx.getRetryCursor();
+            expect(res).toBe("");
+        });
+
+        it("getRetryCursor should return empty string when cursor is undefined", async () => {
+            mockCursorMap.getValue.mockResolvedValue(undefined);
+            const res = await ctx.getRetryCursor();
+            expect(res).toBe("");
+        });
+
+        it("setRetryCursor should call setValue with retryCursor key", async () => {
+            await ctx.setRetryCursor("next-page-cursor");
+            expect(mockCursorMap.setValue).toHaveBeenCalledWith("retryCursor", "next-page-cursor");
+        });
+    });
+
+    describe("Error Stream with originalJobRunId", () => {
+        it("publishToErrorStream should add originalJobRunId to operation error", async () => {
+            mockErrorStream.append.mockResolvedValue("err-id");
+            const error = {
+                message: "File not found",
+                operation: { id: "op-1", name: "file.txt" }
+            } as any;
+            
+            await ctx.publishToErrorStream(error, "original-job-run-123");
+            
+            expect(error.operation.originalJobRunId).toBe("original-job-run-123");
+            expect(mockErrorStream.append).toHaveBeenCalledWith(error);
+        });
+
+        it("publishToErrorStream should not modify error without operation", async () => {
+            mockErrorStream.append.mockResolvedValue("err-id");
+            const error = { message: "General error" } as any;
+            
+            await ctx.publishToErrorStream(error, "original-job-run-456");
+            
+            expect(error.originalJobRunId).toBeUndefined();
+            expect(mockErrorStream.append).toHaveBeenCalledWith(error);
+        });
+
+        it("publishToErrorStream should work without originalJobRunId", async () => {
+            mockErrorStream.append.mockResolvedValue("err-id");
+            const error = {
+                message: "Error",
+                operation: { id: "op-1" }
+            } as any;
+            
+            await ctx.publishToErrorStream(error);
+            
+            expect(error.operation.originalJobRunId).toBeUndefined();
+            expect(mockErrorStream.append).toHaveBeenCalledWith(error);
         });
     });
 });
