@@ -17,10 +17,7 @@ image_sku                    = "server"
 virtual_network_name         = "datamigrate-dev-vnet"
 virtual_network_subnet_name  = "default"
 
-// SSH Bastion Host Values
-ssh_bastion_host             = "20.51.200.139"
-ssh_bastion_username         = "ubuntu"
-ssh_bastion_password         = "Hacker@123321"
+
 ssh_file_transfer_method     = "scp"
 
 // Shared Image Gallery Destination Values

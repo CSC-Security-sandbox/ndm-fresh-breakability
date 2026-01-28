@@ -872,6 +872,10 @@ jobs:
               echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
               echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
               echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+              echo "PKR_VAR_ssh_bastion_host=${{ secrets.SSH_BASTION_HOST }}" >> $GITHUB_ENV
+              echo "PKR_VAR_ssh_bastion_username=${{ secrets.SSH_BASTION_USERNAME }}" >> $GITHUB_ENV
+              echo "PKR_VAR_ssh_bastion_password=${{ secrets.SSH_BASTION_PASSWORD }}" >> $GITHUB_ENV
+              echo "::add-mask::${{ secrets.SSH_BASTION_PASSWORD }}"
               ;;
             aws)
               echo "PKR_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
