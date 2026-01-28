@@ -1336,18 +1336,36 @@ export class JobConfigService {
 
     const severityMessages = await this.syncEmailRepo
       .createQueryBuilder("syncEmail")
-      .select("syncEmail.mailContent")
+      .select(["syncEmail.mailContent", "syncEmail.createdAt"])
       .where("syncEmail.incidentStatus = :status", {
         status: IncidentStatus.OPEN,
       })
+      .orderBy("syncEmail.createdAt", "DESC")
       .getMany();
 
-    const severityMessagesDescriptions = severityMessages?.flatMap(
-      (entry) =>
-        (entry?.mailContent?.alerts ?? [])
-          .map((alert) => alert?.annotations?.description)
-          .filter(Boolean) || []
-    );
+    // Create a map to track unique messages with their most recent timestamp
+    const uniqueMessagesMap = new Map<string, { message: string; timestamp: Date }>();
+
+    severityMessages?.forEach((entry) => {
+      const alerts = entry?.mailContent?.alerts ?? [];
+      alerts.forEach((alert: any) => {
+        const description = alert?.annotations?.description;
+        if (description) {
+          // Only add if not exists, or if exists but this entry is more recent
+          const existing = uniqueMessagesMap.get(description);
+          if (!existing || entry.createdAt > existing.timestamp) {
+            uniqueMessagesMap.set(description, {
+              message: description,
+              timestamp: entry.createdAt,
+            });
+          }
+        }
+      });
+    });
+
+    // Convert map to array and sort by timestamp (most recent first)
+    const severityMessagesWithTimestamps = Array.from(uniqueMessagesMap.values())
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     this.logger.debug(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}`
@@ -1366,7 +1384,7 @@ export class JobConfigService {
     );
 
     this.logger.debug(
-      `severityMessages - ${severityMessagesDescriptions?.length}`
+      `severityMessages - Unique: ${severityMessagesWithTimestamps?.length}, Total before dedup: ${severityMessages?.flatMap((e) => e?.mailContent?.alerts ?? []).length}`
     );
 
     return {
@@ -1374,7 +1392,7 @@ export class JobConfigService {
       countBlockedCutoverJobRuns,
       countRecentJobConfigs,
       countCompletedJobRuns,
-      severityMessages: severityMessagesDescriptions,
+      severityMessages: severityMessagesWithTimestamps,
     };
   }
 

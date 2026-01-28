@@ -48,11 +48,23 @@ const NotificationsContent = ({
 
   const getSecurityNotifications = useMemo(() => {
     if (!noticeBoardDetails?.severityMessages) return null;
-    return noticeBoardDetails.severityMessages.map((message, index) => (
-      <Text key={index} className="text-sm">
-        {message}
-      </Text>
-    ));
+    return noticeBoardDetails.severityMessages.map((item, index) => {
+      const message = typeof item === 'string' ? item : item.message;
+      const timestamp = typeof item === 'object' && item.timestamp 
+        ? new Date(item.timestamp).toLocaleString() 
+        : null;
+      
+      return (
+        <Box key={index} className="flex flex-col gap-1 mb-2">
+          <Text className="text-sm">{message}</Text>
+          {timestamp && (
+            <Text className="text-xs text-gray-500">
+              {timestamp}
+            </Text>
+          )}
+        </Box>
+      );
+    });
   }, [noticeBoardDetails?.severityMessages]);
 
   return (
