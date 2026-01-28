@@ -2,6 +2,7 @@ import {
   configApi,
   useLazyDownloadExportPathSourceTemplateQuery,
   useLazyRefetchConfigExportPathsQuery,
+  useLazyRevalidateExportPathsQuery,
 } from "@api/configApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -50,6 +51,7 @@ const ExportPathsTable = ({
   const [disableRefresh, setDisableRefresh] = useState<boolean>(false);
 
   const [reFetchExportPathsApi] = useLazyRefetchConfigExportPathsQuery();
+  const [revalidateExportPathsApi] = useLazyRevalidateExportPathsQuery();
   const [downloadTemplate] = useLazyDownloadExportPathSourceTemplateQuery();
   const [getWorkFlowStatus] = useLazyCheckConnectionRespQuery();
 
@@ -63,7 +65,7 @@ const ExportPathsTable = ({
   }, [fileServerDetails?.fileServers]);
 
   const isRefreshDisabled =
-    !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus || isManualUploadPath;
+    !fileServerDetails?.isRefreshAvailable || disableRefresh || isDraftStatus;
 
   const tableStateProps = {
     columns: EXPORT_PATHS_TABLE_COLS_DEF,
@@ -94,14 +96,45 @@ const ExportPathsTable = ({
 
   // REFETCH EXPORT PATHS
   const handleRefetchExportPaths = async () => {
-    // Skip refresh for manually uploaded paths - no backend discovery needed
-    if (isManualUploadPath) {
-      return;
-    }
-
     setDisableRefresh(true);
     try {
       let retryCount = 0;
+
+      // Manual upload paths: Call revalidate API to check path status (ValidatePathsWorkflow)
+      if (isManualUploadPath) {
+        const response = await revalidateExportPathsApi({
+          fileServerId: fileServerId,
+        }).unwrap();
+
+        // Revalidation is asynchronous via ValidatePathsWorkflow
+        interval.current = setInterval(async () => {
+          const data = await getWorkFlowStatus({
+            id: response?.workflowId,
+          }).unwrap();
+
+          if (data?.status === ValidateConnectionStatus.COMPLETED) {
+            dispatch(configApi.util.invalidateTags(["GET_FILE_SERVER_BY_ID"]));
+            notify.success("Successfully revalidated the export paths.");
+            setDisableRefresh(false);
+            clearInterval(interval.current);
+
+            if (refetch) {
+              refetch();
+            }
+          } else if (data?.status === ValidateConnectionStatus.TERMINATED) {
+            const error = new Error(
+              `Seems like request to revalidate paths got terminated, please try again.`
+            );
+            showErrorOnRefetchFailure(error);
+          } else if (++retryCount === MAX_RETRY_API_ATTEMPTS) {
+            const error = new Error(
+              `Request timed out after ${MAX_RETRY_API_ATTEMPTS} attempts.`
+            );
+            showErrorOnRefetchFailure(error);
+          }
+        }, 2000);
+        return;
+      }
       
       // Dell Isilon: Pass configId and fileServerId separately for zone-specific refresh
       // Other NAS: Only pass fileServerId (which is actually the config ID)
@@ -213,7 +246,7 @@ const ExportPathsTable = ({
       showLabel={false}
       refetchTableData={handleRefetchExportPaths}
       isRefreshing={isFetching || disableRefresh}  
-      showRefresh={!isManualUploadPath}
+      showRefresh={true}
       handleSelection={
         isRowSelectingEnabled ? setSelectedExportPathsIds : undefined
       }

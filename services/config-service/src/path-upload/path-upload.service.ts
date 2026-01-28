@@ -623,4 +623,110 @@ export class PathUploadService {
       );
     }
   }
+
+  /**
+   * Revalidate existing export paths for a manual upload file server.
+   * This triggers the ValidatePathsWorkflow to check if paths are accessible.
+   */
+  async revalidateExportPaths(
+    fileServerId: string,
+    traceId: string,
+  ): Promise<{ message: string; workflowId?: string }> {
+    try {
+      const fileServer = await this.fileServerRepo.findOne({
+        where: { id: fileServerId },
+        relations: ['workers', 'volumes'],
+      });
+
+      if (!fileServer) {
+        throw new NotFoundException(
+          `File server not found with ID ${fileServerId}`,
+        );
+      }
+
+      if (fileServer.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
+        throw new BadRequestException(
+          `File server ${fileServerId} is not configured for manual upload. Use the standard refresh endpoint.`,
+        );
+      }
+
+      const volumes = fileServer.volumes?.filter((v) => !v.isDisabled) || [];
+      if (volumes.length === 0) {
+        throw new BadRequestException(
+          `No export paths found for file server ${fileServerId}. Please upload export paths first.`,
+        );
+      }
+
+      const workerIds = fileServer.workers?.map((w) => w.workerId) || [];
+      if (workerIds.length === 0) {
+        throw new BadRequestException(
+          `No workers found for file server ${fileServerId}. Please assign workers first.`,
+        );
+      }
+
+      this.logger.log(
+        `Revalidating ${volumes.length} export paths for file server ${fileServerId}`,
+      );
+
+      // Reset validation status before revalidation
+      await this.volumeRepo.update(
+        { id: In(volumes.map((v) => v.id)) },
+        { isValid: null },
+      );
+
+      const startWorkFlowPayload: StartWorkFlowPayload = {
+        workflowId: `${WorkFlows.VALIDATE_PATHS}-${traceId}`,
+        taskQueue: 'ParentWorkflow-TaskQueue',
+        args: [
+          {
+            traceId: traceId,
+            payload: {
+              traceId,
+              paths: volumes.map((volume) => ({
+                pathId: volume.id,
+                path: volume.volumePath,
+              })),
+              fileServer: {
+                type: fileServer.protocol,
+                protocolVersion: fileServer.protocolVersion?.replace(/^v/, ''),
+                host: fileServer.host?.trim(),
+                username: fileServer.userName,
+                password: fileServer.password,
+              },
+              workerIds,
+            },
+            options: {
+              workflowExecutionTimeout: '1h',
+              workflowTaskTimeout: '120s',
+              workflowRunTimeout: '120s',
+            },
+          },
+        ],
+      };
+
+      const workflow = await this.workFlowService.startWorkflow(
+        WorkFlows.VALIDATE_PATHS,
+        startWorkFlowPayload,
+      );
+
+      return {
+        message: 'Export path revalidation started successfully',
+        workflowId: workflow.workflowId,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error revalidating export paths for file server ${fileServerId}`,
+        error,
+      );
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error revalidating export paths: ${error.message}`,
+      );
+    }
+  }
 }

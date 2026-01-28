@@ -158,6 +158,16 @@ export const configApi = createApi({
       invalidatesTags: ["GET_FILE_SERVER_BY_ID"],
     }),
 
+    revalidateExportPaths: builder.query({
+      query: ({ fileServerId }) => ({
+        url: `paths-upload/revalidate/${fileServerId}`,
+        method: "POST",
+      }),
+      transformResponse: (response: any) => {
+        return response?.data || response || {};
+      },
+    }),
+
     generateSupportBundle: builder.mutation<
       string,
       { payload: SupportBundlePayloadType }
@@ -314,6 +324,7 @@ export const {
   useLazyDownloadExportPathSourceTemplateQuery,
   useUploadExportPathSourceFileMutation,
   useSubmitExportPathSourceFileMutation,
+  useLazyRevalidateExportPathsQuery,
   useGenerateSupportBundleMutation,
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,

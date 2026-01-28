@@ -61,6 +61,20 @@ export class PathUploadController {
         return await this.pathUploadService.processUploadUpdate(body.validationResult, uploadId);
     }
 
+    @ApiOperation({ summary: 'Revalidate Export Paths for Manual Upload' })
+    @ApiOkResponse({ description: 'Export Paths Revalidation Started Successfully' })
+    @ApiNotFoundResponse({ description: 'File Server Not Found' })
+    @ApiBadRequestResponse({ description: 'Invalid File Server ID' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageConfig)
+    @Post('revalidate/:fileServerId')
+    async revalidateExportPaths(
+        @Param('fileServerId') fileServerId: string,
+        @Request() userDetails: UserDetails
+    ) {
+        return await this.pathUploadService.revalidateExportPaths(fileServerId, userDetails?.trackId);
+    }
+
     @ApiOperation({ summary: 'Download CSV File' })
     @ApiOkResponse({ description: 'CSV File Downloaded Successfully' })
     @ApiNotFoundResponse({ description: 'File Not Found' })
