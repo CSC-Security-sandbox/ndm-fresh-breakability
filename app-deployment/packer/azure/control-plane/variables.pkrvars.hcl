@@ -6,7 +6,7 @@ ssh_username                 = "packer"
 azure_ubuntu_release_version = "24.04.202502210"
 azure_resource_group         = "datamigrate-acr-resource-group"
 azure_packer_vm_size         = "Standard_D8s_v4"
-azure_region                 = "East US"
+azure_region                 = "East US 2"
 
 // Azure Base Image Values
 os_disk_size_gb              = 200
@@ -14,9 +14,9 @@ os_type                      = "Linux"
 image_publisher              = "Canonical"
 image_offer                  = "ubuntu-24_04-lts"
 image_sku                    = "server"
-virtual_network_name         = "datamigrate-dev-vnet"
-virtual_network_subnet_name  = "default"
-
+virtual_network_name         = "MigrationAsAService-dev-VNET02"
+virtual_network_subnet_name  = "MigrationAsAService-dev-VNET02_Subnet01"
+virtual_network_resource_group = "MigrationAsAService-dev-infra"
 
 ssh_file_transfer_method     = "scp"
 

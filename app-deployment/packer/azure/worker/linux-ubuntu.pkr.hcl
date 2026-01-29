@@ -117,26 +117,15 @@ variable "ssh_username" {
   description = "The SSH username for accessing the VM"
 }
 
-# SSH Bastion Variables
-
-variable "ssh_bastion_host" {
+variable "virtual_network_resource_group" {
   type        = string
-  description = "The hostname or IP address of the SSH bastion host"
-}
-
-variable "ssh_bastion_username" {
-  type        = string
-  description = "The username for the SSH bastion host"
-}
-
-variable "ssh_bastion_password" {
-  type        = string
-  description = "The password for the SSH bastion host"
+  description = "The resource group containing the virtual network to build the VM (different from image resource group)"
 }
 
 variable "ssh_file_transfer_method" {
   type        = string
   description = "The file transfer method to be used for SSH (e.g., scp, sftp)"
+  default     = "scp"
 }
 
 # Local binary path
@@ -222,15 +211,10 @@ source "azure-arm" "azure_ubuntu" {
   location                            = var.azure_region
   virtual_network_name                = var.virtual_network_name
   virtual_network_subnet_name         = var.virtual_network_subnet_name
-  virtual_network_resource_group_name = var.azure_resource_group
+  virtual_network_resource_group_name = var.virtual_network_resource_group
 
   os_type                             = var.os_type
   ssh_username                        = var.ssh_username
-  #ssh_public_key                     = var.ssh_public_key
-
-  ssh_bastion_host                    = var.ssh_bastion_host
-  ssh_bastion_username                = var.ssh_bastion_username
-  ssh_bastion_password                = var.ssh_bastion_password
   ssh_file_transfer_method            = var.ssh_file_transfer_method
 
   shared_image_gallery_destination {
