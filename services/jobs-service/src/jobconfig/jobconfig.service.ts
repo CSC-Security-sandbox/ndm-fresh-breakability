@@ -1334,37 +1334,24 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
+    // Use DISTINCT ON to get unique alerts with their latest timestamp directly from DB
     const severityMessages = await this.syncEmailRepo
       .createQueryBuilder("syncEmail")
-      .select(["syncEmail.mailContent", "syncEmail.createdAt"])
+      .select("DISTINCT ON (syncEmail.description) syncEmail.description AS description, syncEmail.createdAt AS created_at")
       .where("syncEmail.incidentStatus = :status", {
         status: IncidentStatus.OPEN,
       })
-      .orderBy("syncEmail.createdAt", "DESC")
-      .getMany();
+      .andWhere("syncEmail.description IS NOT NULL")
+      .orderBy("syncEmail.description", "ASC")
+      .addOrderBy("syncEmail.createdAt", "DESC")
+      .getRawMany();
 
-    // Create a map to track unique messages with their most recent timestamp
-    const uniqueMessagesMap = new Map<string, { message: string; timestamp: Date }>();
-
-    severityMessages?.forEach((entry) => {
-      const alerts = entry?.mailContent?.alerts ?? [];
-      alerts.forEach((alert: any) => {
-        const description = alert?.annotations?.description;
-        if (description) {
-          // Only add if not exists, or if exists but this entry is more recent
-          const existing = uniqueMessagesMap.get(description);
-          if (!existing || entry.createdAt > existing.timestamp) {
-            uniqueMessagesMap.set(description, {
-              message: description,
-              timestamp: entry.createdAt,
-            });
-          }
-        }
-      });
-    });
-
-    // Convert map to array and sort by timestamp (most recent first)
-    const severityMessagesWithTimestamps = Array.from(uniqueMessagesMap.values())
+    // Map to desired format and sort by timestamp (most recent first)
+    const severityMessagesWithTimestamps = severityMessages
+      .map((row) => ({
+        message: row.description,
+        timestamp: new Date(row.created_at),
+      }))
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     this.logger.debug(
@@ -1384,7 +1371,7 @@ export class JobConfigService {
     );
 
     this.logger.debug(
-      `severityMessages - Unique: ${severityMessagesWithTimestamps?.length}, Total before dedup: ${severityMessages?.flatMap((e) => e?.mailContent?.alerts ?? []).length}`
+      `severityMessages - Unique alerts: ${severityMessagesWithTimestamps?.length}`
     );
 
     return {

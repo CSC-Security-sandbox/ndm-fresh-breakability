@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import NotificationsTile from "@modules/home/components/NotificationsTile";
 import { Show } from "@components/show/Show";
+import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer";
 
 const NotificationsContent = ({
   setTotalNotifications,
@@ -51,17 +52,31 @@ const NotificationsContent = ({
     return noticeBoardDetails.severityMessages.map((item, index) => {
       const message = typeof item === 'string' ? item : item.message;
       const timestamp = typeof item === 'object' && item.timestamp 
-        ? new Date(item.timestamp).toLocaleString() 
+        ? item.timestamp
         : null;
       
       return (
-        <Box key={index} className="flex flex-col gap-1 mb-2">
-          <Text className="text-sm">{message}</Text>
-          {timestamp && (
-            <Text className="text-xs text-gray-500">
-              {timestamp}
+        <Box 
+          key={index} 
+          className="flex items-start gap-3 p-3 mb-2 bg-red-50 border-l-4 border-red-400 rounded"
+        >
+          <Box className="flex-shrink-0 mt-0.5">
+            <NoticeIcon color="error" size="small" />
+          </Box>
+          <Box className="flex-1 flex flex-col gap-1">
+            <Text className="text-sm text-gray-800 leading-snug">
+              {message}
             </Text>
-          )}
+            {timestamp && (
+              <span className="text-xs text-gray-500">
+                <DateCellRenderer 
+                  value={new Date(timestamp).toISOString()} 
+                  oneLineDate={true}
+                  showSmallerDateFormat={false}
+                />
+              </span>
+            )}
+          </Box>
         </Box>
       );
     });

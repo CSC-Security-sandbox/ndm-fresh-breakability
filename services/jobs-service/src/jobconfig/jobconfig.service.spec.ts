@@ -3891,26 +3891,16 @@ describe("JobConfigService", () => {
       it("should return correct counts for different job statuses", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
         const now = new Date();
-        const mockSeverityMessages = [
+        
+        // Mock DISTINCT ON query result - already deduplicated by database
+        const mockRawResults = [
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Pod crash in default namespace' },
-                },
-              ],
-            },
-            createdAt: now,
+            description: 'Pod crash in default namespace',
+            created_at: now,
           },
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'DB connection failure' },
-                },
-              ],
-            },
-            createdAt: new Date(now.getTime() - 1000),
+            description: 'DB connection failure',
+            created_at: new Date(now.getTime() - 1000),
           },
         ];
 
@@ -3942,8 +3932,10 @@ describe("JobConfigService", () => {
           return {
             select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
             orderBy: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+            addOrderBy: jest.fn().mockReturnThis(),
+            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
           } as any;
         });
     
@@ -3967,7 +3959,7 @@ describe("JobConfigService", () => {
     
       it("should return zero counts when no job runs exist", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
-        const mockSeverityMessages = [];
+        const mockRawResults = [];
     
         jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
           return {
@@ -3993,8 +3985,10 @@ describe("JobConfigService", () => {
           return {
             select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
             orderBy: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+            addOrderBy: jest.fn().mockReturnThis(),
+            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
           } as any;
         });
     
@@ -4016,42 +4010,17 @@ describe("JobConfigService", () => {
       it("should deduplicate severity messages and keep the most recent timestamp", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
         const now = new Date();
-        const olderDate = new Date(now.getTime() - 5000);
         const newestDate = new Date(now.getTime() + 1000);
         
-        const mockSeverityMessages = [
+        // Mock the DISTINCT ON query result - already deduplicated by database
+        const mockRawResults = [
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Pod keycloak-0 is using more than 80% of its memory limit.' },
-                },
-                {
-                  annotations: { description: 'DB connection failure' },
-                },
-              ],
-            },
-            createdAt: now,
+            description: 'Pod keycloak-0 is using more than 80% of its memory limit.',
+            created_at: newestDate, // Latest timestamp for this message
           },
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Pod keycloak-0 is using more than 80% of its memory limit.' },
-                },
-              ],
-            },
-            createdAt: olderDate,
-          },
-          {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Pod keycloak-0 is using more than 80% of its memory limit.' },
-                },
-              ],
-            },
-            createdAt: newestDate,
+            description: 'DB connection failure',
+            created_at: now,
           },
         ];
 
@@ -4079,14 +4048,16 @@ describe("JobConfigService", () => {
           return {
             select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
             orderBy: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+            addOrderBy: jest.fn().mockReturnThis(),
+            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
           } as any;
         });
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
-        // Should have only 2 unique messages (duplicate "Pod keycloak-0" should be deduplicated)
+        // Should have only 2 unique messages (deduplication done by DISTINCT ON in DB)
         expect(result.severityMessages).toHaveLength(2);
         
         // The deduplicated message should have the newest timestamp
@@ -4104,54 +4075,25 @@ describe("JobConfigService", () => {
         expect(dbMessage?.timestamp).toEqual(now);
         
         // Should be sorted by timestamp (most recent first)
-        expect(result.severityMessages[0].timestamp >= result.severityMessages[1].timestamp).toBe(true);
+        expect(result.severityMessages[0].timestamp.getTime()).toBeGreaterThanOrEqual(
+          result.severityMessages[1].timestamp.getTime()
+        );
       });
 
       it("should return only 2 unique alerts when given 4 entries with 2 unique messages", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
         const baseTime = new Date('2026-01-28T10:00:00Z');
         
-        // Create 4 entries with only 2 unique messages
-        const mockSeverityMessages = [
+        // Mock the DISTINCT ON query result - database returns only unique descriptions with latest timestamps
+        // Simulates: DISTINCT ON (description) with ORDER BY description, created_at DESC
+        const mockRawResults = [
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'High memory usage detected' },
-                },
-              ],
-            },
-            createdAt: new Date(baseTime.getTime()),
+            description: 'Disk space running low',
+            created_at: new Date(baseTime.getTime() + 90000), // 1.5 minutes (latest)
           },
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'High memory usage detected' },
-                },
-              ],
-            },
-            createdAt: new Date(baseTime.getTime() + 60000), // 1 minute later (latest for this message)
-          },
-          {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Disk space running low' },
-                },
-              ],
-            },
-            createdAt: new Date(baseTime.getTime() + 30000), // 30 seconds later
-          },
-          {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Disk space running low' },
-                },
-              ],
-            },
-            createdAt: new Date(baseTime.getTime() + 90000), // 1.5 minutes later (latest for this message)
+            description: 'High memory usage detected',
+            created_at: new Date(baseTime.getTime() + 60000), // 1 minute (latest)
           },
         ];
 
@@ -4179,14 +4121,16 @@ describe("JobConfigService", () => {
           return {
             select: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
             orderBy: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
+            addOrderBy: jest.fn().mockReturnThis(),
+            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
           } as any;
         });
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
-        // VERIFY: Should have exactly 2 unique alerts from 4 entries
+        // VERIFY: Should have exactly 2 unique alerts (DISTINCT ON handles deduplication)
         expect(result.severityMessages).toHaveLength(2);
         
         // VERIFY: First unique message "Disk space running low" with latest timestamp (90000ms)
