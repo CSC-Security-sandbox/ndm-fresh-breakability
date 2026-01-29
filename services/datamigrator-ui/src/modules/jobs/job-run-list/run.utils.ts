@@ -54,15 +54,6 @@ export const getActionMenu = ({
           disabled: isDisabled,
         },
       ];
-    case JOB_STATUS_TYPE_ENUM.STOPPED:
-    case JOB_STATUS_TYPE_ENUM.ERRORED:
-      return [
-        {
-          label: "Start",
-          onClick: adhocRun,
-          disabled: isDisabled,
-        },
-      ];
     case JOB_STATUS_TYPE_ENUM.READY:
       return [
         {
