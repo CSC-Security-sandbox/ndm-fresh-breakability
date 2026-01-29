@@ -1334,25 +1334,24 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
-    // Use DISTINCT ON to get unique alerts with their latest timestamp directly from DB
+    // Use GROUP BY to get unique alerts with latest timestamp, sorted by timestamp
     const severityMessages = await this.syncEmailRepo
       .createQueryBuilder("syncEmail")
-      .select("DISTINCT ON (syncEmail.description) syncEmail.description AS description, syncEmail.createdAt AS created_at")
+      .select("syncEmail.description", "description")
+      .addSelect("MAX(syncEmail.createdAt)", "created_at")
       .where("syncEmail.incidentStatus = :status", {
         status: IncidentStatus.OPEN,
       })
       .andWhere("syncEmail.description IS NOT NULL")
-      .orderBy("syncEmail.description", "ASC")
-      .addOrderBy("syncEmail.createdAt", "DESC")
+      .groupBy("syncEmail.description")
+      .orderBy("created_at", "DESC")
       .getRawMany();
 
-    // Map to desired format and sort by timestamp (most recent first)
-    const severityMessagesWithTimestamps = severityMessages
-      .map((row) => ({
-        message: row.description,
-        timestamp: new Date(row.created_at),
-      }))
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    // Map to desired format (already sorted by database)
+    const severityMessagesWithTimestamps = severityMessages.map((row) => ({
+      message: row.description,
+      timestamp: new Date(row.created_at),
+    }));
 
     this.logger.debug(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}`

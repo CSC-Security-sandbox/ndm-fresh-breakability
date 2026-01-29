@@ -3928,16 +3928,23 @@ describe("JobConfigService", () => {
             } as any;
           });
 
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            andWhere: jest.fn().mockReturnThis(),
-            orderBy: jest.fn().mockReturnThis(),
-            addOrderBy: jest.fn().mockReturnThis(),
-            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
@@ -3981,16 +3988,23 @@ describe("JobConfigService", () => {
             } as any;
           });
     
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            andWhere: jest.fn().mockReturnThis(),
-            orderBy: jest.fn().mockReturnThis(),
-            addOrderBy: jest.fn().mockReturnThis(),
-            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
@@ -4044,16 +4058,23 @@ describe("JobConfigService", () => {
             } as any;
           });
 
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            andWhere: jest.fn().mockReturnThis(),
-            orderBy: jest.fn().mockReturnThis(),
-            addOrderBy: jest.fn().mockReturnThis(),
-            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
@@ -4117,16 +4138,23 @@ describe("JobConfigService", () => {
             } as any;
           });
 
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            andWhere: jest.fn().mockReturnThis(),
-            orderBy: jest.fn().mockReturnThis(),
-            addOrderBy: jest.fn().mockReturnThis(),
-            getRawMany: jest.fn().mockResolvedValue(mockRawResults),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
