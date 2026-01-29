@@ -84,7 +84,7 @@ jobs:
       - name: Generate SAS URLs via SSH
         id: generate-sas
         env:
-          SSH_HOST: ${{ vars.SAS_SSH_HOST }}
+          SSH_HOST: ${{ vars.AZURE_VM_HOST }}
           SSH_USER: 'ubuntu'
           SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
           STORAGE_ACCOUNT_KEY: ${{ secrets.SAS_AZURE_STORAGE_ACCOUNT_KEY }}
@@ -104,7 +104,7 @@ jobs:
           SAS_EXPIRY=$(date -u -d "+${EXPIRY_DAYS} days" +"%Y-%m-%dT%H:%MZ")
           
           echo "Generating SAS URL for Control Plane VHD..."
-          CP_URL=$(az storage blob generate-sas \
+          CP_URL=$(sudo az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -115,7 +115,7 @@ jobs:
             --output tsv)
           
           echo "Generating SAS URL for Linux Worker VHD..."
-          LINUX_WORKER_URL=$(az storage blob generate-sas \
+          LINUX_WORKER_URL=$(sudo az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -126,7 +126,7 @@ jobs:
             --output tsv)
           
           echo "Generating SAS URL for Windows Worker Installer..."
-          WINDOWS_WORKER_URL=$(az storage blob generate-sas \
+          WINDOWS_WORKER_URL=$(sudo az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -173,7 +173,7 @@ jobs:
       - name: Clean up remote script
         if: always()
         env:
-          SSH_HOST: ${{ vars.SAS_SSH_HOST }}
+          SSH_HOST: ${{ vars.AZURE_VM_HOST }}
           SSH_USER: 'ubuntu'
           SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
         run: |

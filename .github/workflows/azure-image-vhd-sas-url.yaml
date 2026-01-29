@@ -130,9 +130,36 @@ jobs:
           echo "Branch suffix for blob naming: $BRANCH_SUFFIX"
 
       - name: SSH into VM and Export VHDs
+        env:
+            AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+            AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
         run: |
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
+
+          if ! command -v az &> /dev/null; then
+            echo "Installing Azure CLI..."
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+
+          # Azure Authentication on Remote VM
+          echo "Authenticating to Azure on remote VM..."
           
+          # Login using Service Principal
+          sudo az login --service-principal \
+            --username "${{ env.AZURE_CLIENT_ID }}" \
+            --password "${{ env.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ env.AZURE_TENANT_ID }}" \
+            --output none
+          
+          # Set subscription
+          sudo az account set --subscription "${{ env.AZURE_SUBSCRIPTION_ID }}"
+          
+          # Verify authentication
+          echo "Azure authentication successful on remote VM"
+          sudo az account show --query "{Name:name, SubscriptionId:id}" -o table
+           
           export SOURCE_RESOURCE_GROUP="${{ env.SOURCE_RESOURCE_GROUP }}"
           export SOURCE_STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
           export SOURCE_CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
@@ -198,6 +225,9 @@ jobs:
 
             local sas_seconds=$(( ${SAS_DURATION_HOURS} * 3600 ))
 
+            echo "DEBUG: Running command: az disk grant-access --resource-group $SOURCE_RESOURCE_GROUP --name $disk_name --access-level Read --duration-in-seconds $sas_seconds"
+            
+
             
             DISK_SAS=$(sudo az disk grant-access \
               --resource-group "$SOURCE_RESOURCE_GROUP" \
@@ -205,7 +235,27 @@ jobs:
               --access-level Read \
               --duration-in-seconds $sas_seconds \
               --query accessSAS -o tsv)
+            DISK_SAS_EXIT=$?
+            echo "DEBUG: Disk grant-access exit code: $DISK_SAS_EXIT"
             
+            if [ $DISK_SAS_EXIT -ne 0 ]; then
+              echo "ERROR: Failed to grant disk access"
+              echo "Error output: $DISK_SAS_OUTPUT"
+              return 1
+            fi
+            
+            echo "DEBUG: DISK_SAS value: $DISK_SAS"
+            echo "DEBUG: DISK_SAS length: ${#DISK_SAS}"
+            
+            echo "DEBUG: Running blob copy command:"
+            echo "sudo az storage blob copy start \\"
+            echo "  --source-uri \"${DISK_SAS:0:80}...\" \\"
+            echo "  --destination-blob \"${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd\" \\"
+            echo "  --destination-container \"$SOURCE_CONTAINER_NAME\" \\"
+            echo "  --account-name \"$SOURCE_STORAGE_ACCOUNT\" \\"
+            echo "  --account-key \"[MASKED]\" \\"
+            echo "  --output none"
+
             sudo az storage blob copy start \
               --source-uri "$DISK_SAS" \
               --destination-blob "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
@@ -302,8 +352,52 @@ jobs:
           # Mount blob storage with blobfuse2 and generate SHA256 checksums
           echo "Mounting blob storage with blobfuse2..."
           
+          # Install blobfuse2 if not already installed
+          if ! command -v blobfuse2 &> /dev/null; then
+            echo "Installing blobfuse2..."
+            
+            # Install dependencies
+            sudo apt-get update -qq
+            sudo apt-get install -y wget fuse3 libfuse2 || {
+              echo "WARNING: Failed to install dependencies, continuing anyway..."
+            }
+            
+            # Download blobfuse2 (try multiple versions for compatibility)
+            cd /tmp
+            UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
+            echo "Detected Ubuntu version: $UBUNTU_VERSION"
+            
+            # Try to download the appropriate version
+            DOWNLOADED=false
+            
+            if wget -q "https://github.com/Azure/azure-storage-fuse/releases/download/blobfuse2-2.5.2/blobfuse2-2.5.2-Ubuntu-22.04.x86_64.deb" -O blobfuse2.deb 2>/dev/null; then
+              DOWNLOADED=true
+            fi
+            
+            if [ "$DOWNLOADED" = true ] && [ -f blobfuse2.deb ]; then
+              echo "Installing blobfuse2 package..."
+              sudo dpkg -i blobfuse2.deb || sudo apt-get install -f -y
+              rm -f blobfuse2.deb
+            else
+              echo "ERROR: Failed to download blobfuse2 package"
+              echo "Please install blobfuse2 manually or check network connectivity"
+              exit 1
+            fi
+            
+            # Verify installation
+            if command -v blobfuse2 &> /dev/null; then
+              echo "blobfuse2 installed successfully: $(blobfuse2 --version)"
+            else
+              echo "ERROR: blobfuse2 installation verification failed"
+              exit 1
+            fi
+          else
+            echo "blobfuse2 is already installed: $(blobfuse2 --version)"
+          fi
+          
           # Ensure any existing mount is unmounted first to avoid "directory is already mounted" error
           echo "Checking for existing mount at /mnt/azureblob..."
+          
           if mountpoint -q /mnt/azureblob 2>/dev/null; then
             echo "Directory is currently mounted, unmounting..."
             sudo umount /mnt/azureblob
