@@ -13,7 +13,7 @@ import (
 )
 
 // just create empty volume one for src and one for dest
-var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without SID mapping", func() {
+var _ = FDescribe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without SID mapping", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB permissions is skipped in CI/CD as it is not supported in NFS")
