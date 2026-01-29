@@ -668,10 +668,10 @@ export class PathUploadService {
         `Revalidating ${volumes.length} export paths for file server ${fileServerId}`,
       );
 
-      // Reset validation status before revalidation
+      // Reset validation status before revalidation (set to false, not null due to DB constraint)
       await this.volumeRepo.update(
         { id: In(volumes.map((v) => v.id)) },
-        { isValid: null },
+        { isValid: false },
       );
 
       const startWorkFlowPayload: StartWorkFlowPayload = {
