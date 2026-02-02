@@ -62,6 +62,12 @@ on:
         description: 'SAS URL for Windows Worker installer'
         value: ${{ jobs.generate-sas-urls.outputs.windows_worker_url }}
 
+env:
+  VM_RESOURCE_GROUP: ${{ vars.VM_RESOURCE_GROUP || 'MigrationAsAService-dev-infra' }}
+  VM_VNET_NAME: ${{ vars.VM_VNET_NAME || 'MigrationAsAService-dev-VNET02' }}
+  VM_SUBNET_NAME: ${{ vars.VM_SUBNET_NAME || 'MigrationAsAService-dev-VNET02_Subnet01' }}
+  VM_SIZE: ${{ vars.VM_SIZE || 'Standard_D2s_v4' }}
+
 jobs:
   generate-sas-urls:
     runs-on: openlab
@@ -71,20 +77,186 @@ jobs:
       control_plane_url: ${{ steps.generate-sas.outputs.control_plane_url }}
       linux_worker_url: ${{ steps.generate-sas.outputs.linux_worker_url }}
       windows_worker_url: ${{ steps.generate-sas.outputs.windows_worker_url }}
+      vm_name: ${{ steps.create-vm.outputs.vm_name }}
+      vm_ip: ${{ steps.create-vm.outputs.vm_ip }}
+      vm_resource_group: ${{ steps.create-vm.outputs.vm_resource_group }}
+      vm_nic_name: ${{ steps.create-vm.outputs.vm_nic_name }}
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install SSH client
+      - name: Install Azure CLI and SSH Tools
         run: |
           # sudo apt-get update
-          sudo apt-get install -y sshpass
+          sudo apt-get install -y sshpass openssh-client
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+
+      - name: Authenticate to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID" \
+            --output none
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+      - name: Create Dynamic Azure VM
+        id: create-vm
+        env:
+          VM_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          VM_NAME="sas-gen-vm-${TIMESTAMP}"
+          RESOURCE_GROUP="${{ env.VM_RESOURCE_GROUP }}"
+          VNET_NAME="${{ env.VM_VNET_NAME }}"
+          SUBNET_NAME="${{ env.VM_SUBNET_NAME }}"
+          VM_SIZE="${{ env.VM_SIZE }}"
+          
+          echo "Creating VM: $VM_NAME"
+          echo "Resource Group: $RESOURCE_GROUP"
+          echo "VNet: $VNET_NAME"
+          echo "Subnet: $SUBNET_NAME"
+          
+          # Get VNet location
+          VNET_LOCATION=$(az network vnet show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VNET_NAME" \
+            --query location -o tsv)
+          
+          if [ -z "$VNET_LOCATION" ]; then
+            echo "ERROR: VNet $VNET_NAME not found in resource group $RESOURCE_GROUP"
+            exit 1
+          fi
+          
+          # Get subnet ID
+          SUBNET_ID=$(az network vnet subnet show \
+            --resource-group "$RESOURCE_GROUP" \
+            --vnet-name "$VNET_NAME" \
+            --name "$SUBNET_NAME" \
+            --query id -o tsv)
+          
+          if [ -z "$SUBNET_ID" ]; then
+            echo "ERROR: Subnet $SUBNET_NAME not found in VNet $VNET_NAME"
+            exit 1
+          fi
+          
+          # Create NIC with private IP only
+          NIC_NAME="${VM_NAME}-nic"
+          az network nic create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NIC_NAME" \
+            --location "$VNET_LOCATION" \
+            --vnet-name "$VNET_NAME" \
+            --subnet "$SUBNET_NAME" \
+            --output none
+          
+          # Create VM
+          az vm create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --image "Canonical:0001-com-ubuntu-server-jammy:22_04-lts-gen2:latest" \
+            --size "$VM_SIZE" \
+            --admin-username "ubuntu" \
+            --admin-password "$VM_PASSWORD" \
+            --nics "$NIC_NAME" \
+            --location "$VNET_LOCATION" \
+            --os-disk-caching ReadWrite \
+            --storage-sku Standard_LRS \
+            --output none
+
+          # Wait for VM to be fully provisioned
+          echo "Waiting for VM to be provisioned..."
+          for i in {1..30}; do
+            VM_STATE=$(az vm show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$VM_NAME" \
+              --query "provisioningState" -o tsv 2>/dev/null || echo "Unknown")
+            
+            if [ "$VM_STATE" = "Succeeded" ]; then
+              echo "VM provisioning completed"
+              break
+            fi
+            echo "VM provisioning state: $VM_STATE (attempt $i/30), waiting 5 seconds..."
+            sleep 5
+          done
+          
+          # Wait for NIC to get private IP assigned
+          echo "Waiting for NIC to get private IP assigned..."
+          VM_PRIVATE_IP=""
+          for i in {1..30}; do
+            VM_PRIVATE_IP=$(az network nic show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$NIC_NAME" \
+              --query ipConfigurations[0].privateIPAddress -o tsv 2>/dev/null || echo "")
+            
+            if [ -n "$VM_PRIVATE_IP" ] && [ "$VM_PRIVATE_IP" != "None" ]; then
+              echo "Private IP assigned: $VM_PRIVATE_IP"
+              break
+            fi
+            echo "Private IP not yet assigned (attempt $i/30), waiting 5 seconds..."
+            sleep 5
+          done
+          
+          if [ -z "$VM_PRIVATE_IP" ] || [ "$VM_PRIVATE_IP" = "None" ]; then
+            echo "ERROR: Failed to get VM private IP after 150 seconds"
+            exit 1
+          fi
+          
+          echo "VM created successfully"
+          echo "VM Name: $VM_NAME"
+          echo "VM Private IP: $VM_PRIVATE_IP"
+          
+          # Wait for VM to be ready (SSH accessible)
+          echo "Waiting for VM to be ready..."
+          for i in {1..30}; do
+            if sshpass -p "$VM_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+               -o UserKnownHostsFile=/dev/null ubuntu@"$VM_PRIVATE_IP" "echo 'VM is ready'" 2>/dev/null; then
+              echo "VM is ready!"
+              break
+            fi
+            echo "Attempt $i/30: VM not ready yet, waiting 10 seconds..."
+            sleep 10
+          done
+          
+          # Set outputs
+          echo "vm_name=$VM_NAME" >> $GITHUB_OUTPUT
+          echo "vm_ip=$VM_PRIVATE_IP" >> $GITHUB_OUTPUT
+          echo "vm_resource_group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+          echo "vm_nic_name=$NIC_NAME" >> $GITHUB_OUTPUT
+          
+          # Add to known_hosts
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "$VM_PRIVATE_IP" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Install Azure CLI on VM
+        env:
+          SSH_HOST: ${{ steps.create-vm.outputs.vm_ip }}
+          SSH_USER: 'ubuntu'
+          SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+        run: |
+          sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no \
+            ${SSH_USER}@${SSH_HOST} "
+            if ! command -v az &> /dev/null; then
+              echo 'Installing Azure CLI...'
+              curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+            fi
+            az --version | head -1
+          "
 
       - name: Generate SAS URLs via SSH
         id: generate-sas
         env:
-          SSH_HOST: ${{ vars.AZURE_VM_HOST }}
+          SSH_HOST: ${{ steps.create-vm.outputs.vm_ip }}
           SSH_USER: 'ubuntu'
           SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
           STORAGE_ACCOUNT_KEY: ${{ secrets.SAS_AZURE_STORAGE_ACCOUNT_KEY }}
@@ -173,12 +345,12 @@ jobs:
       - name: Clean up remote script
         if: always()
         env:
-          SSH_HOST: ${{ vars.AZURE_VM_HOST }}
+          SSH_HOST: ${{ steps.create-vm.outputs.vm_ip }}
           SSH_USER: 'ubuntu'
           SSH_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
         run: |
           sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no \
-            ${SSH_USER}@${SSH_HOST} "rm -f /tmp/generate_sas.sh"
+            ${SSH_USER}@${SSH_HOST} "rm -f /tmp/generate_sas.sh" || true
 
       - name: Display SAS URLs
         env:
@@ -238,3 +410,54 @@ jobs:
           name: vhd-sas-urls-${{ github.run_number }}
           path: vhd-urls/
           retention-days: 10
+
+  cleanup-vm:
+    needs: generate-sas-urls
+    if: always()  # Run even if previous job fails
+    runs-on: openlab
+    steps:
+      - name: Install Azure CLI
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+
+      - name: Authenticate to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID" \
+            --output none
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+      - name: Delete Dynamic VM
+        if: needs.generate-sas-urls.outputs.vm_name != ''
+        env:
+          VM_NAME: ${{ needs.generate-sas-urls.outputs.vm_name }}
+          RESOURCE_GROUP: ${{ needs.generate-sas-urls.outputs.vm_resource_group }}
+          NIC_NAME: ${{ needs.generate-sas-urls.outputs.vm_nic_name }}
+        run: |
+          echo "Deleting VM: $VM_NAME"
+          az vm delete \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --yes \
+            --output none || echo "VM deletion failed or already deleted"
+          
+          # Clean up associated NIC
+          if [ -n "$NIC_NAME" ]; then
+            echo "Deleting NIC: $NIC_NAME"
+            az network nic delete \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$NIC_NAME" \
+              --output none || echo "NIC deletion failed or already deleted"
+          fi
+          
+          echo "VM cleanup completed"
+        continue-on-error: true  # Don't fail workflow if cleanup fails
