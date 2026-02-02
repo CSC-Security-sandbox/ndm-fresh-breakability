@@ -30,7 +30,7 @@ const Options = () => {
     <FormFrame>
       <Box className="p-6 flex">
         <Box className="w-3/6 flex flex-col gap-10">
-          <Box className="flex gap-1 items-center">
+          <Box className="flex gap-2 items-center">
             <Toggle name="preserve_a_time" form={optionForm}>
               Preserve a-time
             </Toggle>
@@ -39,25 +39,27 @@ const Options = () => {
             </Popover>
           </Box>
           <MigrateFileOption />
-          <Box className="flex flex-col gap-1">
-            <Box className="flex gap-1 items-center mb-2">
+          <Box className="w-5/6 flex flex-col gap-1">
+            <Box className="flex gap-2 items-center mb-1">
               <Text>Skip Files modified in last</Text>
               <Popover placement="right" verticalPlacement="center">
                 Skip Files that are recently modified to avoid the need to
                 migrate multiple times. These will be migrated during cutover.
               </Popover>
             </Box>
-            <Box className="flex gap-2 pr-5">
+            <Box className="flex gap-2">
               <FormFieldInputNew
                 form={optionForm}
                 name="skipFileNum"
                 placeholder="Number e.g. 10"
+                className="!mb-0"
               />
-              <Box className="w-40">
+              <Box className="w-52">
                 <FormFieldSelect
                   name="skipFileOption"
                   form={optionForm}
                   options={SKIP_FILE_OPTIONS}
+                  className="!mb-0"
                 />
               </Box>
             </Box>
@@ -82,6 +84,7 @@ const Options = () => {
               label="Upload GID / UID Mapping"
               name="upload_uid_mapping"
               placeholder="Choose a file"
+              className="!mb-0"
               labelChildren={
                 <Box className="flex gap-1 items-center">
                   <Button
@@ -111,6 +114,7 @@ const Options = () => {
               label="Upload SID Mapping"
               name="upload_sid_mapping"
               placeholder="Choose a file"
+              className="!mb-0"
               labelChildren={
                 <Box className="flex gap-1 items-center">
                   <Button

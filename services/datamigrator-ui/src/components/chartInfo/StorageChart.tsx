@@ -60,7 +60,7 @@ const StorageChart = ({
       </Box>
       <Box className="flex gap-4 w-full flex-wrap">
         <LegendWrapper
-          title="Discoverd"
+          title="Discovered"
           value={totalDiscoveredSizeInDigit}
           color="bg-yellow-500"
           unit={unit}

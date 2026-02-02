@@ -8,8 +8,8 @@ import { useContext } from "react";
 const MigrateFileOption = () => {
   const { optionForm } = useContext(BulkMigrateContext);
   return (
-    <Box className="w-4/6">
-      <Box className="flex gap-1 items-center mb-2">
+    <Box className="w-5/6">
+      <Box className="flex gap-2 items-center mb-1">
         <Text>Migrate File</Text>
         <Popover placement="right" verticalPlacement="center">
           Migrate all files or exclude files older than date?

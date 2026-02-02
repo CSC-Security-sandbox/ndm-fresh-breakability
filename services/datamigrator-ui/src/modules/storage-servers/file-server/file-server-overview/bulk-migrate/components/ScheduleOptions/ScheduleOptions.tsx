@@ -69,75 +69,16 @@ const ScheduleOptions = () => {
       {optionForm.formState.incremental_sync_schedule_set ===
         INCREMENTAL_SYNC_SCHEDULE_SET_ENUM.WEEKLY && (
         <Box className="flex flex-col mt-3">
-          <RadioButton
-            form={optionForm}
-            name="incremental_sync_schedule_weekly"
-            value={INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY}
-          >
-            <Box className="flex w-full items-baseline gap-2 pt-4">
-              <Box>Day</Box>
-              <FormFieldSelect
-                name="incremental_sync_schedule_weekly_day"
-                form={optionForm}
-                options={DOW_OPTIONS}
-                placeholder="1"
-                style={{ width: 100 }}
-                disabled={
-                  optionForm.formState.incremental_sync_schedule_weekly ===
-                  INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.WEEKDAY
-                }
-              />
-              <Box>of every Week</Box>
-              {/* TODO: Following part is not supported as cron expression, check for backend solution */}
-              {/* <Box>of every</Box>
-              <FormFieldSelect
-                name="incremental_sync_schedule_weekly_day_week"
-                form={optionForm}
-                options={WEEK_OPTIONS}
-                placeholder="1"
-                style={{ width: 100 }}
-                disabled={
-                  optionForm.formState.incremental_sync_schedule_weekly ===
-                  INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.WEEKDAY
-                }
-              />
-              <Box>week(s)</Box> */}
-            </Box>
-          </RadioButton>
-          <RadioButton
-            form={optionForm}
-            name="incremental_sync_schedule_weekly"
-            value={INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.WEEKDAY}
-          >
+          <Text>Select day of the week:</Text>
             <Box className="flex w-full items-baseline gap-2 pt-4">
               <FormFieldSelect
                 name="incremental_sync_schedule_weekly_weekday"
                 form={optionForm}
                 options={WEEKDAY_OPTIONS}
-                placeholder="weekday"
+                placeholder="Select weekday"
                 style={{ width: 150 }}
-                disabled={
-                  optionForm.formState.incremental_sync_schedule_weekly ===
-                  INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY
-                }
               />
-              <Box>of every Week</Box>
-              {/* TODO: Following part is not supported as cron expression, check for backend solution */}
-              {/* <Text>of every</Text>
-              <FormFieldSelect
-                name="incremental_sync_schedule_weekly_weekday_week"
-                form={optionForm}
-                options={WEEK_OPTIONS}
-                placeholder="1"
-                style={{ width: 100 }}
-                disabled={
-                  optionForm.formState.incremental_sync_schedule_weekly ===
-                  INCREMENTAL_SYNC_SCHEDULE_SET_WEEKLY_ENUM.DAY
-                }
-              />
-              <Text>week(s)</Text> */}
             </Box>
-          </RadioButton>
         </Box>
       )}
     </Box>

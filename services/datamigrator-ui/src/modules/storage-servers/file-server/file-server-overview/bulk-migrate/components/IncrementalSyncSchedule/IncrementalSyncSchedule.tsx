@@ -58,7 +58,7 @@ const IncrementalSyncSchedule = ({
   if(variant === "normal_run") {
     return (
       <Box className="w-5/6">
-        <Box className="flex gap-1 items-center mb-2">
+        <Box className="flex gap-2 items-center mb-2">
           <Text>Incremental sync schedule</Text>
           <Popover placement="right" verticalPlacement="center">
             Option to turn on incremental migrations, either by a schedule or with
