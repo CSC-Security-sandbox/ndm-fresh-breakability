@@ -3890,24 +3890,17 @@ describe("JobConfigService", () => {
       
       it("should return correct counts for different job statuses", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
-        const mockSeverityMessages = [
+        const now = new Date();
+        
+        // Mock DISTINCT ON query result - already deduplicated by database
+        const mockRawResults = [
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'Pod crash in default namespace' },
-                },
-              ],
-            },
+            description: 'Pod crash in default namespace',
+            created_at: now,
           },
           {
-            mailContent: {
-              alerts: [
-                {
-                  annotations: { description: 'DB connection failure' },
-                },
-              ],
-            },
+            description: 'DB connection failure',
+            created_at: new Date(now.getTime() - 1000),
           },
         ];
 
@@ -3935,13 +3928,23 @@ describe("JobConfigService", () => {
             } as any;
           });
 
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
@@ -3951,8 +3954,8 @@ describe("JobConfigService", () => {
           countRecentJobConfigs: 4,
           countCompletedJobRuns: 5,
           severityMessages: [
-            "Pod crash in default namespace",
-            "DB connection failure",
+            { message: "Pod crash in default namespace", timestamp: now },
+            { message: "DB connection failure", timestamp: new Date(now.getTime() - 1000) },
           ],
         });
     
@@ -3963,7 +3966,7 @@ describe("JobConfigService", () => {
     
       it("should return zero counts when no job runs exist", async () => {
         const projectId = "123e4567-e89b-12d3-a456-426614174000";
-        const mockSeverityMessages = [];
+        const mockRawResults = [];
     
         jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
           return {
@@ -3985,13 +3988,23 @@ describe("JobConfigService", () => {
             } as any;
           });
     
-        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => {
-          return {
-            select: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            getMany: jest.fn().mockResolvedValue(mockSeverityMessages),
-          } as any;
-        });
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
     
         const result = await service.getNoticeBoardDetailsByProjectId(projectId);
     
@@ -4000,12 +4013,178 @@ describe("JobConfigService", () => {
           countBlockedCutoverJobRuns: 0,
           countRecentJobConfigs: 0,
           countCompletedJobRuns: 0,
-          severityMessages: mockSeverityMessages,
+          severityMessages: [],
         });
     
         expect(jobRunRepo.createQueryBuilder).toHaveBeenCalledTimes(3);
         expect(jobConfigRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
         expect(syncEmailRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      });
+
+      it("should deduplicate severity messages and keep the most recent timestamp", async () => {
+        const projectId = "123e4567-e89b-12d3-a456-426614174000";
+        const now = new Date();
+        const newestDate = new Date(now.getTime() + 1000);
+        
+        // Mock the DISTINCT ON query result - already deduplicated by database
+        const mockRawResults = [
+          {
+            description: 'Pod keycloak-0 is using more than 80% of its memory limit.',
+            created_at: newestDate, // Latest timestamp for this message
+          },
+          {
+            description: 'DB connection failure',
+            created_at: now,
+          },
+        ];
+
+        jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(0),
+          } as any;
+        });
+
+        jest
+          .spyOn(jobConfigRepo, "createQueryBuilder")
+          .mockImplementation(() => {
+            return {
+              innerJoin: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              getCount: jest.fn().mockResolvedValue(0),
+            } as any;
+          });
+
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
+        // Should have only 2 unique messages (deduplication done by DISTINCT ON in DB)
+        expect(result.severityMessages).toHaveLength(2);
+        
+        // The deduplicated message should have the newest timestamp
+        const keycloakMessage = result.severityMessages.find(
+          m => m.message === 'Pod keycloak-0 is using more than 80% of its memory limit.'
+        );
+        expect(keycloakMessage).toBeDefined();
+        expect(keycloakMessage?.timestamp).toEqual(newestDate);
+        
+        // The other message should be present
+        const dbMessage = result.severityMessages.find(
+          m => m.message === 'DB connection failure'
+        );
+        expect(dbMessage).toBeDefined();
+        expect(dbMessage?.timestamp).toEqual(now);
+        
+        // Should be sorted by timestamp (most recent first)
+        expect(result.severityMessages[0].timestamp.getTime()).toBeGreaterThanOrEqual(
+          result.severityMessages[1].timestamp.getTime()
+        );
+      });
+
+      it("should return only 2 unique alerts when given 4 entries with 2 unique messages", async () => {
+        const projectId = "123e4567-e89b-12d3-a456-426614174000";
+        const baseTime = new Date('2026-01-28T10:00:00Z');
+        
+        // Mock the DISTINCT ON query result - database returns only unique descriptions with latest timestamps
+        // Simulates: DISTINCT ON (description) with ORDER BY description, created_at DESC
+        const mockRawResults = [
+          {
+            description: 'Disk space running low',
+            created_at: new Date(baseTime.getTime() + 90000), // 1.5 minutes (latest)
+          },
+          {
+            description: 'High memory usage detected',
+            created_at: new Date(baseTime.getTime() + 60000), // 1 minute (latest)
+          },
+        ];
+
+        jest.spyOn(jobRunRepo, "createQueryBuilder").mockImplementation(() => {
+          return {
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getCount: jest.fn().mockResolvedValue(0),
+          } as any;
+        });
+
+        jest
+          .spyOn(jobConfigRepo, "createQueryBuilder")
+          .mockImplementation(() => {
+            return {
+              innerJoin: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              getCount: jest.fn().mockResolvedValue(0),
+            } as any;
+          });
+
+        const mockQueryBuilder = {
+          select: jest.fn(),
+          addSelect: jest.fn(),
+          where: jest.fn(),
+          andWhere: jest.fn(),
+          groupBy: jest.fn(),
+          orderBy: jest.fn(),
+          getRawMany: jest.fn().mockResolvedValue(mockRawResults),
+        };
+        mockQueryBuilder.select.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+        mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
+
+        (syncEmailRepo.createQueryBuilder as jest.Mock).mockImplementation(() => mockQueryBuilder);
+    
+        const result = await service.getNoticeBoardDetailsByProjectId(projectId);
+    
+        // VERIFY: Should have exactly 2 unique alerts (DISTINCT ON handles deduplication)
+        expect(result.severityMessages).toHaveLength(2);
+        
+        // VERIFY: First unique message "Disk space running low" with latest timestamp (90000ms)
+        const diskSpaceAlert = result.severityMessages.find(
+          m => m.message === 'Disk space running low'
+        );
+        expect(diskSpaceAlert).toBeDefined();
+        expect(diskSpaceAlert?.timestamp).toEqual(new Date(baseTime.getTime() + 90000));
+        
+        // VERIFY: Second unique message "High memory usage detected" with latest timestamp (60000ms)
+        const memoryAlert = result.severityMessages.find(
+          m => m.message === 'High memory usage detected'
+        );
+        expect(memoryAlert).toBeDefined();
+        expect(memoryAlert?.timestamp).toEqual(new Date(baseTime.getTime() + 60000));
+        
+        // VERIFY: Both messages are present and no duplicates
+        const messages = result.severityMessages.map(m => m.message);
+        expect(messages).toContain('High memory usage detected');
+        expect(messages).toContain('Disk space running low');
+        expect(new Set(messages).size).toBe(2); // Ensure no duplicates
+        
+        // VERIFY: Results are sorted by timestamp (most recent first)
+        expect(result.severityMessages[0].timestamp.getTime()).toBeGreaterThan(
+          result.severityMessages[1].timestamp.getTime()
+        );
       });
     });
 

@@ -1334,20 +1334,24 @@ export class JobConfigService {
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
+    // Use GROUP BY to get unique alerts with latest timestamp, sorted by timestamp
     const severityMessages = await this.syncEmailRepo
       .createQueryBuilder("syncEmail")
-      .select("syncEmail.mailContent")
+      .select("syncEmail.description", "description")
+      .addSelect("MAX(syncEmail.createdAt)", "created_at")
       .where("syncEmail.incidentStatus = :status", {
         status: IncidentStatus.OPEN,
       })
-      .getMany();
+      .andWhere("syncEmail.description IS NOT NULL")
+      .groupBy("syncEmail.description")
+      .orderBy("created_at", "DESC")
+      .getRawMany();
 
-    const severityMessagesDescriptions = severityMessages?.flatMap(
-      (entry) =>
-        (entry?.mailContent?.alerts ?? [])
-          .map((alert) => alert?.annotations?.description)
-          .filter(Boolean) || []
-    );
+    // Map to desired format (already sorted by database)
+    const severityMessagesWithTimestamps = severityMessages.map((row) => ({
+      message: row.description,
+      timestamp: new Date(row.created_at),
+    }));
 
     this.logger.debug(
       `countErroredJobRuns - ${JSON.stringify(countErroredJobRuns)}`
@@ -1366,7 +1370,7 @@ export class JobConfigService {
     );
 
     this.logger.debug(
-      `severityMessages - ${severityMessagesDescriptions?.length}`
+      `severityMessages - Unique alerts: ${severityMessagesWithTimestamps?.length}`
     );
 
     return {
@@ -1374,7 +1378,7 @@ export class JobConfigService {
       countBlockedCutoverJobRuns,
       countRecentJobConfigs,
       countCompletedJobRuns,
-      severityMessages: severityMessagesDescriptions,
+      severityMessages: severityMessagesWithTimestamps,
     };
   }
 

@@ -1,9 +1,14 @@
+export interface SeverityMessage {
+  message: string;
+  timestamp: Date;
+}
+
 export interface NoticeBoardDetailsType {
   countErroredJobRuns: number;
   countBlockedCutoverJobRuns: number;
   countRecentJobConfigs: number;
   countCompletedJobRuns: number;
-  severityMessages: string[];
+  severityMessages: SeverityMessage[] | string[]; // Support both new and legacy formats
 }
 
 export interface NotificationsTileType {
