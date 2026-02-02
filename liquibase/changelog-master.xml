@@ -548,4 +548,11 @@
       </rollback>
    </changeSet>
    
+
+   <changeSet id="20251120_01_alter_inventory_table_add_checksum_time_column.sql" author="jeevitha">
+      <sqlFile path="liquibase/20251120_01_alter_inventory_table_add_checksum_time_column.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/rollback/20251120_01_alter_inventory_table_add_checksum_time_column_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>

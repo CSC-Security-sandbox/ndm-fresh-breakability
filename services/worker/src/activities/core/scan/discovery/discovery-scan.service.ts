@@ -125,7 +125,8 @@ export class DiscoveryScanService {
             sourceMeta,
             fileSize,
             stats.ino,
-            false
+            false,
+            null // checksumTime is null for discovery scan (no checksum generated)
         );
         return itemInfo;
 

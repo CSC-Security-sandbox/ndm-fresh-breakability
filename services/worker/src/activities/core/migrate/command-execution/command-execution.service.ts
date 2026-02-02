@@ -142,13 +142,15 @@ export class CommandExecService {
                 const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
                 });
 
+                // Capture the timestamp when checksum was generated
+                const checksumTime = new Date();
 
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
-                    command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
+                    command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums, checksumTime } };
                     throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
                 }
-                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
+                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums, checksumTime } };
                 output.shouldStampMeta = true;
             }catch(error){
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
@@ -305,6 +307,7 @@ export class CommandExecService {
                 0, 
                 command.metadata?.inode ?? 0,
                 true, 
+                null // checksumTime is null for delete operations
             );
     
             await jobContext.publishToFileStream(itemInfo);
@@ -316,6 +319,11 @@ export class CommandExecService {
             fs.promises.lstat(sourcePath),
             fs.promises.lstat(targetPath),
         ]);
+
+        // Capture checksum timestamp - when the checksum was generated during file copy
+        const checksumTime = command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksumTime 
+            ? new Date(command.ops[OPS_CMD.COPY_FILE].params.checksumTime) 
+            : null;
 
         const sourceMeta: ItemMeta = {
             accessTime: sourceStats.atime,
@@ -352,6 +360,7 @@ export class CommandExecService {
             targetStats.size,
             command.metadata.inode,
             false, // isDeleted is false for copy operations
+            checksumTime // checksum generated timestamp
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});

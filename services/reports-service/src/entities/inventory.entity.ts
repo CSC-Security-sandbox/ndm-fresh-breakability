@@ -104,4 +104,8 @@ export class InventoryEntity extends Base {
   })
   @JoinColumn({ name: "volume_id" })
   volume: VolumeEntity;
+
+  @ApiProperty({ description: "Checksum generated timestamp" })
+  @Column({ name: "checksum_time", type: "timestamp", nullable: true })
+  checksumTime: Timestamp;
 }

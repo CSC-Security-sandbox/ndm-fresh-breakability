@@ -192,7 +192,8 @@ export const generateDummyItemEntry: ItemInfo = new ItemInfo(
   }, // targeMeta
   2048, // size
   0,
-  false 
+  false,
+  null // checksumTime
 );
 
 export const generateDummyTaskEntry: Task = new Task('8840625a-b818-42a8-98c8-5c05aaa19106', '', TaskType.MIGRATE, TaskStatus.ERRORED, '', '', '', [], '', '', '');

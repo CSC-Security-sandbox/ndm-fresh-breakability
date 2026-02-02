@@ -107,4 +107,8 @@ export class InventoryEntity {
     @ApiProperty({ description: 'Is file deleted' })
     @Column({ name: 'is_deleted', type: 'boolean', default: false })
     isDeleted: boolean;
+
+    @ApiProperty({ description: 'Checksum generated timestamp' })
+    @Column({ name: 'checksum_time', type: 'timestamp', nullable: true })
+    checksumTime: Date;
 }
