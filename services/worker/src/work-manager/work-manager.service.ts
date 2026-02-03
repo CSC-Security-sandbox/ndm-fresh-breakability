@@ -1,7 +1,7 @@
 import { HttpService } from '@nestjs/axios';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -22,10 +22,16 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { getLocalIpAddress } from 'src/utils/network.utils';
-import { createTemporalConnections } from 'src/utils/temporal.utils';
+import { temporal } from '@temporalio/proto';
+import { 
+  buildTemporalConfig,
+  createTemporalConnections, 
+  refreshTemporalConnections,
+} from 'src/utils/temporal.utils';
+import { TemporalConnectionConfig, TemporalConfig } from 'src/utils/temporal.types';
 
 @Injectable()
-export class WorkManagerService {
+export class WorkManagerService implements OnModuleDestroy{
   readonly workerConfigUrl: string;
   private loadingConfigs = false;
   readonly workerId: string;
@@ -33,11 +39,15 @@ export class WorkManagerService {
   readonly tokenRequest: string;
   private connection: NativeConnection = null;
   private activeWorkers: Map<string, Worker> = new Map<string, Worker>();
+  private workerRunPromises: Map<string, Promise<void>> = new Map<string, Promise<void>>();
   private readonly workerStartupTimeout: number;
   private taskQueuesToMonitor = [];
   private temporalClientConnection: Connection = null;
   private platform: Platform;
   private readonly logger: LoggerService;
+  private isRefreshingConnection = false; // Prevent concurrent refresh operations
+  private temporalConfig: TemporalConfig = null;
+  private readonly jwtRefreshInterval: number;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -46,6 +56,7 @@ export class WorkManagerService {
     @Inject(WorkerOptionsService)
     private readonly workerOptions: WorkerOptionsService,
     @Inject(AuthService) private readonly authService: AuthService,
+    private readonly schedulerRegistry: SchedulerRegistry,
   ) {
     this.workerConfigUrl = `${this.configService.get('worker.connection.workerConfigUrl')}`;
     this.workerId = this.configService.get('worker.workerId');
@@ -53,14 +64,24 @@ export class WorkManagerService {
       'worker.workerStartupTimeout',
     );
     this.platform = getPlatform(this.configService.get('worker.platform'));
+    // Convert minutes to milliseconds (default 23 hours = 1380 minutes)
+    const jwtRefreshMinutes = parseInt(process.env.JWT_REFRESH_INTERVAL_MINUTES) || 1380;
+    this.jwtRefreshInterval = jwtRefreshMinutes * 60 * 1000;
     this.logger = loggerFactory.create(WorkManagerService.name);
+  }
+
+  onModuleDestroy() {
+    if(this.schedulerRegistry){
+      this.schedulerRegistry.deleteInterval('jwtRefresh');
+    }    
   }
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
     try {
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
-      const updatedEnvVariables = await this.registerAndGetEnvironment();
+      const accessToken = await this.authService.getAccessToken();
+      const updatedEnvVariables = await this.registerAndGetEnvironment(accessToken);
       
       // Apply critical environment variables to process.env for Temporal config
       if (updatedEnvVariables.TEMPORAL_TLS_CA_CERT) {
@@ -76,21 +97,34 @@ export class WorkManagerService {
         TEMPORAL_TLS_CA_CERT=${process.env.TEMPORAL_TLS_CA_CERT ? `present (${process.env.TEMPORAL_TLS_CA_CERT.length} chars)` : 'not set'}
         TEMPORAL_JWT_ENABLED=${process.env.TEMPORAL_JWT_ENABLED}`);
       
-      // Create Temporal connections using utility function
-      const connections = await createTemporalConnections(
-        {
+      let config: TemporalConnectionConfig =  {
           address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
           tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
           tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
           tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
           jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
           getAccessToken: () => this.authService.getAccessToken(),
-        },
+        };
+      // TODO: this needs to be changed if we need to update certificate also after x time.
+      this.temporalConfig = await buildTemporalConfig(config, this.logger);
+      this.temporalConfig.metadata = {
+        authorization: `Bearer ${accessToken}`,
+      }                  
+      const connections = await createTemporalConnections(
+        this.temporalConfig,
         this.logger,
       );
 
       this.connection = connections.nativeConnection;
       this.temporalClientConnection = connections.clientConnection;
+      
+      // Schedule JWT refresh with dynamic interval
+      const intervalId = setInterval(() => {
+        this.refreshTemporalConnectionCron();
+      }, this.jwtRefreshInterval);
+      
+      this.schedulerRegistry.addInterval('jwtRefresh', intervalId);
+      this.logger.log(`JWT refresh scheduled every ${this.jwtRefreshInterval / 1000 / 60} minutes`);
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
@@ -101,10 +135,9 @@ export class WorkManagerService {
    * Register with config service and retrieve updated environment variables
    * This must be called before connecting to Temporal to get CA certificate for TLS
    */
-  private async registerAndGetEnvironment(): Promise<Record<string, any>> {
+  private async registerAndGetEnvironment(accessToken: string): Promise<Record<string, any>> {
     this.logger.log('Registering with config-service and fetching environment variables');
-    try {
-      const accessToken = await this.authService.getAccessToken();
+    try {      
       if (!accessToken) throw new Error('Access token is null');
       
       // Get worker's actual local IP address
@@ -163,22 +196,20 @@ export class WorkManagerService {
     }
   }
 
+
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleCron() {
     if (this.loadingConfigs) {
       this.logger.debug('Already loading configurations, skipping this cycle.');
       return;
-    }
+    }           
     this.logger.log(`Fetching configurations for platform: ${this.platform}`);
 
     try {
       this.loadingConfigs = true;
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) throw new Error('Access token is null');
-      
-      // Get worker's actual local IP address
-      const workerIp = getLocalIpAddress();
-      
+                            
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.workerConfigUrl}/api/v1/work-manager/config`,
@@ -186,7 +217,7 @@ export class WorkManagerService {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
-              'x-worker-ip': workerIp,
+              'x-worker-ip': getLocalIpAddress(),
             },
             timeout: 5000,
           },
@@ -210,6 +241,9 @@ export class WorkManagerService {
       await this.monitorTaskQueues();
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);
+      if(error.message?.includes('UNAUTHENTICATED: Jwt is expired')){
+        await this.refreshTemporalConnectionCron();
+      }
     } finally {
       this.loadingConfigs = false;
     }
@@ -247,10 +281,25 @@ export class WorkManagerService {
     }
   }
 
-  async startWorker(id: string, workerOptions: any) {
+  async startWorker(id: string, workerOptions: any, retryCount: number = 0) {
+    const maxRetries = 3;
+    const baseDelay = 2000;
+    
     try {
       const worker: Worker = await Worker.create(workerOptions);
-      if (worker.getState() === WorkerState.INITIALIZED) worker.run();
+      const runPromise = worker.run();
+      
+      runPromise.catch((err) => {
+        this.logger.error(`Worker ${id} run() failed: ${err.message || err}`);
+        if (this.activeWorkers.has(id)) {
+          this.activeWorkers.delete(id);
+          this.workerRunPromises.delete(id);
+          this.taskQueuesToMonitor = this.taskQueuesToMonitor.filter(
+            (tq) => tq.workerId !== id,
+          );
+        }
+      });
+      
       while (worker.getState() !== WorkerState.RUNNING) {
         this.logger.debug(
           `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()}`,
@@ -262,42 +311,67 @@ export class WorkManagerService {
       }
       this.logger.log(`Worker ${id} started successfully`);
       this.activeWorkers.set(id, worker);
+      this.workerRunPromises.set(id, runPromise);
       this.taskQueuesToMonitor.push({
         queueName: workerOptions.taskQueue,
         workerId: id,
       });
     } catch (err) {
+      // Check if error is due to overlapping worker registration (old worker not fully cleaned up)
+      const isOverlapError = err.message?.includes('overlapping worker task types') || 
+                            err.message?.includes('Registration of multiple workers');
+      
+      if (isOverlapError && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount) + Math.random() * 1000;
+        this.logger.warn(
+          `Worker ${id} registration failed (old worker still cleaning up), ` +
+          `retrying in ${Math.round(delay)}ms (attempt ${retryCount + 1}/${maxRetries})`
+        );
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.startWorker(id, workerOptions, retryCount + 1);
+      }
+      
       this.logger.error(`Error starting worker ${id}: ${err}`);
     }
   }
 
   async shutdownWorker(worker: Worker, force: boolean) {
+    const workerId = worker.options.identity;
+    
     if (
       worker.getState() === WorkerState.RUNNING ||
       worker.getState() === WorkerState.INITIALIZED
-    )
+    ) {
       worker.shutdown();
+    }
 
+    const runPromise = this.workerRunPromises.get(workerId);
+    
     if (!force) {
       while (worker.getState() !== WorkerState.STOPPED) {
         this.logger.log(
           `Waiting for ${worker.options.identity} to be STOPPED. Current state: ${worker.getState()}`,
         );
-        //sleep
         await new Promise((resolve) =>
           setTimeout(resolve, this.workerStartupTimeout),
         );
       }
-    } else {
-      setTimeout(() => {
-        if (worker.getState() !== WorkerState.STOPPED)
-          this.logger.debug('Worker did not shutdown');
-        else this.logger.debug('Worker shutdown');
-      }, this.workerStartupTimeout);
     }
+    
+    if (runPromise) {
+      this.logger.debug(`Waiting for ${workerId} run() promise to complete`);
+      try {
+        await runPromise;
+      } catch (err) {
+        this.logger.debug(`${workerId} run() promise completed with: ${err.message || 'shutdown'}`);
+      }
+      this.workerRunPromises.delete(workerId);
+      this.logger.debug(`${workerId} fully shut down`);
+    }
+    
     // remove task queue from taskQueueArr
     this.taskQueuesToMonitor = this.taskQueuesToMonitor.filter(
-      (taskQueue) => taskQueue.workerId !== worker.options.identity,
+      (taskQueue) => taskQueue.workerId !== workerId,
     );
   }
 
@@ -328,5 +402,80 @@ export class WorkManagerService {
       }
       this.activeWorkers.delete(worker.options.identity);
     }
+  }
+
+  /**
+   * Refresh Temporal connections with a new JWT token.
+   * Called automatically when token is about to expire.
+   * 
+   * Interval is configurable via JWT_REFRESH_INTERVAL_MINUTES env variable.
+   * Default is 1380 minutes (23 hours) for 24-hour token expiry.
+   */
+  async refreshTemporalConnectionCron(): Promise<void> {
+    if (this.isRefreshingConnection) {
+      this.logger.warn('[refreshTemporalConnections] - Already refreshing, skipping duplicate request');
+      return;
+    }    
+    this.isRefreshingConnection = true;
+    
+    try {
+      this.logger.warn('[refreshTemporalConnections] - Refreshing connections with new token');
+      
+      await this.shutdownAllWorkers();
+      
+      const accessToken = await this.authService.getAccessToken(true);
+      this.temporalConfig.metadata = {
+        authorization: `Bearer ${accessToken}`,
+      };
+      const result = await refreshTemporalConnections(
+        this.connection,
+        this.temporalClientConnection, 
+        this.temporalConfig,       
+        this.logger,        
+      );
+      
+      this.connection = result.nativeConnection;
+      this.temporalClientConnection = result.clientConnection;
+      
+      this.logger.log('[refreshTemporalConnections] - Refresh complete. Workers will be recreated in next config cycle.');
+    } catch (err) {
+      this.logger.error(`[refreshTemporalConnections] - Failed: ${err.message}`);
+    } finally {
+      this.isRefreshingConnection = false;
+    }
+  }
+
+  /**
+   * Gracefully shutdown all active workers.
+   * Waits for worker run promises to complete with timeout.
+   */
+  private async shutdownAllWorkers(): Promise<void> {
+    const workerCount = this.activeWorkers.size;
+    this.logger.log(`[shutdownAllWorkers] - Shutting down ${workerCount} workers`);
+    
+    for (const [id, worker] of this.activeWorkers) {
+      try {
+        if (worker.getState() === WorkerState.RUNNING || worker.getState() === WorkerState.INITIALIZED) {
+          this.logger.debug(`[shutdownAllWorkers] - Shutting down worker ${id}`);
+          worker.shutdown();
+        }
+      } catch (err) {
+        this.logger.debug(`[shutdownAllWorkers] - Error shutting down worker ${id}: ${err.message}`);
+      }
+    }
+    
+    this.logger.debug('[shutdownAllWorkers] - Waiting for worker run promises to complete');
+    const runPromises = Array.from(this.workerRunPromises.values());
+    await Promise.race([
+      Promise.allSettled(runPromises),
+      new Promise(resolve => setTimeout(resolve, 5000)),
+    ]);
+    
+    // Clear all registries
+    this.activeWorkers.clear();
+    this.workerRunPromises.clear();
+    this.taskQueuesToMonitor = [];
+    
+    this.logger.log(`[shutdownAllWorkers] - All ${workerCount} workers shut down`);
   }
 }

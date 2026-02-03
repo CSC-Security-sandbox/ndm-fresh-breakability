@@ -33,9 +33,9 @@ export class AuthService {
         this.logger = loggerFactory.create(AuthService.name);
     }
     
-    async getAccessToken(): Promise<string | null> {
+    async getAccessToken(force: boolean = false): Promise<string | null> {
         const now = Math.floor(Date.now() / 1000); 
-        if (this.accessToken && now < this.expiresAt) 
+        if (this.accessToken && now < this.expiresAt && !force) 
             return this.accessToken;
         try {
             const response = await lastValueFrom(
