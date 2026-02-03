@@ -601,19 +601,7 @@ jobs:
             # 1. Not associated with any AMI
             # 2. Source volume doesn't exist (deleted) OR source volume exists but is unattached (available state)
             # Create jq filter in a temp file to avoid shell interpretation issues
-            cat > /tmp/orphan_filter.jq <<'FILTEREOF'
-              . as $snaps | 
-              ($amis | split("\t") | map(select(. != ""))) as $ami_snaps |
-              ($volumes | split(" ") | map(select(. != ""))) as $vol_ids |
-              ($attached | split(" ") | map(select(. != ""))) as $attached_vols |
-              [.[] | select(
-                (.[0] as $sid | ($ami_snaps | index($sid) | not)) and
-                (.[1] as $vid | 
-                  ($vid == null or $vid == "null" or 
-                   ($vol_ids | index($vid) | not) or
-                   (($vol_ids | index($vid)) and ($attached_vols | index($vid) | not))))
-              )]
-FILTEREOF
+            printf '%s\n' '. as $snaps |' '($amis | split("\t") | map(select(. != ""))) as $ami_snaps |' '($volumes | split(" ") | map(select(. != ""))) as $vol_ids |' '($attached | split(" ") | map(select(. != ""))) as $attached_vols |' '[.[] | select(' '(.[0] as $sid | ($ami_snaps | index($sid) | not)) and' '(.[1] as $vid |' '  ($vid == null or $vid == "null" or' '   ($vol_ids | index($vid) | not) or' '   (($vol_ids | index($vid)) and ($attached_vols | index($vid) | not))))' ')]' > /tmp/orphan_filter.jq
             ORPHANED_SNAPSHOTS=$(echo "$SNAPSHOTS" | jq -r --arg amis "$AMIS" --arg volumes "$ALL_VOLUMES" --arg attached "$ATTACHED_VOLUMES" -f /tmp/orphan_filter.jq)
             rm -f /tmp/orphan_filter.jq
             

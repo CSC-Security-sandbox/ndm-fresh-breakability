@@ -1182,6 +1182,126 @@ jobs:
             fi
           done
 
+      - name: Report S3 Buckets with Data
+        if: ${{ github.event.inputs.cleanup_s3_incomplete_uploads == 'true' }}
+        run: |
+          echo "## S3 Buckets Report" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          # Get all buckets
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[].[Name,CreationDate]" --output json 2>/dev/null || echo "[]")
+          BUCKET_COUNT=$(echo "$BUCKETS" | jq 'length')
+          
+          if [ "$BUCKET_COUNT" -gt 0 ]; then
+            echo "Found $BUCKET_COUNT S3 buckets" >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+            echo "| Bucket Name | Created | Region | Size (GB) | Object Count | Last Modified |" >> cleanup-reports/summary.md
+            echo "|-------------|---------|--------|-----------|--------------|----------------|" >> cleanup-reports/summary.md
+            
+            # Create temp file to store bucket stats (to avoid subshell variable issues)
+            TEMP_STATS=$(mktemp)
+            echo "0 0" > "$TEMP_STATS"
+            
+            echo "$BUCKETS" | jq -r '.[] | "\(.[0])|\(.[1])"' | while IFS='|' read -r BUCKET_NAME CREATION_DATE; do
+              if [ -n "$BUCKET_NAME" ] && [ "$BUCKET_NAME" != "null" ]; then
+                echo "Checking bucket: $BUCKET_NAME"
+                
+                # Get bucket region
+                BUCKET_REGION=$(aws s3api get-bucket-location \
+                  --bucket "$BUCKET_NAME" \
+                  --query "LocationConstraint" \
+                  --output text 2>/dev/null || echo "us-east-1")
+                
+                # Handle null/None region (us-east-1 is default)
+                if [ "$BUCKET_REGION" = "None" ] || [ -z "$BUCKET_REGION" ]; then
+                  BUCKET_REGION="us-east-1"
+                fi
+                
+                # Try to get size from CloudWatch metrics (faster and more accurate)
+                # Get bucket size in bytes from CloudWatch
+                END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
+                START_TIME=$(date -u -d "1 day ago" +%Y-%m-%dT%H:%M:%S)
+                
+                BUCKET_SIZE_BYTES=$(aws cloudwatch get-metric-statistics \
+                  --namespace AWS/S3 \
+                  --metric-name BucketSizeBytes \
+                  --dimensions Name=BucketName,Value="$BUCKET_NAME" Name=StorageType,Value=StandardStorage \
+                  --start-time "$START_TIME" \
+                  --end-time "$END_TIME" \
+                  --period 86400 \
+                  --statistics Average \
+                  --query "Datapoints[0].Average" \
+                  --output text 2>/dev/null || echo "")
+                
+                if [ -n "$BUCKET_SIZE_BYTES" ] && [ "$BUCKET_SIZE_BYTES" != "None" ] && [ "$BUCKET_SIZE_BYTES" != "null" ]; then
+                  # Convert bytes to GB
+                  SIZE_GB=$(echo "scale=2; $BUCKET_SIZE_BYTES / 1073741824" | bc 2>/dev/null || echo "0")
+                else
+                  # Fallback: Use s3 ls for size (slower but works)
+                  BUCKET_SIZE_INFO=$(aws s3 ls s3://"$BUCKET_NAME" --recursive --summarize 2>/dev/null | grep "Total Size" || echo "")
+                  if [ -n "$BUCKET_SIZE_INFO" ]; then
+                    SIZE_BYTES=$(echo "$BUCKET_SIZE_INFO" | grep -oP '[0-9]+' | head -1)
+                    SIZE_GB=$(echo "scale=2; $SIZE_BYTES / 1073741824" | bc 2>/dev/null || echo "0")
+                  else
+                    SIZE_GB="0"
+                  fi
+                fi
+                
+                # Get object count from CloudWatch
+                OBJECT_COUNT=$(aws cloudwatch get-metric-statistics \
+                  --namespace AWS/S3 \
+                  --metric-name NumberOfObjects \
+                  --dimensions Name=BucketName,Value="$BUCKET_NAME" Name=StorageType,Value=AllStorageTypes \
+                  --start-time "$START_TIME" \
+                  --end-time "$END_TIME" \
+                  --period 86400 \
+                  --statistics Average \
+                  --query "Datapoints[0].Average" \
+                  --output text 2>/dev/null || echo "")
+                
+                if [ -z "$OBJECT_COUNT" ] || [ "$OBJECT_COUNT" = "None" ] || [ "$OBJECT_COUNT" = "null" ]; then
+                  # Fallback: Try to get count from s3api (limited to avoid timeout)
+                  OBJECT_COUNT=$(aws s3api list-objects-v2 \
+                    --bucket "$BUCKET_NAME" \
+                    --max-items 1 \
+                    --query "KeyCount" \
+                    --output text 2>/dev/null || echo "0")
+                  if [ "$OBJECT_COUNT" = "1" ]; then
+                    OBJECT_COUNT="1+"
+                  fi
+                else
+                  # Round to integer
+                  OBJECT_COUNT=$(echo "$OBJECT_COUNT" | awk '{printf "%.0f", $1}')
+                fi
+                
+                # Get last modified date (most recent object)
+                LAST_MODIFIED=$(aws s3api list-objects-v2 \
+                  --bucket "$BUCKET_NAME" \
+                  --max-items 1 \
+                  --query "Contents[0].LastModified" \
+                  --output text 2>/dev/null || echo "N/A")
+                
+                # Format last modified date
+                if [ "$LAST_MODIFIED" != "N/A" ] && [ -n "$LAST_MODIFIED" ]; then
+                  LAST_MODIFIED=$(echo "$LAST_MODIFIED" | cut -d'T' -f1)
+                fi
+                
+                # Format creation date
+                CREATION_DATE_FORMATTED=$(echo "$CREATION_DATE" | cut -d'T' -f1)
+                
+                echo "| $BUCKET_NAME | $CREATION_DATE_FORMATTED | $BUCKET_REGION | $SIZE_GB | $OBJECT_COUNT | $LAST_MODIFIED |" >> cleanup-reports/summary.md
+              fi
+            done
+            
+            echo "" >> cleanup-reports/summary.md
+            echo "**Note:** Size and object counts are approximate for large buckets. Use AWS Console for exact values." >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+            rm -f "$TEMP_STATS"
+          else
+            echo "No S3 buckets found." >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+          fi
+
       - name: Cleanup Incomplete S3 Multipart Uploads
         if: ${{ github.event.inputs.cleanup_s3_incomplete_uploads == 'true' }}
         run: |
