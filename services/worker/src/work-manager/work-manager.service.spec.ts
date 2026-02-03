@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { WorkerOptionsService } from './factory/worker-options.factory.service';
 import { AuthService } from 'src/auth/auth.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import {
   LoggerFactory,
   LoggerService,
@@ -40,6 +41,7 @@ describe('WorkManagerService', () => {
   let httpService: any;
   let workerOptions: any;
   let authService: any;
+  let schedulerRegistry: any;
   let loggerFactory: LoggerFactory;
   let logger: LoggerService;
 
@@ -68,6 +70,10 @@ describe('WorkManagerService', () => {
     authService = {
       getAccessToken: jest.fn().mockResolvedValue('token'),
     };
+    schedulerRegistry = {
+      addInterval: jest.fn(),
+      deleteInterval: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -77,6 +83,7 @@ describe('WorkManagerService', () => {
         { provide: LoggerFactory, useValue: mockLoggerFactory },
         { provide: WorkerOptionsService, useValue: workerOptions },
         { provide: AuthService, useValue: authService },
+        { provide: SchedulerRegistry, useValue: schedulerRegistry },
       ],
     }).compile();
 
@@ -96,18 +103,25 @@ describe('WorkManagerService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('onApplicationBootstrap', () => {
+  describe('onApplicationBootstrap', () => {    
     it('should connect to temporal', async () => {
       const nativeConnect =
         require('@temporalio/worker').NativeConnection.connect;
       const clientConnect = require('@temporalio/client').Connection.connect;
       nativeConnect.mockResolvedValue('native-conn');
       clientConnect.mockResolvedValue('client-conn');
+      
+      // Mock setInterval to prevent actual timers
+      const setIntervalSpy = jest.spyOn(global, 'setInterval').mockImplementation(() => 123 as any);
+      
       await service.onApplicationBootstrap();
       expect(nativeConnect).toHaveBeenCalled();
       expect(clientConnect).toHaveBeenCalled();
       expect(service['connection']).toBe('native-conn');
       expect(service['temporalClientConnection']).toBe('client-conn');
+      expect(schedulerRegistry.addInterval).toHaveBeenCalled();
+      
+      setIntervalSpy.mockRestore();
     });
 
     it('should log and throw on connection error', async () => {
@@ -186,11 +200,8 @@ describe('WorkManagerService', () => {
     it('should create, run, and track worker', async () => {
       const Worker = require('@temporalio/worker').Worker;
       const mockWorker = {
-        getState: jest
-          .fn()
-          .mockReturnValueOnce('INITIALIZED')
-          .mockReturnValueOnce('RUNNING'),
-        run: jest.fn(),
+        getState: jest.fn().mockReturnValue('RUNNING'), // Always return RUNNING to pass the while loop
+        run: jest.fn().mockResolvedValue(undefined),
         options: { identity: 'id' },
       };
       Worker.create.mockResolvedValue(mockWorker);
@@ -213,7 +224,8 @@ describe('WorkManagerService', () => {
   });
 
   describe('shutdownWorker', () => {
-    it('should shutdown gracefully and remove from taskQueues', async () => {
+    it('should shutdown gracefully, await run promise, and remove from taskQueues', async () => {
+      const mockRunPromise = Promise.resolve();
       const mockWorker = {
         getState: jest
           .fn()
@@ -222,24 +234,49 @@ describe('WorkManagerService', () => {
         shutdown: jest.fn(),
         options: { identity: 'id' },
       };
+      service['workerRunPromises'].set('id', mockRunPromise);
       service['taskQueuesToMonitor'] = [{ queueName: 'tq', workerId: 'id' }];
-      await service.shutdownWorker(mockWorker as any, false);
+      
+      await service.shutdownWorker(mockWorker as any);
+      
       expect(mockWorker.shutdown).toHaveBeenCalled();
+      expect(service['workerRunPromises'].has('id')).toBe(false);
       expect(service['taskQueuesToMonitor']).toHaveLength(0);
     });
 
-    it('should force shutdown and log if not stopped', async () => {
+    it('should skip shutdown call if worker is already stopped', async () => {
+      const mockRunPromise = Promise.resolve();
       const mockWorker = {
-        getState: jest.fn().mockReturnValue('RUNNING'),
+        getState: jest.fn().mockReturnValue('STOPPED'),
         shutdown: jest.fn(),
         options: { identity: 'id' },
       };
+      service['workerRunPromises'].set('id', mockRunPromise);
       service['taskQueuesToMonitor'] = [{ queueName: 'tq', workerId: 'id' }];
-      jest.useFakeTimers();
-      await service.shutdownWorker(mockWorker as any, true);
-      jest.runAllTimers();
+      
+      await service.shutdownWorker(mockWorker as any);
+      
+      expect(mockWorker.shutdown).not.toHaveBeenCalled();
+      expect(service['workerRunPromises'].has('id')).toBe(false);
       expect(service['taskQueuesToMonitor']).toHaveLength(0);
-      jest.useRealTimers();
+    });
+
+    it('should handle run promise rejection gracefully', async () => {
+      const mockRunPromise = Promise.reject(new Error('Worker failed'));
+      const mockWorker = {
+        getState: jest.fn().mockReturnValue('STOPPED'),
+        shutdown: jest.fn(),
+        options: { identity: 'id' },
+      };
+      service['workerRunPromises'].set('id', mockRunPromise);
+      service['taskQueuesToMonitor'] = [{ queueName: 'tq', workerId: 'id' }];
+      
+      await service.shutdownWorker(mockWorker as any);
+      
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('run() promise completed with:'),
+      );
+      expect(service['workerRunPromises'].has('id')).toBe(false);
     });
   });
 
@@ -261,8 +298,42 @@ describe('WorkManagerService', () => {
 
       await service.monitorTaskQueues();
 
-      expect(service.shutdownWorker).toHaveBeenCalledWith(mockWorker, true);
+      expect(service.shutdownWorker).toHaveBeenCalledWith(mockWorker);
       expect(service['activeWorkers'].has('id')).toBe(false);
+    });
+  });
+
+  describe('onModuleDestroy', () => {
+    it('should cleanup JWT refresh interval successfully', () => {
+      schedulerRegistry.deleteInterval = jest.fn();
+
+      service.onModuleDestroy();
+
+      expect(logger.log).toHaveBeenCalledWith('[onModuleDestroy] - Shutting down WorkManagerService');
+      expect(schedulerRegistry.deleteInterval).toHaveBeenCalledWith('jwtRefresh');
+    });
+
+    it('should handle missing JWT refresh interval gracefully', () => {
+      schedulerRegistry.deleteInterval = jest.fn().mockImplementation(() => {
+        throw new Error('Interval not found');
+      });
+
+      service.onModuleDestroy();
+
+      expect(logger.log).toHaveBeenCalledWith('[onModuleDestroy] - Shutting down WorkManagerService');
+      expect(schedulerRegistry.deleteInterval).toHaveBeenCalledWith('jwtRefresh');
+      expect(logger.debug).toHaveBeenCalledWith('Interval jwtRefresh cleanup failed: Interval not found');
+    });
+
+    it('should handle deleteInterval throwing non-Error objects', () => {
+      schedulerRegistry.deleteInterval = jest.fn().mockImplementation(() => {
+        throw 'string error';
+      });
+
+      // Should not throw
+      expect(() => service.onModuleDestroy()).not.toThrow();
+
+      expect(logger.log).toHaveBeenCalledWith('[onModuleDestroy] - Shutting down WorkManagerService');
     });
   });
 });
