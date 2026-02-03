@@ -807,48 +807,112 @@ jobs:
           echo "" >> cleanup-reports/summary.md
           
           REGIONS="${{ steps.get-regions.outputs.regions }}"
+          TOTAL_UNUSED_SGS=0
           
           for REGION in ${REGIONS//,/ }; do
             echo "Checking Security Groups in $REGION..."
             
-            # Get all security groups except default - handle pagination
+            # Get all security groups (including default for reporting) - handle pagination
             ALL_SGS=$(aws ec2 describe-security-groups \
               --region "$REGION" \
               --no-paginate \
-              --query "SecurityGroups[?GroupName!='default'].[GroupId,GroupName,Description]" \
+              --query "SecurityGroups[].[GroupId,GroupName,Description,VpcId]" \
               --output json 2>/dev/null || echo "[]")
             
+            TOTAL_SG_COUNT=$(echo "$ALL_SGS" | jq 'length')
+            echo "DEBUG: Found $TOTAL_SG_COUNT total security groups in $REGION"
+            
             # Get security groups in use by network interfaces - handle pagination
-            USED_SGS=$(aws ec2 describe-network-interfaces \
+            USED_SGS_NI=$(aws ec2 describe-network-interfaces \
               --region "$REGION" \
               --no-paginate \
               --query "NetworkInterfaces[].Groups[].GroupId" \
-              --output text 2>/dev/null || echo "")
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            # Get security groups referenced by other security groups - handle pagination
-            REFERENCED_SGS=$(aws ec2 describe-security-groups \
+            # Get security groups used by EC2 instances
+            USED_SGS_EC2=$(aws ec2 describe-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Reservations[].Instances[].SecurityGroups[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            # Get security groups referenced by other security groups (inbound rules) - handle pagination
+            REFERENCED_SGS_IN=$(aws ec2 describe-security-groups \
               --region "$REGION" \
               --no-paginate \
               --query "SecurityGroups[].IpPermissions[].UserIdGroupPairs[].GroupId" \
-              --output text 2>/dev/null || echo "")
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            # Get security groups referenced in outbound rules
+            REFERENCED_SGS_OUT=$(aws ec2 describe-security-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "SecurityGroups[].IpPermissionsEgress[].UserIdGroupPairs[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
             # Get security groups used by RDS instances
             RDS_SGS=$(aws rds describe-db-instances \
               --region "$REGION" \
               --no-paginate \
               --query "DBInstances[].VpcSecurityGroups[].VpcSecurityGroupId" \
-              --output text 2>/dev/null || echo "")
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            # Get security groups used by ELB/ALB
+            # Get security groups used by Classic Load Balancers
             ELB_SGS=$(aws elb describe-load-balancers \
               --region "$REGION" \
               --no-paginate \
               --query "LoadBalancerDescriptions[].SecurityGroups[]" \
-              --output text 2>/dev/null || echo "")
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            ALL_USED="$USED_SGS $REFERENCED_SGS $RDS_SGS $ELB_SGS"
+            # Get security groups used by ALB/NLB (Application/Network Load Balancers)
+            ELBV2_SGS=$(aws elbv2 describe-load-balancers \
+              --region "$REGION" \
+              --no-paginate \
+              --query "LoadBalancers[].SecurityGroups[]" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            # Find unused security groups
+            # Get security groups used by Redshift clusters
+            REDSHIFT_SGS=$(aws redshift describe-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Clusters[].VpcSecurityGroups[].VpcSecurityGroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            # Get security groups used by ElastiCache clusters
+            ELASTICACHE_SGS=$(aws elasticache describe-cache-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --show-cache-node-info \
+              --query "CacheClusters[].SecurityGroups[].SecurityGroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            # Get security groups used by EMR clusters
+            EMR_SGS=$(aws emr list-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --active \
+              --query "Clusters[].Id" \
+              --output text 2>/dev/null | while read -r CLUSTER_ID; do
+                aws emr describe-cluster \
+                  --region "$REGION" \
+                  --cluster-id "$CLUSTER_ID" \
+                  --query "Cluster.Ec2InstanceAttributes.EmrManagedMasterSecurityGroup" \
+                  --output text 2>/dev/null
+                aws emr describe-cluster \
+                  --region "$REGION" \
+                  --cluster-id "$CLUSTER_ID" \
+                  --query "Cluster.Ec2InstanceAttributes.EmrManagedSlaveSecurityGroup" \
+                  --output text 2>/dev/null
+              done | sort -u | tr '\n' ' ' || echo "")
+            
+            # Combine all used security groups
+            ALL_USED="$USED_SGS_NI $USED_SGS_EC2 $REFERENCED_SGS_IN $REFERENCED_SGS_OUT $RDS_SGS $ELB_SGS $ELBV2_SGS $REDSHIFT_SGS $ELASTICACHE_SGS $EMR_SGS"
+            
+            # Remove duplicates and empty entries, then count
+            USED_COUNT=$(echo "$ALL_USED" | tr ' ' '\n' | grep -v '^$' | sort -u | wc -l)
+            echo "DEBUG: Found $USED_COUNT unique security groups in use in $REGION"
+            
+            # Find unused security groups (exclude default security group from deletion but include in report)
             UNUSED_SGS=$(echo "$ALL_SGS" | jq -r --arg used "$ALL_USED" '
               . as $sgs |
               ($used | split(" ") | map(select(. != ""))) as $used_sgs |
@@ -856,24 +920,64 @@ jobs:
             ')
             
             UNUSED_COUNT=$(echo "$UNUSED_SGS" | jq 'length')
+            echo "DEBUG: Found $UNUSED_COUNT unused security groups in $REGION"
             
             if [ "$UNUSED_COUNT" -gt 0 ]; then
               echo "Found $UNUSED_COUNT unused Security Groups in $REGION" >> cleanup-reports/summary.md
               echo "" >> cleanup-reports/summary.md
-              echo "| Group ID | Name | Description |" >> cleanup-reports/summary.md
-              echo "|----------|------|-------------|" >> cleanup-reports/summary.md
+              echo "| Group ID | Name | Description | VPC ID |" >> cleanup-reports/summary.md
+              echo "|----------|------|-------------|--------|" >> cleanup-reports/summary.md
               
-              echo "$UNUSED_SGS" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2] // "N/A") |"' >> cleanup-reports/summary.md
+              echo "$UNUSED_SGS" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2] // "N/A") | \(.[3] // "N/A") |"' >> cleanup-reports/summary.md
+              
+              TOTAL_UNUSED_SGS=$((TOTAL_UNUSED_SGS + UNUSED_COUNT))
               
               if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$UNUSED_SGS" | jq -r '.[] | .[0]' | while read -r SG_ID; do
+                echo "$UNUSED_SGS" | jq -r '.[] | select(.[1] != "default") | .[0]' | while read -r SG_ID; do
                   if [ -n "$SG_ID" ] && [ "$SG_ID" != "null" ]; then
                     echo "Deleting Security Group: $SG_ID"
-                    aws ec2 delete-security-group --region "$REGION" --group-id "$SG_ID" || echo "Failed to delete $SG_ID"
+                    aws ec2 delete-security-group --region "$REGION" --group-id "$SG_ID" || echo "Failed to delete $SG_ID (may be default or in use)"
                   fi
                 done
               fi
               
+              echo "" >> cleanup-reports/summary.md
+            else
+              echo "No unused Security Groups found in $REGION" >> cleanup-reports/summary.md
+              echo "" >> cleanup-reports/summary.md
+            fi
+          done
+          
+          echo "**Total unused Security Groups: $TOTAL_UNUSED_SGS**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Report All Security Groups (Including Default)
+        if: ${{ github.event.inputs.cleanup_security_groups == 'true' }}
+        run: |
+          echo "## All Security Groups Report" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Reporting all Security Groups in $REGION..."
+            
+            # Get ALL security groups including default - handle pagination
+            ALL_SGS=$(aws ec2 describe-security-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "SecurityGroups[].[GroupId,GroupName,Description,VpcId]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            SG_COUNT=$(echo "$ALL_SGS" | jq 'length')
+            
+            if [ "$SG_COUNT" -gt 0 ]; then
+              echo "### Region: $REGION ($SG_COUNT security groups)" >> cleanup-reports/summary.md
+              echo "" >> cleanup-reports/summary.md
+              echo "| Group ID | Name | Description | VPC ID |" >> cleanup-reports/summary.md
+              echo "|----------|------|-------------|--------|" >> cleanup-reports/summary.md
+              
+              echo "$ALL_SGS" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2] // "N/A") | \(.[3] // "N/A") |"' >> cleanup-reports/summary.md
               echo "" >> cleanup-reports/summary.md
             fi
           done
