@@ -1133,6 +1133,55 @@ jobs:
             echo "" >> cleanup-reports/summary.md
           fi
 
+      - name: Report All Security Groups
+        if: ${{ github.event.inputs.cleanup_security_groups == 'true' }}
+        run: |
+          echo "## All Security Groups" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          
+          # Create a combined list of all security groups across all regions
+          ALL_SGS_COMBINED="[]"
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Listing all Security Groups in $REGION..."
+            
+            # Get ALL security groups including default - handle pagination
+            ALL_SGS=$(aws ec2 describe-security-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "SecurityGroups[].[GroupId,GroupName]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            SG_COUNT=$(echo "$ALL_SGS" | jq 'length')
+            echo "DEBUG: Found $SG_COUNT security groups in $REGION"
+            
+            if [ "$SG_COUNT" -gt 0 ]; then
+              # Add region to each security group entry
+              REGION_SGS=$(echo "$ALL_SGS" | jq --arg region "$REGION" '[.[] | . + [$region]]')
+              
+              # Combine with all security groups
+              ALL_SGS_COMBINED=$(echo "$ALL_SGS_COMBINED" | jq --argjson region_sgs "$REGION_SGS" '. + $region_sgs')
+            fi
+          done
+          
+          TOTAL_COUNT=$(echo "$ALL_SGS_COMBINED" | jq 'length')
+          
+          if [ "$TOTAL_COUNT" -gt 0 ]; then
+            echo "| name | region |" >> cleanup-reports/summary.md
+            echo "|------|--------|" >> cleanup-reports/summary.md
+            
+            # Sort by region, then by Group ID for consistent output
+            echo "$ALL_SGS_COMBINED" | jq -r 'sort_by(.[2], .[0]) | .[] | "| \(.[0]) | \(.[2]) |"' >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+            echo "**Total Security Groups: $TOTAL_COUNT**" >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+          else
+            echo "No security groups found." >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+          fi
+
       - name: Cleanup Unused Key Pairs
         if: ${{ github.event.inputs.cleanup_key_pairs == 'true' }}
         run: |
