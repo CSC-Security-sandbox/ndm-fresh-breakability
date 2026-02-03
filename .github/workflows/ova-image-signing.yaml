@@ -396,6 +396,62 @@ on:
         options:
           - "true"
           - "false"
+      report_watchdog_governance:
+        description: "Report resources subject to WatchDog Governance"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      report_generic_resources:
+        description: "Report resources subject to Generic Resource Governance"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_cloudformation_stacks:
+        description: "Cleanup orphaned CloudFormation stacks"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_network_interfaces:
+        description: "Cleanup orphaned Network Interfaces"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_testbed_buckets:
+        description: "Cleanup orphaned Testbed S3 buckets"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_testbed_placement_groups:
+        description: "Cleanup orphaned Testbed Placement Groups"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_blackhole_routes:
+        description: "Cleanup orphaned blackhole routes"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 env:
   AWS_REGION: ${{ github.event.inputs.aws_region || vars.AWS_DEFAULT_REGION || 'us-east-1' }}
@@ -951,36 +1007,74 @@ jobs:
           echo "**Total unused Security Groups: $TOTAL_UNUSED_SGS**" >> cleanup-reports/summary.md
           echo "" >> cleanup-reports/summary.md
 
-      - name: Report All Security Groups (Including Default)
+      - name: Report All Orphaned Security Groups
         if: ${{ github.event.inputs.cleanup_security_groups == 'true' }}
         run: |
-          echo "## All Security Groups Report" >> cleanup-reports/summary.md
+          echo "## Orphaned Security Groups" >> cleanup-reports/summary.md
           echo "" >> cleanup-reports/summary.md
           
           REGIONS="${{ steps.get-regions.outputs.regions }}"
           
+          # Create a combined list of all orphaned security groups across all regions
+          ALL_ORPHANED_SGS="[]"
+          
           for REGION in ${REGIONS//,/ }; do
-            echo "Reporting all Security Groups in $REGION..."
+            echo "Checking orphaned Security Groups in $REGION..."
             
-            # Get ALL security groups including default - handle pagination
+            # Get all security groups - handle pagination
             ALL_SGS=$(aws ec2 describe-security-groups \
               --region "$REGION" \
               --no-paginate \
-              --query "SecurityGroups[].[GroupId,GroupName,Description,VpcId]" \
+              --query "SecurityGroups[].[GroupId,GroupName]" \
               --output json 2>/dev/null || echo "[]")
             
-            SG_COUNT=$(echo "$ALL_SGS" | jq 'length')
+            # Get security groups in use
+            USED_SGS_NI=$(aws ec2 describe-network-interfaces \
+              --region "$REGION" \
+              --no-paginate \
+              --query "NetworkInterfaces[].Groups[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            if [ "$SG_COUNT" -gt 0 ]; then
-              echo "### Region: $REGION ($SG_COUNT security groups)" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| Group ID | Name | Description | VPC ID |" >> cleanup-reports/summary.md
-              echo "|----------|------|-------------|--------|" >> cleanup-reports/summary.md
-              
-              echo "$ALL_SGS" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2] // "N/A") | \(.[3] // "N/A") |"' >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-            fi
+            USED_SGS_EC2=$(aws ec2 describe-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Reservations[].Instances[].SecurityGroups[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            REFERENCED_SGS_IN=$(aws ec2 describe-security-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "SecurityGroups[].IpPermissions[].UserIdGroupPairs[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            ALL_USED="$USED_SGS_NI $USED_SGS_EC2 $REFERENCED_SGS_IN"
+            
+            # Find orphaned security groups
+            ORPHANED_SGS=$(echo "$ALL_SGS" | jq -r --arg used "$ALL_USED" --arg region "$REGION" '
+              . as $sgs |
+              ($used | split(" ") | map(select(. != ""))) as $used_sgs |
+              [.[] | select(.[0] as $sg | ($used_sgs | index($sg) | not)) | . + [$region]]
+            ')
+            
+            # Combine with all orphaned security groups
+            ALL_ORPHANED_SGS=$(echo "$ALL_ORPHANED_SGS" | jq --argjson orphaned "$ORPHANED_SGS" '. + $orphaned')
           done
+          
+          TOTAL_COUNT=$(echo "$ALL_ORPHANED_SGS" | jq 'length')
+          
+          if [ "$TOTAL_COUNT" -gt 0 ]; then
+            echo "| name | region |" >> cleanup-reports/summary.md
+            echo "|------|--------|" >> cleanup-reports/summary.md
+            
+            # Sort by region, then by name for consistent output
+            echo "$ALL_ORPHANED_SGS" | jq -r 'sort_by(.[2], .[1]) | .[] | "| \(.[1]) | \(.[2]) |"' >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+            echo "**Total Orphaned Security Groups: $TOTAL_COUNT**" >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+          else
+            echo "No orphaned security groups found." >> cleanup-reports/summary.md
+            echo "" >> cleanup-reports/summary.md
+          fi
 
       - name: Cleanup Unused Key Pairs
         if: ${{ github.event.inputs.cleanup_key_pairs == 'true' }}
@@ -1351,6 +1445,515 @@ jobs:
           done
           
           echo "**Total incomplete multipart uploads: $TOTAL_UPLOADS**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Report WatchDog Governance Resources
+        if: ${{ github.event.inputs.report_watchdog_governance == 'true' }}
+        run: |
+          echo "## Resources subject to WatchDog Governance and Weekend Shutdown" >> cleanup-reports/summary.md
+          echo "==================================================================" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          # Tagged and Untagged Instances
+          echo "### Tagged Instances" >> cleanup-reports/summary.md
+          echo "| name | owner | region |" >> cleanup-reports/summary.md
+          echo "|------|-------|--------|" >> cleanup-reports/summary.md
+          
+          echo "### Untagged or Incorrectly tagged Instances" >> cleanup-reports/summary.md
+          echo "| name | region |" >> cleanup-reports/summary.md
+          echo "|------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            INSTANCES=$(aws ec2 describe-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='Owner'].Value|[0],Tags[?Key=='owner'].Value|[0]]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$INSTANCES" | jq -r --arg region "$REGION" '.[] | 
+              if (.[1] != null and .[1] != "") or (.[2] != null and .[2] != "") then
+                "| \(.[0]) | \(.[1] // .[2] // "") | \($region) |"
+              else
+                "| \(.[0]) | \($region) |"
+              end' >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Tagged and Untagged Testbeds (EC2 instances with testbed tag)
+          echo "### Tagged Testbeds" >> cleanup-reports/summary.md
+          echo "| name | owner | region |" >> cleanup-reports/summary.md
+          echo "|------|-------|--------|" >> cleanup-reports/summary.md
+          
+          echo "### Untagged or Incorrectly tagged Testbeds" >> cleanup-reports/summary.md
+          echo "| name | region |" >> cleanup-reports/summary.md
+          echo "|------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            TESTBEDS=$(aws ec2 describe-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --filters "Name=tag:Testbed,Values=*" \
+              --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='Owner'].Value|[0],Tags[?Key=='owner'].Value|[0]]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$TESTBEDS" | jq -r --arg region "$REGION" '.[] | 
+              if (.[1] != null and .[1] != "") or (.[2] != null and .[2] != "") then
+                "| \(.[0]) | \(.[1] // .[2] // "") | \($region) |"
+              else
+                "| \(.[0]) | \($region) |"
+              end' >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Kubernetes Clusters (EKS)
+          echo "### Tagged Kubernetes Clusters" >> cleanup-reports/summary.md
+          echo "| name | owner | region |" >> cleanup-reports/summary.md
+          echo "|------|-------|--------|" >> cleanup-reports/summary.md
+          
+          echo "### Untagged or Incorrectly tagged Kubernetes Clusters" >> cleanup-reports/summary.md
+          echo "| name | region |" >> cleanup-reports/summary.md
+          echo "|------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            CLUSTERS=$(aws eks list-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --query "clusters[]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$CLUSTERS" | jq -r --arg region "$REGION" '.[] | 
+              "| \(.) | | \($region) |"' >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Auto Scaling Groups
+          echo "### Tagged Scaling Groups" >> cleanup-reports/summary.md
+          echo "| name | owner | region |" >> cleanup-reports/summary.md
+          echo "|------|-------|--------|" >> cleanup-reports/summary.md
+          
+          echo "### Untagged or Incorrectly tagged Scaling Groups" >> cleanup-reports/summary.md
+          echo "| name | region |" >> cleanup-reports/summary.md
+          echo "|------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            ASGS=$(aws autoscaling describe-auto-scaling-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "AutoScalingGroups[].[AutoScalingGroupName,Tags[?Key=='Owner'].Value|[0],Tags[?Key=='owner'].Value|[0]]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$ASGS" | jq -r --arg region "$REGION" '.[] | 
+              if (.[1] != null and .[1] != "") or (.[2] != null and .[2] != "") then
+                "| \(.[0]) | \(.[1] // .[2] // "") | \($region) |"
+              else
+                "| \(.[0]) | \($region) |"
+              end' >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Spot Instances
+          echo "### Tagged Spot Instances" >> cleanup-reports/summary.md
+          echo "| name | owner | region |" >> cleanup-reports/summary.md
+          echo "|------|-------|--------|" >> cleanup-reports/summary.md
+          
+          echo "### Untagged or Incorrectly tagged Spot Instances" >> cleanup-reports/summary.md
+          echo "| name | region |" >> cleanup-reports/summary.md
+          echo "|------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            SPOT_INSTANCES=$(aws ec2 describe-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --filters "Name=instance-lifecycle,Values=spot" \
+              --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='Owner'].Value|[0],Tags[?Key=='owner'].Value|[0]]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$SPOT_INSTANCES" | jq -r --arg region "$REGION" '.[] | 
+              if (.[1] != null and .[1] != "") or (.[2] != null and .[2] != "") then
+                "| \(.[0]) | \(.[1] // .[2] // "") | \($region) |"
+              else
+                "| \(.[0]) | \($region) |"
+              end' >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Cleanup Orphaned CloudFormation Stacks
+        if: ${{ github.event.inputs.cleanup_cloudformation_stacks == 'true' }}
+        run: |
+          echo "## Orphaned CloudFormation Stacks" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
+          TOTAL_STACKS=0
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Checking CloudFormation stacks in $REGION..."
+            
+            # Get all stacks - handle pagination
+            STACKS=$(aws cloudformation list-stacks \
+              --region "$REGION" \
+              --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE ROLLBACK_COMPLETE \
+              --no-paginate \
+              --query "StackSummaries[?CreationTime<='$CUTOFF_DATE'].[StackName,CreationTime]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            # Filter out stacks that are in use (have resources)
+            ORPHANED_STACKS="[]"
+            STACK_COUNT=$(echo "$STACKS" | jq 'length')
+            
+            if [ "$STACK_COUNT" -gt 0 ]; then
+              echo "$STACKS" | jq -r '.[] | .[0]' | while read -r STACK_NAME; do
+                if [ -n "$STACK_NAME" ] && [ "$STACK_NAME" != "null" ]; then
+                  # Check if stack has any resources
+                  RESOURCE_COUNT=$(aws cloudformation describe-stack-resources \
+                    --region "$REGION" \
+                    --stack-name "$STACK_NAME" \
+                    --query "length(StackResources)" \
+                    --output text 2>/dev/null || echo "0")
+                  
+                  if [ "$RESOURCE_COUNT" = "0" ]; then
+                    STACK_INFO=$(echo "$STACKS" | jq --arg name "$STACK_NAME" '.[] | select(.[0] == $name)')
+                    ORPHANED_STACKS=$(echo "$ORPHANED_STACKS" | jq --argjson stack "[$STACK_INFO]" '. + $stack')
+                  fi
+                fi
+              done
+            fi
+            
+            ORPHAN_COUNT=$(echo "$ORPHANED_STACKS" | jq 'length')
+            
+            if [ "$ORPHAN_COUNT" -gt 0 ]; then
+              echo "Found $ORPHAN_COUNT orphaned CloudFormation stacks in $REGION" >> cleanup-reports/summary.md
+              echo "" >> cleanup-reports/summary.md
+              echo "| Stack Name | Created | Region |" >> cleanup-reports/summary.md
+              echo "|------------|---------|--------|" >> cleanup-reports/summary.md
+              
+              echo "$ORPHANED_STACKS" | jq -r --arg region "$REGION" '.[] | "| \(.[0]) | \(.[1]) | \($region) |"' >> cleanup-reports/summary.md
+              
+              TOTAL_STACKS=$((TOTAL_STACKS + ORPHAN_COUNT))
+              
+              if [ "${{ env.DRY_RUN }}" == "false" ]; then
+                echo "$ORPHANED_STACKS" | jq -r '.[] | .[0]' | while read -r STACK_NAME; do
+                  if [ -n "$STACK_NAME" ] && [ "$STACK_NAME" != "null" ]; then
+                    echo "Deleting CloudFormation stack: $STACK_NAME"
+                    aws cloudformation delete-stack --region "$REGION" --stack-name "$STACK_NAME" || echo "Failed to delete $STACK_NAME"
+                  fi
+                done
+              fi
+              
+              echo "" >> cleanup-reports/summary.md
+            fi
+          done
+          
+          echo "**Total orphaned CloudFormation stacks: $TOTAL_STACKS**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Cleanup Orphaned Network Interfaces
+        if: ${{ github.event.inputs.cleanup_network_interfaces == 'true' }}
+        run: |
+          echo "## Orphaned Network Interfaces" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          TOTAL_ENIS=0
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Checking Network Interfaces in $REGION..."
+            
+            # Get all available (unattached) network interfaces - handle pagination
+            ENIS=$(aws ec2 describe-network-interfaces \
+              --region "$REGION" \
+              --filters "Name=status,Values=available" \
+              --no-paginate \
+              --query "NetworkInterfaces[].[NetworkInterfaceId,Description,PrivateIpAddress]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            ENI_COUNT=$(echo "$ENIS" | jq 'length')
+            
+            if [ "$ENI_COUNT" -gt 0 ]; then
+              echo "Found $ENI_COUNT orphaned Network Interfaces in $REGION" >> cleanup-reports/summary.md
+              echo "" >> cleanup-reports/summary.md
+              echo "| ENI ID | Description | Private IP | Region |" >> cleanup-reports/summary.md
+              echo "|--------|-------------|------------|--------|" >> cleanup-reports/summary.md
+              
+              echo "$ENIS" | jq -r --arg region "$REGION" '.[] | "| \(.[0]) | \(.[1] // "N/A") | \(.[2] // "N/A") | \($region) |"' >> cleanup-reports/summary.md
+              
+              TOTAL_ENIS=$((TOTAL_ENIS + ENI_COUNT))
+              
+              if [ "${{ env.DRY_RUN }}" == "false" ]; then
+                echo "$ENIS" | jq -r '.[] | .[0]' | while read -r ENI_ID; do
+                  if [ -n "$ENI_ID" ] && [ "$ENI_ID" != "null" ]; then
+                    echo "Deleting Network Interface: $ENI_ID"
+                    aws ec2 delete-network-interface --region "$REGION" --network-interface-id "$ENI_ID" || echo "Failed to delete $ENI_ID"
+                  fi
+                done
+              fi
+              
+              echo "" >> cleanup-reports/summary.md
+            fi
+          done
+          
+          echo "**Total orphaned Network Interfaces: $TOTAL_ENIS**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Cleanup Orphaned Testbed Buckets
+        if: ${{ github.event.inputs.cleanup_testbed_buckets == 'true' }}
+        run: |
+          echo "## Orphaned Testbed Buckets" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          # Get all buckets
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[].[Name,CreationDate]" --output json 2>/dev/null || echo "[]")
+          
+          # Filter for testbed buckets (you may need to adjust the pattern)
+          TESTBED_BUCKETS=$(echo "$BUCKETS" | jq '[.[] | select(.[0] | test("testbed|test-|testing"; "i"))]')
+          
+          TESTBED_COUNT=$(echo "$TESTBED_BUCKETS" | jq 'length')
+          
+          if [ "$TESTBED_COUNT" -gt 0 ]; then
+            echo "| testbed_name | bucket_name | region | owner |" >> cleanup-reports/summary.md
+            echo "|--------------|-------------|--------|-------|" >> cleanup-reports/summary.md
+            
+            echo "$TESTBED_BUCKETS" | jq -r '.[] | "| \(.[0]) | \(.[0]) | global | |"' >> cleanup-reports/summary.md
+            
+            if [ "${{ env.DRY_RUN }}" == "false" ]; then
+              echo "$TESTBED_BUCKETS" | jq -r '.[] | .[0]' | while read -r BUCKET_NAME; do
+                if [ -n "$BUCKET_NAME" ] && [ "$BUCKET_NAME" != "null" ]; then
+                  echo "Deleting testbed bucket: $BUCKET_NAME"
+                  # First, delete all objects
+                  aws s3 rm s3://"$BUCKET_NAME" --recursive || echo "Failed to delete objects"
+                  # Then delete the bucket
+                  aws s3api delete-bucket --bucket "$BUCKET_NAME" || echo "Failed to delete bucket $BUCKET_NAME"
+                fi
+              done
+            fi
+            
+            echo "" >> cleanup-reports/summary.md
+          fi
+
+      - name: Cleanup Orphaned Testbed Placement Groups
+        if: ${{ github.event.inputs.cleanup_testbed_placement_groups == 'true' }}
+        run: |
+          echo "## Orphaned Testbed Placement Groups" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          TOTAL_PGS=0
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Checking Placement Groups in $REGION..."
+            
+            # Get all placement groups - handle pagination
+            PLACEMENT_GROUPS=$(aws ec2 describe-placement-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "PlacementGroups[].[GroupName,State]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            # Filter for testbed placement groups
+            TESTBED_PGS=$(echo "$PLACEMENT_GROUPS" | jq '[.[] | select(.[0] | test("testbed|test-|testing"; "i"))]')
+            
+            TESTBED_COUNT=$(echo "$TESTBED_PGS" | jq 'length')
+            
+            if [ "$TESTBED_COUNT" -gt 0 ]; then
+              echo "| testbed_name | group_name | region | owner |" >> cleanup-reports/summary.md
+              echo "|--------------|------------|--------|-------|" >> cleanup-reports/summary.md
+              
+              echo "$TESTBED_PGS" | jq -r --arg region "$REGION" '.[] | "| \(.[0]) | \(.[0]) | \($region) | |"' >> cleanup-reports/summary.md
+              
+              TOTAL_PGS=$((TOTAL_PGS + TESTBED_COUNT))
+              
+              if [ "${{ env.DRY_RUN }}" == "false" ]; then
+                echo "$TESTBED_PGS" | jq -r '.[] | .[0]' | while read -r PG_NAME; do
+                  if [ -n "$PG_NAME" ] && [ "$PG_NAME" != "null" ]; then
+                    echo "Deleting Placement Group: $PG_NAME"
+                    aws ec2 delete-placement-group --region "$REGION" --group-name "$PG_NAME" || echo "Failed to delete $PG_NAME"
+                  fi
+                done
+              fi
+              
+              echo "" >> cleanup-reports/summary.md
+            fi
+          done
+          
+          echo "**Total testbed placement groups: $TOTAL_PGS**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Cleanup Orphaned Blackhole Routes
+        if: ${{ github.event.inputs.cleanup_blackhole_routes == 'true' }}
+        run: |
+          echo "## Orphaned Blackhole Routes" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          TOTAL_ROUTES=0
+          
+          for REGION in ${REGIONS//,/ }; do
+            echo "Checking Route Tables in $REGION..."
+            
+            # Get all route tables - handle pagination
+            ROUTE_TABLES=$(aws ec2 describe-route-tables \
+              --region "$REGION" \
+              --no-paginate \
+              --query "RouteTables[].[RouteTableId,Routes[]]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            # Find blackhole routes (state = blackhole)
+            BLACKHOLE_ROUTES=$(echo "$ROUTE_TABLES" | jq '[.[] | .[0] as $rtb_id | .[1] | map(select(.State == "blackhole")) | map({rtb_id: $rtb_id, cidr: .DestinationCidrBlock})] | flatten')
+            
+            ROUTE_COUNT=$(echo "$BLACKHOLE_ROUTES" | jq 'length')
+            
+            if [ "$ROUTE_COUNT" -gt 0 ]; then
+              echo "Found $ROUTE_COUNT blackhole routes in $REGION" >> cleanup-reports/summary.md
+              echo "" >> cleanup-reports/summary.md
+              echo "| region | cidr | rtb_id |" >> cleanup-reports/summary.md
+              echo "|--------|------|--------|" >> cleanup-reports/summary.md
+              
+              echo "$BLACKHOLE_ROUTES" | jq -r --arg region "$REGION" '.[] | "| \($region) | \(.["cidr"]) | \(.["rtb_id"]) |"' >> cleanup-reports/summary.md
+              
+              TOTAL_ROUTES=$((TOTAL_ROUTES + ROUTE_COUNT))
+              
+              if [ "${{ env.DRY_RUN }}" == "false" ]; then
+                echo "$BLACKHOLE_ROUTES" | jq -r --arg region "$REGION" '.[] | "\(.["rtb_id"])|\(.["cidr"])"' | while IFS='|' read -r RTB_ID CIDR; do
+                  if [ -n "$RTB_ID" ] && [ -n "$CIDR" ]; then
+                    echo "Deleting blackhole route: $CIDR from $RTB_ID"
+                    aws ec2 delete-route --region "$REGION" --route-table-id "$RTB_ID" --destination-cidr-block "$CIDR" || echo "Failed to delete route"
+                  fi
+                done
+              fi
+              
+              echo "" >> cleanup-reports/summary.md
+            fi
+          done
+          
+          echo "**Total blackhole routes: $TOTAL_ROUTES**" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+
+      - name: Report Generic Resource Governance
+        if: ${{ github.event.inputs.report_generic_resources == 'true' }}
+        run: |
+          echo "## Resources subject to Generic Resource Governance" >> cleanup-reports/summary.md
+          echo "==================================================================" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report all S3 Buckets (already done above, but add owner column)
+          echo "### Buckets" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[].[Name,CreationDate]" --output json 2>/dev/null || echo "[]")
+          BUCKET_COUNT=$(echo "$BUCKETS" | jq 'length')
+          
+          if [ "$BUCKET_COUNT" -gt 0 ]; then
+            echo "| id | owner | region |" >> cleanup-reports/summary.md
+            echo "|----|-------|--------|" >> cleanup-reports/summary.md
+            echo "$BUCKETS" | jq -r '.[] | "| \(.[0]) | | global |"' >> cleanup-reports/summary.md
+          else
+            echo "No buckets found." >> cleanup-reports/summary.md
+          fi
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report all AMIs
+          echo "### Images" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          REGIONS="${{ steps.get-regions.outputs.regions }}"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          echo "| id | owner | region |" >> cleanup-reports/summary.md
+          echo "|----|-------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            AMIS=$(aws ec2 describe-images \
+              --region "$REGION" \
+              --owners "$ACCOUNT_ID" \
+              --no-paginate \
+              --query "Images[].[ImageId,Name,CreationDate]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            AMI_COUNT=$(echo "$AMIS" | jq 'length')
+            
+            if [ "$AMI_COUNT" -gt 0 ]; then
+              echo "$AMIS" | jq -r ".[] | \"| \(.[0]) | | $REGION |\"" >> cleanup-reports/summary.md
+            fi
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report FSx Filesystems
+          echo "### Filesystems" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          echo "| id | resource_type | owner | region |" >> cleanup-reports/summary.md
+          echo "|----|---------------|-------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            # Get FSx File Systems
+            FSX_FILESYSTEMS=$(aws fsx describe-file-systems \
+              --region "$REGION" \
+              --no-paginate \
+              --query "FileSystems[].[FileSystemId,FileSystemType,CreationTime]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            # Get FSx Backups
+            FSX_BACKUPS=$(aws fsx describe-backups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Backups[].[BackupId,Type,CreationTime]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$FSX_FILESYSTEMS" | jq -r ".[] | \"| \(.[0]) | FSx:FileSystem | | $REGION |\"" >> cleanup-reports/summary.md
+            echo "$FSX_BACKUPS" | jq -r ".[] | \"| \(.[0]) | fsx:backup | | $REGION |\"" >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report Load Balancers
+          echo "### Load Balancers" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          echo "| id | owner | region |" >> cleanup-reports/summary.md
+          echo "|----|-------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            LBS=$(aws elbv2 describe-load-balancers \
+              --region "$REGION" \
+              --no-paginate \
+              --query "LoadBalancers[].[LoadBalancerArn,LoadBalancerName]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$LBS" | jq -r ".[] | \"| \(.[0]) | | $REGION |\"" >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report RDS Instances
+          echo "### RDS" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          echo "| id | owner | region |" >> cleanup-reports/summary.md
+          echo "|----|-------|--------|" >> cleanup-reports/summary.md
+          
+          for REGION in ${REGIONS//,/ }; do
+            RDS_INSTANCES=$(aws rds describe-db-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --query "DBInstances[].[DBInstanceIdentifier,DBInstanceArn]" \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "$RDS_INSTANCES" | jq -r ".[] | \"| \(.[0]) | | $REGION |\"" >> cleanup-reports/summary.md
+          done
+          echo "" >> cleanup-reports/summary.md
+          
+          # Report Unused IAM Roles
+          echo "### Unused Roles" >> cleanup-reports/summary.md
+          echo "" >> cleanup-reports/summary.md
+          echo "| Role Name | Last Used |" >> cleanup-reports/summary.md
+          echo "|-----------|-----------|" >> cleanup-reports/summary.md
+          
+          ROLES=$(aws iam list-roles \
+            --no-paginate \
+            --query "Roles[].[RoleName,RoleLastUsed.LastUsedDate]" \
+            --output json 2>/dev/null || echo "[]")
+          
+          # Filter for roles not used in last 90 days
+          UNUSED_ROLES=$(echo "$ROLES" | jq '[.[] | select(.[1] == null or (.[1] | fromdateiso8601) < (now - 7776000))]')
+          
+          echo "$UNUSED_ROLES" | jq -r '.[] | "| \(.[0]) | \(.[1] // "Never") |"' >> cleanup-reports/summary.md
           echo "" >> cleanup-reports/summary.md
 
       - name: Generate Final Report
