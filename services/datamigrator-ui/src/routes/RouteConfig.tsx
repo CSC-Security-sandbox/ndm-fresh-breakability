@@ -12,6 +12,8 @@ const WorkersPage = lazy(() => import("@pages/WorkersPage"));
 const BulkCutOverPage = lazy(() => import("@pages/BulkCutOverPage"));
 const BulkDiscoveryPage = lazy(() => import("@pages/BulkDiscoveryPage"));
 const BulkMigratePage = lazy(() => import("@pages/BulkMigratePage"));
+const ExploreExportPathsPage = lazy(() => import("@pages/ExploreExportPathsPage"));
+const ExploreDirectoriesPage = lazy(() => import("@pages/ExploreDirectoriesPage"));
 const FileServerOverViewPage = lazy(
   () => import("@pages/FileServerOverViewPage")
 );
@@ -48,6 +50,18 @@ export const routeConfig: RouteConfigType[] = [
   {
     path: "file-server/:fileServerId",
     element: <FileServerOverViewPage />,
+  },
+  {
+    path: "file-server/:fileServerId/explore",
+    element: <ExploreExportPathsPage />,
+    protected: true,
+    requiredPermission: USER_PERMISSION_TYPE_ENUM.ManageJob,
+  },
+  {
+    path: "file-server/:fileServerId/explore-directories/:exportPathId",
+    element: <ExploreDirectoriesPage />,
+    protected: true,
+    requiredPermission: USER_PERMISSION_TYPE_ENUM.ManageJob,
   },
   {
     path: "new-file-server",
