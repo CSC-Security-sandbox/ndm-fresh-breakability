@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { NativeConnection, Worker } from '@temporalio/worker';
@@ -31,7 +31,7 @@ import {
 import { TemporalConnectionConfig, TemporalConfig } from 'src/utils/temporal.types';
 
 @Injectable()
-export class WorkManagerService {
+export class WorkManagerService implements OnModuleDestroy{
   readonly workerConfigUrl: string;
   private loadingConfigs = false;
   readonly workerId: string;
@@ -68,6 +68,12 @@ export class WorkManagerService {
     const jwtRefreshMinutes = parseInt(process.env.JWT_REFRESH_INTERVAL_MINUTES) || 1380;
     this.jwtRefreshInterval = jwtRefreshMinutes * 60 * 1000;
     this.logger = loggerFactory.create(WorkManagerService.name);
+  }
+
+  onModuleDestroy() {
+    if(this.schedulerRegistry){
+      this.schedulerRegistry.deleteInterval('jwtRefresh');
+    }    
   }
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
@@ -114,9 +120,7 @@ export class WorkManagerService {
       
       // Schedule JWT refresh with dynamic interval
       const intervalId = setInterval(() => {
-        this.refreshTemporalConnectionCron().catch(err => {
-          this.logger.error(`JWT refresh interval error: ${err.message}`);
-        });
+        this.refreshTemporalConnectionCron();
       }, this.jwtRefreshInterval);
       
       this.schedulerRegistry.addInterval('jwtRefresh', intervalId);
@@ -238,9 +242,7 @@ export class WorkManagerService {
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);
       if(error.message?.includes('UNAUTHENTICATED: Jwt is expired')){
-        this.refreshTemporalConnectionCron().catch(err => {
-          this.logger.error(`JWT refresh interval error: ${err.message}`);
-        });
+        await this.refreshTemporalConnectionCron();
       }
     } finally {
       this.loadingConfigs = false;
