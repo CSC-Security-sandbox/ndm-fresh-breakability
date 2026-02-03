@@ -90,6 +90,12 @@ const JobsAction = ({
       <Box className="flex justify-end gap-2">
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
+            disabled={!isActive}
+            onClick={() => navigate(`${pathname}/explore${queryString}`)}
+          >
+            Explore
+          </Button>
+          <Button
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-discover${queryString}`)}
           >
