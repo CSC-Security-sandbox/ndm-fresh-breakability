@@ -1021,14 +1021,14 @@ jobs:
           for REGION in ${REGIONS//,/ }; do
             echo "Checking orphaned Security Groups in $REGION..."
             
-            # Get all security groups - handle pagination
+            # Get all security groups - handle pagination (same as cleanup section)
             ALL_SGS=$(aws ec2 describe-security-groups \
               --region "$REGION" \
               --no-paginate \
               --query "SecurityGroups[].[GroupId,GroupName]" \
               --output json 2>/dev/null || echo "[]")
             
-            # Get security groups in use
+            # Get security groups in use (comprehensive check like cleanup section)
             USED_SGS_NI=$(aws ec2 describe-network-interfaces \
               --region "$REGION" \
               --no-paginate \
@@ -1047,7 +1047,63 @@ jobs:
               --query "SecurityGroups[].IpPermissions[].UserIdGroupPairs[].GroupId" \
               --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
             
-            ALL_USED="$USED_SGS_NI $USED_SGS_EC2 $REFERENCED_SGS_IN"
+            REFERENCED_SGS_OUT=$(aws ec2 describe-security-groups \
+              --region "$REGION" \
+              --no-paginate \
+              --query "SecurityGroups[].IpPermissionsEgress[].UserIdGroupPairs[].GroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            RDS_SGS=$(aws rds describe-db-instances \
+              --region "$REGION" \
+              --no-paginate \
+              --query "DBInstances[].VpcSecurityGroups[].VpcSecurityGroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            ELB_SGS=$(aws elb describe-load-balancers \
+              --region "$REGION" \
+              --no-paginate \
+              --query "LoadBalancerDescriptions[].SecurityGroups[]" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            ELBV2_SGS=$(aws elbv2 describe-load-balancers \
+              --region "$REGION" \
+              --no-paginate \
+              --query "LoadBalancers[].SecurityGroups[]" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            REDSHIFT_SGS=$(aws redshift describe-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --query "Clusters[].VpcSecurityGroups[].VpcSecurityGroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            ELASTICACHE_SGS=$(aws elasticache describe-cache-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --show-cache-node-info \
+              --query "CacheClusters[].SecurityGroups[].SecurityGroupId" \
+              --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || echo "")
+            
+            EMR_SGS=$(aws emr list-clusters \
+              --region "$REGION" \
+              --no-paginate \
+              --active \
+              --query "Clusters[].Id" \
+              --output text 2>/dev/null | while read -r CLUSTER_ID; do
+                aws emr describe-cluster \
+                  --region "$REGION" \
+                  --cluster-id "$CLUSTER_ID" \
+                  --query "Cluster.Ec2InstanceAttributes.EmrManagedMasterSecurityGroup" \
+                  --output text 2>/dev/null
+                aws emr describe-cluster \
+                  --region "$REGION" \
+                  --cluster-id "$CLUSTER_ID" \
+                  --query "Cluster.Ec2InstanceAttributes.EmrManagedSlaveSecurityGroup" \
+                  --output text 2>/dev/null
+              done | sort -u | tr '\n' ' ' || echo "")
+            
+            # Combine all used security groups
+            ALL_USED="$USED_SGS_NI $USED_SGS_EC2 $REFERENCED_SGS_IN $REFERENCED_SGS_OUT $RDS_SGS $ELB_SGS $ELBV2_SGS $REDSHIFT_SGS $ELASTICACHE_SGS $EMR_SGS"
             
             # Find orphaned security groups
             ORPHANED_SGS=$(echo "$ALL_SGS" | jq -r --arg used "$ALL_USED" --arg region "$REGION" '
@@ -1066,8 +1122,9 @@ jobs:
             echo "| name | region |" >> cleanup-reports/summary.md
             echo "|------|--------|" >> cleanup-reports/summary.md
             
-            # Sort by region, then by name for consistent output
-            echo "$ALL_ORPHANED_SGS" | jq -r 'sort_by(.[2], .[1]) | .[] | "| \(.[1]) | \(.[2]) |"' >> cleanup-reports/summary.md
+            # Sort by region, then by Group ID for consistent output
+            # Output: Group ID (sg-xxx) as name, region
+            echo "$ALL_ORPHANED_SGS" | jq -r 'sort_by(.[2], .[0]) | .[] | "| \(.[0]) | \(.[2]) |"' >> cleanup-reports/summary.md
             echo "" >> cleanup-reports/summary.md
             echo "**Total Orphaned Security Groups: $TOTAL_COUNT**" >> cleanup-reports/summary.md
             echo "" >> cleanup-reports/summary.md
