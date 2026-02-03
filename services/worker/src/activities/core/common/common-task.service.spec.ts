@@ -20,6 +20,7 @@ jest.mock('@temporalio/client', () => ({
     },
 }));
 jest.mock('src/utils/temporal.utils', () => ({
+    buildTemporalConfig: jest.fn(),
     createClientConnection: jest.fn(),
 }));
 jest.mock('@temporalio/workflow', () => ({
@@ -43,6 +44,7 @@ describe('CommonTaskService', () => {
     let loggerFactory: LoggerFactory;
     let logger: Partial<LoggerService>;
     let redisService: any;
+    let authService: any;
 
     const mockLoggerFactory: Partial<LoggerFactory> = {
         create: jest.fn().mockReturnValue(mockLogger),
@@ -53,6 +55,7 @@ describe('CommonTaskService', () => {
             get: jest.fn((key) => {
                 if (key === 'worker.workerId') return 'worker-1';
                 if (key === 'worker.maxRetryCount') return 2;
+                if (key === 'temporal.address') return 'localhost:7233';
                 return undefined;
             }),
         };
@@ -60,7 +63,10 @@ describe('CommonTaskService', () => {
         redisService = {
             getJobManagerContext: jest.fn(),
         };
-        service = new CommonTaskService(configService, mockLoggerFactory as LoggerFactory, redisService);
+        authService = {
+            getAccessToken: jest.fn().mockResolvedValue('mock-token'),
+        };
+        service = new CommonTaskService(configService, mockLoggerFactory as LoggerFactory, redisService, authService);
     });
 
     describe('constructor', () => {
@@ -113,7 +119,8 @@ describe('CommonTaskService', () => {
 
     describe('isWorkflowRunningActivity', () => {
         it('should return true if workflow is running', async () => {
-            const { createClientConnection } = require('src/utils/temporal.utils');
+            const { buildTemporalConfig, createClientConnection } = require('src/utils/temporal.utils');
+            buildTemporalConfig.mockResolvedValue({ address: 'localhost:7233' });
             const mockDescribe = jest.fn().mockResolvedValue({
                 workflowExecutionInfo: { status: 1 },
             });
@@ -132,7 +139,8 @@ describe('CommonTaskService', () => {
         });
 
         it('should return false if workflow is not running', async () => {
-            const { createClientConnection } = require('src/utils/temporal.utils');
+            const { buildTemporalConfig, createClientConnection } = require('src/utils/temporal.utils');
+            buildTemporalConfig.mockResolvedValue({ address: 'localhost:7233' });
             const mockDescribe = jest.fn().mockResolvedValue({
                 workflowExecutionInfo: { status: 2 },
             });
@@ -150,7 +158,8 @@ describe('CommonTaskService', () => {
         });
 
         it('should return false if workflowExecutionInfo is undefined', async () => {
-            const { createClientConnection } = require('src/utils/temporal.utils');
+            const { buildTemporalConfig, createClientConnection } = require('src/utils/temporal.utils');
+            buildTemporalConfig.mockResolvedValue({ address: 'localhost:7233' });
             const mockDescribe = jest.fn().mockResolvedValue({
             workflowExecutionInfo: undefined,
             });
@@ -168,7 +177,8 @@ describe('CommonTaskService', () => {
         });
 
         it('should throw if createClientConnection fails', async () => {
-            const { createClientConnection } = require('src/utils/temporal.utils');
+            const { buildTemporalConfig, createClientConnection } = require('src/utils/temporal.utils');
+            buildTemporalConfig.mockResolvedValue({ address: 'localhost:7233' });
             createClientConnection.mockRejectedValue(new Error('connection error'));
             await expect(service.isWorkflowRunningActivity('wf-err')).rejects.toThrow('connection error');
         });
