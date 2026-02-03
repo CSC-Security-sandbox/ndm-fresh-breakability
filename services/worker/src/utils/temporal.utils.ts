@@ -1,16 +1,8 @@
 import { NativeConnection } from '@temporalio/worker';
 import { Connection as ClientConnection } from '@temporalio/client';
 import { LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { TemporalConnectionConfig, TemporalConfig } from './temporal.types';
 
-export interface TemporalConnectionConfig {
-  address: string;
-  namespace?: string;
-  tlsEnabled: boolean;
-  tlsServerName?: string;
-  tlsCaCert?: string;
-  jwtEnabled: boolean;
-  getAccessToken?: () => Promise<string>;
-}
 
 /**
  * Build Temporal connection configuration with TLS and JWT settings.
@@ -20,11 +12,11 @@ export interface TemporalConnectionConfig {
  * @returns Temporal connection config object ready for connection
  * @throws Error if JWT authentication required but unavailable
  */
-async function buildTemporalConfig(
+export async function buildTemporalConfig(
   config: TemporalConnectionConfig,
   logger: LoggerService,
-): Promise<any> {
-  const temporalConfig: any = {
+): Promise<TemporalConfig> {
+  const temporalConfig: TemporalConfig = {
     address: config.address,
   };
 
@@ -42,70 +34,25 @@ async function buildTemporalConfig(
   if (config.jwtEnabled) {
     logger.log('[buildTemporalConfig] - JWT authentication enabled for Temporal connection');
     
-    if (!config.getAccessToken) {
-      throw new Error('JWT enabled but no getAccessToken function provided');
-    }
-
-    try {
-      const accessToken = await config.getAccessToken();
-      
-      if (!accessToken) {
-        throw new Error('Access token is null or undefined');
-      }
-      
-      temporalConfig.metadata = {
-        authorization: `Bearer ${accessToken}`,
-      };
-      
-      logger.log('[buildTemporalConfig] - JWT added to Temporal connection metadata');
-    } catch (jwtError) {
-      logger.error(`Failed to obtain JWT for Temporal connection: ${jwtError}`);
-      throw new Error('JWT authentication required but token unavailable');
-    }
   }
 
   return temporalConfig;
 }
 
 /**
- * Create a Temporal NativeConnection for Worker usage.
- * Used by Workers to poll and execute tasks from Temporal task queues.
- * 
- * @param config - Configuration for Temporal connection
- * @param logger - Logger instance for logging
- * @returns NativeConnection instance
- * @throws Error if connection fails
- */
-export async function createNativeConnection(
-  config: TemporalConnectionConfig,
-  logger: LoggerService,
-): Promise<NativeConnection> {
-  try {
-    const temporalConfig = await buildTemporalConfig(config, logger);
-    const connection = await NativeConnection.connect(temporalConfig);
-    logger.log('[createNativeConnection] - NativeConnection established successfully');
-    return connection;
-  } catch (err) {
-    logger.error(`Error creating NativeConnection: ${err}`);
-    throw err;
-  }
-}
-
-/**
  * Create a Temporal ClientConnection for client operations.
  * Used to interact with Temporal server (query workflows, start workflows, check status, etc.)
  * 
- * @param config - Configuration for Temporal connection
+ * @param temporalConfig - Pre-built temporal config object (with TLS, JWT metadata already set)
  * @param logger - Logger instance for logging
  * @returns ClientConnection instance
  * @throws Error if connection fails
  */
 export async function createClientConnection(
-  config: TemporalConnectionConfig,
+  temporalConfig: TemporalConfig,
   logger: LoggerService,
 ): Promise<ClientConnection> {
   try {
-    const temporalConfig = await buildTemporalConfig(config, logger);
     const connection = await ClientConnection.connect(temporalConfig);
     logger.log('[createClientConnection] - ClientConnection established successfully');
     return connection;
@@ -122,23 +69,20 @@ export async function createClientConnection(
  * Build the Temporal config once (including TLS and JWT) and reuse it for both connections
  * to ensure consistency and avoid fetching JWT token twice.
  * 
- * @param config - Configuration for Temporal connection
+ * @param temporalConfig - Pre-built temporal config object (with TLS, JWT metadata already set)
  * @param logger - Logger instance for logging
  * @returns Object containing both native and client connections
  * @throws Error if connection fails
  */
 export async function createTemporalConnections(
-  config: TemporalConnectionConfig,
+  temporalConfig: TemporalConfig,
   logger: LoggerService,
 ): Promise<{ nativeConnection: NativeConnection; clientConnection: ClientConnection }> {
-  try {
-    const temporalConfig = await buildTemporalConfig(config, logger);
-
+  try {    
     const [nativeConnection, clientConnection] = await Promise.all([
       NativeConnection.connect(temporalConfig),
       ClientConnection.connect(temporalConfig),
     ]);
-
     logger.log('[createTemporalConnections] - Both connections established successfully');
 
     return { nativeConnection, clientConnection };
@@ -146,4 +90,65 @@ export async function createTemporalConnections(
     logger.error(`Error creating Temporal connections: ${err}`);
     throw err;
   }
+}
+
+/**
+ * Refresh Temporal connections with a new JWT token.
+ * Creates new connections and validates them before returning.
+ * 
+ * @param oldNativeConnection - Existing NativeConnection to close
+ * @param oldClientConnection - Existing ClientConnection to close
+ * @param temporalConfig - Pre-built temporal config object (with TLS, JWT metadata already set)
+ * @param logger - Logger instance for logging
+ * @returns New connection pair with updated expiry timestamp
+ */
+export async function refreshTemporalConnections(
+  oldNativeConnection: NativeConnection | null,
+  oldClientConnection: ClientConnection | null,
+  temporalConfig: TemporalConfig,
+  logger: LoggerService,  
+): Promise<{ 
+  nativeConnection: NativeConnection; 
+  clientConnection: ClientConnection;  
+}> {
+  logger.log('[refreshTemporalConnections] - Closing old connections');
+  
+  // Close old client connection
+  if (oldClientConnection) {
+    try {
+      oldClientConnection.close();
+      logger.debug('[refreshTemporalConnections] - Old ClientConnection closed');
+    } catch (err) {
+      logger.debug(`[refreshTemporalConnections] - Error closing old client connection: ${err.message}`);
+    }
+  }
+  
+  // Close old native connection
+  if (oldNativeConnection) {
+    try {
+      await oldNativeConnection.close();
+      logger.debug('[refreshTemporalConnections] - Old NativeConnection closed');
+    } catch (err) {
+      logger.debug(`[refreshTemporalConnections] - Error closing old native connection: ${err.message}`);
+    }
+  }
+  
+  logger.log('[refreshTemporalConnections] - Creating new connections with fresh token');
+  
+  // Create new connections with fresh JWT
+  const connections = await createTemporalConnections(temporalConfig, logger);
+  
+  // Validate new connection health
+  try {
+    logger.debug('[refreshTemporalConnections] - Validating new connection health');
+    await connections.clientConnection.workflowService.getSystemInfo({});
+    logger.log('[refreshTemporalConnections] - New connection validated successfully');
+  } catch (healthErr) {
+    logger.error(`[refreshTemporalConnections] - New connection failed validation: ${healthErr.message}`);
+    throw new Error(`Connection health check failed: ${healthErr.message}`);
+  }
+  return {
+    nativeConnection: connections.nativeConnection,
+    clientConnection: connections.clientConnection,    
+  };
 }

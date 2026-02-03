@@ -13,7 +13,8 @@ import { calculateCommandHash } from "src/activities/utils/utils";
 import { buildTask } from "../utils/utils";
 import { InitTaskInput } from "../migrate/sync-activity.type";
 import { AuthService } from "src/auth/auth.service";
-import { createClientConnection } from 'src/utils/temporal.utils';
+import { buildTemporalConfig, createClientConnection } from 'src/utils/temporal.utils';
+import { TemporalConnectionConfig, TemporalConfig } from 'src/utils/temporal.types';
 
 
 @Injectable()
@@ -25,6 +26,7 @@ export class CommonTaskService {
   readonly groupSize: number;
   readonly commandsInTask: number;
   readonly maxCmdStreamLen: number;
+  private temporalConfig: TemporalConfig = null;
 
   constructor(
       @Inject(ConfigService) private readonly configService: ConfigService,
@@ -40,6 +42,32 @@ export class CommonTaskService {
       this.logger = loggerFactory.create(CommonTaskService.name);
       this.maxCmdStreamLen = this.configService.get<number>('worker.maxCmdStreamLen') || 5000;
     }
+
+  /**
+   * Initialize temporal config on first use.
+   * This builds the config once and reuses it, only updating JWT token on each call.
+   */
+  private async getTemporalConfig(): Promise<TemporalConfig> {
+    if (!this.temporalConfig) {
+      const config: TemporalConnectionConfig = {
+        address: this.temporalAddress,
+        tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
+        tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
+        tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+        jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
+        getAccessToken: () => this.authService.getAccessToken(),
+      };
+      this.temporalConfig = await buildTemporalConfig(config, this.logger);
+    }
+    
+    // Update JWT token for this call
+    const accessToken = await this.authService.getAccessToken(true);
+    this.temporalConfig.metadata = {
+      authorization: `Bearer ${accessToken}`,
+    };
+    
+    return this.temporalConfig;
+  }
 
     // TO-DO : make this adaptive resource based task creation
     async getGroupOfTasksActivity(jobRunId): Promise<string[]> {
@@ -112,18 +140,11 @@ export class CommonTaskService {
   }
 
   async isWorkflowRunningActivity(workflowId: string): Promise<boolean> {
-    // Create Temporal client connection using utility function
-    const connection = await createClientConnection(
-      {
-        address: this.temporalAddress,
-        tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
-        tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
-        tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
-        jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
-        getAccessToken: () => this.authService.getAccessToken(),
-      },
-      this.logger,
-    );
+    // Get temporal config with fresh JWT token
+    const temporalConfig = await this.getTemporalConfig();
+    
+    // Create connection with pre-built config
+    const connection = await createClientConnection(temporalConfig, this.logger);
     this.logger.debug(`Checking if workflow ${workflowId} is running on Temporal at ${this.temporalAddress}`);
     
     try {
