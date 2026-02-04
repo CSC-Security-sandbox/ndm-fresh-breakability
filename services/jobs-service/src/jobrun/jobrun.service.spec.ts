@@ -1713,6 +1713,7 @@ describe("JobRunService", () => {
       expect(result).toEqual({
         jobRunId,
         jobConfigId,
+        jobRunType: "REGULAR",
         status: JobRunStatus.Completed,
         startTime,
         endTime,
@@ -1840,6 +1841,7 @@ describe("JobRunService", () => {
       expect(result).toEqual({
         jobRunId,
         jobConfigId,
+        jobRunType: "REGULAR",
         status: JobRunStatus.Completed,
         startTime,
         endTime,
@@ -2818,6 +2820,7 @@ describe("JobRunService", () => {
         endTime: true,
         id: true,
         jobConfigId: true,
+        jobRunType: true,
         startTime: true,
         status: true,
         subStatus: true,

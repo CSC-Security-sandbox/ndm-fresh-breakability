@@ -314,6 +314,36 @@ describe('ProcessRetryBatchActivity', () => {
             expect(result.batchDirs).toEqual([]);
         });
 
+        it('should return empty batchDirs when dir batch is empty array', async () => {
+            mockJobContext.getBatchDir.mockResolvedValue([]);
+
+            const result = await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'dir',
+                settings: mockSettings,
+            });
+
+            expect(result.batchDirs).toEqual([]);
+            expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('not found'));
+        });
+
+        it('should skip updateTaskStatus and deleteTask when batchTaskInfo is null', async () => {
+            mockJobContext.getTask.mockResolvedValue(null);
+            mockJobContext.getBatchDir.mockResolvedValue(mockDirCommands);
+            commandGenerationService.processItems.mockResolvedValue({ commands: [], subDirs: [] });
+
+            const result = await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'dir',
+                settings: mockSettings,
+            });
+
+            expect(result.batchDirs).toBeDefined();
+            expect(mockJobContext.deleteTask).not.toHaveBeenCalled();
+        });
+
         it('should collect subdirs from all directory scans', async () => {
             commandGenerationService.processItems
                 .mockResolvedValueOnce({ commands: [], subDirs: ['/subdir1/nested'] })
@@ -486,6 +516,36 @@ describe('ProcessRetryBatchActivity', () => {
             });
 
             expect(mockJobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('getDirContents ENOENT on destination', () => {
+        beforeEach(() => {
+            mockJobContext.getRetryBatch.mockResolvedValue(mockOperationsBatch);
+        });
+
+        it('should handle target directory ENOENT and still process batch', async () => {
+            const readdirMock = fs.promises.readdir as jest.Mock;
+            readdirMock.mockImplementation((p: string) => {
+                if (p.includes('target') || p.includes('tgt')) {
+                    return Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+                }
+                return Promise.resolve(['file1.txt']);
+            });
+            commandGenerationService.processItems.mockResolvedValue({
+                commands: [{ id: 'c1', fPath: '/file1.txt' }],
+                subDirs: [],
+            });
+
+            const result = await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'ops',
+                settings: mockSettings,
+            });
+
+            expect(result.batchDirs).toBeDefined();
+            expect(mockJobContext.publishBulkToCommandStream).toHaveBeenCalled();
         });
     });
 });

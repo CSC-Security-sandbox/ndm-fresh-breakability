@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { JobRunActionService } from "./jobrun-action.service";
-import { JobRunStatus } from "src/constants/enums";
+import { JobRunStatus, JobRunType } from "src/constants/enums";
 import { JobRunActions } from "./dto/jobrunactions.dto";
 import { JobType, JobStatus } from "src/constants/enums";
 import {
@@ -154,6 +154,7 @@ describe("JobRunActionService", () => {
         it("should call logger.error when signal fails in signalJobRuns", async () => {
             const jobRuns = [{
                 id: "1",
+                jobRunType: JobRunType.REGULAR,
                 status: JobRunStatus.Paused,
                 subStatus: null,
                 startTime: new Date(),

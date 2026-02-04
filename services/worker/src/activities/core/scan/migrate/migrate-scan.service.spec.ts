@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
-import { Cmd, Command, ErrorType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Cmd, Command, ErrorType, CommandStatus, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { dmError, getFileInfo, isContentUpdate, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
@@ -446,6 +446,62 @@ describe('MigrateScanService', () => {
             ).rejects.toThrow(FatalError);
             expect(jobContext.publishToErrorStream).toHaveBeenCalled();
         });
+
+        it('should set errorType to FATAL_ERROR when FatalError is thrown in getDirContents', async () => {
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockRejectedValue(new FatalError('Source directory does not exist'));
+            await expect(
+                service.getDirContents({
+                    path: '/dir',
+                    origin: Origin.SOURCE,
+                    jobContext,
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                    command: commandInput.command,
+                }),
+            ).rejects.toThrow(FatalError);
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    errorType: ErrorType.FATAL_ERROR,
+                }),
+            );
+        });
+
+        it('should publish error and rethrow when readdir throws non-FatalError', async () => {
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockRejectedValue(new Error('EACCES'));
+            await expect(
+                service.getDirContents({
+                    path: '/dir',
+                    origin: Origin.SOURCE,
+                    jobContext,
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                    command: commandInput.command,
+                }),
+            ).rejects.toThrow('EACCES');
+            expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                }),
+            );
+        });
+    });
+
+    describe('scanDirectory - commands length', () => {
+        it('should not call publishCommands when processItems returns empty commands', async () => {
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue(['file1']);
+            (commandGenerationService.processItems as jest.Mock).mockResolvedValue({
+                fileCount: 0,
+                dirCount: 0,
+                subDirs: [],
+                commands: [],
+            });
+            jobContext.jobConfig.skipDelete = true;
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+        });
     });
 
     // --- buildCommand ---
@@ -509,8 +565,60 @@ describe('MigrateScanService', () => {
                 isSymbolicLink: jest.fn().mockReturnValue(false),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
+            (isMetaUpdated as jest.Mock).mockReturnValue(false);
             const result = service.buildCommand(mockSFile as any, 'file/path');
             expect(result).toBeUndefined();
+        });
+
+        it('should build REMOVE_FILE command when sFile is undefined and dFile is undefined', () => {
+            (isContentUpdate as jest.Mock).mockReturnValue(false);
+            const result = service.buildCommand(undefined as any, 'file/path');
+            expect(result).toBeDefined();
+            expect(result!.isDir).toBe(false);
+            expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_FILE);
+        });
+
+        it('should build REMOVE_DIR command when sFile is undefined and dFile is directory', () => {
+            const dFile = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+            };
+            const result = service.buildCommand(undefined as any, 'dir/path', dFile as any);
+            expect(result).toBeDefined();
+            expect(result!.isDir).toBe(true);
+            expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_DIR);
+        });
+
+        it('should build command with STAMP_META when isMetaUpdated true and isContentUpdate false', () => {
+            const mockSFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1,
+                mtime: new Date(),
+                mode: 777,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            };
+            (isContentUpdate as jest.Mock).mockReturnValue(false);
+            (isMetaUpdated as jest.Mock).mockReturnValue(true);
+            const result = service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
+            expect(result).toBeDefined();
+            expect(Object.keys(result!.ops)).toContain(OPS_CMD.STAMP_META);
+        });
+    });
+
+    describe('getOpsCommand', () => {
+        it('should return COPY_SYMLINK for symlink', () => {
+            expect(service.getOpsCommand(false, true)).toBe(OPS_CMD.COPY_SYMLINK);
+        });
+        it('should return COPY_DIR for directory', () => {
+            expect(service.getOpsCommand(true, false)).toBe(OPS_CMD.COPY_DIR);
+        });
+        it('should return COPY_FILE for file', () => {
+            expect(service.getOpsCommand(false, false)).toBe(OPS_CMD.COPY_FILE);
         });
     });
 
@@ -1127,6 +1235,57 @@ describe('MigrateScanService', () => {
             const result = await service.scanDirectory(commandInput);
 
             expect(result).toBeDefined();
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+        });
+
+        it('should skip delete when shouldExcludeForDelete returns true for target item', async () => {
+            jobContext.jobConfig.skipDelete = false;
+            commandInput.targetPrefix = '/dst';
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set();
+                if (origin === Origin.DESTINATION) return new Set(['excluded-file']);
+                return new Set();
+            });
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(true);
+            jest.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            });
+            (removePrefix as jest.Mock).mockImplementation((full: string, prefix: string) => full.replace(prefix, ''));
+
+            await service.scanDirectory(commandInput);
+
+            expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+        });
+
+        it('should not push delete command when target item path does not exist', async () => {
+            jobContext.jobConfig.skipDelete = false;
+            commandInput.targetPrefix = '/dst';
+
+            jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
+                if (origin === Origin.SOURCE) return new Set();
+                if (origin === Origin.DESTINATION) return new Set(['ghost-item']);
+                return new Set();
+            });
+            (shouldExcludeForDelete as jest.Mock).mockReturnValue(false);
+            jest.spyOn(fs.promises, 'access').mockImplementation((path: string) => {
+                if (path && path.includes('ghost-item')) return Promise.reject({ code: 'ENOENT' });
+                return Promise.resolve(undefined);
+            });
+            (removePrefix as jest.Mock).mockImplementation((full: string, prefix: string) => full.replace(prefix, ''));
+
+            await service.scanDirectory(commandInput);
+
             expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
         });
     });
