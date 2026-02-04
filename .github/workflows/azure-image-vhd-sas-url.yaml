@@ -22,18 +22,19 @@ on:
         default: "7"
 
 env:
-  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'datamigrate-acr-resource-group' }}
-  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
-  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
-  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION || 'eastus' }}
-  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
-  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID || 'ndm-vm-export-acr-rg' }}
-  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing' }}
-  WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name || '' }}
-  VM_RESOURCE_GROUP: ${{ vars.VM_RESOURCE_GROUP || 'MigrationAsAService-dev-infra' }}
-  VM_VNET_NAME: ${{ vars.VM_VNET_NAME || 'MigrationAsAService-dev-VNET02' }}
-  VM_SUBNET_NAME: ${{ vars.VM_SUBNET_NAME || 'MigrationAsAService-dev-VNET02_Subnet01' }}
-  VM_SIZE: ${{ vars.VM_SIZE || 'Standard_D4s_v4' }}
+  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME }}
+  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION }}
+  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours }}
+  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID }}
+  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT }}
+  WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name  }}
+  VM_RESOURCE_GROUP: ${{ vars.AZ_VM_RESOURCE_GROUP  }}
+  VM_VNET_NAME: ${{ vars.AZ_VM_VNET_NAME }}
+  VM_SUBNET_NAME: ${{ vars.AZ_VM_SUBNET_NAME  }}
+  VM_SIZE: ${{ vars.AZ_VM_SIZE  }}
+  VM_USERNAME: ${{ vars.AZ_VM_USERNAME  }}
 
 permissions:
   contents: read 
@@ -130,7 +131,7 @@ jobs:
             --name "$VM_NAME" \
             --image "Canonical:0001-com-ubuntu-server-jammy:22_04-lts-gen2:latest" \
             --size "$VM_SIZE" \
-            --admin-username "ubuntu" \
+            --admin-username "$VM_USERNAME" \
             --admin-password "$VM_PASSWORD" \
             --nics "$NIC_NAME" \
             --location "$VNET_LOCATION" \
@@ -184,7 +185,7 @@ jobs:
           echo "Waiting for VM to be ready..."
           for i in {1..30}; do
             if sshpass -p "$VM_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-               -o UserKnownHostsFile=/dev/null ubuntu@"$VM_PRIVATE_IP" "echo 'VM is ready'" 2>/dev/null; then
+               -o UserKnownHostsFile=/dev/null "$VM_USERNAME"@"$VM_PRIVATE_IP" "echo 'VM is ready'" 2>/dev/null; then
               echo "VM is ready!"
               break
             fi
@@ -236,8 +237,8 @@ jobs:
           
           # Create temp directory on Azure VM (via IP 66 runner)
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
-            "sshpass -p '${AZURE_VM_PASSWORD}' ssh -o StrictHostKeyChecking=no ubuntu@${AZURE_VM} 'mkdir -p ~/installer-upload'"
-          
+            "sshpass -p '${AZURE_VM_PASSWORD}' ssh -o StrictHostKeyChecking=no ${VM_USERNAME}@${AZURE_VM} 'mkdir -p ~/installer-upload'"
+
           # Copy file to temp location with sudo and fix ownership/permissions
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
             "sudo cp '${INSTALLER_SOURCE}' '/tmp/${INSTALLER_NAME}.exe' && sudo chown ubuntu:ubuntu '/tmp/${INSTALLER_NAME}.exe' && sudo chmod 644 '/tmp/${INSTALLER_NAME}.exe'"
@@ -249,7 +250,7 @@ jobs:
                     
           # SCP installer from temp location on IP 66 runner to Azure VM
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
-            "sshpass -p '${AZURE_VM_PASSWORD}' scp -o StrictHostKeyChecking=no '/tmp/${INSTALLER_NAME}.exe' 'ubuntu@${AZURE_VM}:~/installer-upload/${INSTALLER_NAME}.exe'"
+            "sshpass -p '${AZURE_VM_PASSWORD}' scp -o StrictHostKeyChecking=no '/tmp/${INSTALLER_NAME}.exe' '${VM_USERNAME}@${AZURE_VM}:~/installer-upload/${INSTALLER_NAME}.exe'"
           
           SCP_EXIT=$?
           
@@ -283,7 +284,7 @@ jobs:
             AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
             AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
         run: |
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ steps.create-vm.outputs.vm_ip }} << 'REMOTE_SCRIPT'
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }} << 'REMOTE_SCRIPT'
 
           if ! command -v az &> /dev/null; then
             echo "Installing Azure CLI..."
@@ -371,9 +372,6 @@ jobs:
             echo "Copying $disk_name to blob storage..."
 
             local sas_seconds=$(( ${SAS_DURATION_HOURS} * 3600 ))
-
-            echo "DEBUG: Running command: az disk grant-access --resource-group $SOURCE_RESOURCE_GROUP --name $disk_name --access-level Read --duration-in-seconds $sas_seconds"
-            
 
             
             DISK_SAS=$(sudo az disk grant-access \
@@ -652,7 +650,7 @@ jobs:
           
           echo "Retrieving vhd-export-info.txt..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            ubuntu@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
+            ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve vhd-export-info.txt from remote VM." >&2
             exit 1
@@ -660,7 +658,7 @@ jobs:
           
           echo "Retrieving storage key file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            'ubuntu@${{ steps.create-vm.outputs.vm_ip }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
+            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve storage-key-*.txt from remote VM." >&2
             exit 1
@@ -668,7 +666,7 @@ jobs:
           
           echo "Retrieving checksum file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            'ubuntu@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
+            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve vhd-checksums-*.txt from remote VM." >&2
             exit 1
@@ -800,7 +798,7 @@ jobs:
         if: needs.vhd-export.outputs.vm_ip != ''
         run: |
           echo "Cleaning up remote VM files..."
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ubuntu@${{ needs.vhd-export.outputs.vm_ip }} << 'CLEANUP' || true
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${VM_USERNAME}@${{ needs.vhd-export.outputs.vm_ip }} << 'CLEANUP' || true
           rm -f ~/vhd-export-info.txt
           rm -f ~/vhd-checksums-*.txt
           rm -f ~/AZURE_SHA256SUMS.sha256

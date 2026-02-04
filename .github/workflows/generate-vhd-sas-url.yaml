@@ -63,10 +63,10 @@ on:
         value: ${{ jobs.generate-sas-urls.outputs.windows_worker_url }}
 
 env:
-  VM_RESOURCE_GROUP: ${{ vars.VM_RESOURCE_GROUP || 'MigrationAsAService-dev-infra' }}
-  VM_VNET_NAME: ${{ vars.VM_VNET_NAME || 'MigrationAsAService-dev-VNET02' }}
-  VM_SUBNET_NAME: ${{ vars.VM_SUBNET_NAME || 'MigrationAsAService-dev-VNET02_Subnet01' }}
-  VM_SIZE: ${{ vars.VM_SIZE || 'Standard_D2s_v4' }}
+  VM_RESOURCE_GROUP: ${{ vars.AZ_VM_RESOURCE_GROUP }}
+  VM_VNET_NAME: ${{ vars.AZ_VM_VNET_NAME || 'MigrationAsAService-dev-VNET02' }}
+  VM_SUBNET_NAME: ${{ vars.AZ_VM_SUBNET_NAME || 'MigrationAsAService-dev-VNET02_Subnet01' }}
+  VM_SIZE: ${{ vars.AZ_VM_SIZE || 'Standard_D2s_v4' }}
 
 jobs:
   generate-sas-urls:
@@ -89,7 +89,7 @@ jobs:
       - name: Install Azure CLI and SSH Tools
         run: |
           # sudo apt-get update
-          sudo apt-get install -y sshpass openssh-client
+          sudo apt-get install -y sshpass
           if ! command -v az &> /dev/null; then
             curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
           fi
