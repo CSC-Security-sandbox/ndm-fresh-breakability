@@ -658,7 +658,7 @@ jobs:
           
           echo "Retrieving storage key file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
+            ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/.vhd-export/storage-key-*.txt /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve storage-key-*.txt from remote VM." >&2
             exit 1
@@ -666,7 +666,7 @@ jobs:
           
           echo "Retrieving checksum file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
+            ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-checksums-*.txt /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve vhd-checksums-*.txt from remote VM." >&2
             exit 1
