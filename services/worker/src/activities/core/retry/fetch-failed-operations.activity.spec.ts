@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { AuthService } from 'src/auth/auth.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { FatalError } from 'src/errors/errors.types';
+import { RetryableError } from 'src/errors/errors.types';
 import axios from 'axios';
 import { RetryBatchInfo } from '@netapp-cloud-datamigrate/jobs-lib';
 
@@ -240,15 +240,15 @@ describe('FetchFailedOperationsActivity', () => {
     });
 
     describe('error handling', () => {
-        it('should throw FatalError when access token is missing', async () => {
+        it('should throw RetryableError when access token is missing', async () => {
             authService.getAccessToken.mockResolvedValue(null);
 
             await expect(
                 activity.fetchFailedOperations({ jobRunId, originalJobRunId })
-            ).rejects.toThrow(FatalError);
+            ).rejects.toThrow(RetryableError);
         });
 
-        it('should throw FatalError on API 4xx errors', async () => {
+        it('should throw RetryableError on API 4xx errors', async () => {
             const axiosError = {
                 response: { status: 400, data: { message: 'Bad request' } },
                 message: 'Request failed',
@@ -258,10 +258,10 @@ describe('FetchFailedOperationsActivity', () => {
 
             await expect(
                 activity.fetchFailedOperations({ jobRunId, originalJobRunId })
-            ).rejects.toThrow(FatalError);
+            ).rejects.toThrow(RetryableError);
         });
 
-        it('should throw FatalError on API 5xx errors', async () => {
+        it('should throw RetryableError on API 5xx errors', async () => {
             const axiosError = {
                 response: { status: 500, data: { message: 'Internal server error' } },
                 message: 'Server error',
@@ -271,15 +271,15 @@ describe('FetchFailedOperationsActivity', () => {
 
             await expect(
                 activity.fetchFailedOperations({ jobRunId, originalJobRunId })
-            ).rejects.toThrow(FatalError);
+            ).rejects.toThrow(RetryableError);
         });
 
-        it('should throw FatalError on network errors', async () => {
+        it('should throw RetryableError on network errors', async () => {
             mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
             await expect(
                 activity.fetchFailedOperations({ jobRunId, originalJobRunId })
-            ).rejects.toThrow(FatalError);
+            ).rejects.toThrow(RetryableError);
         });
     });
 

@@ -548,17 +548,24 @@
       </rollback>
    </changeSet>
 
-    <changeSet id="20251211_01_add_error_status_column.sql" author="achyutas">
-        <sqlFile path="liquibase/20251211_01_add_error_status_column.sql"/>
+     <changeSet id="20260128_01_add_error_status_column.sql" author="achyutas">
+        <sqlFile path="liquibase/20260128_01_add_error_status_column.sql"/>
         <rollback>
-            <sqlFile path="liquibase/rollback/20251211_01_add_error_status_column.sql"/>
+            <sqlFile path="liquibase/rollback/20260128_01_add_error_status_column_rollback.sql"/>
         </rollback>
     </changeSet>
 
-    <changeSet id="20251211_02_add_operations_indexes.sql" author="achyutas">
-        <sqlFile path="liquibase/20251211_02_add_operations_indexes.sql"/>
+    <changeSet id="20260128_02_add_job_run_type_column.sql" author="achyutas">
+        <sqlFile path="liquibase/20260128_02_add_job_run_type_column.sql"/>
         <rollback>
-            <sqlFile path="liquibase/rollback/20251211_02_add_operations_indexes.sql"/>
+            <sqlFile path="liquibase/rollback/20260128_02_add_job_run_type_column_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260128_03_add_operations_indexes.sql" author="achyutas">
+        <sqlFile path="liquibase/20260128_03_add_operations_indexes.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/rollback/20260128_03_add_operations_indexes_rollback.sql"/>
         </rollback>
     </changeSet>
 

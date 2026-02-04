@@ -113,10 +113,8 @@ export class ProcessRetryBatchActivity {
       });
 
       // Convert operations to items - process ONLY specific failed files
-      // Use removePrefix pattern to ensure fPath format matches normal scan flow
       const items = operations.map((op) => ({
         name: path.basename(op.fPath),
-        fPath: removePrefix(path.join(sourcePrefix, op.fPath), sourcePrefix),
         originalCommandId: op.id,
       }));
 
