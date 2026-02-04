@@ -217,6 +217,57 @@ describe('FetchFailedOperationsActivity', () => {
             expect(result.settings.isSMB).toBe(true);
         });
 
+        it('should use empty excludePatterns when options.excludeFilePattern is missing', async () => {
+            mockJobContext.jobConfig.options = { skipsFilesModifiedInLast: '2d' };
+
+            const result = await activity.fetchFailedOperations({
+                jobRunId,
+                originalJobRunId,
+            });
+
+            expect(result.settings.excludePatterns).toEqual([]);
+        });
+
+        it('should use empty string for skipFile when options.skipsFilesModifiedInLast is missing', async () => {
+            mockJobContext.jobConfig.options = { excludeFilePattern: 'node_modules' };
+
+            const result = await activity.fetchFailedOperations({
+                jobRunId,
+                originalJobRunId,
+            });
+
+            expect(result.settings.sourcePrefix).toBeDefined();
+            expect(result.settings.skipFile).toBe('');
+        });
+
+        it('should set isSMB false when protocols is undefined', async () => {
+            delete mockJobContext.jobConfig.sourceFileServer.protocols;
+
+            const result = await activity.fetchFailedOperations({
+                jobRunId,
+                originalJobRunId,
+            });
+
+            expect(result.settings.isSMB).toBe(false);
+        });
+
+        it('should not call setRetryCursor when nextCursor is null', async () => {
+            mockedAxios.get.mockResolvedValue({
+                data: {
+                    data: {
+                        items: {
+                            data: mockFailedOperations,
+                            nextCursor: null,
+                        },
+                    },
+                },
+            });
+
+            await activity.fetchFailedOperations({ jobRunId, originalJobRunId });
+
+            expect(mockJobContext.setRetryCursor).not.toHaveBeenCalled();
+        });
+
         it('should return empty result when no operations', async () => {
             mockedAxios.get.mockResolvedValue({
                 data: {
@@ -280,6 +331,49 @@ describe('FetchFailedOperationsActivity', () => {
             await expect(
                 activity.fetchFailedOperations({ jobRunId, originalJobRunId })
             ).rejects.toThrow(RetryableError);
+        });
+
+        it('should throw RetryableError with response message when API returns 404', async () => {
+            const axiosError = {
+                isAxiosError: true,
+                response: { status: 404, data: { message: 'Not found' } },
+                message: 'Request failed',
+            };
+            mockedAxios.get.mockRejectedValue(axiosError);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            await expect(
+                activity.fetchFailedOperations({ jobRunId, originalJobRunId })
+            ).rejects.toThrow(/HTTP 404 - Not found/);
+        });
+
+        it('should throw RetryableError with error.message when axios error has no response.data.message', async () => {
+            const axiosError = {
+                isAxiosError: true,
+                response: { status: 500, data: {} },
+                message: 'Internal Server Error',
+            };
+            mockedAxios.get.mockRejectedValue(axiosError);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            await expect(
+                activity.fetchFailedOperations({ jobRunId, originalJobRunId })
+            ).rejects.toThrow(/HTTP 500 - Internal Server Error/);
+        });
+
+        it('should throw RetryableError when axios error has no status (e.g. network timeout)', async () => {
+            const axiosError = {
+                isAxiosError: true,
+                response: undefined,
+                message: 'timeout of 5000ms exceeded',
+            };
+            mockedAxios.get.mockRejectedValue(axiosError);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            await expect(
+                activity.fetchFailedOperations({ jobRunId, originalJobRunId })
+            ).rejects.toThrow(RetryableError);
+            expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('timeout'));
         });
     });
 

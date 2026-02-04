@@ -685,18 +685,18 @@ describe("InventoryService", () => {
       expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
-    it("should log the number of resolved errors", async () => {
+    it("should call query with correct params for single error pair", async () => {
       const errors = [
         { operationId: "op-1", filePath: "/path/file1.txt" },
       ];
 
       operationErrorRepo.query = jest.fn().mockResolvedValue(undefined);
-      const loggerSpy = jest.spyOn(service["logger"], "log");
 
       await service.resolveOperationErrors(errors);
 
-      expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Resolved operation errors for 1 error pairs")
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE datamigrator.operation_errors"),
+        ["op-1", "/path/file1.txt"]
       );
     });
 
@@ -945,20 +945,15 @@ describe("InventoryService", () => {
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
-      
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 2 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue(undefined);
 
       await service.saveTasks(data);
 
-      // Should call resolveOperationErrors with the completed retry commands
-      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalled();
-      expect(mockQueryBuilder.set).toHaveBeenCalledWith({ errorStatus: 'RESOLVED' });
+      // Should call resolveOperationErrors via raw query with completed retry commands
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE datamigrator.operation_errors"),
+        ["original-cmd-1", "/path/to/file1.txt", "original-cmd-2", "/path/to/file2.txt"]
+      );
     });
 
     it("should not resolve errors for retry commands that did not complete", async () => {
@@ -980,24 +975,14 @@ describe("InventoryService", () => {
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
-      
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 1 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue(undefined);
 
       await service.saveTasks(data);
 
-      // Should only resolve the completed command (original-cmd-1)
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        expect.stringContaining("operation_id = :opId0"),
-        expect.objectContaining({
-          opId0: "original-cmd-1",
-          fPath0: "/path/to/file1.txt",
-        })
+      // Should only resolve the completed command (original-cmd-1); one (operationId, filePath) pair
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringMatching(/oe\.operation_id = \$1 AND o\.f_path = \$2/),
+        ["original-cmd-1", "/path/to/file1.txt"]
       );
     });
 
@@ -1020,12 +1005,12 @@ describe("InventoryService", () => {
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
-      operationErrorRepo.createQueryBuilder = jest.fn();
+      operationErrorRepo.query = jest.fn();
 
       await service.saveTasks(data);
 
       // Should not call resolveOperationErrors since no commands have originalCmdId
-      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
     it("should only resolve errors when task status is COMPLETED or COMPLETED_WITH_ERROR", async () => {
@@ -1046,12 +1031,12 @@ describe("InventoryService", () => {
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
-      operationErrorRepo.createQueryBuilder = jest.fn();
+      operationErrorRepo.query = jest.fn();
 
       await service.saveTasks(data);
 
       // Should not call resolveOperationErrors for IN_PROGRESS status
-      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
     it("should resolve errors for COMPLETED_WITH_ERROR task status", async () => {
@@ -1073,19 +1058,15 @@ describe("InventoryService", () => {
       (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
       (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
       operationRepo.upsert.mockResolvedValue({} as InsertResult);
-      
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 1 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue(undefined);
 
       await service.saveTasks(data);
 
-      // Should resolve errors for COMPLETED_WITH_ERROR status
-      expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalled();
+      // Should resolve errors for COMPLETED_WITH_ERROR status via raw query (one completed retry command)
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE datamigrator.operation_errors"),
+        ["original-cmd-1", "/path/to/file1.txt"]
+      );
     });
   });
 

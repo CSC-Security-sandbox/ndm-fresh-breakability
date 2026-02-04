@@ -272,6 +272,9 @@ export class JobRunService {
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
+      .andWhere("oe.errorType IN (:...errorTypes)", {
+        errorTypes: ["TRANSIENT_ERROR", "FATAL_ERROR"],
+      })
       .getCount();
 
     if (operationErrorCount === 0) {

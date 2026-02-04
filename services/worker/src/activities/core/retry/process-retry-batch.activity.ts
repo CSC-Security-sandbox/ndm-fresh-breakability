@@ -115,6 +115,7 @@ export class ProcessRetryBatchActivity {
       // Convert operations to items - process ONLY specific failed files
       const items = operations.map((op) => ({
         name: path.basename(op.fPath),
+        fPath: op.fPath,
         originalCommandId: op.id,
       }));
 
