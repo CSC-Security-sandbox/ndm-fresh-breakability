@@ -833,6 +833,73 @@ func GetKeyCloakAdminCredentials() (KeycloakCredentials, error) {
 	return creds, nil
 }
 
+// UpdateKeycloakTokenLifespan updates the accessTokenLifespan for the datamigrator realm in Keycloak
+// lifespanSeconds: token lifespan in seconds (e.g., 1200 for 20 minutes, 86400 for 24 hours)
+func UpdateKeycloakTokenLifespan(lifespanSeconds int) error {
+    // Validate environment variables
+    if NDM_VM_USER_NAME == "" || NDM_VM_HOST == "" || NDM_VM_PORT == "" || NDM_VM_PASSWORD == "" {
+        return fmt.Errorf("required CP SSH environment variables are not set")
+    }
+
+    // Convert port string to int
+    port, err := strconv.Atoi(NDM_VM_PORT)
+    if err != nil {
+        return fmt.Errorf("invalid NDM_VM_PORT value: %w", err)
+    }
+
+    // Create SSH config
+    sshConfig := &ssh.ClientConfig{
+        User: NDM_VM_USER_NAME,
+        Auth: []ssh.AuthMethod{
+            ssh.Password(NDM_VM_PASSWORD),
+        },
+        HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+    }
+
+    // Establish SSH connection
+    address := fmt.Sprintf("%s:%d", NDM_VM_HOST, port)
+    client, err := ssh.Dial("tcp", address, sshConfig)
+    if err != nil {
+        return fmt.Errorf("failed to dial SSH: %w", err)
+    }
+    defer client.Close()
+
+    // Create SSH session
+    session, err := client.NewSession()
+    if err != nil {
+        return fmt.Errorf("failed to create SSH session: %w", err)
+    }
+    defer session.Close()
+
+    // Build the command based on your shell script
+    script := fmt.Sprintf(`
+KEYCLOAK_POD="keycloak-0"
+KEYCLOAK_NS="keycloak"
+REALM_NAME="datamigrator"
+
+ADMIN_PASS=$(kubectl get secret -n $KEYCLOAK_NS keycloak-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
+
+kubectl exec -n $KEYCLOAK_NS $KEYCLOAK_POD -- bash -c "
+TOKEN=\$(curl -sk http://localhost:8080/keycloak/realms/master/protocol/openid-connect/token \
+  -d 'username=kcadmin' -d 'password=$ADMIN_PASS' -d 'grant_type=password' -d 'client_id=admin-cli')
+ACCESS=\$(echo \"\$TOKEN\" | sed -n 's/.*\"access_token\":\"\([^\"]*\)\".*/\1/p')
+CONFIG=\$(curl -sk http://localhost:8080/keycloak/admin/realms/$REALM_NAME -H \"Authorization: Bearer \$ACCESS\")
+UPDATED=\$(echo \"\$CONFIG\" | sed 's/\"accessTokenLifespan\":[0-9]*/\"accessTokenLifespan\":%d/')
+curl -sk -X PUT http://localhost:8080/keycloak/admin/realms/$REALM_NAME \
+  -H \"Authorization: Bearer \$ACCESS\" -H 'Content-Type: application/json' -d \"\$UPDATED\"
+"
+`, lifespanSeconds)
+
+    // Execute the command
+    output, err := session.Output(script)
+    if err != nil {
+        return fmt.Errorf("failed to update Keycloak token lifespan: %w\nOutput: %s", err, string(output))
+    }
+
+    LogDebug(fmt.Sprintf("Keycloak accessTokenLifespan updated to %d seconds. Output: %s", lifespanSeconds, string(output)))
+    return nil
+}
+
 // getOpenBaoRootToken reads the JSON file from the remote host, parses it, and returns the root token.
 func getOpenBaoRootToken() (string, error) {
 	type ClusterKeys struct {

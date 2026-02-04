@@ -97,6 +97,15 @@ func InitTestEnv() {
 		CLIENT_SECRET = creds.ClientSecret
 	}
 
+	if JWT_REFRESH_INTERVAL_MINUTES > 0 {
+        LogDebug("Configuring Keycloak for JWT refresh testing...")
+        err := UpdateKeycloakTokenLifespan(KEYCLOAK_TOKEN_LIFESPAN_SECONDS) // 20 minutes for E2E JWT refresh testing
+        if err != nil {
+            LogFatalf("Failed to configure Keycloak token lifespan: %v", err)
+        }
+        LogDebug(fmt.Sprintf("Keycloak configured with %d-second token lifespan", KEYCLOAK_TOKEN_LIFESPAN_SECONDS))
+    }
+
 	// Update the app admin profile during the first login.
 	err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
 	if err != nil {
@@ -269,6 +278,14 @@ func SetGlobalTestVariables(data SharedSuiteData) {
 }
 
 func CleanupTestEnv() error {
+	if JWT_REFRESH_INTERVAL_MINUTES > 0 {
+        LogDebug("Restoring Keycloak default token lifespan...")
+        err := UpdateKeycloakTokenLifespan(86400) // Restore to 24 hours
+        if err != nil {
+            LogError("Failed to restore Keycloak token lifespan", err)
+        }
+    }
+
 	err := DetachAllWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)

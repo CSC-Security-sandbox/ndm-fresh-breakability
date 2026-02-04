@@ -532,6 +532,18 @@ func attachWorkerForConfig(workerConfig SSHConfig, authToken, accountId, project
 		attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
 		return
 	}
+
+	if JWT_REFRESH_INTERVAL_MINUTES > 0 {
+		LogDebug(fmt.Sprintf("Configuring worker %s with JWT_REFRESH_INTERVAL_MINUTES=%d", workerConfig.Host, JWT_REFRESH_INTERVAL_MINUTES))
+		err = updateWorkerJWTRefreshInterval(workerConfig, JWT_REFRESH_INTERVAL_MINUTES)
+		if err != nil {
+			LogError(fmt.Sprintf("Failed to configure JWT refresh interval on worker %s: %v", workerConfig.Host, err), err)
+			attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, err}
+			return
+		}
+		LogDebug(fmt.Sprintf("Worker %s fully configured with JWT_REFRESH_INTERVAL_MINUTES=%d", workerConfig.Host, JWT_REFRESH_INTERVAL_MINUTES))
+	}
+
 	attachWorkerRes <- AttachWorkerResult{workerConfig, workerId, nil}
 }
 
@@ -811,4 +823,69 @@ func StopCPUMonitoring() error {
 	}
 
 	return nil
+}
+
+// UpdateWorkerJWTRefreshInterval updates JWT_REFRESH_INTERVAL_MINUTES on all unattached workers
+// Call this BEFORE AttachWorkers() to configure workers for JWT refresh testing
+func updateWorkerJWTRefreshInterval(workerConfig SSHConfig, refreshIntervalMinutes int) error {
+	// Update the env variable
+	var script string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		script = updateJWTRefreshIntervalScriptForNFS(workerConfig.Password, refreshIntervalMinutes)
+	case ProtocolSMB:
+		script = updateJWTRefreshIntervalScriptForSMB(refreshIntervalMinutes)
+	default:
+		return fmt.Errorf("unsupported protocol type: %s", PROTOCOL_TYPE)
+	}
+
+	output, err := sshRunScript(workerConfig, script)
+	if err != nil {
+		return fmt.Errorf("failed to update JWT refresh interval on %s: %w\nOutput: %s", workerConfig.Host, err, output)
+	}
+
+	LogDebug(fmt.Sprintf("Worker %s JWT_REFRESH_INTERVAL_MINUTES updated in worker.env", workerConfig.Host))
+
+	// Restart worker to pick up the new configuration
+	_, err = RestartWorker(workerConfig)
+	if err != nil {
+		return fmt.Errorf("failed to restart worker %s after JWT config update: %w", workerConfig.Host, err)
+	}
+	LogDebug(fmt.Sprintf("Worker %s restarted successfully with new JWT configuration", workerConfig.Host))
+
+	return nil
+}
+
+// Helper: Script for NFS workers
+func updateJWTRefreshIntervalScriptForNFS(passwd string, refreshIntervalMinutes int) string {
+	script := fmt.Sprintf(`
+#!/bin/bash
+set -e
+SUDO_PASS="%s"
+ENV_FILE="%s"
+if echo "$SUDO_PASS" | sudo -S grep -q '^JWT_REFRESH_INTERVAL_MINUTES=' "$ENV_FILE"; then
+    echo "$SUDO_PASS" | sudo -S sed -i 's/^JWT_REFRESH_INTERVAL_MINUTES=.*/JWT_REFRESH_INTERVAL_MINUTES=%d/' "$ENV_FILE"
+    echo "Updated JWT_REFRESH_INTERVAL_MINUTES=%d in $ENV_FILE"
+else
+    echo "$SUDO_PASS" | sudo -S bash -c "echo 'JWT_REFRESH_INTERVAL_MINUTES=%d' >> $ENV_FILE"
+    echo "Added JWT_REFRESH_INTERVAL_MINUTES=%d to $ENV_FILE"
+fi
+`, passwd, NFSWorkerEnvPath, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes)
+	return script
+}
+
+// Helper: Script for SMB workers
+func updateJWTRefreshIntervalScriptForSMB(refreshIntervalMinutes int) string {
+	script := fmt.Sprintf(`powershell.exe -Command "
+$envFile = '%s'
+$content = Get-Content $envFile
+if ($content -match 'JWT_REFRESH_INTERVAL_MINUTES=') {
+    $content -replace 'JWT_REFRESH_INTERVAL_MINUTES=\\d+', 'JWT_REFRESH_INTERVAL_MINUTES=%d' | Set-Content $envFile
+    Write-Host 'Updated JWT_REFRESH_INTERVAL_MINUTES=%d'
+} else {
+    Add-Content -Path $envFile -Value 'JWT_REFRESH_INTERVAL_MINUTES=%d'
+    Write-Host 'Added JWT_REFRESH_INTERVAL_MINUTES=%d'
+}
+"`, SMBWorkerEnvPath, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes)
+	return script
 }
