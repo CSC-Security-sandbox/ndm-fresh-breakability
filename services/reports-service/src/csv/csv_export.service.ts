@@ -141,7 +141,7 @@ export class CsvService {
                         WHEN i.source_checksum = i.target_checksum THEN 'yes'
                         ELSE 'no'
                     END AS "ChecksumMatchStatus",
-                    i.checksum_time as "Checksum Generated Timestamp",
+                    TO_CHAR(i.checksum_time AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') as "Checksum Generated Timestamp (UTC)",
                     -- Window function to check if file is deleted in latest run
                     FIRST_VALUE(i.is_deleted) OVER (
                         PARTITION BY i.path 
@@ -165,7 +165,7 @@ export class CsvService {
                 "Source Checksum",
                 "Destination Checksum",
                 "ChecksumMatchStatus",
-                "Checksum Generated Timestamp"
+                "Checksum Generated Timestamp (UTC)"
             FROM latest_file_versions
             WHERE latest_deletion_status = false OR latest_deletion_status IS NULL
             ORDER BY "Source Path"
@@ -186,11 +186,11 @@ export class CsvService {
                         ELSE 'no'
                     END
             END AS "ChecksumMatchStatus",
-            i.checksum_time as "Checksum Generated Timestamp",
+            TO_CHAR(i.checksum_time AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') as "Checksum Generated Timestamp (UTC)",
             CASE
                 WHEN i.is_directory THEN 'directory'
                 ELSE 'file'
-            END AS Type,
+            END AS "Type",
             i.file_size AS "Size in Bytes"
         `;
            
