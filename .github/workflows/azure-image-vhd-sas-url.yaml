@@ -22,15 +22,19 @@ on:
         default: "7"
 
 env:
-  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'datamigrate-acr-resource-group' }}
-  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
-  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
-  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION || 'eastus' }}
-  AZURE_VM_HOST: ${{ vars.AZURE_VM_HOST }}
-  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours || '1' }}
-  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID || 'ndm-vm-export-acr-rg' }}
-  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing' }}
-  WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name || '' }}
+  SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  SOURCE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+  SOURCE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME }}
+  SOURCE_AZURE_REGION: ${{ vars.AZURE_REGION }}
+  SAS_DURATION_HOURS: ${{ github.event.inputs.copy_sas_duration_hours }}
+  AZURE_DISK_ACCESS_ID: ${{ vars.AZURE_DISK_ACCESS_ID }}
+  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT }}
+  WINDOWS_INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name  }}
+  VM_RESOURCE_GROUP: ${{ vars.AZ_VM_RESOURCE_GROUP  }}
+  VM_VNET_NAME: ${{ vars.AZ_VM_VNET_NAME }}
+  VM_SUBNET_NAME: ${{ vars.AZ_VM_SUBNET_NAME  }}
+  VM_SIZE: ${{ vars.AZ_VM_SIZE  }}
+  VM_USERNAME: ${{ vars.AZ_VM_USERNAME  }}
 
 permissions:
   contents: read 
@@ -44,17 +48,161 @@ jobs:
       worker_blob_name: ${{ steps.blob-info.outputs.worker_blob_name }}
       controlplane_blob_name: ${{ steps.blob-info.outputs.controlplane_blob_name }}
       installer_blob_name: ${{ steps.blob-info.outputs.installer_blob_name }}
+      vm_name: ${{ steps.create-vm.outputs.vm_name }}
+      vm_ip: ${{ steps.create-vm.outputs.vm_ip }}
+      vm_resource_group: ${{ steps.create-vm.outputs.vm_resource_group }}
+      vm_nic_name: ${{ steps.create-vm.outputs.vm_nic_name }}
     steps:
-      - name: Install SSH Tools
+      - name: Install Azure CLI and SSH Tools
         run: |
           # sudo apt-get update -qq
           sudo apt-get install -y sshpass openssh-client
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
 
-      - name: Add VM SSH Host Key to known_hosts
+      - name: Authenticate to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
         run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID" \
+            --output none
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+      - name: Create Dynamic Azure VM
+        id: create-vm
+        env:
+          VM_PASSWORD: ${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          VM_NAME="vhd-export-vm-${TIMESTAMP}"
+          RESOURCE_GROUP="${{ env.VM_RESOURCE_GROUP }}"
+          VNET_NAME="${{ env.VM_VNET_NAME }}"
+          SUBNET_NAME="${{ env.VM_SUBNET_NAME }}"
+          VM_SIZE="${{ env.VM_SIZE }}"
+          
+          echo "Creating VM: $VM_NAME"
+          echo "Resource Group: $RESOURCE_GROUP"
+          echo "VNet: $VNET_NAME"
+          echo "Subnet: $SUBNET_NAME"
+          
+          # Get VNet location
+          VNET_LOCATION=$(az network vnet show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VNET_NAME" \
+            --query location -o tsv)
+          
+          if [ -z "$VNET_LOCATION" ]; then
+            echo "ERROR: VNet $VNET_NAME not found in resource group $RESOURCE_GROUP"
+            exit 1
+          fi
+          
+          # Get subnet ID
+          SUBNET_ID=$(az network vnet subnet show \
+            --resource-group "$RESOURCE_GROUP" \
+            --vnet-name "$VNET_NAME" \
+            --name "$SUBNET_NAME" \
+            --query id -o tsv)
+          
+          if [ -z "$SUBNET_ID" ]; then
+            echo "ERROR: Subnet $SUBNET_NAME not found in VNet $VNET_NAME"
+            exit 1
+          fi
+          
+          # Create NIC with private IP only
+          NIC_NAME="${VM_NAME}-nic"
+          az network nic create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NIC_NAME" \
+            --location "$VNET_LOCATION" \
+            --vnet-name "$VNET_NAME" \
+            --subnet "$SUBNET_NAME" \
+            --output none
+          
+          # Create VM
+          az vm create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --image "Canonical:0001-com-ubuntu-server-jammy:22_04-lts-gen2:latest" \
+            --size "$VM_SIZE" \
+            --admin-username "$VM_USERNAME" \
+            --admin-password "$VM_PASSWORD" \
+            --nics "$NIC_NAME" \
+            --location "$VNET_LOCATION" \
+            --os-disk-caching ReadWrite \
+            --storage-sku Standard_LRS \
+            --output none
+
+          # Wait for VM to be fully provisioned
+          echo "Waiting for VM to be provisioned..."
+          for i in {1..30}; do
+            VM_STATE=$(az vm show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$VM_NAME" \
+              --query "provisioningState" -o tsv 2>/dev/null || echo "Unknown")
+            
+            if [ "$VM_STATE" = "Succeeded" ]; then
+              echo "VM provisioning completed"
+              break
+            fi
+            echo "VM provisioning state: $VM_STATE (attempt $i/30), waiting 5 seconds..."
+            sleep 5
+          done
+          
+          # Wait for NIC to get private IP assigned
+          echo "Waiting for NIC to get private IP assigned..."
+          VM_PRIVATE_IP=""
+          for i in {1..30}; do
+            VM_PRIVATE_IP=$(az network nic show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$NIC_NAME" \
+              --query ipConfigurations[0].privateIPAddress -o tsv 2>/dev/null || echo "")
+            
+            if [ -n "$VM_PRIVATE_IP" ] && [ "$VM_PRIVATE_IP" != "None" ]; then
+              echo "Private IP assigned: $VM_PRIVATE_IP"
+              break
+            fi
+            echo "Private IP not yet assigned (attempt $i/30), waiting 5 seconds..."
+            sleep 5
+          done
+          
+          if [ -z "$VM_PRIVATE_IP" ] || [ "$VM_PRIVATE_IP" = "None" ]; then
+            echo "ERROR: Failed to get VM private IP after 150 seconds"
+            exit 1
+          fi
+          
+          echo "VM created successfully"
+          echo "VM Name: $VM_NAME"
+          echo "VM Private IP: $VM_PRIVATE_IP"
+          
+          # Wait for VM to be ready (SSH accessible)
+          echo "Waiting for VM to be ready..."
+          for i in {1..30}; do
+            if sshpass -p "$VM_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+               -o UserKnownHostsFile=/dev/null "$VM_USERNAME"@"$VM_PRIVATE_IP" "echo 'VM is ready'" 2>/dev/null; then
+              echo "VM is ready!"
+              break
+            fi
+            echo "Attempt $i/30: VM not ready yet, waiting 10 seconds..."
+            sleep 10
+          done
+          
+          # Set outputs
+          echo "vm_name=$VM_NAME" >> $GITHUB_OUTPUT
+          echo "vm_ip=$VM_PRIVATE_IP" >> $GITHUB_OUTPUT
+          echo "vm_resource_group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+          echo "vm_nic_name=$NIC_NAME" >> $GITHUB_OUTPUT
+          
+          # Add to known_hosts
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ env.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$VM_PRIVATE_IP" >> ~/.ssh/known_hosts
           ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
@@ -66,7 +214,7 @@ jobs:
         run: |
           INSTALLER_SOURCE="${{ env.IMAGE_SIGNING_MOUNT }}/${{ env.WINDOWS_INSTALLER_NAME }}.exe"
           RUNNER_IP="${{ vars.RUNNER_GITHUB_IP_66 }}"
-          AZURE_VM="${{ env.AZURE_VM_HOST }}"
+          AZURE_VM="${{ steps.create-vm.outputs.vm_ip }}"
           INSTALLER_NAME="${{ env.WINDOWS_INSTALLER_NAME }}"
           
           echo "Checking for installer on runner at $RUNNER_IP..."
@@ -89,8 +237,8 @@ jobs:
           
           # Create temp directory on Azure VM (via IP 66 runner)
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
-            "sshpass -p '${AZURE_VM_PASSWORD}' ssh -o StrictHostKeyChecking=no ubuntu@${AZURE_VM} 'mkdir -p ~/installer-upload'"
-          
+            "sshpass -p '${AZURE_VM_PASSWORD}' ssh -o StrictHostKeyChecking=no ${VM_USERNAME}@${AZURE_VM} 'mkdir -p ~/installer-upload'"
+
           # Copy file to temp location with sudo and fix ownership/permissions
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
             "sudo cp '${INSTALLER_SOURCE}' '/tmp/${INSTALLER_NAME}.exe' && sudo chown ubuntu:ubuntu '/tmp/${INSTALLER_NAME}.exe' && sudo chmod 644 '/tmp/${INSTALLER_NAME}.exe'"
@@ -99,10 +247,10 @@ jobs:
             echo "ERROR: Failed to copy installer to temp location with proper permissions"
             exit 1
           fi
-          
+                    
           # SCP installer from temp location on IP 66 runner to Azure VM
           sshpass -p "$RUNNER_PASSWORD" ssh -o StrictHostKeyChecking=no ubuntu@${RUNNER_IP} \
-            "sshpass -p '${AZURE_VM_PASSWORD}' scp -o StrictHostKeyChecking=no '/tmp/${INSTALLER_NAME}.exe' 'ubuntu@${AZURE_VM}:~/installer-upload/${INSTALLER_NAME}.exe'"
+            "sshpass -p '${AZURE_VM_PASSWORD}' scp -o StrictHostKeyChecking=no '/tmp/${INSTALLER_NAME}.exe' '${VM_USERNAME}@${AZURE_VM}:~/installer-upload/${INSTALLER_NAME}.exe'"
           
           SCP_EXIT=$?
           
@@ -130,9 +278,36 @@ jobs:
           echo "Branch suffix for blob naming: $BRANCH_SUFFIX"
 
       - name: SSH into VM and Export VHDs
+        env:
+            AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+            AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
         run: |
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'REMOTE_SCRIPT'
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }} << 'REMOTE_SCRIPT'
+
+          if ! command -v az &> /dev/null; then
+            echo "Installing Azure CLI..."
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+
+          # Azure Authentication on Remote VM
+          echo "Authenticating to Azure on remote VM..."
           
+          # Login using Service Principal
+          sudo az login --service-principal \
+            --username "${{ env.AZURE_CLIENT_ID }}" \
+            --password "${{ env.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ env.AZURE_TENANT_ID }}" \
+            --output none
+          
+          # Set subscription
+          sudo az account set --subscription "${{ env.AZURE_SUBSCRIPTION_ID }}"
+          
+          # Verify authentication
+          echo "Azure authentication successful on remote VM"
+          sudo az account show --query "{Name:name, SubscriptionId:id}" -o table
+           
           export SOURCE_RESOURCE_GROUP="${{ env.SOURCE_RESOURCE_GROUP }}"
           export SOURCE_STORAGE_ACCOUNT="${{ env.SOURCE_STORAGE_ACCOUNT }}"
           export SOURCE_CONTAINER_NAME="${{ env.SOURCE_CONTAINER_NAME }}"
@@ -205,7 +380,27 @@ jobs:
               --access-level Read \
               --duration-in-seconds $sas_seconds \
               --query accessSAS -o tsv)
+            DISK_SAS_EXIT=$?
+            echo "DEBUG: Disk grant-access exit code: $DISK_SAS_EXIT"
             
+            if [ $DISK_SAS_EXIT -ne 0 ]; then
+              echo "ERROR: Failed to grant disk access"
+              echo "Error output: $DISK_SAS_OUTPUT"
+              return 1
+            fi
+            
+            echo "DEBUG: DISK_SAS value: $DISK_SAS"
+            echo "DEBUG: DISK_SAS length: ${#DISK_SAS}"
+            
+            echo "DEBUG: Running blob copy command:"
+            echo "sudo az storage blob copy start \\"
+            echo "  --source-uri \"${DISK_SAS:0:80}...\" \\"
+            echo "  --destination-blob \"${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd\" \\"
+            echo "  --destination-container \"$SOURCE_CONTAINER_NAME\" \\"
+            echo "  --account-name \"$SOURCE_STORAGE_ACCOUNT\" \\"
+            echo "  --account-key \"[MASKED]\" \\"
+            echo "  --output none"
+
             sudo az storage blob copy start \
               --source-uri "$DISK_SAS" \
               --destination-blob "${blob_name}-${TIMESTAMP}-${BRANCH_SUFFIX}.vhd" \
@@ -302,8 +497,52 @@ jobs:
           # Mount blob storage with blobfuse2 and generate SHA256 checksums
           echo "Mounting blob storage with blobfuse2..."
           
+          # Install blobfuse2 if not already installed
+          if ! command -v blobfuse2 &> /dev/null; then
+            echo "Installing blobfuse2..."
+            
+            # Install dependencies
+            sudo apt-get update -qq
+            sudo apt-get install -y wget fuse3 libfuse2 || {
+              echo "WARNING: Failed to install dependencies, continuing anyway..."
+            }
+            
+            # Download blobfuse2 (try multiple versions for compatibility)
+            cd /tmp
+            UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
+            echo "Detected Ubuntu version: $UBUNTU_VERSION"
+            
+            # Try to download the appropriate version
+            DOWNLOADED=false
+            
+            if wget -q "https://github.com/Azure/azure-storage-fuse/releases/download/blobfuse2-2.5.2/blobfuse2-2.5.2-Ubuntu-22.04.x86_64.deb" -O blobfuse2.deb 2>/dev/null; then
+              DOWNLOADED=true
+            fi
+            
+            if [ "$DOWNLOADED" = true ] && [ -f blobfuse2.deb ]; then
+              echo "Installing blobfuse2 package..."
+              sudo dpkg -i blobfuse2.deb || sudo apt-get install -f -y
+              rm -f blobfuse2.deb
+            else
+              echo "ERROR: Failed to download blobfuse2 package"
+              echo "Please install blobfuse2 manually or check network connectivity"
+              exit 1
+            fi
+            
+            # Verify installation
+            if command -v blobfuse2 &> /dev/null; then
+              echo "blobfuse2 installed successfully: $(blobfuse2 --version)"
+            else
+              echo "ERROR: blobfuse2 installation verification failed"
+              exit 1
+            fi
+          else
+            echo "blobfuse2 is already installed: $(blobfuse2 --version)"
+          fi
+          
           # Ensure any existing mount is unmounted first to avoid "directory is already mounted" error
           echo "Checking for existing mount at /mnt/azureblob..."
+          
           if mountpoint -q /mnt/azureblob 2>/dev/null; then
             echo "Directory is currently mounted, unmounting..."
             sudo umount /mnt/azureblob
@@ -411,7 +650,7 @@ jobs:
           
           echo "Retrieving vhd-export-info.txt..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
+            ${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-export-info.txt /tmp/vhd-export/info.txt
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve vhd-export-info.txt from remote VM." >&2
             exit 1
@@ -419,7 +658,7 @@ jobs:
           
           echo "Retrieving storage key file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            'ubuntu@${{ env.AZURE_VM_HOST }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
+            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/.vhd-export/storage-key-*.txt' /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve storage-key-*.txt from remote VM." >&2
             exit 1
@@ -427,7 +666,7 @@ jobs:
           
           echo "Retrieving checksum file..."
           sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" scp \
-            'ubuntu@${{ env.AZURE_VM_HOST }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
+            '${VM_USERNAME}@${{ steps.create-vm.outputs.vm_ip }}:~/vhd-checksums-*.txt' /tmp/vhd-export/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to retrieve vhd-checksums-*.txt from remote VM." >&2
             exit 1
@@ -530,20 +769,36 @@ jobs:
             echo "No checksum file found"
           fi
     
-  cleanup-remote-vm:
-    needs: display-results
-    runs-on: openlab
+  cleanup-vm:
+    needs: [vhd-export, display-results]
     if: always()  # Run even if previous jobs fail
+    runs-on: openlab
     steps:
-      - name: Install SSH Tools
+      - name: Install Azure CLI
         run: |
-          # sudo apt-get update -qq
-          sudo apt-get install -y sshpass openssh-client
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+
+      - name: Authenticate to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.NDM_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.NDM_AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.NDM_AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.NDM_AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID" \
+            --output none
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 
       - name: Cleanup Remote VM Files
+        if: needs.vhd-export.outputs.vm_ip != ''
         run: |
           echo "Cleaning up remote VM files..."
-          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh ubuntu@${{ env.AZURE_VM_HOST }} << 'CLEANUP'
+          sshpass -p "${{ secrets.SAS_AZURE_VM_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${VM_USERNAME}@${{ needs.vhd-export.outputs.vm_ip }} << 'CLEANUP' || true
           rm -f ~/vhd-export-info.txt
           rm -f ~/vhd-checksums-*.txt
           rm -f ~/AZURE_SHA256SUMS.sha256
@@ -551,7 +806,28 @@ jobs:
           rm -rf ~/installer-upload
           echo "Remote VM cleanup completed"
           CLEANUP
-        continue-on-error: true  # Don't fail workflow if cleanup fails
+
+      - name: Delete Dynamic VM
+        if: needs.vhd-export.outputs.vm_name != ''
+        env:
+          VM_NAME: ${{ needs.vhd-export.outputs.vm_name }}
+          RESOURCE_GROUP: ${{ needs.vhd-export.outputs.vm_resource_group }}
+          NIC_NAME: ${{ needs.vhd-export.outputs.vm_nic_name }}
+        run: |
+          echo "Deleting VM: $VM_NAME"
+          az vm delete \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --yes \
+            --output none || echo "VM deletion failed or already deleted"
+          
+          # Clean up associated NIC
+          if [ -n "$NIC_NAME" ]; then
+            az network nic delete --resource-group "$RESOURCE_GROUP" --name "$NIC_NAME" --output none || echo "NIC deletion failed or already deleted"
+          fi
+          
+          echo "VM cleanup completed"
+        continue-on-error: false  # Don't fail workflow if cleanup fails
 
   # Trigger the SAS URL generation workflow after VHD export completes
   generate-sas-urls:
