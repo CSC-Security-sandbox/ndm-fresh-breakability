@@ -15,13 +15,13 @@ on:
         
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'app-microservices-cm' }}
-  GCS_BUCKET: ${{ vars.GCP_GCS_BUCKET || 'ndm-vmdk-files' }}
-  VPC_NAME: ${{ vars.GCP_VPC_NAME || 'appmicro-vpc1' }}
-  SUBNET_NAME: ${{ vars.GCP_SUBNET_NAME || 'appmicro-vpc-subnet-02' }}
-  ZONE: ${{ vars.GCP_ZONE || 'us-east4-a' }}
-  LOCAL_EXPORT_PATH: ${{ vars.LOCAL_BASE_PATH || '/home/ubuntu/' }}
-  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space' }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCS_BUCKET: ${{ vars.GCP_GCS_BUCKET }}
+  VPC_NAME: ${{ vars.GCP_VPC_NAME }}
+  SUBNET_NAME: ${{ vars.GCP_SUBNET_NAME }}
+  ZONE: ${{ vars.GCP_ZONE }}
+  LOCAL_EXPORT_PATH: ${{ vars.LOCAL_BASE_PATH }}
+  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE }}
 
 jobs:
   gcp-image-export:
@@ -61,9 +61,9 @@ jobs:
           EXPORT_PREFIX="${{ github.event.inputs.release_folder }}"
           BRANCH_NAME="${{ github.ref_name }}"
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          WORKER_ARCHIVE="${WORKER_IMAGE}-${TIMESTAMP}-${BRANCH_NAME}-signed.tar.gz"
-          CP_ARCHIVE="${CP_IMAGE}-${TIMESTAMP}-${BRANCH_NAME}-signed.tar.gz"
-          CHECKSUM_FILE="GCP_SHA256SUMS-${TIMESTAMP}-${BRANCH_NAME}.sha256"
+          WORKER_ARCHIVE="${WORKER_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
+          CP_ARCHIVE="${CP_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
+          CHECKSUM_FILE="GCP_SHA256SUMS-${BRANCH_NAME}.sha256"
           LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
           SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
           
@@ -196,13 +196,13 @@ jobs:
           fi
           
           echo "Downloading from GCS..."
-          mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
+          sudo mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
           cd "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
           sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" .
           sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" .
           
           echo "Generating checksums..."
-          sha256sum "${CP_ARCHIVE}" "${WORKER_ARCHIVE}" > "${CHECKSUM_FILE}"
+          sha256sum "${CP_ARCHIVE}" "${WORKER_ARCHIVE}" | sudo tee "${CHECKSUM_FILE}" > /dev/null
           sudo gsutil cp "${CHECKSUM_FILE}" "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/"
 
           # Function: Copy with retry
