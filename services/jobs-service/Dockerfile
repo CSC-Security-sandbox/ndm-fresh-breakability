@@ -1,11 +1,14 @@
-FROM public.ecr.aws/docker/library/alpine:3.22.0
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 
-RUN apk update && \
-    apk upgrade --no-cache --purge && \
-    apk add --no-cache npm nodejs && \
-    rm -vrf /var/cache/apk/* && \
-    npm i -g @nestjs/cli && \
-    npm i -g pm2@latest 
+# Install system dependencies for NFS
+RUN apt-get update && apt-get install -y \
+    nfs-common \
+    cifs-utils \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install global npm packages
+RUN npm install -g @nestjs/cli pm2@latest
 
 WORKDIR /app
 

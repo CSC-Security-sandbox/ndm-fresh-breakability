@@ -19,6 +19,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
+import { GetDirsDto } from './dto/get-dirs.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -332,5 +333,16 @@ export class JobConfigController {
   ): Promise<JobConfigInventoryStatsResponseDto> {
     const shouldFetchLatest = fetchLatest ?? false;
     return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID, shouldFetchLatest);
+  }
+
+    @ApiOperation({ summary: 'Get directories in export path' })
+    @ApiResponse({ status: 200, description: 'Directories retrieved' })
+    @ApiResponse({ status: 400, description: 'Bad Request' })
+    @ApiResponse({ status: 404, description: 'File server not found' })
+    @ApiBearerAuth()
+    @Auth(Permission.ManageJob)
+    @Post('get-dirs')
+    async getDirs(@Body() request: GetDirsDto): Promise<{ name: string }[]> {
+      return this.jobConfigService.getDirs(request);
   }
 }

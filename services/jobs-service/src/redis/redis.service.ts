@@ -110,4 +110,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return { message: 'Error while updating the job state : ' + traceId };
     }
   }
+
+  async setDirListing(key: string, value: string, ttlSeconds?: number): Promise<void> {
+    console.log(key);
+    console.log(value);
+    const client = await this.getClient();
+    if (ttlSeconds) {
+      await client.set(key, value, { EX: ttlSeconds });
+    } else {
+      await client.set(key, value);
+    }
+  }
+  
+  async getDirListing(key: string): Promise<string | null> {
+    const client = await this.getClient();
+    return client.get(key);
+  }
+  
+  async delDirListing(key: string): Promise<void> {
+    const client = await this.getClient();
+    await client.del(key);
+  }
 }

@@ -91,6 +91,8 @@ import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { JobConfigInventoryStatsResponseDto } from "./dto/jobconfig-inventory-stats.dto";
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
+import { v4 as uuid } from 'uuid';
+import { GetDirsDto } from './dto/get-dirs.dto';
 
 @Injectable()
 export class JobConfigService {
@@ -2249,5 +2251,91 @@ export class JobConfigService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  async getDirs(payload: GetDirsDto): Promise<{ name: string }[]> {
+    const workflowId = `ListDirs-${payload.fileServerId}-${payload.exportPath.replace(/\//g, '_')}`;
+    const requestId = uuid();
+    const redisKey = `${workflowId}-${requestId}`;
+  
+    this.logger.log(`getDirs: workflowId=${workflowId}, requestId=${requestId}`);
+  
+    // 1. Ensure workflow is running
+    await this.ensureWorkflowRunning(workflowId, payload);
+  
+    // 2. Send signal using existing workflowService.sendSignal
+    await this.workFlowService.sendSignal({
+      workflowId,
+      signalName: 'listDir',
+      payload: { requestId, path: payload.path || '' },
+    });
+  
+    this.logger.log(`Signal sent to workflow ${workflowId}`);
+  
+    // 3. Poll Redis for result
+    const result = await this.pollRedisForResult(redisKey);
+  
+    if (result.status === 'ERROR') {
+      throw new HttpException(result.errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  
+    return result.directories;
+  }
+  
+  private async ensureWorkflowRunning(workflowId: string, payload: GetDirsDto): Promise<void> {
+    try {
+      const status = await this.workFlowService.getWorkflowStatus(workflowId);
+      if (status === 'RUNNING') {
+        this.logger.log(`Workflow ${workflowId} already running`);
+        return;
+      }
+    } catch (error) {
+      this.logger.log(`Starting new workflow ${workflowId}`);
+    }
+  
+    const fileServer = await this.fileServerRepo.findOne({
+      where: { id: payload.fileServerId },
+    });
+  
+    if (!fileServer) {
+      throw new NotFoundException(`File server ${payload.fileServerId} not found`);
+    }
+  
+    await this.workFlowService.startWorkflow('ListDirsWorkflow' as any, {
+      workflowId,
+      taskQueue: 'JobsService-ListDirs-TaskQueue',
+      args: [{
+        fileServerId: payload.fileServerId,
+        hostname: fileServer.host,
+        exportPath: payload.exportPath,
+        protocol: fileServer.protocol,
+        username: fileServer.userName,
+        password: fileServer.password,
+        protocolVersion: fileServer.protocolVersion,
+      }],
+    });
+  
+    await this.sleep(2000);
+  }
+  
+  private async pollRedisForResult(key: string): Promise<any> {
+    const maxWaitMs = 60000;
+    const pollIntervalMs = 100;
+    const startTime = Date.now();
+  
+    while (Date.now() - startTime < maxWaitMs) {
+      const result = await this.redisService.getDirListing(key);
+      if (result) {
+        await this.redisService.delDirListing(key);
+        return JSON.parse(result);
+      }
+      await this.sleep(pollIntervalMs);
+    }
+  
+    throw new HttpException('Directory listing timed out', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+  
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

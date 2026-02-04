@@ -14,6 +14,7 @@ import {
   LoggerModule,
   RequestContextMiddleware,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { TemporalWorkerModule } from './workers/temporal-worker.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import {
     WorkflowModule,
     RedisModule,
     HealthcheckModule,
+    TemporalWorkerModule, 
   ],
   controllers: [],
   providers: [],
