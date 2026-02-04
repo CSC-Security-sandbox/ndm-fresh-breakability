@@ -64,9 +64,9 @@ on:
 
 env:
   VM_RESOURCE_GROUP: ${{ vars.AZ_VM_RESOURCE_GROUP }}
-  VM_VNET_NAME: ${{ vars.AZ_VM_VNET_NAME || 'MigrationAsAService-dev-VNET02' }}
-  VM_SUBNET_NAME: ${{ vars.AZ_VM_SUBNET_NAME || 'MigrationAsAService-dev-VNET02_Subnet01' }}
-  VM_SIZE: ${{ vars.AZ_VM_SIZE || 'Standard_D2s_v4' }}
+  VM_VNET_NAME: ${{ vars.AZ_VM_VNET_NAME }}
+  VM_SUBNET_NAME: ${{ vars.AZ_VM_SUBNET_NAME }}
+  VM_SIZE: ${{ vars.AZ_VM_SIZE }}
 
 jobs:
   generate-sas-urls:
@@ -276,7 +276,7 @@ jobs:
           SAS_EXPIRY=$(date -u -d "+${EXPIRY_DAYS} days" +"%Y-%m-%dT%H:%MZ")
           
           echo "Generating SAS URL for Control Plane VHD..."
-          CP_URL=$(sudo az storage blob generate-sas \
+          CP_URL=$(az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -287,7 +287,7 @@ jobs:
             --output tsv)
           
           echo "Generating SAS URL for Linux Worker VHD..."
-          LINUX_WORKER_URL=$(sudo az storage blob generate-sas \
+          LINUX_WORKER_URL=$(az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -298,7 +298,7 @@ jobs:
             --output tsv)
           
           echo "Generating SAS URL for Windows Worker Installer..."
-          WINDOWS_WORKER_URL=$(sudo az storage blob generate-sas \
+          WINDOWS_WORKER_URL=$(az storage blob generate-sas \
             --account-key "${STORAGE_ACCOUNT_KEY}" \
             --account-name "${STORAGE_ACCOUNT_NAME}" \
             --container-name "${CONTAINER_NAME}" \
@@ -460,4 +460,4 @@ jobs:
           fi
           
           echo "VM cleanup completed"
-        continue-on-error: true  # Don't fail workflow if cleanup fails
+        continue-on-error: false # Don't fail workflow if cleanup fails

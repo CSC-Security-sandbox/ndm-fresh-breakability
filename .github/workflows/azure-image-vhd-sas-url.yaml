@@ -827,7 +827,7 @@ jobs:
           fi
           
           echo "VM cleanup completed"
-        continue-on-error: true  # Don't fail workflow if cleanup fails
+        continue-on-error: false  # Don't fail workflow if cleanup fails
 
   # Trigger the SAS URL generation workflow after VHD export completes
   generate-sas-urls:
