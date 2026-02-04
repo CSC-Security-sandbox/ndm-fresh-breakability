@@ -62,6 +62,8 @@
     "vite-plugin-node-polyfills": "^0.23.0"
   },
   "overrides": {
+    "lodash": "4.17.23",
+    "lodash-es": "4.17.23",
     "react-syntax-highlighter": {
       "refractor": "^5.0.0"
     },
