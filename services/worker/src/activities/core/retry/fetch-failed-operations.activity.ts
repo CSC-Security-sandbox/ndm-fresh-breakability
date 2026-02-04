@@ -6,7 +6,7 @@ import axios from "axios";
 import * as path from "path";
 import { AuthService } from "src/auth/auth.service";
 import { RedisService } from "src/redis/redis.service";
-import { FatalError } from "src/errors/errors.types";
+import { RetryableError } from "src/errors/errors.types";
 import { calculateHash } from "src/activities/utils/checksum-utils";
 import { basePrefix } from "src/activities/utils/utils";
 import { 
@@ -55,31 +55,21 @@ export class FetchFailedOperationsActivity {
    * Activity method called by Temporal workflow.
    * Fetches a batch of failed operations from the jobs-service API.
    * Groups operations by parent directory and stores them in Redis.
-   * 
+   *
    * @param input - Contains jobRunId (for cursor) and originalJobRunId (to fetch from)
    * @returns The batch IDs for grouped operations and hasMore flag
    */
   async fetchFailedOperations(input: FetchFailedOperationsInput): Promise<FetchFailedOperationsOutput> {
-    return this.execute(input);
-  }
-
-  /**
-   * Executes the fetch failed operations activity.
-   * 
-   * @param input - Contains jobRunId (for cursor) and originalJobRunId (to fetch from)
-   * @returns The batch IDs for grouped operations and hasMore flag
-   */
-  private async execute(input: FetchFailedOperationsInput): Promise<FetchFailedOperationsOutput> {
     const { jobRunId, originalJobRunId } = input;
-    
+
     this.logger.debug(`Fetching failed operations for job run ${jobRunId} from original job ${originalJobRunId}`);
-    
+
     try {
       const jobContext = await this.redisService.getJobManagerContext(jobRunId);
       const accessToken = await this.authService.getAccessToken();
-      
+
       if (!accessToken) {
-        throw new FatalError('Failed to get access token');
+        throw new RetryableError('Failed to get access token');
       }
 
       // Extract settings once - these will be passed to all subsequent activities
@@ -94,25 +84,25 @@ export class FetchFailedOperationsActivity {
           (p: any) => p.type?.toUpperCase() === 'SMB'
         ) ?? false,
       };
-      
+
       // Get current cursor from jobContext (empty string if first batch)
       const cursor = await jobContext.getRetryCursor();
-      
+
       // Fetch batch of failed operations from ORIGINAL job run
-      const fetchResult = await this.fetchFromApi(
+      const fetchResult = await this.fetchOperationsByJobRun(
         originalJobRunId,
         accessToken,
         cursor || undefined
       );
-      
+
       if (fetchResult.operations.length === 0) {
         this.logger.debug(`No more failed operations to process for original job ${originalJobRunId}`);
         return { opsBatchIds: [], hasMore: false, settings };
       }
-      
+
       // Group operations by parent directory
       const groupedOps = this.groupByParentDirectory(fetchResult.operations);
-      
+
       // Store each group in Redis and collect batch IDs
       const opsBatchIds: string[] = [];
       for (const [parentPath, operations] of groupedOps) {
@@ -121,18 +111,18 @@ export class FetchFailedOperationsActivity {
         await jobContext.setRetryBatch(batchId, batch);
         opsBatchIds.push(batchId);
       }
-      
+
       const hasMore = fetchResult.nextCursor !== null;
-      
+
       // Save the new cursor (if there are more pages)
       if (fetchResult.nextCursor) {
         await jobContext.setRetryCursor(fetchResult.nextCursor);
       }
-      
+
       this.logger.debug(
         `Fetched ${fetchResult.operations.length} operations, grouped into ${opsBatchIds.length} batches, hasMore: ${hasMore}`
       );
-      
+
       return { opsBatchIds, hasMore, settings };
     } catch (error) {
       this.logger.error(`Failed to fetch failed operations: ${error.message}`, error.stack);
@@ -147,9 +137,9 @@ export class FetchFailedOperationsActivity {
    * @param accessToken - Bearer token for authentication
    * @param cursor - Optional cursor for pagination
    * @returns The fetched operations and pagination info
-   * @throws FatalError for API errors (4xx, 5xx) - these should not be retried
+   * @throws RetryableError for API/network errors so Temporal can retry
    */
-  private async fetchFromApi(
+  private async fetchOperationsByJobRun(
     jobRunId: string,
     accessToken: string,
     cursor?: string
@@ -179,21 +169,20 @@ export class FetchFailedOperationsActivity {
       
       return { operations, nextCursor };
     } catch (error) {
-      // Handle axios errors - throw FatalError for API/DB errors (non-retryable)
+      // Handle axios errors - throw RetryableError so Temporal can retry
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const message = error.response?.data?.message || error.message;
         
-        // 4xx and 5xx errors are non-retryable (API/DB issues)
         if (status && status >= 400) {
           this.logger.error(`API error fetching failed operations: status=${status}, message=${message}`);
-          throw new FatalError(`Failed to fetch failed operations: HTTP ${status} - ${message}`);
+          throw new RetryableError(`Failed to fetch failed operations: HTTP ${status} - ${message}`);
         }
       }
       
-      // Network errors or other unexpected errors - also treat as fatal
+      // Network errors or other unexpected errors - retryable
       this.logger.error(`Error fetching failed operations: ${error.message}`);
-      throw new FatalError(`Failed to fetch failed operations: ${error.message}`);
+      throw new RetryableError(`Failed to fetch failed operations: ${error.message}`);
     }
   }
 

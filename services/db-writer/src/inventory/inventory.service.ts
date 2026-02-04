@@ -542,11 +542,12 @@ export class InventoryService {
    * Resolves operation errors by updating their status from UNRESOLVED to RESOLVED.
    * This is called when retry operations complete successfully.
    * 
-   * Must match both operationId AND filePath because:
-   * - One operation can produce multiple file errors (e.g., directory scan fails on multiple files)
-   * - Same file path could have errors from different operations
+   * Joins to operations table to match on operations.f_path (relative path) because:
+   * - operation_errors.file_path stores full absolute path (e.g., /mnt/jobRunId/pathId/data/file.txt)
+   * - operations.f_path stores relative path (e.g., /data/file.txt)
+   * - Retry commands use relative paths matching operations.f_path
    * 
-   * @param errors - Array of {operationId, filePath} pairs to resolve
+   * @param errors - Array of {operationId, filePath} pairs to resolve (filePath is relative)
    */
   async resolveOperationErrors(errors: { operationId: string; filePath: string }[]): Promise<void> {
     if (!errors || errors.length === 0) {
@@ -554,27 +555,34 @@ export class InventoryService {
     }
 
     try {
-      // Build WHERE conditions for each error
-      const whereConditions = errors.map((_, index) => 
-        `(operation_id = :opId${index} AND file_path = :fPath${index})`
-      );
+      // Build WHERE conditions for each error (each error uses two params: operationId, filePath)
+      const whereConditions = errors.map((_, index) => {
+        const p1 = index * 2 + 1;
+        return `(oe.operation_id = $${p1} AND o.f_path = $${p1 + 1})`;
+      });
 
-      // Build parameters object
-      const parameters = errors.reduce((params, error, index) => ({
-        ...params,
-        [`opId${index}`]: error.operationId,
-        [`fPath${index}`]: error.filePath,
-      }), {} as Record<string, string>);
+      // Build parameters array for raw query
+      const parameters: string[] = [];
+      errors.forEach(error => {
+        parameters.push(error.operationId, error.filePath);
+      });
 
-      // Execute the update
-      const result = await this.operationErrorRepo
-        .createQueryBuilder()
-        .update()
-        .set({ errorStatus: 'RESOLVED' })
-        .where(whereConditions.join(' OR '), parameters)
-        .execute();
+      // Execute the update with a subquery that joins to operations table
+      // This matches operation_errors by operation_id where the linked operation has matching f_path
+      const query = `
+        UPDATE datamigrator.operation_errors
+        SET error_status = 'RESOLVED'
+        WHERE id IN (
+          SELECT oe.id
+          FROM datamigrator.operation_errors oe
+          INNER JOIN datamigrator.operations o ON oe.operation_id = o.id
+          WHERE ${whereConditions.join(' OR ')}
+        )
+      `;
 
-      this.logger.log(`Resolved ${result.affected || 0} operation errors for ${errors.length} error pairs`);
+
+      await this.operationErrorRepo.query(query, parameters);
+
     } catch (error) {
       this.logger.error(`Failed to resolve operation errors: ${error.message}`, error?.stack || error);
     }

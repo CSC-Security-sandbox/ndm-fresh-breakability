@@ -296,53 +296,44 @@ export class JobRunService {
   async getFailedOperations(
     jobRunId: string,
     cursor: string | null,
-    limit: number = 5000
+    limit: number = 4000
   ): Promise<{ data: Record<string, any>[]; nextCursor: string | null }> {
-    // Cursor-based pagination using (f_path, oe.id) for efficient deep pagination
-    // Orders by f_path which naturally groups files in same directory together
-    // Uses o.f_path to support both scan errors and migrate errors
-    const params: (string | number)[] = [jobRunId];
-    let paramIndex = 2;
-
-    let query = `
-      SELECT oe.id AS "operationErrorId", 
-             o.f_path AS "filePath",
-             oe.operation_id AS "operationId"
-      FROM datamigrator.operation_errors oe
-      JOIN datamigrator.operations o ON o.id = oe.operation_id
-      WHERE o.job_run_id = $1
-        AND oe.error_status = 'UNRESOLVED'
-    `;
+    const qb = this.operationErrorRepo
+      .createQueryBuilder("oe")
+      .innerJoin("oe.operation", "o")
+      .select("oe.id", "operationErrorId")
+      .addSelect("o.fPath", "filePath")
+      .addSelect("oe.operationId", "operationId")
+      .where("o.jobRunId = :jobRunId", { jobRunId })
+      .andWhere("oe.errorStatus = :status", { status: "UNRESOLVED" })
+      .andWhere("oe.errorType IN (:...errorTypes)", {
+        errorTypes: ["TRANSIENT_ERROR", "FATAL_ERROR"],
+      })
+      .orderBy("o.fPath", "ASC")
+      .addOrderBy("oe.id", "ASC")
+      .take(limit + 1);
 
     if (cursor) {
-      // Cursor format: "filePath|operationErrorId"
-      const [cursorFilePath, cursorId] = cursor.split('|');
-      query += ` AND (
-        o.f_path > $${paramIndex}
-        OR (o.f_path = $${paramIndex} AND oe.id > $${paramIndex + 1})
-      )`;
-      params.push(cursorFilePath, cursorId);
-      paramIndex += 2;
+      const [cursorFilePath, cursorId] = cursor.split("|");
+      qb.andWhere(
+        "(o.fPath > :cursorPath OR (o.fPath = :cursorPath AND oe.id > :cursorId))",
+        { cursorPath: cursorFilePath, cursorId }
+      );
     }
 
-    query += ` ORDER BY o.f_path, oe.id LIMIT $${paramIndex}`;
-    params.push(limit + 1); // Fetch one extra to determine if there's a next page
-
-    const results = await this.operationRepo.query(query, params);
+    const results = await qb.getRawMany();
 
     const hasMore = results.length > limit;
     const data = hasMore ? results.slice(0, limit) : results;
+    const last = data.at(-1);
+    const nextCursor = hasMore ? `${last!.filePath}|${last!.operationErrorId}` : null;
 
-    // Composite cursor: "filePath|operationErrorId" - null if no more data
-    const nextCursor = hasMore && data.length > 0
-      ? `${data[data.length - 1].filePath}|${data[data.length - 1].operationErrorId}` 
-      : null;
-
-    // Transform to the format expected by retry: { id, fPath }
-    const operations = data.map((row: { operationId: string; filePath: string }) => ({
-      id: row.operationId,
-      fPath: row.filePath
-    }));
+    const operations = data.map(
+      (row: { operationId: string; filePath: string }) => ({
+        id: row.operationId,
+        fPath: row.filePath,
+      })
+    );
 
     return { data: operations, nextCursor };
   }
@@ -858,7 +849,7 @@ export class JobRunService {
         oe.error_code AS "errorCode"
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-      WHERE o.job_run_id = $1 AND oe.error_type = $2
+      WHERE o.job_run_id = $1 AND oe.error_type = $2 AND oe.error_status = 'UNRESOLVED'
       ORDER BY ${sortColumn} ${orderClause}
       LIMIT $3 OFFSET $4
     `;
@@ -917,6 +908,7 @@ export class JobRunService {
       .leftJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType = :errorType", { errorType })
+      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
       .select("COUNT(*)", "total")
       .getRawOne();
 

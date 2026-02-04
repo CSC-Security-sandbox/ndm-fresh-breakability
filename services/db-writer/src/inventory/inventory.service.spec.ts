@@ -661,34 +661,28 @@ describe("InventoryService", () => {
         { operationId: "op-2", filePath: "/path/file2.txt" },
       ];
 
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 2 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue([[], 2]);
 
       await service.resolveOperationErrors(errors);
 
-      expect(mockQueryBuilder.update).toHaveBeenCalled();
-      expect(mockQueryBuilder.set).toHaveBeenCalledWith({ errorStatus: 'RESOLVED' });
-      expect(mockQueryBuilder.where).toHaveBeenCalled();
-      expect(mockQueryBuilder.execute).toHaveBeenCalled();
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE datamigrator.operation_errors"),
+        ["op-1", "/path/file1.txt", "op-2", "/path/file2.txt"]
+      );
     });
 
     it("should return early for empty errors array", async () => {
-      operationErrorRepo.createQueryBuilder = jest.fn();
+      operationErrorRepo.query = jest.fn();
       await service.resolveOperationErrors([]);
 
-      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
     it("should return early for null errors", async () => {
-      operationErrorRepo.createQueryBuilder = jest.fn();
+      operationErrorRepo.query = jest.fn();
       await service.resolveOperationErrors(null as any);
 
-      expect(operationErrorRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
     it("should log the number of resolved errors", async () => {
@@ -696,19 +690,13 @@ describe("InventoryService", () => {
         { operationId: "op-1", filePath: "/path/file1.txt" },
       ];
 
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 1 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue(undefined);
       const loggerSpy = jest.spyOn(service["logger"], "log");
 
       await service.resolveOperationErrors(errors);
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Resolved 1 operation errors")
+        expect.stringContaining("Resolved operation errors for 1 error pairs")
       );
     });
 
@@ -717,13 +705,7 @@ describe("InventoryService", () => {
         { operationId: "op-1", filePath: "/path/file1.txt" },
       ];
 
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockRejectedValue(new Error("Database error")),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockRejectedValue(new Error("Database error"));
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
       // Should not throw
@@ -734,30 +716,25 @@ describe("InventoryService", () => {
       );
     });
 
-    it("should build correct WHERE clause with operationId AND filePath pairs", async () => {
+    it("should build correct SQL query joining operations table for f_path matching", async () => {
       const errors = [
         { operationId: "op-a", filePath: "/path/a.txt" },
         { operationId: "op-b", filePath: "/path/b.txt" },
       ];
 
-      const mockQueryBuilder = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 2 }),
-      };
-      operationErrorRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+      operationErrorRepo.query = jest.fn().mockResolvedValue([[], 2]);
 
       await service.resolveOperationErrors(errors);
 
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        expect.stringContaining("operation_id = :opId0 AND file_path = :fPath0"),
-        expect.objectContaining({
-          opId0: "op-a",
-          fPath0: "/path/a.txt",
-          opId1: "op-b",
-          fPath1: "/path/b.txt",
-        })
+      // Verify the query joins to operations table and uses o.f_path
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringMatching(/INNER JOIN datamigrator\.operations o ON oe\.operation_id = o\.id/),
+        expect.arrayContaining(["op-a", "/path/a.txt", "op-b", "/path/b.txt"])
+      );
+      // Verify it matches on o.f_path (operations.f_path) not oe.file_path
+      expect(operationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringMatching(/o\.f_path = \$\d+/),
+        expect.anything()
       );
     });
   });
