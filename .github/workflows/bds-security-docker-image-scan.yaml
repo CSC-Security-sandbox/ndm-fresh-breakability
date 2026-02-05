@@ -1,15 +1,19 @@
 name: bds-security-docker-image-scan
 
 on:
+  schedule:
+    - cron: "30 18 * * 0"
   workflow_dispatch:
     inputs:
       bds_scan_folder_name:
         description: 'black duck folder name (e.g., 2025.12.0_preview_docker_image) that we created on black duck portal'
-        required: true
+        required: false
+        default: 'ndm_main_docker_image'
         type: string
       branch:  
         description: 'Branch to build and scan (leave empty for current)'
         required: false
+        default: 'main'
         type: string
 
 permissions:
@@ -20,6 +24,7 @@ permissions:
 env:
   PROJECT_NAME: NetApp Data Migrator Scans
   BLACKDUCK_URL: https://blackduck.eng.netapp.com
+  VERSION_NAME: ${{ github.event.inputs.bds_scan_folder_name || 'ndm_main_docker_image' }}
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   JAVA_VERSION: 17.0.11
   SYNOPSYS_DETECT_VERSION: 9.10.1
@@ -57,7 +62,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.event.inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Set matrix
@@ -94,7 +99,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.event.inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
@@ -185,7 +190,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}  # Use input or current
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.event.inputs.branch || github.ref }}
           fetch-depth: 0
 
       - name: Restore Docker image from artifacts
@@ -266,7 +271,7 @@ jobs:
           
           SERVICE_NAME="${{ matrix.display_name }}"
           SERVICE_ID="${{ matrix.service }}"
-          VERSION_NAME="${{ github.event.inputs.bds_scan_folder_name }}"
+          VERSION_NAME="${{ env.VERSION_NAME }}"
 
           TAR_FILE="/tmp/docker-images/$SERVICE_ID.tar"
           CODE_LOCATION_NAME="${{ env.PROJECT_NAME }}___${VERSION_NAME}___${SERVICE_NAME}"
