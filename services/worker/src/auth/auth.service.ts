@@ -47,10 +47,12 @@ export class AuthService {
             );
             this.accessToken = response.data.access_token;
             this.expiresAt = now + response.data.expires_in - 10; 
-            this.logger.log(`Fetched new access token, expires at: ${this.expiresAt}`);
+            this.logger.log(
+                `Fetched worker access token for client ${this.workerId} (realm ${this.keycloakConfig.realm}); expires at ${this.expiresAt}`
+            );
             return this.accessToken;
         } catch (error) {
-            this.logger.error(`Failed to obtain access token: ${error.message}`);
+            this.logger.error(`Failed to obtain access token : ${error.message}`);
             return null;
         }
     }
