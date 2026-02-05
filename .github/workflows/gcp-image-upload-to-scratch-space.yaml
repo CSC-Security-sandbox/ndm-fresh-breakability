@@ -60,10 +60,11 @@ jobs:
           CP_IMAGE="${{ github.event.inputs.release_controlplane_image_name }}"
           EXPORT_PREFIX="${{ github.event.inputs.release_folder }}"
           BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME_SAFE=$(echo "$BRANCH_NAME" | tr '/' '-')
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          WORKER_ARCHIVE="${WORKER_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
-          CP_ARCHIVE="${CP_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
-          CHECKSUM_FILE="GCP_SHA256SUMS-${BRANCH_NAME}.sha256"
+          WORKER_ARCHIVE="${WORKER_IMAGE}-${BRANCH_NAME_SAFE}-signed.tar.gz"
+          CP_ARCHIVE="${CP_IMAGE}-${BRANCH_NAME_SAFE}-signed.tar.gz"
+          CHECKSUM_FILE="GCP_SHA256SUMS-${BRANCH_NAME_SAFE}.sha256"
           LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
           SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
           
