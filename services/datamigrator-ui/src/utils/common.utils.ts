@@ -3,8 +3,21 @@ import {
   JOB_CONFIG_STATUS_ENUM,
   JOBS_TYPE,
 } from "@/types/app.type";
-import crypto from "crypto";
 import { USER_ROLES_ENUM } from "@/types/app.type";
+
+const hexToBytes = (hex: string): Uint8Array =>
+  new Uint8Array(hex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)));
+
+const bytesToHex = (bytes: Uint8Array): string =>
+  Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+const getKeyFromSecret = async (keyString: string): Promise<Uint8Array> => {
+  const encoded = new TextEncoder().encode(keyString);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  return new Uint8Array(hashBuffer);
+};
 
 export const getJobType = (type: JOBS_TYPE) => {
   switch (type) {
@@ -134,34 +147,52 @@ export const getFileServerStatusFormat = (status: FILE_SERVER_STATUS_ENUM) => {
   }
 };
 
-export const decryptData = (encryptedWithIv: string): string => {
+export const decryptData = async (encryptedWithIv: string): Promise<string> => {
   try {
     const [ivHex, encryptedPassword] = encryptedWithIv.split(":");
-    const iv = Buffer.from(ivHex, "hex");
+    const iv = hexToBytes(ivHex);
     const keyString =
       window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
       import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
-    const key = crypto.createHash("sha256").update(keyString).digest();
-    const decipher = crypto.createDecipheriv("aes-256-ctr", key, iv);
-    let decrypted = decipher.update(encryptedPassword, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
+    const keyBytes = await getKeyFromSecret(keyString);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "AES-CTR" },
+      false,
+      ["decrypt"]
+    );
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-CTR", counter: iv, length: 64 },
+      cryptoKey,
+      hexToBytes(encryptedPassword)
+    );
+    return new TextDecoder().decode(decrypted);
   } catch (error) {
     throw new Error("An internal error occurred");
   }
 };
 
-export const encryptData = (data: string): string => {
+export const encryptData = async (data: string): Promise<string> => {
   try {
-    const iv = crypto.randomBytes(16);
+    const iv = crypto.getRandomValues(new Uint8Array(16));
     const keyString =
       window?.env?.VITE_KEYCLOAK_CLIENT_SECRET ||
       import.meta.env.VITE_KEYCLOAK_CLIENT_SECRET;
-    const key = crypto.createHash("sha256").update(keyString).digest();
-    const cipher = crypto.createCipheriv("aes-256-ctr", key, iv);
-    let encrypted = cipher.update(data, "utf8", "hex");
-    encrypted += cipher.final("hex");
-    return `${iv.toString("hex")}:${encrypted}`;
+    const keyBytes = await getKeyFromSecret(keyString);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "AES-CTR" },
+      false,
+      ["encrypt"]
+    );
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-CTR", counter: iv, length: 64 },
+      cryptoKey,
+      new TextEncoder().encode(data)
+    );
+    return `${bytesToHex(iv)}:${bytesToHex(new Uint8Array(encrypted))}`;
   } catch (error) {
     throw new Error("An internal error occurred");
   }

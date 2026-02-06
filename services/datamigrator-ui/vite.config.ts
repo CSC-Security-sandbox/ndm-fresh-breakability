@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig({
-  plugins: [react(), nodePolyfills(), checker({ typescript: false })],
+  plugins: [react(), nodePolyfills({ exclude: ["crypto"] }), checker({ typescript: false })],
   build: {
     outDir: "dist",
   },
@@ -29,7 +29,6 @@ export default defineConfig({
       "@auth": path.resolve(__dirname, "src/auth"),
       "@routes": path.resolve(__dirname, "src/routes"),
       "@utils": path.resolve(__dirname, "src/utils"),
-      crypto: "crypto-browserify",
       stream: "stream-browserify",
     },
   },

@@ -64,7 +64,7 @@ const CreateUserForm = ({
 
     try {
       const createUserResponse = await createUserApi(body).unwrap();
-      const decryptedPassword = decryptData(createUserResponse?.data?.tempPassword);
+      const decryptedPassword = await decryptData(createUserResponse?.data?.tempPassword);
       setTemporaryPassword(decryptedPassword);
       if (form.formState.is_app_admin) {
         await associateUserApi({

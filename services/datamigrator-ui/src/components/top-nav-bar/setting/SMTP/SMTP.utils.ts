@@ -4,11 +4,11 @@ import {
 } from "@/types/app.type";
 import { encryptData } from "@/utils/common.utils";
 
-export const smtpData = (smtpProps: SmtpDataPropsType) => {
+export const smtpData = async (smtpProps: SmtpDataPropsType) => {
     try {
         const toEmailIds = smtpProps.to_email.map((obj: ToEmailType) => obj.value).join(',');
 
-        const encryptedPassword = encryptData(smtpProps.password);
+        const encryptedPassword = await encryptData(smtpProps.password);
 
         const payLoad = [
             {settingKey: "SMTP_HOST", settingValue: smtpProps.ip_address, description: "", settingType: "SMTP"},

@@ -79,9 +79,9 @@ const ManageUsers = () => {
         };
         resetPasswordApi(body)
           .unwrap()
-          .then((res) => {
+          .then(async (res) => {
             setIsCreateFormVisible(true);
-            setTemporaryPassword(decryptData(res?.newPassword));
+            setTemporaryPassword(await decryptData(res?.newPassword));
           })
           .catch((err) => {
             notify.error(err.message);

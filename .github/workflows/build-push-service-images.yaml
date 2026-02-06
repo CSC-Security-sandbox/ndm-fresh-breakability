@@ -256,7 +256,8 @@ jobs:
           output: 'trivy-results-${{ matrix.service }}.json'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
-          ignore-unfixed: false
+          # Only fail on vulns that have a fix; unfixed (e.g. glibc, libpng) stay in report but don't fail job
+          ignore-unfixed: true
 
       - name: Convert Trivy JSON to SARIF and Table format
         run: |

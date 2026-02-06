@@ -70,7 +70,7 @@
     "systeminformation": "^5.30.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.11",
+    "@nestjs/cli": "^11.0.16",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
     "@temporalio/testing": "^1.11.7",

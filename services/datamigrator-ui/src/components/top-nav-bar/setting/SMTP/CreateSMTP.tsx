@@ -96,7 +96,7 @@ const CreateSMTP = ({ handleDefaultTab }: SmtpDetailsPropsType) => {
   }, [smtpLoading, smtpExistingData, isEdit]);
 
   const handleCreateSMTP = async () => {
-    const data = smtpData(smtpForm.formState);
+    const data = await smtpData(smtpForm.formState);
 
     try {
       if (isEdit) {
