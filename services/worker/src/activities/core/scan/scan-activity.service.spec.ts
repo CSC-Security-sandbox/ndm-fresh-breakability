@@ -7,6 +7,7 @@ import { MigrateScanService } from './migrate/migrate-scan.service';
 import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 import { Context } from '@temporalio/activity';
 import { TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import * as utils from 'src/activities/utils/utils';
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
@@ -104,7 +105,7 @@ describe('ScanService', () => {
 
     describe('getScanSettings', () => {
         it('should return correct scan settings', () => {
-            const settings = scanService.getScanSettings(mockJobContext as any);
+            const settings = utils.getScanSettings(mockJobContext as any);
             expect(settings).toEqual({
                 skipFile: '2d',
                 excludePatterns: ['node_modules', '.git'],
@@ -113,7 +114,7 @@ describe('ScanService', () => {
 
         it('should handle missing options', () => {
             const ctx = { jobConfig: {} };
-            const settings = scanService.getScanSettings(ctx as any);
+            const settings = utils.getScanSettings(ctx as any);
             expect(settings).toEqual({
                 skipFile: '',
                 excludePatterns: [],
@@ -183,7 +184,7 @@ describe('ScanService', () => {
         it('should execute discovery scan and aggregate results', async () => {
             const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
-            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            jest.spyOn(utils, 'getScanSettings').mockReturnValue({
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });
@@ -208,7 +209,7 @@ describe('ScanService', () => {
         it('should execute migrate scan and aggregate results', async () => {
             const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
-            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            jest.spyOn(utils, 'getScanSettings').mockReturnValue({
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });
@@ -234,7 +235,7 @@ describe('ScanService', () => {
             const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
             discoveryScanService.scanDirectory.mockRejectedValueOnce({ code: 'ERR_CODE' });
-            jest.spyOn(scanService, 'getScanSettings').mockReturnValue({
+            jest.spyOn(utils, 'getScanSettings').mockReturnValue({
             skipFile: '2d',
             excludePatterns: ['node_modules', '.git'],
             });

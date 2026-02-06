@@ -5,13 +5,14 @@ import {
   OperationError,
   TaskError,
   TaskStatus,
+  CommandStatus,
 } from "@netapp-cloud-datamigrate/jobs-lib";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { OperationErrorEntity } from "../entities/operation-error.entity";
 import { OperationsEntity } from "../entities/operation.entity";
 import { TaskErrorEntity } from "../entities/task-error.entity";
 import { TaskEntity } from "../entities/task.entity";
-import { OperationStatus } from "../enum/queues.enum";
+import { OperationStatus, OperationType } from "../enum/queues.enum";
 import { DataSource, Repository, UpdateResult } from "typeorm";
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import {
@@ -314,6 +315,7 @@ export class InventoryService {
         throw new ValidationError('Invalid operation error data', 'data');
       }
 
+      // Save error for current operation
       const operationError = this.operationErrorRepo.create({
         errorCode: data.errorCode,
         errorMessage: data.errorMessage,
@@ -322,15 +324,111 @@ export class InventoryService {
         filePath: data.errorFiles?.filePath ?? null,
         createdAt: new Date(),
         error_type: data?.errorType || null,
-        operationType:data?.operationName || null,
+        operationType: data?.operationName || null,
         origin: data?.origin || null,
       });
 
       await this.operationErrorRepo.save(operationError);
+
+      // Sync error to original job run if this is a retry
+      await this.syncErrorToOriginalJobRun(data);
+
     } catch (err) {
       this.logger.error(`Failed to save operation error: ${err.message}`, err?.stack || err);
       throw new DatabaseError("Error while saving operation error records to the database", err);
     }
+  }
+
+  /**
+   * Syncs an error to the original job run during retry operations.
+   * Only creates operation + error for NEW files discovered during retry.
+   * If the file already existed in the original job run, it already has an error there.
+   */
+  private async syncErrorToOriginalJobRun(data: OperationError): Promise<void> {
+    if (!data.originalJobRunId || !data.errorFiles?.filePath) {
+      return;
+    }
+
+    try {
+      // Check if operation already exists in original job run
+      const existingOperation = await this.operationRepo.findOne({
+        where: {
+          fPath: data.errorFiles.filePath,
+          jobRunId: data.originalJobRunId
+        }
+      });
+
+      // Only create operation + error for NEW files not in original job run
+      if (!existingOperation) {
+        const newOperation = await this.createOperationInOriginalJobRun(
+          data.originalJobRunId,
+          data.errorFiles.filePath
+        );
+        await this.upsertOperationError(newOperation.id, data);
+        
+        this.logger.log(
+          `Synced new error to original job run ${data.originalJobRunId} for file ${data.errorFiles.filePath}`
+        );
+      }
+      // If operation exists, error is already tracked there - no action needed
+    } catch (err) {
+      this.logger.error(
+        `Failed to sync error to original job run ${data.originalJobRunId}: ${err.message}`,
+        err?.stack || err
+      );
+      // Don't throw - this is supplementary to the main error save
+    }
+  }
+
+  /**
+   * Creates a new operation in the original job run for error tracking.
+   * Used during retry when a new file (not in original errors) fails.
+   */
+  private async createOperationInOriginalJobRun(
+    originalJobRunId: string,
+    filePath: string
+  ): Promise<OperationsEntity> {
+    // Get path IDs from any existing operation in the original job run
+    const existingOp = await this.operationRepo.findOne({
+      where: { jobRunId: originalJobRunId },
+      select: ['sPathId', 'tPathId']
+    });
+
+    // Create new operation for error tracking
+    const newOperation = this.operationRepo.create({
+      fPath: filePath,
+      jobRunId: originalJobRunId,
+      status: OperationStatus.ERROR,
+      operationType: OperationType.SCAN,
+      request: {},
+      sPathId: existingOp?.sPathId ?? null,
+      tPathId: existingOp?.tPathId ?? null,
+      retryCount: 0,
+    });
+
+    return await this.operationRepo.save(newOperation);
+  }
+
+  /**
+   * Upserts an operation error record.
+   * Updates existing error or inserts new one based on operationId + filePath.
+   */
+  private async upsertOperationError(
+    operationId: string,
+    data: OperationError
+  ): Promise<void> {
+    await this.operationErrorRepo.upsert({
+      errorCode: data.errorCode,
+      errorMessage: data.errorMessage,
+      operationId: operationId,
+      fileName: data.errorFiles?.fileName ?? null,
+      filePath: data.errorFiles?.filePath ?? null,
+      createdAt: new Date(),
+      error_type: data?.errorType || null,
+      operationType: data?.operationName || null,
+      origin: data?.origin || null,
+      errorStatus: 'UNRESOLVED',
+    }, ['operationId', 'filePath']);
   }
   async saveTaskError(data: TaskError) {
     try {
@@ -421,8 +519,72 @@ export class InventoryService {
       if (operationBatches.length > 0) {
         await Promise.all(operationBatches.map(batch => this.operationRepo.upsert(batch,["id"])));
       }
+
+      // Resolve operation errors for completed retry commands
+      // Commands with originalCmdId are retry commands - resolve the original command's errors
+      // Must match both operationId AND filePath since one operation can have multiple file errors
+      if ([TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR].includes(status) && Array.isArray(commands)) {
+        const errorsToResolve = commands
+          .filter((cmd: any) => cmd.originalCmdId && cmd.status === CommandStatus.COMPLETED)
+          .map((cmd: any) => ({ operationId: cmd.originalCmdId, filePath: cmd.fPath }));
+        
+        if (errorsToResolve.length > 0) {
+          await this.resolveOperationErrors(errorsToResolve);
+        }
+      }
     } catch (err) {
       this.logger.error(`Failed to save task records: ${err.message}`, err?.stack || err);
+    }
+  }
+
+
+  /**
+   * Resolves operation errors by updating their status from UNRESOLVED to RESOLVED.
+   * This is called when retry operations complete successfully.
+   * 
+   * Joins to operations table to match on operations.f_path (relative path) because:
+   * - operation_errors.file_path stores full absolute path (e.g., /mnt/jobRunId/pathId/data/file.txt)
+   * - operations.f_path stores relative path (e.g., /data/file.txt)
+   * - Retry commands use relative paths matching operations.f_path
+   * 
+   * @param errors - Array of {operationId, filePath} pairs to resolve (filePath is relative)
+   */
+  async resolveOperationErrors(errors: { operationId: string; filePath: string }[]): Promise<void> {
+    if (!errors || errors.length === 0) {
+      return;
+    }
+
+    try {
+      // Build WHERE conditions for each error (each error uses two params: operationId, filePath)
+      const whereConditions = errors.map((_, index) => {
+        const p1 = index * 2 + 1;
+        return `(oe.operation_id = $${p1} AND o.f_path = $${p1 + 1})`;
+      });
+
+      // Build parameters array for raw query
+      const parameters: string[] = [];
+      errors.forEach(error => {
+        parameters.push(error.operationId, error.filePath);
+      });
+
+      // Execute the update with a subquery that joins to operations table
+      // This matches operation_errors by operation_id where the linked operation has matching f_path
+      const query = `
+        UPDATE datamigrator.operation_errors
+        SET error_status = 'RESOLVED'
+        WHERE id IN (
+          SELECT oe.id
+          FROM datamigrator.operation_errors oe
+          INNER JOIN datamigrator.operations o ON oe.operation_id = o.id
+          WHERE ${whereConditions.join(' OR ')}
+        )
+      `;
+
+
+      await this.operationErrorRepo.query(query, parameters);
+
+    } catch (error) {
+      this.logger.error(`Failed to resolve operation errors: ${error.message}`, error?.stack || error);
     }
   }
 

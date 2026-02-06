@@ -3,7 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGene
 import { Base } from './base.entity';
 import { JobConfigEntity } from './jobconfig.entity';
 import { WorkerJobRunMap } from './workerjobrun.entity';
-import { JobRunStatus, PausedReason } from 'src/constants/enums';
+import { JobRunStatus, JobRunType, PausedReason } from 'src/constants/enums';
 import { InventoryEntity } from './inventory.entity';
 import { TaskEntity } from './task.entity';
 import { JobOptionsEntity } from './joboptions.entity';
@@ -43,6 +43,10 @@ export class JobRunEntity extends Base {
   @ApiProperty({ description: "Job ID associated with this run" })
   @Column({ name: "is_report_ready" })
   isReportReady: boolean;
+
+  @ApiProperty({ description: "Type of job run (REGULAR or RETRY)" })
+  @Column({ type: 'varchar', name: 'job_run_type', default: 'REGULAR' })
+  jobRunType: JobRunType;
 
   @ManyToOne(() => JobConfigEntity, (jobConfig) => jobConfig.jobRuns, {
     onDelete: "CASCADE",

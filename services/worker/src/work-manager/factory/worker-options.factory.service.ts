@@ -19,6 +19,8 @@ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-l
 import { SyncService } from "src/activities/core/migrate/sync-activity.service";
 import { MappingResolverService } from "src/activities/core/initializer/mapping-resolver.service";
 import { SetupExportsPathPermissionService } from "src/activities/core/initializer/setup-exports-path-permission.service";
+import { FetchFailedOperationsActivity } from "src/activities/core/retry/fetch-failed-operations.activity";
+import { ProcessRetryBatchActivity } from "src/activities/core/retry/process-retry-batch.activity";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -41,6 +43,8 @@ export class WorkerOptionsService {
     private readonly validatePathActivity: ValidatePathActivity,
     private readonly mappingResolverService: MappingResolverService,
     private readonly setupExportsPathPermissionService: SetupExportsPathPermissionService,
+    private readonly fetchFailedOperationsActivity: FetchFailedOperationsActivity,
+    private readonly processRetryBatchActivity: ProcessRetryBatchActivity,
 
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -105,7 +109,10 @@ export class WorkerOptionsService {
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
           isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
           resolveUsernamesToSids: this.mappingResolverService.resolveUsernamesToSids.bind(this.mappingResolverService),
-          setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService)
+          setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService),
+          // Retry workflow activities
+          fetchFailedOperations: this.fetchFailedOperationsActivity.fetchFailedOperations.bind(this.fetchFailedOperationsActivity),
+          processRetryBatch: this.processRetryBatchActivity.processRetryBatch.bind(this.processRetryBatchActivity),
         }, this.jobTaskActivityConcurrency, this.shutDownForceTime);
       default:
         return undefined;

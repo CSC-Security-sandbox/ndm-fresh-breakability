@@ -88,6 +88,7 @@ export interface JobRunsDTO {
   endTime?: Date;
   jobConfigId?: string;
   jobType: string;
+  jobRunType: string;
   sourceServer: ServerDetailsDTO;
   destinationServer?: ServerDetailsDTO;
   nextSchedule?: Date;
@@ -113,6 +114,7 @@ export interface JobRunDetailsDTO {
   startTime: Date;
   endTime?: Date;
   jobType: string;
+  jobRunType: string;
   sourceServer: ServerDetailsDTO;
   destinationServer?: ServerDetailsDTO;
   timeElapsed: number;

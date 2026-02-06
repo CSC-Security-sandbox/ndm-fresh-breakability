@@ -8,8 +8,12 @@ const jobTypeWorkflowMap = {
     [JobType.DISCOVER]: WorkFlows.DISCOVERY,
 };
 
-export const getWorkflowId = (jobRunId: string, JobRunType: JobType): string => 
-    jobTypeWorkflowMap[JobRunType] + '-' + jobRunId;
+export const getWorkflowId = (jobRunId: string, jobType: JobType, isRetryRun: boolean = false): string => {
+    if (isRetryRun) {
+        return `${WorkFlows.RETRY}-${jobRunId}`;
+    }
+    return `${jobTypeWorkflowMap[jobType]}-${jobRunId}`;
+};
 
 const GENERAL_ERROR_CODES = new Set([
     'OP_GENERAL_FAILURE',

@@ -1119,6 +1119,7 @@ export class JobConfigService {
           startTime: jobRun.startTime,
           endTime: jobRun.endTime,
           jobType: jobConfig.jobType,
+          jobRunType: jobRun.jobRunType,
           timeElapsed: jobRun.endTime
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
@@ -1926,6 +1927,7 @@ export class JobConfigService {
       .innerJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
       .select([
         "oe.errorType AS errorType", 
         "COUNT(*) AS count"

@@ -261,6 +261,7 @@ export interface OperationError{
   errorType: ErrorType;
   operationName?: string;
   origin?: string;
+  originalJobRunId?: string;  // For retry error synchronization - tracks the original job run
 }
 export interface ErroredFile{
   fileName: string;

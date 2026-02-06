@@ -60,6 +60,7 @@ describe('JobRunController', () => {
           useValue: {
             getJobAllRuns: jest.fn(),
             getJobRunErrors: jest.fn(),
+            getFailedOperations: jest.fn(),
             getJobRun: jest.fn(),
             approveCutoverRequest: jest.fn(),
             addHocRun: jest.fn(),
@@ -124,6 +125,65 @@ describe('JobRunController', () => {
     });
   });
 
+  describe('getFailedOperations', () => {
+    it('should get failed operations with default limit and no cursor', async () => {
+      const jobRunId = 'run1';
+      const result = { data: [], nextCursor: null };
+      jobRunService.getFailedOperations.mockResolvedValue(result);
+      
+      expect(await controller.getFailedOperations(jobRunId)).toBe(result);
+      expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
+        jobRunId,
+        null,
+        1000
+      );
+    });
+
+    it('should get failed operations with cursor provided', async () => {
+      const jobRunId = 'run1';
+      const cursor = 'cursor123';
+      const result = { data: [], nextCursor: null };
+      jobRunService.getFailedOperations.mockResolvedValue(result);
+      
+      expect(await controller.getFailedOperations(jobRunId, cursor)).toBe(result);
+      expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
+        jobRunId,
+        cursor,
+        1000
+      );
+    });
+
+    it('should get failed operations with custom limit', async () => {
+      const jobRunId = 'run1';
+      const cursor = undefined;
+      const limit = '500';
+      const result = { data: [], nextCursor: null };
+      jobRunService.getFailedOperations.mockResolvedValue(result);
+      
+      expect(await controller.getFailedOperations(jobRunId, cursor, limit)).toBe(result);
+      expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
+        jobRunId,
+        null,
+        500
+      );
+    });
+
+    it('should get failed operations with both cursor and custom limit', async () => {
+      const jobRunId = 'run1';
+      const cursor = 'cursor456';
+      const limit = '250';
+      const result = { data: [{ id: '1' }], nextCursor: 'next123' };
+      jobRunService.getFailedOperations.mockResolvedValue(result);
+      
+      expect(await controller.getFailedOperations(jobRunId, cursor, limit)).toBe(result);
+      expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
+        jobRunId,
+        cursor,
+        250
+      );
+    });
+  });
+
   describe('getJobById', () => {
     it('should return job run by id', async () => {
       const id = '123';
@@ -160,7 +220,15 @@ describe('JobRunController', () => {
       const result = { runId: 'run1' };
       jobRunService.addHocRun.mockResolvedValue(result as any);
       expect(await controller.adhocRun(adhoc)).toBe(result);
-      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined);
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined, undefined);
+    });
+
+    it('should create ad hoc run with jobRunId for retry', async () => {
+      const adhoc: AdHocRunDTO = { jobConfigId: 'cfg1', jobRunId: 'run1' };
+      const result = { runId: 'run2' };
+      jobRunService.addHocRun.mockResolvedValue(result as any);
+      expect(await controller.adhocRun(adhoc)).toBe(result);
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined, 'run1');
     });
   });
 

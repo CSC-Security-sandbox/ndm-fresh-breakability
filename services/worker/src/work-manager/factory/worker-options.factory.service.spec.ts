@@ -21,6 +21,8 @@ import { ValidatePathActivity } from 'src/activities/validate-path/validate-path
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
+import { FetchFailedOperationsActivity } from 'src/activities/core/retry/fetch-failed-operations.activity';
+import { ProcessRetryBatchActivity } from 'src/activities/core/retry/process-retry-batch.activity';
 
 const bindMock = jest.fn().mockReturnValue({
   bind: jest.fn(),
@@ -103,6 +105,14 @@ const SyncServiceMock = {
   syncTaskActivity: bindMock,
 };
 
+const FetchFailedOperationsActivityMock = {
+  fetchFailedOperations: bindMock,
+};
+
+const ProcessRetryBatchActivityMock = {
+  processRetryBatch: bindMock,
+};
+
 describe('WorkerOptionsService', () => {
   let service: WorkerOptionsService;
   const mockConnection = {} as NativeConnection;
@@ -145,6 +155,14 @@ describe('WorkerOptionsService', () => {
         {
           provide: SetupExportsPathPermissionService,
           useValue: { setupExportPathPermission: jest.fn() },
+        },
+        {
+          provide: FetchFailedOperationsActivity,
+          useValue: FetchFailedOperationsActivityMock,
+        },
+        {
+          provide: ProcessRetryBatchActivity,
+          useValue: ProcessRetryBatchActivityMock,
         },
       ],
     }).compile();

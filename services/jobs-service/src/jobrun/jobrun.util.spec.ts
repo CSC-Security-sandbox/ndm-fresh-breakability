@@ -1,6 +1,33 @@
-import { getErrorDisplayMessage } from "./jobrun.util";
+import { getErrorDisplayMessage, getWorkflowId } from "./jobrun.util";
+import { JobType, WorkFlows } from "src/constants/enums";
 
 describe('JobRun Utils', () => {
+
+  describe('getWorkflowId', () => {
+    it('should return the workflow ID for DISCOVER job type', () => {
+      const jobRunId = 'jobRunId';
+      const result = getWorkflowId(jobRunId, JobType.DISCOVER);
+      expect(result).toEqual(`${WorkFlows.DISCOVERY}-${jobRunId}`);
+    });
+
+    it('should return the workflow ID for CUT_OVER job type', () => {
+      const jobRunId = 'jobRunId';
+      const result = getWorkflowId(jobRunId, JobType.CUT_OVER);
+      expect(result).toEqual(`${WorkFlows.CUT_OVER}-${jobRunId}`);
+    });
+
+    it('should return the workflow ID for MIGRATE job type', () => {
+      const jobRunId = 'jobRunId';
+      const result = getWorkflowId(jobRunId, JobType.MIGRATE);
+      expect(result).toEqual(`${WorkFlows.MIGRATE}-${jobRunId}`);
+    });
+
+    it('should return the workflow ID for SPEED_TEST job type', () => {
+      const jobRunId = 'jobRunId';
+      const result = getWorkflowId(jobRunId, JobType.SPEED_TEST);
+      expect(result).toEqual(`${WorkFlows.SPEED_TEST}-${jobRunId}`);
+    });
+  });
 
   describe('getErrorDisplayMessage', () => {
     const mockSystemMessage = 'Database connection timeout after 30 seconds';
