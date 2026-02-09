@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,6 +25,21 @@ const (
 
 	mimeJSON = "application/json"
 )
+
+// goosToNDMPlatform maps Go's runtime.GOOS values to the Platform enum values
+// used by the NDM control plane (config-service/src/constants/enums.ts).
+func goosToNDMPlatform() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "LINUX"
+	case "darwin":
+		return "MACOS"
+	case "windows":
+		return "WINDOWS"
+	default:
+		return "OTHER"
+	}
+}
 
 // Response holds the HTTP status code and raw body bytes returned by a
 // request made through Client.
@@ -120,7 +136,7 @@ func (c *Client) do(method, url string, body []byte, extraHeaders map[string]str
 	// Standard headers injected on every request.
 	req.Header.Set(headerAuthorization, "Bearer "+token)
 	req.Header.Set(headerAccept, mimeJSON)
-	req.Header.Set(headerClientPlatform, "linux")
+	req.Header.Set(headerClientPlatform, goosToNDMPlatform())
 
 	if body != nil {
 		req.Header.Set(headerContentType, mimeJSON)

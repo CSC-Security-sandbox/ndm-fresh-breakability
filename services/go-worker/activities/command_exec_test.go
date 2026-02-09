@@ -17,7 +17,7 @@ import (
 
 func newTestActivities() *Activities {
 	return &Activities{
-		Logger: logger.NewLogger("test"),
+		Logger: logger.NewLogger("test", "debug"),
 	}
 }
 

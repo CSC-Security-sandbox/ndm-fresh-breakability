@@ -43,14 +43,13 @@ type KeycloakAuth struct {
 }
 
 // NewKeycloakAuth creates a new KeycloakAuth instance using values from the
-// provided configuration. The workerSecret field from cfg is used for both the
-// client_id and client_secret parameters in the token request, matching the
-// behaviour of the TypeScript auth service.
+// provided configuration. client_id is the worker ID and client_secret is the
+// worker secret, matching the TypeScript auth service (auth.service.ts).
 func NewKeycloakAuth(cfg *config.Config) *KeycloakAuth {
 	return &KeycloakAuth{
 		baseURL:      cfg.KeycloakBaseURL,
 		realm:        cfg.KeycloakRealm,
-		clientID:     cfg.WorkerSecret,
+		clientID:     cfg.WorkerID,
 		clientSecret: cfg.WorkerSecret,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,

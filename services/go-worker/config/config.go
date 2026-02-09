@@ -66,6 +66,18 @@ type Config struct {
 	RedisPort     string
 	RedisUsername string
 	RedisPassword string
+
+	// Project
+	ProjectID string
+
+	// Logging
+	LogLevel string
+
+	// Metrics
+	MetricsEnabled           bool
+	MetricsCollectionInterval int
+	MetricsPushInterval      int
+	WorkerMetricsInterval    int
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -162,6 +174,21 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parsing SPEED_TEST_TIMEOUT: %w", err)
 	}
 
+	metricsCollectionInterval, err := envOrDefaultInt("METRICS_COLLECTION_INTERVAL", 5000)
+	if err != nil {
+		return nil, fmt.Errorf("parsing METRICS_COLLECTION_INTERVAL: %w", err)
+	}
+
+	metricsPushInterval, err := envOrDefaultInt("METRICS_PUSH_INTERVAL", 15000)
+	if err != nil {
+		return nil, fmt.Errorf("parsing METRICS_PUSH_INTERVAL: %w", err)
+	}
+
+	workerMetricsInterval, err := envOrDefaultInt("WORKER_METRICS_COLLECTION_INTERVAL", 2000)
+	if err != nil {
+		return nil, fmt.Errorf("parsing WORKER_METRICS_COLLECTION_INTERVAL: %w", err)
+	}
+
 	cfg := &Config{
 		WorkerID:              envOrDefault("WORKER_ID", ""),
 		BuildID:               envOrDefault("BUILD_ID", "1.0.0"),
@@ -212,6 +239,15 @@ func Load() (*Config, error) {
 		RedisPort:     envOrDefault("REDIS_PORT", "6379"),
 		RedisUsername: envOrDefault("REDIS_USERNAME", ""),
 		RedisPassword: envOrDefault("REDIS_PASSWORD", ""),
+
+		ProjectID: envOrDefault("PROJECT_ID", ""),
+
+		LogLevel: envOrDefault("LOG_LEVEL", "info"),
+
+		MetricsEnabled:           envOrDefault("METRICS_ENABLED", "false") == "true",
+		MetricsCollectionInterval: metricsCollectionInterval,
+		MetricsPushInterval:      metricsPushInterval,
+		WorkerMetricsInterval:    workerMetricsInterval,
 	}
 
 	return cfg, nil

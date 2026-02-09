@@ -38,6 +38,7 @@ func newKeycloakAuthWithServer(serverURL string) *KeycloakAuth {
 	cfg := &config.Config{
 		KeycloakBaseURL: serverURL,
 		KeycloakRealm:   "test-realm",
+		WorkerID:        "test-worker-id",
 		WorkerSecret:    "test-secret",
 	}
 	return NewKeycloakAuth(cfg)
@@ -47,13 +48,14 @@ func TestNewKeycloakAuth(t *testing.T) {
 	cfg := &config.Config{
 		KeycloakBaseURL: "https://keycloak.example.com",
 		KeycloakRealm:   "my-realm",
+		WorkerID:        "my-worker-id",
 		WorkerSecret:    "my-secret",
 	}
 	auth := NewKeycloakAuth(cfg)
 
 	assert.Equal(t, "https://keycloak.example.com", auth.baseURL)
 	assert.Equal(t, "my-realm", auth.realm)
-	assert.Equal(t, "my-secret", auth.clientID)
+	assert.Equal(t, "my-worker-id", auth.clientID)
 	assert.Equal(t, "my-secret", auth.clientSecret)
 	assert.NotNil(t, auth.httpClient)
 }

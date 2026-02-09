@@ -2,6 +2,7 @@ package logger
 
 import (
 	"regexp"
+	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -19,12 +20,31 @@ type Logger struct {
 	context []zap.Field
 }
 
+// parseLogLevel converts a string log level (e.g. "debug", "info", "warn",
+// "error") into the corresponding zapcore.Level. Defaults to InfoLevel for
+// unrecognised values.
+func parseLogLevel(level string) zapcore.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return zap.DebugLevel
+	case "info":
+		return zap.InfoLevel
+	case "warn", "warning":
+		return zap.WarnLevel
+	case "error":
+		return zap.ErrorLevel
+	default:
+		return zap.InfoLevel
+	}
+}
+
 // NewLogger creates a production-ready Logger that writes JSON-encoded log
 // entries to stdout. The name parameter is attached to every log entry and is
-// typically the service or component name.
-func NewLogger(name string) *Logger {
+// typically the service or component name. The level parameter controls the
+// minimum log level (e.g. "debug", "info", "warn", "error").
+func NewLogger(name string, level string) *Logger {
 	cfg := zap.Config{
-		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
+		Level:       zap.NewAtomicLevelAt(parseLogLevel(level)),
 		Development: false,
 		Encoding:    "json",
 		EncoderConfig: zapcore.EncoderConfig{

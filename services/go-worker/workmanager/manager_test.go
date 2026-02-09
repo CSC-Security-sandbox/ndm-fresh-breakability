@@ -51,11 +51,11 @@ func TestKeyvalsToFields_NonStringKey(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// applyRegistrationOverrides
+// applyEnvOverrides
 // ---------------------------------------------------------------------------
 
-func TestApplyRegistrationOverrides_NilResponse(t *testing.T) {
-	log := logger.NewLogger("test")
+func TestApplyEnvOverrides_NilPayload(t *testing.T) {
+	log := logger.NewLogger("test", "debug")
 	cfg := &config.Config{
 		TemporalAddress: "original-address:7233",
 	}
@@ -65,12 +65,12 @@ func TestApplyRegistrationOverrides_NilResponse(t *testing.T) {
 	}
 
 	// Should not panic.
-	wm.applyRegistrationOverrides(nil)
+	wm.applyEnvOverrides(nil)
 	assert.Equal(t, "original-address:7233", cfg.TemporalAddress)
 }
 
-func TestApplyRegistrationOverrides_PartialOverrides(t *testing.T) {
-	log := logger.NewLogger("test")
+func TestApplyEnvOverrides_PartialOverrides(t *testing.T) {
+	log := logger.NewLogger("test", "debug")
 	cfg := &config.Config{
 		TemporalAddress: "original:7233",
 		RedisHost:       "original-redis",
@@ -83,38 +83,43 @@ func TestApplyRegistrationOverrides_PartialOverrides(t *testing.T) {
 		logger: log,
 	}
 
-	resp := &registrationResponse{}
-	resp.Data.TemporalAddress = "new-temporal:7233"
-	resp.Data.RedisHost = "new-redis"
-	// RedisPort is empty -> should not override.
+	cp := &configPayload{
+		EnvVariables: map[string]string{
+			"TEMPORAL_ADDRESS": "new-temporal:7233",
+			"REDIS_HOST":       "new-redis",
+			// REDIS_PORT missing -> should not override.
+		},
+	}
 
-	wm.applyRegistrationOverrides(resp)
+	wm.applyEnvOverrides(cp)
 
 	assert.Equal(t, "new-temporal:7233", cfg.TemporalAddress)
 	assert.Equal(t, "new-redis", cfg.RedisHost)
-	assert.Equal(t, "6379", cfg.RedisPort, "should not be overridden when empty")
+	assert.Equal(t, "6379", cfg.RedisPort, "should not be overridden when missing")
 	assert.Equal(t, "olduser", cfg.RedisUsername)
 }
 
-func TestApplyRegistrationOverrides_AllOverrides(t *testing.T) {
-	log := logger.NewLogger("test")
+func TestApplyEnvOverrides_AllOverrides(t *testing.T) {
+	log := logger.NewLogger("test", "debug")
 	cfg := &config.Config{}
 	wm := &WorkManager{
 		cfg:    cfg,
 		logger: log,
 	}
 
-	resp := &registrationResponse{}
-	resp.Data.TemporalAddress = "temporal:7233"
-	resp.Data.TemporalTLSEnabled = true
-	resp.Data.TemporalTLSCACert = "CERT-DATA"
-	resp.Data.TemporalTLSServerName = "server.example.com"
-	resp.Data.RedisHost = "redis-host"
-	resp.Data.RedisPort = "6380"
-	resp.Data.RedisUsername = "redisuser"
-	resp.Data.RedisPassword = "redispass"
+	cp := &configPayload{
+		EnvVariables: map[string]string{
+			"TEMPORAL_ADDRESS":        "temporal:7233",
+			"TEMPORAL_TLS_CA_CERT":    "CERT-DATA",
+			"TEMPORAL_TLS_SERVER_NAME": "server.example.com",
+			"REDIS_HOST":              "redis-host",
+			"REDIS_PORT":              "6380",
+			"REDIS_USERNAME":          "redisuser",
+			"REDIS_PASSWORD":          "redispass",
+		},
+	}
 
-	wm.applyRegistrationOverrides(resp)
+	wm.applyEnvOverrides(cp)
 
 	assert.Equal(t, "temporal:7233", cfg.TemporalAddress)
 	assert.True(t, cfg.TemporalTLSEnabled)
@@ -127,11 +132,85 @@ func TestApplyRegistrationOverrides_AllOverrides(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// parseConfigResponse
+// ---------------------------------------------------------------------------
+
+func TestParseConfigResponse_ValidEnvelope(t *testing.T) {
+	raw := []byte(`{
+		"trackId": "t-1",
+		"message": "ok",
+		"data": {
+			"items": {
+				"metaConfig": [
+					{"workerId":"w1","configName":"PARENT_WORKFLOW","taskQueueId":null,"dynamicTaskQueue":false},
+					{"workerId":"w1","configName":"WORKER_SPECIFIC_WORKFLOW","taskQueueId":"w1","dynamicTaskQueue":true}
+				],
+				"envVariables": {"TEMPORAL_TLS_CA_CERT": "cert-data"}
+			}
+		}
+	}`)
+
+	cp, err := parseConfigResponse(raw)
+	require.NoError(t, err)
+	require.NotNil(t, cp)
+	assert.Len(t, cp.MetaConfig, 2)
+	assert.Equal(t, "PARENT_WORKFLOW", cp.MetaConfig[0].ConfigName)
+	assert.Equal(t, "WORKER_SPECIFIC_WORKFLOW", cp.MetaConfig[1].ConfigName)
+	assert.True(t, cp.MetaConfig[1].DynamicTaskQueue)
+	assert.Equal(t, "w1", cp.MetaConfig[1].TaskQueueID)
+	assert.Equal(t, "cert-data", cp.EnvVariables["TEMPORAL_TLS_CA_CERT"])
+}
+
+// ---------------------------------------------------------------------------
+// getWorkerIdentity
+// ---------------------------------------------------------------------------
+
+func TestGetWorkerIdentity_Static(t *testing.T) {
+	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "PARENT_WORKFLOW", DynamicTaskQueue: false}
+	assert.Equal(t, "w1/PARENT_WORKFLOW", getWorkerIdentity(wc))
+}
+
+func TestGetWorkerIdentity_Dynamic(t *testing.T) {
+	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "WORKER_SPECIFIC_WORKFLOW", TaskQueueID: "w1", DynamicTaskQueue: true}
+	assert.Equal(t, "w1/WORKER_SPECIFIC_WORKFLOW-w1", getWorkerIdentity(wc))
+}
+
+// ---------------------------------------------------------------------------
+// resolveTaskQueue
+// ---------------------------------------------------------------------------
+
+func TestResolveTaskQueue_Parent(t *testing.T) {
+	wc := WorkerConfiguration{ConfigName: configNameParentWorkflow, DynamicTaskQueue: false}
+	assert.Equal(t, "ParentWorkflow-TaskQueue", resolveTaskQueue(wc))
+}
+
+func TestResolveTaskQueue_WorkerSpecific(t *testing.T) {
+	wc := WorkerConfiguration{ConfigName: configNameWorkerSpecific, TaskQueueID: "w1", DynamicTaskQueue: true}
+	assert.Equal(t, "w1-TaskQueue", resolveTaskQueue(wc))
+}
+
+func TestResolveTaskQueue_JobSpecific(t *testing.T) {
+	wc := WorkerConfiguration{ConfigName: configNameJobSpecific, TaskQueueID: "job-123", DynamicTaskQueue: true}
+	assert.Equal(t, "job-123-TaskQueue", resolveTaskQueue(wc))
+}
+
+// ---------------------------------------------------------------------------
+// resolveWorkerType
+// ---------------------------------------------------------------------------
+
+func TestResolveWorkerType(t *testing.T) {
+	assert.Equal(t, ParentWorkflow, resolveWorkerType(configNameParentWorkflow))
+	assert.Equal(t, WorkerSpecific, resolveWorkerType(configNameWorkerSpecific))
+	assert.Equal(t, JobSpecific, resolveWorkerType(configNameJobSpecific))
+	assert.Equal(t, WorkerSpecific, resolveWorkerType("UNKNOWN"))
+}
+
+// ---------------------------------------------------------------------------
 // NewWorkManager
 // ---------------------------------------------------------------------------
 
 func TestNewWorkManager(t *testing.T) {
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	cfg := &config.Config{
 		WorkerID: "test-worker",
 	}
@@ -148,7 +227,7 @@ func TestNewWorkManager(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTemporalLogger_Methods(t *testing.T) {
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	tl := newTemporalLogger(log)
 
 	// These should not panic. We just verify they accept the correct signatures.
@@ -167,7 +246,7 @@ func TestTemporalLogger_Methods(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// MetaConfig types
+// WorkerType constants
 // ---------------------------------------------------------------------------
 
 func TestWorkerTypeConstants(t *testing.T) {
@@ -187,4 +266,40 @@ func TestKeyvalsToFields_WithZapAny(t *testing.T) {
 	// Verify field types.
 	assert.Equal(t, zap.Any("duration", 42.5).Key, fields[0].Key)
 	assert.Equal(t, zap.Any("slice", []int{1, 2, 3}).Key, fields[1].Key)
+}
+
+// ---------------------------------------------------------------------------
+// normalizeLocalhost
+// ---------------------------------------------------------------------------
+
+func TestNormalizeLocalhost(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"localhost:7233", "127.0.0.1:7233"},
+		{"LOCALHOST:7233", "127.0.0.1:7233"},
+		{"Localhost:7233", "127.0.0.1:7233"},
+		{"localhost", "127.0.0.1"},
+		{"192.168.1.1:7233", "192.168.1.1:7233"},
+		{"temporal.example.com:7233", "temporal.example.com:7233"},
+		{"127.0.0.1:7233", "127.0.0.1:7233"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.expected, normalizeLocalhost(tt.input))
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// collectEnvVars
+// ---------------------------------------------------------------------------
+
+func TestCollectEnvVars(t *testing.T) {
+	m := collectEnvVars()
+	// PATH should always be present in a normal environment.
+	_, ok := m["PATH"]
+	assert.True(t, ok, "PATH should be present in collected env vars")
 }

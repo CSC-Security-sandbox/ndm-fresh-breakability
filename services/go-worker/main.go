@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 
 	"github.com/netapp/ndm/services/go-worker/activities"
@@ -17,6 +18,7 @@ import (
 	"github.com/netapp/ndm/services/go-worker/httpclient"
 	"github.com/netapp/ndm/services/go-worker/logger"
 	"github.com/netapp/ndm/services/go-worker/metrics"
+	"github.com/netapp/ndm/services/go-worker/netutil"
 	"github.com/netapp/ndm/services/go-worker/redisclient"
 	"github.com/netapp/ndm/services/go-worker/workmanager"
 
@@ -26,6 +28,10 @@ import (
 )
 
 func main() {
+	// 0. Load .env file (if present). Variables already set in the
+	//    environment take precedence — godotenv will NOT overwrite them.
+	_ = godotenv.Load() // ignore error; .env is optional (e.g. in containers)
+
 	// 1. Load configuration from environment variables.
 	cfg, err := config.Load()
 	if err != nil {
@@ -34,7 +40,7 @@ func main() {
 	}
 
 	// 2. Initialize structured logger.
-	log := logger.NewLogger("go-worker")
+	log := logger.NewLogger("go-worker", cfg.LogLevel)
 	defer log.Sync()
 
 	log.Info("Starting go-worker",
@@ -50,8 +56,11 @@ func main() {
 	// 3. Initialize Keycloak auth.
 	keycloak := auth.NewKeycloakAuth(cfg)
 
-	// 4. Initialize HTTP client (with auth token injection).
-	httpClient := httpclient.NewClient(keycloak, log)
+	// 4. Detect local IP and initialize HTTP client (with auth token
+	//    injection and x-worker-ip header on every request).
+	workerIP := netutil.GetLocalIP()
+	log.Info("Detected local IP", zap.String("workerIP", workerIP))
+	httpClient := httpclient.NewClient(keycloak, log, httpclient.WithWorkerIP(workerIP))
 
 	// 5. Initialize Redis client.
 	redis, err := redisclient.NewRedisClient(cfg, log)
@@ -79,7 +88,7 @@ func main() {
 	// 8. Initialize Prometheus metrics.
 	metrics.Init(cfg.WorkerID, cfg.BuildID)
 
-	// 9. Start health check goroutine (Linux-only; no-op on other platforms).
+	// 9. Start health check goroutine (posts system stats to the Job Service).
 	healthcheck.Start(ctx, cfg, httpClient, log)
 
 	// 10. Start metrics push goroutine.

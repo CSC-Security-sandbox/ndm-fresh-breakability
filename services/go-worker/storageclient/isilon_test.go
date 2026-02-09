@@ -66,7 +66,7 @@ func TestIsilonClient_ValidateConnection_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	err := client.ValidateConnection()
@@ -80,7 +80,7 @@ func TestIsilonClient_ValidateConnection_Failure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	err := client.ValidateConnection()
@@ -107,7 +107,7 @@ func TestIsilonClient_GetNFSExportPaths_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	paths, err := client.GetNFSExportPaths("fs-1")
@@ -128,7 +128,7 @@ func TestIsilonClient_GetNFSExportPaths_EmptyExports(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	paths, err := client.GetNFSExportPaths("fs-1")
@@ -143,7 +143,7 @@ func TestIsilonClient_GetNFSExportPaths_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	paths, err := client.GetNFSExportPaths("fs-1")
@@ -171,7 +171,7 @@ func TestIsilonClient_GetSMBShares_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	shares, err := client.GetSMBShares("fs-1")
@@ -192,7 +192,7 @@ func TestIsilonClient_GetSMBShares_Empty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	shares, err := client.GetSMBShares("fs-1")
@@ -207,7 +207,7 @@ func TestIsilonClient_GetSMBShares_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	shares, err := client.GetSMBShares("fs-1")
@@ -226,7 +226,7 @@ func TestIsilonClient_FetchCertificate_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := &IsilonClient{
 		hostname:   "test-host",
 		username:   "admin",
@@ -293,7 +293,7 @@ func TestIsilonClient_FetchZones_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 
 	zones, err := client.FetchZones()
@@ -318,7 +318,7 @@ func TestIsilonClient_DoGet_SetsBasicAuth(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	client := newTestIsilonClient(server.URL, log)
 	client.username = "testuser"
 	client.password = "testpass"

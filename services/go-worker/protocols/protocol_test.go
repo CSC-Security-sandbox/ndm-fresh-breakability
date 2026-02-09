@@ -155,7 +155,7 @@ func TestRegisterProtocol_AndNewProtocol(t *testing.T) {
 	}()
 
 	cfg := &config.Config{}
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 
 	called := false
 	RegisterProtocol("TEST", func(c *config.Config, l *logger.Logger) Protocol {
@@ -182,7 +182,7 @@ func TestNewProtocol_CaseInsensitive(t *testing.T) {
 	}()
 
 	cfg := &config.Config{}
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 
 	callCount := 0
 	RegisterProtocol("myproto", func(c *config.Config, l *logger.Logger) Protocol {
@@ -203,7 +203,7 @@ func TestNewProtocol_CaseInsensitive(t *testing.T) {
 
 func TestNewProtocol_UnknownProtocol(t *testing.T) {
 	cfg := &config.Config{}
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 
 	result := NewProtocol("UNKNOWN_PROTOCOL_XYZ", cfg, log)
 	assert.Nil(t, result)
@@ -261,7 +261,7 @@ func TestProtocolPayload_Fields(t *testing.T) {
 
 // Verify that ExecuteCommand does not crash with a simple echo command
 func TestExecuteCommand_SimpleEcho(t *testing.T) {
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	payload := ProtocolPayload{}
 
 	output, err := ExecuteCommand("echo hello", payload, 5, log)
@@ -270,7 +270,7 @@ func TestExecuteCommand_SimpleEcho(t *testing.T) {
 }
 
 func TestExecuteCommand_FailingCommand(t *testing.T) {
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	payload := ProtocolPayload{}
 
 	_, err := ExecuteCommand("false", payload, 5, log)
@@ -278,7 +278,7 @@ func TestExecuteCommand_FailingCommand(t *testing.T) {
 }
 
 func TestExecuteCommand_DefaultTimeout(t *testing.T) {
-	log := logger.NewLogger("test")
+	log := logger.NewLogger("test", "debug")
 	payload := ProtocolPayload{}
 
 	// Timeout <= 0 should use default of 5 seconds

@@ -8,14 +8,14 @@ import (
 )
 
 func TestNewLogger(t *testing.T) {
-	l := NewLogger("test-service")
+	l := NewLogger("test-service", "debug")
 	require.NotNil(t, l)
 	assert.NotNil(t, l.zap)
 }
 
 func TestNewLogger_DifferentNames(t *testing.T) {
-	l1 := NewLogger("service-a")
-	l2 := NewLogger("service-b")
+	l1 := NewLogger("service-a", "debug")
+	l2 := NewLogger("service-b", "debug")
 	require.NotNil(t, l1)
 	require.NotNil(t, l2)
 	// Both should be valid but distinct logger instances
@@ -23,7 +23,7 @@ func TestNewLogger_DifferentNames(t *testing.T) {
 }
 
 func TestWithTrackID(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 	tracked := l.WithTrackID("trace-123")
 
 	require.NotNil(t, tracked)
@@ -36,7 +36,7 @@ func TestWithTrackID(t *testing.T) {
 }
 
 func TestWithTrackID_ChainedCalls(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 	tracked1 := l.WithTrackID("trace-1")
 	tracked2 := tracked1.WithTrackID("trace-2")
 
@@ -79,20 +79,20 @@ func TestMaskIPs_PreservesNonIPText(t *testing.T) {
 }
 
 func TestLogger_Underlying(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 	underlying := l.Underlying()
 	assert.NotNil(t, underlying)
 }
 
 func TestLogger_MergeFields_EmptyContext(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 	// With no context, mergeFields should return the input fields as-is
 	fields := l.mergeFields(nil)
 	assert.Empty(t, fields)
 }
 
 func TestLogger_LogMethods_DoNotPanic(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 
 	// These should not panic
 	assert.NotPanics(t, func() {
@@ -110,7 +110,7 @@ func TestLogger_LogMethods_DoNotPanic(t *testing.T) {
 }
 
 func TestLogger_Sync_DoesNotPanic(t *testing.T) {
-	l := NewLogger("test")
+	l := NewLogger("test", "debug")
 	// Sync might return an error on stdout, but should not panic
 	assert.NotPanics(t, func() {
 		_ = l.Sync()

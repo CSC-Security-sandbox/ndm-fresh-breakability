@@ -31,6 +31,7 @@ func setupMockAuth(t *testing.T) (*auth.KeycloakAuth, func()) {
 	cfg := &config.Config{
 		KeycloakBaseURL: keycloakServer.URL,
 		KeycloakRealm:   "test-realm",
+		WorkerID:        "test-worker-id",
 		WorkerSecret:    "test-secret",
 	}
 	a := auth.NewKeycloakAuth(cfg)
@@ -41,7 +42,7 @@ func setupMockAuth(t *testing.T) (*auth.KeycloakAuth, func()) {
 func TestNewClient(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	c := NewClient(a, l)
 	require.NotNil(t, c)
@@ -50,13 +51,13 @@ func TestNewClient(t *testing.T) {
 func TestClient_Get(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "Bearer mock-bearer-token", r.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", r.Header.Get("Accept"))
-		assert.Equal(t, "linux", r.Header.Get("x-client-platform"))
+		assert.Equal(t, goosToNDMPlatform(), r.Header.Get("x-client-platform"))
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -73,7 +74,7 @@ func TestClient_Get(t *testing.T) {
 func TestClient_Post(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
@@ -95,7 +96,7 @@ func TestClient_Post(t *testing.T) {
 func TestClient_Patch(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPatch, r.Method)
@@ -115,7 +116,7 @@ func TestClient_Patch(t *testing.T) {
 func TestClient_Put(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
@@ -135,7 +136,7 @@ func TestClient_Put(t *testing.T) {
 func TestClient_AuthorizationHeaderInjection(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	var capturedAuthHeader string
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +155,7 @@ func TestClient_AuthorizationHeaderInjection(t *testing.T) {
 func TestClient_ClientPlatformHeader(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	var capturedPlatform string
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -167,13 +168,13 @@ func TestClient_ClientPlatformHeader(t *testing.T) {
 	_, err := c.Get(apiServer.URL, nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, "linux", capturedPlatform)
+	assert.Equal(t, goosToNDMPlatform(), capturedPlatform)
 }
 
 func TestClient_WorkerIPHeader(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	var capturedWorkerIP string
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +193,7 @@ func TestClient_WorkerIPHeader(t *testing.T) {
 func TestClient_ExtraHeaders(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	var capturedCustomHeader string
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +213,7 @@ func TestClient_ExtraHeaders(t *testing.T) {
 func TestClient_WithTimeout(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	c := NewClient(a, l, WithTimeout(5*time.Second))
 	assert.Equal(t, 5*time.Second, c.httpClient.Timeout)
@@ -221,7 +222,7 @@ func TestClient_WithTimeout(t *testing.T) {
 func TestClient_GetWithNoBody(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// GET should NOT have Content-Type header set (no body)
@@ -238,7 +239,7 @@ func TestClient_GetWithNoBody(t *testing.T) {
 func TestClient_PostSetsContentType(t *testing.T) {
 	a, cleanup := setupMockAuth(t)
 	defer cleanup()
-	l := logger.NewLogger("test")
+	l := logger.NewLogger("test", "debug")
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
