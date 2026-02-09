@@ -93,6 +93,7 @@ import { JobConfigInventoryStatsResponseDto } from "./dto/jobconfig-inventory-st
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
 import { v4 as uuid } from 'uuid';
 import { GetDirsDto } from './dto/get-dirs.dto';
+import { MountDetails, MountRequest, MountTrackerService } from './mount-tracker.service';
 
 @Injectable()
 export class JobConfigService {
@@ -132,6 +133,7 @@ export class JobConfigService {
     private readonly workFlowService: WorkflowService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly mountTrackerService: MountTrackerService,
     @InjectRepository(IdentityMappingEntity)
     private identityMappingRepo: Repository<IdentityMappingEntity>,
     @InjectRepository(IdentityConfigCrossMappingEntity)
@@ -147,7 +149,7 @@ export class JobConfigService {
     @InjectRepository(JobConfigInventoryStatsEntity)
     private jobConfigInventoryStatsRepo: Repository<JobConfigInventoryStatsEntity>,
     @InjectDataSource()
-    private dataSource: DataSource
+    private dataSource: DataSource,    
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
   }
@@ -2281,6 +2283,42 @@ export class JobConfigService {
   
     return result.directories;
   }
+
+  async getDirsFromService(payload: GetDirsDto): Promise<{ name: string }[]> {
+  
+    const key = `/mnt/${payload.fileServerId}/${payload.exportPath}/${payload.path}`;
+
+    const mountRequest: MountRequest = {
+      fileServerId: payload.fileServerId,
+      exportPath: payload.exportPath,
+      hostname: '',
+      dir: payload.path || '',
+      username: 'ndmuser',
+      password: 'test@123',
+      protocol: payload.protocol || Protocol.NFS,
+    };
+  
+    const result:MountDetails = await this.mountTrackerService.ensureMounted(mountRequest);
+    
+    const { stdout } = await execAsync(`find "${key}" -maxdepth 2 -type d 2>/dev/null`, { maxBuffer: 1024 * 1024 * 10 });
+    const normalizedFullPath = key.replace(/\/$/, ''); 
+    
+    const directories = stdout.trim().split('\n')
+    .filter(entry => {
+        const normalizedEntry = entry.replace(/\/$/, '');
+        return entry.length > 0 && normalizedEntry !== normalizedFullPath;
+    })
+    .map(entry => {
+        let name = entry.replace(key, '').replace(/^\//, '');
+        if (name === entry) {
+        name = entry.replace(normalizedFullPath, '').replace(/^\//, '');
+        }
+        return { name };
+    });
+    
+    this.logger.log(`Found ${directories.length} directories`);
+    return directories;    
+  }
   
   private async ensureWorkflowRunning(workflowId: string, payload: GetDirsDto): Promise<void> {
     try {
@@ -2339,3 +2377,7 @@ export class JobConfigService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+function execAsync(arg0: string, arg1: { maxBuffer: number; }): { stdout: any; } | PromiseLike<{ stdout: any; }> {
+  throw new Error("Function not implemented.");
+}
+

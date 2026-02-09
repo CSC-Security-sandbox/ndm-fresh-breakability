@@ -339,10 +339,10 @@ export class JobConfigController {
     @ApiResponse({ status: 200, description: 'Directories retrieved' })
     @ApiResponse({ status: 400, description: 'Bad Request' })
     @ApiResponse({ status: 404, description: 'File server not found' })
-    @ApiBearerAuth()
-    @Auth(Permission.ManageJob)
+    //@ApiBearerAuth()
+    //@Auth(Permission.ManageJob)
     @Post('get-dirs')
     async getDirs(@Body() request: GetDirsDto): Promise<{ name: string }[]> {
-      return this.jobConfigService.getDirs(request);
+      return this.jobConfigService.getDirsFromService(request);
   }
 }

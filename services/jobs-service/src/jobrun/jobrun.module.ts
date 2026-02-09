@@ -35,6 +35,7 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';import {
 import { MigrationConflictModule } from 'src/migration-conflict/migration-conflict.module';
 import { JobStatsSummaryMvEntity } from 'src/entities/job-stats-summary-mv.entity';
 import { JobConfigInventoryStatsEntity } from 'src/entities/job-config-inventory-stats.entity';
+import { MountTrackerService } from 'src/jobconfig/mount-tracker.service';
 
 
 @Module({
@@ -47,7 +48,7 @@ import { JobConfigInventoryStatsEntity } from 'src/entities/job-config-inventory
         AuthKeycloakModule,
         MigrationConflictModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService, MountTrackerService],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

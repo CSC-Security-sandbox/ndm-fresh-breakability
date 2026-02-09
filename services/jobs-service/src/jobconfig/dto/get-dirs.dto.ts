@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Protocol } from 'src/constants/enums';
 import { IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class GetDirsDto {
@@ -14,4 +15,7 @@ export class GetDirsDto {
   @IsString()
   @IsOptional()
   path?: string;
+
+  @ApiProperty({ description: 'Protocol used to access the file server', example: 'Protocol.NFS' })
+  protocol: Protocol;
 }

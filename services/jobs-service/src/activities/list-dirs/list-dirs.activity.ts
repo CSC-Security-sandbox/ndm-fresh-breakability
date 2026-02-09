@@ -81,7 +81,7 @@ export class ListDirsActivity {
     //   const { stdout } = await execAsync(`tree -d --noreport -i -J -L 2 "${fullPath}" 2>/dev/null`);
     const { stdout } = await execAsync(`find "${fullPath}" -maxdepth 2 -type d 2>/dev/null`, { maxBuffer: 1024 * 1024 * 10 });
     
-    const normalizedFullPath = fullPath.replace(/\/$/, '');
+    const normalizedFullPath = fullPath.replace(/\/$/, ''); 
     const directories = stdout.trim().split('\n')
     .filter(entry => {
         const normalizedEntry = entry.replace(/\/$/, '');
