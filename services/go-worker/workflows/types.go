@@ -142,11 +142,34 @@ type CleanupWorkerInput struct {
 	JobRunID string `json:"jobRunId"`
 }
 
-// ValidateConnectionInput is the input for the ValidateConnectionWorkflow.
+// ValidateConnectionInput is the input for the ValidateConnectionsWorkflow.
+// The config service wraps the real payload inside a top-level object:
+//
+//	{
+//	  "traceId": "...",
+//	  "payload": {
+//	    "traceId": "...",
+//	    "feature": { "enablePreListPath": false, "enableVersionFetch": false },
+//	    "fileServer": { "hostname": "...", "protocols": [...] },
+//	    "workerIds": ["worker-uuid-1", ...],
+//	    "options": { ... }
+//	  },
+//	  "options": { ... }
+//	}
 type ValidateConnectionInput struct {
-	TraceID    string                 `json:"traceId"`
-	FileServer interface{}            `json:"fileServer"`
-	Feature    string                 `json:"feature,omitempty"`
+	TraceID string                 `json:"traceId"`
+	Payload ValidateConnectionData `json:"payload"`
+	Options interface{}            `json:"options,omitempty"`
+}
+
+// ValidateConnectionData is the nested "payload" inside
+// ValidateConnectionInput that carries the actual workflow data.
+type ValidateConnectionData struct {
+	TraceID    string      `json:"traceId"`
+	Feature    interface{} `json:"feature,omitempty"`
+	FileServer interface{} `json:"fileServer"`
+	WorkerIDs  []string    `json:"workerIds"`
+	Options    interface{} `json:"options,omitempty"`
 }
 
 // ValidatePathInput is the input for the ValidatePathWorkflow.
@@ -157,10 +180,31 @@ type ValidatePathInput struct {
 	WorkerID   string      `json:"workerId,omitempty"`
 }
 
-// ListPathInput is the input for the ListPathWorkflow.
+// ListPathInput is the input for the ListPathsWorkflow (parent).
+// The config service wraps the real payload inside a top-level object:
+//
+//	{
+//	  "traceId": "...",
+//	  "payload": {
+//	    "traceId": "...",
+//	    "fileServer": { "hostname": "...", "protocols": [...] },
+//	    "workerIds": ["worker-uuid-1", ...],
+//	    "options": { ... }
+//	  },
+//	  "options": { ... }
+//	}
 type ListPathInput struct {
+	TraceID string        `json:"traceId"`
+	Payload ListPathData  `json:"payload"`
+	Options interface{}   `json:"options,omitempty"`
+}
+
+// ListPathData is the nested "payload" inside ListPathInput.
+type ListPathData struct {
 	TraceID    string      `json:"traceId"`
 	FileServer interface{} `json:"fileServer"`
+	WorkerIDs  []string    `json:"workerIds"`
+	Options    interface{} `json:"options,omitempty"`
 }
 
 // PreCheckInput is the input for the PreCheckWorkflow.

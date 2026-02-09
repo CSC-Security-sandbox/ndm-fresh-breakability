@@ -149,7 +149,18 @@ func registerAllActivities(env *testsuite.TestWorkflowEnvironment) {
 		activity.RegisterOptions{Name: "CheckMemoryUsage"},
 	)
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input interface{}) error { return nil },
+		func(ctx context.Context, traceID string, protocolType string, payload map[string]interface{}, feature map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"traceId":          traceID,
+				"status":           "success",
+				"protocolType":     protocolType,
+				"hostname":         payload["hostname"],
+				"workerId":         "test-worker",
+				"paths":            []string{},
+				"protocolVersions": []string{},
+				"message":          "validated successfully",
+			}, nil
+		},
 		activity.RegisterOptions{Name: "ValidateConnection"},
 	)
 	env.RegisterActivityWithOptions(
@@ -165,7 +176,17 @@ func registerAllActivities(env *testsuite.TestWorkflowEnvironment) {
 		activity.RegisterOptions{Name: "PreCheckPath"},
 	)
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input interface{}) (interface{}, error) { return nil, nil },
+		func(ctx context.Context, traceID string, protocolType string, payload map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"traceId":      traceID,
+				"status":       "success",
+				"protocolType": protocolType,
+				"hostname":     payload["hostname"],
+				"workerId":     "test-worker",
+				"paths":        []string{"/export1", "/export2"},
+				"message":      "listed successfully",
+			}, nil
+		},
 		activity.RegisterOptions{Name: "ListPaths"},
 	)
 	env.RegisterActivityWithOptions(

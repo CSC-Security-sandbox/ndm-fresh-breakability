@@ -17,16 +17,31 @@ import (
 func registerWorkflows(w worker.Worker, wtype WorkerType) {
 	switch wtype {
 	case ParentWorkflow:
+		// Parent orchestration workflows that run on ParentWorkflow-TaskQueue.
+		// These dispatch child workflows to per-worker or per-job task queues.
 		w.RegisterWorkflow(workflows.DiscoveryWorkflow)
 		w.RegisterWorkflow(workflows.MigrationWorkflow)
 		w.RegisterWorkflow(workflows.CutOverWorkFlow)
+		// ValidateConnectionsWorkflow is the parent orchestrator that dispatches
+		// ValidateWorkerConnectionWorkflow children on per-worker task queues.
+		w.RegisterWorkflow(workflows.ValidateConnectionsWorkflow)
+		w.RegisterWorkflow(workflows.ValidatePathWorkflow)
+		w.RegisterWorkflow(workflows.ListPathsWorkflow)
+		w.RegisterWorkflow(workflows.PreCheckWorkflow)
+		w.RegisterWorkflow(workflows.SpeedTestWorkflow)
+		w.RegisterWorkflow(workflows.WorkingDirectoryWorkflow)
 
 	case WorkerSpecific:
+		// Per-worker workflows that run on ${workerId}-TaskQueue.
 		w.RegisterWorkflow(workflows.SetupWorkerWorkflow)
 		w.RegisterWorkflow(workflows.CleanupWorkerWorkflow)
-		w.RegisterWorkflow(workflows.ValidateConnectionWorkflow)
+		// ValidateWorkerConnectionWorkflow is the per-worker child that
+		// calls the ValidateConnection activity for each protocol.
+		w.RegisterWorkflow(workflows.ValidateWorkerConnectionWorkflow)
 		w.RegisterWorkflow(workflows.ValidatePathWorkflow)
-		w.RegisterWorkflow(workflows.ListPathWorkflow)
+		// ListPathWorkerWorkflow is the per-worker child that calls the
+		// ListPaths activity for each protocol.
+		w.RegisterWorkflow(workflows.ListPathWorkerWorkflow)
 		w.RegisterWorkflow(workflows.PreCheckWorkflow)
 		w.RegisterWorkflow(workflows.SpeedTestWorkflow)
 		w.RegisterWorkflow(workflows.RedisMemCheckWorkflow)

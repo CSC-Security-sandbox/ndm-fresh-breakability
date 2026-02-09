@@ -3,59 +3,121 @@ package activities
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"go.uber.org/zap"
 
 	"github.com/netapp/ndm/services/go-worker/protocols"
-	"github.com/netapp/ndm/services/go-worker/types"
 )
 
-// ListPathInput contains the parameters for the ListPaths activity.
-type ListPathInput struct {
-	JobRunID   string                  `json:"jobRunId"`
-	FileServer types.FileServerDetails `json:"fileServer"`
+// ListPathResponse is the response returned by the ListPaths activity. It
+// matches the TypeScript ListPathActivity.listPath() return shape exactly so
+// that the config service and UI can parse the results.
+type ListPathResponse struct {
+	TraceID      string   `json:"traceId"`
+	Status       string   `json:"status"`
+	ProtocolType string   `json:"protocolType"`
+	Hostname     string   `json:"hostname"`
+	WorkerID     string   `json:"workerId"`
+	Paths        []string `json:"paths"`
+	Message      string   `json:"message"`
 }
 
-// ListPaths lists available paths (shares or exports) on a file server using
-// the configured protocol (SMB or NFS).
-func (a *Activities) ListPaths(ctx context.Context, input ListPathInput) ([]string, error) {
-	a.Logger.Info("ListPaths",
-		zap.String("jobRunId", input.JobRunID),
-		zap.String("hostname", input.FileServer.Hostname),
+// ListPaths is the activity called from ListPathWorkerWorkflow to discover
+// available export paths (NFS exports / SMB shares) for a single protocol.
+// Its signature mirrors the TypeScript ListPathActivity.listPath() method:
+//
+//	listPath(traceId: string, protocolType: string, payload: any): Promise<any>
+//
+// The Temporal Go SDK maps positional workflow.ExecuteActivity args to function
+// parameters, so the 3 args from the workflow map to (traceID, protocolType,
+// payload) after the implicit context.Context.
+//
+// On success the response has status "success" with the discovered paths. On
+// failure the response has status "error" with a descriptive message — errors
+// are NOT returned via the error return value so that the parent workflow always
+// gets a result object (matching the TypeScript behaviour where errors are caught
+// and returned as a response).
+func (a *Activities) ListPaths(
+	ctx context.Context,
+	traceID string,
+	protocolType string,
+	payload map[string]interface{},
+) (*ListPathResponse, error) {
+	hostname, _ := payload["hostname"].(string)
+
+	a.Logger.Info("ListPaths activity started",
+		zap.String("traceId", traceID),
+		zap.String("protocolType", protocolType),
+		zap.String("hostname", hostname),
+		zap.String("workerId", a.Config.WorkerID),
 	)
 
-	protocolType := getProtocolType(input.FileServer)
-	if protocolType == "" {
-		return nil, fmt.Errorf("no protocol type found for file server %s", input.FileServer.Hostname)
+	response := &ListPathResponse{
+		TraceID:      traceID,
+		Status:       "success",
+		ProtocolType: protocolType,
+		Hostname:     hostname,
+		WorkerID:     a.Config.WorkerID,
+		Paths:        []string{},
+		Message: fmt.Sprintf("[%s] Connection to %s from %s validated successfully",
+			protocolType, hostname, a.Config.WorkerID),
+	}
+
+	// Check if exportPathSource is MANUAL_UPLOAD — if so, skip listing
+	// (matching TS behaviour).
+	exportPathSource, _ := payload["exportPathSource"].(string)
+	if exportPathSource == "MANUAL_UPLOAD" {
+		a.Logger.Info("ListPaths: skipping listing for MANUAL_UPLOAD",
+			zap.String("traceId", traceID),
+			zap.String("hostname", hostname),
+		)
+		return response, nil
+	}
+
+	// Build protocol payload from the raw map.
+	username, _ := payload["username"].(string)
+	password, _ := payload["password"].(string)
+
+	protoPayload := protocols.ProtocolPayload{
+		Hostname: hostname,
+		Username: username,
+		Password: password,
 	}
 
 	proto := protocols.NewProtocol(protocolType, a.Config, a.Logger)
 	if proto == nil {
-		return nil, fmt.Errorf("unsupported protocol type: %s", protocolType)
+		response.Status = "error"
+		response.Message = fmt.Sprintf("Failed to List Path for %s of type %s: unsupported protocol type",
+			hostname, protocolType)
+		a.Logger.Error("ListPaths: unsupported protocol",
+			zap.String("traceId", traceID),
+			zap.String("protocolType", protocolType),
+		)
+		return response, nil
 	}
 
-	payload := protocols.ProtocolPayload{
-		Hostname:        input.FileServer.Hostname,
-		Username:        input.FileServer.Username,
-		Password:        input.FileServer.Password,
-		Path:            input.FileServer.Path,
-		MountBasePath:   a.Config.BaseWorkingPath,
-		JobRunID:        input.JobRunID,
-		PathID:          input.FileServer.PathID,
-		ProtocolVersion: input.FileServer.ProtocolVersion,
-		DirPath:         filepath.Join(a.Config.BaseWorkingPath, input.JobRunID, input.FileServer.PathID),
-	}
-
-	paths, err := proto.ListPaths(input.JobRunID, payload)
+	// List available paths/exports.
+	paths, err := proto.ListPaths(traceID, protoPayload)
 	if err != nil {
-		return nil, fmt.Errorf("listing paths on %s: %w", input.FileServer.Hostname, err)
+		response.Status = "error"
+		response.Message = fmt.Sprintf("Failed to List Path for %s of type %s: %v",
+			hostname, protocolType, err)
+		a.Logger.Error("ListPaths failed",
+			zap.String("traceId", traceID),
+			zap.String("hostname", hostname),
+			zap.Error(err),
+		)
+		return response, nil
 	}
 
-	a.Logger.Info("ListPaths completed",
-		zap.String("hostname", input.FileServer.Hostname),
-		zap.Int("count", len(paths)),
+	response.Paths = paths
+
+	a.Logger.Info("ListPaths activity completed",
+		zap.String("traceId", traceID),
+		zap.String("hostname", hostname),
+		zap.String("status", response.Status),
+		zap.Int("pathCount", len(response.Paths)),
 	)
 
-	return paths, nil
+	return response, nil
 }

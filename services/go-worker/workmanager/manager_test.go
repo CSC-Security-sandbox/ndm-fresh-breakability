@@ -136,14 +136,16 @@ func TestApplyEnvOverrides_AllOverrides(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseConfigResponse_ValidEnvelope(t *testing.T) {
+	// JSON uses the actual configName values sent by the config service
+	// (the TS WorkFlowType enum values, NOT the enum keys).
 	raw := []byte(`{
 		"trackId": "t-1",
 		"message": "ok",
 		"data": {
 			"items": {
 				"metaConfig": [
-					{"workerId":"w1","configName":"PARENT_WORKFLOW","taskQueueId":null,"dynamicTaskQueue":false},
-					{"workerId":"w1","configName":"WORKER_SPECIFIC_WORKFLOW","taskQueueId":"w1","dynamicTaskQueue":true}
+					{"workerId":"w1","configName":"parent-workflow-tasks","taskQueueId":null,"dynamicTaskQueue":false},
+					{"workerId":"w1","configName":"worker-specific-tasks","taskQueueId":"w1","dynamicTaskQueue":true}
 				],
 				"envVariables": {"TEMPORAL_TLS_CA_CERT": "cert-data"}
 			}
@@ -154,8 +156,8 @@ func TestParseConfigResponse_ValidEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cp)
 	assert.Len(t, cp.MetaConfig, 2)
-	assert.Equal(t, "PARENT_WORKFLOW", cp.MetaConfig[0].ConfigName)
-	assert.Equal(t, "WORKER_SPECIFIC_WORKFLOW", cp.MetaConfig[1].ConfigName)
+	assert.Equal(t, "parent-workflow-tasks", cp.MetaConfig[0].ConfigName)
+	assert.Equal(t, "worker-specific-tasks", cp.MetaConfig[1].ConfigName)
 	assert.True(t, cp.MetaConfig[1].DynamicTaskQueue)
 	assert.Equal(t, "w1", cp.MetaConfig[1].TaskQueueID)
 	assert.Equal(t, "cert-data", cp.EnvVariables["TEMPORAL_TLS_CA_CERT"])
@@ -166,13 +168,13 @@ func TestParseConfigResponse_ValidEnvelope(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetWorkerIdentity_Static(t *testing.T) {
-	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "PARENT_WORKFLOW", DynamicTaskQueue: false}
-	assert.Equal(t, "w1/PARENT_WORKFLOW", getWorkerIdentity(wc))
+	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "parent-workflow-tasks", DynamicTaskQueue: false}
+	assert.Equal(t, "w1/parent-workflow-tasks", getWorkerIdentity(wc))
 }
 
 func TestGetWorkerIdentity_Dynamic(t *testing.T) {
-	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "WORKER_SPECIFIC_WORKFLOW", TaskQueueID: "w1", DynamicTaskQueue: true}
-	assert.Equal(t, "w1/WORKER_SPECIFIC_WORKFLOW-w1", getWorkerIdentity(wc))
+	wc := WorkerConfiguration{WorkerID: "w1", ConfigName: "worker-specific-tasks", TaskQueueID: "w1", DynamicTaskQueue: true}
+	assert.Equal(t, "w1/worker-specific-tasks-w1", getWorkerIdentity(wc))
 }
 
 // ---------------------------------------------------------------------------

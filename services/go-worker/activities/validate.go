@@ -12,17 +12,26 @@ import (
 	"github.com/netapp/ndm/services/go-worker/types"
 )
 
-// ValidateInput contains the parameters for the ValidateConnection activity.
-type ValidateInput struct {
-	JobRunID   string                   `json:"jobRunId"`
-	FileServer types.FileServerDetails  `json:"fileServer"`
+// ValidateConnectionResponse is the response returned by the Validate activity
+// (called from ValidateWorkerConnectionWorkflow). It matches the TypeScript
+// ValidateConnectionActivity.validate() return shape exactly so that the config
+// service and UI can parse the results.
+type ValidateConnectionResponse struct {
+	TraceID          string   `json:"traceId"`
+	Status           string   `json:"status"`
+	ProtocolType     string   `json:"protocolType"`
+	Hostname         string   `json:"hostname"`
+	WorkerID         string   `json:"workerId"`
+	Paths            []string `json:"paths"`
+	ProtocolVersions []string `json:"protocolVersions"`
+	Message          string   `json:"message"`
 }
 
 // ValidatePathInput contains the parameters for the ValidatePath activity.
 type ValidatePathInput struct {
-	JobRunID   string                   `json:"jobRunId"`
-	FileServer types.FileServerDetails  `json:"fileServer"`
-	Path       string                   `json:"path"`
+	JobRunID   string                  `json:"jobRunId"`
+	FileServer types.FileServerDetails `json:"fileServer"`
+	Path       string                  `json:"path"`
 }
 
 // ValidatePathOutput contains the results of the ValidatePath activity.
@@ -33,9 +42,9 @@ type ValidatePathOutput struct {
 
 // WorkDirInput contains the parameters for the ValidateWorkingDirectory activity.
 type WorkDirInput struct {
-	JobRunID   string                   `json:"jobRunId"`
-	FileServer types.FileServerDetails  `json:"fileServer"`
-	Path       string                   `json:"path"`
+	JobRunID   string                  `json:"jobRunId"`
+	FileServer types.FileServerDetails `json:"fileServer"`
+	Path       string                  `json:"path"`
 }
 
 // DirInput contains the parameters for the IsValidDirectory activity.
@@ -45,43 +54,124 @@ type DirInput struct {
 	PathID   string `json:"pathId"`
 }
 
-// ValidateConnection validates that the worker can connect to the file server
-// using the configured protocol (SMB or NFS).
-func (a *Activities) ValidateConnection(ctx context.Context, input ValidateInput) error {
-	a.Logger.Info("ValidateConnection",
-		zap.String("jobRunId", input.JobRunID),
-		zap.String("hostname", input.FileServer.Hostname),
+// ValidateConnection is the activity called from ValidateWorkerConnectionWorkflow
+// to validate connectivity for a single protocol. Its signature mirrors the
+// TypeScript ValidateConnectionActivity.validate() method:
+//
+//	validate(traceId: string, protocolType: string, payload: any, feature: any): Promise<any>
+//
+// The Temporal Go SDK maps positional workflow.ExecuteActivity args to function
+// parameters, so the 4 args from the workflow map to (traceID, protocolType,
+// payload, feature) after the implicit context.Context.
+//
+// On success the response has status "success" and may include the list of
+// export paths and protocol versions (if feature flags are enabled). On failure
+// the response has status "error" with a descriptive message — errors are NOT
+// returned via the error return value so that the parent workflow always gets
+// a result object (matching the TypeScript behaviour where errors are caught
+// and returned as a response).
+func (a *Activities) ValidateConnection(
+	ctx context.Context,
+	traceID string,
+	protocolType string,
+	payload map[string]interface{},
+	feature map[string]interface{},
+) (*ValidateConnectionResponse, error) {
+	hostname, _ := payload["hostname"].(string)
+
+	a.Logger.Info("ValidateConnection activity started",
+		zap.String("traceId", traceID),
+		zap.String("protocolType", protocolType),
+		zap.String("hostname", hostname),
+		zap.String("workerId", a.Config.WorkerID),
 	)
 
-	protocolType := getProtocolType(input.FileServer)
-	if protocolType == "" {
-		return fmt.Errorf("no protocol type found for file server %s", input.FileServer.Hostname)
+	response := &ValidateConnectionResponse{
+		TraceID:          traceID,
+		Status:           "success",
+		ProtocolType:     protocolType,
+		Hostname:         hostname,
+		WorkerID:         a.Config.WorkerID,
+		Paths:            []string{},
+		ProtocolVersions: []string{},
+		Message: fmt.Sprintf("[%s] Connection to %s from %s validated successfully",
+			protocolType, hostname, a.Config.WorkerID),
+	}
+
+	// Build protocol payload from the raw map (same shape the TS workflow
+	// spreads: { hostname, ...protocol }).
+	username, _ := payload["username"].(string)
+	password, _ := payload["password"].(string)
+
+	protoPayload := protocols.ProtocolPayload{
+		Hostname: hostname,
+		Username: username,
+		Password: password,
 	}
 
 	proto := protocols.NewProtocol(protocolType, a.Config, a.Logger)
 	if proto == nil {
-		return fmt.Errorf("unsupported protocol type: %s", protocolType)
+		response.Status = "error"
+		response.Message = fmt.Sprintf("Failed to validate connection for %s of type %s: unsupported protocol type",
+			hostname, protocolType)
+		a.Logger.Error("ValidateConnection: unsupported protocol",
+			zap.String("traceId", traceID),
+			zap.String("protocolType", protocolType),
+		)
+		return response, nil
 	}
 
-	payload := protocols.ProtocolPayload{
-		Hostname:        input.FileServer.Hostname,
-		Username:        input.FileServer.Username,
-		Password:        input.FileServer.Password,
-		Path:            input.FileServer.Path,
-		MountBasePath:   a.Config.BaseWorkingPath,
-		JobRunID:        input.JobRunID,
-		PathID:          input.FileServer.PathID,
-		ProtocolVersion: input.FileServer.ProtocolVersion,
+	// Validate connectivity.
+	if err := proto.ValidateConnection(traceID, protoPayload); err != nil {
+		response.Status = "error"
+		response.Message = fmt.Sprintf("Failed to validate connection for %s of type %s: %v",
+			hostname, protocolType, err)
+		a.Logger.Error("ValidateConnection failed",
+			zap.String("traceId", traceID),
+			zap.String("hostname", hostname),
+			zap.Error(err),
+		)
+		return response, nil
 	}
 
-	if err := proto.ValidateConnection(input.JobRunID, payload); err != nil {
-		return fmt.Errorf("validating connection to %s: %w", input.FileServer.Hostname, err)
+	// Feature: list export paths if enabled.
+	enablePreListPath, _ := feature["enablePreListPath"].(bool)
+	if enablePreListPath {
+		a.Logger.Info("ValidateConnection: listing paths",
+			zap.String("traceId", traceID),
+			zap.String("hostname", hostname),
+		)
+		paths, err := proto.ListPaths(traceID, protoPayload)
+		if err != nil {
+			a.Logger.Warn("ValidateConnection: listPaths failed (non-fatal)",
+				zap.String("traceId", traceID),
+				zap.Error(err),
+			)
+		} else {
+			response.Paths = paths
+		}
 	}
 
-	a.Logger.Info("ValidateConnection succeeded",
-		zap.String("hostname", input.FileServer.Hostname),
+	// Feature: get protocol versions if enabled.
+	// Note: GetProtocolVersions is not yet implemented in the Go protocol
+	// interface. Log a warning and return an empty list (matching TS
+	// behaviour where an unimplemented call returns []).
+	enableVersionFetch, _ := feature["enableVersionFetch"].(bool)
+	if enableVersionFetch {
+		a.Logger.Info("ValidateConnection: protocol version fetch requested but not yet implemented in Go worker",
+			zap.String("traceId", traceID),
+		)
+		// response.ProtocolVersions remains []string{}
+	}
+
+	a.Logger.Info("ValidateConnection activity completed",
+		zap.String("traceId", traceID),
+		zap.String("hostname", hostname),
+		zap.String("status", response.Status),
+		zap.Int("pathCount", len(response.Paths)),
 	)
-	return nil
+
+	return response, nil
 }
 
 // ValidatePath mounts the file server, checks that the given path exists and

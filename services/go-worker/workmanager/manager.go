@@ -42,12 +42,17 @@ const (
 	JobSpecific WorkerType = "JOB_SPECIFIC"
 )
 
-// Workflow type names as returned by the config service. They match the
-// TypeScript WorkFlowType enum in worker-options.types.ts.
+// Workflow type names as returned by the config service. These are the
+// *values* of the TypeScript WorkFlowType enum (not the keys).
+//
+// TypeScript enum (worker-options.types.ts / config-service enums.ts):
+//   PARENT_WORKFLOW          = 'parent-workflow-tasks'
+//   WORKER_SPECIFIC_WORKFLOW = 'worker-specific-tasks'
+//   JOB_SPECIFIC_WORKFLOW    = 'job-specific-tasks'
 const (
-	configNameParentWorkflow   = "PARENT_WORKFLOW"
-	configNameWorkerSpecific   = "WORKER_SPECIFIC_WORKFLOW"
-	configNameJobSpecific      = "JOB_SPECIFIC_WORKFLOW"
+	configNameParentWorkflow = "parent-workflow-tasks"
+	configNameWorkerSpecific = "worker-specific-tasks"
+	configNameJobSpecific    = "job-specific-tasks"
 )
 
 // Static task queue base names matching the TypeScript worker-options factory.
@@ -586,8 +591,20 @@ func (wm *WorkManager) reconcileWorkers(configs []WorkerConfiguration) {
 // worker type, registers the appropriate workflows and activities, starts the
 // worker, and records it in the active set. Caller must hold wm.mu.
 func (wm *WorkManager) startWorker(id, taskQueue string, wtype WorkerType) error {
+	wmLogger := wm.logger
 	opts := worker.Options{
 		MaxConcurrentActivityExecutionSize: wm.cfg.MaxActivityConcurrency,
+		// OnFatalError logs any fatal error that the Temporal SDK encounters
+		// internally (e.g. workflow/activity registration issues, payload
+		// deserialization failures, etc.). Without this, such errors are
+		// silently swallowed and the workflow simply times out.
+		OnFatalError: func(err error) {
+			wmLogger.Error("Temporal worker fatal error",
+				zap.String("workerId", id),
+				zap.String("taskQueue", taskQueue),
+				zap.Error(err),
+			)
+		},
 	}
 
 	w := worker.New(wm.temporalClient, taskQueue, opts)
