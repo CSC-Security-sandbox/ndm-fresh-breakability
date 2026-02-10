@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { Button, ProgressBar } from "@netapp/bxp-design-system-react";
+import { Button, ProgressLoader } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { UpgradeContext } from "../context/context";
 import { UPLOAD_STATUS_MESSAGES, CANCEL_LABEL } from "../constants/upgrade.constant";
@@ -12,7 +12,7 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-const UpgradeProgress = () => {
+const UploadProgress = () => {
   const { uploadProgress, handleCancelUpload, isUploading } =
     useContext(UpgradeContext);
 
@@ -52,7 +52,7 @@ const UpgradeProgress = () => {
       {(uploadProgress.status === "uploading" ||
         uploadProgress.status === "uploaded") && (
         <Box className="mb-3">
-          <ProgressBar value={uploadProgress.progress} max={100} showLabel />
+          <ProgressLoader small percent={uploadProgress.progress} />
         </Box>
       )}
 
@@ -68,7 +68,7 @@ const UpgradeProgress = () => {
 
       {isUploading && uploadProgress.status === "uploading" && (
         <Box className="flex justify-end">
-          <Button onClick={handleCancelUpload} variant="tertiary" size="small">
+          <Button onClick={handleCancelUpload} variant="tertiary">
             {CANCEL_LABEL}
           </Button>
         </Box>
@@ -77,4 +77,4 @@ const UpgradeProgress = () => {
   );
 };
 
-export default UpgradeProgress;
+export default UploadProgress;

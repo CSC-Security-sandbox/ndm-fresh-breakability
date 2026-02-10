@@ -13,7 +13,6 @@ import {
   import { Request } from 'express';
   import * as fs from 'fs';
   import * as path from 'path';
-  import * as crypto from 'crypto';
   import { v4 as uuidv4 } from 'uuid';
   import { InitUploadDto, InitUploadResponseDto } from './dto/init-upload.dto';
   import { UploadChunkResponseDto } from './dto/upload-chunk.dto';
@@ -193,7 +192,7 @@ import {
     }
   
     // ═══════════════════════════════════════════════════════════════════════════
-    // FINALIZE: Assemble all chunks into final file and verify checksum
+    // FINALIZE: Assemble all chunks into final file using streaming
     // ═══════════════════════════════════════════════════════════════════════════
     async finalizeUpload(uploadId: string) {
       const session = this.sessions.get(uploadId);
@@ -212,46 +211,62 @@ import {
       const finalPath = path.join(this.basePath, session.fileName);
   
       this.logger.log(`Assembling ${session.totalChunks} chunks into ${finalPath}`);
-  
-      // Concatenate all chunks in order
+
+      // Use streaming to avoid memory issues with large files
       const writeStream = fs.createWriteStream(finalPath);
-      const hash = crypto.createHash('sha256');
-  
-      for (let i = 0; i < session.totalChunks; i++) {
-        const chunkPath = path.join(session.tempDir, `chunk_${String(i).padStart(5, '0')}`);
-        const chunkData = fs.readFileSync(chunkPath);
-        
-        writeStream.write(chunkData);
-        hash.update(chunkData);
+
+      try {
+        // Process chunks sequentially using streams (not loading all into memory)
+        for (let i = 0; i < session.totalChunks; i++) {
+          const chunkPath = path.join(session.tempDir, `chunk_${String(i).padStart(5, '0')}`);
+          
+          // Stream each chunk to the output file
+          await new Promise<void>((resolve, reject) => {
+            const readStream = fs.createReadStream(chunkPath);
+            
+            readStream.on('error', reject);
+            readStream.on('end', resolve);
+            
+            // Pipe to writeStream but don't close it (we have more chunks)
+            readStream.pipe(writeStream, { end: false });
+          });
+
+          this.logger.log(`Assembled chunk ${i + 1}/${session.totalChunks}`);
+        }
+
+        // Close the write stream
+        writeStream.end();
+
+        // Wait for write to complete
+        await new Promise<void>((resolve, reject) => {
+          writeStream.on('finish', resolve);
+          writeStream.on('error', reject);
+        });
+
+        // NOTE: Checksum validation is NOT done here
+        // The upgrade bundle contains checksums.sha256 file which is used by 
+        // upgrade.sh to validate the contents after extraction on the VM
+
+        // Cleanup temp directory
+        this.cleanupTempDir(session.tempDir);
+        this.sessions.delete(uploadId);
+
+        this.logger.log(`Upload finalized successfully: ${finalPath}`);
+
+        return {
+          success: true,
+          path: finalPath,
+          fileSize: session.fileSize,
+        };
+      } catch (error) {
+        // Cleanup on error
+        writeStream.destroy();
+        if (fs.existsSync(finalPath)) {
+          fs.unlinkSync(finalPath);
+        }
+        this.logger.error(`Finalize failed: ${error.message}`);
+        throw new InternalServerErrorException(`Failed to assemble file: ${error.message}`);
       }
-  
-      writeStream.end();
-  
-      // Wait for write to complete
-      await new Promise<void>((resolve) => writeStream.on('finish', resolve));
-  
-      // Verify checksum
-      const calculatedChecksum = hash.digest('hex');
-      if (calculatedChecksum !== session.checksum) {
-        // Checksum mismatch - delete the corrupted file
-        fs.unlinkSync(finalPath);
-        throw new BadRequestException(
-          `Checksum mismatch! Expected: ${session.checksum}, Got: ${calculatedChecksum}`,
-        );
-      }
-  
-      // Cleanup temp directory
-      this.cleanupTempDir(session.tempDir);
-      this.sessions.delete(uploadId);
-  
-      this.logger.log(`Upload finalized successfully: ${finalPath}`);
-  
-      return {
-        success: true,
-        path: finalPath,
-        checksum: calculatedChecksum,
-        fileSize: session.fileSize,
-      };
     }
   
     // ═══════════════════════════════════════════════════════════════════════════

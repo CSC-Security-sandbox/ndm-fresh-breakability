@@ -1,10 +1,10 @@
 import { useContext } from "react";
-import { Button, Card, Modal } from "@netapp/bxp-design-system-react";
+import { Button, Card } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { Show } from "@components/show/Show";
 import { UpgradeContext } from "../context/context";
-import UpgradeFileSelector from "./UpgradeFileSelector";
-import UpgradeProgress from "./UpgradeProgress";
+import UploadFileSelector from "./UploadFileSelector";
+import UploadProgress from "./UploadProgress";
 import {
   UPLOAD_LABEL,
   UPGRADE_LABEL,
@@ -13,8 +13,13 @@ import {
   JOB_WARNING_MESSAGE,
   UPGRADE_STATUS_MESSAGES,
 } from "../constants/upgrade.constant";
+import userIsAppAdmin from "@/hooks/userIsAppAdmin";
+
 
 const UpgradeContent = () => {
+
+  const isAppAdmin = userIsAppAdmin();
+
   const {
     selectedFile,
     uploadProgress,
@@ -36,16 +41,28 @@ const UpgradeContent = () => {
     upgradeProgress.status === "success" ||
     upgradeProgress.status === "error";
 
+
+    if (!isAppAdmin) {
+        return (
+          <Box className="p-6 text-center">
+            <p className="text-red-600 font-medium">Access Denied</p>
+            <p className="text-gray-500 mt-2">
+              Only App Administrators can upload and apply upgrade bundles.
+            </p>
+          </Box>
+        );
+    }
+
   return (
     <>
       <Card className="p-6 flex flex-col m-8">
         {/* File Selection */}
-        <UpgradeFileSelector />
+        <UploadFileSelector />
 
         {/* Upload Progress */}
         <Show>
           <Show.When isTrue={isUploading || isUploaded || uploadProgress.status === "error"}>
-            <UpgradeProgress />
+            <UploadProgress />
           </Show.When>
         </Show>
 
@@ -111,7 +128,7 @@ const UpgradeContent = () => {
 
         {/* File path info after upload */}
         <Show>
-          <Show.When isTrue={isUploaded && uploadProgress.filePath}>
+          <Show.When isTrue={isUploaded && !!uploadProgress.filePath}>
             <Box className="mt-4 p-3 bg-green-50 rounded border border-green-200">
               <p className="text-sm text-green-800">
                 <span className="font-medium">File location on VM:</span>{" "}
@@ -128,36 +145,39 @@ const UpgradeContent = () => {
       </Card>
 
       {/* Job Warning Modal */}
-      <Modal
-        isOpen={showJobWarning}
-        onClose={closeJobWarning}
-        title={JOB_WARNING_TITLE}
-      >
-        <Box className="p-4">
-          <p className="mb-4">{JOB_WARNING_MESSAGE}</p>
-          <Box className="max-h-60 overflow-y-auto">
-            {blockingJobs.map((job) => (
-              <Box
-                key={job.jobRunId}
-                className="p-3 mb-2 bg-gray-100 rounded border-l-4 border-yellow-500"
-              >
-                <p className="font-medium">
-                  {job.jobType} - {job.sourceFileServerName || "N/A"}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Status: <span className="font-medium">{job.status}</span>
-                </p>
-                {job.volumePath && (
-                  <p className="text-sm text-gray-500">{job.volumePath}</p>
-                )}
+      {showJobWarning && (
+        <Box className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Box className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+            <Box className="p-4 border-b">
+              <h2 className="text-lg font-semibold">{JOB_WARNING_TITLE}</h2>
+            </Box>
+            <Box className="p-4">
+              <p className="mb-4">{JOB_WARNING_MESSAGE}</p>
+              <Box className="max-h-60 overflow-y-auto">
+                {blockingJobs.map((job) => (
+                  <Box
+                    key={job.jobRunId}
+                    className="p-3 mb-2 bg-gray-100 rounded border-l-4 border-yellow-500"
+                  >
+                    <p className="font-medium">
+                      {job.jobType} - {job.sourceFileServerName || "N/A"}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Status: <span className="font-medium">{job.status}</span>
+                    </p>
+                    {job.volumePath && (
+                      <p className="text-sm text-gray-500">{job.volumePath}</p>
+                    )}
+                  </Box>
+                ))}
               </Box>
-            ))}
-          </Box>
-          <Box className="flex justify-end mt-4">
-            <Button onClick={closeJobWarning}>OK</Button>
+            </Box>
+            <Box className="p-4 border-t flex justify-end">
+              <Button onClick={closeJobWarning}>OK</Button>
+            </Box>
           </Box>
         </Box>
-      </Modal>
+      )}
     </>
   );
 };

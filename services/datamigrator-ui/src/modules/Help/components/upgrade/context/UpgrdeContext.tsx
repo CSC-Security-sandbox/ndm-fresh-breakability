@@ -23,8 +23,13 @@ import {
 import { notify } from "@components/notification/NotificationWrapper";
 import { useSelector } from "react-redux";
 import { RootStateType } from "@store/store";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
+
+
 
 export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
+
+
   // File state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -37,9 +42,7 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [showJobWarning, setShowJobWarning] = useState(false);
 
   // Get project ID from store
-  const selectedProjectId = useSelector(
-    (state: RootStateType) => state?.projectSlice?.selectedProjectId
-  );
+  const { selectedProjectId } = useSelectedProjectId();
 
   // API hooks
   const [getJobRuns] = useLazyGetJobRunsQuery();
@@ -54,13 +57,9 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const isUploaded = uploadProgress.status === 'uploaded';
   const isUpgrading = ['checking-jobs', 'upgrading'].includes(upgradeProgress.status);
 
-  // Calculate SHA256 checksum
-  const calculateChecksum = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  };
+  // NOTE: Checksum validation is NOT done on frontend
+  // The upgrade bundle contains checksums.sha256 file which is used by upgrade.sh
+  // to validate the contents after extraction on the VM
 
   // Handle file selection
   const handleFileSelect = useCallback((file: File | null) => {
@@ -84,27 +83,24 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     if (!selectedFile) return;
 
     try {
-      // Step 1: Calculate checksum
-      setUploadProgress((prev) => ({ ...prev, status: "hashing" }));
-      const checksum = await calculateChecksum(selectedFile);
-
-      // Step 2: Initialize upload session
+      // Step 1: Initialize upload session (no checksum - validation via upgrade.sh)
+      setUploadProgress((prev) => ({ ...prev, status: "uploading", progress: 0 }));
+      
       const initResult = await initUpload({
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
-        checksum,
+        checksum: "", // Checksum validation done by upgrade.sh using included checksums.sha256
       }).unwrap();
 
       const { uploadId, totalChunks } = initResult;
 
       setUploadProgress((prev) => ({
         ...prev,
-        status: "uploading",
         uploadId,
         totalChunks,
       }));
 
-      // Step 3: Upload chunks
+      // Step 2: Upload chunks
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
@@ -124,7 +120,7 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         }));
       }
 
-      // Step 4: Finalize - assemble chunks and verify checksum
+      // Step 3: Finalize - assemble chunks into final file
       setUploadProgress((prev) => ({ ...prev, status: "finalizing" }));
       const finalResult = await finalizeUpload(uploadId).unwrap();
 

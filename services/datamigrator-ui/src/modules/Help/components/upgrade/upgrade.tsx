@@ -4,7 +4,7 @@ import UpgradeContent from "./components/UpgradeContent";
 import { HELP_ITEMS_ENUM } from "@modules/Help/constants/help.constants";
 
 
-const upgrade = () => {
+const Upgrade = () => {
     return (
         <UpgradeProvider>
             <HelpDrawerLayout
@@ -16,8 +16,7 @@ const upgrade = () => {
             </HelpDrawerLayout>
         </UpgradeProvider>
         
-        <UpgradeProvider />
     )
 }
 
-export default upgrade;
+export default Upgrade;

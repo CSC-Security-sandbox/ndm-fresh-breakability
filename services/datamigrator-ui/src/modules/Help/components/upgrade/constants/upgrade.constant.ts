@@ -17,9 +17,8 @@ export const CLEAR_FILE_LABEL = "Clear";
 // Upload Status Messages
 export const UPLOAD_STATUS_MESSAGES: Record<string, string> = {
   idle: "Select an upgrade bundle file",
-  hashing: "Calculating file checksum...",
   uploading: "Uploading",
-  finalizing: "Verifying and assembling file on server...",
+  finalizing: "Assembling file on server...",
   uploaded: "File uploaded successfully!",
   error: "Upload failed",
   cancelled: "Upload cancelled",

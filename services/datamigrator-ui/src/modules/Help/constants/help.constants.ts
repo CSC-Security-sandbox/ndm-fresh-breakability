@@ -1,7 +1,7 @@
 import AboutNDM from "@modules/Help/components/about-ndm/components/AboutNDM";
 import React from "react";
 import SupportBundle from "@modules/Help/components/support-bundle/SupportBundle";
-import Upgrade from "@modules/Help/components/upgrade/Upgrade";
+import Upgrade from "@modules/Help/components/upgrade/upgrade";
 
 export enum HELP_ITEMS_ENUM {
   ABOUT_NDM = "About NDM",

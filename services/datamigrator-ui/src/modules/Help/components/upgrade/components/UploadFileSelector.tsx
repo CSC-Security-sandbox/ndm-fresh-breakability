@@ -16,7 +16,7 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-const UpgradeFileSelector = () => {
+const UploadFileSelector = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { selectedFile, handleFileSelect, isUploading, isUploaded } =
     useContext(UpgradeContext);
@@ -77,7 +77,6 @@ const UpgradeFileSelector = () => {
               <Button
                 onClick={handleClear}
                 variant="tertiary"
-                size="small"
               >
                 {CLEAR_FILE_LABEL}
               </Button>
@@ -95,4 +94,4 @@ const UpgradeFileSelector = () => {
   );
 };
 
-export default UpgradeFileSelector;
+export default UploadFileSelector;

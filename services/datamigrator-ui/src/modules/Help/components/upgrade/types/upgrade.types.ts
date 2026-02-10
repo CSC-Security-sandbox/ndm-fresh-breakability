@@ -1,10 +1,9 @@
 export type UploadStatus =
   | 'idle'
   | 'checking-jobs'
-  | 'hashing'
   | 'uploading'
   | 'finalizing'
-  | 'complete'
+  | 'uploaded'
   | 'error'
   | 'blocked'
   | 'cancelled';
@@ -19,6 +18,7 @@ export type UploadProgress = {
   error?: string;
   fileName?: string;
   uploadId?: string;
+  filePath?: string;
 };
 
 export type BlockingJob = {
@@ -31,18 +31,21 @@ export type BlockingJob = {
 };
 
 export type UpgradeContextType = {
-  selectedFile: File | null;
-  uploadProgress: UploadProgress;
-  blockingJobs: BlockingJob[];
-  showJobWarning: boolean;
-  isUploading: boolean;
-  handleFileSelect: (file: File | null) => void;
-  handleUpgrade: () => Promise<void>;
-  handleCancel: () => void;
-  handleReset: () => void;
-  closeJobWarning: () => void;
-};
-
+    selectedFile: File | null;
+    uploadProgress: UploadProgress;
+    isUploading: boolean;
+    isUploaded: boolean;
+    handleFileSelect: (file: File | null) => void;
+    handleUpload: () => Promise<void>;
+    handleCancelUpload: () => Promise<void>;
+    upgradeProgress: UpgradeProgress;
+    blockingJobs: BlockingJob[];
+    showJobWarning: boolean;
+    isUpgrading: boolean;
+    handleUpgrade: () => Promise<void>;
+    closeJobWarning: () => void;
+    handleReset: () => void;
+  };
 export type InitUploadResponse = {
   uploadId: string;
   chunkSize: number;
@@ -58,7 +61,6 @@ export type UploadChunkResponse = {
 export type FinalizeUploadResponse = {
   success: boolean;
   path: string;
-  checksum: string;
   fileSize: number;
 };
 
@@ -70,4 +72,17 @@ export type UploadStatusResponse = {
   receivedChunks: number;
   progress: number;
   missingChunks: number[];
+};
+
+export type UpgradeStatus = 
+  | 'idle'
+  | 'checking-jobs'
+  | 'blocked'
+  | 'upgrading'
+  | 'success'
+  | 'error';
+
+export type UpgradeProgress = {
+  status: UpgradeStatus;
+  error?: string;
 };
