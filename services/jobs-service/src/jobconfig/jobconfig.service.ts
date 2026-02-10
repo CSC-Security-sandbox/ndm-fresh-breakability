@@ -2376,8 +2376,16 @@ export class JobConfigService {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  async getFileServerById(id: string): Promise<FileServerEntity> {
+  return this.fileServerRepo.findOne({
+    where: { id },
+  });
+}
 }
 function execAsync(arg0: string, arg1: { maxBuffer: number; }): { stdout: any; } | PromiseLike<{ stdout: any; }> {
   throw new Error("Function not implemented.");
 }
+
+
 

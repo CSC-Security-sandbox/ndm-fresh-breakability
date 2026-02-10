@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, ParseBoolPipe, Patch, Post, Put, Query, Res, Inject } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, ParseBoolPipe, Patch, Post, Put, Query, Res, Inject,NotFoundException } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {SpeedTestConfigEntity } from "src/entities/speed-test-job-config.entity"
@@ -20,6 +20,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
 import { GetDirsDto } from './dto/get-dirs.dto';
+import { MountTrackerService } from './mount-tracker.service';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -29,6 +30,7 @@ export class JobConfigController {
   constructor(
     private readonly jobConfigService: JobConfigService,
     private readonly preCheckService: PreCheckService,
+    private readonly mountTrackerService: MountTrackerService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.logger = loggerFactory.create(JobConfigController.name);
@@ -335,14 +337,38 @@ export class JobConfigController {
     return await this.jobConfigService.getJobConfigInventoryStats(jobConfigID, shouldFetchLatest);
   }
 
-    @ApiOperation({ summary: 'Get directories in export path' })
-    @ApiResponse({ status: 200, description: 'Directories retrieved' })
-    @ApiResponse({ status: 400, description: 'Bad Request' })
-    @ApiResponse({ status: 404, description: 'File server not found' })
-    //@ApiBearerAuth()
-    //@Auth(Permission.ManageJob)
-    @Post('get-dirs')
-    async getDirs(@Body() request: GetDirsDto): Promise<{ name: string }[]> {
-      return this.jobConfigService.getDirsFromService(request);
+  @ApiOperation({ summary: 'Get directories in export path' })
+  @ApiResponse({ status: 200, description: 'Directories retrieved' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 404, description: 'File server not found' })
+  //@ApiBearerAuth()
+  //@Auth(Permission.ManageJob)
+  @Post('get-dirs')
+  async getDirs(@Body() request: GetDirsDto): Promise<{ name: string }[]> {
+
+    const fileServer = await this.jobConfigService.getFileServerById(request.fileServerId);
+  
+    if (!fileServer) {
+      throw new NotFoundException(`File server not found: ${request.fileServerId}`);
+    }
+    const mountDetails = await this.mountTrackerService.ensureMounted({
+      fileServerId: request.fileServerId,
+      hostname: fileServer.host,
+      exportPath: request.exportPath,
+      dir: request.dir || '',
+      protocol: fileServer.protocol,
+      username: request.username || fileServer.userName,
+      password: request.password || fileServer.password,
+      protocolVersion: fileServer.protocolVersion,
+    });
+
+    const directories = await this.mountTrackerService.listDirectoriesls({
+      mountPath: mountDetails.mountPath,
+      path: request.path || '',
+    });
+
+    await this.mountTrackerService.touch(mountDetails.key);
+
+    return directories;
   }
 }

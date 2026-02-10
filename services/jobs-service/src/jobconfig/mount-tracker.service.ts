@@ -9,7 +9,7 @@ import {
 } from "@netapp-cloud-datamigrate/logger-lib";
 
 const execAsync = promisify(exec);
-const IDLE_TIMEOUT_MS = 1 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface MountRequest {
   fileServerId: string;
@@ -34,6 +34,15 @@ export interface MountDetails {
   lastAccessAt: number;
 }
 
+export interface ListDirsInput {
+  mountPath: string;
+  path: string;
+}
+
+export interface DirectoryEntry {
+  name: string;
+}
+
 interface MountRecord extends MountDetails {
   timeoutHandle?: NodeJS.Timeout;
 }
@@ -53,8 +62,9 @@ export class MountTrackerService {
   }
 
   private buildMountCommand(request: MountRequest, mountDest: string): string {
+    console.log('Building mount command with request:', request, 'and mountDest:', mountDest);
     if (request.protocol === Protocol.NFS) {      
-      return `mount -t nfs -o nolock 172.30.121.91:${request.exportPath} "${mountDest}"`;
+      return `mount -t nfs -o nolock ${request.hostname}:${request.exportPath} "${mountDest}"`;
     }
 
     if (request.protocol === Protocol.SMB) {
@@ -95,6 +105,87 @@ export class MountTrackerService {
     }
   }
 
+  async listDirectories(input: ListDirsInput): Promise<DirectoryEntry[]> {
+    const fullPath = `${input.mountPath}/${input.path}`.replace(/\/+/g, '/');
+    const startTime = Date.now();
+    this.logger.log(`Listing directories in ${fullPath}`);
+
+    try {
+      const { stdout } = await execAsync(
+        `find "${fullPath}" -maxdepth 2 -type d 2>/dev/null`,
+        { maxBuffer: 1024 * 1024 * 10 }
+      );
+
+      const normalizedFullPath = fullPath.replace(/\/$/, '');
+      const directories = stdout
+        .trim()
+        .split('\n')
+        .filter(entry => {
+          const normalizedEntry = entry.replace(/\/$/, '');
+          return entry.length > 0 && normalizedEntry !== normalizedFullPath;
+        })
+        .map(entry => {
+          let name = entry.replace(fullPath, '').replace(/^\//, '');
+          if (name === entry) {
+            name = entry.replace(normalizedFullPath, '').replace(/^\//, '');
+          }
+          return { name };
+        });
+
+      this.logger.log(`Found ${directories.length} directories`);
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      this.logger.log(`Directory listing completed in ${duration}s`);
+      return directories;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      
+      if (message.includes('ENOENT') || message.includes('No such file')) {
+        this.logger.warn(`Directory not found: ${fullPath}`);
+        return [];
+      }
+
+      this.logger.error(`Error listing directories: ${message}`);
+      throw error;
+    }
+  }
+
+  async listDirectoriesls(input: ListDirsInput): Promise<DirectoryEntry[]> {
+    const fullPath = `${input.mountPath}/${input.path}`.replace(/\/+/g, '/');
+    const startTime = Date.now();
+    this.logger.log(`Listing directories in ${fullPath}`);
+
+    try {
+      const entries = await fs.promises.readdir(fullPath, { withFileTypes: true });
+
+      const directories = entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => {
+          // entry.parentPath is available in Node 20+; falls back to entry.path
+          const parent = (entry as any).parentPath || (entry as any).path || '';
+          const relativePath = parent
+            ? `${parent.replace(fullPath, '').replace(/^\//, '')}/${entry.name}`
+            : entry.name;
+          return { name: relativePath.replace(/^\//, '') };
+        });
+
+      this.logger.log(`Found ${directories.length} directories`);
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      this.logger.log(`Directory listing completed in ${duration}s`);
+      return directories;
+      
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      
+      if (message.includes('ENOENT') || message.includes('No such file')) {
+        this.logger.warn(`Directory not found: ${fullPath}`);
+        return [];
+      }
+
+      this.logger.error(`Error listing directories: ${message}`);
+      throw error;
+    }
+  }
+
   async touch(key: string): Promise<void> {
     const record = this.mounts.get(key);
     if (!record) return;
@@ -120,8 +211,7 @@ export class MountTrackerService {
   }
 
   private async createMount(request: MountRequest, key: string): Promise<MountRecord> {
-    
-    const mountDir = `/mnt/${request.fileServerId}/${request.exportPath}/${request.dir}`;
+    const mountDir = `/mnt/${request.fileServerId}${request.exportPath}${request.dir ? '/' + request.dir : ''}`.replace(/\/+/g, '/');
     const mountCmd = this.buildMountCommand(request, mountDir);
     await fs.promises.mkdir(mountDir, { recursive: true });
 
