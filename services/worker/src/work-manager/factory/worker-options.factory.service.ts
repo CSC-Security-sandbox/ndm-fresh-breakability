@@ -95,6 +95,7 @@ export class WorkerOptionsService {
             // Upgrade activities (for WorkerDownloadWorkflow)
             ensureStagingDir: this.upgradeActivityService.ensureStagingDir.bind(this.upgradeActivityService),
             downloadBinary: this.upgradeActivityService.downloadBinary.bind(this.upgradeActivityService),
+            downloadEnv: this.upgradeActivityService.downloadEnv.bind(this.upgradeActivityService),
             isBinaryStaged: this.upgradeActivityService.isBinaryStaged.bind(this.upgradeActivityService),
             getAuthToken: this.upgradeActivityService.getAuthToken.bind(this.upgradeActivityService),
         });

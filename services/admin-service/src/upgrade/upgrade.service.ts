@@ -20,6 +20,11 @@ const CP_BINARY_PATHS = {
 } as const;
 
 /**
+ * Path for common env file
+ */
+const CP_ENV_PATH = '/upgrade/worker/env';
+
+/**
  * Task queue for parent workflows
  */
 const PARENT_TASK_QUEUE = 'ParentWorkflow-TaskQueue';
@@ -200,18 +205,91 @@ export class UpgradeService {
   }
 
   /**
-   * Gets information about available binaries
+   * Serves common env file for workers
+   * Workers call this endpoint to download their env configuration
+   */
+  async streamEnvFile(): Promise<StreamableFile> {
+    this.logger.log(`Serving env file from: ${CP_ENV_PATH}`);
+
+    // Check if directory exists
+    if (!fs.existsSync(CP_ENV_PATH)) {
+      this.logger.error(`Env directory not found: ${CP_ENV_PATH}`);
+      throw new NotFoundException(`Env directory not found`);
+    }
+
+    // Find the env file in the directory (look for .env file or env file)
+    const files = fs.readdirSync(CP_ENV_PATH);
+    const envFile = files.find((f) => 
+      f === '.env' || f === 'env' || f.endsWith('.env')
+    );
+
+    if (!envFile) {
+      this.logger.error(`Env file not found in: ${CP_ENV_PATH}`);
+      throw new NotFoundException(`Env file not found`);
+    }
+
+    const envPath = path.join(CP_ENV_PATH, envFile);
+    const stat = fs.statSync(envPath);
+
+    this.logger.log(
+      `Streaming env file: ${envPath}, size: ${stat.size} bytes`,
+    );
+
+    const stream = fs.createReadStream(envPath);
+
+    return new StreamableFile(stream, {
+      type: 'application/octet-stream',
+      disposition: `attachment; filename="${envFile}"`,
+      length: stat.size,
+    });
+  }
+
+  /**
+   * Gets information about available binaries and env file
    */
   async getBinaryInfo(): Promise<{
     linux: { available: boolean; filename?: string; size?: number };
     windows: { available: boolean; filename?: string; size?: number };
+    env: { available: boolean; filename?: string; size?: number };
   }> {
     const result = {
       linux: this.checkBinaryInfo('linux'),
       windows: this.checkBinaryInfo('windows'),
+      env: this.checkEnvInfo(),
     };
 
     return result;
+  }
+
+  /**
+   * Check env file info
+   */
+  private checkEnvInfo(): {
+    available: boolean;
+    filename?: string;
+    size?: number;
+  } {
+    if (!fs.existsSync(CP_ENV_PATH)) {
+      return { available: false };
+    }
+
+    const files = fs.readdirSync(CP_ENV_PATH);
+    const envFile = files.find((f) => 
+      f === '.env' || f === 'env' || f.endsWith('.env')
+    );
+
+    if (!envFile) {
+      return { available: false };
+    }
+
+    const envPath = path.join(CP_ENV_PATH, envFile);
+    const stat = fs.statSync(envPath);
+
+    return {
+      available: true,
+      filename: envFile,
+      size: stat.size,
+    };
   }
 
   /**

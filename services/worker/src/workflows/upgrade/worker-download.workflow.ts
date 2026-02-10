@@ -2,7 +2,7 @@
  * Worker Download Workflow
  * 
  * Child workflow that runs ON the worker machine.
- * Downloads the binary from CP and stages it locally.
+ * Downloads the binary and env file from CP and stages them locally.
  * 
  * This workflow is spawned by BinaryMulticastWorkflow and runs on:
  * - Task queue: {workerId}-TaskQueue (worker-specific)
@@ -15,10 +15,10 @@
  *       ▼
  *   WorkerDownloadWorkflow (this workflow, runs on worker)
  *       │
- *       │ proxyActivities → downloadBinary()
+ *       │ proxyActivities → downloadBinary(), downloadEnv()
  *       │
  *       ▼
- *   Binary saved to /opt/datamigrator/staging/ (or C:\datamigrator\staging\)
+ *   Binary + Env saved to /opt/datamigrator/staging/ (or C:\datamigrator\staging\)
  */
 
 import { proxyActivities } from '@temporalio/workflow';
@@ -43,6 +43,7 @@ async function log(traceId: string, message: string) {
 const {
   ensureStagingDir,
   downloadBinary,
+  downloadEnv,
   isBinaryStaged,
   getAuthToken,
 } = proxyActivities<UpgradeActivityService>({
@@ -62,7 +63,7 @@ const {
 export async function WorkerDownloadWorkflow(
   input: WorkerDownloadWorkflowInput
 ): Promise<WorkerDownloadWorkflowOutput> {
-  const { traceId, workerId, platform, downloadUrl, version } = input;
+  const { traceId, workerId, platform, downloadUrl, envDownloadUrl, version } = input;
 
   log(traceId, `WorkerDownloadWorkflow starting for worker ${workerId} (${platform})`);
 
@@ -100,13 +101,23 @@ export async function WorkerDownloadWorkflow(
     });
     log(traceId, `Binary downloaded: ${downloadResult.downloadedPath} (${downloadResult.sizeBytes} bytes)`);
 
-    // 5. Return success
+    // 5. Download env file from CP
+    log(traceId, `Downloading env file from ${envDownloadUrl}`);
+    const envResult = await downloadEnv({
+      downloadUrl: envDownloadUrl,
+      platform,
+      authToken,
+    });
+    log(traceId, `Env file downloaded: ${envResult.downloadedPath} (${envResult.sizeBytes} bytes)`);
+
+    // 6. Return success
     log(traceId, `WorkerDownloadWorkflow completed successfully`);
     return {
       workerId,
       status: 'success',
       stagedPath: downloadResult.downloadedPath,
       sizeBytes: downloadResult.sizeBytes,
+      message: `Binary and env file downloaded successfully`,
     };
 
   } catch (error) {

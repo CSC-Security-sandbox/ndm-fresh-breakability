@@ -176,23 +176,67 @@ export class UpgradeController {
   }
 
   /**
+   * GET /api/v1/upgrade/worker/env
+   * Streams the common env file for workers
+   * Workers call this endpoint to download the shared env file
+   * Protected by worker authentication (client credentials)
+   */
+  @AuthWorker()
+  @ApiBearerAuth()
+  @Get('worker/env')
+  @ApiOperation({
+    summary: 'Download worker env file',
+    description:
+      'Streams the common environment file for workers. Requires worker authentication.',
+  })
+  @ApiProduces('application/octet-stream')
+  @ApiResponse({
+    status: 200,
+    description: 'Env file stream',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing worker token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Env file not found',
+  })
+  @Header('Cache-Control', 'no-cache')
+  async downloadEnvFile(@Res() res: Response): Promise<void> {
+    const streamableFile = await this.upgradeService.streamEnvFile();
+    
+    // Set headers for env file download
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': streamableFile.getHeaders().disposition,
+      'Content-Length': streamableFile.getHeaders().length,
+      'Cache-Control': 'no-cache',
+    });
+    
+    // Pipe the stream directly to response (bypasses ResponseInterceptor)
+    streamableFile.getStream().pipe(res);
+  }
+
+  /**
    * GET /api/v1/upgrade/binary-info
-   * Gets information about available binaries
+   * Gets information about available binaries and env file
    */
   @Auth(Permission.AgentDeployment)
   @ApiBearerAuth()
   @Get('binary-info')
   @ApiOperation({
-    summary: 'Get binary information',
-    description: 'Returns information about available worker binaries',
+    summary: 'Get binary and env file information',
+    description: 'Returns information about available worker binaries and env file',
   })
   @ApiResponse({
     status: 200,
-    description: 'Binary information',
+    description: 'Binary and env file information',
   })
   async getBinaryInfo(): Promise<{
     linux: { available: boolean; filename?: string; size?: number };
     windows: { available: boolean; filename?: string; size?: number };
+    env: { available: boolean; filename?: string; size?: number };
   }> {
     return this.upgradeService.getBinaryInfo();
   }

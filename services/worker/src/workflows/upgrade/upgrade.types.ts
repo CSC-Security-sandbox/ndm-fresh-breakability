@@ -79,6 +79,8 @@ export interface WorkerDownloadWorkflowInput {
   platform: 'linux' | 'windows';
   /** Full URL to download binary from CP */
   downloadUrl: string;
+  /** Full URL to download env file from CP */
+  envDownloadUrl: string;
   /** Target version */
   version: string;
 }
@@ -130,6 +132,22 @@ export interface StageBinaryInput {
 export interface StageBinaryOutput {
   /** Final staged path */
   stagedPath: string;
+}
+
+export interface DownloadEnvInput {
+  /** Full URL to download env file from */
+  downloadUrl: string;
+  /** Platform */
+  platform: 'linux' | 'windows';
+  /** Auth token for CP */
+  authToken?: string;
+}
+
+export interface DownloadEnvOutput {
+  /** Path where env file was downloaded */
+  downloadedPath: string;
+  /** File size in bytes */
+  sizeBytes: number;
 }
 
 // =============================================================================
@@ -184,7 +202,7 @@ export enum MulticastStatus {
 // =============================================================================
 
 /**
- * API endpoints on CP for downloading binaries
+ * API endpoints on CP for downloading binaries and env
  * Worker calls: GET {cpBaseUrl}{endpoint}
  */
 export const UPGRADE_ENDPOINTS = {
@@ -192,6 +210,8 @@ export const UPGRADE_ENDPOINTS = {
   linux: '/api/v1/upgrade/worker/linux',
   /** Endpoint for Windows binary */
   windows: '/api/v1/upgrade/worker/windows',
+  /** Endpoint for common env file */
+  env: '/api/v1/upgrade/worker/env',
 } as const;
 
 /**
@@ -206,7 +226,7 @@ export const CP_BINARY_PATHS = {
 } as const;
 
 /**
- * Paths on Worker where binaries are staged/stored
+ * Paths on Worker where binaries and env are staged/stored
  */
 export const WORKER_PATHS = {
   linux: {
@@ -216,6 +236,8 @@ export const WORKER_PATHS = {
     binaryDir: '/opt/datamigrator/binary',
     /** Binary name pattern */
     binaryName: 'datamigrator-worker',
+    /** Env file name */
+    envFileName: '.env',
   },
   windows: {
     /** Directory to stage downloaded binaries */
@@ -224,5 +246,7 @@ export const WORKER_PATHS = {
     binaryDir: 'C:\\datamigrator\\binary',
     /** Binary name pattern */
     binaryName: 'datamigrator-worker.exe',
+    /** Env file name */
+    envFileName: '.env',
   },
 } as const;

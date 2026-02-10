@@ -65,6 +65,9 @@ export async function BinaryMulticastWorkflow(
 
   const results: WorkerDownloadResult[] = [];
 
+  // Construct common env download URL (same for all platforms)
+  const envDownloadUrl = `${cpBaseUrl}${UPGRADE_ENDPOINTS.env}`;
+
   // Process all workers in parallel
   const workerPromises = workerIds.map(async (workerId) => {
     // Determine platform from workerId or default to linux
@@ -82,6 +85,7 @@ export async function BinaryMulticastWorkflow(
           workerId,
           platform,
           downloadUrl,
+          envDownloadUrl,
           version,
         }],
         workflowId: `WorkerDownload-${traceId}-${workerId}`,

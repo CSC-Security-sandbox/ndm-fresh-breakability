@@ -22,8 +22,11 @@ import { AuthService } from '../../auth/auth.service';
 import {
   DownloadBinaryInput,
   DownloadBinaryOutput,
+  DownloadEnvInput,
+  DownloadEnvOutput,
   StageBinaryInput,
   StageBinaryOutput,
+  WORKER_PATHS,
 } from '../../workflows/upgrade/upgrade.types';
 
 @Injectable()
@@ -127,6 +130,72 @@ export class UpgradeActivityService {
       // Cleanup partial download
       if (fs.existsSync(stagedPath)) {
         fs.unlinkSync(stagedPath);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Download env file from CP to staging directory
+   * @param input - Download parameters
+   * @returns Path to downloaded env file and size
+   */
+  async downloadEnv(input: DownloadEnvInput): Promise<DownloadEnvOutput> {
+    const { downloadUrl, platform, authToken } = input;
+
+    this.logger.log(`Starting env file download from ${downloadUrl}`);
+
+    // Ensure staging directory exists
+    await this.ensureStagingDir(platform);
+
+    // Determine destination path for env file
+    const stagingDir = BinaryHandlerFactory.create(platform).getStagingDir();
+    const envFileName = WORKER_PATHS[platform].envFileName;
+    const envPath = path.join(stagingDir, envFileName);
+
+    // Prepare headers
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    try {
+      // Download env file
+      const response = await firstValueFrom(
+        this.httpService.get(downloadUrl, {
+          responseType: 'stream',
+          headers,
+          timeout: 5 * 60 * 1000, // 5 minutes timeout (env file is small)
+        }),
+      );
+
+      // Write to file
+      const writer = fs.createWriteStream(envPath);
+      response.data.pipe(writer);
+
+      // Wait for download to complete
+      await new Promise<void>((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      // Get file size
+      const stats = fs.statSync(envPath);
+      const sizeBytes = stats.size;
+
+      this.logger.log(`Env file downloaded: ${envPath} (${sizeBytes} bytes)`);
+
+      return {
+        downloadedPath: envPath,
+        sizeBytes,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to download env file: ${error.message}`);
+      
+      // Cleanup partial download
+      if (fs.existsSync(envPath)) {
+        fs.unlinkSync(envPath);
       }
       
       throw error;
