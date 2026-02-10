@@ -10,199 +10,125 @@ import {
 import { ArrowBackIcon, FolderIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { VolumeType } from "@/types/app.type";
 
-// Directory item interface
+// API base URL for jobs service
+const JOBS_SERVICE_URL = window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL;
+
+// API Request DTO - matches backend GetDirsDto
+interface GetDirsRequest {
+  fileServerId: string;
+  exportPath: string;
+  path?: string;
+  protocol?: string;
+  hostname?: string;
+  dir?: string;
+  username?: string;
+  password?: string;
+  protocolVersion?: string;
+}
+
+// API Response - matches backend DirectoryEntry
+interface DirectoryEntryResponse {
+  name: string;
+}
+
+// Directory item interface for UI
 interface DirectoryItem {
   id: string;
   name: string;
   path: string;
-  type: "directory" | "file";
-  size?: number;
-  modifiedDate?: string;
-  children?: DirectoryItem[];
+  type: "directory";
 }
 
-// Mock fetch function for directories - replace with actual API call
-const mockFetchDirectoryContents = async (
-  exportPathId: string,
+// Fetch directory contents from backend API
+const fetchDirectoryContents = async (
+  fileServerId: string,
+  exportPath: string,
   currentPath: string
 ): Promise<DirectoryItem[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      if (currentPath === "/") {
-        resolve([
-          {
-            id: "dir-1",
-            name: "Documents",
-            path: "/Documents",
-            type: "directory",
-            modifiedDate: "2026-01-15",
-          },
-          {
-            id: "dir-2",
-            name: "Images",
-            path: "/Images",
-            type: "directory",
-            modifiedDate: "2026-01-20",
-          },
-          {
-            id: "dir-3",
-            name: "Videos",
-            path: "/Videos",
-            type: "directory",
-            modifiedDate: "2026-01-10",
-          },
-          {
-            id: "dir-4",
-            name: "Projects",
-            path: "/Projects",
-            type: "directory",
-            modifiedDate: "2026-01-05",
-          },
-          {
-            id: "dir-5",
-            name: "Archive",
-            path: "/Archive",
-            type: "directory",
-            modifiedDate: "2025-12-25",
-          },
-        ]);
-      } else if (currentPath === "/Documents") {
-        resolve([
-          {
-            id: "dir-doc-1",
-            name: "Reports",
-            path: "/Documents/Reports",
-            type: "directory",
-            modifiedDate: "2026-01-14",
-          },
-          {
-            id: "dir-doc-2",
-            name: "Presentations",
-            path: "/Documents/Presentations",
-            type: "directory",
-            modifiedDate: "2026-01-12",
-          },
-          {
-            id: "dir-doc-3",
-            name: "Spreadsheets",
-            path: "/Documents/Spreadsheets",
-            type: "directory",
-            modifiedDate: "2026-01-10",
-          },
-        ]);
-      } else if (currentPath === "/Images") {
-        resolve([
-          {
-            id: "dir-img-1",
-            name: "Photos",
-            path: "/Images/Photos",
-            type: "directory",
-            modifiedDate: "2026-01-18",
-          },
-          {
-            id: "dir-img-2",
-            name: "Graphics",
-            path: "/Images/Graphics",
-            type: "directory",
-            modifiedDate: "2026-01-20",
-          },
-          {
-            id: "dir-img-3",
-            name: "Logos",
-            path: "/Images/Logos",
-            type: "directory",
-            modifiedDate: "2026-01-19",
-          },
-        ]);
-      } else if (currentPath === "/Projects") {
-        resolve([
-          {
-            id: "dir-proj-1",
-            name: "WebApp",
-            path: "/Projects/WebApp",
-            type: "directory",
-            modifiedDate: "2026-01-05",
-          },
-          {
-            id: "dir-proj-2",
-            name: "MobileApp",
-            path: "/Projects/MobileApp",
-            type: "directory",
-            modifiedDate: "2026-01-03",
-          },
-          {
-            id: "dir-proj-3",
-            name: "Backend",
-            path: "/Projects/Backend",
-            type: "directory",
-            modifiedDate: "2026-01-04",
-          },
-        ]);
-      } else {
-        resolve([
-          {
-            id: "dir-sub-1",
-            name: "Subfolder1",
-            path: `${currentPath}/Subfolder1`,
-            type: "directory",
-            modifiedDate: "2026-01-01",
-          },
-          {
-            id: "dir-sub-2",
-            name: "Subfolder2",
-            path: `${currentPath}/Subfolder2`,
-            type: "directory",
-            modifiedDate: "2026-01-02",
-          },
-        ]);
-      }
-    }, 300);
-  });
-};
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  
+  // The API expects:
+  // - exportPath: the NFS/SMB export path (e.g., "/nfs/smallEDA")
+  // - path: the relative path within the export (e.g., "" for root, or "/subdir")
+  const requestBody: GetDirsRequest = {
+    fileServerId,
+    exportPath,
+    path: currentPath === "/" ? "" : currentPath,
+  };
 
-// Dummy export paths data
-const DUMMY_EXPORT_PATHS: VolumeType[] = [
-  {
-    id: "ep-1",
-    volumePath: "/mnt/data/production",
-    protocol: "NFS",
-    isValid: true,
-    isDisabled: false,
-    jobConfig: [],
-  },
-  {
-    id: "ep-2",
-    volumePath: "/mnt/data/development",
-    protocol: "SMB",
-    isValid: true,
-    isDisabled: false,
-    jobConfig: [],
-  },
-  {
-    id: "ep-3",
-    volumePath: "/mnt/data/archives",
-    protocol: "NFS",
-    isValid: true,
-    isDisabled: false,
-    jobConfig: [],
-  },
-  {
-    id: "ep-4",
-    volumePath: "/mnt/data/backup",
-    protocol: "SMB",
-    isValid: false,
-    isDisabled: true,
-    jobConfig: [],
-  },
-  {
-    id: "ep-5",
-    volumePath: "/mnt/data/shared",
-    protocol: "NFS",
-    isValid: true,
-    isDisabled: false,
-    jobConfig: [],
-  },
-];
+  // JOBS_SERVICE_URL already includes /api/v1, so we just append the endpoint
+  const baseUrl = JOBS_SERVICE_URL?.endsWith('/api/v1') 
+    ? JOBS_SERVICE_URL 
+    : `${JOBS_SERVICE_URL}/api/v1`;
+  
+  const response = await fetch(`${baseUrl}/jobs/get-dirs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to fetch directories: ${response.status}`);
+  }
+
+  const result = await response.json();
+  
+  // Handle the API response structure: { data: { items: [...] } }
+  // The items array contains objects with { name: string }
+  let items: DirectoryEntryResponse[] = [];
+  
+  if (result?.data?.items && Array.isArray(result.data.items)) {
+    items = result.data.items;
+  } else if (result?.items && Array.isArray(result.items)) {
+    items = result.items;
+  } else if (Array.isArray(result?.data)) {
+    items = result.data;
+  } else if (Array.isArray(result)) {
+    items = result;
+  }
+
+  if (!Array.isArray(items)) {
+    console.error("Unexpected API response structure:", result);
+    throw new Error("Unexpected response format from server");
+  }
+
+  // Transform API response to DirectoryItem format
+  // The path is relative to the export path, not including the export path itself
+  const directories: DirectoryItem[] = items.map((entry, index) => {
+    const name = entry.name;
+    // Build the relative path within the export path
+    const relativePath = currentPath === "/" || currentPath === "" 
+      ? `/${name}` 
+      : `${currentPath}/${name}`;
+    
+    return {
+      id: `dir-${index}-${name}`,
+      name: name,
+      path: relativePath, // This is the path relative to export path root
+      type: "directory" as const,
+    };
+  });
+
+  // Remove duplicates (in case API returns nested paths)
+  const uniqueDirectories = directories.filter(
+    (dir, index, self) => index === self.findIndex((d) => d.name === dir.name)
+  );
+
+  // Sort alphabetically, but put hidden files (starting with .) at the end
+  uniqueDirectories.sort((a, b) => {
+    const aHidden = a.name.startsWith(".");
+    const bHidden = b.name.startsWith(".");
+    if (aHidden && !bHidden) return 1;
+    if (!aHidden && bHidden) return -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return uniqueDirectories;
+};
 
 // Export Paths Content Component
 interface ExportPathsContentProps {
@@ -238,13 +164,18 @@ const ExportPathsContent = ({
       <Box className="divide-y max-h-80 overflow-y-auto">
         {allExportPaths.map((path) => {
           const isSelected = selectedExportPath === path.id;
-          const isDisabled = path.isValid === false || path.isDisabled === true;
+          // Only disable if explicitly set to disabled, not based on validation status
+          // This allows exploration of paths that haven't been validated yet
+          const isExplicitlyDisabled = path.isDisabled === true;
+          // Determine the status for display
+          const isValidated = path.isValid === true;
+          const isInvalid = path.isValid === false && path.isDisabled !== true;
 
           return (
             <Box
               key={path.id}
               className={`grid grid-cols-12 gap-4 p-4 hover:bg-gray-50 transition-colors ${
-                isDisabled ? "opacity-50" : ""
+                isExplicitlyDisabled ? "opacity-50" : ""
               }`}
             >
               <Box className="col-span-1 flex items-center">
@@ -252,7 +183,7 @@ const ExportPathsContent = ({
                   type="radio"
                   checked={isSelected}
                   onChange={() => onPathSelect(path.id)}
-                  disabled={isDisabled}
+                  disabled={isExplicitlyDisabled}
                   className="w-4 h-4 cursor-pointer"
                 />
               </Box>
@@ -265,13 +196,21 @@ const ExportPathsContent = ({
                 </Box>
               </Box>
               <Box className="col-span-3 flex items-center">
-                {isDisabled ? (
+                {isExplicitlyDisabled ? (
                   <Box className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
                     Disabled
                   </Box>
-                ) : (
+                ) : isValidated ? (
                   <Box className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
                     Active
+                  </Box>
+                ) : isInvalid ? (
+                  <Box className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold">
+                    Not Validated
+                  </Box>
+                ) : (
+                  <Box className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-semibold">
+                    Pending
                   </Box>
                 )}
               </Box>
@@ -289,6 +228,7 @@ interface DirectoriesContentProps {
   currentPath: string;
   directoryContents: DirectoryItem[];
   isLoading: boolean;
+  error: string | null;
   selectedItems: Set<string>;
   onItemToggle: (itemId: string) => void;
   onNavigateToFolder: (folderPath: string) => void;
@@ -301,6 +241,7 @@ const DirectoriesContent = ({
   currentPath,
   directoryContents,
   isLoading,
+  error,
   selectedItems,
   onItemToggle,
   onNavigateToFolder,
@@ -313,7 +254,7 @@ const DirectoriesContent = ({
     onPathChange(parentPath);
   };
 
-  const handleFolderDoubleClick = (item: DirectoryItem) => {
+  const handleFolderClick = (item: DirectoryItem) => {
     if (item.type === "directory") {
       onNavigateToFolder(item.path);
     }
@@ -336,9 +277,13 @@ const DirectoriesContent = ({
 
       {/* Current Path Display */}
       <Box className="mb-4 p-3 bg-gray-100 rounded-md">
-        <Box className="text-sm font-semibold text-gray-700 mb-1">Current Path</Box>
+        <Box className="text-sm font-semibold text-gray-700 mb-1">Export Path</Box>
+        <Box className="font-mono text-sm text-gray-800 mb-2">
+          {exportPath?.volumePath}
+        </Box>
+        <Box className="text-sm font-semibold text-gray-700 mb-1">Directory Path (relative to export)</Box>
         <Box className="font-mono text-sm text-gray-800">
-          {exportPath?.volumePath}{currentPath === "/" ? "" : currentPath}
+          {currentPath === "/" || currentPath === "" ? "/" : currentPath}
         </Box>
       </Box>
 
@@ -358,12 +303,19 @@ const DirectoriesContent = ({
         </Box>
       )}
 
+      {/* Error Display */}
+      {error && (
+        <Box className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+          {error}
+        </Box>
+      )}
+
       {/* Directory Contents */}
       {isLoading ? (
         <Box className="text-center py-8 text-gray-500">
           Loading directory contents...
         </Box>
-      ) : directoryContents.length === 0 ? (
+      ) : directoryContents.length === 0 && !error ? (
         <Box className="text-center py-8 text-gray-500">
           This directory is empty.
         </Box>
@@ -406,7 +358,7 @@ const DirectoriesContent = ({
                     className={`col-span-11 flex items-center gap-2 ${
                       isDirectory ? "cursor-pointer" : ""
                     }`}
-                    onClick={() => isDirectory && handleFolderDoubleClick(item)}
+                    onClick={() => isDirectory && handleFolderClick(item)}
                   >
                     {isDirectory && (
                       <FolderIcon size="20" className="text-blue-500" />
@@ -451,7 +403,7 @@ interface ExploreModalProps {
   onConfirm?: (selectedItems: SelectedItemInfo[], exportPath: VolumeType) => void;
   fileServerName: string;
   fileServerId: string;
-  allExportPaths?: VolumeType[];
+  allExportPaths: VolumeType[];
 }
 
 // Main ExploreModal Component
@@ -461,7 +413,7 @@ const ExploreModal = ({
   onConfirm,
   fileServerName,
   fileServerId,
-  allExportPaths = DUMMY_EXPORT_PATHS,
+  allExportPaths,
 }: ExploreModalProps) => {
   // View state: "export-paths" or "directories"
   const [currentView, setCurrentView] = useState<"export-paths" | "directories">(
@@ -479,6 +431,7 @@ const ExploreModal = ({
     []
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Selected items (checkbox selection)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -496,29 +449,35 @@ const ExploreModal = ({
       setCurrentPath("/");
       setDirectoryContents([]);
       setSelectedItems(new Set());
+      setError(null);
     }
   }, [isOpen]);
 
-  // Load directory contents when path changes
+  // Load directory contents when view changes to directories or path changes
   useEffect(() => {
-    const loadDirectoryContents = async () => {
-      if (currentView === "directories" && selectedExportPath) {
+    // Only fetch when in directories view with a selected export path
+    if (currentView === "directories" && selectedExportPathDetails && fileServerId) {
+      const fetchData = async () => {
         setIsLoading(true);
+        setError(null);
         try {
-          const contents = await mockFetchDirectoryContents(
-            selectedExportPath,
+          const contents = await fetchDirectoryContents(
+            fileServerId,
+            selectedExportPathDetails.volumePath,
             currentPath
           );
           setDirectoryContents(contents);
-        } catch (error) {
-          console.error("Error loading directory contents:", error);
+        } catch (err) {
+          console.error("Error loading directory contents:", err);
+          setError(err instanceof Error ? err.message : "Failed to load directories");
+          setDirectoryContents([]);
         } finally {
           setIsLoading(false);
         }
-      }
-    };
-    loadDirectoryContents();
-  }, [currentView, selectedExportPath, currentPath]);
+      };
+      fetchData();
+    }
+  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId]);
 
   // Handle export path selection
   const handlePathSelect = useCallback((pathId: string) => {
@@ -565,6 +524,7 @@ const ExploreModal = ({
     setCurrentPath("/");
     setDirectoryContents([]);
     setSelectedItems(new Set());
+    setError(null);
   }, []);
 
   // Handle close modal
@@ -574,6 +534,7 @@ const ExploreModal = ({
     setCurrentPath("/");
     setDirectoryContents([]);
     setSelectedItems(new Set());
+    setError(null);
     onClose();
   }, [onClose]);
 
@@ -624,6 +585,7 @@ const ExploreModal = ({
             currentPath={currentPath}
             directoryContents={directoryContents}
             isLoading={isLoading}
+            error={error}
             selectedItems={selectedItems}
             onItemToggle={handleItemToggle}
             onNavigateToFolder={handleNavigateToFolder}

@@ -38,12 +38,14 @@ const JobsAction = ({
     return fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
   }, [fileServerDetails, zoneFileServerId]);
 
-  // Check if all export paths are disabled (isValid = false or isDisabled = true)
+  // Check if all export paths are explicitly disabled
+  // Note: We allow paths that haven't been validated yet (isValid undefined or false without isDisabled)
   const areAllExportPathsDisabled = useMemo(() => {
     if (!allExportPaths || allExportPaths.length === 0) {
       return true; // If no export paths, consider all disabled
     }
-    return allExportPaths.every(path => path.isValid === false || path.isDisabled === true);
+    // Only consider paths as disabled if they are explicitly marked as disabled
+    return allExportPaths.every(path => path.isDisabled === true);
   }, [allExportPaths]);
 
   // Bulk buttons should be disabled if file server is not active OR all export paths are disabled
@@ -74,6 +76,17 @@ const JobsAction = ({
   // Initialize explore modal hook
   const { isOpen: isExploreModalOpen, openExploreModal, closeExploreModal } = useExploreModal();
 
+  // Get the actual file server ID (not config ID)
+  // For Dell Isilon zones, use zoneFileServerId from query params
+  // For regular NAS, use the first file server's ID
+  const actualFileServerId = useMemo(() => {
+    if (zoneFileServerId) {
+      return zoneFileServerId;
+    }
+    // For regular NAS, get the first file server's ID
+    return fileServerDetails?.fileServers?.[0]?.id || "";
+  }, [zoneFileServerId, fileServerDetails?.fileServers]);
+
   // Handle confirmed selection from explore modal
   const handleExploreConfirm = useCallback((selectedItems: SelectedItemInfo[], exportPath: VolumeType) => {
     // For now, log the selection. In a real implementation, this would:
@@ -95,7 +108,7 @@ const JobsAction = ({
         onClose={closeExploreModal}
         onConfirm={handleExploreConfirm}
         fileServerName={displayName || ""}
-        fileServerId={fileServerDetails?.id || ""}
+        fileServerId={actualFileServerId}
         allExportPaths={allExportPaths}
       />
 
