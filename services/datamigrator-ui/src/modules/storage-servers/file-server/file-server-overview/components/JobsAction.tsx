@@ -6,7 +6,8 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
+import ExploreModal, { useExploreModal, SelectedItemInfo } from "./ExploreModal";
 
 const JobsAction = ({
   fileServerDetails,
@@ -70,8 +71,35 @@ const JobsAction = ({
     return '';
   }, [zoneFileServerId, zoneNameParam]);
 
+  // Initialize explore modal hook
+  const { isOpen: isExploreModalOpen, openExploreModal, closeExploreModal } = useExploreModal();
+
+  // Handle confirmed selection from explore modal
+  const handleExploreConfirm = useCallback((selectedItems: SelectedItemInfo[], exportPath: VolumeType) => {
+    // For now, log the selection. In a real implementation, this would:
+    // - Navigate to a job creation page with the selected items
+    // - Or trigger some other action based on the selection
+    console.log("Selected items:", selectedItems);
+    console.log("Export path:", exportPath);
+    
+    // Example: Navigate to create job with selected paths
+    // const selectedPaths = selectedItems.map(item => item.path).join(',');
+    // navigate(`${pathname}/create-job?exportPath=${exportPath.id}&paths=${encodeURIComponent(selectedPaths)}${queryString}`);
+  }, []);
+
   return (
-    <Box className="flex justify-between align-middle">
+    <>
+      {/* Explore Modal */}
+      <ExploreModal
+        isOpen={isExploreModalOpen}
+        onClose={closeExploreModal}
+        onConfirm={handleExploreConfirm}
+        fileServerName={displayName || ""}
+        fileServerId={fileServerDetails?.id || ""}
+        allExportPaths={allExportPaths}
+      />
+
+      <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
         <Box className="text-lg">File Server Overview:</Box>
         <Box className="text-lg font-semibold flex gap-3">
@@ -91,7 +119,7 @@ const JobsAction = ({
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
             disabled={!isActive}
-            onClick={() => navigate(`${pathname}/explore${queryString}`)}
+            onClick={openExploreModal}
           >
             Explore
           </Button>
@@ -116,6 +144,7 @@ const JobsAction = ({
         </PermissionAuth>
       </Box>
     </Box>
+    </>
   );
 };
 
