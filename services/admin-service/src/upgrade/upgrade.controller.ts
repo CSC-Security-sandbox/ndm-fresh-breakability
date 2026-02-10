@@ -6,7 +6,7 @@ import {
   Body,
   Param,
   Header,
-  StreamableFile,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,7 +17,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, AuthWorker, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Response } from 'express';
 import { UpgradeService } from './upgrade.service';
 import {
   MulticastRequestDto,
@@ -127,12 +128,15 @@ export class UpgradeController {
    * GET /api/v1/upgrade/worker/:platform
    * Streams the binary file for a specific platform
    * Workers call this endpoint to download their binaries
+   * Protected by worker authentication (client credentials)
    */
+  @AuthWorker()
+  @ApiBearerAuth()
   @Get('worker/:platform')
   @ApiOperation({
     summary: 'Download worker binary',
     description:
-      'Streams the worker binary file for the specified platform (linux or windows)',
+      'Streams the worker binary file for the specified platform (linux or windows). Requires worker authentication.',
   })
   @ApiParam({
     name: 'platform',
@@ -145,14 +149,30 @@ export class UpgradeController {
     description: 'Binary file stream',
   })
   @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing worker token',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Binary not found for platform',
   })
   @Header('Cache-Control', 'no-cache')
   async downloadBinary(
     @Param('platform') platform: 'linux' | 'windows',
-  ): Promise<StreamableFile> {
-    return this.upgradeService.streamBinary(platform);
+    @Res() res: Response,
+  ): Promise<void> {
+    const streamableFile = await this.upgradeService.streamBinary(platform);
+    
+    // Set headers for binary download
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': streamableFile.getHeaders().disposition,
+      'Content-Length': streamableFile.getHeaders().length,
+      'Cache-Control': 'no-cache',
+    });
+    
+    // Pipe the stream directly to response (bypasses ResponseInterceptor)
+    streamableFile.getStream().pipe(res);
   }
 
   /**

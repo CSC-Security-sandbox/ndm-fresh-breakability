@@ -44,6 +44,7 @@ const {
   ensureStagingDir,
   downloadBinary,
   isBinaryStaged,
+  getAuthToken,
 } = proxyActivities<UpgradeActivityService>({
   startToCloseTimeout: '30m', // Large binary download can take time
   heartbeatTimeout: '2m',
@@ -81,16 +82,25 @@ export async function WorkerDownloadWorkflow(
     const stagingDir = await ensureStagingDir(platform);
     log(traceId, `Staging directory ready: ${stagingDir}`);
 
-    // 3. Download binary from CP
+    // 3. Get authentication token for CP API
+    log(traceId, `Getting authentication token`);
+    const authToken = await getAuthToken();
+    if (!authToken) {
+      throw new Error('Failed to obtain authentication token');
+    }
+    log(traceId, `Authentication token obtained`);
+
+    // 4. Download binary from CP
     log(traceId, `Downloading binary from ${downloadUrl}`);
     const downloadResult = await downloadBinary({
       downloadUrl,
       platform,
       version,
+      authToken,
     });
     log(traceId, `Binary downloaded: ${downloadResult.downloadedPath} (${downloadResult.sizeBytes} bytes)`);
 
-    // 4. Return success
+    // 5. Return success
     log(traceId, `WorkerDownloadWorkflow completed successfully`);
     return {
       workerId,

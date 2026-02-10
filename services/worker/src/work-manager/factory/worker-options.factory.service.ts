@@ -96,6 +96,7 @@ export class WorkerOptionsService {
             ensureStagingDir: this.upgradeActivityService.ensureStagingDir.bind(this.upgradeActivityService),
             downloadBinary: this.upgradeActivityService.downloadBinary.bind(this.upgradeActivityService),
             isBinaryStaged: this.upgradeActivityService.isBinaryStaged.bind(this.upgradeActivityService),
+            getAuthToken: this.upgradeActivityService.getAuthToken.bind(this.upgradeActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

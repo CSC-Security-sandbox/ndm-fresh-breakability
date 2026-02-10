@@ -18,6 +18,7 @@ import * as path from 'path';
 import { firstValueFrom } from 'rxjs';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { BinaryHandlerFactory } from './binary-handler.factory';
+import { AuthService } from '../../auth/auth.service';
 import {
   DownloadBinaryInput,
   DownloadBinaryOutput,
@@ -33,8 +34,17 @@ export class UpgradeActivityService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
+    private readonly authService: AuthService,
   ) {
     this.logger = loggerFactory.create(UpgradeActivityService.name);
+  }
+
+  /**
+   * Get authentication token for CP API calls
+   * Workers use client credentials flow
+   */
+  async getAuthToken(): Promise<string | null> {
+    return this.authService.getAccessToken();
   }
 
   /**

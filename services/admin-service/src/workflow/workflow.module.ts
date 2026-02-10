@@ -6,7 +6,7 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
   imports: [
-    LoggerModule,
+    LoggerModule.forRoot(),
     ConfigModule.forFeature(temporalConfig),
   ],
   providers: [WorkflowService, ConfigService],
