@@ -140,6 +140,7 @@ ingress:
     - /api/v1/email
     - /api/v1/worker-registration
     - /api/v1/secrets
+    - /api/v1/upgrade
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -147,3 +148,11 @@ ingress:
   tls:
     enabled: false
   host: ""
+
+# ==============================
+# Persistent Volumes for Upgrade Bundles
+# ==============================
+persistentVolumes:
+  - name: upgrade-bundles
+    mountPath: /upgrade
+    hostPath: /upgrade

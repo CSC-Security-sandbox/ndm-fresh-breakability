@@ -14,6 +14,12 @@
     - { path: "/opt/datamigrator/logs" }
     - { path: "/opt/datamigrator/lock" }
     - { path: "/opt/datamigrator/cronjobs" }
+    - { path: "/upgrade" }
+    - { path: "/upgrade/bundles" }
+    - { path: "/upgrade/worker" }
+    - { path: "/upgrade/worker/linux" }
+    - { path: "/upgrade/worker/windows" }
+    - { path: "/upgrade/worker/env" }
 
 - name: Configure NDM Versions
   become: yes
