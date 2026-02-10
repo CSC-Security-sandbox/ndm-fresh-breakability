@@ -131,6 +131,7 @@ export enum WorkFlows {
   MIGRATE = "MigrationWorkflow",
   RETRY = "RetryMigrationWorkflow",
   CUT_OVER = "CutOverWorkFlow",
+  BINARY_MULTICAST = "BinaryMulticastWorkflow",
 }
 
 export enum ConsumerType {
