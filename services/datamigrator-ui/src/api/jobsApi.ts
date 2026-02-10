@@ -352,6 +352,14 @@ export const jobsApi = createApi({
         return response?.data?.items || response?.data || response;
       },
     }),
+
+    retryJobRun: builder.mutation({
+      query: (payload: { jobConfigId: string; jobRunId: string }) => ({
+        url: '/job-run/ad-hoc',
+        method: 'POST',
+        body: payload,
+      }),
+    }),
   }),
 });
 
@@ -387,4 +395,5 @@ export const {
   useUpdateMigrationJobConfigMutation,
   useLazyGetJobRunIdentityMappingsQuery,
   useGetJobConfigInventoryStatsMutation,
+  useRetryJobRunMutation,
 } = jobsApi;

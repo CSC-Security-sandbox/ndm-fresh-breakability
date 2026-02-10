@@ -1,6 +1,7 @@
 import {
   FILE_SERVER_STATUS_ENUM,
   JOB_CONFIG_STATUS_ENUM,
+  JOBS_RUN_TYPE,
   JOBS_TYPE,
 } from "@/types/app.type";
 import crypto from "crypto";
@@ -17,6 +18,15 @@ export const getJobType = (type: JOBS_TYPE) => {
     default:
       return type;
   }
+};
+
+export const getJobRunType = (type: JOBS_RUN_TYPE) => {
+  // If this is a retry run, always display as "Retry Run"
+  if (type === JOBS_RUN_TYPE.RETRY) {
+    return "Retry";
+  }
+  // Otherwise, return the job type display
+  return "Regular";
 };
 
 export const getJobTypeTextForHeader = (type: JOBS_TYPE) => {

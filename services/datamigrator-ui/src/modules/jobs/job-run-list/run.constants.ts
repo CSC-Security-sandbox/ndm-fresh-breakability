@@ -8,7 +8,7 @@ import {
   JOBS_TYPE,
   JobRunApiType,
 } from "@/types/app.type";
-import { getJobType, toTitleCase } from "@/utils/common.utils";
+import { getJobType, getJobRunType, toTitleCase } from "@/utils/common.utils";
 import React from "react";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 import {
@@ -187,7 +187,7 @@ export const COLUMNS_TO_FILTER_DEFS: ColumnFilterType[] = [
   { accessor: "sourceServerName", label: "Source" },
   { accessor: "destinationServerName", label: "Destination" },
   { accessor: "sourceServerProtocol", label: "Protocol" },
-  { accessor: "jobType", label: "Type", formatter: getJobType },
+  { accessor: "jobRunType", label: "Type", formatter: getJobRunType },
   { accessor: "status", label: "Status", formatter: toTitleCase },
 ];
 
