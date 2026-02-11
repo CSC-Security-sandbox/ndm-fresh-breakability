@@ -51,6 +51,35 @@ export class UpgradeActivityService {
   }
 
   /**
+   * Get CP base URL from worker's own config
+   * Worker already knows the CP IP from CONTROL_PLANE_IP env var
+   * Uses CP_BASE_URL if set, otherwise constructs from CONTROL_PLANE_IP
+   */
+  async getCpBaseUrl(): Promise<string> {
+    // Allow explicit override for local development
+    const cpBaseUrl = process.env.CP_BASE_URL;
+    if (cpBaseUrl) {
+      return cpBaseUrl;
+    }
+
+    const cpIp = process.env.CONTROL_PLANE_IP;
+    if (!cpIp) {
+      throw new Error('CONTROL_PLANE_IP environment variable is not set');
+    }
+    return `https://${cpIp}`;
+  }
+
+  /**
+   * Detect the platform this worker is running on
+   * Uses process.platform which returns 'win32' on Windows, 'linux' on Linux
+   */
+  async detectPlatform(): Promise<'linux' | 'windows'> {
+    const platform = process.platform === 'win32' ? 'windows' : 'linux';
+    this.logger.log(`Detected platform: ${platform} (process.platform=${process.platform})`);
+    return platform;
+  }
+
+  /**
    * Ensure staging directory exists
    * @param platform - 'linux' or 'windows'
    */

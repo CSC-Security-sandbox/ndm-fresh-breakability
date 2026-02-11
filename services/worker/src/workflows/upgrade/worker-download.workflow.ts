@@ -26,6 +26,7 @@ import type { UpgradeActivityService } from '../../activities/upgrade/upgrade.ac
 import {
   WorkerDownloadWorkflowInput,
   WorkerDownloadWorkflowOutput,
+  UPGRADE_ENDPOINTS,
 } from './upgrade.types';
 
 // =============================================================================
@@ -46,6 +47,8 @@ const {
   downloadEnv,
   isBinaryStaged,
   getAuthToken,
+  getCpBaseUrl,
+  detectPlatform,
 } = proxyActivities<UpgradeActivityService>({
   startToCloseTimeout: '30m', // Large binary download can take time
   heartbeatTimeout: '2m',
@@ -63,17 +66,22 @@ const {
 export async function WorkerDownloadWorkflow(
   input: WorkerDownloadWorkflowInput
 ): Promise<WorkerDownloadWorkflowOutput> {
-  const { traceId, workerId, platform, downloadUrl, envDownloadUrl, version } = input;
+  const { traceId, workerId, version } = input;
 
-  log(traceId, `WorkerDownloadWorkflow starting for worker ${workerId} (${platform})`);
+  log(traceId, `WorkerDownloadWorkflow starting for worker ${workerId}`);
 
   try {
-    // 1. Check if binary is already staged
+    // 1. Detect platform from the worker's own OS
+    const platform = await detectPlatform();
+    log(traceId, `Detected platform: ${platform}`);
+
+    // 2. Check if binary is already staged
     const alreadyStaged = await isBinaryStaged(platform, version);
     if (alreadyStaged) {
       log(traceId, `Binary already staged for version ${version}, skipping download`);
       return {
         workerId,
+        platform,
         status: 'success',
         message: 'Binary already staged',
       };
@@ -91,7 +99,13 @@ export async function WorkerDownloadWorkflow(
     }
     log(traceId, `Authentication token obtained`);
 
-    // 4. Download binary from CP
+    // 4. Build download URLs from worker's own CP config
+    const cpBaseUrl = await getCpBaseUrl();
+    const downloadUrl = `${cpBaseUrl}${UPGRADE_ENDPOINTS[platform]}`;
+    const envDownloadUrl = `${cpBaseUrl}${UPGRADE_ENDPOINTS.env}`;
+    log(traceId, `CP Base URL: ${cpBaseUrl}`);
+
+    // 6. Download binary from CP
     log(traceId, `Downloading binary from ${downloadUrl}`);
     const downloadResult = await downloadBinary({
       downloadUrl,
@@ -101,7 +115,7 @@ export async function WorkerDownloadWorkflow(
     });
     log(traceId, `Binary downloaded: ${downloadResult.downloadedPath} (${downloadResult.sizeBytes} bytes)`);
 
-    // 5. Download env file from CP
+    // 7. Download env file from CP
     log(traceId, `Downloading env file from ${envDownloadUrl}`);
     const envResult = await downloadEnv({
       downloadUrl: envDownloadUrl,
@@ -110,10 +124,11 @@ export async function WorkerDownloadWorkflow(
     });
     log(traceId, `Env file downloaded: ${envResult.downloadedPath} (${envResult.sizeBytes} bytes)`);
 
-    // 6. Return success
+    // 8. Return success
     log(traceId, `WorkerDownloadWorkflow completed successfully`);
     return {
       workerId,
+      platform,
       status: 'success',
       stagedPath: downloadResult.downloadedPath,
       sizeBytes: downloadResult.sizeBytes,

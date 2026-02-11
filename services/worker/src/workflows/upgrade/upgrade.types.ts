@@ -47,8 +47,6 @@ export interface BinaryMulticastWorkflowInput {
   workerIds: string[];
   /** Target version */
   version: string;
-  /** Base URL for CP (e.g., https://10.x.x.x) */
-  cpBaseUrl: string;
 }
 
 export interface BinaryMulticastWorkflowOutput {
@@ -75,12 +73,6 @@ export interface WorkerDownloadWorkflowInput {
   traceId: string;
   /** This worker's ID */
   workerId: string;
-  /** Platform of this worker */
-  platform: 'linux' | 'windows';
-  /** Full URL to download binary from CP */
-  downloadUrl: string;
-  /** Full URL to download env file from CP */
-  envDownloadUrl: string;
   /** Target version */
   version: string;
 }
@@ -88,6 +80,8 @@ export interface WorkerDownloadWorkflowInput {
 export interface WorkerDownloadWorkflowOutput {
   /** Worker ID */
   workerId: string;
+  /** Detected platform */
+  platform?: 'linux' | 'windows';
   /** Status */
   status: 'success' | 'failed';
   /** Message (error message if failed) */

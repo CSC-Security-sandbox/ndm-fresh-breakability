@@ -125,6 +125,52 @@ export class UpgradeController {
   }
 
   /**
+   * GET /api/v1/upgrade/worker/env
+   * Streams the common env file for workers
+   * Workers call this endpoint to download the shared env file
+   * Protected by worker authentication (client credentials)
+   * 
+   * IMPORTANT: This route MUST be defined BEFORE worker/:platform
+   * otherwise NestJS will match 'env' as a :platform parameter
+   */
+  @AuthWorker()
+  @ApiBearerAuth()
+  @Get('worker/env')
+  @ApiOperation({
+    summary: 'Download worker env file',
+    description:
+      'Streams the common environment file for workers. Requires worker authentication.',
+  })
+  @ApiProduces('application/octet-stream')
+  @ApiResponse({
+    status: 200,
+    description: 'Env file stream',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing worker token',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Env file not found',
+  })
+  @Header('Cache-Control', 'no-cache')
+  async downloadEnvFile(@Res() res: Response): Promise<void> {
+    const streamableFile = await this.upgradeService.streamEnvFile();
+    
+    // Set headers for env file download
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': streamableFile.getHeaders().disposition,
+      'Content-Length': streamableFile.getHeaders().length,
+      'Cache-Control': 'no-cache',
+    });
+    
+    // Pipe the stream directly to response (bypasses ResponseInterceptor)
+    streamableFile.getStream().pipe(res);
+  }
+
+  /**
    * GET /api/v1/upgrade/worker/:platform
    * Streams the binary file for a specific platform
    * Workers call this endpoint to download their binaries
@@ -164,49 +210,6 @@ export class UpgradeController {
     const streamableFile = await this.upgradeService.streamBinary(platform);
     
     // Set headers for binary download
-    res.set({
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': streamableFile.getHeaders().disposition,
-      'Content-Length': streamableFile.getHeaders().length,
-      'Cache-Control': 'no-cache',
-    });
-    
-    // Pipe the stream directly to response (bypasses ResponseInterceptor)
-    streamableFile.getStream().pipe(res);
-  }
-
-  /**
-   * GET /api/v1/upgrade/worker/env
-   * Streams the common env file for workers
-   * Workers call this endpoint to download the shared env file
-   * Protected by worker authentication (client credentials)
-   */
-  @AuthWorker()
-  @ApiBearerAuth()
-  @Get('worker/env')
-  @ApiOperation({
-    summary: 'Download worker env file',
-    description:
-      'Streams the common environment file for workers. Requires worker authentication.',
-  })
-  @ApiProduces('application/octet-stream')
-  @ApiResponse({
-    status: 200,
-    description: 'Env file stream',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - invalid or missing worker token',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Env file not found',
-  })
-  @Header('Cache-Control', 'no-cache')
-  async downloadEnvFile(@Res() res: Response): Promise<void> {
-    const streamableFile = await this.upgradeService.streamEnvFile();
-    
-    // Set headers for env file download
     res.set({
       'Content-Type': 'application/octet-stream',
       'Content-Disposition': streamableFile.getHeaders().disposition,

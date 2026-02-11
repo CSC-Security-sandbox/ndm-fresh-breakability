@@ -98,6 +98,8 @@ export class WorkerOptionsService {
             downloadEnv: this.upgradeActivityService.downloadEnv.bind(this.upgradeActivityService),
             isBinaryStaged: this.upgradeActivityService.isBinaryStaged.bind(this.upgradeActivityService),
             getAuthToken: this.upgradeActivityService.getAuthToken.bind(this.upgradeActivityService),
+            getCpBaseUrl: this.upgradeActivityService.getCpBaseUrl.bind(this.upgradeActivityService),
+            detectPlatform: this.upgradeActivityService.detectPlatform.bind(this.upgradeActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

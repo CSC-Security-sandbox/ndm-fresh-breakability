@@ -34,8 +34,6 @@ import {
   BinaryMulticastWorkflowInput,
   BinaryMulticastWorkflowOutput,
   WorkerDownloadResult,
-  WorkerInfo,
-  UPGRADE_ENDPOINTS,
 } from './upgrade.types';
 
 // =============================================================================
@@ -59,33 +57,24 @@ async function log(traceId: string, message: string) {
 export async function BinaryMulticastWorkflow(
   input: BinaryMulticastWorkflowInput
 ): Promise<BinaryMulticastWorkflowOutput> {
-  const { traceId, workerIds, version, cpBaseUrl } = input;
+  const { traceId, workerIds, version } = input;
 
   log(traceId, `BinaryMulticastWorkflow starting for ${workerIds.length} workers, version ${version}`);
 
   const results: WorkerDownloadResult[] = [];
 
-  // Construct common env download URL (same for all platforms)
-  const envDownloadUrl = `${cpBaseUrl}${UPGRADE_ENDPOINTS.env}`;
-
   // Process all workers in parallel
+  // Platform is NOT passed here - each worker detects its own platform at runtime
   const workerPromises = workerIds.map(async (workerId) => {
-    // Determine platform from workerId or default to linux
-    // In real implementation, this would come from worker info
-    const platform = detectPlatformFromWorkerId(workerId);
     const taskQueue = `${workerId}-TaskQueue`;
-    const downloadUrl = `${cpBaseUrl}${UPGRADE_ENDPOINTS[platform]}`;
 
-    log(traceId, `Starting download for worker ${workerId} (${platform}) on queue ${taskQueue}`);
+    log(traceId, `Starting download for worker ${workerId} on queue ${taskQueue}`);
 
     try {
       const result = await executeChild(WorkerDownloadWorkflow, {
         args: [{
           traceId,
           workerId,
-          platform,
-          downloadUrl,
-          envDownloadUrl,
           version,
         }],
         workflowId: `WorkerDownload-${traceId}-${workerId}`,
@@ -96,7 +85,7 @@ export async function BinaryMulticastWorkflow(
 
       const downloadResult: WorkerDownloadResult = {
         workerId,
-        platform,
+        platform: result.platform || 'linux',
         status: result.status,
         message: result.message,
         stagedPath: result.stagedPath,
@@ -112,7 +101,7 @@ export async function BinaryMulticastWorkflow(
 
       return {
         workerId,
-        platform,
+        platform: 'linux' as const,
         status: 'failed' as const,
         message: errorMessage,
         timestamp: new Date().toISOString(),
@@ -152,20 +141,3 @@ export async function BinaryMulticastWorkflow(
   };
 }
 
-// =============================================================================
-// Helper functions
-// =============================================================================
-
-/**
- * Detect platform from workerId
- * In real implementation, this should come from worker info passed in input
- * For now, default to 'linux'
- */
-function detectPlatformFromWorkerId(workerId: string): 'linux' | 'windows' {
-  // TODO: This should be passed from the API based on worker info from DB
-  // For now, check if workerId contains 'win' as a simple heuristic
-  if (workerId.toLowerCase().includes('win')) {
-    return 'windows';
-  }
-  return 'linux';
-}

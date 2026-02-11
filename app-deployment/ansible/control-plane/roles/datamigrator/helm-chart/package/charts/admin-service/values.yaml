@@ -97,6 +97,8 @@ env:
     value: "$(MY_HOST_IP)"
   - name: PROMETHEUS_BASE_URL
     value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
 
 service:
   type: ClusterIP

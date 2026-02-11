@@ -56,10 +56,8 @@ export class UpgradeService {
     );
 
     try {
-      // Get CP base URL for workers to download from
-      const cpBaseUrl = this.getCpBaseUrl();
-
       // Start the BinaryMulticastWorkflow
+      // Workers will resolve CP URL and platform from their own config at runtime
       const handle = await this.workflowService.startWorkflow(
         WorkFlows.BINARY_MULTICAST,
         {
@@ -70,7 +68,6 @@ export class UpgradeService {
               traceId,
               workerIds: dto.workerIds,
               version: dto.version,
-              cpBaseUrl,
             },
           ],
         },
@@ -327,23 +324,5 @@ export class UpgradeService {
       filename: binaryFile,
       size: stat.size,
     };
-  }
-
-  /**
-   * Gets the CP base URL that workers use to download binaries
-   */
-  private getCpBaseUrl(): string {
-    // Try to get from env or config
-    const cpUrl = this.configService.get<string>('CP_BASE_URL');
-    if (cpUrl) {
-      return cpUrl;
-    }
-
-    // Fallback: construct from CP_HOST or default
-    const cpHost = this.configService.get<string>('CP_HOST') || 'localhost';
-    const cpPort = this.configService.get<string>('CP_PORT') || '3000';
-    const useHttps = this.configService.get<boolean>('USE_HTTPS') ?? true;
-
-    return `${useHttps ? 'https' : 'http'}://${cpHost}:${cpPort}`;
   }
 }

@@ -4,11 +4,14 @@ import { IsArray, IsString, IsOptional, ArrayNotEmpty } from 'class-validator';
 /**
  * DTO for POST /api/v1/upgrade/multicast
  * Triggers binary distribution to workers
+ * 
+ * Note: Platform is NOT needed in the payload.
+ * Workers detect their own platform via process.platform at runtime.
  */
 export class MulticastRequestDto {
   @ApiProperty({
     description: 'Worker IDs to distribute binaries to',
-    example: ['worker-123', 'worker-456'],
+    example: ['53d5f0cd-bdf8-4e59-86d2-2b4443670586', '17d5dd44-1639-43d0-8381-d9f68189c17e'],
     type: [String],
   })
   @IsArray()
