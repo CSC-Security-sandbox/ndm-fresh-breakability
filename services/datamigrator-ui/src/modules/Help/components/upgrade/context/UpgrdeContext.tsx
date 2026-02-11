@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { UpgradeContext } from "./context";
 import {
   UploadProgress,
@@ -14,6 +14,7 @@ import {
 } from "../constants/upgrade.constant";
 import { useLazyGetJobRunsQuery } from "@api/jobsApi";
 import {
+  useGetLatestUploadStatusQuery,
   useInitUploadMutation,
   useUploadChunkMutation,
   useFinalizeUploadMutation,
@@ -21,15 +22,9 @@ import {
   useTriggerUpgradeMutation,
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
-import { useSelector } from "react-redux";
-import { RootStateType } from "@store/store";
 import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
-
-
 export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
-
-
   // File state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -41,8 +36,16 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [blockingJobs, setBlockingJobs] = useState<BlockingJob[]>([]);
   const [showJobWarning, setShowJobWarning] = useState(false);
 
+  // UI visibility flags (determined by DB state)
+  const [showUploadUI, setShowUploadUI] = useState(true);
+  const [showUpgradeUI, setShowUpgradeUI] = useState(false);
+
   // Get project ID from store
   const { selectedProjectId } = useSelectedProjectId();
+
+  // Fetch latest status from DB on mount
+  const { data: latestStatus, isLoading: isLoadingStatus, refetch: refetchStatus } = 
+    useGetLatestUploadStatusQuery();
 
   // API hooks
   const [getJobRuns] = useLazyGetJobRunsQuery();
@@ -52,17 +55,37 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [cancelUpload] = useCancelUploadMutation();
   const [triggerUpgrade] = useTriggerUpgradeMutation();
 
+  // ═══════════════════════════════════════════════════════════════
+  // RESTORE STATE FROM DB ON MOUNT
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (latestStatus) {
+      setShowUploadUI(latestStatus.showUploadUI);
+      setShowUpgradeUI(latestStatus.showUpgradeUI);
+
+      // If there's a successful upload pending upgrade, restore the upload state
+      if (latestStatus.showUpgradeUI && latestStatus.filePath) {
+        setUploadProgress({
+          ...INITIAL_UPLOAD_STATE,
+          status: 'uploaded',
+          progress: 100,
+          fileName: latestStatus.fileName || '',
+          filePath: latestStatus.filePath,
+          totalBytes: latestStatus.fileSize || 0,
+          uploadedBytes: latestStatus.fileSize || 0,
+        });
+      }
+    }
+  }, [latestStatus]);
+
   // Derived states
   const isUploading = ['hashing', 'uploading', 'finalizing'].includes(uploadProgress.status);
   const isUploaded = uploadProgress.status === 'uploaded';
   const isUpgrading = ['checking-jobs', 'upgrading'].includes(upgradeProgress.status);
 
-  // NOTE: Checksum validation is NOT done on frontend
-  // The upgrade bundle contains checksums.sha256 file which is used by upgrade.sh
-  // to validate the contents after extraction on the VM
-
   // Handle file selection
   const handleFileSelect = useCallback((file: File | null) => {
+    console.log("handleFileSelect called with:", file);  // ADD THIS
     setSelectedFile(file);
     if (file) {
       setUploadProgress({
@@ -76,20 +99,19 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     setUpgradeProgress(INITIAL_UPGRADE_STATE);
   }, []);
 
-  // ============================================
-  // UPLOAD HANDLER - Uploads file to VM
-  // ============================================
+  // ═══════════════════════════════════════════════════════════════
+  // UPLOAD HANDLER
+  // ═══════════════════════════════════════════════════════════════
   const handleUpload = async () => {
     if (!selectedFile) return;
 
     try {
-      // Step 1: Initialize upload session (no checksum - validation via upgrade.sh)
       setUploadProgress((prev) => ({ ...prev, status: "uploading", progress: 0 }));
       
       const initResult = await initUpload({
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
-        checksum: "", // Checksum validation done by upgrade.sh using included checksums.sha256
+        checksum: "",
       }).unwrap();
 
       const { uploadId, totalChunks } = initResult;
@@ -100,7 +122,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         totalChunks,
       }));
 
-      // Step 2: Upload chunks
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
@@ -120,7 +141,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         }));
       }
 
-      // Step 3: Finalize - assemble chunks into final file
       setUploadProgress((prev) => ({ ...prev, status: "finalizing" }));
       const finalResult = await finalizeUpload(uploadId).unwrap();
 
@@ -128,8 +148,15 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         ...prev,
         status: "uploaded",
         progress: 100,
-        filePath: finalResult.path, // Path on VM
+        filePath: finalResult.path,
       }));
+
+      // Update UI flags after successful upload
+      setShowUploadUI(false);
+      setShowUpgradeUI(true);
+
+      // Refetch status to sync with DB
+      refetchStatus();
 
       notify.success(`File uploaded successfully to: ${finalResult.path}`);
     } catch (error: any) {
@@ -153,11 +180,12 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       }
     }
     setUploadProgress((prev) => ({ ...prev, status: "cancelled" }));
+    refetchStatus();
   };
 
-  // ============================================
-  // UPGRADE HANDLER - Checks jobs then triggers upgrade
-  // ============================================
+  // ═══════════════════════════════════════════════════════════════
+  // UPGRADE HANDLER
+  // ═══════════════════════════════════════════════════════════════
   const handleUpgrade = async () => {
     if (!isUploaded || !uploadProgress.filePath) {
       notify.error("Please upload a file first");
@@ -165,7 +193,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     }
 
     try {
-      // Step 1: Check for blocking jobs
       setUpgradeProgress({ status: "checking-jobs" });
 
       const jobRuns = await getJobRuns({ projectId: selectedProjectId }).unwrap();
@@ -174,7 +201,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       );
 
       if (blocking.length > 0) {
-        // Jobs are running - show warning
         setBlockingJobs(
           blocking.map((job: any) => ({
             jobRunId: job.jobRunId,
@@ -190,7 +216,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         return;
       }
 
-      // Step 2: No jobs running - trigger upgrade
       setUpgradeProgress({ status: "upgrading" });
 
       await triggerUpgrade({
@@ -199,6 +224,14 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       }).unwrap();
 
       setUpgradeProgress({ status: "success" });
+
+      // Update UI flags after successful upgrade
+      setShowUploadUI(true);
+      setShowUpgradeUI(false);
+
+      // Refetch status to sync with DB
+      refetchStatus();
+
       notify.success("Upgrade initiated successfully!");
     } catch (error: any) {
       console.error("Upgrade error:", error);
@@ -223,6 +256,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     setUpgradeProgress(INITIAL_UPGRADE_STATE);
     setBlockingJobs([]);
     setShowJobWarning(false);
+    setShowUploadUI(true);
+    setShowUpgradeUI(false);
   };
 
   const contextValue: UpgradeContextType = {
@@ -240,6 +275,9 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     handleUpgrade,
     closeJobWarning,
     handleReset,
+    showUploadUI,
+    showUpgradeUI,
+    isLoadingStatus,
   };
 
   return (

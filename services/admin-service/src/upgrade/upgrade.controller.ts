@@ -5,6 +5,7 @@ import {
     Delete,
     Param,
     Body,
+    Query,
     Req,
     Res,
     HttpStatus,
@@ -16,7 +17,7 @@ import {
     ApiResponse,
     ApiBearerAuth,
     ApiConsumes,
-    ApiBody,
+    ApiQuery,
   } from '@nestjs/swagger';
   import { Request, Response } from 'express';
   import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
@@ -24,16 +25,27 @@ import {
   import { InitUploadDto, InitUploadResponseDto } from './dto/init-upload.dto';
   import { UploadChunkResponseDto } from './dto/upload-chunk.dto';
   
-  @ApiTags('upgrade')                        // Swagger: Groups all endpoints under "upgrade"
-  @Controller('/api/v1/upgrade')             // Base path for all routes
+  @ApiTags('upgrade')
+  @Controller('/api/v1/upgrade')
   export class UpgradeController {
     constructor(private readonly upgradeService: UpgradeService) {}
   
     // ═══════════════════════════════════════════════════════════════
+    // GET LATEST STATUS - For UI state restoration after page refresh
+    // ═══════════════════════════════════════════════════════════════
+    @Auth()
+    @ApiBearerAuth()
+    @Get('latest-status')
+    @ApiOperation({ summary: 'Get the latest upload status for UI state restoration' })
+    async getLatestStatus() {
+      return this.upgradeService.getLatestUploadStatus();
+    }
+  
+    // ═══════════════════════════════════════════════════════════════
     // ENDPOINT 1: Initialize Upload Session
     // ═══════════════════════════════════════════════════════════════
-    @Auth()                                  // Requires valid JWT token
-    @ApiBearerAuth()                         // Swagger: Shows lock icon
+    @Auth()
+    @ApiBearerAuth()
     @Post('init')
     @ApiOperation({ summary: 'Initialize a new upgrade bundle upload session' })
     @ApiResponse({ status: 201, type: InitUploadResponseDto })
@@ -48,18 +60,15 @@ import {
     @ApiBearerAuth()
     @Post('chunk/:uploadId')
     @ApiOperation({ summary: 'Upload a single chunk of the upgrade bundle' })
-    @ApiConsumes('application/octet-stream')  // Accepts raw binary data
+    @ApiConsumes('application/octet-stream')
     @ApiResponse({ status: 200, type: UploadChunkResponseDto })
     async uploadChunk(
-      @Param('uploadId', ParseUUIDPipe) uploadId: string,  // Validates UUID format
-      @Req() req: Request,                                   // Raw request for streaming
-      @Res() res: Response,                                  // Raw response for manual control
+      @Param('uploadId', ParseUUIDPipe) uploadId: string,
+      @Req() req: Request,
+      @Res() res: Response,
     ): Promise<void> {
-      // Get chunk index from header (can't use body since body IS the chunk data)
       const chunkIndex = parseInt(req.headers['x-chunk-index'] as string, 10);
-      
       const result = await this.upgradeService.uploadChunk(uploadId, chunkIndex, req);
-      
       res.status(HttpStatus.OK).json(result);
     }
   
@@ -80,7 +89,7 @@ import {
     @Auth()
     @ApiBearerAuth()
     @Post('finalize/:uploadId')
-    @ApiOperation({ summary: 'Finalize upload: assemble chunks and verify checksum' })
+    @ApiOperation({ summary: 'Finalize upload: assemble chunks' })
     async finalizeUpload(@Param('uploadId', ParseUUIDPipe) uploadId: string) {
       return this.upgradeService.finalizeUpload(uploadId);
     }
@@ -95,14 +104,40 @@ import {
     async cancelUpload(@Param('uploadId', ParseUUIDPipe) uploadId: string) {
       return this.upgradeService.cancelUpload(uploadId);
     }
-
+  
+    // ═══════════════════════════════════════════════════════════════
+    // ENDPOINT 6: Trigger Upgrade
+    // ═══════════════════════════════════════════════════════════════
     @Auth()
     @ApiBearerAuth()
     @Post('trigger')
     @ApiOperation({ summary: 'Trigger the upgrade process' })
     async triggerUpgrade(
-    @Body() body: { filePath: string; fileName?: string },
+      @Body() body: { filePath: string; fileName?: string },
     ) {
-    return this.upgradeService.triggerUpgrade(body.filePath, body.fileName);
+      return this.upgradeService.triggerUpgrade(body.filePath, body.fileName);
+    }
+  
+    // ═══════════════════════════════════════════════════════════════
+    // ENDPOINT 7: Cleanup Directory
+    // ═══════════════════════════════════════════════════════════════
+    @Auth()
+    @ApiBearerAuth()
+    @Delete('cleanup')
+    @ApiOperation({ summary: 'Cleanup upgrade bundle directory' })
+    async cleanupDirectory() {
+      return this.upgradeService.cleanupDirectory();
+    }
+  
+    // ═══════════════════════════════════════════════════════════════
+    // ENDPOINT 8: Get Upload History (Audit)
+    // ═══════════════════════════════════════════════════════════════
+    @Auth()
+    @ApiBearerAuth()
+    @Get('history')
+    @ApiOperation({ summary: 'Get upload history for audit' })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    async getHistory(@Query('limit') limit?: number) {
+      return this.upgradeService.getUploadHistory(limit || 10);
     }
   }

@@ -22,16 +22,27 @@ const UploadFileSelector = () => {
     useContext(UpgradeContext);
 
   const handleClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
     fileInputRef.current?.click();
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("handleChange triggered");  // ADD THIS
+
     const file = event.target.files?.[0];
+    console.log("Selected file:", file);  // ADD THIS
+
     if (file) {
+      console.log("File name:", file.name);  // ADD THIS
+
       if (!file.name.match(/\.(tar\.gz|zip)$/)) {
         alert("Please select a .tar.gz or .zip file");
         return;
       }
+      console.log("Calling handleFileSelect");  // ADD THIS
+
       handleFileSelect(file);
     }
   };

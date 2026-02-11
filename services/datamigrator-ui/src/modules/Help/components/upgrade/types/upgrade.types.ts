@@ -30,22 +30,49 @@ export type BlockingJob = {
   sourceFileServerName?: string;
 };
 
+export type UpgradeStatus = 
+  | 'idle'
+  | 'checking-jobs'
+  | 'blocked'
+  | 'upgrading'
+  | 'success'
+  | 'error';
+
+export type UpgradeProgress = {
+  status: UpgradeStatus;
+  error?: string;
+};
+
 export type UpgradeContextType = {
-    selectedFile: File | null;
-    uploadProgress: UploadProgress;
-    isUploading: boolean;
-    isUploaded: boolean;
-    handleFileSelect: (file: File | null) => void;
-    handleUpload: () => Promise<void>;
-    handleCancelUpload: () => Promise<void>;
-    upgradeProgress: UpgradeProgress;
-    blockingJobs: BlockingJob[];
-    showJobWarning: boolean;
-    isUpgrading: boolean;
-    handleUpgrade: () => Promise<void>;
-    closeJobWarning: () => void;
-    handleReset: () => void;
-  };
+  // File selection
+  selectedFile: File | null;
+  handleFileSelect: (file: File | null) => void;
+  
+  // Upload state
+  uploadProgress: UploadProgress;
+  isUploading: boolean;
+  isUploaded: boolean;
+  handleUpload: () => Promise<void>;
+  handleCancelUpload: () => Promise<void>;
+  
+  // Upgrade state
+  upgradeProgress: UpgradeProgress;
+  blockingJobs: BlockingJob[];
+  showJobWarning: boolean;
+  isUpgrading: boolean;
+  handleUpgrade: () => Promise<void>;
+  closeJobWarning: () => void;
+  
+  // Reset
+  handleReset: () => void;
+  
+  // UI visibility flags (from DB state)
+  showUploadUI: boolean;
+  showUpgradeUI: boolean;
+  isLoadingStatus: boolean;
+};
+
+// API Response types
 export type InitUploadResponse = {
   uploadId: string;
   chunkSize: number;
@@ -74,15 +101,16 @@ export type UploadStatusResponse = {
   missingChunks: number[];
 };
 
-export type UpgradeStatus = 
-  | 'idle'
-  | 'checking-jobs'
-  | 'blocked'
-  | 'upgrading'
-  | 'success'
-  | 'error';
-
-export type UpgradeProgress = {
-  status: UpgradeStatus;
-  error?: string;
+export type LatestUploadStatusResponse = {
+  hasUpload: boolean;
+  uploadStatus?: string;
+  upgradeSuccess?: boolean;
+  fileName?: string;
+  filePath?: string;
+  fileSize?: number;
+  version?: string;
+  uploadCompletedAt?: string;
+  upgradeCompletedAt?: string;
+  showUploadUI: boolean;
+  showUpgradeUI: boolean;
 };

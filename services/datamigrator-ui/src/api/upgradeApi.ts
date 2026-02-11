@@ -1,6 +1,20 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { prepareHeaders } from "@api/api.utils";
 
+export interface LatestUploadStatusResponse {
+  hasUpload: boolean;
+  uploadStatus?: string;
+  upgradeSuccess?: boolean;
+  fileName?: string;
+  filePath?: string;
+  fileSize?: number;
+  version?: string;
+  uploadCompletedAt?: string;
+  upgradeCompletedAt?: string;
+  showUploadUI: boolean;
+  showUpgradeUI: boolean;
+}
+
 export const upgradeApi = createApi({
   reducerPath: "upgradeApi",
   tagTypes: ["UPLOAD_STATUS"],
@@ -13,6 +27,15 @@ export const upgradeApi = createApi({
   }),
 
   endpoints: (builder) => ({
+    // Get latest upload status for UI state restoration
+    getLatestUploadStatus: builder.query<LatestUploadStatusResponse, void>({
+      query: () => "/upgrade/latest-status",
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response;
+      },
+      providesTags: ["UPLOAD_STATUS"],
+    }),
+
     // Initialize upload session
     initUpload: builder.mutation({
       query: (body: { fileName: string; fileSize: number; checksum: string }) => ({
@@ -23,6 +46,7 @@ export const upgradeApi = createApi({
       transformResponse: (response: any) => {
         return response?.data?.items || response?.data || response;
       },
+      invalidatesTags: ["UPLOAD_STATUS"],
     }),
 
     // Upload a single chunk
@@ -49,7 +73,7 @@ export const upgradeApi = createApi({
       },
     }),
 
-    // Finalize upload (assemble chunks + verify checksum)
+    // Finalize upload (assemble chunks)
     finalizeUpload: builder.mutation({
       query: (uploadId: string) => ({
         url: `/upgrade/finalize/${uploadId}`,
@@ -58,6 +82,7 @@ export const upgradeApi = createApi({
       transformResponse: (response: any) => {
         return response?.data?.items || response?.data || response;
       },
+      invalidatesTags: ["UPLOAD_STATUS"],
     }),
 
     // Cancel upload
@@ -69,9 +94,10 @@ export const upgradeApi = createApi({
       transformResponse: (response: any) => {
         return response?.data?.items || response?.data || response;
       },
+      invalidatesTags: ["UPLOAD_STATUS"],
     }),
 
-    // Trigger upgrade (called after job check passes)
+    // Trigger upgrade
     triggerUpgrade: builder.mutation({
       query: (body: { filePath: string; fileName?: string }) => ({
         url: `/upgrade/trigger`,
@@ -81,14 +107,29 @@ export const upgradeApi = createApi({
       transformResponse: (response: any) => {
         return response?.data?.items || response?.data || response;
       },
+      invalidatesTags: ["UPLOAD_STATUS"],
+    }),
+
+    // Cleanup upgrade directory
+    cleanupUpgrade: builder.mutation<{ success: boolean; message: string }, void>({
+      query: () => ({
+        url: "/upgrade/cleanup",
+        method: "DELETE",
+      }),
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response;
+      },
+      invalidatesTags: ["UPLOAD_STATUS"],
     }),
   }),
 });
 
 export const {
+  useGetLatestUploadStatusQuery,
   useInitUploadMutation,
   useUploadChunkMutation,
   useFinalizeUploadMutation,
   useCancelUploadMutation,
   useTriggerUpgradeMutation,
+  useCleanupUpgradeMutation,
 } = upgradeApi;
