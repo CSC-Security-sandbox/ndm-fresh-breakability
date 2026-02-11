@@ -7,9 +7,11 @@ export class JobConfig implements Serializable {
   jobType: string;
   sourceFileServer: FileServerDetails;
   sourcePath: string;
+  sourceDirectoryPath?: string;
   workerIds?: string[];
   destinationFileServer?: FileServerDetails;
   destinationPath?: string;
+  destinationDirectoryPath?: string;
   options?:Options;
   skipDelete?: boolean //  Set to true for incremental or cutover jobs. When true, target files will be deleted if they are not present in the source.
   jobRunId?: string; // If set, this is a retry run - skip scan and use failed items from this job run
@@ -19,8 +21,10 @@ export class JobConfig implements Serializable {
     jobType: string,
     sourceFileServer: FileServerDetails,
     sourcePath: string,
+    sourceDirectoryPath?: string,
     destinationFileServer?: FileServerDetails,
     destinationPath?: string,
+    destinationDirectoryPath?: string,
     workerIds?: string[],
     options?: Options,
     skipDelete?: boolean,
@@ -31,7 +35,9 @@ export class JobConfig implements Serializable {
     this.sourceFileServer = sourceFileServer;
     this.destinationFileServer = destinationFileServer;
     this.sourcePath = sourcePath;
+    this.sourceDirectoryPath = sourceDirectoryPath;
     this.destinationPath = destinationPath;
+    this.destinationDirectoryPath = destinationDirectoryPath;
     this.workerIds = workerIds;
     this.options = options;
     this.skipDelete = skipDelete;
@@ -49,7 +55,9 @@ export class JobConfig implements Serializable {
     this.sourceFileServer = obj.sourceFileServer;
     this.destinationFileServer = obj.destinationFileServer;
     this.sourcePath = obj.sourcePath;
+    this.sourceDirectoryPath = obj.sourceDirectoryPath;
     this.destinationPath = obj.destinationPath;
+    this.destinationDirectoryPath = obj.destinationDirectoryPath;
     this.workerIds = obj.workerIds;
     this.options = obj.options;
     this.skipDelete = obj.skipDelete;

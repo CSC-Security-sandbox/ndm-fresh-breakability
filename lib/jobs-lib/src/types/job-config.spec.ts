@@ -13,6 +13,34 @@ describe('JobConfig Class', () => {
     expect(newJobConfig.jobId).toBe('job1');
   });
 
+  it('should retain explicit directory paths after serialization', () => {
+    const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'pathId', 'path', 'username', 'password', 'workingDirectory');
+    const destinationFileServer = new FileServerDetails('target-host', [ new NFS('/') ], 'destPathId', 'destPath', 'destUser', 'destPass', 'destWorkingDir');
+    const fs2 = new FileServerDetails('', [ new NFS('') ], 'pathId', 'path', 'username', 'password', 'workingDirectory');
+
+    const jobConfig = new JobConfig(
+      'job-dir',
+      'MIGRATE',
+      sourceFileServer,
+      '/share',
+      '/share/source',
+      destinationFileServer,
+      '/share',
+      '/share/destination',
+      ['worker1'],
+      {},
+      false,
+      undefined
+    );
+
+    const serialized = jobConfig.serialize();
+    const newJobConfig = new JobConfig('', '', fs2, '');
+    newJobConfig.deserialize(serialized);
+
+    expect(newJobConfig.sourceDirectoryPath).toBe('/share/source');
+    expect(newJobConfig.destinationDirectoryPath).toBe('/share/destination');
+  });
+
   it('should serialize and deserialize JobConfig with shouldScanADS option', () => {
     const sourceFileServer = new FileServerDetails('host', [ new NFS('root') ], 'pathId', 'path', 'username', 'password', 'workingDirectory');
     const fs2 = new FileServerDetails('', [ new NFS('') ], 'pathId', 'path', 'username', 'password', 'workingDirectory');
@@ -29,6 +57,8 @@ describe('JobConfig Class', () => {
       'DISCOVER',
       sourceFileServer,
       '/source',
+      undefined,
+      undefined,
       undefined,
       undefined,
       ['worker1'],
@@ -62,6 +92,8 @@ describe('JobConfig Class', () => {
       '/source',
       undefined,
       undefined,
+      undefined,
+      undefined,
       [],
       options
     );
@@ -89,6 +121,8 @@ describe('JobConfig Class', () => {
       '/source',
       undefined,
       undefined,
+      undefined,
+      undefined,
       [],
       options
     );
@@ -110,6 +144,8 @@ describe('JobConfig Class', () => {
       'MIGRATE',
       sourceFileServer,
       '/source',
+      undefined,
+      undefined,
       undefined,
       undefined,
       ['worker1'],
@@ -136,6 +172,8 @@ describe('JobConfig Class', () => {
       'MIGRATE',
       sourceFileServer,
       '/source',
+      undefined,
+      undefined,
       undefined,
       undefined,
       ['worker1'],
