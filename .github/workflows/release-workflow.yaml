@@ -62,10 +62,52 @@ jobs:
     with:
       build: ${{ needs.check-branch.outputs.build }}
     secrets: inherit
-  
-  build-vm-images:
+
+  package-artifacts:
     needs: [check-branch, build-worker-binary, build-docker-images]
+    uses: ./.github/workflows/package-artifacts.yaml
+    with:
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
+  
+  create-upgrade-bundle:
+    needs: [check-branch, package-artifacts]
+    uses: ./.github/workflows/ndm-upgrade-workflow.yaml
+    with:
+      build_version: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
+
+  build-vm-images:
+    needs: [check-branch, build-worker-binary, build-docker-images, package-artifacts]
     uses: ./.github/workflows/ndm-vm-image-build.yaml
     with:
       build: ${{ needs.check-branch.outputs.build }}
+      skip_package_artifacts: true
+      ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
+      ref_name: ${{ needs.package-artifacts.outputs.ref_name }}
+      build_type: ${{ needs.package-artifacts.outputs.build_type }}
+      build_version: ${{ needs.package-artifacts.outputs.build_version }}
+      worker_tag: ${{ needs.package-artifacts.outputs.worker_tag }}
+      worker_branch: ${{ needs.package-artifacts.outputs.worker_branch }}
+      admin_service_tag: ${{ needs.package-artifacts.outputs.admin_service_tag }}
+      admin_service_branch: ${{ needs.package-artifacts.outputs.admin_service_branch }}
+      config_service_tag: ${{ needs.package-artifacts.outputs.config_service_tag }}
+      config_service_branch: ${{ needs.package-artifacts.outputs.config_service_branch }}
+      datamigrator_ui_tag: ${{ needs.package-artifacts.outputs.datamigrator_ui_tag }}
+      datamigrator_ui_branch: ${{ needs.package-artifacts.outputs.datamigrator_ui_branch }}
+      db_writer_service_tag: ${{ needs.package-artifacts.outputs.db_writer_service_tag }}
+      db_writer_service_branch: ${{ needs.package-artifacts.outputs.db_writer_service_branch }}
+      jobs_service_tag: ${{ needs.package-artifacts.outputs.jobs_service_tag }}
+      jobs_service_branch: ${{ needs.package-artifacts.outputs.jobs_service_branch }}
+      keycloak_customizations_tag: ${{ needs.package-artifacts.outputs.keycloak_customizations_tag }}
+      keycloak_customizations_branch: ${{ needs.package-artifacts.outputs.keycloak_customizations_branch }}
+      reports_service_tag: ${{ needs.package-artifacts.outputs.reports_service_tag }}
+      reports_service_branch: ${{ needs.package-artifacts.outputs.reports_service_branch }}
+      db_migrations_tag: ${{ needs.package-artifacts.outputs.db_migrations_tag }}
+      db_migrations_branch: ${{ needs.package-artifacts.outputs.db_migrations_branch }}
+      support_service_tag: ${{ needs.package-artifacts.outputs.support_service_tag }}
+      support_service_branch: ${{ needs.package-artifacts.outputs.support_service_branch }}
+      linux_binary_name: ${{ needs.package-artifacts.outputs.linux_binary_name }}
+      windows_binary_name: ${{ needs.package-artifacts.outputs.windows_binary_name }}
+      binary_path: ${{ needs.package-artifacts.outputs.binary_path }}
     secrets: inherit

@@ -1,0 +1,738 @@
+# Standalone workflow that performs the same steps as the package-artifacts job in ndm-vm-image-build.
+# Can be run manually (workflow_dispatch) or called by another workflow (workflow_call).
+
+name: Package Artifacts
+
+env:
+  HELM_VERSION: 3.17.3
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to build (control-plane, worker, or all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - control-plane
+          - worker
+          - windows-installer
+      services_config:
+        description: 'JSON configuration for service tags and branches'
+        required: false
+        type: string
+        default: |
+          {
+            "worker": {"tag": "latest", "branch": "main"},
+            "admin-service": {"tag": "latest", "branch": "main"},
+            "config-service": {"tag": "latest", "branch": "main"},
+            "datamigrator-ui": {"tag": "latest", "branch": "main"},
+            "db-writer": {"tag": "latest", "branch": "main"},
+            "jobs-service": {"tag": "latest", "branch": "main"},
+            "keycloak-customizations": {"tag": "latest", "branch": "main"},
+            "reports-service": {"tag": "latest", "branch": "main"},
+            "db-migrations": {"tag": "latest", "branch": "main"},
+            "support-service": {"tag": "latest", "branch": "main"}
+          }
+      build:
+        description: 'Release version when on a release branch (e.g. 2025.08.17-preview). If empty and run from a release branch, derived from branch name.'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      build:
+        description: 'Build to release'
+        required: true
+        type: string
+      component:
+        description: 'Component (control-plane, worker, windows-installer, or all)'
+        required: false
+        default: 'all'
+        type: string
+      services_config:
+        description: 'JSON configuration for service tags and branches'
+        required: false
+        type: string
+      passthrough_only:
+        description: 'If true, skip packaging and only set outputs from passed inputs (caller already ran package-artifacts)'
+        required: false
+        default: false
+        type: boolean
+      ref_type:
+        description: 'Passthrough: ref_type (when passthrough_only)'
+        required: false
+        default: ''
+        type: string
+      ref_name:
+        description: 'Passthrough: ref_name'
+        required: false
+        default: ''
+        type: string
+      build_type:
+        description: 'Passthrough: build_type'
+        required: false
+        default: ''
+        type: string
+      build_version:
+        description: 'Passthrough: build_version'
+        required: false
+        default: ''
+        type: string
+      worker_tag:
+        description: 'Passthrough: worker_tag'
+        required: false
+        default: ''
+        type: string
+      worker_branch:
+        description: 'Passthrough: worker_branch'
+        required: false
+        default: ''
+        type: string
+      admin_service_tag:
+        description: 'Passthrough: admin_service_tag'
+        required: false
+        default: ''
+        type: string
+      admin_service_branch:
+        description: 'Passthrough: admin_service_branch'
+        required: false
+        default: ''
+        type: string
+      config_service_tag:
+        description: 'Passthrough: config_service_tag'
+        required: false
+        default: ''
+        type: string
+      config_service_branch:
+        description: 'Passthrough: config_service_branch'
+        required: false
+        default: ''
+        type: string
+      datamigrator_ui_tag:
+        description: 'Passthrough: datamigrator_ui_tag'
+        required: false
+        default: ''
+        type: string
+      datamigrator_ui_branch:
+        description: 'Passthrough: datamigrator_ui_branch'
+        required: false
+        default: ''
+        type: string
+      db_writer_service_tag:
+        description: 'Passthrough: db_writer_service_tag'
+        required: false
+        default: ''
+        type: string
+      db_writer_service_branch:
+        description: 'Passthrough: db_writer_service_branch'
+        required: false
+        default: ''
+        type: string
+      jobs_service_tag:
+        description: 'Passthrough: jobs_service_tag'
+        required: false
+        default: ''
+        type: string
+      jobs_service_branch:
+        description: 'Passthrough: jobs_service_branch'
+        required: false
+        default: ''
+        type: string
+      keycloak_customizations_tag:
+        description: 'Passthrough: keycloak_customizations_tag'
+        required: false
+        default: ''
+        type: string
+      keycloak_customizations_branch:
+        description: 'Passthrough: keycloak_customizations_branch'
+        required: false
+        default: ''
+        type: string
+      reports_service_tag:
+        description: 'Passthrough: reports_service_tag'
+        required: false
+        default: ''
+        type: string
+      reports_service_branch:
+        description: 'Passthrough: reports_service_branch'
+        required: false
+        default: ''
+        type: string
+      db_migrations_tag:
+        description: 'Passthrough: db_migrations_tag'
+        required: false
+        default: ''
+        type: string
+      db_migrations_branch:
+        description: 'Passthrough: db_migrations_branch'
+        required: false
+        default: ''
+        type: string
+      support_service_tag:
+        description: 'Passthrough: support_service_tag'
+        required: false
+        default: ''
+        type: string
+      support_service_branch:
+        description: 'Passthrough: support_service_branch'
+        required: false
+        default: ''
+        type: string
+      linux_binary_name:
+        description: 'Passthrough: linux_binary_name'
+        required: false
+        default: ''
+        type: string
+      windows_binary_name:
+        description: 'Passthrough: windows_binary_name'
+        required: false
+        default: ''
+        type: string
+      binary_path:
+        description: 'Passthrough: binary_path'
+        required: false
+        default: ''
+        type: string
+    outputs:
+      ref_type:
+        value: ${{ jobs.package-artifacts.outputs.ref_type }}
+      ref_name:
+        value: ${{ jobs.package-artifacts.outputs.ref_name }}
+      build_type:
+        value: ${{ jobs.package-artifacts.outputs.build_type }}
+      build_version:
+        value: ${{ jobs.package-artifacts.outputs.build_version }}
+      worker_tag:
+        value: ${{ jobs.package-artifacts.outputs.worker_tag }}
+      worker_branch:
+        value: ${{ jobs.package-artifacts.outputs.worker_branch }}
+      admin_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.admin_service_tag }}
+      admin_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.admin_service_branch }}
+      config_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.config_service_tag }}
+      config_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.config_service_branch }}
+      datamigrator_ui_tag:
+        value: ${{ jobs.package-artifacts.outputs.datamigrator_ui_tag }}
+      datamigrator_ui_branch:
+        value: ${{ jobs.package-artifacts.outputs.datamigrator_ui_branch }}
+      db_writer_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.db_writer_service_tag }}
+      db_writer_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.db_writer_service_branch }}
+      jobs_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.jobs_service_tag }}
+      jobs_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.jobs_service_branch }}
+      keycloak_customizations_tag:
+        value: ${{ jobs.package-artifacts.outputs.keycloak_customizations_tag }}
+      keycloak_customizations_branch:
+        value: ${{ jobs.package-artifacts.outputs.keycloak_customizations_branch }}
+      reports_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.reports_service_tag }}
+      reports_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.reports_service_branch }}
+      db_migrations_tag:
+        value: ${{ jobs.package-artifacts.outputs.db_migrations_tag }}
+      db_migrations_branch:
+        value: ${{ jobs.package-artifacts.outputs.db_migrations_branch }}
+      support_service_tag:
+        value: ${{ jobs.package-artifacts.outputs.support_service_tag }}
+      support_service_branch:
+        value: ${{ jobs.package-artifacts.outputs.support_service_branch }}
+      linux_binary_name:
+        value: ${{ jobs.package-artifacts.outputs.linux_binary_name }}
+      windows_binary_name:
+        value: ${{ jobs.package-artifacts.outputs.windows_binary_name }}
+      binary_path:
+        value: ${{ jobs.package-artifacts.outputs.binary_path }}
+
+permissions:
+  contents: read
+
+jobs:
+  package-artifacts:
+    runs-on: openlab
+    outputs:
+      ref_type: ${{ steps.passthrough.outputs.ref_type || steps.build_version.outputs.ref_type }}
+      ref_name: ${{ steps.passthrough.outputs.ref_name || steps.build_version.outputs.ref_name }}
+      build_type: ${{ steps.passthrough.outputs.build_type || steps.build_version.outputs.build_type }}
+      build_version: ${{ steps.passthrough.outputs.build_version || steps.build_version.outputs.build_version }}
+      worker_tag: ${{ steps.passthrough.outputs.worker_tag || steps.parse-config.outputs.worker_tag }}
+      worker_branch: ${{ steps.passthrough.outputs.worker_branch || steps.parse-config.outputs.worker_branch }}
+      admin_service_tag: ${{ steps.passthrough.outputs.admin_service_tag || steps.parse-config.outputs.admin_service_tag }}
+      admin_service_branch: ${{ steps.passthrough.outputs.admin_service_branch || steps.parse-config.outputs.admin_service_branch }}
+      config_service_tag: ${{ steps.passthrough.outputs.config_service_tag || steps.parse-config.outputs.config_service_tag }}
+      config_service_branch: ${{ steps.passthrough.outputs.config_service_branch || steps.parse-config.outputs.config_service_branch }}
+      datamigrator_ui_tag: ${{ steps.passthrough.outputs.datamigrator_ui_tag || steps.parse-config.outputs.datamigrator_ui_tag }}
+      datamigrator_ui_branch: ${{ steps.passthrough.outputs.datamigrator_ui_branch || steps.parse-config.outputs.datamigrator_ui_branch }}
+      db_writer_service_tag: ${{ steps.passthrough.outputs.db_writer_service_tag || steps.parse-config.outputs.db_writer_service_tag }}
+      db_writer_service_branch: ${{ steps.passthrough.outputs.db_writer_service_branch || steps.parse-config.outputs.db_writer_service_branch }}
+      jobs_service_tag: ${{ steps.passthrough.outputs.jobs_service_tag || steps.parse-config.outputs.jobs_service_tag }}
+      jobs_service_branch: ${{ steps.passthrough.outputs.jobs_service_branch || steps.parse-config.outputs.jobs_service_branch }}
+      keycloak_customizations_tag: ${{ steps.passthrough.outputs.keycloak_customizations_tag || steps.parse-config.outputs.keycloak_customizations_tag }}
+      keycloak_customizations_branch: ${{ steps.passthrough.outputs.keycloak_customizations_branch || steps.parse-config.outputs.keycloak_customizations_branch }}
+      reports_service_tag: ${{ steps.passthrough.outputs.reports_service_tag || steps.parse-config.outputs.reports_service_tag }}
+      reports_service_branch: ${{ steps.passthrough.outputs.reports_service_branch || steps.parse-config.outputs.reports_service_branch }}
+      db_migrations_tag: ${{ steps.passthrough.outputs.db_migrations_tag || steps.parse-config.outputs.db_migrations_tag }}
+      db_migrations_branch: ${{ steps.passthrough.outputs.db_migrations_branch || steps.parse-config.outputs.db_migrations_branch }}
+      support_service_tag: ${{ steps.passthrough.outputs.support_service_tag || steps.parse-config.outputs.support_service_tag }}
+      support_service_branch: ${{ steps.passthrough.outputs.support_service_branch || steps.parse-config.outputs.support_service_branch }}
+      linux_binary_name: ${{ steps.passthrough.outputs.linux_binary_name || steps.worker-binary.outputs.linux_binary_name }}
+      windows_binary_name: ${{ steps.passthrough.outputs.windows_binary_name || steps.worker-binary.outputs.windows_binary_name }}
+      binary_path: ${{ steps.passthrough.outputs.binary_path || steps.worker-binary.outputs.binary_path }}
+    steps:
+      - name: Set outputs from caller (passthrough mode)
+        if: ${{ inputs.passthrough_only }}
+        id: passthrough
+        run: |
+          echo "ref_type=${{ inputs.ref_type }}" >> $GITHUB_OUTPUT
+          echo "ref_name=${{ inputs.ref_name }}" >> $GITHUB_OUTPUT
+          echo "build_type=${{ inputs.build_type }}" >> $GITHUB_OUTPUT
+          echo "build_version=${{ inputs.build_version }}" >> $GITHUB_OUTPUT
+          echo "worker_tag=${{ inputs.worker_tag }}" >> $GITHUB_OUTPUT
+          echo "worker_branch=${{ inputs.worker_branch }}" >> $GITHUB_OUTPUT
+          echo "admin_service_tag=${{ inputs.admin_service_tag }}" >> $GITHUB_OUTPUT
+          echo "admin_service_branch=${{ inputs.admin_service_branch }}" >> $GITHUB_OUTPUT
+          echo "config_service_tag=${{ inputs.config_service_tag }}" >> $GITHUB_OUTPUT
+          echo "config_service_branch=${{ inputs.config_service_branch }}" >> $GITHUB_OUTPUT
+          echo "datamigrator_ui_tag=${{ inputs.datamigrator_ui_tag }}" >> $GITHUB_OUTPUT
+          echo "datamigrator_ui_branch=${{ inputs.datamigrator_ui_branch }}" >> $GITHUB_OUTPUT
+          echo "db_writer_service_tag=${{ inputs.db_writer_service_tag }}" >> $GITHUB_OUTPUT
+          echo "db_writer_service_branch=${{ inputs.db_writer_service_branch }}" >> $GITHUB_OUTPUT
+          echo "jobs_service_tag=${{ inputs.jobs_service_tag }}" >> $GITHUB_OUTPUT
+          echo "jobs_service_branch=${{ inputs.jobs_service_branch }}" >> $GITHUB_OUTPUT
+          echo "keycloak_customizations_tag=${{ inputs.keycloak_customizations_tag }}" >> $GITHUB_OUTPUT
+          echo "keycloak_customizations_branch=${{ inputs.keycloak_customizations_branch }}" >> $GITHUB_OUTPUT
+          echo "reports_service_tag=${{ inputs.reports_service_tag }}" >> $GITHUB_OUTPUT
+          echo "reports_service_branch=${{ inputs.reports_service_branch }}" >> $GITHUB_OUTPUT
+          echo "db_migrations_tag=${{ inputs.db_migrations_tag }}" >> $GITHUB_OUTPUT
+          echo "db_migrations_branch=${{ inputs.db_migrations_branch }}" >> $GITHUB_OUTPUT
+          echo "support_service_tag=${{ inputs.support_service_tag }}" >> $GITHUB_OUTPUT
+          echo "support_service_branch=${{ inputs.support_service_branch }}" >> $GITHUB_OUTPUT
+          echo "linux_binary_name=${{ inputs.linux_binary_name }}" >> $GITHUB_OUTPUT
+          echo "windows_binary_name=${{ inputs.windows_binary_name }}" >> $GITHUB_OUTPUT
+          echo "binary_path=${{ inputs.binary_path }}" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository
+        if: ${{ !inputs.passthrough_only }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Helm
+        if: ${{ !inputs.passthrough_only }}
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Export Azure credentials
+        if: ${{ !inputs.passthrough_only }}
+        run: |
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+      - name: Parse and set service configurations
+        if: ${{ !inputs.passthrough_only }}
+        id: parse-config
+        run: |
+          # Parse the JSON configuration or use defaults (support both workflow_dispatch and workflow_call)
+          SERVICES_CONFIG='${{ inputs.services_config || github.event.inputs.services_config }}'
+          
+          if [ -z "$SERVICES_CONFIG" ] || [ "$SERVICES_CONFIG" = "null" ]; then
+            echo "No services configuration provided, using defaults"
+            SERVICES_CONFIG='{
+              "worker": {"tag": "latest", "branch": "main"},
+              "admin-service": {"tag": "latest", "branch": "main"},
+              "config-service": {"tag": "latest", "branch": "main"},
+              "datamigrator-ui": {"tag": "latest", "branch": "main"},
+              "db-writer": {"tag": "latest", "branch": "main"},
+              "jobs-service": {"tag": "latest", "branch": "main"},
+              "keycloak-customizations": {"tag": "latest", "branch": "main"},
+              "reports-service": {"tag": "latest", "branch": "main"},
+              "db-migrations": {"tag": "latest", "branch": "main"},
+              "support-service": {"tag": "latest", "branch": "main"}
+            }'
+          fi
+          
+          # Extract individual service tags and set as environment variables
+          WORKER_TAG=$(echo "$SERVICES_CONFIG" | jq -r '.worker.tag // "latest"')
+          ADMIN_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."admin-service".tag // "latest"')
+          CONFIG_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."config-service".tag // "latest"')
+          DATAMIGRATOR_UI_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."datamigrator-ui".tag // "latest"')
+          DB_WRITER_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."db-writer".tag // "latest"')
+          JOBS_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."jobs-service".tag // "latest"')
+          KEYCLOAK_CUSTOMIZATIONS_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."keycloak-customizations".tag // "latest"')
+          REPORTS_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."reports-service".tag // "latest"')
+          DB_MIGRATIONS_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".tag // "latest"')
+          SUPPORT_SERVICE_TAG=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".tag // "latest"')
+
+          # Extract branches for each service
+          WORKER_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '.worker.branch // "main"' | sed 's#/#-#g')
+          ADMIN_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."admin-service".branch // "main"' | sed 's#/#-#g')
+          CONFIG_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."config-service".branch // "main"' | sed 's#/#-#g')
+          DATAMIGRATOR_UI_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."datamigrator-ui".branch // "main"' | sed 's#/#-#g')
+          DB_WRITER_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."db-writer".branch // "main"' | sed 's#/#-#g')
+          JOBS_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."jobs-service".branch // "main"' | sed 's#/#-#g')
+          KEYCLOAK_CUSTOMIZATIONS_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."keycloak-customizations".branch // "main"' | sed 's#/#-#g')
+          REPORTS_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."reports-service".branch // "main"' | sed 's#/#-#g')
+          DB_MIGRATIONS_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."db-migrations".branch // "main"' | sed 's#/#-#g')
+          SUPPORT_SERVICE_BRANCH=$(echo "$SERVICES_CONFIG" | jq -r '."support-service".branch // "main"' | sed 's#/#-#g')
+          
+          # Set as step outputs for other jobs
+          echo "worker_tag=$WORKER_TAG" >> $GITHUB_OUTPUT
+          echo "admin_service_tag=$ADMIN_SERVICE_TAG" >> $GITHUB_OUTPUT
+          echo "config_service_tag=$CONFIG_SERVICE_TAG" >> $GITHUB_OUTPUT
+          echo "datamigrator_ui_tag=$DATAMIGRATOR_UI_TAG" >> $GITHUB_OUTPUT
+          echo "db_writer_service_tag=$DB_WRITER_SERVICE_TAG" >> $GITHUB_OUTPUT
+          echo "jobs_service_tag=$JOBS_SERVICE_TAG" >> $GITHUB_OUTPUT
+          echo "keycloak_customizations_tag=$KEYCLOAK_CUSTOMIZATIONS_TAG" >> $GITHUB_OUTPUT
+          echo "reports_service_tag=$REPORTS_SERVICE_TAG" >> $GITHUB_OUTPUT
+          echo "db_migrations_tag=$DB_MIGRATIONS_TAG" >> $GITHUB_OUTPUT
+          echo "support_service_tag=$SUPPORT_SERVICE_TAG" >> $GITHUB_OUTPUT
+
+          echo "worker_branch=$WORKER_BRANCH" >> $GITHUB_OUTPUT
+          echo "admin_service_branch=$ADMIN_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+          echo "config_service_branch=$CONFIG_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+          echo "datamigrator_ui_branch=$DATAMIGRATOR_UI_BRANCH" >> $GITHUB_OUTPUT
+          echo "db_writer_service_branch=$DB_WRITER_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+          echo "jobs_service_branch=$JOBS_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+          echo "keycloak_customizations_branch=$KEYCLOAK_CUSTOMIZATIONS_BRANCH" >> $GITHUB_OUTPUT
+          echo "reports_service_branch=$REPORTS_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+          echo "db_migrations_branch=$DB_MIGRATIONS_BRANCH" >> $GITHUB_OUTPUT
+          echo "support_service_branch=$SUPPORT_SERVICE_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Determine build and ref
+        if: ${{ !inputs.passthrough_only }}
+        id: build_version
+        run: |
+          DATE_BASE=$(date +'%Y.%m.')
+          TIME_PART=$(date +'%d%H%M%S')
+          VERSION_BASE="${DATE_BASE}${TIME_PART}"
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/heads/release/* ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${REF#refs/heads/release/}"
+          elif [[ "$REF" == "refs/heads/main" ]]; then
+            REF_TYPE="branches"
+            REF_NAME="main"
+          elif [[ "$REF" == refs/heads/* ]]; then
+            REF_TYPE="branches"
+            REF_NAME="main"
+          else
+            REF_TYPE="branches"
+            REF_NAME="main"
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-nightly"
+            echo "build_type=nightly" >> $GITHUB_OUTPUT
+          elif [[ "$REF" == refs/heads/release/* ]]; then
+            BUILD_VERSION="${{ inputs.build || github.event.inputs.build }}"
+            if [ -z "$BUILD_VERSION" ]; then BUILD_VERSION="$REF_NAME"; fi
+            echo "build_type=${{ github.event_name == 'schedule' && 'nightly' || 'adhoc' }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "workflow_call" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-adhoc"
+            echo "build_type=adhoc" >> $GITHUB_OUTPUT
+          else
+            echo "Error: Unsupported event type or branch format for build versioning."
+            exit 1
+          fi
+          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+          echo "ref_type=$REF_TYPE" >> $GITHUB_OUTPUT
+          echo "ref_name=$REF_NAME" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Display Service Tags and Branches
+        if: ${{ !inputs.passthrough_only }}
+        run: |
+          echo "========== SERVICE CONFIGURATION SUMMARY =========="
+          echo "worker: tag=${{ steps.parse-config.outputs.worker_tag }}, branch=${{ steps.parse-config.outputs.worker_branch }}"
+          echo "admin-service: tag=${{ steps.parse-config.outputs.admin_service_tag }}, branch=${{ steps.parse-config.outputs.admin_service_branch }}"
+          echo "config-service: tag=${{ steps.parse-config.outputs.config_service_tag }}, branch=${{ steps.parse-config.outputs.config_service_branch }}"
+          echo "datamigrator-ui: tag=${{ steps.parse-config.outputs.datamigrator_ui_tag }}, branch=${{ steps.parse-config.outputs.datamigrator_ui_branch }}"
+          echo "db-writer: tag=${{ steps.parse-config.outputs.db_writer_service_tag }}, branch=${{ steps.parse-config.outputs.db_writer_service_branch }}"
+          echo "jobs-service: tag=${{ steps.parse-config.outputs.jobs_service_tag }}, branch=${{ steps.parse-config.outputs.jobs_service_branch }}"
+          echo "keycloak-customizations: tag=${{ steps.parse-config.outputs.keycloak_customizations_tag }}, branch=${{ steps.parse-config.outputs.keycloak_customizations_branch }}"
+          echo "reports-service: tag=${{ steps.parse-config.outputs.reports_service_tag }}, branch=${{ steps.parse-config.outputs.reports_service_branch }}"
+          echo "db-migrations: tag=${{ steps.parse-config.outputs.db_migrations_tag }}, branch=${{ steps.parse-config.outputs.db_migrations_branch }}"
+          echo "support-service: tag=${{ steps.parse-config.outputs.support_service_tag }}, branch=${{ steps.parse-config.outputs.support_service_branch }}"
+          echo "build version: ${{ steps.build_version.outputs.build_version }}"
+          echo "=================================================="
+          
+          echo "## Package Artifacts - Service Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Tag | Branch |" >> $GITHUB_STEP_SUMMARY
+          echo "| ------- | --- | ------ |" >> $GITHUB_STEP_SUMMARY
+          echo "| worker | \`${{ steps.parse-config.outputs.worker_tag }}\` | \`${{ steps.parse-config.outputs.worker_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| admin-service | \`${{ steps.parse-config.outputs.admin_service_tag }}\` | \`${{ steps.parse-config.outputs.admin_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| config-service | \`${{ steps.parse-config.outputs.config_service_tag }}\` | \`${{ steps.parse-config.outputs.config_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| datamigrator-ui | \`${{ steps.parse-config.outputs.datamigrator_ui_tag }}\` | \`${{ steps.parse-config.outputs.datamigrator_ui_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| db-writer | \`${{ steps.parse-config.outputs.db_writer_service_tag }}\` | \`${{ steps.parse-config.outputs.db_writer_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| jobs-service | \`${{ steps.parse-config.outputs.jobs_service_tag }}\` | \`${{ steps.parse-config.outputs.jobs_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| keycloak-customizations | \`${{ steps.parse-config.outputs.keycloak_customizations_tag }}\` | \`${{ steps.parse-config.outputs.keycloak_customizations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| reports-service | \`${{ steps.parse-config.outputs.reports_service_tag }}\` | \`${{ steps.parse-config.outputs.reports_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| db-migrations | \`${{ steps.parse-config.outputs.db_migrations_tag }}\` | \`${{ steps.parse-config.outputs.db_migrations_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| support-service | \`${{ steps.parse-config.outputs.support_service_tag }}\` | \`${{ steps.parse-config.outputs.support_service_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fetch and Replace tags and bundle docker images
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        env:
+          WORKER_TAG: ${{ steps.parse-config.outputs.worker_tag }}
+          ADMIN_SERVICE_TAG: ${{ steps.parse-config.outputs.admin_service_tag }}
+          CONFIG_SERVICE_TAG: ${{ steps.parse-config.outputs.config_service_tag }}
+          DATAMIGRATOR_UI_TAG: ${{ steps.parse-config.outputs.datamigrator_ui_tag }}
+          DB_WRITER_SERVICE_TAG: ${{ steps.parse-config.outputs.db_writer_service_tag }}
+          JOBS_SERVICE_TAG: ${{ steps.parse-config.outputs.jobs_service_tag }}
+          KEYCLOAK_CUSTOMIZATIONS_TAG: ${{ steps.parse-config.outputs.keycloak_customizations_tag }}
+          REPORTS_SERVICE_TAG: ${{ steps.parse-config.outputs.reports_service_tag }}
+          DB_MIGRATIONS_TAG: ${{ steps.parse-config.outputs.db_migrations_tag }}
+          SUPPORT_SERVICE_TAG: ${{ steps.parse-config.outputs.support_service_tag }}
+          WORKER_BRANCH: ${{ steps.parse-config.outputs.worker_branch }}
+          ADMIN_SERVICE_BRANCH: ${{ steps.parse-config.outputs.admin_service_branch }}
+          CONFIG_SERVICE_BRANCH: ${{ steps.parse-config.outputs.config_service_branch }}
+          DATAMIGRATOR_UI_BRANCH: ${{ steps.parse-config.outputs.datamigrator_ui_branch }}
+          DB_WRITER_SERVICE_BRANCH: ${{ steps.parse-config.outputs.db_writer_service_branch }}
+          JOBS_SERVICE_BRANCH: ${{ steps.parse-config.outputs.jobs_service_branch }}
+          KEYCLOAK_CUSTOMIZATIONS_BRANCH: ${{ steps.parse-config.outputs.keycloak_customizations_branch }}
+          REPORTS_SERVICE_BRANCH: ${{ steps.parse-config.outputs.reports_service_branch }}
+          DB_MIGRATIONS_BRANCH: ${{ steps.parse-config.outputs.db_migrations_branch }}
+          SUPPORT_SERVICE_BRANCH: ${{ steps.parse-config.outputs.support_service_branch }}
+        run: |
+          chmod +x ./app-deployment/scripts/get_tags.sh
+          ./app-deployment/scripts/get_tags.sh ${{ steps.build_version.outputs.build_version }} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
+
+      - name: Run helm package ansible playbook
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        run: |
+          ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
+
+      - name: Upload Docker tar and Helm chart tgz to artifactory
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        run: |
+          BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
+          BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
+
+          # Upload Docker image tar
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Docker tar to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Docker tar uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Docker tar not found, skipping upload."
+          fi
+
+          # Upload Helm chart tgz
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz ]; then
+            if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            else
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+            fi
+            for REPO_PATH in "cicd/ndm" "team/ndm"; do
+              TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
+              echo "Uploading Helm chart to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz \
+                "$TARGET_URL" \
+                -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+              echo "Helm chart uploaded successfully to $TARGET_URL."
+            done
+          else
+            echo "Helm chart tgz not found, skipping upload."
+          fi
+
+      - name: Download Worker Binary from Artifactory
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'worker' || (inputs.component || github.event.inputs.component || 'all') == 'windows-installer' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        id: worker-binary
+        run: |
+          BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
+          BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
+          WORKER_TAG="${{ steps.parse-config.outputs.worker_tag }}"
+          WORKER_BRANCH="${{ steps.parse-config.outputs.worker_branch }}"
+          
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            REF_TYPE="releases"
+            REF_NAME="${BASH_REMATCH[1]}"
+            BASE_PATH="releases"
+            WORKER_TAG="${{ inputs.build || github.event.inputs.build }}"
+            [ -z "$WORKER_TAG" ] && WORKER_TAG="$REF_NAME"
+          else
+            REF_TYPE="branches"
+            REF_NAME="${WORKER_BRANCH:-main}"
+            BASE_PATH="builds/worker"
+          fi
+          
+          echo "Using ref type: $REF_TYPE, ref name: $REF_NAME"
+          
+          # Determine worker version to use
+          if [[ "$WORKER_TAG" == "latest" ]]; then
+            echo "Fetching latest worker version from Artifactory..."
+            
+            LATEST_JSON_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/latest.json"
+            
+            # Download latest.json from Artifactory
+            curl -o "latest.json" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${LATEST_JSON_PATH}"
+            
+            if [ ! -f "latest.json" ] || [ ! -s "latest.json" ]; then
+              echo "Error: Failed to download latest.json or file is empty"
+              exit 1
+            fi
+            
+            SELECTED_VERSION=$(jq -r '.build_version' latest.json)
+            
+            if [[ -z "$SELECTED_VERSION" || "$SELECTED_VERSION" == "null" ]]; then
+              echo "Error: Couldn't extract build_version from latest.json"
+              cat latest.json
+              exit 1
+            fi
+            
+            echo "Using latest worker version: $SELECTED_VERSION"
+          elif [[ -n "${{ inputs.build || github.event.inputs.build }}" && "$WORKER_TAG" == "${{ inputs.build || github.event.inputs.build }}" ]]; then
+            echo "Using release worker tag: $WORKER_TAG"
+            SELECTED_VERSION="${WORKER_TAG}"
+          else
+            echo "Using specified worker tag: $WORKER_TAG"
+            SELECTED_VERSION="${WORKER_TAG::7}"
+          fi
+          
+          echo "SELECTED_VERSION=$SELECTED_VERSION" >> $GITHUB_ENV
+          
+          # artifact path
+          if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            ARTIFACT_PATH="releases/${REF_NAME}/worker"
+          else
+            ARTIFACT_PATH="${BASE_PATH}/${REF_TYPE}/${REF_NAME}/${SELECTED_VERSION}"
+          fi
+          
+          echo "binary_path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+          BINARY_PATH="${ARTIFACT_PATH}/datamigrator-worker-${SELECTED_VERSION}.zip"
+          
+          echo "Downloading worker binary from Artifactory..."
+          curl -o "worker.zip" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${BINARY_PATH}"
+          
+          if [ ! -f "worker.zip" ] || [ ! -s "worker.zip" ]; then
+            echo "Error: Failed to download worker binary or file is empty"
+            exit 1
+          fi
+          echo "Worker binary downloaded successfully."
+
+          echo "Downloading worker.env from Artifactory..."
+          curl -o "worker.env" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/${ARTIFACT_PATH}/worker-${SELECTED_VERSION}.env"
+
+          if [ ! -f "worker.env" ] || [ ! -s "worker.env" ]; then
+            echo "Error: Failed to download worker.env or file is empty"
+            exit 1
+          fi
+          echo "Worker environment file downloaded successfully."
+          
+          mkdir -p $GITHUB_WORKSPACE/worker_bin
+          unzip worker.zip -d $GITHUB_WORKSPACE/worker_bin
+          
+          if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" ]]; then
+            echo "Linux binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64"
+            LINUX_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}"
+            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-linux-x64" "$GITHUB_WORKSPACE/worker_bin/pkg/$LINUX_BINARY_NAME"
+            echo "Renamed binary to $LINUX_BINARY_NAME"
+          else
+            echo "Linux binary not found!"
+            ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
+            exit 1
+          fi
+
+          if [[ -f "$GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe" ]]; then
+            echo "Windows binary exists at $GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe"
+            WINDOWS_BINARY_NAME="datamigrator-worker-${BUILD_VERSION}.exe"
+            mv "$GITHUB_WORKSPACE/worker_bin/pkg/worker-win-x64.exe" "$GITHUB_WORKSPACE/worker_bin/pkg/$WINDOWS_BINARY_NAME"
+            echo "Renamed binary to $WINDOWS_BINARY_NAME"
+          else
+            echo "Windows binary not found!"
+            ls -la $GITHUB_WORKSPACE/worker_bin/pkg/
+            exit 1
+          fi
+
+          echo "linux_binary_name=$LINUX_BINARY_NAME" >> $GITHUB_OUTPUT
+          echo "windows_binary_name=$WINDOWS_BINARY_NAME" >> $GITHUB_OUTPUT
+
+          # Upload assets to Artifactory
+          # Create combined tarball with both Linux and Windows binaries
+          BINARIES_TARBALL="datamigrator-worker-${BUILD_VERSION}-binaries.tar.gz"
+          tar -czf "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" -C "$GITHUB_WORKSPACE/worker_bin/pkg" "$LINUX_BINARY_NAME" "$WINDOWS_BINARY_NAME"
+          echo "Created binaries tarball ${BINARIES_TARBALL} with both Linux and Windows binaries"
+
+          ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker"
+          BINARIES_TARBALL_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/${BINARIES_TARBALL}"
+          ENV_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
+          
+          for REPO_PATH in "cicd/ndm" "team/ndm"; do
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${BINARIES_TARBALL_PATH}"
+            echo "Uploading worker binaries tarball to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file "$GITHUB_WORKSPACE/worker_bin/pkg/${BINARIES_TARBALL}" \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "Worker binaries tarball uploaded successfully to $TARGET_URL."
+
+            TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ENV_PATH}"
+            echo "Uploading worker environment file to $TARGET_URL..."
+            curl --silent --show-error --fail --request PUT --upload-file "worker.env" \
+              "$TARGET_URL" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
+            echo "Worker environment file uploaded successfully to $TARGET_URL."
+          done
+      
+      - name: Download Docker images tarball
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        run: | 
+          cd app-deployment/artifacts
+          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
+          curl -o "ndm-docker-images.tar" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              $TARGET_URL
+
+      - name: Upload Ansible vars.yaml
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ansible-vars
+          path: app-deployment/ansible/control-plane/config/group_vars/vars.yaml
+
+      - name: Upload Helm chart artifact
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: helm-chart
+          path: app-deployment/artifacts/datamigrator-*.tgz
+
+      - name: Upload Docker image tar artifacts
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'control-plane' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: datamigrator-images
+          path: app-deployment/artifacts/*.tar
+
+      - name: Upload Worker Binaries as Artifact
+        if: ${{ !inputs.passthrough_only && ((inputs.component || github.event.inputs.component || 'all') == 'worker' || (inputs.component || github.event.inputs.component || 'all') == 'windows-installer' || (inputs.component || github.event.inputs.component || 'all') == 'all' || (inputs.component || github.event.inputs.component) == '') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: worker-binary
+          path: ${{ github.workspace }}/worker_bin/pkg/

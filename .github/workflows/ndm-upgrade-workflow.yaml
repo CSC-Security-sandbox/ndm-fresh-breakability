@@ -1,0 +1,161 @@
+# Creates an upgrade bundle in Artifactory: directory upgrade-${BUILD_VERSION} under
+# releases/${BUILD_VERSION}/ by copying docker/, helm/, worker/ within Artifactory
+# (no download to runner), then uploading upgrade.sh and checksums, then creating a .tar.
+# BUILD_VERSION is the same as in release-workflow (e.g. from branch release/2026.01.1).
+
+name: NDM Upgrade Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: 'Build version (e.g. 2026.01.1) - same as release-workflow build'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      build_version:
+        description: 'Build version (e.g. 2026.01.1) - from caller'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ARTIFACTORY_SERVER: 'https://generic.repo.eng.netapp.com/artifactory'
+  ARTIFACTORY_REPO: 'openlab-generic-local'
+  ARTIFACTORY_UPLOAD_REPO: 'openlab-generic'
+  ARTIFACTORY_PATH: 'cicd/ndm/releases'
+
+jobs:
+  create-upgrade-bundle:
+    runs-on: openlab
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 
+
+      - name: Copy docker file within Artifactory into upgrade-${BUILD_VERSION}/docker/
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          REPO="${{ env.ARTIFACTORY_REPO }}"
+          BASE="${ARTIFACTORY_PATH}/${BUILD_VERSION}"
+          SRC="${BASE}/docker/datamigrator-${BUILD_VERSION}.tar"
+          DST="${BASE}/upgrade-${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+          URL="${ARTIFACTORY_SERVER}/api/copy/${REPO}/${SRC}?to=/${REPO}/${DST}"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST "$URL"
+          echo "Copied docker file to upgrade-${BUILD_VERSION}/docker/ in Artifactory"
+
+      - name: Copy helm file within Artifactory into upgrade-${BUILD_VERSION}/helm/
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          REPO="${{ env.ARTIFACTORY_REPO }}"
+          BASE="${ARTIFACTORY_PATH}/${BUILD_VERSION}"
+          SRC="${BASE}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          DST="${BASE}/upgrade-${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          URL="${ARTIFACTORY_SERVER}/api/copy/${REPO}/${SRC}?to=/${REPO}/${DST}"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST "$URL"
+          echo "Copied helm file to upgrade-${BUILD_VERSION}/helm/ in Artifactory"
+
+      - name: Copy worker file(s) within Artifactory into upgrade-${BUILD_VERSION}/worker/
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          REPO="${{ env.ARTIFACTORY_REPO }}"
+          BASE="${ARTIFACTORY_PATH}/${BUILD_VERSION}"
+          # Required: worker zip
+          SRC="${BASE}/worker/datamigrator-worker-${BUILD_VERSION}.zip"
+          DST="${BASE}/upgrade-${BUILD_VERSION}/worker/datamigrator-worker-${BUILD_VERSION}.zip"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST "${ARTIFACTORY_SERVER}/api/copy/${REPO}/${SRC}?to=/${REPO}/${DST}"
+          echo "Copied worker zip"
+          # Optional: worker env
+          SRC="${BASE}/worker/worker-${BUILD_VERSION}.env"
+          DST="${BASE}/upgrade-${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env"
+          curl -sf -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST "${ARTIFACTORY_SERVER}/api/copy/${REPO}/${SRC}?to=/${REPO}/${DST}" || echo "Skip worker env (optional)"
+          echo "Copied worker file(s) to upgrade-${BUILD_VERSION}/worker/ in Artifactory"
+
+      - name: Upload upgrade.sh to Artifactory (upgrade-${BUILD_VERSION}/)
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          DST="${ARTIFACTORY_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}/upgrade.sh"
+          URL="${ARTIFACTORY_SERVER}/${ARTIFACTORY_UPLOAD_REPO}/${DST}"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT --upload-file upgrade/upgrade.sh "$URL"
+          echo "Uploaded upgrade.sh to upgrade-${BUILD_VERSION}/ in Artifactory"
+
+      - name: Download upgrade bundle files to runner
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          BASE="${ARTIFACTORY_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}"
+          URL_LOCAL="${ARTIFACTORY_SERVER}/${ARTIFACTORY_REPO}/${BASE}"
+          mkdir -p "upgrade-${BUILD_VERSION}"/{docker,helm,worker}
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "upgrade-${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar" "${URL_LOCAL}/docker/datamigrator-${BUILD_VERSION}.tar"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "upgrade-${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz" "${URL_LOCAL}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "upgrade-${BUILD_VERSION}/worker/datamigrator-worker-${BUILD_VERSION}.zip" "${URL_LOCAL}/worker/datamigrator-worker-${BUILD_VERSION}.zip"
+          curl -sf -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "upgrade-${BUILD_VERSION}/worker/worker-${BUILD_VERSION}.env" "${URL_LOCAL}/worker/worker-${BUILD_VERSION}.env" || true
+          cp upgrade/upgrade.sh "upgrade-${BUILD_VERSION}/upgrade.sh"
+          echo "Downloaded upgrade bundle files"
+
+      - name: Create checksums.sha256
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          cd "upgrade-${BUILD_VERSION}"
+          sha256sum \
+            "docker/datamigrator-${BUILD_VERSION}.tar" \
+            "helm/datamigrator-${BUILD_VERSION}.tgz" \
+            "worker/datamigrator-worker-${BUILD_VERSION}.zip" \
+            "upgrade.sh" \
+            > checksums.sha256
+          if [ -f "worker/worker-${BUILD_VERSION}.env" ]; then
+            sha256sum "worker/worker-${BUILD_VERSION}.env" >> checksums.sha256
+          fi
+          echo "Created checksums.sha256:"
+          cat checksums.sha256
+
+      - name: Upload checksums.sha256 to Artifactory
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          BASE="${ARTIFACTORY_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}"
+          # Use .sha256.txt so Artifactory deploys as artifact; .sha256 is treated as checksum metadata and requires the target file to exist
+          UPLOAD_URL="${ARTIFACTORY_SERVER}/${ARTIFACTORY_UPLOAD_REPO}/${BASE}/checksums.sha256.txt"
+          curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -T "upgrade-${BUILD_VERSION}/checksums.sha256" "$UPLOAD_URL"
+          echo "Uploaded checksums.sha256 to Artifactory as checksums.sha256.txt"
+
+      - name: Create tar of upgrade-${BUILD_VERSION}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          tar -cvf "upgrade-${BUILD_VERSION}.tar" "upgrade-${BUILD_VERSION}"
+          echo "Created upgrade-${BUILD_VERSION}.tar"
+
+      - name: Upload upgrade tar to Artifactory (releases/${BUILD_VERSION}/)
+        env:
+          NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+          NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          BUILD_VERSION="${{ inputs.build_version }}"
+          TAR_PATH="${ARTIFACTORY_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}.tar"
+          URL="${ARTIFACTORY_SERVER}/${ARTIFACTORY_UPLOAD_REPO}/${TAR_PATH}"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT --upload-file "upgrade-${BUILD_VERSION}.tar" "$URL"
+          echo "Uploaded upgrade-${BUILD_VERSION}.tar to Artifactory at ${TAR_PATH}"
+
+      - name: Upload upgrade tar as workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: upgrade-${{ inputs.build_version }}
+          path: upgrade-${{ inputs.build_version }}.tar
