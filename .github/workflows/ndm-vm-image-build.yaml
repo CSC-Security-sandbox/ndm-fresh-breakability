@@ -1379,6 +1379,85 @@ jobs:
             echo "worker_template=${{ steps.image-info.outputs.image_name }}" >> $GITHUB_OUTPUT
           fi
 
+  create-upgrade-bundle:
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    needs: [package-artifacts, packer, upload-windows-installer]
+    runs-on: openlab
+    env:
+      BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
+      NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
+      NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
+      ARTIFACTORY_URL: "https://generic.repo.eng.netapp.com/artifactory"
+      REPO: "openlab-generic"
+      BASE_PATH: "cicd/ndm/releases"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Copy artifacts within Artifactory into upgrade bundle
+        run: |
+          BASE="${BASE_PATH}/${BUILD_VERSION}"
+          UPGRADE="upgrade-${BUILD_VERSION}"
+          copy() {
+            local src="$1" dst="$2" flags="${3:--f}"
+            curl $flags -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST \
+              "${ARTIFACTORY_URL}/api/copy/${REPO}/${src}?to=/${REPO}/${dst}"
+          }
+          copy "${BASE}/docker/datamigrator-${BUILD_VERSION}.tar"          "${BASE}/${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"
+          copy "${BASE}/helm/datamigrator-${BUILD_VERSION}.tgz"            "${BASE}/${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          copy "${BASE}/worker/datamigrator-worker-${BUILD_VERSION}.zip"   "${BASE}/${UPGRADE}/worker/datamigrator-worker-${BUILD_VERSION}.zip"
+          copy "${BASE}/worker/worker-${BUILD_VERSION}.env"                "${BASE}/${UPGRADE}/worker/worker-${BUILD_VERSION}.env" "-sf" || echo "Skipped worker env (optional)"
+
+      - name: Upload upgrade.sh to Artifactory
+        run: |
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
+            --upload-file upgrade/upgrade.sh \
+            "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}/upgrade.sh"
+
+      - name: Download bundle, create checksums and tar
+        run: |
+          UPGRADE="upgrade-${BUILD_VERSION}"
+          URL="${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}"
+          dl() { curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "$1" "${URL}/$2"; }
+
+          mkdir -p "${UPGRADE}"/{docker,helm,worker}
+          dl "${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"         "docker/datamigrator-${BUILD_VERSION}.tar"
+          dl "${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"           "helm/datamigrator-${BUILD_VERSION}.tgz"
+          dl "${UPGRADE}/worker/datamigrator-worker-${BUILD_VERSION}.zip"  "worker/datamigrator-worker-${BUILD_VERSION}.zip"
+          curl -sf -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L \
+            -o "${UPGRADE}/worker/worker-${BUILD_VERSION}.env" "${URL}/worker/worker-${BUILD_VERSION}.env" || true
+          cp upgrade/upgrade.sh "${UPGRADE}/upgrade.sh"
+
+          # Checksums
+          cd "${UPGRADE}"
+          sha256sum \
+            "docker/datamigrator-${BUILD_VERSION}.tar" \
+            "helm/datamigrator-${BUILD_VERSION}.tgz" \
+            "worker/datamigrator-worker-${BUILD_VERSION}.zip" \
+            "upgrade.sh" \
+            > checksums.sha256
+          [ -f "worker/worker-${BUILD_VERSION}.env" ] && sha256sum "worker/worker-${BUILD_VERSION}.env" >> checksums.sha256
+          echo "checksums.sha256:"; cat checksums.sha256
+          cd ..
+
+          tar -cvf "${UPGRADE}.tar" "${UPGRADE}"
+
+      - name: Upload checksums and upgrade tar to Artifactory
+        run: |
+          UPGRADE="upgrade-${BUILD_VERSION}"
+          BASE="${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}"
+          # .sha256.txt so Artifactory treats it as an artifact, not checksum metadata
+          curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" \
+            -T "${UPGRADE}/checksums.sha256" "${ARTIFACTORY_URL}/${REPO}/${BASE}/checksums.sha256.txt"
+          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
+            --upload-file "${UPGRADE}.tar" "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar"
+
+      - name: Upload upgrade tar as workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: upgrade-${{ env.BUILD_VERSION }}
+          path: upgrade-${{ env.BUILD_VERSION }}.tar
+
   notify-build-completion:
     if: ${{ github.event_name == 'schedule' }}
     needs: [package-artifacts, packer, upload-windows-installer]
@@ -1555,4 +1634,3 @@ jobs:
       build_version: ${{ needs.package-artifacts.outputs.build_version }}
       ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
     secrets: inherit
-
