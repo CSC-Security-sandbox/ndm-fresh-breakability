@@ -42,7 +42,7 @@ export class VolumeEntity extends Base {
     isValid: boolean;
 
     @ApiProperty({ description: 'isDisabled' })
-    @Column({ type: 'boolean', nullable: true, default: false, name: 'is_disabled' })
+    @Column({ type: 'boolean', nullable: true, default: true, name: 'is_disabled' })
     isDisabled: boolean;
 
     @ApiProperty({ description: 'Directory path on the file system (for SMB this is different from share name)' })

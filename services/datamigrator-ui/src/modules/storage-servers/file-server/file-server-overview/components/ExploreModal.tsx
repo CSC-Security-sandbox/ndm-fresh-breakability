@@ -234,6 +234,7 @@ interface DirectoriesContentProps {
   onNavigateToFolder: (folderPath: string) => void;
   onPathChange: (path: string) => void;
   onBackToExportPaths: () => void;
+  fileServerId: string;
 }
 
 const DirectoriesContent = ({
@@ -247,7 +248,19 @@ const DirectoriesContent = ({
   onNavigateToFolder,
   onPathChange,
   onBackToExportPaths,
+  fileServerId,
 }: DirectoriesContentProps) => {
+  // Search/Jump to path state
+  const [searchPath, setSearchPath] = useState<string>(currentPath);
+  const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Sync search bar with current path when navigating via folder clicks or parent button
+  useEffect(() => {
+    setSearchPath(currentPath);
+    setSearchError(null); // Clear any previous search errors when path changes
+  }, [currentPath]);
+
   const handleParentClick = () => {
     const parentPath =
       currentPath.substring(0, currentPath.lastIndexOf("/")) || "/";
@@ -257,6 +270,57 @@ const DirectoriesContent = ({
   const handleFolderClick = (item: DirectoryItem) => {
     if (item.type === "directory") {
       onNavigateToFolder(item.path);
+    }
+  };
+
+  // Handle search/jump to path
+  const handleJumpToPath = async () => {
+    if (!searchPath.trim() || !exportPath || !fileServerId) {
+      return;
+    }
+
+    // Normalize the path - ensure it starts with /
+    let normalizedPath = searchPath.trim();
+    if (!normalizedPath.startsWith("/")) {
+      normalizedPath = "/" + normalizedPath;
+    }
+    // Remove trailing slash if present (except for root)
+    if (normalizedPath !== "/" && normalizedPath.endsWith("/")) {
+      normalizedPath = normalizedPath.slice(0, -1);
+    }
+
+    setIsValidating(true);
+    setSearchError(null);
+
+    try {
+      // Validate the path by trying to fetch its contents
+      await fetchDirectoryContents(
+        fileServerId,
+        exportPath.volumePath,
+        normalizedPath
+      );
+      
+      // If successful, navigate to that path
+      onPathChange(normalizedPath);
+      // Keep the path in search bar so user can see where they navigated
+      setSearchPath(normalizedPath);
+      setSearchError(null);
+    } catch (err) {
+      console.error("Path validation failed:", err);
+      setSearchError(
+        err instanceof Error 
+          ? `Invalid path: ${err.message}` 
+          : "Path not found or inaccessible"
+      );
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Handle Enter key in search input
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !isValidating) {
+      handleJumpToPath();
     }
   };
 
@@ -272,6 +336,41 @@ const DirectoriesContent = ({
             Export Path:{" "}
             <span className="font-mono">{exportPath?.volumePath}</span>
           </Box>
+        </Box>
+      </Box>
+
+      {/* Jump to Path Search Bar */}
+      <Box className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+        <Box className="text-sm font-semibold text-gray-700 mb-2">
+          Jump to Path
+        </Box>
+        <Box className="flex gap-2">
+          <input
+            type="text"
+            value={searchPath}
+            onChange={(e) => {
+              setSearchPath(e.target.value);
+              setSearchError(null); // Clear error when typing
+            }}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Enter path (e.g., /folder1/subfolder)"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={isValidating}
+          />
+          <Button
+            onClick={handleJumpToPath}
+            disabled={!searchPath.trim() || isValidating}
+          >
+            {isValidating ? "Validating..." : "Go"}
+          </Button>
+        </Box>
+        {searchError && (
+          <Box className="mt-2 text-sm text-red-600">
+            {searchError}
+          </Box>
+        )}
+        <Box className="mt-2 text-xs text-gray-500">
+          Enter an absolute path relative to the export path to jump directly to that directory.
         </Box>
       </Box>
 
@@ -591,6 +690,7 @@ const ExploreModal = ({
             onNavigateToFolder={handleNavigateToFolder}
             onPathChange={handlePathChange}
             onBackToExportPaths={handleBackToExportPaths}
+            fileServerId={fileServerId}
           />
         )}
       </ModalContent>
