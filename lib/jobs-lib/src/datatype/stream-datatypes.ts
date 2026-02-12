@@ -14,6 +14,7 @@ export class ItemInfo implements Serializable {
     size: number;
     inode: number;
     isDeleted: boolean;
+    checksumTime: Date | null;
     
 
     constructor(
@@ -27,7 +28,8 @@ export class ItemInfo implements Serializable {
         targetMeta: ItemMeta,
         size: number,
         inode: number,
-        isDeleted: boolean = false
+        isDeleted: boolean = false,
+        checksumTime: Date | null = null
     ) {
         this.fileName = fileName;
         this.isDirectory = isDirectory;
@@ -40,6 +42,7 @@ export class ItemInfo implements Serializable {
         this.size = size;
         this.inode = inode;
         this.isDeleted = isDeleted;
+        this.checksumTime = checksumTime;
     }
 
     serialize(): string {
