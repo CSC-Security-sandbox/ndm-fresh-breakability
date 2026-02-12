@@ -1,860 +1,344 @@
-# name: Windows Installer Signing & Release
-
-# on:
-#   workflow_dispatch:
-#     inputs:
-#       windows_installer_name:
-#         description: "Windows Installer filename for uploading(without .exe extension) should be downloaded from artifactory from the release folder"
-#         required: true
-#         type: string
-#       release_folder:
-#         description: "Release folder name (e.g., preview_x). If this folder already exists in scratch space (created by GCP or OVA workflows), use it; otherwise, create a new one."
-#         required: true
-#         type: string
-#       artifactory_path:
-#         description: "Artifactory path (e.g., releases/preview_x/windows-installer) for downloading the windows installer"
-#         required: true
-#         type: string
-
-# env:
-#   ARTIFACTORY_BASE_URL: ${{ vars.ARTIFACTORY_BASE_URL || 'https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm'}}
-#   LOCAL_BASE_PATH: ${{ vars.LOCAL_BASE_PATH || '/home/ubuntu'}}
-#   IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing'}}
-#   SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space'}}
-
-# permissions:
-#   contents: read
-
-# jobs:
-#   windows-installer-signing:
-#     runs-on: openlab
-#     outputs:
-#       signed_installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}
-#       checksum_file: ${{ steps.execute-signing-prep.outputs.checksum_file }}
-#       release_folder: ${{ steps.execute-signing-prep.outputs.release_folder }}
-    
-#     steps:
-#       - name: Install SSH Tools
-#         run: |
-#           # sudo apt-get update -qq
-#           sudo apt-get install -y sshpass openssh-client curl
-
-#       - name: Extract Branch Name
-#         id: branch-info
-#         run: |
-#           # Extract branch name from github.ref
-#           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-#           # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
-#           BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-#           echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
-#           echo "Branch suffix for file naming: $BRANCH_SUFFIX"
-
-#       - name: Add SSH Host Keys to known_hosts
-#         env:
-#           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
-#           WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
-#           LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
-#         run: |
-#           # Add Linux runner host key to GitHub runner's known_hosts
-#           mkdir -p ~/.ssh
-#           chmod 700 ~/.ssh
-#           ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts 2>/dev/null
-#           chmod 644 ~/.ssh/known_hosts
-          
-#           # Add Windows server host key to Linux runner's known_hosts
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} "
-#             mkdir -p ~/.ssh
-#             chmod 700 ~/.ssh
-#             ssh-keyscan -H '${WINDOWS_SERVER}' >> ~/.ssh/known_hosts 2>/dev/null
-#             chmod 644 ~/.ssh/known_hosts
-#           "
-#           echo "Host keys added for both Linux runner and Windows server"
-
-#       - name: Download and Prepare Windows Installer
-#         id: download-installer
-#         env:
-#           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
-#           INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name }}
-#           RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
-#           ARTIFACTORY_PATH: ${{ github.event.inputs.artifactory_path }}
-#           LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
-#           IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
-#           ARTIFACTORY_BASE: ${{ env.ARTIFACTORY_BASE_URL }}
-#           BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
-#         run: |
-#           # Build the remote command as a single string to avoid heredoc issues
-#           REMOTE_CMD=$(cat << 'CMDEOF'
-#           set -e
-#           echo "Starting Windows Installer Signing Process"
-#           echo "Release Folder: __RELEASE_FOLDER__"
-#           echo "Installer: __INSTALLER_NAME__.exe"
-#           echo "Branch Suffix: __BRANCH_SUFFIX__"
-          
-#           LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
-#           IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
-#           ARTIFACTORY_BASE="__ARTIFACTORY_BASE__"
-#           ARTIFACTORY_PATH="__ARTIFACTORY_PATH__"
-#           INSTALLER_NAME="__INSTALLER_NAME__"
-#           BRANCH_SUFFIX="__BRANCH_SUFFIX__"
-#           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          
-#           # Create new installer name with branch suffix
-#           NEW_INSTALLER_NAME="${INSTALLER_NAME}-${BRANCH_SUFFIX}"
-          
-#           # Create directory structure
-#           echo "Creating directories..."
-#           sudo mkdir -p "${LOCAL_PATH}"
-#           sudo mkdir -p "${IMAGE_SIGNING_PATH}"
-          
-#           # Download Windows Installer from Artifactory
-#           echo "Downloading Windows Installer from Artifactory..."
-#           cd "${LOCAL_PATH}"
-#           INSTALLER_URL="${ARTIFACTORY_BASE}/${ARTIFACTORY_PATH}/${INSTALLER_NAME}.exe"
-#           echo "Downloading from: ${INSTALLER_URL}"
-          
-#           sudo curl -o "${NEW_INSTALLER_NAME}.exe" "${INSTALLER_URL}"
-#           CURL_EXIT_CODE=$?
-#           if [ $CURL_EXIT_CODE -ne 0 ] || [ ! -f "${NEW_INSTALLER_NAME}.exe" ]; then
-#             echo "Failed to download Windows Installer from ${INSTALLER_URL} (curl exit code: $CURL_EXIT_CODE)"
-#             exit 1
-#           fi
-#           echo "Windows Installer downloaded as: ${NEW_INSTALLER_NAME}.exe"
-          
-#           # Move installer to image signing mount
-#           echo "Moving installer to image signing mount..."
-#           sudo cp "${NEW_INSTALLER_NAME}.exe" "${IMAGE_SIGNING_PATH}/"
-#           sudo chmod 644 "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
-          
-#           if [ ! -f "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe" ]; then
-#             echo "Failed to copy installer to image signing mount"
-#             exit 1
-#           fi
-#           echo "Installer copied to: ${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
-#           echo "SUCCESS: Download and prepare step completed"
-#           echo "OUTPUT_INSTALLER_NAME:${NEW_INSTALLER_NAME}"
-#           CMDEOF
-#           )
-          
-#           # Substitute variables into the command
-#           REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
-#           REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
-#           REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_PATH__/$ARTIFACTORY_PATH}"
-#           REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
-#           REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
-#           REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_BASE__/$ARTIFACTORY_BASE}"
-#           REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
-          
-#           # Execute remote command and capture output
-#           OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
-#           echo "$OUTPUT"
-          
-#           # Extract the new installer name for subsequent steps
-#           NEW_INSTALLER_NAME=$(echo "$OUTPUT" | grep '^OUTPUT_INSTALLER_NAME:' | cut -d: -f2)
-#           echo "new_installer_name=$NEW_INSTALLER_NAME" >> $GITHUB_OUTPUT
-
-#       - name: Sign Windows Installer
-#         id: sign-installer
-#         env:
-#           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
-#           INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
-#           RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
-#           WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
-#           LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
-#           IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
-#         run: |
-#           WINDOWS_PASS="${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
-#           WINDOWS_USER="Imageadmin"
-#           WINDOWS_DEST_PATH="C:/share/${RELEASE_FOLDER}"
-#           WINDOWS_DEST_PATH_WIN="C:\\share\\${RELEASE_FOLDER}"
-          
-#           # Validate required secrets
-#           if [ -z "${WINDOWS_SERVER}" ] || [ -z "${WINDOWS_PASS}" ]; then
-#             echo "ERROR: WINDOWS_SIGNING_SERVER_IP or WINDOWS_SIGNING_PASSWORD secret not configured"
-#             exit 1
-#           fi
-          
-#           echo "=== SCP-based Windows Signing Approach ==="
-#           echo "Windows Server: ${WINDOWS_SERVER}"
-#           echo "Linux Runner IP: ${LINUX_RUNNER_IP}"
-#           echo "Installer: ${INSTALLER_NAME}.exe"
-#           echo "Source Path: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
-#           echo "Windows Dest Path: ${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe"
-          
-#           # Step 1: Verify source file exists on Linux runner
-#           echo "=== Step 1: Verify source file exists ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
-          
-#           # Step 2: Create destination directory on Windows server
-#           echo "=== Step 2: Create destination directory on Windows ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'if not exist \"${WINDOWS_DEST_PATH_WIN}\" mkdir \"${WINDOWS_DEST_PATH_WIN}\"'"
-          
-#           # Step 3: SCP the installer FROM Linux runner TO Windows server
-#           echo "=== Step 3: Copy installer to Windows server via SCP ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' scp '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe'"
-          
-#           echo "=== Step 4: Verify file arrived on Windows ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'dir \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
-          
-#           # Step 5: Delete the unsigned installer from image signing path to avoid conflicts
-#           echo "=== Step 5: Delete unsigned installer from image signing path ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sudo rm -f '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' && echo 'Unsigned installer deleted from ${IMAGE_SIGNING_PATH}'" 
-
-#           echo "=== Step 6: Sign the installer with signtool ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
-#              '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" sign /tr \"http://timestamp.sectigo.com?td=sha256\" /td SHA256 /fd SHA256 /f \"C:\\dpod\\ndm-msi-signing-certificates\\ndm-msi-prod-main.cer\" /CSP \"SafeNet Key Storage Provider\" /v /kc \"NDM-MSI-PROD-keypair\" \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
-          
-#           echo "=== Step 7: Verify the signature ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
-#              '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" verify /pa \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
-          
-#           echo "=== Step 8: Copy signed installer back to Linux runner ==="
-          
-#           # Step 8a: Copy signed installer from Windows server to temporary location on Linux runner
-#           echo "=== Step 8a: SCP signed installer from Windows to Linux temp ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sshpass -p '${WINDOWS_PASS}' scp '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe' '/tmp/${INSTALLER_NAME}_signed.exe'"
-          
-#           # Step 8b: Move signed installer from temporary location into the image signing path
-#           echo "=== Step 8b: Copy from temp to image signing path ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "sudo cp '/tmp/${INSTALLER_NAME}_signed.exe' '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
-          
-#           # Step 8c: Remove temporary signed installer file from Linux runner
-#           echo "=== Step 8c: Remove temp file ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "rm '/tmp/${INSTALLER_NAME}_signed.exe'"
-          
-#           echo "=== Step 9: Verify signed file is back on Linux runner ==="
-#           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
-#             "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
-          
-#           echo "=== Signing completed successfully ==="
-#           echo "Installer signed and copied back to Linux runner!"
-
-#       - name: Generate Checksums and Finalize
-#         id: execute-signing-prep
-#         env:
-#           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
-#           INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
-#           RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
-#           LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
-#           IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
-#           SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
-#           BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
-#         run: |
-#           # Build the remote command
-#           REMOTE_CMD=$(cat << 'CMDEOF'
-#           set -e
-#           INSTALLER_NAME="__INSTALLER_NAME__"
-#           RELEASE_FOLDER="__RELEASE_FOLDER__"
-#           LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
-#           IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
-#           SCRATCH_SPACE="__SCRATCH_SPACE__"
-#           BRANCH_SUFFIX="__BRANCH_SUFFIX__"
-#           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          
-#           # Verify signed file exists in the mount
-#           if [ ! -f "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" ]; then
-#             echo "ERROR: Signed file not found at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
-#             exit 1
-#           fi
-#           echo "Signed installer verified at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
-#           echo "Branch suffix: ${BRANCH_SUFFIX}"
-#           echo "Timestamp: ${TIMESTAMP}"
-          
-#           # Generate checksums and copy to scratch space
-#           echo "Copying signed installer to local path..."
-#           sudo mkdir -p "${LOCAL_PATH}/signed"
-#           SIGNED_INSTALLER_NAME="${INSTALLER_NAME}_signed-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
-#           sudo cp "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" "${LOCAL_PATH}/signed/${SIGNED_INSTALLER_NAME}"
-          
-#           # Generate SHA256 Checksum
-#           echo "Generating SHA256 checksum..."
-#           cd "${LOCAL_PATH}/signed"
-#           CHECKSUM_FILE="WINDOWS_INSTALLER_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256"
-#           sha256sum "${SIGNED_INSTALLER_NAME}" | sudo tee "${CHECKSUM_FILE}" > /dev/null
-#           echo "Checksum generated:"
-#           cat "${CHECKSUM_FILE}"
-          
-#           # Copy to Scratch Space
-#           echo "Copying signed installer and checksum to scratch space..."
-#           SCRATCH_DEST="${SCRATCH_SPACE}/${RELEASE_FOLDER}/windows"
-#           sudo mkdir -p "${SCRATCH_DEST}"
-#           sudo cp "${SIGNED_INSTALLER_NAME}" "${SCRATCH_DEST}/"
-#           sudo cp "${CHECKSUM_FILE}" "${SCRATCH_DEST}/"
-#           sudo chmod 644 "${SCRATCH_DEST}/${SIGNED_INSTALLER_NAME}"
-#           sudo chmod 644 "${SCRATCH_DEST}/${CHECKSUM_FILE}"
-          
-#           echo "Files copied to scratch space: ${SCRATCH_DEST}"
-          
-#           # Note: Signed file is preserved at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe for manual verification
-#           echo "Signed file preserved at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
-          
-#           echo "Windows installer signing process completed successfully"
-          
-#           # Output data in pipe-delimited format (at end so it's easy to parse)
-#           echo "OUTPUT_DATA:${SIGNED_INSTALLER_NAME}|${CHECKSUM_FILE}|${RELEASE_FOLDER}"
-#           CMDEOF
-#           )
-          
-#           # Substitute variables into the command
-#           REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
-#           REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
-#           REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
-#           REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
-#           REMOTE_CMD="${REMOTE_CMD//__SCRATCH_SPACE__/$SCRATCH_SPACE}"
-#           REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
-          
-#           # Execute and capture output
-#           OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
-#           echo "$OUTPUT"
-          
-#           # Parse the output data line
-#           DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
-#           if [ -z "$DATA_LINE" ]; then
-#             echo "ERROR: Could not find OUTPUT_DATA in remote output"
-#             exit 1
-#           fi
-          
-#           SIGNED_INSTALLER=$(echo "$DATA_LINE" | cut -d'|' -f1)
-#           CHECKSUM_FILE=$(echo "$DATA_LINE" | cut -d'|' -f2)
-#           RELEASE_FOLDER_OUT=$(echo "$DATA_LINE" | cut -d'|' -f3)
-          
-#           # Set outputs
-#           echo "signed_installer=$SIGNED_INSTALLER" >> $GITHUB_OUTPUT
-#           echo "checksum_file=$CHECKSUM_FILE" >> $GITHUB_OUTPUT
-#           echo "release_folder=$RELEASE_FOLDER_OUT" >> $GITHUB_OUTPUT
-          
-#           echo "Checksums generated and files finalized!"
-
-#       - name: Display Summary
-#         run: |
-#           echo "=== Windows Installer Signing Complete ==="
-#           echo "Signed Installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}"
-#           echo "Checksum File: ${{ steps.execute-signing-prep.outputs.checksum_file }}"
-#           echo ""
-#           echo "Files Location:"
-#           echo "  Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.execute-signing-prep.outputs.release_folder }}/windows/"
-
-name: AWS Orphaned Resources Cleanup
+name: Windows Installer Signing & Release
 
 on:
-  # TESTING: Runs every 15 minutes - CHANGE BACK TO '0 6 * * 5' (Friday 6 AM UTC) after testing
-  schedule:
-    - cron: '*/15 * * * *'
-  # Manual trigger still available for ad-hoc runs
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Dry run mode (true = report only, false = delete resources)"
+      windows_installer_name:
+        description: "Windows Installer filename for uploading(without .exe extension) should be downloaded from artifactory from the release folder"
         required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      resource_age_days:
-        description: "Delete resources older than X days (default: 30)"
-        required: false
-        default: "14"
-      aws_region:
-        description: "AWS Region (leave empty for all regions)"
-        required: false
-        default: ""
-      cleanup_ebs_volumes:
-        description: "Cleanup unattached EBS volumes"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      cleanup_ebs_snapshots:
-        description: "Cleanup orphaned EBS snapshots"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      cleanup_elastic_ips:
-        description: "Cleanup unassociated Elastic IPs"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      cleanup_amis:
-        description: "Cleanup old/unused AMIs"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      cleanup_ecr_images:
-        description: "Cleanup old untagged ECR images"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      cleanup_s3_incomplete_uploads:
-        description: "Cleanup incomplete S3 multipart uploads"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
+        type: string
+      release_folder:
+        description: "Release folder name (e.g., preview_x). If this folder already exists in scratch space (created by GCP or OVA workflows), use it; otherwise, create a new one."
+        required: true
+        type: string
+      artifactory_path:
+        description: "Artifactory path (e.g., releases/preview_x/windows-installer) for downloading the windows installer"
+        required: true
+        type: string
 
 env:
-  AWS_REGION: ${{ github.event.inputs.aws_region || vars.AWS_DEFAULT_REGION || 'us-east-1' }}
-  # Scheduled runs delete resources (dry_run=false), manual runs use the input value
-  DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || github.event.inputs.dry_run || 'true' }}
-  RESOURCE_AGE_DAYS: ${{ github.event.inputs.resource_age_days || '14' }}
+  ARTIFACTORY_BASE_URL: ${{ vars.ARTIFACTORY_BASE_URL || 'https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm'}}
+  LOCAL_BASE_PATH: ${{ vars.LOCAL_BASE_PATH || '/home/ubuntu'}}
+  IMAGE_SIGNING_MOUNT: ${{ vars.WINDOWS_IMAGE_SIGNING_MOUNT || '/mnt/image_signing'}}
+  SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space'}}
 
 permissions:
   contents: read
 
 jobs:
-  aws-cleanup:
-    runs-on: ubuntu-latest
+  windows-installer-signing:
+    runs-on: openlab
+    outputs:
+      signed_installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}
+      checksum_file: ${{ steps.execute-signing-prep.outputs.checksum_file }}
+      release_folder: ${{ steps.execute-signing-prep.outputs.release_folder }}
     
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@7ceaf96edc86cc1713cef59eba79feeb23f59da1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install Dependencies
+      - name: Install SSH Tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y jq bc
-          pip install awscli --upgrade
+          # sudo apt-get update -qq
+          sudo apt-get install -y sshpass openssh-client curl
 
-      - name: Get AWS Regions
-        id: get-regions
+      - name: Extract Branch Name
+        id: branch-info
         run: |
-          # For scheduled runs or when no specific region is provided, scan all regions
-          INPUT_REGION="${{ github.event.inputs.aws_region }}"
-          if [ -n "$INPUT_REGION" ] && [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "regions=$INPUT_REGION" >> $GITHUB_OUTPUT
-          else
-            REGIONS=$(aws ec2 describe-regions --query "Regions[].RegionName" --output text | tr '\t' ',')
-            echo "regions=$REGIONS" >> $GITHUB_OUTPUT
+          # Extract branch name from github.ref
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
+          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
+          echo "Branch suffix for file naming: $BRANCH_SUFFIX"
+
+      - name: Add SSH Host Keys to known_hosts
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
+          LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
+        run: |
+          # Add Linux runner host key to GitHub runner's known_hosts
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+          
+          # Add Windows server host key to Linux runner's known_hosts
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} "
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+            ssh-keyscan -H '${WINDOWS_SERVER}' >> ~/.ssh/known_hosts 2>/dev/null
+            chmod 644 ~/.ssh/known_hosts
+          "
+          echo "Host keys added for both Linux runner and Windows server"
+
+      - name: Download and Prepare Windows Installer
+        id: download-installer
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ github.event.inputs.windows_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          ARTIFACTORY_PATH: ${{ github.event.inputs.artifactory_path }}
+          LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
+          ARTIFACTORY_BASE: ${{ env.ARTIFACTORY_BASE_URL }}
+          BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+        run: |
+          # Build the remote command as a single string to avoid heredoc issues
+          REMOTE_CMD=$(cat << 'CMDEOF'
+          set -e
+          echo "Starting Windows Installer Signing Process"
+          echo "Release Folder: __RELEASE_FOLDER__"
+          echo "Installer: __INSTALLER_NAME__.exe"
+          echo "Branch Suffix: __BRANCH_SUFFIX__"
+          
+          LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
+          IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
+          ARTIFACTORY_BASE="__ARTIFACTORY_BASE__"
+          ARTIFACTORY_PATH="__ARTIFACTORY_PATH__"
+          INSTALLER_NAME="__INSTALLER_NAME__"
+          BRANCH_SUFFIX="__BRANCH_SUFFIX__"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          # Create new installer name with branch suffix
+          NEW_INSTALLER_NAME="${INSTALLER_NAME}-${BRANCH_SUFFIX}"
+          
+          # Create directory structure
+          echo "Creating directories..."
+          sudo mkdir -p "${LOCAL_PATH}"
+          sudo mkdir -p "${IMAGE_SIGNING_PATH}"
+          
+          # Download Windows Installer from Artifactory
+          echo "Downloading Windows Installer from Artifactory..."
+          cd "${LOCAL_PATH}"
+          INSTALLER_URL="${ARTIFACTORY_BASE}/${ARTIFACTORY_PATH}/${INSTALLER_NAME}.exe"
+          echo "Downloading from: ${INSTALLER_URL}"
+          
+          sudo curl -o "${NEW_INSTALLER_NAME}.exe" "${INSTALLER_URL}"
+          CURL_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ] || [ ! -f "${NEW_INSTALLER_NAME}.exe" ]; then
+            echo "Failed to download Windows Installer from ${INSTALLER_URL} (curl exit code: $CURL_EXIT_CODE)"
+            exit 1
           fi
+          echo "Windows Installer downloaded as: ${NEW_INSTALLER_NAME}.exe"
+          
+          # Move installer to image signing mount
+          echo "Moving installer to image signing mount..."
+          sudo cp "${NEW_INSTALLER_NAME}.exe" "${IMAGE_SIGNING_PATH}/"
+          sudo chmod 644 "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
+          
+          if [ ! -f "${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe" ]; then
+            echo "Failed to copy installer to image signing mount"
+            exit 1
+          fi
+          echo "Installer copied to: ${IMAGE_SIGNING_PATH}/${NEW_INSTALLER_NAME}.exe"
+          echo "SUCCESS: Download and prepare step completed"
+          echo "OUTPUT_INSTALLER_NAME:${NEW_INSTALLER_NAME}"
+          CMDEOF
+          )
+          
+          # Substitute variables into the command
+          REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
+          REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
+          REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_PATH__/$ARTIFACTORY_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__ARTIFACTORY_BASE__/$ARTIFACTORY_BASE}"
+          REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
+          
+          # Execute remote command and capture output
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
+          echo "$OUTPUT"
+          
+          # Extract the new installer name for subsequent steps
+          NEW_INSTALLER_NAME=$(echo "$OUTPUT" | grep '^OUTPUT_INSTALLER_NAME:' | cut -d: -f2)
+          echo "new_installer_name=$NEW_INSTALLER_NAME" >> $GITHUB_OUTPUT
 
-      - name: Initialize Cleanup Report
+      - name: Sign Windows Installer
+        id: sign-installer
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          WINDOWS_SERVER: ${{ vars.WINDOWS_SIGNING_SERVER_IP }}
+          LINUX_RUNNER_IP: ${{ vars.RUNNER_GITHUB_IP_66 }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
         run: |
-          mkdir -p cleanup-reports
-          cat > cleanup-reports/summary.md << 'EOF'
-          # AWS Orphaned Resources Cleanup Report
+          WINDOWS_PASS="${{ secrets.WINDOWS_SIGNING_PASSWORD }}"
+          WINDOWS_USER="Imageadmin"
+          WINDOWS_DEST_PATH="C:/share/${RELEASE_FOLDER}"
+          WINDOWS_DEST_PATH_WIN="C:\\share\\${RELEASE_FOLDER}"
           
-          **Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          **Mode:** ${{ env.DRY_RUN == 'true' && 'DRY RUN (No resources deleted)' || 'LIVE RUN (Resources will be deleted)' }}
-          **Resource Age Threshold:** ${{ env.RESOURCE_AGE_DAYS }} days
-          
-          ---
-          
-          EOF
-
-      - name: Cleanup Unattached EBS Volumes
-        if: ${{ github.event.inputs.cleanup_ebs_volumes == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## EBS Volumes Cleanup (Orphaned - Unattached)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          REGIONS="${{ steps.get-regions.outputs.regions }}"
-          TOTAL_DELETED=0
-          TOTAL_SIZE_GB=0
-          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
-          
-          for REGION in ${REGIONS//,/ }; do
-            echo "Checking EBS volumes in $REGION..."
-            
-            # Find unattached volumes (available state)
-            VOLUMES=$(aws ec2 describe-volumes \
-              --region "$REGION" \
-              --filters "Name=status,Values=available" \
-              --no-paginate \
-              --query "Volumes[?CreateTime<='$CUTOFF_DATE'].[VolumeId,Size,CreateTime,Tags[?Key=='Name'].Value|[0]]" \
-              --output json 2>/dev/null || echo "[]")
-            
-            VOLUME_COUNT=$(echo "$VOLUMES" | jq 'length')
-            
-            if [ "$VOLUME_COUNT" -gt 0 ]; then
-              echo "Found $VOLUME_COUNT unattached volumes in $REGION" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| Volume ID | Size (GB) | Created | Name |" >> cleanup-reports/summary.md
-              echo "|-----------|-----------|---------|------|" >> cleanup-reports/summary.md
-              
-              echo "$VOLUMES" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2]) | \(.[3] // "N/A") |"' >> cleanup-reports/summary.md
-              
-              REGION_SIZE=$(echo "$VOLUMES" | jq '[.[] | .[1]] | add // 0')
-              TOTAL_SIZE_GB=$((TOTAL_SIZE_GB + REGION_SIZE))
-              
-              if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$VOLUMES" | jq -r '.[] | .[0]' | while read -r VOL_ID; do
-                  if [ -n "$VOL_ID" ] && [ "$VOL_ID" != "null" ]; then
-                    echo "Deleting volume: $VOL_ID"
-                    aws ec2 delete-volume --region "$REGION" --volume-id "$VOL_ID" || echo "Failed to delete $VOL_ID"
-                    TOTAL_DELETED=$((TOTAL_DELETED + 1))
-                  fi
-                done
-              fi
-              
-              echo "" >> cleanup-reports/summary.md
-            fi
-          done
-          
-          echo "**Total unattached EBS storage: ${TOTAL_SIZE_GB} GB**" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Cleanup Orphaned EBS Snapshots
-        if: ${{ github.event.inputs.cleanup_ebs_snapshots == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## EBS Snapshots Cleanup (Orphaned - No AMI or Volume)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          REGIONS="${{ steps.get-regions.outputs.regions }}"
-          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          TOTAL_SNAPSHOTS=0
-          TOTAL_SIZE_GB=0
-          
-          for REGION in ${REGIONS//,/ }; do
-            echo "Checking EBS snapshots in $REGION..."
-            
-            SNAPSHOTS=$(aws ec2 describe-snapshots \
-              --region "$REGION" \
-              --owner-ids "$ACCOUNT_ID" \
-              --no-paginate \
-              --query "Snapshots[?StartTime<='$CUTOFF_DATE'].[SnapshotId,VolumeId,StartTime,VolumeSize,Description]" \
-              --output json 2>/dev/null || echo "[]")
-            
-            AMIS=$(aws ec2 describe-images \
-              --region "$REGION" \
-              --owners "$ACCOUNT_ID" \
-              --no-paginate \
-              --query "Images[].BlockDeviceMappings[].Ebs.SnapshotId" \
-              --output text 2>/dev/null || echo "")
-            
-            ALL_VOLUMES=$(aws ec2 describe-volumes \
-              --region "$REGION" \
-              --no-paginate \
-              --query "Volumes[].VolumeId" \
-              --output text 2>/dev/null || echo "")
-            
-            # Find orphaned snapshots (not associated with AMI and source volume doesn't exist)
-            printf '%s\n' '. as $snaps |' '($amis | split("\t") | map(select(. != ""))) as $ami_snaps |' '($volumes | split(" ") | map(select(. != ""))) as $vol_ids |' '[.[] | select(' '(.[0] as $sid | ($ami_snaps | index($sid) | not)) and' '(.[1] as $vid | ($vid == null or $vid == "null" or ($vol_ids | index($vid) | not)))' ')]' > /tmp/orphan_filter.jq
-            ORPHANED_SNAPSHOTS=$(echo "$SNAPSHOTS" | jq -r --arg amis "$AMIS" --arg volumes "$ALL_VOLUMES" -f /tmp/orphan_filter.jq)
-            rm -f /tmp/orphan_filter.jq
-            
-            ORPHAN_COUNT=$(echo "$ORPHANED_SNAPSHOTS" | jq 'length')
-            
-            if [ "$ORPHAN_COUNT" -gt 0 ]; then
-              echo "Found $ORPHAN_COUNT orphaned snapshots in $REGION" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| Snapshot ID | Volume ID | Created | Size (GB) | Description |" >> cleanup-reports/summary.md
-              echo "|-------------|-----------|---------|-----------|-------------|" >> cleanup-reports/summary.md
-              
-              echo "$ORPHANED_SNAPSHOTS" | jq -r '.[] | "| \(.[0]) | \(.[1] // "N/A") | \(.[2]) | \(.[3]) | \(.[4] // "N/A") |"' >> cleanup-reports/summary.md
-              
-              REGION_SIZE=$(echo "$ORPHANED_SNAPSHOTS" | jq '[.[] | .[3]] | add // 0')
-              TOTAL_SIZE_GB=$((TOTAL_SIZE_GB + REGION_SIZE))
-              TOTAL_SNAPSHOTS=$((TOTAL_SNAPSHOTS + ORPHAN_COUNT))
-              
-              if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$ORPHANED_SNAPSHOTS" | jq -r '.[] | .[0]' | while read -r SNAP_ID; do
-                  if [ -n "$SNAP_ID" ] && [ "$SNAP_ID" != "null" ]; then
-                    echo "Deleting snapshot: $SNAP_ID"
-                    aws ec2 delete-snapshot --region "$REGION" --snapshot-id "$SNAP_ID" || echo "Failed to delete $SNAP_ID"
-                  fi
-                done
-              fi
-              
-              echo "" >> cleanup-reports/summary.md
-            fi
-          done
-          
-          echo "**Total orphaned snapshots: $TOTAL_SNAPSHOTS**" >> cleanup-reports/summary.md
-          echo "**Total snapshot storage: ${TOTAL_SIZE_GB} GB**" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Cleanup Unassociated Elastic IPs
-        if: ${{ github.event.inputs.cleanup_elastic_ips == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## Elastic IPs Cleanup (Orphaned - Unassociated)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          REGIONS="${{ steps.get-regions.outputs.regions }}"
-          TOTAL_EIPS=0
-          
-          for REGION in ${REGIONS//,/ }; do
-            echo "Checking Elastic IPs in $REGION..."
-            
-            EIPS=$(aws ec2 describe-addresses \
-              --region "$REGION" \
-              --no-paginate \
-              --query "Addresses[?AssociationId==null].[AllocationId,PublicIp,Tags[?Key=='Name'].Value|[0]]" \
-              --output json 2>/dev/null || echo "[]")
-            
-            EIP_COUNT=$(echo "$EIPS" | jq 'length')
-            
-            if [ "$EIP_COUNT" -gt 0 ]; then
-              echo "Found $EIP_COUNT unassociated Elastic IPs in $REGION" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| Allocation ID | Public IP | Name |" >> cleanup-reports/summary.md
-              echo "|---------------|-----------|------|" >> cleanup-reports/summary.md
-              
-              echo "$EIPS" | jq -r '.[] | "| \(.[0]) | \(.[1]) | \(.[2] // "N/A") |"' >> cleanup-reports/summary.md
-              
-              TOTAL_EIPS=$((TOTAL_EIPS + EIP_COUNT))
-              
-              if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$EIPS" | jq -r '.[] | .[0]' | while read -r ALLOC_ID; do
-                  if [ -n "$ALLOC_ID" ] && [ "$ALLOC_ID" != "null" ]; then
-                    echo "Releasing Elastic IP: $ALLOC_ID"
-                    aws ec2 release-address --region "$REGION" --allocation-id "$ALLOC_ID" || echo "Failed to release $ALLOC_ID"
-                  fi
-                done
-              fi
-              
-              echo "" >> cleanup-reports/summary.md
-            fi
-          done
-          
-          echo "**Total unassociated Elastic IPs: $TOTAL_EIPS** (Cost: ~\$${TOTAL_EIPS} * 3.60/month)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Cleanup Unused AMIs
-        if: ${{ github.event.inputs.cleanup_amis == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## AMI Cleanup (Orphaned - Not Used by Any Instance)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          REGIONS="${{ steps.get-regions.outputs.regions }}"
-          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          TOTAL_AMIS=0
-          
-          for REGION in ${REGIONS//,/ }; do
-            echo "Checking AMIs in $REGION..."
-            
-            OLD_AMIS=$(aws ec2 describe-images \
-              --region "$REGION" \
-              --owners "$ACCOUNT_ID" \
-              --no-paginate \
-              --query "Images[?CreationDate<='$CUTOFF_DATE'].[ImageId,Name,CreationDate]" \
-              --output json 2>/dev/null || echo "[]")
-            
-            USED_AMIS=$(aws ec2 describe-instances \
-              --region "$REGION" \
-              --no-paginate \
-              --query "Reservations[].Instances[].ImageId" \
-              --output text 2>/dev/null || echo "")
-            
-            LT_AMIS=$(aws ec2 describe-launch-templates \
-              --region "$REGION" \
-              --no-paginate \
-              --query "LaunchTemplates[].LaunchTemplateId" \
-              --output text 2>/dev/null | while read -r LT_ID; do
-                [ -n "$LT_ID" ] && aws ec2 describe-launch-template-versions \
-                  --region "$REGION" \
-                  --launch-template-id "$LT_ID" \
-                  --no-paginate \
-                  --query "LaunchTemplateVersions[].LaunchTemplateData.ImageId" \
-                  --output text 2>/dev/null
-              done || echo "")
-            
-            ASG_AMIS=$(aws autoscaling describe-launch-configurations \
-              --region "$REGION" \
-              --no-paginate \
-              --query "LaunchConfigurations[].ImageId" \
-              --output text 2>/dev/null || echo "")
-            
-            ALL_USED_AMIS="$USED_AMIS $LT_AMIS $ASG_AMIS"
-            
-            UNUSED_AMIS=$(echo "$OLD_AMIS" | jq -r --arg used "$ALL_USED_AMIS" '
-              . as $amis |
-              ($used | split(" ") | map(select(. != ""))) as $used_amis |
-              [.[] | select(.[0] as $ami | ($used_amis | index($ami) | not))]
-            ')
-            
-            UNUSED_COUNT=$(echo "$UNUSED_AMIS" | jq 'length')
-            
-            if [ "$UNUSED_COUNT" -gt 0 ]; then
-              echo "Found $UNUSED_COUNT unused AMIs in $REGION" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| AMI ID | Name | Created |" >> cleanup-reports/summary.md
-              echo "|--------|------|---------|" >> cleanup-reports/summary.md
-              
-              echo "$UNUSED_AMIS" | jq -r '.[] | "| \(.[0]) | \(.[1] // "N/A") | \(.[2]) |"' >> cleanup-reports/summary.md
-              
-              TOTAL_AMIS=$((TOTAL_AMIS + UNUSED_COUNT))
-              
-              if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$UNUSED_AMIS" | jq -r '.[] | .[0]' | while read -r AMI_ID; do
-                  if [ -n "$AMI_ID" ] && [ "$AMI_ID" != "null" ]; then
-                    echo "Deregistering AMI: $AMI_ID"
-                    aws ec2 deregister-image --region "$REGION" --image-id "$AMI_ID" || echo "Failed to deregister $AMI_ID"
-                  fi
-                done
-              fi
-              
-              echo "" >> cleanup-reports/summary.md
-            fi
-          done
-          
-          echo "**Total unused AMIs: $TOTAL_AMIS**" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Cleanup Old Untagged ECR Images
-        if: ${{ github.event.inputs.cleanup_ecr_images == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## ECR Images Cleanup (Orphaned - Untagged)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          REGIONS="${{ steps.get-regions.outputs.regions }}"
-          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
-          TOTAL_IMAGES=0
-          
-          for REGION in ${REGIONS//,/ }; do
-            echo "Checking ECR repositories in $REGION..."
-            
-            REPOS=$(aws ecr describe-repositories \
-              --region "$REGION" \
-              --no-paginate \
-              --query "repositories[].repositoryName" \
-              --output text 2>/dev/null || echo "")
-            
-            if [ -z "$REPOS" ]; then
-              continue
-            fi
-            
-            for REPO in $REPOS; do
-              UNTAGGED=$(aws ecr describe-images \
-                --region "$REGION" \
-                --repository-name "$REPO" \
-                --filter "tagStatus=UNTAGGED" \
-                --no-paginate \
-                --query "imageDetails[?imagePushedAt<='$CUTOFF_DATE'].[imageDigest,imagePushedAt]" \
-                --output json 2>/dev/null || echo "[]")
-              
-              UNTAGGED_COUNT=$(echo "$UNTAGGED" | jq 'length')
-              
-              if [ "$UNTAGGED_COUNT" -gt 0 ]; then
-                echo "Found $UNTAGGED_COUNT untagged images in $REPO ($REGION)" >> cleanup-reports/summary.md
-                echo "" >> cleanup-reports/summary.md
-                
-                TOTAL_IMAGES=$((TOTAL_IMAGES + UNTAGGED_COUNT))
-                
-                if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                  echo "$UNTAGGED" | jq -r '.[] | .[0]' | while read -r DIGEST; do
-                    if [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ]; then
-                      aws ecr batch-delete-image \
-                        --region "$REGION" \
-                        --repository-name "$REPO" \
-                        --image-ids imageDigest="$DIGEST" || echo "Failed to delete image"
-                    fi
-                  done
-                fi
-              fi
-            done
-          done
-          
-          echo "**Total untagged ECR images: $TOTAL_IMAGES**" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Cleanup Incomplete S3 Multipart Uploads
-        if: ${{ github.event.inputs.cleanup_s3_incomplete_uploads == 'true' || github.event_name == 'schedule' }}
-        run: |
-          echo "## S3 Incomplete Multipart Uploads Cleanup (Orphaned)" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          CUTOFF_DATE=$(date -d "-${{ env.RESOURCE_AGE_DAYS }} days" -u +%Y-%m-%dT%H:%M:%S)
-          BUCKETS=$(aws s3api list-buckets --query "Buckets[].Name" --output text 2>/dev/null || echo "")
-          TOTAL_UPLOADS=0
-          
-          for BUCKET in $BUCKETS; do
-            echo "Checking incomplete multipart uploads in $BUCKET..."
-            
-            UPLOADS=$(aws s3api list-multipart-uploads \
-              --bucket "$BUCKET" \
-              --query "Uploads[?Initiated<='$CUTOFF_DATE'].[Key,UploadId,Initiated]" \
-              --output json 2>/dev/null || echo "[]")
-            
-            UPLOAD_COUNT=$(echo "$UPLOADS" | jq 'length')
-            
-            if [ "$UPLOAD_COUNT" -gt 0 ]; then
-              echo "Found $UPLOAD_COUNT incomplete uploads in $BUCKET" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              echo "| Bucket | Key | Upload ID | Initiated |" >> cleanup-reports/summary.md
-              echo "|--------|-----|----------|-----------|" >> cleanup-reports/summary.md
-              
-              echo "$UPLOADS" | jq -r ".[] | \"| $BUCKET | \(.[0]) | \(.[1]) | \(.[2]) |\"" >> cleanup-reports/summary.md
-              echo "" >> cleanup-reports/summary.md
-              
-              TOTAL_UPLOADS=$((TOTAL_UPLOADS + UPLOAD_COUNT))
-              
-              if [ "${{ env.DRY_RUN }}" == "false" ]; then
-                echo "$UPLOADS" | jq -r '.[] | "\(.[0])|\(.[1])"' | while IFS='|' read -r KEY UPLOAD_ID; do
-                  if [ -n "$KEY" ] && [ -n "$UPLOAD_ID" ]; then
-                    aws s3api abort-multipart-upload \
-                      --bucket "$BUCKET" \
-                      --key "$KEY" \
-                      --upload-id "$UPLOAD_ID" || echo "Failed to abort upload"
-                  fi
-                done
-              fi
-            fi
-          done
-          
-          echo "**Total incomplete multipart uploads: $TOTAL_UPLOADS**" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-
-      - name: Generate Final Report
-        run: |
-          echo "---" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          echo "## Summary" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          echo "**Cleanup completed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> cleanup-reports/summary.md
-          echo "" >> cleanup-reports/summary.md
-          
-          if [ "${{ env.DRY_RUN }}" == "true" ]; then
-            echo "⚠️ **This was a DRY RUN. No resources were deleted.**" >> cleanup-reports/summary.md
-            echo "" >> cleanup-reports/summary.md
-            echo "To delete these resources, run the workflow again with \`dry_run: false\`" >> cleanup-reports/summary.md
-          else
-            echo "✅ **Orphaned resources have been deleted.**" >> cleanup-reports/summary.md
+          # Validate required secrets
+          if [ -z "${WINDOWS_SERVER}" ] || [ -z "${WINDOWS_PASS}" ]; then
+            echo "ERROR: WINDOWS_SIGNING_SERVER_IP or WINDOWS_SIGNING_PASSWORD secret not configured"
+            exit 1
           fi
           
-          cat cleanup-reports/summary.md
-
-      - name: Upload Cleanup Report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: aws-cleanup-report-${{ github.run_id }}
-          path: cleanup-reports/
-          retention-days: 30
-
-      - name: Post Summary to GitHub
-        run: |
-          cat cleanup-reports/summary.md >> $GITHUB_STEP_SUMMARY
+          echo "=== SCP-based Windows Signing Approach ==="
+          echo "Windows Server: ${WINDOWS_SERVER}"
+          echo "Linux Runner IP: ${LINUX_RUNNER_IP}"
+          echo "Installer: ${INSTALLER_NAME}.exe"
+          echo "Source Path: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          echo "Windows Dest Path: ${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe"
           
+          # Step 1: Verify source file exists on Linux runner
+          echo "=== Step 1: Verify source file exists ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          # Step 2: Create destination directory on Windows server
+          echo "=== Step 2: Create destination directory on Windows ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'if not exist \"${WINDOWS_DEST_PATH_WIN}\" mkdir \"${WINDOWS_DEST_PATH_WIN}\"'"
+          
+          # Step 3: SCP the installer FROM Linux runner TO Windows server
+          echo "=== Step 3: Copy installer to Windows server via SCP ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' scp '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe'"
+          
+          echo "=== Step 4: Verify file arrived on Windows ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' 'dir \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          # Step 5: Delete the unsigned installer from image signing path to avoid conflicts
+          echo "=== Step 5: Delete unsigned installer from image signing path ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sudo rm -f '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe' && echo 'Unsigned installer deleted from ${IMAGE_SIGNING_PATH}'" 
+
+          echo "=== Step 6: Sign the installer with signtool ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
+             '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" sign /tr \"http://timestamp.sectigo.com?td=sha256\" /td SHA256 /fd SHA256 /f \"C:\\dpod\\ndm-msi-signing-certificates\\ndm-msi-prod-main.cer\" /CSP \"SafeNet Key Storage Provider\" /v /kc \"NDM-MSI-PROD-keypair\" \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          echo "=== Step 7: Verify the signature ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' ssh '${WINDOWS_USER}@${WINDOWS_SERVER}' \
+             '\"C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe\" verify /pa \"${WINDOWS_DEST_PATH_WIN}\\${INSTALLER_NAME}.exe\"'"
+          
+          echo "=== Step 8: Copy signed installer back to Linux runner ==="
+          
+          # Step 8a: Copy signed installer from Windows server to temporary location on Linux runner
+          echo "=== Step 8a: SCP signed installer from Windows to Linux temp ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sshpass -p '${WINDOWS_PASS}' scp '${WINDOWS_USER}@${WINDOWS_SERVER}:${WINDOWS_DEST_PATH}/${INSTALLER_NAME}.exe' '/tmp/${INSTALLER_NAME}_signed.exe'"
+          
+          # Step 8b: Move signed installer from temporary location into the image signing path
+          echo "=== Step 8b: Copy from temp to image signing path ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "sudo cp '/tmp/${INSTALLER_NAME}_signed.exe' '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          # Step 8c: Remove temporary signed installer file from Linux runner
+          echo "=== Step 8c: Remove temp file ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "rm '/tmp/${INSTALLER_NAME}_signed.exe'"
+          
+          echo "=== Step 9: Verify signed file is back on Linux runner ==="
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${LINUX_RUNNER_IP} \
+            "ls -la '${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe'"
+          
+          echo "=== Signing completed successfully ==="
+          echo "Installer signed and copied back to Linux runner!"
+
+      - name: Generate Checksums and Finalize
+        id: execute-signing-prep
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          INSTALLER_NAME: ${{ steps.download-installer.outputs.new_installer_name }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
+          IMAGE_SIGNING_PATH: ${{ env.IMAGE_SIGNING_MOUNT }}
+          SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
+          BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+        run: |
+          # Build the remote command
+          REMOTE_CMD=$(cat << 'CMDEOF'
+          set -e
+          INSTALLER_NAME="__INSTALLER_NAME__"
+          RELEASE_FOLDER="__RELEASE_FOLDER__"
+          LOCAL_PATH="__LOCAL_BASE_PATH__/__RELEASE_FOLDER__/windows"
+          IMAGE_SIGNING_PATH="__IMAGE_SIGNING_PATH__"
+          SCRATCH_SPACE="__SCRATCH_SPACE__"
+          BRANCH_SUFFIX="__BRANCH_SUFFIX__"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          # Verify signed file exists in the mount
+          if [ ! -f "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" ]; then
+            echo "ERROR: Signed file not found at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+            exit 1
+          fi
+          echo "Signed installer verified at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          echo "Branch suffix: ${BRANCH_SUFFIX}"
+          echo "Timestamp: ${TIMESTAMP}"
+          
+          # Generate checksums and copy to scratch space
+          echo "Copying signed installer to local path..."
+          sudo mkdir -p "${LOCAL_PATH}/signed"
+          SIGNED_INSTALLER_NAME="${INSTALLER_NAME}_signed-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
+          sudo cp "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" "${LOCAL_PATH}/signed/${SIGNED_INSTALLER_NAME}"
+          
+          # Generate SHA256 Checksum
+          echo "Generating SHA256 checksum..."
+          cd "${LOCAL_PATH}/signed"
+          CHECKSUM_FILE="WINDOWS_INSTALLER_SHA256SUMS-${TIMESTAMP}-${BRANCH_SUFFIX}.sha256"
+          sha256sum "${SIGNED_INSTALLER_NAME}" | sudo tee "${CHECKSUM_FILE}" > /dev/null
+          echo "Checksum generated:"
+          cat "${CHECKSUM_FILE}"
+          
+          # Copy to Scratch Space
+          echo "Copying signed installer and checksum to scratch space..."
+          SCRATCH_DEST="${SCRATCH_SPACE}/${RELEASE_FOLDER}/windows"
+          sudo mkdir -p "${SCRATCH_DEST}"
+          sudo cp "${SIGNED_INSTALLER_NAME}" "${SCRATCH_DEST}/"
+          sudo cp "${CHECKSUM_FILE}" "${SCRATCH_DEST}/"
+          sudo chmod 644 "${SCRATCH_DEST}/${SIGNED_INSTALLER_NAME}"
+          sudo chmod 644 "${SCRATCH_DEST}/${CHECKSUM_FILE}"
+          
+          echo "Files copied to scratch space: ${SCRATCH_DEST}"
+          
+          # Note: Signed file is preserved at ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe for manual verification
+          echo "Signed file preserved at: ${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe"
+          
+          echo "Windows installer signing process completed successfully"
+          
+          # Output data in pipe-delimited format (at end so it's easy to parse)
+          echo "OUTPUT_DATA:${SIGNED_INSTALLER_NAME}|${CHECKSUM_FILE}|${RELEASE_FOLDER}"
+          CMDEOF
+          )
+          
+          # Substitute variables into the command
+          REMOTE_CMD="${REMOTE_CMD//__INSTALLER_NAME__/$INSTALLER_NAME}"
+          REMOTE_CMD="${REMOTE_CMD//__RELEASE_FOLDER__/$RELEASE_FOLDER}"
+          REMOTE_CMD="${REMOTE_CMD//__LOCAL_BASE_PATH__/$LOCAL_BASE_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__IMAGE_SIGNING_PATH__/$IMAGE_SIGNING_PATH}"
+          REMOTE_CMD="${REMOTE_CMD//__SCRATCH_SPACE__/$SCRATCH_SPACE}"
+          REMOTE_CMD="${REMOTE_CMD//__BRANCH_SUFFIX__/$BRANCH_SUFFIX}"
+          
+          # Execute and capture output
+          OUTPUT=$(sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "$REMOTE_CMD")
+          echo "$OUTPUT"
+          
+          # Parse the output data line
+          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
+          if [ -z "$DATA_LINE" ]; then
+            echo "ERROR: Could not find OUTPUT_DATA in remote output"
+            exit 1
+          fi
+          
+          SIGNED_INSTALLER=$(echo "$DATA_LINE" | cut -d'|' -f1)
+          CHECKSUM_FILE=$(echo "$DATA_LINE" | cut -d'|' -f2)
+          RELEASE_FOLDER_OUT=$(echo "$DATA_LINE" | cut -d'|' -f3)
+          
+          # Set outputs
+          echo "signed_installer=$SIGNED_INSTALLER" >> $GITHUB_OUTPUT
+          echo "checksum_file=$CHECKSUM_FILE" >> $GITHUB_OUTPUT
+          echo "release_folder=$RELEASE_FOLDER_OUT" >> $GITHUB_OUTPUT
+          
+          echo "Checksums generated and files finalized!"
+
+      - name: Display Summary
+        run: |
+          echo "=== Windows Installer Signing Complete ==="
+          echo "Signed Installer: ${{ steps.execute-signing-prep.outputs.signed_installer }}"
+          echo "Checksum File: ${{ steps.execute-signing-prep.outputs.checksum_file }}"
+          echo ""
+          echo "Files Location:"
+          echo "  Scratch Space: ${{ env.SCRATCH_SPACE }}/${{ steps.execute-signing-prep.outputs.release_folder }}/windows/"
