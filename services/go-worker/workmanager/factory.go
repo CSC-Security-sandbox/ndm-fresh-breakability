@@ -25,11 +25,14 @@ func registerWorkflows(w worker.Worker, wtype WorkerType) {
 		// ValidateConnectionsWorkflow is the parent orchestrator that dispatches
 		// ValidateWorkerConnectionWorkflow children on per-worker task queues.
 		w.RegisterWorkflow(workflows.ValidateConnectionsWorkflow)
-		w.RegisterWorkflow(workflows.ValidatePathWorkflow)
+		// ValidatePathsWorkflow (with "s") matches TS WorkFlows.VALIDATE_PATHS.
+		w.RegisterWorkflow(workflows.ValidatePathsWorkflow)
 		w.RegisterWorkflow(workflows.ListPathsWorkflow)
-		w.RegisterWorkflow(workflows.PreCheckWorkflow)
+		// PreCheckValidationWorkflow matches TS function name.
+		w.RegisterWorkflow(workflows.PreCheckValidationWorkflow)
 		w.RegisterWorkflow(workflows.SpeedTestWorkflow)
-		w.RegisterWorkflow(workflows.WorkingDirectoryWorkflow)
+		// ValidateWorkingDirectoryWorkflow matches TS WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY.
+		w.RegisterWorkflow(workflows.ValidateWorkingDirectoryWorkflow)
 
 	case WorkerSpecific:
 		// Per-worker workflows that run on ${workerId}-TaskQueue.
@@ -38,14 +41,18 @@ func registerWorkflows(w worker.Worker, wtype WorkerType) {
 		// ValidateWorkerConnectionWorkflow is the per-worker child that
 		// calls the ValidateConnection activity for each protocol.
 		w.RegisterWorkflow(workflows.ValidateWorkerConnectionWorkflow)
-		w.RegisterWorkflow(workflows.ValidatePathWorkflow)
+		// ValidatePathWorkerWorkflow is the per-worker child for path validation.
+		w.RegisterWorkflow(workflows.ValidatePathWorkerWorkflow)
 		// ListPathWorkerWorkflow is the per-worker child that calls the
 		// ListPaths activity for each protocol.
 		w.RegisterWorkflow(workflows.ListPathWorkerWorkflow)
-		w.RegisterWorkflow(workflows.PreCheckWorkflow)
-		w.RegisterWorkflow(workflows.SpeedTestWorkflow)
-		w.RegisterWorkflow(workflows.RedisMemCheckWorkflow)
-		w.RegisterWorkflow(workflows.WorkingDirectoryWorkflow)
+		// PreCheckWorkerValidationWorkflow is the per-worker child for pre-checks.
+		w.RegisterWorkflow(workflows.PreCheckWorkerValidationWorkflow)
+		// SpeedTestJobWorkflow is the per-worker child that runs speed tests.
+		w.RegisterWorkflow(workflows.SpeedTestJobWorkflow)
+		w.RegisterWorkflow(workflows.RedisMemoryCheckWorkflow)
+		// ValidateWorkingDirectoryWorkerWorkflow is the per-worker child.
+		w.RegisterWorkflow(workflows.ValidateWorkingDirectoryWorkerWorkflow)
 
 	case JobSpecific:
 		w.RegisterWorkflow(workflows.ChildScanWorkflow)

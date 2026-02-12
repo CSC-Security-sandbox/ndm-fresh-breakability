@@ -7,18 +7,21 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// WorkingDirectoryWorkflow is the parent workflow for validating export paths
-// and working directories. It calls ValidateWorkingDirectoryWorkerWorkflow for
-// each worker. Registered with Temporal as "WorkingDirectoryWorkflow" for wire
-// compatibility (TypeScript: ValidateWorkingDirectoryWorkflow, registered as
-// "ValidateExportPathAndWorkingDirectoryWorkflow").
-func WorkingDirectoryWorkflow(ctx workflow.Context, input WorkingDirectoryInput) (interface{}, error) {
+// ValidateWorkingDirectoryWorkflow is the parent workflow for validating export
+// paths and working directories. It calls
+// ValidateWorkingDirectoryWorkerWorkflow for each worker.
+//
+// The function name MUST match the TypeScript export name exactly
+// ("ValidateWorkingDirectoryWorkflow") because the config service starts it by
+// that string (WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY =
+// 'ValidateWorkingDirectoryWorkflow').
+func ValidateWorkingDirectoryWorkflow(ctx workflow.Context, input WorkingDirectoryInput) (interface{}, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting WorkingDirectoryWorkflow", "traceId", input.TraceID)
+	logger.Info("Starting ValidateWorkingDirectoryWorkflow", "traceId", input.TraceID)
 
 	payload, ok := input.Payload.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("invalid payload type for WorkingDirectoryWorkflow")
+		return nil, fmt.Errorf("invalid payload type for ValidateWorkingDirectoryWorkflow")
 	}
 
 	workerIDsRaw, _ := payload["workerIds"].([]interface{})
@@ -31,11 +34,15 @@ func WorkingDirectoryWorkflow(ctx workflow.Context, input WorkingDirectoryInput)
 		if fileServerID != "" {
 			fileServerSuffix = fileServerID
 		}
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        fmt.Sprintf("ValidateExportPathAndWorkingDirectoryWorkflow-%s-%s-%s", input.TraceID, workerID, fileServerSuffix),
-			TaskQueue:         fmt.Sprintf("%s-TaskQueue", workerID),
-			ParentClosePolicy: 1, // TERMINATE
-		})
+
+		// TS spreads `...options` into the child workflow start call.
+		childOpts := parseChildWorkflowOptions(
+			fmt.Sprintf("ValidateExportPathAndWorkingDirectoryWorkflow-%s-%s-%s", input.TraceID, workerID, fileServerSuffix),
+			fmt.Sprintf("%s-TaskQueue", workerID),
+			input.Options,
+		)
+		childCtx := workflow.WithChildOptions(ctx, childOpts)
+
 		futures[i] = workflow.ExecuteChildWorkflow(childCtx, "ValidateWorkingDirectoryWorkerWorkflow", map[string]interface{}{
 			"traceId": input.TraceID,
 			"payload": payload,
@@ -55,14 +62,17 @@ func WorkingDirectoryWorkflow(ctx workflow.Context, input WorkingDirectoryInput)
 		}
 	}
 
-	logger.Info("WorkingDirectoryWorkflow completed", "traceId", input.TraceID)
+	logger.Info("ValidateWorkingDirectoryWorkflow completed", "traceId", input.TraceID)
 	return allResults, nil
 }
 
 // ValidateWorkingDirectoryWorkerWorkflow validates the working directory for a
 // single worker. It first discovers paths (via listPath for non-storage-aware
-// systems) and then validates the working directory. Registered with Temporal
-// as "ValidateWorkingDirectoryWorkerWorkflow".
+// systems) and then validates the working directory.
+//
+// TS uses:
+//   - proxyActivities<ListPathActivity>({ startToCloseTimeout: '30s' })
+//   - proxyActivities<ValidateWorkingDirectoryActivity>({ startToCloseTimeout: '30s' })
 func ValidateWorkingDirectoryWorkerWorkflow(ctx workflow.Context, args map[string]interface{}) (interface{}, error) {
 	logger := workflow.GetLogger(ctx)
 	traceID, _ := args["traceId"].(string)
@@ -70,6 +80,7 @@ func ValidateWorkingDirectoryWorkerWorkflow(ctx workflow.Context, args map[strin
 
 	payload, _ := args["payload"].(map[string]interface{})
 
+	// TS: proxyActivities({ startToCloseTimeout: '30s' })
 	listPathCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 	})
@@ -117,6 +128,54 @@ func ValidateWorkingDirectoryWorkerWorkflow(ctx workflow.Context, args map[strin
 	}
 
 	payload["paths"] = paths
+
+	// Check for manual upload flag matching TS behavior.
+	if listPathPayloadRaw, ok := payload["listPathPayload"].([]interface{}); ok {
+		hasManualUpload := false
+		for _, lpRaw := range listPathPayloadRaw {
+			if lp, ok := lpRaw.(map[string]interface{}); ok {
+				if eps, _ := lp["exportPathSource"].(string); eps == "MANUAL_UPLOAD" {
+					hasManualUpload = true
+					break
+				}
+			}
+		}
+		payload["hasManualUpload"] = hasManualUpload
+	}
+
+	// For storage-aware types, mark as such so activity knows to use exportsMap.
+	if isStorageAware {
+		if _, ok := payload["exportsMap"]; ok {
+			payload["isStorageAware"] = true
+		}
+	}
+
+	// Check export path / working directory provided.
+	exportPathWorkingDirectoryProvided := false
+	if ep, ok := payload["exportPath"].(string); ok && len(ep) > 0 {
+		exportPathWorkingDirectoryProvided = true
+		payload["exportPathPresent"] = true
+	}
+	payload["exportPathWorkingDirectoryProvided"] = exportPathWorkingDirectoryProvided
+
+	if !exportPathWorkingDirectoryProvided {
+		if isStorageAware {
+			if exportsMap, ok := payload["exportsMap"].(map[string]interface{}); ok {
+				if listPathPayloadRaw, ok := payload["listPathPayload"].([]interface{}); ok && len(listPathPayloadRaw) > 0 {
+					if firstLP, ok := listPathPayloadRaw[0].(map[string]interface{}); ok {
+						firstHost, _ := firstLP["host"].(string)
+						if v, ok := exportsMap[firstHost]; ok {
+							payload["fetchedPath"] = v
+						} else if len(paths) > 0 {
+							payload["fetchedPath"] = paths[0]
+						}
+					}
+				}
+			}
+		} else if len(paths) > 0 {
+			payload["fetchedPath"] = paths[0]
+		}
+	}
 
 	// Validate the working directory.
 	var result interface{}

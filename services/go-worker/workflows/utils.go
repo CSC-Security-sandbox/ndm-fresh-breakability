@@ -116,6 +116,120 @@ func setupActivityOptions() workflow.ActivityOptions {
 	}
 }
 
+// validateConnectionActivityOptions returns activity options matching the
+// TypeScript ValidateWorkerConnectionWorkflow:
+//
+//	proxyActivities({ startToCloseTimeout: '300s' })
+func validateConnectionActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 300 * time.Second, // 5 minutes
+	}
+}
+
+// listPathActivityOptions returns activity options matching the TypeScript
+// ListPathWorkerWorkflow:
+//
+//	proxyActivities({ startToCloseTimeout: '30s' })
+func listPathActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+	}
+}
+
+// parseChildWorkflowOptions builds ChildWorkflowOptions from the parent
+// workflow input. The TS workflows spread the `options` object from the
+// config-service payload into the child-workflow start call:
+//
+//	executeChild(ChildWorkflow, { ...options, ... })
+//
+// The options may contain Temporal-compatible fields such as:
+//   - workflowExecutionTimeout  (string like "60s")
+//   - workflowRunTimeout        (string like "30s")
+//   - workflowTaskTimeout       (string like "30s")
+//
+// This helper converts them into the Go SDK ChildWorkflowOptions.
+func parseChildWorkflowOptions(workflowID, taskQueue string, opts interface{}) workflow.ChildWorkflowOptions {
+	cwo := workflow.ChildWorkflowOptions{
+		WorkflowID:        workflowID,
+		TaskQueue:         taskQueue,
+		ParentClosePolicy: 1, // TERMINATE
+	}
+
+	m, ok := opts.(map[string]interface{})
+	if !ok {
+		return cwo
+	}
+
+	if v, ok := m["workflowExecutionTimeout"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cwo.WorkflowExecutionTimeout = d
+		}
+	}
+	if v, ok := m["workflowRunTimeout"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cwo.WorkflowRunTimeout = d
+		}
+	}
+	if v, ok := m["workflowTaskTimeout"].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			cwo.WorkflowTaskTimeout = d
+		}
+	}
+	return cwo
+}
+
+// setupCleanupActivityOptions returns options for setup/cleanup worker
+// activities matching the TypeScript proxyActivities config:
+//
+//	proxyActivities({ startToCloseTimeout: '300s' })
+func setupCleanupActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 300 * time.Second, // 5 minutes, matches TS
+	}
+}
+
+// validatePathActivityOptions returns activity options matching the TypeScript
+// ValidatePathWorkerWorkflow:
+//
+//	proxyActivities({ startToCloseTimeout: '300s' })
+func validatePathActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 300 * time.Second, // 5 minutes
+	}
+}
+
+// executeSetupActivityOptions returns activity options matching the TypeScript
+// executeWorkerSetup helper:
+//
+//	proxyActivities({ startToCloseTimeout: '5h', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } })
+func executeSetupActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Hour,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:   30 * time.Second,
+			BackoffCoefficient: 1,
+		},
+	}
+}
+
+// workflowCheckActivityOptions returns activity options for the
+// IsWorkflowRunning activity. Matches TS:
+//
+//	proxyActivities({ startToCloseTimeout: '5m', heartbeatTimeout: '1m',
+//	  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } })
+func workflowCheckActivityOptions() workflow.ActivityOptions {
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:   30 * time.Second,
+			BackoffCoefficient: 1,
+		},
+	}
+}
+
 // cleanupActivityOptions returns options for cleanup-related activities.
 func cleanupActivityOptions() workflow.ActivityOptions {
 	return workflow.ActivityOptions{
@@ -190,10 +304,14 @@ func isScanFinished(status string) bool {
 	return status == StatusCompleted || status == StatusFailed
 }
 
-// isWorkflowRunningActivity calls the isWorkflowRunningActivity to check
+// checkWorkflowRunning calls the IsWorkflowRunning activity to check
 // whether a given workflow is still running.
+//
+// TS uses: proxyActivities({ startToCloseTimeout: '5m', heartbeatTimeout: '1m',
+//
+//	retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } })
 func checkWorkflowRunning(ctx workflow.Context, workflowID string) (bool, error) {
-	actCtx := workflow.WithActivityOptions(ctx, shortActivityOptions())
+	actCtx := workflow.WithActivityOptions(ctx, workflowCheckActivityOptions())
 	var isRunning bool
 	err := workflow.ExecuteActivity(actCtx, "IsWorkflowRunning", workflowID).Get(ctx, &isRunning)
 	return isRunning, err

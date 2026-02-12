@@ -14,16 +14,18 @@ type StatusInput struct {
 	Status   string `json:"status"`
 }
 
-// WorkerResponseInput contains the parameters for the UpdateWorkerResponse activity.
-type WorkerResponseInput struct {
-	JobRunID       string `json:"jobRunId"`
-	WorkerID       string `json:"workerId"`
-	Status         string `json:"status"`
-	SourceErrors   int    `json:"sourceErrors"`
-	TargetErrors   int    `json:"targetErrors"`
-	FileCount      int    `json:"fileCount"`
-	DirCount       int    `json:"dirCount"`
-	ErrorMessage   string `json:"errorMessage,omitempty"`
+// WorkerResponsePayload contains the response payload for the UpdateWorkerResponse
+// activity. This is the third positional arg in the TS call:
+//
+//	updateWorkerResponse(jobRunId, workerId, workerResponse)
+type WorkerResponsePayload struct {
+	Status     string      `json:"status,omitempty"`
+	Code       string      `json:"code,omitempty"`
+	Operation  string      `json:"operation,omitempty"`
+	Occurrence int         `json:"occurrence,omitempty"`
+	Origin     string      `json:"origin,omitempty"`
+	Message    string      `json:"message,omitempty"`
+	CreatedAt  interface{} `json:"createdAt,omitempty"`
 }
 
 // CutOverStatusInput contains the parameters for UpdateCutOverStatus.
@@ -57,22 +59,26 @@ func (a *Activities) UpdateStatus(ctx context.Context, input StatusInput) error 
 
 // UpdateWorkerResponse sends a PUT request to the job service with the worker's
 // response data for a completed job run.
-func (a *Activities) UpdateWorkerResponse(ctx context.Context, input WorkerResponseInput) error {
-	url := fmt.Sprintf("%s/api/v1/job-run/worker-response/%s", a.Config.JobServiceURL, input.JobRunID)
+//
+// The TypeScript signature is: updateWorkerResponse(jobRunId, workerId, workerResponse)
+// with 3 positional args, so the Go activity matches.
+func (a *Activities) UpdateWorkerResponse(ctx context.Context, jobRunID string, workerID string, workerResponse WorkerResponsePayload) error {
+	url := fmt.Sprintf("%s/api/v1/job-run/worker-response/%s/%s", a.Config.JobServiceURL, jobRunID, workerID)
 
-	body, err := toJSON(input)
+	body, err := toJSON(workerResponse)
 	if err != nil {
 		return fmt.Errorf("marshaling worker response: %w", err)
 	}
 
 	a.Logger.Info("UpdateWorkerResponse",
-		zap.String("jobRunId", input.JobRunID),
+		zap.String("jobRunId", jobRunID),
+		zap.String("workerId", workerID),
 		zap.String("url", url),
 	)
 
 	resp, err := a.HTTP.Put(url, body, nil)
 	if err != nil {
-		return fmt.Errorf("updating worker response for %s: %w", input.JobRunID, err)
+		return fmt.Errorf("updating worker response for %s: %w", jobRunID, err)
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {

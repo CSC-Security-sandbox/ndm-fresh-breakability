@@ -5,28 +5,15 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.uber.org/zap"
-
-	"github.com/netapp/ndm/services/go-worker/types"
 )
 
 // DirBatchInput contains the parameters for the CreateInitialDirBatch activity.
+// Wire-compatible with the TypeScript {dirsToScan, jobRunId} shape.
 type DirBatchInput struct {
-	JobRunID string   `json:"jobRunId"`
-	Dirs     []string `json:"dirs"`
-}
-
-// GetTasksInput contains the parameters for the GetGroupOfTasks activity.
-type GetTasksInput struct {
-	JobRunID     string `json:"jobRunId"`
-	ConsumerName string `json:"consumerName"`
-	BatchSize    int64  `json:"batchSize"`
-}
-
-// GetTasksOutput contains the results of the GetGroupOfTasks activity.
-type GetTasksOutput struct {
-	Tasks   []types.Cmd `json:"tasks"`
-	TaskIDs []string    `json:"taskIds"`
+	JobRunID   string   `json:"jobRunId"`
+	DirsToScan []string `json:"dirsToScan"`
 }
 
 // CreateInitialDirBatch creates the initial directory batch in the Redis dir
@@ -34,7 +21,7 @@ type GetTasksOutput struct {
 func (a *Activities) CreateInitialDirBatch(ctx context.Context, input DirBatchInput) (string, error) {
 	a.Logger.Info("CreateInitialDirBatch",
 		zap.String("jobRunId", input.JobRunID),
-		zap.Int("dirCount", len(input.Dirs)),
+		zap.Int("dirCount", len(input.DirsToScan)),
 	)
 
 	jobContext, err := a.getJobManagerContext(ctx, input.JobRunID)
@@ -44,13 +31,13 @@ func (a *Activities) CreateInitialDirBatch(ctx context.Context, input DirBatchIn
 
 	batchID := uuid.New().String()
 
-	if err := jobContext.SetBatchDir(ctx, batchID, input.Dirs); err != nil {
+	if err := jobContext.SetBatchDir(ctx, batchID, input.DirsToScan); err != nil {
 		return "", fmt.Errorf("setting batch dir %s: %w", batchID, err)
 	}
 
 	a.Logger.Info("CreateInitialDirBatch completed",
 		zap.String("batchId", batchID),
-		zap.Int("dirCount", len(input.Dirs)),
+		zap.Int("dirCount", len(input.DirsToScan)),
 	)
 
 	return batchID, nil
@@ -90,41 +77,38 @@ func (a *Activities) IsCmdStreamLenValid(ctx context.Context, jobRunID string) (
 
 // GetGroupOfTasks reads a batch of commands from the Redis command stream
 // using consumer group reads.
-func (a *Activities) GetGroupOfTasks(ctx context.Context, input GetTasksInput) (*GetTasksOutput, error) {
+//
+// The TypeScript version is called as getGroupOfTasksActivity(jobRunId) with a
+// single string argument, so the Go signature matches: (ctx, jobRunID string).
+func (a *Activities) GetGroupOfTasks(ctx context.Context, jobRunID string) ([]string, error) {
 	a.Logger.Info("GetGroupOfTasks",
-		zap.String("jobRunId", input.JobRunID),
-		zap.String("consumer", input.ConsumerName),
-		zap.Int64("batchSize", input.BatchSize),
+		zap.String("jobRunId", jobRunID),
 	)
 
-	jobContext, err := a.getJobManagerContext(ctx, input.JobRunID)
+	jobContext, err := a.getJobManagerContext(ctx, jobRunID)
 	if err != nil {
 		return nil, fmt.Errorf("getting job manager context: %w", err)
 	}
 
-	batchSize := input.BatchSize
+	batchSize := int64(a.Config.CommandsInTask)
 	if batchSize <= 0 {
-		batchSize = int64(a.Config.CommandsInTask)
+		batchSize = 100
 	}
 
-	messages, err := jobContext.GroupReadCommandStream(ctx, input.ConsumerName, batchSize)
+	consumerName := fmt.Sprintf("consumer-%s", jobRunID)
+	messages, err := jobContext.GroupReadCommandStream(ctx, consumerName, batchSize)
 	if err != nil {
 		return nil, fmt.Errorf("reading command stream: %w", err)
 	}
 
-	output := &GetTasksOutput{
-		Tasks:   make([]types.Cmd, 0, len(messages)),
-		TaskIDs: make([]string, 0, len(messages)),
-	}
-
+	taskIDs := make([]string, 0, len(messages))
 	for _, msg := range messages {
-		output.Tasks = append(output.Tasks, msg.Data)
-		output.TaskIDs = append(output.TaskIDs, msg.ID)
+		taskIDs = append(taskIDs, msg.ID)
 	}
 
 	// Acknowledge the messages.
-	if len(output.TaskIDs) > 0 {
-		if err := jobContext.GroupAckCommandStream(ctx, output.TaskIDs...); err != nil {
+	if len(taskIDs) > 0 {
+		if err := jobContext.GroupAckCommandStream(ctx, taskIDs...); err != nil {
 			a.Logger.Error("failed to acknowledge command stream messages",
 				zap.Error(err),
 			)
@@ -132,9 +116,42 @@ func (a *Activities) GetGroupOfTasks(ctx context.Context, input GetTasksInput) (
 	}
 
 	a.Logger.Info("GetGroupOfTasks completed",
-		zap.String("jobRunId", input.JobRunID),
-		zap.Int("taskCount", len(output.Tasks)),
+		zap.String("jobRunId", jobRunID),
+		zap.Int("taskCount", len(taskIDs)),
 	)
 
-	return output, nil
+	return taskIDs, nil
+}
+
+// IsWorkflowRunning checks whether a workflow with the given ID is currently
+// running by querying Temporal's DescribeWorkflowExecution API.
+// Matches the TypeScript isWorkflowRunningActivity.
+func (a *Activities) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
+	a.Logger.Debug("IsWorkflowRunning", zap.String("workflowId", workflowID))
+
+	if a.TemporalClient == nil {
+		return false, fmt.Errorf("temporal client not available")
+	}
+
+	resp, err := a.TemporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		a.Logger.Error("failed to describe workflow execution",
+			zap.String("workflowId", workflowID),
+			zap.Error(err),
+		)
+		return false, nil // Return false on error, matching TS behavior
+	}
+
+	if resp.WorkflowExecutionInfo == nil {
+		return false, nil
+	}
+
+	isRunning := resp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+
+	a.Logger.Debug("IsWorkflowRunning result",
+		zap.String("workflowId", workflowID),
+		zap.Bool("isRunning", isRunning),
+	)
+
+	return isRunning, nil
 }

@@ -39,13 +39,16 @@ func ValidateConnectionsWorkflow(ctx workflow.Context, input ValidateConnectionI
 	)
 
 	// Execute a child workflow for each worker.
+	// The TS workflow spreads `...options` into the child workflow start call,
+	// which propagates workflowExecutionTimeout, workflowRunTimeout, etc.
 	futures := make([]workflow.Future, len(data.WorkerIDs))
 	for i, workerID := range data.WorkerIDs {
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        fmt.Sprintf("ValidateConnectionsWorkflow-%s-%s", input.TraceID, workerID),
-			TaskQueue:         fmt.Sprintf("%s-TaskQueue", workerID),
-			ParentClosePolicy: 1, // TERMINATE
-		})
+		childOpts := parseChildWorkflowOptions(
+			fmt.Sprintf("ValidateConnectionsWorkflow-%s-%s", input.TraceID, workerID),
+			fmt.Sprintf("%s-TaskQueue", workerID),
+			input.Options,
+		)
+		childCtx := workflow.WithChildOptions(ctx, childOpts)
 
 		logger.Info("Dispatching child workflow",
 			"traceId", input.TraceID,
@@ -101,6 +104,7 @@ func ValidateConnectionsWorkflow(ctx workflow.Context, input ValidateConnectionI
 //   - Receives {traceId, fileServer, feature} from the parent workflow
 //   - For each protocol in fileServer.protocols, calls the ValidateConnection
 //     activity with (traceId, protocolType, {hostname, ...protocol}, feature)
+//   - Activity timeout: 300s (5 minutes) matching TS proxyActivities config
 //   - Returns the array of results from all protocol validations
 func ValidateWorkerConnectionWorkflow(ctx workflow.Context, args map[string]interface{}) ([]interface{}, error) {
 	logger := workflow.GetLogger(ctx)
@@ -141,7 +145,8 @@ func ValidateWorkerConnectionWorkflow(ctx workflow.Context, args map[string]inte
 		"protocolCount", len(protocolsRaw),
 	)
 
-	actCtx := workflow.WithActivityOptions(ctx, setupActivityOptions())
+	// TS uses: proxyActivities({ startToCloseTimeout: '300s' })
+	actCtx := workflow.WithActivityOptions(ctx, validateConnectionActivityOptions())
 
 	futures := make([]workflow.Future, len(protocolsRaw))
 	for i, pRaw := range protocolsRaw {

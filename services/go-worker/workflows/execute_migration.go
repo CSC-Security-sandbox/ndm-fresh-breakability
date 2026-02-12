@@ -101,17 +101,17 @@ func executeMigrationChildWorkflows(ctx workflow.Context, jobRunID string) (*Mig
 			} else {
 				output.SyncJobStatus = StatusFailed
 			}
-			// Report sync failure.
+			// Report sync failure. TS: updateWorkerResponse(jobRunId, 'all', {...})
 			respCtx := workflow.WithActivityOptions(ctx, shortActivityOptions())
 			_ = workflow.ExecuteActivity(respCtx, "UpdateWorkerResponse",
-				jobRunID, "all", WorkerResponseInput{
-					Status:     output.SyncJobStatus,
-					Code:       "TASK_FETCH_FAILURE",
-					Operation:  "Sync Workflow Failed",
-					Occurrence: 1,
-					Origin:     "ChildSyncWorkflow",
-					Message:    fmt.Sprintf("Sync workflow failed with error: %v", err),
-					CreatedAt:  workflow.Now(ctx),
+				jobRunID, "all", map[string]interface{}{
+					"status":     output.SyncJobStatus,
+					"code":       "TASK_FETCH_FAILURE",
+					"operation":  "Sync Workflow Failed",
+					"occurrence": 1,
+					"origin":     "ChildSyncWorkflow",
+					"message":    fmt.Sprintf("Sync workflow failed with error: %v", err),
+					"createdAt":  workflow.Now(ctx),
 				}).Get(ctx, nil)
 			// Cancel scan if sync failed.
 			cancelWorkflowIfRunning(ctx, scanWorkflowID)

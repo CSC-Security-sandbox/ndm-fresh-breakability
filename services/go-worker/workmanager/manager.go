@@ -169,6 +169,10 @@ func (wm *WorkManager) Start(ctx context.Context) error {
 	}
 	wm.temporalClient = tc
 
+	// Inject the Temporal client into Activities so activities like
+	// IsWorkflowRunning can query Temporal directly.
+	wm.activities.TemporalClient = tc
+
 	// Step 4: Reconcile initial metaConfig returned from registration.
 	wm.reconcileWorkers(payload.MetaConfig)
 

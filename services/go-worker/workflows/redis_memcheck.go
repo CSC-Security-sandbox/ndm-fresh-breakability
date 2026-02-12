@@ -8,11 +8,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// RedisMemCheckWorkflow polls the CheckMemoryUsage activity until Redis memory
-// is within acceptable limits. Uses ContinueAsNew after a maximum number of
-// iterations to prevent history growth. Registered with Temporal as
-// "RedisMemoryCheckWorkflow" for wire compatibility.
-func RedisMemCheckWorkflow(ctx workflow.Context, traceID string) (bool, error) {
+// RedisMemoryCheckWorkflow polls the CheckMemoryUsage activity until Redis
+// memory is within acceptable limits. Uses ContinueAsNew after a maximum number
+// of iterations to prevent history growth. The function name matches the
+// TypeScript export "RedisMemoryCheckWorkflow" for wire compatibility.
+func RedisMemoryCheckWorkflow(ctx workflow.Context, traceID string) (bool, error) {
 	logger := workflow.GetLogger(ctx)
 
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -30,7 +30,7 @@ func RedisMemCheckWorkflow(ctx workflow.Context, traceID string) (bool, error) {
 
 	for iterations := 0; ; iterations++ {
 		var isMemoryOk bool
-		err := workflow.ExecuteActivity(actCtx, "CheckMemoryUsage").Get(ctx, &isMemoryOk)
+		err := workflow.ExecuteActivity(actCtx, "CheckMemoryUsage", traceID).Get(ctx, &isMemoryOk)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error in RedisMemoryCheckWorkflow: %v", err))
 			// Continue to next iteration on error.
@@ -45,7 +45,7 @@ func RedisMemCheckWorkflow(ctx workflow.Context, traceID string) (bool, error) {
 
 		if iterations > maxIterations {
 			logger.Error("Max iterations reached. Redis memory check failed.")
-			return false, workflow.NewContinueAsNewError(ctx, RedisMemCheckWorkflow, traceID)
+			return false, workflow.NewContinueAsNewError(ctx, RedisMemoryCheckWorkflow, traceID)
 		}
 	}
 }

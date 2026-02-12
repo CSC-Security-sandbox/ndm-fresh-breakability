@@ -34,13 +34,17 @@ func ListPathsWorkflow(ctx workflow.Context, input ListPathInput) ([]interface{}
 		"hasFileServer", data.FileServer != nil,
 	)
 
+	// Execute a child workflow for each worker.
+	// The TS workflow spreads `...options` into the child workflow start call,
+	// which propagates workflowExecutionTimeout, workflowRunTimeout, etc.
 	futures := make([]workflow.Future, len(data.WorkerIDs))
 	for i, workerID := range data.WorkerIDs {
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        fmt.Sprintf("ListPathsWorkflow-%s-%s", input.TraceID, workerID),
-			TaskQueue:         fmt.Sprintf("%s-TaskQueue", workerID),
-			ParentClosePolicy: 1, // TERMINATE
-		})
+		childOpts := parseChildWorkflowOptions(
+			fmt.Sprintf("ListPathsWorkflow-%s-%s", input.TraceID, workerID),
+			fmt.Sprintf("%s-TaskQueue", workerID),
+			input.Options,
+		)
+		childCtx := workflow.WithChildOptions(ctx, childOpts)
 
 		logger.Info("Dispatching ListPathWorkerWorkflow",
 			"traceId", input.TraceID,
@@ -125,7 +129,8 @@ func ListPathWorkerWorkflow(ctx workflow.Context, args map[string]interface{}) (
 		"protocolCount", len(protocolsRaw),
 	)
 
-	actCtx := workflow.WithActivityOptions(ctx, setupActivityOptions())
+	// TS uses: proxyActivities({ startToCloseTimeout: '30s' })
+	actCtx := workflow.WithActivityOptions(ctx, listPathActivityOptions())
 
 	futures := make([]workflow.Future, len(protocolsRaw))
 	for i, pRaw := range protocolsRaw {

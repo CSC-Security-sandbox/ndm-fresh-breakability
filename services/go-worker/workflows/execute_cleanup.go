@@ -13,15 +13,17 @@ func executeCleanup(ctx workflow.Context, input ExecuteCleanupInput) {
 	logger := workflow.GetLogger(ctx)
 
 	// Launch cleanup for each worker in parallel and wait for all to settle.
+	// TS spreads `...options` into the child workflow start call.
 	futures := make([]workflow.Future, len(input.WorkerIDs))
 	for i, workerID := range input.WorkerIDs {
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        fmt.Sprintf("CleanupWorkerWorkflow-%s-%s", input.JobRunID, workerID),
-			TaskQueue:         fmt.Sprintf("%s-TaskQueue", workerID),
-			ParentClosePolicy: 1, // TERMINATE
-		})
-		futures[i] = workflow.ExecuteChildWorkflow(childCtx, "CleanupWorkerWorkflow", CleanupWorkerInput{
-			JobRunID: input.JobRunID,
+		childOpts := parseChildWorkflowOptions(
+			fmt.Sprintf("CleanupWorkerWorkflow-%s-%s", input.JobRunID, workerID),
+			fmt.Sprintf("%s-TaskQueue", workerID),
+			input.Options,
+		)
+		childCtx := workflow.WithChildOptions(ctx, childOpts)
+		futures[i] = workflow.ExecuteChildWorkflow(childCtx, "CleanupWorkerWorkflow", map[string]interface{}{
+			"jobRunId": input.JobRunID,
 		})
 	}
 

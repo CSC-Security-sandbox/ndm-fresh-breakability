@@ -1,7 +1,5 @@
 package workflows
 
-import "time"
-
 // ChildScanWorkflowInput is the input for the ChildScanWorkflow.
 // Wire-compatible with the TypeScript ChildScanWorkflowInput interface.
 type ChildScanWorkflowInput struct {
@@ -132,9 +130,13 @@ type SetupWorkerInput struct {
 
 // SetupWorkerOutput is the output for the SetupWorkerWorkflow.
 type SetupWorkerOutput struct {
-	Status   string `json:"status"`
-	Message  string `json:"message,omitempty"`
-	WorkerID string `json:"workerId,omitempty"`
+	Status       string      `json:"status"`
+	Message      string      `json:"message,omitempty"`
+	WorkerID     string      `json:"workerId,omitempty"`
+	FSDetails    interface{} `json:"fsDetails,omitempty"`
+	FileServerID string      `json:"fileServerId,omitempty"`
+	VolumeID     string      `json:"volumeId,omitempty"`
+	ProtocolType string      `json:"protocolType,omitempty"`
 }
 
 // CleanupWorkerInput is the input for the CleanupWorkerWorkflow.
@@ -172,12 +174,31 @@ type ValidateConnectionData struct {
 	Options    interface{} `json:"options,omitempty"`
 }
 
-// ValidatePathInput is the input for the ValidatePathWorkflow.
-type ValidatePathInput struct {
+// ValidatePathsInput is the input for the ValidatePathsWorkflow (parent).
+// The config service wraps the real payload inside a top-level object:
+//
+//	{
+//	  "traceId": "...",
+//	  "payload": {
+//	    "traceId": "...",
+//	    "paths": [{"pathId": "...", "path": "..."}],
+//	    "fileServer": { "type": "NFS", "host": "...", ... },
+//	    "workerIds": ["worker-uuid-1", ...]
+//	  },
+//	  "options": { ... }
+//	}
+type ValidatePathsInput struct {
+	TraceID string             `json:"traceId"`
+	Payload ValidatePathsData `json:"payload"`
+	Options interface{}        `json:"options,omitempty"`
+}
+
+// ValidatePathsData is the nested "payload" inside ValidatePathsInput.
+type ValidatePathsData struct {
 	TraceID    string      `json:"traceId"`
 	Paths      interface{} `json:"paths"`
 	FileServer interface{} `json:"fileServer"`
-	WorkerID   string      `json:"workerId,omitempty"`
+	WorkerIDs  []string    `json:"workerIds"`
 }
 
 // ListPathInput is the input for the ListPathsWorkflow (parent).
@@ -282,17 +303,6 @@ type SyncTaskActivityInput struct {
 type SyncTaskActivityOutput struct {
 	TaskID string `json:"taskId"`
 	Error  string `json:"error,omitempty"`
-}
-
-// WorkerResponseInput is used for updateWorkerResponse activity calls.
-type WorkerResponseInput struct {
-	Status     string    `json:"status"`
-	Code       string    `json:"code"`
-	Operation  string    `json:"operation"`
-	Occurrence int       `json:"occurrence"`
-	Origin     string    `json:"origin"`
-	Message    string    `json:"message"`
-	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // MigrationChildWorkflowsOutput is the internal result of

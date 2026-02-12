@@ -14,17 +14,20 @@ import (
 	"github.com/netapp/ndm/services/go-worker/logger"
 	"github.com/netapp/ndm/services/go-worker/redisclient"
 	"github.com/netapp/ndm/services/go-worker/types"
+
+	"go.temporal.io/sdk/client"
 )
 
 // Activities holds all shared dependencies required by Temporal activity
 // implementations. A single instance is registered with the Temporal worker.
 type Activities struct {
-	Config   *config.Config
-	Redis    *redisclient.RedisClient
-	Auth     *auth.KeycloakAuth
-	CopyPool *filecopy.CopyPool
-	HTTP     *httpclient.Client
-	Logger   *logger.Logger
+	Config         *config.Config
+	Redis          *redisclient.RedisClient
+	Auth           *auth.KeycloakAuth
+	CopyPool       *filecopy.CopyPool
+	HTTP           *httpclient.Client
+	Logger         *logger.Logger
+	TemporalClient client.Client
 }
 
 // NewDMError constructs a types.DMError representing an operation-level error.

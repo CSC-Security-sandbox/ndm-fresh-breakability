@@ -7,35 +7,43 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// ValidatePathWorkflow is the parent workflow that calls
+// ValidatePathsWorkflow is the parent workflow that calls
 // ValidatePathWorkerWorkflow for each worker ID and then posts the validation
-// results. Registered with Temporal as "ValidatePathWorkflow" for wire
-// compatibility (TypeScript: ValidatePathsWorkflow).
-func ValidatePathWorkflow(ctx workflow.Context, input ValidatePathInput) (interface{}, error) {
+// results.
+//
+// The function name MUST match the TypeScript export name exactly
+// ("ValidatePathsWorkflow" with the trailing "s") because the Temporal Go SDK
+// registers it under the function name, and the config service starts it by
+// that string (WorkFlows.VALIDATE_PATHS = 'ValidatePathsWorkflow').
+func ValidatePathsWorkflow(ctx workflow.Context, input ValidatePathsInput) (interface{}, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting ValidatePathWorkflow", "traceId", input.TraceID)
+	logger.Info("Starting ValidatePathsWorkflow",
+		"traceId", input.TraceID,
+		"workerCount", len(input.Payload.WorkerIDs),
+	)
 
-	payload, ok := input.FileServer.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid payload type for ValidatePathWorkflow")
+	data := input.Payload
+
+	if len(data.WorkerIDs) == 0 {
+		logger.Warn("ValidatePathsWorkflow: no worker IDs in payload", "traceId", input.TraceID)
+		return []interface{}{}, nil
 	}
 
-	workerIDsRaw, _ := payload["workerIds"].([]interface{})
-	paths := payload["paths"]
-	fileServer := payload["fileServer"]
+	// Execute a child workflow for each worker.
+	// The TS workflow spreads `...options` into the child workflow start call.
+	futures := make([]workflow.Future, len(data.WorkerIDs))
+	for i, workerID := range data.WorkerIDs {
+		childOpts := parseChildWorkflowOptions(
+			fmt.Sprintf("ValidatePathsWorkflow-%s-%s", input.TraceID, workerID),
+			fmt.Sprintf("%s-TaskQueue", workerID),
+			input.Options,
+		)
+		childCtx := workflow.WithChildOptions(ctx, childOpts)
 
-	futures := make([]workflow.Future, len(workerIDsRaw))
-	for i, wRaw := range workerIDsRaw {
-		workerID, _ := wRaw.(string)
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        fmt.Sprintf("ValidatePathsWorkflow-%s-%s", input.TraceID, workerID),
-			TaskQueue:         fmt.Sprintf("%s-TaskQueue", workerID),
-			ParentClosePolicy: 1, // TERMINATE
-		})
 		futures[i] = workflow.ExecuteChildWorkflow(childCtx, "ValidatePathWorkerWorkflow", map[string]interface{}{
 			"traceId":    input.TraceID,
-			"paths":      paths,
-			"fileServer": fileServer,
+			"paths":      data.Paths,
+			"fileServer": data.FileServer,
 			"workerId":   workerID,
 		})
 	}
@@ -53,18 +61,20 @@ func ValidatePathWorkflow(ctx workflow.Context, input ValidatePathInput) (interf
 		}
 	}
 
-	// Post the validation results.
+	// Post the validation results. TS: proxyActivities({ startToCloseTimeout: '5m' })
 	postCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
 	})
 	_ = workflow.ExecuteActivity(postCtx, "PostValidationResult", input.TraceID, allResults).Get(ctx, nil)
 
-	logger.Info("ValidatePathWorkflow completed", "traceId", input.TraceID)
+	logger.Info("ValidatePathsWorkflow completed", "traceId", input.TraceID)
 	return allResults, nil
 }
 
-// ValidatePathWorkerWorkflow validates paths for a single worker. Registered
-// with Temporal as "ValidatePathWorkerWorkflow".
+// ValidatePathWorkerWorkflow validates paths for a single worker.
+// Registered with Temporal as "ValidatePathWorkerWorkflow".
+//
+// TS uses: proxyActivities({ startToCloseTimeout: '300s' })
 func ValidatePathWorkerWorkflow(ctx workflow.Context, args map[string]interface{}) (interface{}, error) {
 	logger := workflow.GetLogger(ctx)
 	traceID, _ := args["traceId"].(string)
@@ -73,7 +83,8 @@ func ValidatePathWorkerWorkflow(ctx workflow.Context, args map[string]interface{
 	fileServer, _ := args["fileServer"].(map[string]interface{})
 	pathsRaw, _ := args["paths"].([]interface{})
 
-	actCtx := workflow.WithActivityOptions(ctx, setupActivityOptions())
+	// TS: proxyActivities({ startToCloseTimeout: '300s' })
+	actCtx := workflow.WithActivityOptions(ctx, validatePathActivityOptions())
 
 	var validationResults []interface{}
 	for _, pRaw := range pathsRaw {

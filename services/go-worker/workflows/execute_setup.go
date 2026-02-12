@@ -29,15 +29,17 @@ func executeWorkerSetup(ctx workflow.Context, input ExecuteWorkerSetupInput) (*E
 	for _, workerID := range input.WorkerIDs {
 		wID := workerID
 		workflow.Go(ctx, func(gCtx workflow.Context) {
-			childCtx := workflow.WithChildOptions(gCtx, workflow.ChildWorkflowOptions{
-				WorkflowID:        fmt.Sprintf("SetupWorkerWorkflow-%s-%s", input.JobRunID, wID),
-				TaskQueue:         fmt.Sprintf("%s-TaskQueue", wID),
-				ParentClosePolicy: 1, // TERMINATE
-			})
+			// TS spreads `...options` into the child workflow start call.
+			childOpts := parseChildWorkflowOptions(
+				fmt.Sprintf("SetupWorkerWorkflow-%s-%s", input.JobRunID, wID),
+				fmt.Sprintf("%s-TaskQueue", wID),
+				input.Options,
+			)
+			childCtx := workflow.WithChildOptions(gCtx, childOpts)
 
 			var result SetupWorkerOutput
-			err := workflow.ExecuteChildWorkflow(childCtx, "SetupWorkerWorkflow", SetupWorkerInput{
-				JobRunID: input.JobRunID,
+			err := workflow.ExecuteChildWorkflow(childCtx, "SetupWorkerWorkflow", map[string]interface{}{
+				"jobRunId": input.JobRunID,
 			}).Get(gCtx, &result)
 
 			resultCh.Send(gCtx, workerResult{workerID: wID, output: result, err: err})
@@ -69,10 +71,8 @@ func executeWorkerSetup(ctx workflow.Context, input ExecuteWorkerSetupInput) (*E
 
 	// If all workers failed, update job error status and return an error.
 	if len(failedWorkers) == len(input.WorkerIDs) {
-		errCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: shortActivityOptions().StartToCloseTimeout,
-			RetryPolicy:         shortActivityOptions().RetryPolicy,
-		})
+		// TS uses the same 5h activity options for updateJobErrorStatus.
+		errCtx := workflow.WithActivityOptions(ctx, executeSetupActivityOptions())
 		_ = workflow.ExecuteActivity(errCtx, "UpdateJobErrorStatus", input.JobRunID).Get(ctx, nil)
 		return nil, temporal.NewNonRetryableApplicationError(
 			fmt.Sprintf("All workers failed to setup: %v", failedWorkers),
@@ -89,16 +89,19 @@ func executeWorkerSetup(ctx workflow.Context, input ExecuteWorkerSetupInput) (*E
 
 // updateWorkerFailedResponse reports a worker setup failure via the
 // UpdateWorkerResponse activity.
+//
+// TS uses: proxyActivities({ startToCloseTimeout: '5h', retry: { maximumAttempts: 3, ... } })
 func updateWorkerFailedResponse(ctx workflow.Context, workerID, jobRunID, message string) {
-	respCtx := workflow.WithActivityOptions(ctx, shortActivityOptions())
+	respCtx := workflow.WithActivityOptions(ctx, executeSetupActivityOptions())
+	// TS: updateWorkerResponse(jobRunId, workerId, {...})
 	_ = workflow.ExecuteActivity(respCtx, "UpdateWorkerResponse",
-		jobRunID, workerID, WorkerResponseInput{
-			Status:     "FAILED",
-			Code:       "SETUP_WORKER_FAILURE",
-			Operation:  "Worker Setup Failed",
-			Occurrence: 1,
-			Origin:     "Worker",
-			Message:    message,
-			CreatedAt:  workflow.Now(ctx),
+		jobRunID, workerID, map[string]interface{}{
+			"status":     "FAILED",
+			"code":       "SETUP_WORKER_FAILURE",
+			"operation":  "Worker Setup Failed",
+			"occurrence": 1,
+			"origin":     "Worker",
+			"message":    message,
+			"createdAt":  workflow.Now(ctx),
 		}).Get(ctx, nil)
 }

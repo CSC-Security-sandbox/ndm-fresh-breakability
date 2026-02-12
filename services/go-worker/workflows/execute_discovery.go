@@ -70,17 +70,17 @@ func executeDiscoveryChildWorkflows(ctx workflow.Context, jobRunID string) (*Dis
 				logger.Error(fmt.Sprintf("[%s] Error in ChildScanWorkflow: %v", jobRunID, err))
 				output.Status = StatusFailed
 
-				// Report the failure.
+				// Report the failure. TS: updateWorkerResponse(jobRunId, 'all', {...})
 				respCtx := workflow.WithActivityOptions(ctx, shortActivityOptions())
 				_ = workflow.ExecuteActivity(respCtx, "UpdateWorkerResponse",
-					jobRunID, "all", WorkerResponseInput{
-						Status:     output.Status,
-						Code:       "SCAN_ACTIVITY_FAILURE",
-						Operation:  "Scan Workflow Failed",
-						Occurrence: 1,
-						Origin:     "ChildScanWorkflow",
-						Message:    fmt.Sprintf("Scan workflow failed with error: %v", err),
-						CreatedAt:  workflow.Now(ctx),
+					jobRunID, "all", map[string]interface{}{
+						"status":     output.Status,
+						"code":       "SCAN_ACTIVITY_FAILURE",
+						"operation":  "Scan Workflow Failed",
+						"occurrence": 1,
+						"origin":     "ChildScanWorkflow",
+						"message":    fmt.Sprintf("Scan workflow failed with error: %v", err),
+						"createdAt":  workflow.Now(ctx),
 					}).Get(ctx, nil)
 			}
 		} else {
