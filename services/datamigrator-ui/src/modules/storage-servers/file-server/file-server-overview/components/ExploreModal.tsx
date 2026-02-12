@@ -250,15 +250,14 @@ const DirectoriesContent = ({
   onBackToExportPaths,
   fileServerId,
 }: DirectoriesContentProps) => {
-  // Search/Jump to path state
-  const [searchPath, setSearchPath] = useState<string>(currentPath);
+  // Search/Jump to path state - independent from current path navigation
+  const [searchPath, setSearchPath] = useState<string>("");
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Sync search bar with current path when navigating via folder clicks or parent button
+  // Clear search error when current path changes (user navigated via folder clicks)
   useEffect(() => {
-    setSearchPath(currentPath);
-    setSearchError(null); // Clear any previous search errors when path changes
+    setSearchError(null);
   }, [currentPath]);
 
   const handleParentClick = () => {
@@ -294,24 +293,62 @@ const DirectoriesContent = ({
 
     try {
       // Validate the path by trying to fetch its contents
-      await fetchDirectoryContents(
+      const contents = await fetchDirectoryContents(
         fileServerId,
         exportPath.volumePath,
         normalizedPath
       );
       
+      // Check if the path exists - if it returns empty and it's not root, 
+      // we should verify by trying to fetch the parent directory
+      if (contents.length === 0 && normalizedPath !== "/") {
+        // Try to fetch the parent to see if the target folder exists as a child
+        const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) || "/";
+        const folderName = normalizedPath.substring(normalizedPath.lastIndexOf("/") + 1);
+        
+        try {
+          const parentContents = await fetchDirectoryContents(
+            fileServerId,
+            exportPath.volumePath,
+            parentPath
+          );
+          
+          // Check if the folder exists in parent directory
+          const folderExists = parentContents.some(
+            (item) => item.name === folderName
+          );
+          
+          if (!folderExists) {
+            setSearchError(`Path not found: "${normalizedPath}" does not exist`);
+            return;
+          }
+          // Folder exists but is empty - this is valid, proceed
+        } catch {
+          // Parent doesn't exist either
+          setSearchError(`Path not found: "${normalizedPath}" does not exist`);
+          return;
+        }
+      }
+      
       // If successful, navigate to that path
       onPathChange(normalizedPath);
-      // Keep the path in search bar so user can see where they navigated
-      setSearchPath(normalizedPath);
+      // Clear the search bar after successful navigation
+      setSearchPath("");
       setSearchError(null);
     } catch (err) {
       console.error("Path validation failed:", err);
-      setSearchError(
-        err instanceof Error 
-          ? `Invalid path: ${err.message}` 
-          : "Path not found or inaccessible"
-      );
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes("404") || errorMessage.includes("not found")) {
+        setSearchError(`Path not found: "${normalizedPath}" does not exist`);
+      } else if (errorMessage.includes("403") || errorMessage.includes("permission")) {
+        setSearchError(`Access denied: You don't have permission to access "${normalizedPath}"`);
+      } else if (errorMessage.includes("timeout") || errorMessage.includes("network")) {
+        setSearchError("Network error: Unable to reach the server. Please try again.");
+      } else {
+        setSearchError(`Invalid path: ${errorMessage}`);
+      }
     } finally {
       setIsValidating(false);
     }
@@ -331,18 +368,24 @@ const DirectoriesContent = ({
         <Button variant="secondary" onClick={onBackToExportPaths}>
           <ArrowBackIcon size="20" />
         </Button>
-        <Box className="flex flex-col gap-1">
-          <Box className="text-sm text-gray-600">
-            Export Path:{" "}
-            <span className="font-mono">{exportPath?.volumePath}</span>
-          </Box>
+      </Box>
+
+      {/* Current Path Display - Now on top */}
+      <Box className="mb-4 p-3 bg-gray-100 rounded-md">
+        <Box className="text-sm font-semibold text-gray-700 mb-1">Export Path</Box>
+        <Box className="font-mono text-sm text-gray-800 mb-2">
+          {exportPath?.volumePath}
+        </Box>
+        <Box className="text-sm font-semibold text-gray-700 mb-1">Directory Path (relative to export)</Box>
+        <Box className="font-mono text-sm text-gray-800">
+          {currentPath === "/" || currentPath === "" ? "/" : currentPath}
         </Box>
       </Box>
 
-      {/* Jump to Path Search Bar */}
+      {/* Jump to Path Search Bar - Now in middle */}
       <Box className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
         <Box className="text-sm font-semibold text-gray-700 mb-2">
-          Jump to Path
+          Search
         </Box>
         <Box className="flex gap-2">
           <input
@@ -361,7 +404,7 @@ const DirectoriesContent = ({
             onClick={handleJumpToPath}
             disabled={!searchPath.trim() || isValidating}
           >
-            {isValidating ? "Validating..." : "Go"}
+            {isValidating ? "Validating..." : "Validate"}
           </Button>
         </Box>
         {searchError && (
@@ -371,18 +414,6 @@ const DirectoriesContent = ({
         )}
         <Box className="mt-2 text-xs text-gray-500">
           Enter an absolute path relative to the export path to jump directly to that directory.
-        </Box>
-      </Box>
-
-      {/* Current Path Display */}
-      <Box className="mb-4 p-3 bg-gray-100 rounded-md">
-        <Box className="text-sm font-semibold text-gray-700 mb-1">Export Path</Box>
-        <Box className="font-mono text-sm text-gray-800 mb-2">
-          {exportPath?.volumePath}
-        </Box>
-        <Box className="text-sm font-semibold text-gray-700 mb-1">Directory Path (relative to export)</Box>
-        <Box className="font-mono text-sm text-gray-800">
-          {currentPath === "/" || currentPath === "" ? "/" : currentPath}
         </Box>
       </Box>
 
@@ -396,16 +427,9 @@ const DirectoriesContent = ({
       )}
 
       {/* Selected Items Count */}
-      {selectedItems.size > 0 && (
+      {selectedItems.size > 0 && !searchError && (
         <Box className="mb-4 p-2 bg-blue-50 rounded-md text-sm text-blue-700">
           {selectedItems.size} item(s) selected
-        </Box>
-      )}
-
-      {/* Error Display */}
-      {error && (
-        <Box className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
-          {error}
         </Box>
       )}
 
@@ -414,7 +438,21 @@ const DirectoriesContent = ({
         <Box className="text-center py-8 text-gray-500">
           Loading directory contents...
         </Box>
-      ) : directoryContents.length === 0 && !error ? (
+      ) : searchError ? (
+        <Box className="text-center py-8">
+          <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+            <Box className="font-semibold mb-1">Path Not Found</Box>
+            <Box className="text-sm">{searchError}</Box>
+          </Box>
+        </Box>
+      ) : error ? (
+        <Box className="text-center py-8">
+          <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+            <Box className="font-semibold mb-1">Error Loading Directory</Box>
+            <Box className="text-sm">{error}</Box>
+          </Box>
+        </Box>
+      ) : directoryContents.length === 0 ? (
         <Box className="text-center py-8 text-gray-500">
           This directory is empty.
         </Box>
