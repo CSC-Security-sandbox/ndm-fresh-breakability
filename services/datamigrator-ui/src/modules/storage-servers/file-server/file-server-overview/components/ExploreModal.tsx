@@ -735,7 +735,7 @@ const ExploreModal = ({
       <ModalFooter>
         {currentView === "export-paths" ? (
           <Box className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={handleClose}>
+            <Button onClick={handleClose}>
               Cancel
             </Button>
             <Button
@@ -747,7 +747,7 @@ const ExploreModal = ({
           </Box>
         ) : (
           <Box className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={handleClose}>
+            <Button onClick={handleClose}>
               Cancel
             </Button>
             <Button
