@@ -68,14 +68,17 @@ const UploadFileSelector = () => {
       />
 
       <Box className="flex items-center gap-4">
-        <Button
-          onClick={handleClick}
-          disabled={isDisabled}
-          variant="secondary"
-        >
-          {SELECT_FILE_LABEL}
-        </Button>
+        {/* Show Select File button only when no file is selected */}
+        {!selectedFile && (
+          <Button
+            onClick={handleClick}
+            disabled={isDisabled}
+          >
+            {SELECT_FILE_LABEL}
+          </Button>
+        )}
 
+        {/* Show file info and Clear button when file is selected */}
         {selectedFile && (
           <>
             <Box className="flex-1 p-3 bg-gray-50 rounded border">
@@ -87,7 +90,6 @@ const UploadFileSelector = () => {
             {!isDisabled && (
               <Button
                 onClick={handleClear}
-                variant="tertiary"
               >
                 {CLEAR_FILE_LABEL}
               </Button>

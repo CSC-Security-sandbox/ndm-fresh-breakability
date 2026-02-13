@@ -39,6 +39,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   // UI visibility flags (determined by DB state)
   const [showUploadUI, setShowUploadUI] = useState(true);
   const [showUpgradeUI, setShowUpgradeUI] = useState(false);
+  const [isUploadInProgress, setIsUploadInProgress] = useState(false);
+  const [inProgressFileName, setInProgressFileName] = useState<string>('');
 
   // Get project ID from store
   const { selectedProjectId } = useSelectedProjectId();
@@ -62,6 +64,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     if (latestStatus) {
       setShowUploadUI(latestStatus.showUploadUI);
       setShowUpgradeUI(latestStatus.showUpgradeUI);
+      setIsUploadInProgress(latestStatus.isUploadInProgress || false);
+      setInProgressFileName(latestStatus.isUploadInProgress ? (latestStatus.fileName || '') : '');
 
       // If there's a successful upload pending upgrade, restore the upload state
       if (latestStatus.showUpgradeUI && latestStatus.filePath) {
@@ -100,8 +104,10 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   }, []);
 
   // ═══════════════════════════════════════════════════════════════
-  // UPLOAD HANDLER
+  // UPLOAD HANDLER - Parallel chunk uploads for faster performance
   // ═══════════════════════════════════════════════════════════════
+  const PARALLEL_UPLOADS = 5; // Upload 5 chunks simultaneously
+
   const handleUpload = async () => {
     if (!selectedFile) return;
 
@@ -122,27 +128,77 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         totalChunks,
       }));
 
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
+      // Create array of chunk indices
+      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i);
+      let completedChunks = 0;
+
+      // Upload function for a single chunk
+      const uploadSingleChunk = async (chunkIndex: number) => {
+        const start = chunkIndex * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
         const chunkBlob = selectedFile.slice(start, end);
 
         await uploadChunk({
           uploadId,
-          chunkIndex: i,
+          chunkIndex,
           chunkData: chunkBlob,
         }).unwrap();
 
+        completedChunks++;
         setUploadProgress((prev) => ({
           ...prev,
-          currentChunk: i + 1,
-          uploadedBytes: end,
-          progress: Math.round(((i + 1) / totalChunks) * 100),
+          currentChunk: completedChunks,
+          uploadedBytes: Math.min(completedChunks * CHUNK_SIZE, selectedFile.size),
+          progress: Math.round((completedChunks / totalChunks) * 100),
         }));
-      }
+      };
+
+      // Parallel upload with concurrency limit
+      const uploadChunksInParallel = async () => {
+        const executing: Promise<void>[] = [];
+
+        for (const chunkIndex of chunkIndices) {
+          const promise = uploadSingleChunk(chunkIndex).then(() => {
+            executing.splice(executing.indexOf(promise), 1);
+          });
+          executing.push(promise);
+
+          // If we've reached the concurrency limit, wait for one to finish
+          if (executing.length >= PARALLEL_UPLOADS) {
+            await Promise.race(executing);
+          }
+        }
+
+        // Wait for remaining uploads to complete
+        await Promise.all(executing);
+      };
+
+      await uploadChunksInParallel();
 
       setUploadProgress((prev) => ({ ...prev, status: "finalizing" }));
       const finalResult = await finalizeUpload(uploadId).unwrap();
+
+      // Check if processing (checksum validation, extraction) failed
+      if (finalResult.success === false) {
+        const errorMessages = finalResult.errors || [];
+        const errorSummary = errorMessages.length > 0 
+          ? errorMessages.join('\n') 
+          : finalResult.message || 'Upload processing failed';
+        
+        setUploadProgress((prev) => ({
+          ...prev,
+          status: "error",
+          error: errorSummary,
+        }));
+
+        // Show detailed errors in notification
+        if (errorMessages.length > 0) {
+          notify.error(`Upload validation failed:\n${errorMessages.slice(0, 5).join('\n')}${errorMessages.length > 5 ? `\n...and ${errorMessages.length - 5} more errors` : ''}`);
+        } else {
+          notify.error(finalResult.message || 'Upload processing failed');
+        }
+        return;
+      }
 
       setUploadProgress((prev) => ({
         ...prev,
@@ -278,6 +334,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     showUploadUI,
     showUpgradeUI,
     isLoadingStatus,
+    isUploadInProgress,
+    inProgressFileName,
   };
 
   return (

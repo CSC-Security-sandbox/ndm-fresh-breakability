@@ -33,6 +33,10 @@ const UpgradeContent = () => {
     handleUpgrade,
     closeJobWarning,
     handleReset,
+    showUploadUI,
+    showUpgradeUI,
+    isUploadInProgress,
+    inProgressFileName,
   } = useContext(UpgradeContext);
 
   const showResetButton =
@@ -40,6 +44,9 @@ const UpgradeContent = () => {
     uploadProgress.status === "cancelled" ||
     upgradeProgress.status === "success" ||
     upgradeProgress.status === "error";
+  
+  // Can show file selector only if: showUploadUI is true AND no upload in progress from another session
+  const canShowFileSelector = showUploadUI && !isUploadInProgress;
 
 
     if (!isAppAdmin) {
@@ -56,12 +63,31 @@ const UpgradeContent = () => {
   return (
     <>
       <Card className="p-6 flex flex-col m-8">
-        {/* File Selection */}
-        <UploadFileSelector />
-
-        {/* Upload Progress */}
+        {/* Upload In Progress Warning (from another session/tab) */}
         <Show>
-          <Show.When isTrue={isUploading || isUploaded || uploadProgress.status === "error"}>
+          <Show.When isTrue={isUploadInProgress && !isUploading}>
+            <Box className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded">
+              <p className="font-medium text-yellow-800">
+                Upload In Progress
+              </p>
+              <p className="text-sm text-yellow-700 mt-1">
+                An upload is currently in progress{inProgressFileName ? ` for "${inProgressFileName}"` : ''}.
+                Please wait for it to complete before starting a new upload.
+              </p>
+            </Box>
+          </Show.When>
+        </Show>
+
+        {/* File Selection - Only show if allowed, hide after upgrade success */}
+        <Show>
+          <Show.When isTrue={(canShowFileSelector || isUploading) && upgradeProgress.status !== "success"}>
+            <UploadFileSelector />
+          </Show.When>
+        </Show>
+
+        {/* Upload Progress - hide after upgrade success */}
+        <Show>
+          <Show.When isTrue={(isUploading || isUploaded || uploadProgress.status === "error") && upgradeProgress.status !== "success"}>
             <UploadProgress />
           </Show.When>
         </Show>
@@ -73,7 +99,7 @@ const UpgradeContent = () => {
               <p
                 className={`font-medium ${
                   upgradeProgress.status === "success"
-                    ? "text-green-600"
+                    ? "text-primary"
                     : upgradeProgress.status === "error" ||
                       upgradeProgress.status === "blocked"
                     ? "text-red-600"
@@ -89,14 +115,13 @@ const UpgradeContent = () => {
 
         {/* Action Buttons */}
         <Box className="flex justify-center gap-4 mt-6">
-          {/* Upload Button */}
+          {/* Upload Button - Only show if allowed and no in-progress upload */}
           <Show>
-            <Show.When isTrue={!isUploaded && !showResetButton}>
+            <Show.When isTrue={canShowFileSelector && !isUploaded && !showResetButton}>
               <Button
                 onClick={handleUpload}
                 disabled={!selectedFile || isUploading}
                 isSubmitting={isUploading}
-                variant="secondary"
               >
                 {UPLOAD_LABEL}
               </Button>
@@ -105,7 +130,7 @@ const UpgradeContent = () => {
 
           {/* Upgrade Button */}
           <Show>
-            <Show.When isTrue={isUploaded && upgradeProgress.status !== "success"}>
+            <Show.When isTrue={(isUploaded || showUpgradeUI) && upgradeProgress.status !== "success"}>
               <Button
                 onClick={handleUpgrade}
                 disabled={isUpgrading}
@@ -119,7 +144,7 @@ const UpgradeContent = () => {
           {/* Reset Button */}
           <Show>
             <Show.When isTrue={showResetButton}>
-              <Button onClick={handleReset} variant="tertiary">
+              <Button onClick={handleReset}>
                 {RESET_LABEL}
               </Button>
             </Show.When>
@@ -128,16 +153,16 @@ const UpgradeContent = () => {
 
         {/* File path info after upload */}
         <Show>
-          <Show.When isTrue={isUploaded && !!uploadProgress.filePath}>
-            <Box className="mt-4 p-3 bg-green-50 rounded border border-green-200">
-              <p className="text-sm text-green-800">
+          <Show.When isTrue={isUploaded && !!uploadProgress.filePath && upgradeProgress.status !== "success"}>
+            <Box className="mt-4 p-3 bg-primary/10 rounded border border-primary/30">
+              <p className="text-sm text-gray-800">
                 <span className="font-medium">File location on VM:</span>{" "}
-                <code className="bg-green-100 px-1 rounded">
+                <code className="font-mono text-gray-900">
                   {uploadProgress.filePath}
                 </code>
               </p>
-              <p className="text-xs text-green-600 mt-1">
-                You can verify with: <code>ls -la {uploadProgress.filePath}</code>
+              <p className="text-xs text-gray-600 mt-1">
+                You can verify with: <code className="font-mono">ls -la {uploadProgress.filePath}</code>
               </p>
             </Box>
           </Show.When>

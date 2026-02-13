@@ -40,6 +40,9 @@ persistentVolumes:
   - name: upgrade-bundles
     mountPath: /upgrade-bundles
     hostPath: /upgrade-bundles
+  - name: upgrade-deploy
+    mountPath: /upgrade
+    hostPath: /upgrade
 
 env:
   - name: MY_HOST_IP
@@ -104,6 +107,8 @@ env:
     value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
   - name: UPGRADE_BUNDLES_PATH
     value: "/upgrade-bundles"
+  - name: UPGRADE_DEPLOY_PATH
+    value: "/upgrade"
 
 service:
   type: ClusterIP

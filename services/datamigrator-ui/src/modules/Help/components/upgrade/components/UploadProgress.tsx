@@ -23,8 +23,9 @@ const UploadProgress = () => {
       return `${baseMessage} chunk ${uploadProgress.currentChunk} of ${uploadProgress.totalChunks}...`;
     }
 
-    if (uploadProgress.status === "error" && uploadProgress.error) {
-      return `${baseMessage}: ${uploadProgress.error}`;
+    // For error status, just return base message (errors shown separately)
+    if (uploadProgress.status === "error") {
+      return baseMessage;
     }
 
     return baseMessage;
@@ -33,7 +34,7 @@ const UploadProgress = () => {
   const getStatusColor = () => {
     switch (uploadProgress.status) {
       case "uploaded":
-        return "text-green-600";
+        return "text-primary";
       case "error":
         return "text-red-600";
       case "cancelled":
@@ -42,6 +43,14 @@ const UploadProgress = () => {
         return "text-gray-600";
     }
   };
+
+  // Parse error string to extract multiple errors (split by newline)
+  const getErrorLines = (): string[] => {
+    if (!uploadProgress.error) return [];
+    return uploadProgress.error.split('\n').filter(line => line.trim());
+  };
+
+  const errorLines = getErrorLines();
 
   return (
     <Box className="mt-6 p-4 bg-gray-50 rounded">
@@ -63,6 +72,23 @@ const UploadProgress = () => {
             {formatBytes(uploadProgress.totalBytes)}
           </span>
           <span>{uploadProgress.progress}%</span>
+        </Box>
+      )}
+
+      {/* Error Details Box */}
+      {uploadProgress.status === "error" && errorLines.length > 0 && (
+        <Box className="mt-3 p-3 bg-red-50 border border-red-200 rounded max-h-48 overflow-y-auto">
+          <p className="text-sm font-medium text-red-800 mb-2">
+            Validation Errors ({errorLines.length}):
+          </p>
+          <ul className="text-sm text-red-700 space-y-1">
+            {errorLines.map((error, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <span className="text-red-500 mt-0.5">•</span>
+                <span className="break-all">{error}</span>
+              </li>
+            ))}
+          </ul>
         </Box>
       )}
 

@@ -13,6 +13,7 @@ export interface LatestUploadStatusResponse {
   upgradeCompletedAt?: string;
   showUploadUI: boolean;
   showUpgradeUI: boolean;
+  isUploadInProgress: boolean;
 }
 
 export const upgradeApi = createApi({

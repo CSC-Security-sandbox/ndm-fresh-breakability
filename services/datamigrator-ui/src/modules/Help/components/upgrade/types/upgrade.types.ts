@@ -70,6 +70,8 @@ export type UpgradeContextType = {
   showUploadUI: boolean;
   showUpgradeUI: boolean;
   isLoadingStatus: boolean;
+  isUploadInProgress: boolean;
+  inProgressFileName: string;
 };
 
 // API Response types
@@ -89,6 +91,9 @@ export type FinalizeUploadResponse = {
   success: boolean;
   path: string;
   fileSize: number;
+  version?: string;
+  message?: string;
+  errors?: string[];  // Checksum validation or processing errors
 };
 
 export type UploadStatusResponse = {
@@ -113,4 +118,5 @@ export type LatestUploadStatusResponse = {
   upgradeCompletedAt?: string;
   showUploadUI: boolean;
   showUpgradeUI: boolean;
+  isUploadInProgress: boolean;
 };

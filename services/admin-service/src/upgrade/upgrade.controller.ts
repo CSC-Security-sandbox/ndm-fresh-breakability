@@ -140,4 +140,17 @@ import {
     async getHistory(@Query('limit') limit?: number) {
       return this.upgradeService.getUploadHistory(limit || 10);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ENDPOINT 9: Process Bundle (Manual validation & organization)
+    // ═══════════════════════════════════════════════════════════════
+    @Auth()
+    @ApiBearerAuth()
+    @Post('process/:bundleId')
+    @ApiOperation({ 
+      summary: 'Process an uploaded bundle: extract, validate checksums, organize for deployment' 
+    })
+    async processBundle(@Param('bundleId', ParseUUIDPipe) bundleId: string) {
+      return this.upgradeService.processUploadedBundle(bundleId);
+    }
   }
