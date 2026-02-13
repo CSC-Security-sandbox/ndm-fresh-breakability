@@ -27,6 +27,7 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/microservices": "^10.4.15",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/schedule": "^4.0.0",
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/typeorm": "^10.0.2",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",

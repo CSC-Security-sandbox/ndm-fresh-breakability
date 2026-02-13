@@ -1,8 +1,9 @@
 vite.config.js
 .env*
-**/node_modules/**,
-**/dist/**,
-**/build/**,
-**/coverage/**
+node_modules
+**/node_modules
+**/dist
+**/build
+**/coverage
 **/yarn.lock
 # **/package-lock.json

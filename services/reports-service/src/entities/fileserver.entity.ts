@@ -35,7 +35,7 @@ export class FileServerEntity extends Base {
   @Column({ type: "varchar", name: "protocol", nullable: true })
   protocol: Protocol;
 
-  @Column({ type: "varchar", name: "server_type" })
+  @Column({ type: "varchar", name: "server_type", nullable: true, select: false })
   serverType: ServerType;
 
   @ApiProperty({ description: "password" })
