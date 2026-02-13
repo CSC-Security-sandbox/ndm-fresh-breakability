@@ -801,34 +801,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Copy docker and helm within Artifactory into upgrade bundle
-        run: |
-          BASE="${BASE_PATH}/${BUILD_VERSION}"
-          UPGRADE="upgrade-${BUILD_VERSION}"
-          copy() {
-            local src="$1" dst="$2" flags="${3:--f}"
-            curl $flags -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST \
-              "${ARTIFACTORY_URL}/api/copy/${REPO}/${src}?to=/${REPO}/${dst}&force=1"
-          }
-          copy "${BASE}/docker/datamigrator-${BUILD_VERSION}.tar"  "${BASE}/${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"
-          copy "${BASE}/helm/datamigrator-${BUILD_VERSION}.tgz"    "${BASE}/${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
+      - name: Download Helm chart artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: helm-chart
+          path: ./artifacts/helm
+
+      - name: Download Docker image tar artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: datamigrator-images
+          path: ./artifacts/docker
+
+      - name: Download Worker Binary artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: worker-binary
+          path: ./worker-bin
 
       - name: Prepare worker packages (linux and windows)
         run: |
+          # Download worker.env from Artifactory (not included in the artifact)
           BASE_URL="${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}"
-
-          # Download worker zip and env from release path
-          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o worker-bundle.zip \
-            "${BASE_URL}/worker/datamigrator-worker-${BUILD_VERSION}.zip"
           curl -sf -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "worker-${BUILD_VERSION}.env" \
             "${BASE_URL}/worker/worker-${BUILD_VERSION}.env" || echo "worker env not found (optional)"
 
-          # Unzip worker bundle
-          unzip -o worker-bundle.zip -d worker-unzipped
-
           # --- Linux worker ---
           mkdir -p linux_worker
-          cp worker-unzipped/pkg/worker-linux-x64        linux_worker/worker-linux-x64
+          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION}  linux_worker/worker-linux-x64
           [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "linux_worker/worker-${BUILD_VERSION}.env"
           cd linux_worker
           sha256sum * > linux_worker_checksum
@@ -838,7 +838,7 @@ jobs:
 
           # --- Windows worker ---
           mkdir -p windows_worker
-          cp worker-unzipped/pkg/worker-win-x64.exe      windows_worker/worker-win-x64.exe
+          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION}.exe  windows_worker/worker-win-x64.exe
           [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "windows_worker/worker-${BUILD_VERSION}.env"
           cd windows_worker
           sha256sum * > windows_worker_checksum
@@ -852,15 +852,13 @@ jobs:
             --upload-file upgrade/upgrade.sh \
             "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}/upgrade.sh"
 
-      - name: Download bundle, create checksums and tar
+      - name: Assemble bundle, create checksums and tar
         run: |
           UPGRADE="upgrade-${BUILD_VERSION}"
-          URL="${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}"
-          dl() { curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -L -o "$1" "${URL}/$2"; }
 
           mkdir -p "${UPGRADE}"/{docker,helm,worker}
-          dl "${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"  "docker/datamigrator-${BUILD_VERSION}.tar"
-          dl "${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"    "helm/datamigrator-${BUILD_VERSION}.tgz"
+          cp ./artifacts/docker/datamigrator-${BUILD_VERSION}.tar  "${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"
+          cp ./artifacts/helm/datamigrator-${BUILD_VERSION}.tgz    "${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
 
           # Place prepared worker packages into the bundle
           cp linux_worker.tar    "${UPGRADE}/worker/linux_worker.tar"
