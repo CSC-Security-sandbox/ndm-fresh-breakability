@@ -808,7 +808,7 @@ jobs:
           copy() {
             local src="$1" dst="$2" flags="${3:--f}"
             curl $flags -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" -X POST \
-              "${ARTIFACTORY_URL}/api/copy/${REPO}/${src}?to=/${REPO}/${dst}"
+              "${ARTIFACTORY_URL}/api/copy/${REPO}/${src}?to=/${REPO}/${dst}&force=1"
           }
           copy "${BASE}/docker/datamigrator-${BUILD_VERSION}.tar"  "${BASE}/${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"
           copy "${BASE}/helm/datamigrator-${BUILD_VERSION}.tgz"    "${BASE}/${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
