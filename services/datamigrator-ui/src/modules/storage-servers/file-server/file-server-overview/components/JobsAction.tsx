@@ -6,8 +6,7 @@ import { Button } from "@netapp/bxp-design-system-react";
 import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
-import { useMemo, useCallback } from "react";
-import ExploreModal, { useExploreModal, SelectedItemInfo } from "./ExploreModal";
+import { useMemo } from "react";
 
 const JobsAction = ({
   fileServerDetails,
@@ -73,45 +72,8 @@ const JobsAction = ({
     return '';
   }, [zoneFileServerId, zoneNameParam]);
 
-  // Initialize explore modal hook
-  const { isOpen: isExploreModalOpen, openExploreModal, closeExploreModal } = useExploreModal();
-
-  // Get the actual file server ID (not config ID)
-  // For Dell Isilon zones, use zoneFileServerId from query params
-  // For regular NAS, use the first file server's ID
-  const actualFileServerId = useMemo(() => {
-    if (zoneFileServerId) {
-      return zoneFileServerId;
-    }
-    // For regular NAS, get the first file server's ID
-    return fileServerDetails?.fileServers?.[0]?.id || "";
-  }, [zoneFileServerId, fileServerDetails?.fileServers]);
-
-  // Handle confirmed selection from explore modal
-  const handleExploreConfirm = useCallback((selectedItems: SelectedItemInfo[], exportPath: VolumeType) => {
-    // For now, log the selection. In a real implementation, this would:
-    // - Navigate to a job creation page with the selected items
-    // - Or trigger some other action based on the selection
-    console.log("Selected items:", selectedItems);
-    console.log("Export path:", exportPath);
-    
-    // Example: Navigate to create job with selected paths
-    // const selectedPaths = selectedItems.map(item => item.path).join(',');
-    // navigate(`${pathname}/create-job?exportPath=${exportPath.id}&paths=${encodeURIComponent(selectedPaths)}${queryString}`);
-  }, []);
-
   return (
     <>
-      {/* Explore Modal */}
-      <ExploreModal
-        isOpen={isExploreModalOpen}
-        onClose={closeExploreModal}
-        onConfirm={handleExploreConfirm}
-        fileServerName={displayName || ""}
-        fileServerId={actualFileServerId}
-        allExportPaths={allExportPaths}
-      />
-
       <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
         <Box className="text-lg">File Server Overview:</Box>
@@ -130,12 +92,6 @@ const JobsAction = ({
       </Box>
       <Box className="flex justify-end gap-2">
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
-          <Button
-            disabled={!isActive}
-            onClick={openExploreModal}
-          >
-            Explore
-          </Button>
           <Button
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-discover${queryString}`)}

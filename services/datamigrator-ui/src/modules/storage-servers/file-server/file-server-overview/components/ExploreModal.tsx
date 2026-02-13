@@ -235,6 +235,8 @@ interface DirectoriesContentProps {
   onPathChange: (path: string) => void;
   onBackToExportPaths: () => void;
   fileServerId: string;
+  /** Whether to show the back button (hidden when skipExportPathsView is true) */
+  showBackButton?: boolean;
 }
 
 const DirectoriesContent = ({
@@ -249,6 +251,7 @@ const DirectoriesContent = ({
   onPathChange,
   onBackToExportPaths,
   fileServerId,
+  showBackButton = true,
 }: DirectoriesContentProps) => {
   // Search/Jump to path state - independent from current path navigation
   const [searchPath, setSearchPath] = useState<string>("");
@@ -361,12 +364,14 @@ const DirectoriesContent = ({
 
   return (
     <>
-      {/* Directory Header with Back Button */}
-      <Box className="flex items-center gap-4 mb-4">
-        <Button variant="secondary" onClick={onBackToExportPaths}>
-          <ArrowBackIcon size="20" />
-        </Button>
-      </Box>
+      {/* Directory Header with Back Button (hidden when skipExportPathsView is true) */}
+      {showBackButton && (
+        <Box className="flex items-center gap-4 mb-4">
+          <Button variant="secondary" onClick={onBackToExportPaths}>
+            <ArrowBackIcon size="20" />
+          </Button>
+        </Box>
+      )}
 
       {/* Current Path Display - Now on top */}
       <Box className="mb-4 p-3 bg-gray-100 rounded-md">
@@ -477,15 +482,21 @@ const DirectoriesContent = ({
                     isSelected ? "bg-blue-50" : ""
                   }`}
                 >
-                  {/* Radio Button - Single Select */}
+                  {/* Radio Button - Single Select with Toggle */}
                   <Box className="col-span-1 flex items-center">
                     <input
                       type="radio"
                       name="directory-selection"
                       checked={isSelected}
                       onChange={() => onItemToggle(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Allow deselection by clicking an already selected radio button
+                        if (isSelected) {
+                          onItemToggle(item.id);
+                        }
+                      }}
                       className="w-4 h-4 cursor-pointer"
-                      onClick={(e) => e.stopPropagation()}
                     />
                   </Box>
                   
@@ -540,6 +551,12 @@ interface ExploreModalProps {
   fileServerName: string;
   fileServerId: string;
   allExportPaths: VolumeType[];
+  /** Pre-selected export path ID - if provided, skips the export paths selection view */
+  preSelectedExportPathId?: string;
+  /** Initial selected directory path - used for pre-selection when editing */
+  initialSelectedPath?: string;
+  /** If true, skips the export paths view and goes directly to directory browsing */
+  skipExportPathsView?: boolean;
 }
 
 // Main ExploreModal Component
@@ -550,34 +567,67 @@ const ExploreModal = ({
   fileServerName,
   fileServerId,
   allExportPaths,
+  preSelectedExportPathId,
+  initialSelectedPath,
+  skipExportPathsView = false,
 }: ExploreModalProps) => {
   // View state: "export-paths" or "directories"
-  const [currentView, setCurrentView] = useState<"export-paths" | "directories">(
-    "export-paths"
-  );
+  const [currentView, setCurrentView] = useState<"export-paths" | "directories">("export-paths");
 
   // Export paths selection state
-  const [selectedExportPath, setSelectedExportPath] = useState<string | null>(
-    null
-  );
+  const [selectedExportPath, setSelectedExportPath] = useState<string | null>(null);
 
   // Directory exploration state
   const [currentPath, setCurrentPath] = useState<string>("/");
-  const [directoryContents, setDirectoryContents] = useState<DirectoryItem[]>(
-    []
-  );
+  const [directoryContents, setDirectoryContents] = useState<DirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
   // Selected items (checkbox selection)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  
+  // Track if initial selection has been applied (to avoid re-applying on every render)
+  const [initialSelectionApplied, setInitialSelectionApplied] = useState<boolean>(false);
 
   // Get the selected export path details
   const selectedExportPathDetails = useMemo(() => {
     return allExportPaths.find((path) => path.id === selectedExportPath);
   }, [allExportPaths, selectedExportPath]);
 
-  // Reset state when modal opens/closes
+  // Initialize state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const shouldSkipExportPaths = skipExportPathsView && preSelectedExportPathId;
+      
+      // Set export path
+      setSelectedExportPath(preSelectedExportPathId || null);
+      
+      // Determine initial view
+      if (shouldSkipExportPaths) {
+        setCurrentView("directories");
+        
+        // If we have an initialSelectedPath, navigate to its parent directory
+        if (initialSelectedPath && initialSelectedPath !== "/") {
+          // Get parent directory path
+          const parentPath = initialSelectedPath.substring(0, initialSelectedPath.lastIndexOf("/")) || "/";
+          setCurrentPath(parentPath);
+        } else {
+          setCurrentPath("/");
+        }
+      } else {
+        setCurrentView("export-paths");
+        setCurrentPath("/");
+      }
+      
+      // Reset other state
+      setDirectoryContents([]);
+      setSelectedItems(new Set());
+      setError(null);
+      setInitialSelectionApplied(false);
+    }
+  }, [isOpen, skipExportPathsView, preSelectedExportPathId, initialSelectedPath]);
+
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setCurrentView("export-paths");
@@ -586,6 +636,7 @@ const ExploreModal = ({
       setDirectoryContents([]);
       setSelectedItems(new Set());
       setError(null);
+      setInitialSelectionApplied(false);
     }
   }, [isOpen]);
 
@@ -603,6 +654,18 @@ const ExploreModal = ({
             currentPath
           );
           setDirectoryContents(contents);
+          
+          // Pre-select the initial path item if we have one and haven't applied it yet
+          if (initialSelectedPath && !initialSelectionApplied) {
+            // Extract the directory name from the initial path
+            const targetName = initialSelectedPath.substring(initialSelectedPath.lastIndexOf("/") + 1);
+            // Find the matching item in the loaded contents
+            const matchingItem = contents.find((item) => item.name === targetName);
+            if (matchingItem) {
+              setSelectedItems(new Set([matchingItem.id]));
+            }
+            setInitialSelectionApplied(true);
+          }
         } catch (err) {
           console.error("Error loading directory contents:", err);
           setError(err instanceof Error ? err.message : "Failed to load directories");
@@ -613,17 +676,22 @@ const ExploreModal = ({
       };
       fetchData();
     }
-  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId]);
+  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId, initialSelectedPath, initialSelectionApplied]);
 
   // Handle export path selection
   const handlePathSelect = useCallback((pathId: string) => {
     setSelectedExportPath((prev) => (pathId === prev ? null : pathId));
   }, []);
 
-  // Handle item toggle (radio button selection - single select)
+  // Handle item toggle (radio button selection - single select with toggle)
   const handleItemToggle = useCallback((itemId: string) => {
-    // Single select - only one item can be selected at a time
-    setSelectedItems(new Set([itemId]));
+    // Toggle behavior: if already selected, deselect; otherwise select
+    setSelectedItems((prev) => {
+      if (prev.has(itemId)) {
+        return new Set(); // Deselect
+      }
+      return new Set([itemId]); // Select this one
+    });
   }, []);
 
   // Handle path change (navigating into a folder)
@@ -667,9 +735,9 @@ const ExploreModal = ({
     onClose();
   }, [onClose]);
 
-  // Handle confirm selection
+  // Handle confirm selection (supports empty selection for clearing directory path)
   const handleConfirmSelection = useCallback(() => {
-    if (selectedItems.size > 0 && selectedExportPathDetails && onConfirm) {
+    if (selectedExportPathDetails && onConfirm) {
       const selectedItemsInfo: SelectedItemInfo[] = directoryContents
         .filter((item) => selectedItems.has(item.id))
         .map((item) => ({
@@ -721,6 +789,7 @@ const ExploreModal = ({
             onPathChange={handlePathChange}
             onBackToExportPaths={handleBackToExportPaths}
             fileServerId={fileServerId}
+            showBackButton={!skipExportPathsView}
           />
         )}
       </ModalContent>
@@ -743,10 +812,9 @@ const ExploreModal = ({
               Cancel
             </Button>
             <Button
-              disabled={selectedItems.size === 0}
               onClick={handleConfirmSelection}
             >
-              Confirm Selection ({selectedItems.size})
+              Confirm Selection
             </Button>
           </Box>
         )}

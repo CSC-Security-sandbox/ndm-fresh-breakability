@@ -8,18 +8,19 @@ import {
   Table,
   useForm,
 } from "@netapp/bxp-design-system-react";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import { setModalClose, setModalProps } from "@store/reducer/commonComponentSlice";
 import BulkMigrateScheduleComponent from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/BulkMigrateScheduleComponent";
 import MountPathConfigurationTable from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/MountPathConfigurationTable";
-import AddSourceDirectoryPathModal from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/AddSourceDirectoryPathModal";
 import { getOptionsFromArray } from "@/utils/common.utils";
 import { nanoid } from "@reduxjs/toolkit";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import type { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
 import { isSourceDirectoryPathChildOrParent } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/TruncatedPathCell";
+import ExploreModal, { useExploreModal, SelectedItemInfo } from "@modules/storage-servers/file-server/file-server-overview/components/ExploreModal";
+import type { VolumeType } from "@/types/app.type";
 
 const Mapping = () => {
   const {
@@ -54,38 +55,104 @@ const Mapping = () => {
     destinationPath: "" as any,
   });
 
-  const openAddSourceDirectoryPathModal = () => {
-    dispatch(
-      setModalProps({
-        isOpen: true,
-        modalHeader: "Add Source Directory",
-        modalContent: (
-          <AddSourceDirectoryPathModal
-            initialPath={sourceDirectoryPath}
-            onSave={(path) => setSourceDirectoryPath(path)}
-          />
-        ),
-        modalFooter: null,
-      })
-    );
-  };
+  // ExploreModal hooks for source and destination directory selection
+  const {
+    isOpen: isSourceExploreModalOpen,
+    openExploreModal: openSourceExploreModal,
+    closeExploreModal: closeSourceExploreModal,
+  } = useExploreModal();
 
-  const openAddDestinationDirectoryPathModal = () => {
-    dispatch(
-      setModalProps({
-        isOpen: true,
-        modalHeader: "Add Destination Directory",
-        modalContent: (
-          <AddSourceDirectoryPathModal
-            initialPath={destinationDirectoryPath}
-            onSave={(path) => setDestinationDirectoryPath(path)}
-            fieldLabel="Destination Directory"
-          />
-        ),
-        modalFooter: null,
-      })
+  const {
+    isOpen: isDestinationExploreModalOpen,
+    openExploreModal: openDestinationExploreModal,
+    closeExploreModal: closeDestinationExploreModal,
+  } = useExploreModal();
+
+  // Get the actual file server ID for source (must match selected protocol)
+  const sourceFileServerId = useMemo(() => {
+    if (!sourceFileServerDetails?.fileServers?.length) return "";
+    const protocol = protocolForm.formState.protocol?.value ?? "";
+    // Find the file server that matches the selected protocol
+    const matchingFileServer = sourceFileServerDetails.fileServers.find(
+      (fs) => fs.protocol === protocol
     );
-  };
+    // Fall back to first file server if no protocol match
+    return matchingFileServer?.id || sourceFileServerDetails.fileServers[0]?.id || "";
+  }, [sourceFileServerDetails?.fileServers, protocolForm.formState.protocol?.value]);
+
+  // Get the destination file server config ID (from dropdown selection)
+  const destinationFileServerConfigId = useMemo(() => {
+    return destinationForm.formState.destinationFileServer?.value || "";
+  }, [destinationForm.formState.destinationFileServer?.value]);
+
+  // Get destination file server details (by config ID)
+  const destinationFileServerDetails = useMemo(() => {
+    if (!destinationFileServerConfigId || !allFileServers?.length) return null;
+    return allFileServers.find((fs) => fs.id === destinationFileServerConfigId);
+  }, [destinationFileServerConfigId, allFileServers]);
+
+  // Get the actual file server ID for destination (for API calls)
+  // Must match the selected protocol since a config can have multiple file servers (NFS, SMB)
+  const destinationFileServerId = useMemo(() => {
+    if (!destinationFileServerDetails?.fileServers?.length) return "";
+    const protocol = protocolForm.formState.protocol?.value ?? "";
+    // Find the file server that matches the selected protocol
+    const matchingFileServer = destinationFileServerDetails.fileServers.find(
+      (fs) => fs.protocol === protocol
+    );
+    // Fall back to first file server if no protocol match
+    return matchingFileServer?.id || destinationFileServerDetails.fileServers[0]?.id || "";
+  }, [destinationFileServerDetails, protocolForm.formState.protocol?.value]);
+
+  // Get destination export paths
+  const destinationExportPaths = useMemo(() => {
+    const paths = fileServerWithPathsMap?.get(destinationFileServerConfigId) ?? [];
+    return paths.map((p) => ({
+      id: p.pathId,
+      volumePath: p.pathName,
+    })) as VolumeType[];
+  }, [destinationFileServerConfigId, fileServerWithPathsMap]);
+
+  // Get the selected source export path ID (for ExploreModal)
+  const selectedSourceExportPathId = useMemo(() => {
+    const selectedPathValue = sourcePathForm.formState.selectedSourcePath?.value ?? "";
+    if (!selectedPathValue || !allExportPaths?.length) return "";
+    const exportPath = allExportPaths.find((p) => p.volumePath === selectedPathValue);
+    return exportPath?.id ?? "";
+  }, [sourcePathForm.formState.selectedSourcePath?.value, allExportPaths]);
+
+  // Get the selected destination export path ID (for ExploreModal)
+  const selectedDestinationExportPathId = useMemo(() => {
+    return destinationForm.formState.destinationPath?.value ?? "";
+  }, [destinationForm.formState.destinationPath?.value]);
+
+  // Handle source directory selection from ExploreModal
+  const handleSourceExploreConfirm = useCallback(
+    (selectedItems: SelectedItemInfo[], _exportPath: VolumeType) => {
+      if (selectedItems.length > 0) {
+        setSourceDirectoryPath(selectedItems[0].path);
+      } else {
+        // User cleared the selection
+        setSourceDirectoryPath("");
+      }
+      closeSourceExploreModal();
+    },
+    [closeSourceExploreModal]
+  );
+
+  // Handle destination directory selection from ExploreModal
+  const handleDestinationExploreConfirm = useCallback(
+    (selectedItems: SelectedItemInfo[], _exportPath: VolumeType) => {
+      if (selectedItems.length > 0) {
+        setDestinationDirectoryPath(selectedItems[0].path);
+      } else {
+        // User cleared the selection
+        setDestinationDirectoryPath("");
+      }
+      closeDestinationExploreModal();
+    },
+    [closeDestinationExploreModal]
+  );
 
   // Source file server is auto-populated from the file server selected in the left bar (URL: /file-server/:fileServerId/bulk-migrate)
   const sourceFileServerDisplayName = useMemo(() => {
@@ -334,6 +401,32 @@ const Mapping = () => {
 
   return (
     <>
+      {/* Source Directory ExploreModal */}
+      <ExploreModal
+        isOpen={isSourceExploreModalOpen}
+        onClose={closeSourceExploreModal}
+        onConfirm={handleSourceExploreConfirm}
+        fileServerName={sourceFileServerDisplayName || ""}
+        fileServerId={sourceFileServerId}
+        allExportPaths={allExportPaths}
+        skipExportPathsView={true}
+        preSelectedExportPathId={selectedSourceExportPathId}
+        initialSelectedPath={sourceDirectoryPath || undefined}
+      />
+
+      {/* Destination Directory ExploreModal */}
+      <ExploreModal
+        isOpen={isDestinationExploreModalOpen}
+        onClose={closeDestinationExploreModal}
+        onConfirm={handleDestinationExploreConfirm}
+        fileServerName={destinationFileServerDetails?.configName || ""}
+        fileServerId={destinationFileServerId}
+        allExportPaths={destinationExportPaths}
+        skipExportPathsView={true}
+        preSelectedExportPathId={selectedDestinationExportPathId}
+        initialSelectedPath={destinationDirectoryPath || undefined}
+      />
+
       {/* Job Schedule card */}
       <Card className="min-h-24 p-6">
         <Text bold className="mb-3">
@@ -415,7 +508,7 @@ const Mapping = () => {
                 }}
                 onClick={
                   sourcePathForm.formState.selectedSourcePath?.value
-                    ? openAddSourceDirectoryPathModal
+                    ? openSourceExploreModal
                     : undefined
                 }
               >
@@ -429,7 +522,7 @@ const Mapping = () => {
                   component="span"
                   className="cursor-pointer text-sm hover:underline block mt-1"
                   style={{ color: "#0067c5" }}
-                  onClick={openAddSourceDirectoryPathModal}
+                  onClick={openSourceExploreModal}
                 >
                   - Edit Source Directory
                 </Text>
@@ -445,7 +538,7 @@ const Mapping = () => {
                   color: canAddMapping ? "#0067c5" : "#6b7280",
                 }}
                 onClick={
-                  canAddMapping ? openAddDestinationDirectoryPathModal : undefined
+                  canAddMapping ? openDestinationExploreModal : undefined
                 }
               >
                 + Add Destination Directory
@@ -458,7 +551,7 @@ const Mapping = () => {
                   component="span"
                   className="cursor-pointer text-sm hover:underline block mt-1"
                   style={{ color: "#0067c5" }}
-                  onClick={openAddDestinationDirectoryPathModal}
+                  onClick={openDestinationExploreModal}
                 >
                   - Edit Destination Directory
                 </Text>
