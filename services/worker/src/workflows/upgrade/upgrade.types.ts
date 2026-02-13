@@ -114,20 +114,6 @@ export interface DownloadBundleOutput {
   envPath: string;
 }
 
-export interface StageBinaryInput {
-  /** Source path (downloaded file) */
-  sourcePath: string;
-  /** Platform */
-  platform: 'linux' | 'windows';
-  /** Version */
-  version: string;
-}
-
-export interface StageBinaryOutput {
-  /** Final staged path */
-  stagedPath: string;
-}
-
 // =============================================================================
 // Worker Download Result (used in workflow output)
 // =============================================================================
@@ -135,8 +121,8 @@ export interface StageBinaryOutput {
 export interface WorkerDownloadResult {
   /** Worker ID */
   workerId: string;
-  /** Platform */
-  platform: 'linux' | 'windows';
+  /** Platform (may be absent if workflow failed before detection) */
+  platform?: 'linux' | 'windows';
   /** Status */
   status: 'success' | 'failed';
   /** Message */

@@ -24,8 +24,6 @@ import { AuthService } from '../../auth/auth.service';
 import {
   DownloadBundleInput,
   DownloadBundleOutput,
-  StageBinaryInput,
-  StageBinaryOutput,
   UPGRADE_ENDPOINT,
   ARCHIVE_EXTENSION,
   WORKER_PATHS,
@@ -72,6 +70,14 @@ export class UpgradeActivityService {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const authToken = await this.getAuthToken();
     return { 'Authorization': `Bearer ${authToken}` };
+  }
+
+  /** Send a heartbeat to Temporal with a stage description. */
+  private heartbeat(stage: string): void {
+    try {
+      Context.current().heartbeat({ stage });
+      this.logger.log(`Heartbeat: ${stage}`);
+    } catch { /* not in activity context during tests */ }
   }
 
   /** Detect platform: 'linux' or 'windows'. */
@@ -166,14 +172,15 @@ export class UpgradeActivityService {
       this.logger.log(`Downloaded archive: ${archivePath} (${archiveSize} bytes)`);
 
       // 2. Extract archive (platform-aware: tar.gz or zip)
+      this.heartbeat('extracting archive');
       await this.extractArchive(archivePath, stagingDir, platform);
       this.logger.log(`Extracted archive to ${stagingDir}`);
 
       // Cleanup macOS resource fork files
-      // TODO : check and remove
       this.cleanupMacOSResourceForks(stagingDir);
 
       // 3. Find extracted files
+      this.heartbeat('finding extracted files');
       const extractedFiles = fs.readdirSync(stagingDir);
       this.logger.log(`Extracted files: ${extractedFiles.join(', ')}`);
 
@@ -207,12 +214,14 @@ export class UpgradeActivityService {
         throw new Error(`Checksums file not found after extraction in ${stagingDir}. Files: ${extractedFiles.join(', ')}`);
       }
 
+      this.heartbeat('verifying checksums');
       const checksumPath = path.join(stagingDir, checksumFile);
       await this.verifyChecksums(stagingDir, checksumPath);
       this.logger.log(`Checksums verified`);
       fs.unlinkSync(checksumPath);
 
       // 5. Rename env file to .env
+      this.heartbeat('finalizing staged files');
       const envFileName = WORKER_PATHS[platform].envFileName;
       const finalEnvPath = path.join(stagingDir, envFileName);
 
@@ -242,7 +251,8 @@ export class UpgradeActivityService {
         envPath: finalEnvPath,
       };
     } catch (error) {
-      this.logger.error(`Failed to download/extract bundle: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to download/extract bundle: ${errorMessage}`);
 
       // Cleanup archive on failure
       if (fs.existsSync(archivePath)) {
@@ -259,14 +269,14 @@ export class UpgradeActivityService {
 
   /**
    * Check if bundle is already staged in the versioned staging directory.
-   * Looks for the binary in {stagingBase}/{version}/
+   * Returns staged status and detected platform.
    */
-  async isBinaryStaged(version: string): Promise<boolean> {
+  async isBinaryStaged(version: string): Promise<{ staged: boolean; platform: 'linux' | 'windows' }> {
     const platform = this.detectPlatform();
     const stagingDir = workerStagingDir(platform, version);
 
     if (!fs.existsSync(stagingDir)) {
-      return false;
+      return { staged: false, platform };
     }
 
     const files = fs.readdirSync(stagingDir);
@@ -279,12 +289,13 @@ export class UpgradeActivityService {
     });
 
     if (!binaryFile) {
-      return false;
+      return { staged: false, platform };
     }
 
     const binaryPath = path.join(stagingDir, binaryFile);
     const handler = BinaryHandlerFactory.create(platform);
-    return handler.verifyBinary(binaryPath, version);
+    const valid = await handler.verifyBinary(binaryPath, version);
+    return { staged: valid, platform };
   }
 
   /**
@@ -321,7 +332,8 @@ export class UpgradeActivityService {
       );
       this.logger.log(`Ack sent successfully for worker ${workerId}`);
     } catch (error) {
-      this.logger.error(`Failed to send ack: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to send ack: ${errorMessage}`);
     }
   }
 
@@ -331,6 +343,7 @@ export class UpgradeActivityService {
 
   /**
    * Extract an archive to a destination directory.
+   * Uses execFile (no shell) to prevent command injection.
    * Linux: tar -xzf (tar.gz)
    * Windows: tar -xf (zip) — Windows 10+ tar supports zip format
    */
@@ -339,17 +352,15 @@ export class UpgradeActivityService {
     destDir: string,
     platform: 'linux' | 'windows',
   ): Promise<void> {
-    const { exec } = require('child_process');
+    const { execFile } = require('child_process');
     const { promisify } = require('util');
-    const execAsync = promisify(exec);
+    const execFileAsync = promisify(execFile);
 
-    if (platform === 'windows') {
-      // Windows: tar -xf handles both .zip and .tar.gz on Windows 10+
-      await execAsync(`tar -xf "${archivePath}" -C "${destDir}"`);
-    } else {
-      // Linux: tar -xzf for .tar.gz
-      await execAsync(`tar -xzf "${archivePath}" -C "${destDir}"`);
-    }
+    const args = platform === 'windows'
+      ? ['-xf', archivePath, '-C', destDir]
+      : ['-xzf', archivePath, '-C', destDir];
+
+    await execFileAsync('tar', args);
   }
 
   /**
@@ -379,7 +390,9 @@ export class UpgradeActivityService {
       if (parts.length < 2) continue;
 
       const expectedHash = parts[0].toLowerCase();
-      const filename = parts[parts.length - 1]; // Handle both "hash  file" and "hash *file"
+      // sha256sum outputs "hash  file" (text mode) or "hash *file" (binary mode)
+      // Strip leading * if present
+      const filename = parts[parts.length - 1].replace(/^\*/, '');
 
       const filePath = path.join(baseDir, filename);
 

@@ -185,11 +185,8 @@ export class UpgradeController {
 
   /**
    * POST /api/v1/upgrade/worker/ack
-   * Worker calls this after successful binary download + verification.
-   * Sets upgrade_bundle_staged = true for the worker in DB.
-   * 
-   * IMPORTANT: This route MUST be defined BEFORE worker/:platform
-   * to avoid route collision.
+   * Worker calls this after successful bundle download + verification.
+   * Sets upgrade_bundle_staged = COMPLETED for the worker in DB.
    */
   @AuthWorker()
   @ApiBearerAuth()

@@ -78,7 +78,7 @@ export async function BinaryMulticastWorkflow(
 
       const downloadResult: WorkerDownloadResult = {
         workerId,
-        platform: result.platform || 'linux',
+        platform: result.platform,
         status: result.status,
         message: result.message,
         stagedPath: result.stagedPath,
@@ -94,7 +94,6 @@ export async function BinaryMulticastWorkflow(
 
       return {
         workerId,
-        platform: 'linux' as const,
         status: 'failed' as const,
         message: errorMessage,
         timestamp: new Date().toISOString(),

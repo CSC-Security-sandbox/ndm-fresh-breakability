@@ -82,11 +82,13 @@ export async function WorkerDownloadWorkflow(
 
   try {
     // 1. Check if binary is already staged
-    const alreadyStaged = await isBinaryStaged(version);
-    if (alreadyStaged) {
-      log.info(`[${traceId}] Bundle already staged for version ${version}, skipping download`);
+    const { staged, platform } = await isBinaryStaged(version);
+    if (staged) {
+      log.info(`[${traceId}] Bundle already staged for version ${version} on ${platform}, skipping download`);
+      await ackUpgrade({ version, status: 'success' });
       return {
         workerId,
+        platform,
         status: 'success',
         message: 'Bundle already staged',
       };

@@ -1,7 +1,7 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, StreamableFile } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -44,9 +44,32 @@ export class UpgradeService {
   // Path helpers (versioned)
   // =============================================================================
 
-  /** Build versioned path for platform bundle on CP */
+  /**
+   * Sanitize version string to prevent path traversal attacks.
+   * Only allows alphanumeric characters, dots, dashes, and underscores.
+   * Valid: "2026.02.10185052-nightly", "preview-1", "2026.02.10_hotfix"
+   * Invalid: "../etc/passwd", "foo/bar", "..\\windows", "ver;rm -rf"
+   */
+  private sanitizeVersion(version: string): string {
+    if (!version || !/^[a-zA-Z0-9._-]+$/.test(version)) {
+      throw new BadRequestException(
+        `Invalid version string: ${version}. Only alphanumeric, dots, dashes, and underscores allowed.`,
+      );
+    }
+    return version;
+  }
+
+  /** Build versioned path for platform bundle on CP. Validates against path traversal. */
   private cpBundlePath(version: string, platform: 'linux' | 'windows'): string {
-    return path.join(CP_UPGRADE_BASE, version, 'worker', platform);
+    const safeVersion = this.sanitizeVersion(version);
+    const resolved = path.resolve(CP_UPGRADE_BASE, safeVersion, 'worker', platform);
+
+    // Ensure the resolved absolute path stays within CP_UPGRADE_BASE
+    if (!resolved.startsWith(path.resolve(CP_UPGRADE_BASE))) {
+      throw new BadRequestException(`Invalid version path: ${version}`);
+    }
+
+    return resolved;
   }
 
   // =============================================================================
@@ -117,7 +140,7 @@ export class UpgradeService {
 
       // 3. Set upgrade_bundle_staged to IN_PROGRESS for all active workers
       await this.workerRepository.update(
-        workerIds.map((id) => id),
+        { workerId: In(workerIds) },
         { upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS },
       );
       this.logger.log(`Set upgrade_bundle_staged=IN_PROGRESS for ${workerIds.length} workers`);
