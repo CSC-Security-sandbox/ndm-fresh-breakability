@@ -255,10 +255,8 @@ const DirectoriesContent = ({
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Clear search error when current path changes (user navigated via folder clicks)
-  useEffect(() => {
-    setSearchError(null);
-  }, [currentPath]);
+  // Note: searchError persists until a valid path is entered and Validate is clicked
+  // This ensures users see the error message until they correct the path
 
   const handleParentClick = () => {
     const parentPath =
@@ -393,7 +391,7 @@ const DirectoriesContent = ({
             value={searchPath}
             onChange={(e) => {
               setSearchPath(e.target.value);
-              setSearchError(null); // Clear error when typing
+              // Error persists until Validate is clicked with a valid path
             }}
             onKeyDown={handleSearchKeyDown}
             placeholder="Enter path (e.g., /folder1/subfolder)"
@@ -426,10 +424,10 @@ const DirectoriesContent = ({
         </Box>
       )}
 
-      {/* Selected Items Count */}
+      {/* Selected Item Indicator */}
       {selectedItems.size > 0 && !searchError && (
         <Box className="mb-4 p-2 bg-blue-50 rounded-md text-sm text-blue-700">
-          {selectedItems.size} item(s) selected
+          1 item selected
         </Box>
       )}
 
@@ -479,10 +477,11 @@ const DirectoriesContent = ({
                     isSelected ? "bg-blue-50" : ""
                   }`}
                 >
-                  {/* Checkbox */}
+                  {/* Radio Button - Single Select */}
                   <Box className="col-span-1 flex items-center">
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="directory-selection"
                       checked={isSelected}
                       onChange={() => onItemToggle(item.id)}
                       className="w-4 h-4 cursor-pointer"
@@ -621,17 +620,10 @@ const ExploreModal = ({
     setSelectedExportPath((prev) => (pathId === prev ? null : pathId));
   }, []);
 
-  // Handle item toggle (checkbox selection)
+  // Handle item toggle (radio button selection - single select)
   const handleItemToggle = useCallback((itemId: string) => {
-    setSelectedItems((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
+    // Single select - only one item can be selected at a time
+    setSelectedItems(new Set([itemId]));
   }, []);
 
   // Handle path change (navigating into a folder)
