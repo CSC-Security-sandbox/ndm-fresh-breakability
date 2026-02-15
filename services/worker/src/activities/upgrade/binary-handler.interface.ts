@@ -96,8 +96,8 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       await this.extractArchive(archivePath, stagingDir);
       this.logger.log(`Extracted archive to ${stagingDir}`);
 
-      // 3. Cleanup macOS resource forks
-      this.cleanupResourceForks(stagingDir);
+      // 3. Cleanup macOS junk files (.DS_Store, ._ resource forks)
+      this.cleanupMacOSJunk(stagingDir);
 
       // 4. Find files
       heartbeatFn('finding extracted files');
@@ -285,11 +285,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   }
 
   /**
-   * Find checksum file matching: datamigrator-{platform}-{version}.sha256
+   * Find checksum file matching: datamigrator-worker-{platform}-{version}.sha256
    */
   protected findChecksumFile(files: string[]): string | undefined {
     return files.find((f) =>
-      f.startsWith(`datamigrator-${this.platform}-`) && f.endsWith('.sha256'),
+      f.startsWith(`datamigrator-worker-${this.platform}-`) && f.endsWith('.sha256'),
     );
   }
 
@@ -376,12 +376,13 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
     return finalEnvPath;
   }
 
-  protected cleanupResourceForks(dirPath: string): void {
+  protected cleanupMacOSJunk(dirPath: string): void {
+    const junkPatterns = ['.DS_Store', '._'];
     const files = fs.readdirSync(dirPath);
     for (const file of files) {
-      if (file.startsWith('._')) {
+      if (file === '.DS_Store' || file.startsWith('._')) {
         fs.unlinkSync(path.join(dirPath, file));
-        this.logger.log(`Removed macOS resource fork file: ${file}`);
+        this.logger.log(`Removed macOS junk file: ${file}`);
       }
     }
   }
