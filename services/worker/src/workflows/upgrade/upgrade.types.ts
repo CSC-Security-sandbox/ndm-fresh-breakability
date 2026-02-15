@@ -162,17 +162,9 @@ export enum MulticastStatus {
 }
 
 // =============================================================================
-// Constants
+// Constants (used by admin-service for CP-side path building)
+// Worker-side constants live in the handler classes.
 // =============================================================================
-
-/**
- * API endpoint on CP for downloading the upgrade bundle (versioned).
- * Worker calls: GET {cpBaseUrl}/api/v1/upgrade/worker/{version}/{platform}
- * 
- * Each platform bundle contains: binary + env + checksums
- */
-export const UPGRADE_ENDPOINT = (version: string, platform: 'linux' | 'windows') =>
-  `/api/v1/upgrade/worker/${version}/${platform}`;
 
 /**
  * Base path on CP where upgrade bundles are stored.
@@ -186,48 +178,3 @@ export const CP_UPGRADE_BASE = '/upgrade';
  */
 export const cpBundlePath = (version: string, platform: 'linux' | 'windows') =>
   `${CP_UPGRADE_BASE}/${version}/worker/${platform}`;
-
-/**
- * Archive file extensions per platform.
- * Linux uses tar.gz, Windows uses zip.
- */
-export const ARCHIVE_EXTENSION = {
-  linux: '.tar.gz',
-  windows: '.zip',
-} as const;
-
-/**
- * Paths on Worker where bundles are staged.
- * Structure: {stagingBase}/{version}/
- */
-export const WORKER_PATHS = {
-  linux: {
-    /** Base staging directory */
-    stagingBase: '/opt/datamigrator/staging',
-    /** Directory where current binary lives */
-    binaryDir: '/opt/datamigrator/binary',
-    /** Binary name pattern */
-    binaryName: 'datamigrator-worker',
-    /** Env file name */
-    envFileName: '.env',
-  },
-  windows: {
-    /** Base staging directory */
-    stagingBase: 'C:\\datamigrator\\staging',
-    /** Directory where current binary lives */
-    binaryDir: 'C:\\datamigrator\\binary',
-    /** Binary name pattern */
-    binaryName: 'datamigrator-worker.exe',
-    /** Env file name */
-    envFileName: '.env',
-  },
-} as const;
-
-/**
- * Build versioned staging directory path for a worker.
- * e.g. /opt/datamigrator/staging/2026.02.10185052-nightly/
- */
-export const workerStagingDir = (platform: 'linux' | 'windows', version: string) =>
-  platform === 'windows'
-    ? `${WORKER_PATHS[platform].stagingBase}\\${version}`
-    : `${WORKER_PATHS[platform].stagingBase}/${version}`;

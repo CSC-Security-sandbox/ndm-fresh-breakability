@@ -1,115 +1,374 @@
 /**
- * Binary Handler Interface
+ * Binary Handler Interface & Base Class
  * 
- * Defines the contract for platform-specific binary handlers.
- * Used by the factory pattern to return Linux or Windows handler.
+ * IBinaryHandler: contract for platform-specific upgrade handlers.
+ * BaseBinaryHandler: abstract class with the full download-extract-verify pipeline.
  * 
- * Note:
- *   - Binaries are already extracted on CP at /upgrade/worker/{platform}/
- *   - Worker downloads the binary file directly (not archive)
- *   - Binary names from CP: datamigrator-{version} (linux) or datamigrator-{version}.exe (windows)
+ * Only 3 methods differ per platform (abstract):
+ *   - extractArchive()  — tar -xzf (linux) vs tar -xf (windows)
+ *   - findBinary()      — no .exe (linux) vs .exe (windows)
+ *   - makeExecutable()  — chmod +x (linux) vs no-op (windows)
  * 
- * Usage:
- *   const handler = BinaryHandlerFactory.create('linux');
- *   const endpoint = handler.getDownloadEndpoint();
- *   const stagedPath = handler.getStagedBinaryPath(version);
+ * Everything else (auth, download, checksum, cleanup) is shared.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { firstValueFrom } from 'rxjs';
+import { LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { AuthService } from '../../auth/auth.service';
+import { DownloadBundleOutput } from '../../workflows/upgrade/upgrade.types';
+
 // =============================================================================
-// IBinaryHandler Interface
+// Interface
 // =============================================================================
 
 export interface IBinaryHandler {
-  /**
-   * Get the platform name
-   * @returns 'linux' or 'windows'
-   */
-  getPlatform(): 'linux' | 'windows';
+  /** Download bundle from CP, extract, verify, stage. */
+  download(
+    version: string,
+    heartbeatFn: (stage: string) => void,
+  ): Promise<DownloadBundleOutput>;
 
-  /**
-   * Get the API endpoint path for downloading binary
-   * @returns e.g., '/api/v1/upgrade/worker/linux'
-   */
-  getDownloadEndpoint(): string;
-
-  /**
-   * Get the staging directory path on worker
-   * @returns e.g., '/opt/datamigrator/staging' or 'C:\datamigrator\staging'
-   */
-  getStagingDir(): string;
-
-  /**
-   * Get the binary directory path (where current binary lives) on worker
-   * @returns e.g., '/opt/datamigrator/binary' or 'C:\datamigrator\binary'
-   */
-  getBinaryDir(): string;
-
-  /**
-   * Get the binary filename for a version
-   * @param version - Target version (e.g., '2026.02.08184701-nightly')
-   * @returns e.g., 'datamigrator-2026.02.08184701-nightly' or 'datamigrator-2026.02.08184701-nightly.exe'
-   */
-  getBinaryFilename(version: string): string;
-
-  /**
-   * Get the staged binary path for a version (on worker)
-   * @param version - Target version
-   * @returns Full path to staged binary
-   */
-  getStagedBinaryPath(version: string): string;
-
-  /**
-   * Make the binary executable (Linux only, no-op on Windows)
-   * @param binaryPath - Path to binary
-   */
-  makeExecutable(binaryPath: string): Promise<void>;
-
-  /**
-   * Verify the binary exists and is valid
-   * @param binaryPath - Path to binary
-   * @param version - Optional version string to verify in filename
-   * @returns true if binary is valid
-   */
-  verifyBinary(binaryPath: string, version: string): Promise<boolean>;
+  /** Check if a version is already staged and valid. */
+  isBinaryStaged(version: string): Promise<{ staged: boolean; platform: 'linux' | 'windows' }>;
 }
 
 // =============================================================================
-// Binary Handler Config (shared config structure)
+// Heartbeat callback type
 // =============================================================================
 
-export interface BinaryHandlerConfig {
-  /** Platform */
-  platform: 'linux' | 'windows';
-  /** API endpoint for download */
-  endpoint: string;
-  /** Staging directory on worker */
-  stagingDir: string;
-  /** Binary directory on worker */
-  binaryDir: string;
-  /** Binary name prefix */
-  binaryNamePrefix: string;
-  /** Binary extension (empty for linux, .exe for windows) */
-  binaryExtension: string;
+export type HeartbeatFn = (stage: string) => void;
+
+// =============================================================================
+// Base Handler (abstract)
+// =============================================================================
+
+export abstract class BaseBinaryHandler implements IBinaryHandler {
+  /** Platform identifier */
+  protected abstract readonly platform: 'linux' | 'windows';
+  /** Archive extension: '.tar.gz' or '.zip' */
+  protected abstract readonly archiveExtension: string;
+  /** Base staging directory on worker */
+  protected abstract readonly stagingBase: string;
+
+  constructor(
+    protected readonly httpService: HttpService,
+    protected readonly authService: AuthService,
+    protected readonly configService: ConfigService,
+    protected readonly logger: LoggerService,
+  ) {}
+
+  // ===========================================================================
+  // Abstract methods (only these differ per platform)
+  // ===========================================================================
+
+  /** Extract archive to destination directory. */
+  protected abstract extractArchive(archivePath: string, destDir: string): Promise<void>;
+
+  /** Find the binary file from a list of extracted filenames. */
+  protected abstract findBinary(files: string[]): string | undefined;
+
+  /** Make the binary executable (chmod +x on linux, no-op on windows). */
+  protected abstract makeExecutable(binaryPath: string): Promise<void>;
+
+  // ===========================================================================
+  // Public: download
+  // ===========================================================================
+
+  async download(
+    version: string,
+    heartbeatFn: HeartbeatFn,
+  ): Promise<DownloadBundleOutput> {
+    const cpBaseUrl = this.getCpBaseUrl();
+    const downloadUrl = `${cpBaseUrl}${this.getUpgradeEndpoint(version)}`;
+    const headers = await this.getAuthHeaders();
+
+    this.logger.log(`Downloading bundle for ${this.platform} v${version} from ${downloadUrl}`);
+
+    const stagingDir = this.ensureStagingDir(version);
+    const archivePath = path.join(stagingDir, `bundle-${version}${this.archiveExtension}`);
+
+    try {
+      // 1. Stream download to file
+      const archiveSize = await this.streamToFile(downloadUrl, archivePath, headers, heartbeatFn);
+
+      // 2. Extract
+      heartbeatFn('extracting archive');
+      await this.extractArchive(archivePath, stagingDir);
+      this.logger.log(`Extracted archive to ${stagingDir}`);
+
+      // 3. Cleanup macOS resource forks
+      this.cleanupResourceForks(stagingDir);
+
+      // 4. Find files
+      heartbeatFn('finding extracted files');
+      const files = fs.readdirSync(stagingDir);
+      this.logger.log(`Extracted files: ${files.join(', ')}`);
+
+      const binaryFile = this.findBinary(files);
+      if (!binaryFile) {
+        throw new Error(`Binary not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
+      }
+
+      const checksumFile = this.findChecksumFile(files);
+      if (!checksumFile) {
+        throw new Error(`Checksums file not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
+      }
+
+      const binaryPath = path.join(stagingDir, binaryFile);
+      const checksumPath = path.join(stagingDir, checksumFile);
+
+      // 5. Verify checksums
+      heartbeatFn('verifying checksums');
+      this.verifyChecksums(stagingDir, checksumPath);
+      this.logger.log('Checksums verified');
+      fs.unlinkSync(checksumPath);
+
+      // 6. Finalize env
+      heartbeatFn('finalizing staged files');
+      const envPath = this.finalizeEnv(stagingDir, files);
+
+      // 7. Make binary executable
+      await this.makeExecutable(binaryPath);
+
+      // 8. Cleanup archive
+      this.safeDelete(archivePath);
+
+      this.logger.log(`Bundle staged: ${stagingDir} (binary: ${binaryFile})`);
+
+      return {
+        stagedPath: stagingDir,
+        sizeBytes: archiveSize,
+        platform: this.platform,
+        binaryPath,
+        envPath,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to download/extract bundle: ${msg}`);
+      this.safeDelete(archivePath);
+      throw error;
+    }
+  }
+
+  // ===========================================================================
+  // Public: isBinaryStaged
+  // ===========================================================================
+
+  async isBinaryStaged(version: string): Promise<{ staged: boolean; platform: 'linux' | 'windows' }> {
+    const stagingDir = this.getStagingDir(version);
+
+    if (!fs.existsSync(stagingDir)) {
+      return { staged: false, platform: this.platform };
+    }
+
+    const files = fs.readdirSync(stagingDir);
+    const binaryFile = this.findBinary(files);
+
+    if (!binaryFile) {
+      return { staged: false, platform: this.platform };
+    }
+
+    const binaryPath = path.join(stagingDir, binaryFile);
+    const valid = this.verifyBinary(binaryPath, version);
+    return { staged: valid, platform: this.platform };
+  }
+
+  // ===========================================================================
+  // Protected: auth + config helpers
+  // ===========================================================================
+
+  protected getCpBaseUrl(): string {
+    const cpBaseUrl = process.env.CP_BASE_URL;
+    if (cpBaseUrl) return cpBaseUrl;
+
+    const cpIp = process.env.CONTROL_PLANE_IP;
+    if (!cpIp) throw new Error('CONTROL_PLANE_IP environment variable is not set');
+    return `https://${cpIp}`;
+  }
+
+  protected async getAuthHeaders(): Promise<Record<string, string>> {
+    const token = await this.authService.getAccessToken();
+    if (!token) throw new Error('Failed to obtain authentication token from Keycloak');
+    return { 'Authorization': `Bearer ${token}` };
+  }
+
+  protected getUpgradeEndpoint(version: string): string {
+    return `/api/v1/upgrade/worker/${version}/${this.platform}`;
+  }
+
+  // ===========================================================================
+  // Protected: staging directory
+  // ===========================================================================
+
+  protected getStagingDir(version: string): string {
+    return path.join(this.stagingBase, version);
+  }
+
+  protected ensureStagingDir(version: string): string {
+    const dir = this.getStagingDir(version);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      this.logger.log(`Created staging directory: ${dir}`);
+    }
+    return dir;
+  }
+
+  // ===========================================================================
+  // Protected: stream download
+  // ===========================================================================
+
+  protected async streamToFile(
+    url: string,
+    destPath: string,
+    headers: Record<string, string>,
+    heartbeatFn: HeartbeatFn,
+  ): Promise<number> {
+    const response = await firstValueFrom(
+      this.httpService.get(url, {
+        responseType: 'stream',
+        headers,
+        timeout: 30 * 60 * 1000,
+      }),
+    );
+
+    const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+    let bytesReceived = 0;
+
+    const heartbeatInterval = setInterval(() => {
+      const pct = totalSize > 0 ? ((bytesReceived / totalSize) * 100).toFixed(1) : '?';
+      heartbeatFn(`downloading: ${bytesReceived} / ${totalSize} bytes (${pct}%)`);
+    }, 30_000);
+
+    response.data.on('data', (chunk: Buffer) => {
+      bytesReceived += chunk.length;
+    });
+
+    const writer = fs.createWriteStream(destPath);
+    response.data.pipe(writer);
+
+    await new Promise<void>((resolve, reject) => {
+      writer.on('finish', () => { clearInterval(heartbeatInterval); resolve(); });
+      writer.on('error', (err) => { clearInterval(heartbeatInterval); reject(err); });
+    });
+
+    const size = fs.statSync(destPath).size;
+    this.logger.log(`Downloaded: ${destPath} (${size} bytes)`);
+    return size;
+  }
+
+  // ===========================================================================
+  // Protected: file discovery
+  // ===========================================================================
+
+  protected findEnvFile(files: string[]): string | undefined {
+    return files.find((f) => f.endsWith('.env') && f !== '.env');
+  }
+
+  protected findChecksumFile(files: string[]): string | undefined {
+    return files.find((f) => f.endsWith('.sha256') || f === 'checksums.sha256');
+  }
+
+  // ===========================================================================
+  // Protected: checksum verification
+  // ===========================================================================
+
+  protected verifyChecksums(baseDir: string, checksumFilePath: string): void {
+    const content = fs.readFileSync(checksumFilePath, 'utf-8').trim();
+    const lines = content.split('\n').filter((line) => line.trim());
+
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 2) continue;
+
+      const expectedHash = parts[0].toLowerCase();
+      const filename = parts[parts.length - 1].replace(/^\*/, '');
+      const filePath = path.join(baseDir, filename);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File listed in checksums not found: ${filename} (expected at ${filePath})`);
+      }
+
+      const fileBuffer = fs.readFileSync(filePath);
+      const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex').toLowerCase();
+
+      if (actualHash === expectedHash) {
+        this.logger.log(`Checksum OK: ${filename}`);
+        continue;
+      }
+
+      // CRLF normalization fallback for text files
+      const normalized = Buffer.from(fileBuffer.toString('utf-8').replace(/\r\n/g, '\n'));
+      const normalizedHash = crypto.createHash('sha256').update(normalized).digest('hex').toLowerCase();
+
+      if (normalizedHash === expectedHash) {
+        this.logger.log(`Checksum OK (after CRLF normalization): ${filename}`);
+        continue;
+      }
+
+      throw new Error(`Checksum mismatch for ${filename}: expected ${expectedHash}, got ${actualHash}`);
+    }
+  }
+
+  // ===========================================================================
+  // Protected: binary verification
+  // ===========================================================================
+
+  protected verifyBinary(binaryPath: string, version: string): boolean {
+    try {
+      if (!fs.existsSync(binaryPath)) return false;
+
+      const dirName = path.basename(path.dirname(binaryPath));
+      if (!dirName.includes(version)) return false;
+
+      const filename = path.basename(binaryPath);
+      if (!filename.includes(version)) return false;
+
+      const stats = fs.statSync(binaryPath);
+      if (stats.size < 1024 * 1024) return false;
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // Protected: finalize env + cleanup
+  // ===========================================================================
+
+  protected finalizeEnv(stagingDir: string, files: string[]): string {
+    const envFile = this.findEnvFile(files);
+    const finalEnvPath = path.join(stagingDir, '.env');
+
+    if (envFile) {
+      const envFilePath = path.join(stagingDir, envFile);
+      if (envFilePath !== finalEnvPath) {
+        fs.renameSync(envFilePath, finalEnvPath);
+        this.logger.log(`Renamed ${envFile} → .env`);
+      }
+    }
+
+    return finalEnvPath;
+  }
+
+  protected cleanupResourceForks(dirPath: string): void {
+    const files = fs.readdirSync(dirPath);
+    for (const file of files) {
+      if (file.startsWith('._')) {
+        fs.unlinkSync(path.join(dirPath, file));
+        this.logger.log(`Removed macOS resource fork file: ${file}`);
+      }
+    }
+  }
+
+  protected safeDelete(...paths: string[]): void {
+    for (const p of paths) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  }
 }
-
-// =============================================================================
-// Platform Configs
-// =============================================================================
-
-export const LINUX_CONFIG: BinaryHandlerConfig = {
-  platform: 'linux',
-  endpoint: '/api/v1/upgrade/worker/linux',
-  stagingDir: '/opt/datamigrator/staging',
-  binaryDir: '/opt/datamigrator/binary',
-  binaryNamePrefix: 'datamigrator-',
-  binaryExtension: '',
-};
-
-export const WINDOWS_CONFIG: BinaryHandlerConfig = {
-  platform: 'windows',
-  endpoint: '/api/v1/upgrade/worker/windows',
-  stagingDir: 'C:\\datamigrator\\staging',
-  binaryDir: 'C:\\datamigrator\\binary',
-  binaryNamePrefix: 'datamigrator-',
-  binaryExtension: '.exe',
-};

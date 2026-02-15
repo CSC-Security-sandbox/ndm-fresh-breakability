@@ -1,113 +1,34 @@
 /**
  * Windows Binary Handler
  * 
- * Platform-specific handler for Windows binary operations.
- * Implements IBinaryHandler interface.
+ * Extends BaseBinaryHandler with Windows-specific behavior:
+ *   - extractArchive: tar -xf (.zip) — Windows 10+ tar supports zip
+ *   - findBinary: file with .exe extension
+ *   - makeExecutable: no-op (exe files are executable by default)
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { IBinaryHandler, WINDOWS_CONFIG } from '../binary-handler.interface';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { BaseBinaryHandler } from '../binary-handler.interface';
 
-export class WindowsBinaryHandler implements IBinaryHandler {
-  private readonly config = WINDOWS_CONFIG;
+const execFileAsync = promisify(execFile);
 
-  /**
-   * Get the platform name
-   */
-  getPlatform(): 'linux' | 'windows' {
-    return this.config.platform;
+export class WindowsBinaryHandler extends BaseBinaryHandler {
+  protected readonly platform = 'windows' as const;
+  protected readonly archiveExtension = '.zip';
+  protected readonly stagingBase = 'C:\\datamigrator\\staging';
+
+  protected async extractArchive(archivePath: string, destDir: string): Promise<void> {
+    await execFileAsync('tar', ['-xf', archivePath, '-C', destDir]);
   }
 
-  /**
-   * Get the API endpoint path for downloading binary
-   * @returns '/api/v1/upgrade/worker/windows'
-   */
-  getDownloadEndpoint(): string {
-    return this.config.endpoint;
+  protected findBinary(files: string[]): string | undefined {
+    return files.find((f) =>
+      f.startsWith('datamigrator-') && f.endsWith('.exe'),
+    );
   }
 
-  /**
-   * Get the staging directory path on worker
-   * @returns 'C:\datamigrator\staging'
-   */
-  getStagingDir(): string {
-    return this.config.stagingDir;
-  }
-
-  /**
-   * Get the binary directory path on worker
-   * @returns 'C:\datamigrator\binary'
-   */
-  getBinaryDir(): string {
-    return this.config.binaryDir;
-  }
-
-  /**
-   * Get the binary filename for a version
-   * @param version - e.g., '2026.02.08184701-nightly'
-   * @returns e.g., 'datamigrator-2026.02.08184701-nightly.exe'
-   */
-  getBinaryFilename(version: string): string {
-    return `${this.config.binaryNamePrefix}${version}${this.config.binaryExtension}`;
-  }
-
-  /**
-   * Get the staged binary path for a version
-   * @param version - Target version
-   * @returns e.g., 'C:\datamigrator\staging\datamigrator-2026.02.08184701-nightly.exe'
-   */
-  getStagedBinaryPath(version: string): string {
-    return path.join(this.getStagingDir(), this.getBinaryFilename(version));
-  }
-
-  /**
-   * Make the binary executable (no-op on Windows, exe files are executable by default)
-   * @param binaryPath - Path to binary
-   */
-  async makeExecutable(binaryPath: string): Promise<void> {
-    // No-op on Windows - exe files are executable by default
-  }
-
-  /**
-   * Verify the binary exists and is valid
-   * @param binaryPath - Path to binary
-   * @returns true if binary exists and has reasonable size
-   */
-  async verifyBinary(binaryPath: string, version: string): Promise<boolean> {
-    try {
-      // Check file exists
-      if (!fs.existsSync(binaryPath)) {
-        return false;
-      }
-
-      const filename = path.basename(binaryPath);
-
-      // Check it has .exe extension
-      if (!filename.toLowerCase().endsWith('.exe')) {
-        return false;
-      }
-
-      // Check parent directory name contains the version string
-      const dirName = path.basename(path.dirname(binaryPath));
-      if (!dirName.includes(version)) {
-        return false;
-      }
-
-      // Check filename contains the version string
-      if (!filename.includes(version)) {
-        return false;
-      }
-
-      // Check file size is reasonable (> 1MB)
-      const stats = fs.statSync(binaryPath);
-      if (stats.size < 1024 * 1024) {
-        return false;
-      }
-      
-      return true;
-    } catch {
-      return false;
-    }
+  protected async makeExecutable(): Promise<void> {
+    // No-op on Windows — exe files are executable by default
   }
 }
