@@ -10,13 +10,14 @@ import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from '../../auth/auth.module';
 import { AuthService } from '../../auth/auth.service';
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { LoggerModule, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpgradeActivityService } from './upgrade.activity.service';
 import { LinuxBinaryHandler } from './handlers/linux-binary.handler';
 import { WindowsBinaryHandler } from './handlers/windows-binary.handler';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(),
     HttpModule,
     ConfigModule,
     AuthModule,
