@@ -827,24 +827,26 @@ jobs:
             "${BASE_URL}/worker/worker-${BUILD_VERSION}.env" || echo "worker env not found (optional)"
 
           # --- Linux worker ---
-          mkdir -p linux_worker
-          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION}  linux_worker/worker-linux-x64
-          [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "linux_worker/worker-${BUILD_VERSION}.env"
-          cd linux_worker
-          sha256sum * > linux_worker_checksum
-          echo "linux_worker_checksum:"; cat linux_worker_checksum
+          LINUX_WORKER="datamigrator-worker-linux-${BUILD_VERSION}"
+          mkdir -p "${LINUX_WORKER}"
+          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION} "${LINUX_WORKER}/${LINUX_WORKER}"
+          [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "${LINUX_WORKER}/${LINUX_WORKER}.env"
+          cd "${LINUX_WORKER}"
+          sha256sum * > "${LINUX_WORKER}.sha256"
+          echo "${LINUX_WORKER}.sha256:"; cat "${LINUX_WORKER}.sha256"
+          tar -czf "../${LINUX_WORKER}.tar.gz" *
           cd ..
-          tar -cvf linux_worker.tar linux_worker
 
           # --- Windows worker ---
-          mkdir -p windows_worker
-          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION}.exe  windows_worker/worker-win-x64.exe
-          [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "windows_worker/worker-${BUILD_VERSION}.env"
-          cd windows_worker
-          sha256sum * > windows_worker_checksum
-          echo "windows_worker_checksum:"; cat windows_worker_checksum
+          WINDOWS_WORKER="datamigrator-worker-windows-${BUILD_VERSION}"
+          mkdir -p "${WINDOWS_WORKER}"
+          cp ./worker-bin/datamigrator-worker-${BUILD_VERSION}.exe "${WINDOWS_WORKER}/${WINDOWS_WORKER}.exe"
+          [ -f "worker-${BUILD_VERSION}.env" ] && cp "worker-${BUILD_VERSION}.env" "${WINDOWS_WORKER}/${WINDOWS_WORKER}.env"
+          cd "${WINDOWS_WORKER}"
+          sha256sum * > "${WINDOWS_WORKER}.sha256"
+          echo "${WINDOWS_WORKER}.sha256:"; cat "${WINDOWS_WORKER}.sha256"
+          zip "../${WINDOWS_WORKER}.zip" *
           cd ..
-          zip -r windows_worker.zip windows_worker
 
       - name: Upload upgrade.sh to Artifactory
         run: |
@@ -861,8 +863,10 @@ jobs:
           cp ./artifacts/helm/datamigrator-${BUILD_VERSION}.tgz    "${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
 
           # Place prepared worker packages into the bundle
-          cp linux_worker.tar    "${UPGRADE}/worker/linux_worker.tar"
-          cp windows_worker.zip  "${UPGRADE}/worker/windows_worker.zip"
+          LINUX_WORKER="datamigrator-worker-linux-${BUILD_VERSION}"
+          cp "${LINUX_WORKER}.tar.gz" "${UPGRADE}/worker/${LINUX_WORKER}.tar.gz"
+          WINDOWS_WORKER="datamigrator-worker-windows-${BUILD_VERSION}"
+          cp "${WINDOWS_WORKER}.zip"  "${UPGRADE}/worker/${WINDOWS_WORKER}.zip"
           cp upgrade/upgrade.sh  "${UPGRADE}/upgrade.sh"
 
           # Checksums
@@ -870,11 +874,11 @@ jobs:
           sha256sum \
             "docker/datamigrator-${BUILD_VERSION}.tar" \
             "helm/datamigrator-${BUILD_VERSION}.tgz" \
-            "worker/linux_worker.tar" \
-            "worker/windows_worker.zip" \
+            "worker/datamigrator-worker-linux-${BUILD_VERSION}.tar.gz" \
+            "worker/datamigrator-worker-windows-${BUILD_VERSION}.zip" \
             "upgrade.sh" \
-            > checksums.sha256
-          echo "checksums.sha256:"; cat checksums.sha256
+            > checksums-${BUILD_VERSION}.sha256
+          echo "checksums-${BUILD_VERSION}.sha256:"; cat checksums-${BUILD_VERSION}.sha256
           cd ..
 
           tar -cvf "${UPGRADE}.tar" "${UPGRADE}"
@@ -885,7 +889,7 @@ jobs:
           BASE="${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}"
           # .sha256.txt so Artifactory treats it as an artifact, not checksum metadata
           curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" \
-            -T "${UPGRADE}/checksums.sha256" "${ARTIFACTORY_URL}/${REPO}/${BASE}/checksums.sha256.txt"
+            -T "${UPGRADE}/checksums-${BUILD_VERSION}.sha256" "${ARTIFACTORY_URL}/${REPO}/${BASE}/checksums-${BUILD_VERSION}.sha256.txt"
           curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
             --upload-file "${UPGRADE}.tar" "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar"
 
