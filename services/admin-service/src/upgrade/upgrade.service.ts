@@ -302,8 +302,8 @@ export class UpgradeService {
 
   /**
    * Serves the upgrade bundle for a specific version and platform.
-   * Linux:   /upgrade/{version}/worker/linux/datamigrator-*-linux.tar.gz
-   * Windows: /upgrade/{version}/worker/windows/datamigrator-*-windows.zip
+   * Linux:   /upgrade/{version}/worker/linux/datamigrator-worker-linux-{version}.tar.gz
+   * Windows: /upgrade/{version}/worker/windows/datamigrator-worker-windows-{version}.zip
    */
   async streamBundle(
     version: string,
@@ -318,9 +318,8 @@ export class UpgradeService {
     }
 
     const files = fs.readdirSync(basePath);
-    // Linux: *.tar.gz, Windows: *.zip
     const bundleFile = files.find((f) =>
-      f.startsWith('datamigrator-') && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
+      f.startsWith(`datamigrator-worker-${platform}-`) && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
     );
 
     if (!bundleFile) {
@@ -361,7 +360,7 @@ export class UpgradeService {
 
   /**
    * Check bundle info for a version and platform.
-   * Linux: looks for *.tar.gz, Windows: looks for *.zip
+   * Looks for: datamigrator-worker-{platform}-{version}.tar.gz (linux) or .zip (windows)
    */
   private checkBundleInfo(version: string, platform: 'linux' | 'windows'): {
     available: boolean;
@@ -376,7 +375,7 @@ export class UpgradeService {
 
     const files = fs.readdirSync(basePath);
     const bundleFile = files.find((f) =>
-      f.startsWith('datamigrator-') && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
+      f.startsWith(`datamigrator-worker-${platform}-`) && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
     );
 
     if (!bundleFile) {

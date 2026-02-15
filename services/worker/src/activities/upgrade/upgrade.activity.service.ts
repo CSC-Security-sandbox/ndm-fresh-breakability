@@ -66,7 +66,11 @@ export class UpgradeActivityService {
     status: 'success' | 'failed';
     message?: string;
   }): Promise<void> {
-    const cpBaseUrl = process.env.CP_BASE_URL || `https://${process.env.CONTROL_PLANE_IP}`;
+    const cpBaseUrl = process.env.CP_BASE_URL
+      || (process.env.CONTROL_PLANE_IP ? `https://${process.env.CONTROL_PLANE_IP}` : null);
+    if (!cpBaseUrl) {
+      throw new Error('Neither CP_BASE_URL nor CONTROL_PLANE_IP environment variable is set');
+    }
     const ackUrl = `${cpBaseUrl}/api/v1/upgrade/worker/ack`;
     const workerId = this.configService.get<string>('worker.workerId');
 

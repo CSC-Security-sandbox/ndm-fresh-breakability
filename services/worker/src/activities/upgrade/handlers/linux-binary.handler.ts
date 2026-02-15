@@ -22,9 +22,12 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
     await execFileAsync('tar', ['-xzf', archivePath, '-C', destDir]);
   }
 
+  /**
+   * Find binary matching: datamigrator-worker-linux-{version} (no extension)
+   */
   protected findBinary(files: string[]): string | undefined {
     return files.find((f) =>
-      f.startsWith('datamigrator-') &&
+      f.startsWith('datamigrator-worker-linux-') &&
       !f.endsWith('.exe') &&
       !f.endsWith('.sha256') &&
       !f.endsWith('.tar.gz') &&

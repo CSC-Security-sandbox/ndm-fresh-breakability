@@ -38,12 +38,6 @@ export interface IBinaryHandler {
 }
 
 // =============================================================================
-// Heartbeat callback type
-// =============================================================================
-
-export type HeartbeatFn = (stage: string) => void;
-
-// =============================================================================
 // Base Handler (abstract)
 // =============================================================================
 
@@ -81,8 +75,9 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
   async download(
     version: string,
-    heartbeatFn: HeartbeatFn,
+    heartbeatFn: (stage: string) => void,
   ): Promise<DownloadBundleOutput> {
+    this.validateVersion(version);
     const cpBaseUrl = this.getCpBaseUrl();
     const downloadUrl = `${cpBaseUrl}${this.getUpgradeEndpoint(version)}`;
     const headers = await this.getAuthHeaders();
@@ -160,6 +155,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // ===========================================================================
 
   async isBinaryStaged(version: string): Promise<{ staged: boolean; platform: 'linux' | 'windows' }> {
+    this.validateVersion(version);
     const stagingDir = this.getStagingDir(version);
 
     if (!fs.existsSync(stagingDir)) {
@@ -181,6 +177,16 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // ===========================================================================
   // Protected: auth + config helpers
   // ===========================================================================
+
+  /**
+   * Validate version string to prevent path traversal.
+   * Only allows alphanumeric, dots, dashes, underscores.
+   */
+  protected validateVersion(version: string): void {
+    if (!version || !/^[a-zA-Z0-9._-]+$/.test(version)) {
+      throw new Error(`Invalid version string: ${version}. Only alphanumeric, dots, dashes, and underscores allowed.`);
+    }
+  }
 
   protected getCpBaseUrl(): string {
     const cpBaseUrl = process.env.CP_BASE_URL;
@@ -206,7 +212,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // ===========================================================================
 
   protected getStagingDir(version: string): string {
-    return path.join(this.stagingBase, version);
+    const resolved = path.resolve(this.stagingBase, version);
+    if (!resolved.startsWith(path.resolve(this.stagingBase))) {
+      throw new Error(`Invalid staging path for version: ${version}`);
+    }
+    return resolved;
   }
 
   protected ensureStagingDir(version: string): string {
@@ -226,7 +236,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
     url: string,
     destPath: string,
     headers: Record<string, string>,
-    heartbeatFn: HeartbeatFn,
+    heartbeatFn: (stage: string) => void,
   ): Promise<number> {
     const response = await firstValueFrom(
       this.httpService.get(url, {
@@ -265,12 +275,22 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // Protected: file discovery
   // ===========================================================================
 
+  /**
+   * Find env file matching: datamigrator-worker-{platform}-{version}.env
+   */
   protected findEnvFile(files: string[]): string | undefined {
-    return files.find((f) => f.endsWith('.env') && f !== '.env');
+    return files.find((f) =>
+      f.startsWith(`datamigrator-worker-${this.platform}-`) && f.endsWith('.env'),
+    );
   }
 
+  /**
+   * Find checksum file matching: datamigrator-{platform}-{version}.sha256
+   */
   protected findChecksumFile(files: string[]): string | undefined {
-    return files.find((f) => f.endsWith('.sha256') || f === 'checksums.sha256');
+    return files.find((f) =>
+      f.startsWith(`datamigrator-${this.platform}-`) && f.endsWith('.sha256'),
+    );
   }
 
   // ===========================================================================

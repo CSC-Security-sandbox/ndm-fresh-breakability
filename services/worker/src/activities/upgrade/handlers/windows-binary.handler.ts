@@ -22,9 +22,12 @@ export class WindowsBinaryHandler extends BaseBinaryHandler {
     await execFileAsync('tar', ['-xf', archivePath, '-C', destDir]);
   }
 
+  /**
+   * Find binary matching: datamigrator-worker-windows-{version}.exe
+   */
   protected findBinary(files: string[]): string | undefined {
     return files.find((f) =>
-      f.startsWith('datamigrator-') && f.endsWith('.exe'),
+      f.startsWith('datamigrator-worker-windows-') && f.endsWith('.exe'),
     );
   }
 
