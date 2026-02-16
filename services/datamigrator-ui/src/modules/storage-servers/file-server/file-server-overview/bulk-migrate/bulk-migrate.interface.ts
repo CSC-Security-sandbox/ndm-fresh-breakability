@@ -41,6 +41,8 @@ export interface MigrationDetailsTableConfigurationType {
     sourcePathName: string;
     sourcePathId: string;
   };
+  /** User-entered source directory (from Add Source Directory modal) */
+  sourceDirectoryPath?: string;
   protocol: string;
   destinationFileServerDetails: {
     destinationFileServerName: string;
@@ -50,6 +52,8 @@ export interface MigrationDetailsTableConfigurationType {
     destinationPathName: string;
     destinationPathId: string;
   };
+  /** User-entered destination directory (from Add Destination Directory modal) */
+  destinationDirectoryPath?: string;
   discoveryJobCount: string;
   migrationJobCount: string;
   cutoverJobCount: string;
@@ -140,6 +144,10 @@ export interface BulkMigrateContextType {
   sourceDisabledPaths: string[];
   refetch: () => void;
   isFetching: boolean;
+  deleteMapping: (rowId: number) => void;
+  mappingToEdit: MigrationDetailsTableConfigurationType | null;
+  setMappingToEdit: (row: MigrationDetailsTableConfigurationType | null) => void;
+  editMapping: (row: MigrationDetailsTableConfigurationType) => void;
 }
 
 export interface ErrorsValidateMappingStepFormType {

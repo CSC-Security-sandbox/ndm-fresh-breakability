@@ -14,11 +14,13 @@ const BulkMigrateContextWrapper = withBulkMigrateCreateForm(
   BulkMigrateContextProvider
 );
 
+// Shown when user clicks "Bulk Migrate" after selecting a file server from the left bar (sidebar).
+// The selected file server is read from the URL (/file-server/:fileServerId/bulk-migrate) and auto-populated as Source File Server.
 const BulkMigrate = () => {
   return (
     <Box className="h-[70vh]">
       <BulkMigrateContextWrapper>
-        <Box className="font-semibold text-lg pt-8 px-8">Bulk Migrate</Box>
+        <Box className="font-semibold text-lg pt-6 px-8">Bulk Migrate</Box>
         <Wizard
           stepsMap={STEPS_MAP_BULK_MIGRATION}
           stepPaths={STEPS_PATHS_BULK_MIGRATION}
