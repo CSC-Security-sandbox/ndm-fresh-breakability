@@ -1,7 +1,6 @@
 import { BlueXpTableRowType } from "@/types/app.type";
-import React from "react";
 import { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import { Tooltip } from "@netapp/bxp-design-system-react";
+import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/TruncatedPathCell";
 
 const SourcePathCellRenderer = ({
   row,
@@ -9,12 +8,8 @@ const SourcePathCellRenderer = ({
   MigrationDetailsTableConfigurationType,
   MigrationDetailsTableConfigurationType
 >) => {
-  return (
-    <>
-      {row?.sourcePath?.sourcePathName}
-      <Tooltip nowrap>{row?.sourcePath?.sourcePathName}</Tooltip>
-    </>
-  );
+  const value = row?.sourcePath?.sourcePathName ?? "";
+  return <TruncatedPathCell value={value} />;
 };
 
 export default SourcePathCellRenderer;

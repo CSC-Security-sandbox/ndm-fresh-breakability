@@ -33,8 +33,16 @@ const BulkMigrateProceedButton = () => {
     goToNextStep();
   };
 
-  // Validation methods
-  const isMappingStepFormInValid = () => !mappingStepForm?.isValid;
+  // On Mapping step: Proceed enabled when at least one mapping added
+  const hasAtLeastOneMapping = () =>
+    (mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.length ?? 0) >= 1;
+
+  const isMappingStepFormInValid = () => {
+    if (currentStepIndex === BULK_MIGRATE_STEPS_IDS.mapping) {
+      return !hasAtLeastOneMapping();
+    }
+    return !mappingStepForm?.isValid;
+  };
 
   const isIncrementalSyncScheduleInValid = () => {
     if (currentStepIndex !== BULK_MIGRATE_STEPS_IDS.options) return false;
