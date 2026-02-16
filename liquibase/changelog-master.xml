@@ -575,4 +575,11 @@
          <sqlFile path="liquibase/20260209_01_alter_jobconfig_remove_directory_paths.sql"/>
       </rollback>
    </changeSet> 
+    <changeSet id="20260211_01_alter_worker_table_add_upgrade_bundle_staged.sql" author="kb93278">
+        <sqlFile path="liquibase/20260211_01_alter_worker_table_add_upgrade_bundle_staged.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/20260211_01_alter_worker_table_add_upgrade_bundle_staged_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

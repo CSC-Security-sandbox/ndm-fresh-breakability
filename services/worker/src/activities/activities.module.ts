@@ -32,11 +32,12 @@ import { FetchFailedOperationsActivity } from './core/retry/fetch-failed-operati
 import { ProcessRetryBatchActivity } from './core/retry/process-retry-batch.activity';
 import { CommandGenerationService } from './core/shared/command-generation.service';
 import { MetricsModule } from 'src/metrics/metrics.module';
+import { UpgradeActivityModule } from './upgrade/upgrade.activity.module';
 
 @Module({
-  imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule, MetricsModule],
+  imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule, UpgradeActivityModule, MetricsModule],
   controllers: [],
   providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, FileTypeDetectionService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService],
-  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService],
+  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService, UpgradeActivityModule],
 })
 export class ActivitiesModule {}
