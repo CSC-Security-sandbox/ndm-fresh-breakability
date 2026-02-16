@@ -31,6 +31,7 @@ import {
   RequestContextMiddleware,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AboutNdmModule } from './about-ndm/about-ndm.module';
+import { JobStatusModule } from './job-status/job-status.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AboutNdmModule } from './about-ndm/about-ndm.module';
     SettingModule,
     EmailModule,
     AboutNdmModule,
+    JobStatusModule,
   ],
   controllers: [AppController],
   providers: [AppService],
