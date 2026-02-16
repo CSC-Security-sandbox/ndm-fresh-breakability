@@ -41,7 +41,7 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
           disabled={isFormSubmitting || currentStepIndex === 0}
           style={{ width: 152 }}
         >
-          Back
+          Cancel
         </Button>
         <Button
           color="secondary"
@@ -49,7 +49,7 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
           disabled={isFormSubmitting}
           style={{ width: 152 }}
         >
-          Cancel
+          Back
         </Button>
         <BulkMigrateProceedButton />
       </Box>

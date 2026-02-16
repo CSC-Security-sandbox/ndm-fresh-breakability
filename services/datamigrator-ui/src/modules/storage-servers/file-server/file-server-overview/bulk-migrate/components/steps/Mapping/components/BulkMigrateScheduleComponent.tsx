@@ -85,7 +85,7 @@ const BulkMigrateScheduleComponent = ({
             <FormControlLabel
               value={SCHEDULE_OPTIONS?.SCHEDULE_DATE}
               control={<Radio />}
-              label="Schedule Date & Time (UTC)"
+              label="Schedule Date & Time"
             />
           </Box>
         </RadioGroup>
