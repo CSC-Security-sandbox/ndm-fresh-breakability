@@ -97,6 +97,8 @@ env:
     value: "$(MY_HOST_IP)"
   - name: PROMETHEUS_BASE_URL
     value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
+  - name: TEMPORAL_ADDRESS
+    value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
 
 service:
   type: ClusterIP
@@ -140,6 +142,7 @@ ingress:
     - /api/v1/email
     - /api/v1/worker-registration
     - /api/v1/secrets
+    - /api/v1/upgrade
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -147,3 +150,11 @@ ingress:
   tls:
     enabled: false
   host: ""
+
+# ==============================
+# Persistent Volumes for Upgrade Bundles
+# ==============================
+persistentVolumes:
+  - name: upgrade-bundles
+    mountPath: /upgrade
+    hostPath: /upgrade
