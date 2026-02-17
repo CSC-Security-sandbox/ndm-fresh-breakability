@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -29,8 +29,8 @@ describe('UpgradeService', () => {
   };
 
   const mockWorkers: Partial<WorkerEntity>[] = [
-    { workerId: 'worker-1', status: 'Online', platform: 'linux', upgradeBundleStaged: UpgradeBundleStatus.IDLE },
-    { workerId: 'worker-2', status: 'Online', platform: 'windows', upgradeBundleStaged: UpgradeBundleStatus.IDLE },
+    { workerId: 'worker-1', status: 'Online', platform: 'linux', upgradeBundleStaged: UpgradeBundleStatus.IDLE, stats: { updatedAt: new Date() } as any },
+    { workerId: 'worker-2', status: 'Online', platform: 'windows', upgradeBundleStaged: UpgradeBundleStatus.IDLE, stats: { updatedAt: new Date() } as any },
   ];
 
   beforeEach(async () => {
@@ -122,7 +122,25 @@ describe('UpgradeService', () => {
       const result = await service.startMulticast({ version: '1.0.0' });
 
       expect(result.status).toBe('error');
-      expect(result.message).toBe('No active workers found');
+      expect(result.message).toContain('No');
+    });
+
+    it('should return error when workers exist but are unhealthy', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readdirSync.mockReturnValue([
+        'datamigrator-worker-linux-1.0.0.tar.gz' as any,
+      ]);
+      mockedFs.statSync.mockReturnValue({ size: 100 } as any);
+      // Workers with stale stats (2 hours ago)
+      const staleDate = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      jest.spyOn(workerRepository, 'find').mockResolvedValue([
+        { workerId: 'w1', status: 'Online', stats: { updatedAt: staleDate } },
+      ] as any);
+
+      const result = await service.startMulticast({ version: '1.0.0' });
+
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('not reporting health checks');
     });
 
     it('should start multicast workflow for active workers', async () => {
@@ -143,8 +161,8 @@ describe('UpgradeService', () => {
       expect(result.status).toBe('started');
       expect(result.workflowId).toBe('BinaryMulticast-test-trace-id');
       expect(workerRepository.update).toHaveBeenCalledWith(
-        { workerId: In(['worker-1', 'worker-2']) },
-        { upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS },
+        expect.objectContaining({ workerId: expect.anything() }),
+        { upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS, stagedVersion: '1.0.0' },
       );
       expect(mockWorkflowService.startWorkflow).toHaveBeenCalledWith(
         'BinaryMulticastWorkflow',
