@@ -9,6 +9,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { ArrowBackIcon, FolderIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { VolumeType } from "@/types/app.type";
+import { store } from "@store/store";
 
 // API base URL for jobs service
 const JOBS_SERVICE_URL = window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL;
@@ -45,7 +46,9 @@ const fetchDirectoryContents = async (
   exportPath: string,
   currentPath: string
 ): Promise<DirectoryItem[]> => {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  // Get token from Redux store (same approach as userApi.ts)
+  const state = store.getState();
+  const token = state.authSlice?.accessToken;
   
   // The API expects:
   // - exportPath: the NFS/SMB export path (e.g., "/nfs/smallEDA")
