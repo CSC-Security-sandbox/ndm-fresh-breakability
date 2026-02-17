@@ -126,18 +126,36 @@ export class UpgradeService {
       // 1. Precheck: ensure bundles exist for this version before starting workflow
       this.validateBundlesExist(dto.version);
 
-      // 2. Fetch all active (Online) workers
-      const activeWorkers = await this.workerRepository.find({
+      // 2. Fetch all healthy workers (health check received within last 60s)
+      const healthTimeout = 60; // seconds
+      const allWorkers = await this.workerRepository.find({
         where: { status: 'Online' },
+        relations: ['stats'],
+      });
+
+      const now = new Date();
+      const activeWorkers = allWorkers.filter((w) => {
+        if (!w.stats?.updatedAt) return false;
+        const diffSeconds = Math.floor(
+          Math.abs(now.getTime() - new Date(w.stats.updatedAt).getTime()) / 1000,
+        );
+        return diffSeconds < healthTimeout;
       });
 
       if (activeWorkers.length === 0) {
+        const totalOnline = allWorkers.length;
         return {
           workflowId,
           status: 'error',
-          message: 'No active workers found',
+          message: totalOnline > 0
+            ? `No healthy workers found. ${totalOnline} worker(s) are registered but not reporting health checks.`
+            : 'No active workers found',
         };
       }
+
+      this.logger.log(
+        `Health check: ${activeWorkers.length}/${allWorkers.length} workers are healthy`,
+      );
 
       const workerIds = activeWorkers.map((w) => w.workerId);
 
