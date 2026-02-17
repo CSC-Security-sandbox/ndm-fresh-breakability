@@ -83,4 +83,7 @@ export class WorkerEntity extends Base {
   @Column({ type: 'enum', enum:Platform, name:'platform' ,nullable: true })
   platform: Platform;
 
+  @ApiProperty({ description: 'workerVersion' })
+  @Column({ type: 'varchar', length: 100, name: 'worker_version', nullable: true })
+  workerVersion: string;
 }

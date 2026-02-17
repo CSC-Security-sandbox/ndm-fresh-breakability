@@ -78,6 +78,10 @@ export class WorkManagerService implements OnModuleDestroy{
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
     try {
+      // Read worker version from versions.conf and set in process.env
+      // so it gets sent to config-service during registration
+      await this.loadWorkerVersion();
+
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
       const accessToken = await this.authService.getAccessToken();
@@ -128,6 +132,32 @@ export class WorkManagerService implements OnModuleDestroy{
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
+    }
+  }
+
+  /**
+   * Read current_version from versions.conf and set process.env.WORKER_VERSION.
+   * This gets sent to config-service during registration so CP knows the worker's version.
+   */
+  private async loadWorkerVersion(): Promise<void> {
+    try {
+      const versionsPath = process.platform === 'win32'
+        ? this.configService.get<string>('worker.metrics.versionsPathWindows') || 'C:\\datamigrator\\conf\\versions.conf'
+        : this.configService.get<string>('worker.metrics.versionsPathLinux') || '/opt/datamigrator/conf/versions.conf';
+
+      const fs = require('fs');
+      if (fs.existsSync(versionsPath)) {
+        const content = fs.readFileSync(versionsPath, 'utf8');
+        const match = content.match(/current_version=(.+)/);
+        if (match && match[1]) {
+          process.env.WORKER_VERSION = match[1].trim();
+          this.logger.log(`Worker version: ${process.env.WORKER_VERSION}`);
+          return;
+        }
+      }
+      this.logger.warn('versions.conf not found or current_version missing, WORKER_VERSION not set');
+    } catch (err) {
+      this.logger.error(`Failed to read worker version: ${err.message || err}`);
     }
   }
 
