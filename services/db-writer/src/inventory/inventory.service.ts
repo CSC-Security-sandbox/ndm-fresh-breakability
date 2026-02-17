@@ -476,10 +476,10 @@ export class InventoryService {
           lock: { mode: "pessimistic_write" },
         });
   
-        if (!task || ![TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR, TaskStatus.ERRORED].includes(task?.status)) {
+        if (!task || ![TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR].includes(task?.status)) {
           const updatedAt = [TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_ERROR, TaskStatus.ERRORED].includes(status)
-          ? new Date()
-          : null;
+            ? new Date()
+            : null;
           await queryRunner.manager.upsert(
             TaskEntity,
             { id, jobRunId, status, taskType, workerId ,updatedAt},

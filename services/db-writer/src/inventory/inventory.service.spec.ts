@@ -1068,6 +1068,98 @@ describe("InventoryService", () => {
         ["original-cmd-1", "/path/to/file1.txt"]
       );
     });
+
+    // Tests for bug fix: "Fix task error count, operation error count mismatch" (commit 7eeabe99f)
+    // Bug fix removed TaskStatus.ERRORED from terminal states to allow successful retries to update tasks
+    it("should allow task update when existing task status is ERRORED", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.RUNNING,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [{ commandId: "cmd1", fPath: "/path/to/file" }],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.ERRORED };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+
+      await service.saveTasks(data);
+
+      expect(queryRunner.manager.upsert).toHaveBeenCalledWith(
+        TaskEntity,
+        expect.objectContaining({
+          id: "taskId",
+          status: TaskStatus.RUNNING,
+          updatedAt: null,
+        }),
+        ['id']
+      );
+    });
+
+    it("should allow task to transition from ERRORED to COMPLETED after retry", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.COMPLETED,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [{ commandId: "cmd1", fPath: "/path/to/file" }],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.ERRORED };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+
+      await service.saveTasks(data);
+
+      expect(queryRunner.manager.upsert).toHaveBeenCalledWith(
+        TaskEntity,
+        expect.objectContaining({
+          id: "taskId",
+          status: TaskStatus.COMPLETED,
+          updatedAt: expect.any(Date),
+        }),
+        ['id']
+      );
+    });
+
+    it("should allow task to remain ERRORED when retry fails again", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.ERRORED,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [{ commandId: "cmd1", fPath: "/path/to/file" }],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.ERRORED };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+
+      await service.saveTasks(data);
+
+      expect(queryRunner.manager.upsert).toHaveBeenCalledWith(
+        TaskEntity,
+        expect.objectContaining({
+          id: "taskId",
+          status: TaskStatus.ERRORED,
+          updatedAt: expect.any(Date),
+        }),
+        ['id']
+      );
+    });
   });
 
   describe("updateTask", () => {
