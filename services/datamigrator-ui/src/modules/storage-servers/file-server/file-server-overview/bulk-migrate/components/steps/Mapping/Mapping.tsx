@@ -259,7 +259,9 @@ const Mapping = () => {
       selectedSourcePath: pathName ? { value: pathName, label: pathName } : "",
     });
     setSourceDirectoryPath(
-      mappingToEdit.sourceDirectoryPath === "-" || !mappingToEdit.sourceDirectoryPath
+      mappingToEdit.sourceDirectoryPath === "-" ||
+        mappingToEdit.sourceDirectoryPath === "" ||
+        !mappingToEdit.sourceDirectoryPath
         ? ""
         : mappingToEdit.sourceDirectoryPath
     );
@@ -276,14 +278,16 @@ const Mapping = () => {
         : ("" as any),
     });
     setDestinationDirectoryPath(
-      mappingToEdit.destinationDirectoryPath === "-" || !mappingToEdit.destinationDirectoryPath
+      mappingToEdit.destinationDirectoryPath === "-" ||
+        mappingToEdit.destinationDirectoryPath === "" ||
+        !mappingToEdit.destinationDirectoryPath
         ? ""
         : mappingToEdit.destinationDirectoryPath
     );
     setMappingToEdit(null);
   }, [mappingToEdit, setMappingToEdit]);
 
-  // Source path, destination file server, and destination path required; directory paths optional (shown as "-" when not set)
+  // Source path, destination file server, and destination path required; directory paths optional (stored as "" when not set; displayed as "(whole export)" when empty)
   const canAddMapping = useMemo(() => {
     const sp = sourcePathForm.formState.selectedSourcePath?.value ?? "";
     const destServer = destinationForm.formState.destinationFileServer?.value ?? "";

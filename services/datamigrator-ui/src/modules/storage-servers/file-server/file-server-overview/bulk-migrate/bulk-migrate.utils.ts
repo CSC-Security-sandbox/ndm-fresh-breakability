@@ -42,7 +42,9 @@ export const downloadBulkMigrationCsv = async (
         (detail: MigrationDetailsTableConfigurationType) => ({
           "Source Path": detail.sourcePath?.sourcePathName ?? "",
           "Source Directory":
-            detail.sourceDirectoryPath && detail.sourceDirectoryPath !== "-"
+            detail.sourceDirectoryPath &&
+            detail.sourceDirectoryPath !== "-" &&
+            detail.sourceDirectoryPath !== ""
               ? detail.sourceDirectoryPath
               : "-",
           "Destination File Server":
@@ -51,7 +53,8 @@ export const downloadBulkMigrationCsv = async (
             detail.destinationPathDetails?.destinationPathName ?? "-",
           "Destination Directory":
             detail.destinationDirectoryPath &&
-            detail.destinationDirectoryPath !== "-"
+            detail.destinationDirectoryPath !== "-" &&
+            detail.destinationDirectoryPath !== ""
               ? detail.destinationDirectoryPath
               : "-",
         })
@@ -259,13 +262,13 @@ export const structureDataForReviewList = (
         path: detail.sourcePath.sourcePathName,
         sourcePathId: detail.sourcePath.sourcePathId,
       },
-      sourceDirectoryPath: detail.sourceDirectoryPath ?? "-",
+      sourceDirectoryPath: detail.sourceDirectoryPath ?? "",
       destination: {
         server: detail.destinationFileServerDetails.destinationFileServerName,
         path: detail.destinationPathDetails.destinationPathName,
         pathId: [detail.destinationPathDetails.destinationPathId],
       },
-      destinationDirectoryPath: detail.destinationDirectoryPath ?? "-",
+      destinationDirectoryPath: detail.destinationDirectoryPath ?? "",
       status: preCheckStatus,
     });
   });
@@ -282,11 +285,20 @@ export const createPathMapping = (
 
   migrationDetails.forEach((detail) => {
     if (!selectedMountPathsId.includes(String(detail?.id))) return;
+    // Display shows "-" when empty; API must receive "" for no directory selected
+    const sourceDir =
+      detail.sourceDirectoryPath && detail.sourceDirectoryPath !== "-"
+        ? detail.sourceDirectoryPath
+        : "";
+    const destDir =
+      detail.destinationDirectoryPath && detail.destinationDirectoryPath !== "-"
+        ? detail.destinationDirectoryPath
+        : "";
     data.push({
       sourcePathId: detail.sourcePath.sourcePathId,
       destinationPathId: [detail.destinationPathDetails.destinationPathId],
-      sourceDirectoryPath: detail.sourceDirectoryPath,
-      destinationDirectoryPath: detail.destinationDirectoryPath,
+      sourceDirectoryPath: sourceDir,
+      destinationDirectoryPath: destDir,
     });
   });
 
