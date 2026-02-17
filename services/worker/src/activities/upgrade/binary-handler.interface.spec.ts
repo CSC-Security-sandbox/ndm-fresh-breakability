@@ -14,14 +14,14 @@ class TestLinuxHandler extends BaseBinaryHandler {
   protected readonly stagingBase = '/opt/datamigrator/staging';
 
   protected async extractArchive(): Promise<void> { /* no-op for test */ }
-  protected findBinary(files: string[], version: string): string | undefined {
+  protected getBinary(files: string[], version: string): string | undefined {
     return files.find((f) => f.includes(version) && !f.endsWith('.env') && !f.endsWith('.sha256') && !f.endsWith('.tar.gz'));
   }
   protected async makeExecutable(): Promise<void> { /* no-op for test */ }
-  protected findChecksumFile(files: string[], version: string): string | undefined {
+  protected getChecksumFile(files: string[], version: string): string | undefined {
     return files.find((f) => f.endsWith('.sha256'));
   }
-  protected findEnvFile(files: string[], version: string): string | undefined {
+  protected getEnvFile(files: string[], version: string): string | undefined {
     return files.find((f) => f.endsWith('.env') && f !== '.env');
   }
 }

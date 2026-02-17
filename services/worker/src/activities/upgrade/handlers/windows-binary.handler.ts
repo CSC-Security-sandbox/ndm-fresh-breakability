@@ -25,7 +25,7 @@ export class WindowsBinaryHandler extends BaseBinaryHandler {
   /**
    * Find binary matching: datamigrator-worker-windows-{version}.exe
    */
-  protected findBinary(files: string[], version: string): string | undefined {
+  protected getBinary(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-windows-${version}\\.exe$`)),
     );
@@ -39,7 +39,7 @@ export class WindowsBinaryHandler extends BaseBinaryHandler {
     // No-op on Windows — exe files are executable by default
   }
 
-  protected findEnvFile(files: string[], version: string): string | undefined {
+  protected getEnvFile(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-windows-${version}\\.env$`)),
     );
@@ -49,7 +49,7 @@ export class WindowsBinaryHandler extends BaseBinaryHandler {
     return match;
   }
 
-  protected findChecksumFile(files: string[], version: string): string | undefined {
+  protected getChecksumFile(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-windows-${version}\\.sha256$`)),
     );

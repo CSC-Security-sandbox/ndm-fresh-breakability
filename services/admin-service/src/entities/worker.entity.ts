@@ -11,6 +11,12 @@ export class WorkerEntity {
   @PrimaryColumn({ type: 'uuid', name: 'id' })
   workerId: string;
 
+  @Column({ type: 'varchar', length: 255, name: 'worker_name', nullable: true })
+  workerName: string;
+
+  @Column({ type: 'varchar', length: 255, name: 'ip_address', nullable: true })
+  ipAddress: string;
+
   @Column({ type: 'varchar', name: 'status' })
   status: string;
 

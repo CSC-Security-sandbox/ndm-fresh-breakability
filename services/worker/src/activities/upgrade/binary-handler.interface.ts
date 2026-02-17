@@ -6,7 +6,7 @@
  * 
  * Only 3 methods differ per platform (abstract):
  *   - extractArchive()  — tar -xzf (linux) vs tar -xf (windows)
- *   - findBinary()      — no .exe (linux) vs .exe (windows)
+ *   - getBinary()      — no .exe (linux) vs .exe (windows)
  *   - makeExecutable()  — chmod +x (linux) vs no-op (windows)
  * 
  * Everything else (auth, download, checksum, cleanup) is shared.
@@ -64,14 +64,14 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   protected abstract extractArchive(archivePath: string, destDir: string): Promise<void>;
 
   /** Find the binary file from a list of extracted filenames. */
-  protected abstract findBinary(files: string[], version: string): string | undefined;
+  protected abstract getBinary(files: string[], version: string): string | undefined;
 
   /** Make the binary executable (chmod +x on linux, no-op on windows). */
   protected abstract makeExecutable(binaryPath: string): Promise<void>;
 
-  protected abstract findChecksumFile(files:string[], version: string): string | undefined;
+  protected abstract getChecksumFile(files:string[], version: string): string | undefined;
 
-  protected abstract findEnvFile(files: string[], version: string): string | undefined;
+  protected abstract getEnvFile(files: string[], version: string): string | undefined;
 
   // ===========================================================================
   // Public: download
@@ -108,17 +108,17 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       const files = fs.readdirSync(stagingDir);
       this.logger.log(`Extracted files: ${files.join(', ')}`);
 
-      const binaryFile = this.findBinary(files, version);
+      const binaryFile = this.getBinary(files, version);
       if (!binaryFile) {
         throw new Error(`Binary not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
       }
 
-      const checksumFile = this.findChecksumFile(files, version);
+      const checksumFile = this.getChecksumFile(files, version);
       if (!checksumFile) {
         throw new Error(`Checksums file not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
       }
 
-      const envFile = this.findEnvFile(files, version);
+      const envFile = this.getEnvFile(files, version);
       if (!envFile) {
         throw new Error(`Env file not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
       }
@@ -177,7 +177,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
     }
 
     const files = fs.readdirSync(stagingDir);
-    const binaryFile = this.findBinary(files, version);
+    const binaryFile = this.getBinary(files, version);
 
     if (!binaryFile) {
       return { staged: false, platform: this.platform };

@@ -25,7 +25,7 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
   /**
    * Find binary matching: datamigrator-worker-linux-{version} (no extension)
    */
-  protected findBinary(files: string[], version: string): string | undefined {
+  protected getBinary(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-linux-${version}$`)),
     );
@@ -47,7 +47,7 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
     }
   }
 
-  protected findEnvFile(files: string[], version: string): string | undefined {
+  protected getEnvFile(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-linux-${version}\\.env$`)),
     );
@@ -57,7 +57,7 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
     return match;
   }
 
-  protected findChecksumFile(files: string[], version: string): string | undefined {
+  protected getChecksumFile(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-linux-${version}\\.sha256$`)),
     );

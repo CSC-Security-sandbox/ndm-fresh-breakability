@@ -54,6 +54,65 @@ export class WorkerAckDto {
 }
 
 /**
+ * Per-worker status in the multicast status response
+ */
+export class WorkerUpgradeStatusDto {
+  @ApiProperty({ description: 'Worker ID' })
+  workerId: string;
+
+  @ApiProperty({ description: 'Worker name', required: false })
+  workerName?: string;
+
+  @ApiProperty({ description: 'Worker IP address', required: false })
+  ipAddress?: string;
+
+  @ApiProperty({ description: 'Platform', enum: ['linux', 'windows'], required: false })
+  platform?: string;
+
+  @ApiProperty({ description: 'Current running version', required: false })
+  currentVersion?: string;
+
+  @ApiProperty({ description: 'Version being staged', required: false })
+  stagedVersion?: string;
+
+  @ApiProperty({ description: 'Bundle distribution status', enum: ['IDLE', 'IN_PROGRESS', 'COMPLETED', 'FAILED'] })
+  bundleStatus: string;
+
+  @ApiProperty({ description: 'Whether worker is reporting health checks', required: false })
+  healthy?: boolean;
+
+  @ApiProperty({ description: 'Last health check timestamp', required: false })
+  lastSeen?: string;
+}
+
+/**
+ * Response DTO for GET /api/v1/upgrade/multicast/:workflowId
+ * Combines Temporal workflow status with per-worker DB status
+ */
+export class MulticastStatusDto {
+  @ApiProperty({ description: 'Workflow ID' })
+  workflowId: string;
+
+  @ApiProperty({ description: 'Temporal workflow status', enum: ['RUNNING', 'COMPLETED', 'FAILED', 'TERMINATED', 'TIMED_OUT'] })
+  workflowStatus: string;
+
+  @ApiProperty({ description: 'Aggregate summary' })
+  summary: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    failed: number;
+    idle: number;
+  };
+
+  @ApiProperty({ description: 'Per-worker status', type: [WorkerUpgradeStatusDto] })
+  workers: WorkerUpgradeStatusDto[];
+
+  @ApiProperty({ description: 'Temporal workflow result (when completed)', required: false })
+  workflowResult?: any;
+}
+
+/**
  * Response DTO for multicast API
  */
 export class MulticastResponseDto {

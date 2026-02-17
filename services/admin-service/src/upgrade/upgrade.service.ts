@@ -11,6 +11,7 @@ import { WorkFlows } from '../workflow/workflow.types';
 import {
   MulticastRequestDto,
   MulticastResponseDto,
+  MulticastStatusDto,
   WorkerAckDto,
 } from './dto/multicast.dto';
 import { WorkerEntity } from '../entities/worker.entity';
@@ -127,7 +128,7 @@ export class UpgradeService {
       this.validateBundlesExist(dto.version);
 
       // 2. Fetch all healthy workers (health check received within last 60s)
-      const healthTimeout = 60; // seconds
+      const healthTimeout = 20; // seconds Three reties(20s)
       const allWorkers = await this.workerRepository.find({
         where: { status: 'Online' },
         relations: ['stats'],
@@ -222,12 +223,74 @@ export class UpgradeService {
         upgradeBundleStaged: UpgradeBundleStatus.COMPLETED,
       });
       this.logger.log(`Set upgrade_bundle_staged=COMPLETED for worker ${dto.workerId}`);
-    } else {
+    } else{
+      await this.workerRepository.update(dto.workerId, {
+        upgradeBundleStaged: UpgradeBundleStatus.FAILED,
+        stagedVersion: null,
+      });
       this.logger.log(`Worker ${dto.workerId} reported failure: ${dto.message}`);
-      // Keep as IN_PROGRESS on failure (admin can see it didn't complete)
     }
 
     return { acknowledged: true };
+  }
+
+  /**
+   * Get multicast workflow status combined with per-worker distribution status.
+   * Queries Temporal for workflow state + DB for per-worker bundle status + health.
+   */
+  async getWorkflowStatus(workflowId: string): Promise<MulticastStatusDto> {
+    this.logger.log(`Getting status for workflow: ${workflowId}`);
+
+    // 1. Get workflow status from Temporal
+    const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
+
+    // 2. Get all workers with stats for health check
+    const workers = await this.workerRepository.find({
+      relations: ['stats'],
+    });
+
+    // 3. Build per-worker status
+    const healthTimeout = 60; // seconds
+    const now = new Date();
+
+    const workerStatuses = workers.map((w) => {
+      const lastSeen = w.stats?.updatedAt ? new Date(w.stats.updatedAt) : null;
+      const healthy = lastSeen
+        ? Math.floor(Math.abs(now.getTime() - lastSeen.getTime()) / 1000) < healthTimeout
+        : false;
+
+      return {
+        workerId: w.workerId,
+        workerName: w.workerName,
+        ipAddress: w.ipAddress, 
+        platform: w.platform,
+        currentVersion: w.workerVersion,
+        stagedVersion: w.stagedVersion,
+        bundleStatus: w.upgradeBundleStaged,
+        healthy,
+        lastSeen: lastSeen?.toISOString(),
+      };
+    });
+
+    // 4. Calculate summary
+    const summary = {
+      total: workerStatuses.length,
+      completed: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.COMPLETED).length,
+      inProgress: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.IN_PROGRESS).length,
+      failed: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.FAILED).length,
+      idle: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.IDLE).length,
+    };
+
+    // 5. Get workflow result if completed
+    const workflowResult = workflowData.status === 'COMPLETED' ? workflowData.completed : undefined;
+
+    return {
+      workflowId,
+      workflowStatus: workflowData.status,
+      summary,
+      workers: workerStatuses,
+      workflowResult,
+    };
   }
 
   // Stream the upgrade bundle for a specific version and platform.

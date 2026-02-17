@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Delete,
   Body,
   Param,
   Header,
@@ -23,6 +22,7 @@ import { UpgradeService } from './upgrade.service';
 import {
   MulticastRequestDto,
   MulticastResponseDto,
+  MulticastStatusDto,
   WorkerAckDto,
 } from './dto/multicast.dto';
 
@@ -128,5 +128,26 @@ export class UpgradeController {
     @Body() dto: WorkerAckDto,
   ): Promise<{ acknowledged: boolean }> {
     return this.upgradeService.acknowledgeWorkerDownload(dto);
+  }
+
+  // Get the workflow status and the list of workers inprogress, failed, completed
+  @Auth(Permission.AgentDeployment)
+  @ApiBearerAuth()
+  @Get('multicast/:workflowId')
+  @ApiOperation({
+    summary: 'Get the workflow status and the list of workers inprogress, failed, completed',
+    description:
+      'Get the workflow status and the list of workers inprogress, failed, completed',
+  })
+  @ApiParam({ name: 'workflowId', description: 'The workflow ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Workflow status and list of workers',
+    type: MulticastStatusDto,
+  })
+  async getWorkflowStatus(
+    @Param('workflowId') workflowId: string,
+  ): Promise<MulticastStatusDto> {
+    return this.upgradeService.getWorkflowStatus(workflowId);
   }
 }
