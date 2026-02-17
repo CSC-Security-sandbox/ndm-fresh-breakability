@@ -17,7 +17,10 @@ import { getOptionsFromArray } from "@/utils/common.utils";
 import { nanoid } from "@reduxjs/toolkit";
 import { FILE_SERVER_STATUS_ENUM } from "@/types/app.type";
 import type { MigrationDetailsTableConfigurationType } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.interface";
-import { isSourceDirectoryPathChildOrParent } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import {
+  findConflictingDestinationDirectoryMapping,
+  findConflictingSourceDirectoryMapping,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/TruncatedPathCell";
 import ExploreModal, { useExploreModal, SelectedItemInfo } from "@modules/storage-servers/file-server/file-server-overview/components/ExploreModal";
 import type { VolumeType } from "@/types/app.type";
@@ -305,14 +308,10 @@ const Mapping = () => {
     const currentSourceDirPath = sourceDirectoryPath || "-";
     const currentRows: MigrationDetailsTableConfigurationType[] =
       mappingStepForm.values.migrationDetailsTableConfigurationValue ?? [];
-    const existingRowsSameSource = currentRows.filter(
-      (r) => (r.sourcePath?.sourcePathName ?? "") === sourcePathValue
-    );
-    const conflictingRow = existingRowsSameSource.find((row) =>
-      isSourceDirectoryPathChildOrParent(
-        currentSourceDirPath,
-        row.sourceDirectoryPath ?? "-"
-      )
+    const conflictingRow = findConflictingSourceDirectoryMapping(
+      currentRows,
+      sourcePathValue,
+      currentSourceDirPath
     );
     if (conflictingRow) {
       const existingDisplay =
@@ -329,6 +328,51 @@ const Mapping = () => {
             <Box className="flex flex-col gap-3 text-gray-700">
               <Text>
                 The source directory is a parent or child of an existing mapping for the same source export path.
+              </Text>
+              <Text component="span" className="text-sm">
+                Current: {currentDisplay}
+                <br />
+                Existing: {existingDisplay}
+              </Text>
+              <Text component="span" className="text-sm">
+                Please choose a different path or remove the conflicting mapping first.
+              </Text>
+            </Box>
+          ),
+          modalFooter: (
+            <Button color="primary" onClick={() => dispatch(setModalClose())}>
+              OK
+            </Button>
+          ),
+        })
+      );
+      return;
+    }
+    const currentDestDirPath = destinationDirectoryPath || "-";
+    const destFileServerId = destinationForm.formState.destinationFileServer?.value ?? "";
+    const destPathId = destinationForm.formState.destinationPath?.value ?? "";
+    const conflictingDestRow = findConflictingDestinationDirectoryMapping(
+      currentRows,
+      destFileServerId,
+      destPathId,
+      currentDestDirPath
+    );
+    if (conflictingDestRow) {
+      const existingDisplay =
+        conflictingDestRow.destinationDirectoryPath === "-" ||
+        !conflictingDestRow.destinationDirectoryPath
+          ? "(whole export)"
+          : conflictingDestRow.destinationDirectoryPath;
+      const currentDisplay =
+        currentDestDirPath === "-" ? "(whole export)" : currentDestDirPath;
+      dispatch(
+        setModalProps({
+          isOpen: true,
+          modalHeader: "Cannot add mapping",
+          modalContent: (
+            <Box className="flex flex-col gap-3 text-gray-700">
+              <Text>
+                The destination directory is a parent or child of an existing mapping for the same destination file server and path.
               </Text>
               <Text component="span" className="text-sm">
                 Current: {currentDisplay}
