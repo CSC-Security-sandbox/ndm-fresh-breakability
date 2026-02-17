@@ -101,30 +101,6 @@ export const downloadBulkMigrationCsv = async (
   }
 };
 
-/** Normalize source directory path for comparison: empty or "-" becomes "", trailing slashes removed */
-const normalizeSourceDirectoryPath = (path: string | undefined): string => {
-  if (path === "-" || path === undefined || path === null) return "";
-  return String(path).replace(/\/+$/, "").trim();
-};
-
-/**
- * Returns true if current path is a child or parent of existing path (for the same export).
- * Used to prevent overlapping source directory mappings.
- */
-export const isSourceDirectoryPathChildOrParent = (
-  currentPath: string | undefined,
-  existingPath: string | undefined
-): boolean => {
-  const current = normalizeSourceDirectoryPath(currentPath);
-  const existing = normalizeSourceDirectoryPath(existingPath);
-  if (current === existing) return true;
-  if (existing === "") return true;
-  if (current === "") return true;
-  return (
-    current.startsWith(existing + "/") || existing.startsWith(current + "/")
-  );
-};
-
 export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
   const errors: ErrorsValidateMappingStepFormType = {};
 
