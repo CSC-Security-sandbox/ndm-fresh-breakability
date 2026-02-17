@@ -59,6 +59,7 @@ import {formatBytes} from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
 import { DataSource } from "typeorm";
+import { MountTrackerService } from "./mount-tracker.service";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -124,6 +125,16 @@ describe("JobConfigService", () => {
         RedisService,
         WorkflowService,
         SendMailService,
+        {
+          provide: MountTrackerService,
+          useValue: {
+            ensureMounted: jest.fn(),
+            listDirectories: jest.fn(),
+            touch: jest.fn(),
+            unmount: jest.fn(),
+            unmountAll: jest.fn(),
+          },
+        },
         { provide: ConfigService, useValue: configService },
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: "winston", useValue: winston },

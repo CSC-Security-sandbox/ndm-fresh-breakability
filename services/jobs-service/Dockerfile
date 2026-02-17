@@ -2,7 +2,7 @@ FROM public.ecr.aws/docker/library/alpine:3.22.0
 
 RUN apk update && \
     apk upgrade --no-cache --purge && \
-    apk add --no-cache npm nodejs && \
+    apk add --no-cache npm nodejs nfs-utils cifs-utils && \
     rm -vrf /var/cache/apk/* && \
     npm i -g @nestjs/cli && \
     npm i -g pm2@latest 

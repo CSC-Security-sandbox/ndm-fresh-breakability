@@ -2252,4 +2252,10 @@ export class JobConfigService {
       );
     }
   }
+
+  async getFileServerById(id: string): Promise<FileServerEntity | null> {
+    return this.fileServerRepo.findOne({
+      where: { id },
+    });
+  }
 }

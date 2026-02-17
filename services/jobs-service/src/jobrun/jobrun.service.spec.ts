@@ -41,6 +41,7 @@ import { TaskEntity } from "src/entities/task.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { WorkerEntity } from "src/entities/worker.entity";
 import { JobConfigService } from "src/jobconfig/jobconfig.service";
+import { MountTrackerService } from "src/jobconfig/mount-tracker.service";
 import { RedisService } from "src/redis/redis.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
@@ -444,6 +445,16 @@ describe("JobRunService", () => {
           provide: DataSource,
           useValue: {
             query: jest.fn(),
+          },
+        },
+        {
+          provide: MountTrackerService,
+          useValue: {
+            ensureMounted: jest.fn(),
+            listDirectories: jest.fn(),
+            touch: jest.fn(),
+            unmount: jest.fn(),
+            unmountAll: jest.fn(),
           },
         },
         ConfigService,

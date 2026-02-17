@@ -43,7 +43,10 @@ spec:
       {{- end }}
       {{- end }}
       serviceAccountName: {{- if .Values.serviceAccountName }} {{ .Values.serviceAccountName }} {{- end }}
-      {{- if .Values.runAs1001 }}
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- else if .Values.runAs1001 }}
       securityContext:
         runAsUser: 1001
         runAsGroup: 1001
@@ -52,6 +55,13 @@ spec:
       containers:
       - name: {{ .Values.appName }}
         image: {{ if .Values.global.registry }}{{ .Values.global.registry }}/{{ end }}{{ .Values.image.repository }}:{{ .Values.image.tag }}
+        {{- if .Values.containerSecurityContext }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
+        {{- else if .Values.securityContext }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        {{- end }}
         {{- if .Values.command }}
         command: [{{ .Values.command }}]
         {{- end }}

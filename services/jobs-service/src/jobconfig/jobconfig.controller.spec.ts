@@ -6,6 +6,7 @@ import {
   NotFoundException,
   HttpException,
   HttpStatus,
+  InternalServerErrorException,
 } from "@nestjs/common";
 import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
 import {
@@ -53,12 +54,16 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
+import { GetDirsDto } from './dto/get-dirs.dto';
+import { MountTrackerService } from './mount-tracker.service';
+import { Protocol } from 'src/constants/enums';
 
 describe("JobConfigController", () => {
   let controller: JobConfigController;
   let service: JobConfigService;
   let volumeRepo: any;
   let preCheckService: PreCheckService;
+  let mountTrackerService: MountTrackerService;
   let mockLogger: LoggerService;
 
   const mockPreCheckService = {
@@ -91,6 +96,7 @@ describe("JobConfigController", () => {
     getIdentityMappingsForJob: jest.fn(),
     deleteIdentityMappingsForJob: jest.fn(),
     getJobConfigInventoryStats: jest.fn(),
+    getFileServerById: jest.fn(),
   };
 
   const mockJwtService = {
@@ -369,6 +375,17 @@ describe("JobConfigController", () => {
           useValue: mockPreCheckService,
         },
         {
+          provide: MountTrackerService,
+          useValue: {
+            ensureMounted: jest.fn(),
+            listDirectories: jest.fn(),
+            listDirectoriesls: jest.fn(),
+            touch: jest.fn(),
+            unmount: jest.fn(),
+            unmountAll: jest.fn(),
+          },
+        },
+        {
           provide: "JobConfigRepository",
           useValue: {},
         },
@@ -397,6 +414,7 @@ describe("JobConfigController", () => {
 
     controller = module.get<JobConfigController>(JobConfigController);
     service = module.get<JobConfigService>(JobConfigService);
+    mountTrackerService = module.get<MountTrackerService>(MountTrackerService);
     volumeRepo = module.get(getRepositoryToken(VolumeEntity));
   });
 
@@ -650,6 +668,26 @@ describe("JobConfigController", () => {
             firstRunAt: updateDto.firstRunAt,
             shouldScanADS: true,
           });
+        });
+
+        it("should throw BadRequestException when job type is not DISCOVER", async () => {
+          const jobId = "migrate-job";
+          const updateDto: UpdateDiscoveryConfigDto = {
+            excludeFilePatterns: "*.tmp",
+            firstRunAt: new Date("2025-01-01T00:00:00Z"),
+            shouldScanADS: "Enabled",
+          };
+          const mockJobEntity = { jobType: JobType.MIGRATE };
+
+          mockJobConfigService.getJobEntity.mockResolvedValue(
+            mockJobEntity as any,
+          );
+
+          await expect(
+            controller.updateDiscoveryJobConfig(jobId, updateDto),
+          ).rejects.toThrow(BadRequestException);
+          expect(service.getJobEntity).toHaveBeenCalledWith(jobId);
+          expect(service.updateJobConfig).not.toHaveBeenCalled();
         });
       });
 
@@ -1459,6 +1497,95 @@ describe("JobConfigController", () => {
           'Calculation is in progress or Nothing to Show',
         );
       }
+    });
+  });
+
+  describe("getDirs", () => {
+    it("should return directories from mount and list listDirectoriesls", async () => {
+      const request: GetDirsDto = {
+        fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        exportPath: "/export",
+        path: "subdir",
+        dir: "",
+      };
+      const mockFileServer = {
+        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        host: "192.168.1.100",
+        protocol: Protocol.NFS,
+        userName: undefined,
+        password: undefined,
+        protocolVersion: undefined,
+      };
+      const mockMountDetails = { key: "a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:", mountPath: "/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export" };
+      const mockDirs = [{ name: "dir1" }, { name: "dir2" }];
+
+      mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
+      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
+      (mountTrackerService.listDirectoriesls as jest.Mock).mockResolvedValue(mockDirs);
+      (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await controller.getDirs(request);
+
+      expect(result).toEqual(mockDirs);
+      expect(service.getFileServerById).toHaveBeenCalledWith(request.fileServerId);
+      expect(mountTrackerService.ensureMounted).toHaveBeenCalledWith({
+        fileServerId: request.fileServerId,
+        hostname: mockFileServer.host,
+        exportPath: request.exportPath,
+        dir: request.dir || "",
+        protocol: mockFileServer.protocol,
+        username: mockFileServer.userName,
+        password: mockFileServer.password,
+        protocolVersion: mockFileServer.protocolVersion,
+      });
+      expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
+        mountPath: mockMountDetails.mountPath,
+        path: request.path || "",
+      });
+      expect(mountTrackerService.touch).toHaveBeenCalledWith(mockMountDetails.key);
+    });
+
+    it("should throw NotFoundException when file server is not found", async () => {
+      const request: GetDirsDto = {
+        fileServerId: "00000000-0000-0000-0000-000000000000",
+        exportPath: "/export",
+      };
+
+      mockJobConfigService.getFileServerById.mockResolvedValue(null);
+
+      await expect(controller.getDirs(request)).rejects.toThrow(NotFoundException);
+      expect(service.getFileServerById).toHaveBeenCalledWith(request.fileServerId);
+      expect(mountTrackerService.ensureMounted).not.toHaveBeenCalled();
+    });
+    it("should propagate error when listDirectoriesls fails with Internal Server Error", async () => {
+      const request: GetDirsDto = {
+        fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        exportPath: "/export",
+        path: "subdir",
+        dir: "",
+      };
+      const mockFileServer = {
+        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        host: "192.168.1.100",
+        protocol: Protocol.NFS,
+        userName: undefined,
+        password: undefined,
+        protocolVersion: undefined,
+      };
+      const mockMountDetails = { key: "a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:", mountPath: "/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export" };
+
+      mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
+      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
+      (mountTrackerService.listDirectoriesls as jest.Mock).mockRejectedValue(
+        new InternalServerErrorException("Internal Server Error"),
+      );
+      (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
+
+      await expect(controller.getDirs(request)).rejects.toThrow(InternalServerErrorException);
+      expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
+        mountPath: mockMountDetails.mountPath,
+        path: request.path || "",
+      });
     });
   });
 });

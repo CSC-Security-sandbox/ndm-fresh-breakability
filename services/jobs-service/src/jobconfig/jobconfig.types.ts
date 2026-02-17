@@ -2,6 +2,7 @@ import {
   JobConfigBulkMigrateResStatus,
   JobStatus,
   JobType,
+  Protocol,
 } from "src/constants/enums";
 
 export interface InActivateJobConfigPayload {
@@ -113,4 +114,40 @@ export interface PreCheckCircularDependency {
   targetServerId: string;
   conflictType: 'circular' | 'destination';
   jobType: string;
+}
+
+//Parameters required to mount a remote NFS or SMB file-system share.
+export interface MountRequest {
+  fileServerId: string;
+  hostname: string;
+  exportPath: string;
+  dir: string;
+  protocol: Protocol;
+  username?: string;
+  password?: string;
+  protocolVersion?: string;
+}
+
+//Metadata returned after a successful mount, used to track and manage the active mount.
+export interface MountDetails {
+  key: string;
+  fileServerId: string;
+  hostname: string;
+  exportPath: string;
+  dir?: string;
+  protocol: Protocol;
+  mountPath: string;
+  mountedAt: number;
+  lastAccessAt: number;
+}
+
+//Input for listing directories within an already-mounted file system.
+export interface ListDirsInput {
+  mountPath: string;
+  path?: string;
+}
+
+//A single directory entry returned by directory listing operations
+export interface DirectoryEntry {
+  name: string;
 }

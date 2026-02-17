@@ -25,5 +25,13 @@ export default registerAs(
       healthCheckStatusTimout:
         parseInt(process.env.HEALTHCHECK_STATUS_TIMEOUT_SEC) || 60,
     },
+    mount: {
+      basePath: process.env.DIR_MOUNT_BASE_PATH || "/mnt",
+      idleTimeoutMs:
+        parseInt(process.env.MOUNT_IDLE_TIMEOUT_MS || "600000", 10),
+      timeoutMs: parseInt(process.env.MOUNT_TIMEOUT_MS || "120000", 10),
+      unmountTimeoutMs:
+        parseInt(process.env.UNMOUNT_TIMEOUT_MS || "30000", 10),
+    },
   }),
 );

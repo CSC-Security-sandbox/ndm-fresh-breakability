@@ -1,6 +1,9 @@
 appName: "jobs-service"
 kubeApiVersion: "apps/v1"
 replicaCount: 1
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
 
 image:
   repository: ndm-jobs-service
@@ -29,6 +32,9 @@ annotations:
   #   {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
+
+containerSecurityContext:
+  privileged: true
 
 args:
   - "--source-vault"
@@ -68,6 +74,14 @@ env:
     value: "/jobs-service"
   - name: MOUNT_BASE_PATH
     value: "/mnt/datamigrator"
+  - name: DIR_MOUNT_BASE_PATH
+    value: "/mnt"
+  - name: UNMOUNT_TIMEOUT_MS
+    value: "30000"
+  - name: MOUNT_IDLE_TIMEOUT_MS
+    value: "600000"
+  - name: MOUNT_TIMEOUT_MS
+    value: "120000"
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
   - name: REDIS_HOST
