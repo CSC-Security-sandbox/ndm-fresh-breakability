@@ -1,6 +1,11 @@
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, OneToOne, JoinColumn } from 'typeorm';
 import { UpgradeBundleStatus } from '../constants/worker.enums';
+import { WorkerStatsEntity } from './worker-stats.entity';
 
+/**
+ * Lightweight projection of the worker table for admin-service.
+ * Only maps columns needed for upgrade operations.
+ */
 @Entity({ name: 'worker' })
 export class WorkerEntity {
   @PrimaryColumn({ type: 'uuid', name: 'id' })
@@ -12,6 +17,9 @@ export class WorkerEntity {
   @Column({ type: 'varchar', name: 'platform', nullable: true })
   platform: string;
 
+  @Column({ type: 'varchar', length: 100, name: 'staged_version', nullable: true })
+  stagedVersion: string;
+
   @Column({
     type: 'varchar',
     length: 20,
@@ -19,4 +27,11 @@ export class WorkerEntity {
     default: UpgradeBundleStatus.IDLE,
   })
   upgradeBundleStaged: UpgradeBundleStatus;
+
+  @Column({ type: 'varchar', length: 100, name: 'worker_version', nullable: true })
+  workerVersion: string;
+
+  @OneToOne(() => WorkerStatsEntity)
+  @JoinColumn({ name: 'id', referencedColumnName: 'workerId' })
+  stats: WorkerStatsEntity;
 }

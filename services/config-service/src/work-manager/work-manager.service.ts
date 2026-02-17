@@ -235,6 +235,7 @@ export class WorkManagerService {
               ),
               platform: platform,
               envVariables: envVariables,
+              workerVersion: envVariables?.WORKER_VERSION || null,
             },
           );
         }
@@ -252,6 +253,7 @@ export class WorkManagerService {
         projectId,
         platform: platform,
         envVariables: envVariables,
+        workerVersion: envVariables?.WORKER_VERSION || null,
       });
       const result = await this.workerEntity.save(newWorker);
 

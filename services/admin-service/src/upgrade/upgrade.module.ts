@@ -7,6 +7,7 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { UpgradeController } from './upgrade.controller';
 import { UpgradeService } from './upgrade.service';
 import { WorkerEntity } from '../entities/worker.entity';
+import { WorkerStatsEntity } from '../entities/worker-stats.entity';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { WorkerEntity } from '../entities/worker.entity';
     ConfigModule,
     WorkflowModule,
     AuthKeycloakModule,
-    TypeOrmModule.forFeature([WorkerEntity]),
+    TypeOrmModule.forFeature([WorkerEntity, WorkerStatsEntity]),
   ],
   controllers: [UpgradeController],
   providers: [UpgradeService],

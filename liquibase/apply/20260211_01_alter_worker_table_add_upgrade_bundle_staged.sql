@@ -1,4 +1,3 @@
--- Add upgrade_bundle_staged column to worker table
--- Tracks the upgrade bundle distribution status for this worker
--- Values: IDLE (default), IN_PROGRESS, COMPLETED
 ALTER TABLE worker ADD COLUMN IF NOT EXISTS upgrade_bundle_staged VARCHAR(20) DEFAULT 'IDLE';
+ALTER TABLE worker ADD COLUMN IF NOT EXISTS worker_version VARCHAR(100) DEFAULT NULL;
+ALTER TABLE worker ADD COLUMN IF NOT EXISTS staged_version VARCHAR(100) DEFAULT NULL;
