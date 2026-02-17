@@ -7,6 +7,7 @@ export enum Permission {
     DeleteUser="DeleteUser",
     UpdateUser="UpdateUser",
     AgentDeployment="AgentDeployment",
+    ManageUpgrade="ManageUpgrade",
     ManageConfig="ManageConfig",
     ManageJob="ManageJob",
     RollbackJob="RollbackJob",

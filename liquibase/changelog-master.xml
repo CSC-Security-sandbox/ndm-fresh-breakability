@@ -576,4 +576,12 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="20260215_01_add_manage_upgrade_permission.sql" author="kb93278">
+        <sqlFile path="liquibase/20260215_01_add_manage_upgrade_permission.sql"/>
+        <rollback>
+            <sql>DELETE FROM "role_permission" WHERE permission_id IN (SELECT id FROM "permission" WHERE permission_name = 'ManageUpgrade');
+DELETE FROM "permission" WHERE permission_name = 'ManageUpgrade';</sql>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

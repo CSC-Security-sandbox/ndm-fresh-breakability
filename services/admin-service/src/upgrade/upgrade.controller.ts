@@ -35,7 +35,7 @@ export class UpgradeController {
    * POST /api/v1/upgrade/multicast
    * Initiates binary distribution to workers which are online
    */
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.ManageUpgrade) // TODO: Switch to Permission.ManageUpgrade after auth-lib is published with the new permission
   @ApiBearerAuth()
   @Post('multicast')
   @ApiOperation({
