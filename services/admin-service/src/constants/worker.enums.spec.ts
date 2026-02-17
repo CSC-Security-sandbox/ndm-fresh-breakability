@@ -13,9 +13,13 @@ describe('UpgradeBundleStatus', () => {
     expect(UpgradeBundleStatus.COMPLETED).toBe('COMPLETED');
   });
 
-  it('should have exactly 3 values', () => {
+  it('should have FAILED value', () => {
+    expect(UpgradeBundleStatus.FAILED).toBe('FAILED');
+  });
+
+  it('should have exactly 4 values', () => {
     const values = Object.values(UpgradeBundleStatus);
-    expect(values).toHaveLength(3);
-    expect(values).toEqual(['IDLE', 'IN_PROGRESS', 'COMPLETED']);
+    expect(values).toHaveLength(4);
+    expect(values).toEqual(['IDLE', 'IN_PROGRESS', 'COMPLETED', 'FAILED']);
   });
 });

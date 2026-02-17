@@ -213,7 +213,9 @@ describe('UpgradeService', () => {
       });
     });
 
-    it('should not update DB on failure status', async () => {
+    it('should set FAILED status and clear stagedVersion on failure', async () => {
+      jest.spyOn(workerRepository, 'update').mockResolvedValue(undefined as any);
+
       const result = await service.acknowledgeWorkerDownload({
         workerId: 'worker-1',
         version: '1.0.0',
@@ -222,7 +224,10 @@ describe('UpgradeService', () => {
       });
 
       expect(result).toEqual({ acknowledged: true });
-      expect(workerRepository.update).not.toHaveBeenCalled();
+      expect(workerRepository.update).toHaveBeenCalledWith('worker-1', {
+        upgradeBundleStaged: UpgradeBundleStatus.FAILED,
+        stagedVersion: null,
+      });
     });
   });
 
