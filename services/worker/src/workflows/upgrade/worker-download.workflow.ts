@@ -50,7 +50,7 @@ const { isBinaryStaged } = proxyActivities<UpgradeActivityService>({
 // TODO: consider the start to close timeout
 // Bundle download (binary + env + checksums in one archive) — long timeout, heartbeats
 const { downloadBundle } = proxyActivities<UpgradeActivityService>({
-  startToCloseTimeout: '60m',
+  startToCloseTimeout: '30m',
   heartbeatTimeout: '2m',
   retry: {
     initialInterval: '10s',

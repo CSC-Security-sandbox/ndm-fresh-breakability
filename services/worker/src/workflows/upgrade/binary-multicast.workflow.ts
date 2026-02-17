@@ -73,6 +73,7 @@ export async function BinaryMulticastWorkflow(
         }],
         workflowId: `WorkerDownload-${traceId}-${workerId}`,
         taskQueue,
+        workflowExecutionTimeout: '60m',
         cancellationType: ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         parentClosePolicy: ParentClosePolicy.TERMINATE,
       });
