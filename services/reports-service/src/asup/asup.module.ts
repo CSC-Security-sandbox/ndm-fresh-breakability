@@ -5,6 +5,7 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { AsupController } from './asup.controller';
 import { AsupService } from './asup.service';
+import { AsupSettingsService } from './asup-settings.service';
 import { AsupSchedulerService } from './asup-scheduler.service';
 import { ProjectEntity } from '../entities/project.entity';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
@@ -26,7 +27,7 @@ import { VolumeEntity } from '../entities/volume.entity';
     ]),
   ],
   controllers: [AsupController],
-  providers: [AsupService, AsupSchedulerService],
-  exports: [AsupService, AsupSchedulerService],
+  providers: [AsupService, AsupSettingsService, AsupSchedulerService],
+  exports: [AsupService, AsupSettingsService, AsupSchedulerService],
 })
 export class AsupModule {}

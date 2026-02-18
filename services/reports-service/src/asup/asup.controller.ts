@@ -1,8 +1,9 @@
-import { Controller, Get, Put, Post, Param, Body, Res, Header, Inject } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, Res, Header, Inject, Req } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBearerAuth, ApiBody, ApiProperty } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { AsupService } from './asup.service';
+import { AsupSettingsService } from './asup-settings.service';
 import {
   LoggerFactory,
   LoggerService,
@@ -36,15 +37,6 @@ export class UpdateAsupSettingsDto {
   consentGiven?: boolean;
 }
 
-// In-memory store for ASUP settings (in production, this would be stored in a database)
-// TODO: Move to a proper database table for persistence
-let asupSettings: AsupSettingsDto = {
-  enabled: false,
-  consentGiven: false,
-  lastUpdated: null,
-  lastTransmission: null,
-};
-
 @ApiTags('asup')
 @Controller('asup')
 export class AsupController {
@@ -52,6 +44,7 @@ export class AsupController {
 
   constructor(
     private readonly asupService: AsupService,
+    private readonly asupSettingsService: AsupSettingsService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory
   ) {
     this.logger = loggerFactory.create(AsupController.name);
@@ -61,12 +54,16 @@ export class AsupController {
 
   @ApiOperation({ summary: 'Get ASUP settings' })
   @ApiResponse({ status: 200, description: 'Returns current ASUP settings' })
-  @ApiBearerAuth()
-  @Auth(Permission.Reports)
   @Get('settings')
   async getAsupSettings(): Promise<AsupSettingsDto> {
-    this.logger.log('Fetching ASUP settings');
-    return asupSettings;
+    this.logger.log('Fetching ASUP settings from database');
+    const settings = await this.asupSettingsService.getSettings();
+    return {
+      enabled: settings.enabled,
+      consentGiven: settings.consentGiven,
+      lastUpdated: settings.lastUpdated,
+      lastTransmission: settings.lastTransmission,
+    };
   }
 
   @ApiOperation({ summary: 'Update ASUP settings' })
@@ -75,20 +72,25 @@ export class AsupController {
   @ApiBearerAuth()
   @Auth(Permission.Reports)
   @Put('settings')
-  async updateAsupSettings(@Body() updateDto: UpdateAsupSettingsDto): Promise<AsupSettingsDto & { xmlPreview?: string }> {
+  async updateAsupSettings(
+    @Body() updateDto: UpdateAsupSettingsDto,
+    @Req() req: Request
+  ): Promise<AsupSettingsDto & { xmlPreview?: string }> {
     this.logger.log(`Updating ASUP settings with body: ${JSON.stringify(updateDto)}`);
     
-    // Update settings
-    asupSettings.enabled = updateDto.enabled === true;
-    asupSettings.consentGiven = updateDto.consentGiven === true;
-    asupSettings.lastUpdated = new Date().toISOString();
+    // Get user ID from request (set by auth middleware)
+    const userId = (req as any).user?.id || null;
     
-    this.logger.log(`ASUP settings updated: enabled=${asupSettings.enabled}, consentGiven=${asupSettings.consentGiven}`);
+    // Update settings in database
+    const enabled = updateDto.enabled === true;
+    const updatedSettings = await this.asupSettingsService.updateSettings(enabled, userId);
+    
+    this.logger.log(`ASUP settings updated: enabled=${updatedSettings.enabled}`);
     
     // If user just enabled ASUP and gave consent, generate and return the XML preview
     // This is for local testing - in production, this would be sent to ASUP endpoint
     let xmlPreview: string | undefined;
-    if (asupSettings.enabled && asupSettings.consentGiven) {
+    if (updatedSettings.enabled) {
       try {
         const analysis = await this.asupService.generateMigrationAnalysis();
         xmlPreview = this.asupService.generateXml(analysis);
@@ -101,7 +103,7 @@ export class AsupController {
         //   await this.httpService.post(asupEndpointUrl, xmlPreview, {
         //     headers: { 'Content-Type': 'application/xml' }
         //   }).toPromise();
-        //   asupSettings.lastTransmission = new Date().toISOString();
+        //   await this.asupSettingsService.updateLastTransmission();
         // }
       } catch (error) {
         this.logger.error(`Failed to generate XML preview: ${error.message}`);
@@ -111,7 +113,13 @@ export class AsupController {
       }
     }
     
-    return { ...asupSettings, xmlPreview };
+    return {
+      enabled: updatedSettings.enabled,
+      consentGiven: updatedSettings.consentGiven,
+      lastUpdated: updatedSettings.lastUpdated,
+      lastTransmission: updatedSettings.lastTransmission,
+      xmlPreview,
+    };
   }
   
   /**
@@ -191,12 +199,11 @@ export class AsupController {
   async triggerAsupTransmission(): Promise<{ success: boolean; message: string; xml?: string }> {
     this.logger.log('Manually triggering ASUP transmission');
     
-    if (!asupSettings.enabled) {
-      return { success: false, message: 'ASUP is disabled. Enable it first to transmit metrics.' };
-    }
+    // Get current settings from database
+    const currentSettings = await this.asupSettingsService.getSettings();
     
-    if (!asupSettings.consentGiven) {
-      return { success: false, message: 'User consent has not been given. Please accept the consent agreement.' };
+    if (!currentSettings.enabled) {
+      return { success: false, message: 'ASUP is disabled. Enable it first to transmit metrics.' };
     }
     
     try {
@@ -207,7 +214,7 @@ export class AsupController {
       this.logger.log(`ASUP XML generated: ${xml.length} bytes`);
       
       // Update last transmission timestamp
-      asupSettings.lastTransmission = new Date().toISOString();
+      await this.asupSettingsService.updateLastTransmission();
       
       // ============================================================
       // NOTE: ASUP TRANSMISSION IS DISABLED FOR LOCAL TESTING

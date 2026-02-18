@@ -98,6 +98,27 @@
                                     </span>
                                 </#if>
                             </div>
+                            <!-- ASUP Metrics Sharing (Optional) -->
+                            <div class="w-full my-4 text-left">
+                                <div class="flex items-start gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="allowMetricsSharing"
+                                        name="allowMetricsSharing"
+                                        class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        value="true" />
+                                    <div class="flex flex-col">
+                                        <label for="allowMetricsSharing" class="text-sm font-medium text-gray-700 cursor-pointer">
+                                            ${msg("Allow Metrics Sharing")}
+                                            <span class="text-gray-400 font-normal">(Optional)</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            Help improve NetApp Data Migrator by sharing usage metrics.
+                                            You can change this setting later from the Help menu.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                             <!-- Submit Button -->
                             <div class="my-2 w-full">
                                 <button

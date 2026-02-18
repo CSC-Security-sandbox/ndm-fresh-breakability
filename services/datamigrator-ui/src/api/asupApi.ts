@@ -109,6 +109,7 @@ export const asupApi = createApi({
 
 export const {
   useGetAsupSettingsQuery,
+  useLazyGetAsupSettingsQuery,
   useUpdateAsupSettingsMutation,
   useGetMigrationAnalysisQuery,
   useLazyPreviewMigrationAnalysisXmlQuery,

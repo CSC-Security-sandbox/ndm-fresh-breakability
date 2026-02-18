@@ -6,19 +6,24 @@ interface AsupSliceState {
   lastUpdated: string | null;
   lastTransmission: string | null;
   isConsentModalOpen: boolean;
+  isInitialized: boolean;  // Track if settings have been fetched from backend
 }
 
 const STORAGE_KEY = "asup_settings";
 
-// Load initial state from localStorage
+// Load initial state from localStorage (used as cache)
 const loadInitialState = (): AsupSliceState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        ...parsed,
+        enabled: parsed.enabled ?? false,
+        consentGiven: parsed.consentGiven ?? false,
+        lastUpdated: parsed.lastUpdated ?? null,
+        lastTransmission: parsed.lastTransmission ?? null,
         isConsentModalOpen: false,
+        isInitialized: parsed.isInitialized ?? false,
       };
     }
   } catch (e) {
@@ -30,6 +35,7 @@ const loadInitialState = (): AsupSliceState => {
     lastUpdated: null,
     lastTransmission: null,
     isConsentModalOpen: false,
+    isInitialized: false,
   };
 };
 
@@ -96,7 +102,41 @@ export const asupSlice = createSlice({
       state.lastUpdated = null;
       state.lastTransmission = null;
       state.isConsentModalOpen = false;
+      state.isInitialized = false;
       localStorage.removeItem(STORAGE_KEY);
+    },
+    /**
+     * Sync ASUP settings from backend.
+     * Used on app initialization to load the settings from server.
+     * The backend reads from the global_settings table which is populated
+     * by Keycloak when the instance creator sets their preference.
+     */
+    syncAsupSettings: (
+      state,
+      action: PayloadAction<{
+        enabled: boolean;
+        consentGiven: boolean;
+        lastUpdated?: string;
+        lastTransmission?: string;
+      }>
+    ) => {
+      // Backend settings take precedence
+      state.enabled = action.payload.enabled;
+      state.consentGiven = action.payload.consentGiven;
+      state.lastUpdated = action.payload.lastUpdated || state.lastUpdated;
+      state.lastTransmission = action.payload.lastTransmission || state.lastTransmission;
+      state.isInitialized = true;
+      // Persist to localStorage as cache
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          enabled: state.enabled,
+          consentGiven: state.consentGiven,
+          lastUpdated: state.lastUpdated,
+          lastTransmission: state.lastTransmission,
+          isInitialized: state.isInitialized,
+        })
+      );
     },
   },
 });
@@ -108,6 +148,7 @@ export const {
   openConsentModal,
   closeConsentModal,
   resetAsupSettings,
+  syncAsupSettings,
 } = asupSlice.actions;
 
 export default asupSlice.reducer;
