@@ -41,8 +41,8 @@ export class UpgradeActivityService {
     try {
       Context.current().heartbeat({ stage });
       this.logger.log(`Heartbeat: ${stage}`);
-    } catch { 
-      this.logger.log(`Heartbeat failed : ${stage}`);
+    } catch(error) { 
+      this.logger.log(`Heartbeat failed : ${stage} - ${error}`);
      }
   }
 

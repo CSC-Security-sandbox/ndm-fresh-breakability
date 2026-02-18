@@ -28,6 +28,9 @@ const CP_UPGRADE_BASE = '/upgrade';
  */
 const PARENT_TASK_QUEUE = 'ParentWorkflow-TaskQueue';
 
+/** Max seconds since last health check to consider a worker healthy. */
+const WORKER_HEALTH_TIMEOUT_SECONDS = 20; // window of 3 pings from worker 
+
 @Injectable()
 export class UpgradeService {
   private logger: LoggerService;
@@ -122,13 +125,13 @@ export class UpgradeService {
   ): Promise<MulticastResponseDto> {
     const traceId = uuid();
     const workflowId = `BinaryMulticast-${traceId}`;
-
+    let workerIds: string[] = [];
     try {
       // 1. Precheck: ensure bundles exist for this version before starting workflow
       this.validateBundlesExist(dto.version);
 
       // 2. Fetch all healthy workers (health check received within last 60s)
-      const healthTimeout = 20; // seconds Three reties(20s)
+      const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
       const allWorkers = await this.workerRepository.find({
         where: { status: 'Online' },
         relations: ['stats'],
@@ -158,7 +161,7 @@ export class UpgradeService {
         `Health check: ${activeWorkers.length}/${allWorkers.length} workers are healthy`,
       );
 
-      const workerIds = activeWorkers.map((w) => w.workerId);
+      workerIds = activeWorkers.map((w) => w.workerId);
 
       this.logger.log(
         `Starting multicast workflow: ${workflowId} for ${workerIds.length} active workers, version ${dto.version}`,
@@ -198,10 +201,24 @@ export class UpgradeService {
       };
     } catch (error) {
       this.logger.error(`Failed to start multicast workflow: ${error}`);
+
       // Re-throw BadRequestException (precheck failure) directly
       if (error instanceof BadRequestException) {
         throw error;
       }
+      // Reset workers to IDLE in DB if workflow failed to start after DB was updated
+      if (workerIds?.length) {
+        try {
+          await this.workerRepository.update(
+            { workerId: In(workerIds) },
+            { upgradeBundleStaged: UpgradeBundleStatus.IDLE, stagedVersion: null },
+          );
+          this.logger.log(`Reset upgrade_bundle_staged=IDLE for ${workerIds.length} workers after workflow start failure`);
+        } catch (resetError) {
+          this.logger.error(`Failed to reset worker status after workflow start failure: ${resetError}`);
+        }
+      }
+
       return {
         workflowId,
         status: 'error',
@@ -250,7 +267,7 @@ export class UpgradeService {
     });
 
     // 3. Build per-worker status
-    const healthTimeout = 60; // seconds
+    const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
     const now = new Date();
 
     const workerStatuses = workers.map((w) => {
