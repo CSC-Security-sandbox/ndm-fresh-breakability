@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/netapp/ndm/services/go-worker/types"
 )
 
 // StatusInput contains the parameters for the UpdateStatus activity.
@@ -204,8 +207,15 @@ func (a *Activities) CleanupJobContext(ctx context.Context, jobRunID string) err
 
 // CheckMemoryUsage checks the Redis memory usage and returns true if it is
 // within acceptable limits (below the configured threshold).
-func (a *Activities) CheckMemoryUsage(ctx context.Context, jobRunID string) (bool, error) {
-	a.Logger.Info("CheckMemoryUsage", zap.String("jobRunId", jobRunID))
+//
+// Its signature matches the TypeScript RedisMemoryCheckActivity.checkMemoryUsage():
+//
+//	async checkMemoryUsage(): Promise<boolean>
+//
+// The TypeScript activity takes NO arguments (only the implicit `this`), so
+// the Go version must also take no arguments beyond the context.
+func (a *Activities) CheckMemoryUsage(ctx context.Context) (bool, error) {
+	a.Logger.Info("CheckMemoryUsage")
 
 	memInfo, err := a.Redis.GetMemoryInfo(ctx)
 	if err != nil {
@@ -226,4 +236,126 @@ func (a *Activities) CheckMemoryUsage(ctx context.Context, jobRunID string) (boo
 	)
 
 	return isOk, nil
+}
+
+// UpdateLastEntry publishes sentinel/dummy entries to the file, task, and error
+// Redis streams to signal that a job run is complete. Downstream consumers
+// (db-writer) watch for these entries to know when all data has been flushed.
+//
+// Wire-compatible with the TypeScript CommonActivityService.updateLastEntry():
+//
+//	async updateLastEntry(traceId: string): Promise<any>
+func (a *Activities) UpdateLastEntry(ctx context.Context, jobRunID string) error {
+	a.Logger.Info("UpdateLastEntry", zap.String("jobRunId", jobRunID))
+
+	jobContext, err := a.getJobManagerContext(ctx, jobRunID)
+	if err != nil {
+		return fmt.Errorf("getting job context for UpdateLastEntry: %w", err)
+	}
+
+	now := time.Now()
+
+	// Dummy file entry matching TypeScript generateDummyItemEntry.
+	dummyItem := types.ItemInfo{
+		FileName:       "LAST_FILE",
+		IsDirectory:    false,
+		IsSymbolicLink: false,
+		Depth:          0,
+		Extension:      "",
+		FileType:       "file",
+		SourceMeta: types.ItemMeta{
+			BirthTime:    now,
+			ModifiedTime: now,
+			AccessTime:   now,
+			Permission:   "rwxr-xr-x",
+			Checksum:     "dummy-checksum-source",
+		},
+		TargetMeta: types.ItemMeta{
+			BirthTime:    now,
+			ModifiedTime: now,
+			AccessTime:   now,
+			Permission:   "rwxr-xr-x",
+			Checksum:     "dummy-checksum-target",
+		},
+		Size:      2048,
+		Inode:     0,
+		IsDeleted: false,
+	}
+
+	// Dummy task entry matching TypeScript generateDummyTaskInfoEntry.
+	dummyTask := types.TaskInfo{
+		ID:       "8840625a-b818-42a8-98c8-5c05aaa19106",
+		JobRunID: "",
+		TaskType: "MIGRATE",
+		Status:   "ERRORED",
+		WorkerID: "worker-12345",
+		SPathID:  "sourcePathId-12345",
+		TPathID:  "destinationPathId-12345",
+	}
+
+	// Dummy error entry matching TypeScript generateDummyErrorEntry.
+	dummyError := types.DMError{
+		Tasks: &types.TaskError{
+			TaskID:       "8840625a-b818-42a8-98c8-5c05aaa19106",
+			ErrorCode:    "",
+			ErrorMessage: "",
+			ErrorType:    "FATAL_ERROR",
+			TaskType:     "",
+		},
+	}
+
+	if err := jobContext.PublishToFileStream(ctx, dummyItem); err != nil {
+		return fmt.Errorf("publishing dummy file entry for %s: %w", jobRunID, err)
+	}
+
+	if err := jobContext.PublishToTaskStream(ctx, dummyTask); err != nil {
+		return fmt.Errorf("publishing dummy task entry for %s: %w", jobRunID, err)
+	}
+
+	if err := jobContext.PublishToErrorStream(ctx, dummyError); err != nil {
+		return fmt.Errorf("publishing dummy error entry for %s: %w", jobRunID, err)
+	}
+
+	a.Logger.Info("Last entry published", zap.String("jobRunId", jobRunID))
+	return nil
+}
+
+// UpdateJobErrorStatus marks a job run as ERRORED and publishes sentinel
+// entries to Redis streams. This matches the TypeScript
+// CommonActivityService.updateJobErrorStatus():
+//
+//	async updateJobErrorStatus(jobRunId: string) {
+//	    await this.updateStatus({jobRunId, status: JobRunStatus.Errored});
+//	    await this.updateLastEntry(jobRunId);
+//	}
+func (a *Activities) UpdateJobErrorStatus(ctx context.Context, jobRunID string) error {
+	a.Logger.Info("UpdateJobErrorStatus", zap.String("jobRunId", jobRunID))
+
+	// First, update the job status to ERRORED.
+	if err := a.UpdateStatus(ctx, StatusInput{
+		JobRunID: jobRunID,
+		Status:   "ERRORED",
+	}); err != nil {
+		return fmt.Errorf("updating error status for %s: %w", jobRunID, err)
+	}
+
+	// Then, publish sentinel entries.
+	if err := a.UpdateLastEntry(ctx, jobRunID); err != nil {
+		return fmt.Errorf("publishing last entry for %s: %w", jobRunID, err)
+	}
+
+	return nil
+}
+
+// SetupExportPathPermission sets up NFS export path permissions for the source
+// file server before migration scanning begins. Wire-compatible with the
+// TypeScript ScanService.setupExportPathPermission():
+//
+//	async setupExportPathPermission(jobRunId: string): Promise<void>
+//
+// TODO: Implement the full NFS export path permission setup. For now this is
+// a no-op stub that allows migration workflows to proceed.
+func (a *Activities) SetupExportPathPermission(ctx context.Context, jobRunID string) error {
+	a.Logger.Info("SetupExportPathPermission", zap.String("jobRunId", jobRunID))
+	return nil
 }

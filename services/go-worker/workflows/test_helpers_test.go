@@ -31,7 +31,7 @@ func registerAllWorkflows(env *testsuite.TestWorkflowEnvironment) {
 		workflow.RegisterOptions{Name: "CleanupWorkerWorkflow"},
 	)
 	env.RegisterWorkflowWithOptions(
-		func(ctx workflow.Context, traceID string) (bool, error) { return true, nil },
+		func(ctx workflow.Context) (bool, error) { return true, nil },
 		workflow.RegisterOptions{Name: "RedisMemoryCheckWorkflow"},
 	)
 	env.RegisterWorkflowWithOptions(
@@ -85,7 +85,7 @@ func registerAllActivities(env *testsuite.TestWorkflowEnvironment) {
 		activity.RegisterOptions{Name: "CleanupWorker"},
 	)
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, jobRunID string) (interface{}, error) { return nil, nil },
+		func(ctx context.Context, jobRunID string) (*SetupWorkerOutput, error) { return nil, nil },
 		activity.RegisterOptions{Name: "SetupWorker"},
 	)
 
@@ -168,11 +168,20 @@ func registerAllActivities(env *testsuite.TestWorkflowEnvironment) {
 		activity.RegisterOptions{Name: "ValidatePath"},
 	)
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input interface{}) error { return nil },
+		func(ctx context.Context, traceID string, payload map[string]interface{}) (interface{}, error) {
+			return nil, nil
+		},
 		activity.RegisterOptions{Name: "ValidateWorkingDirectory"},
 	)
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input interface{}) (interface{}, error) { return nil, nil },
+		func(ctx context.Context, input map[string]interface{}) (interface{}, error) {
+			return map[string]interface{}{
+				"pathId":     "test-path",
+				"status":     "success",
+				"errorCodes": []string{},
+				"workerId":   "test-worker",
+			}, nil
+		},
 		activity.RegisterOptions{Name: "PreCheckPath"},
 	)
 	env.RegisterActivityWithOptions(

@@ -129,7 +129,9 @@ type SetupWorkerInput struct {
 }
 
 // SetupWorkerOutput is the output for the SetupWorkerWorkflow.
+// Wire-compatible with the TypeScript SetupOutput interface.
 type SetupWorkerOutput struct {
+	JobRunID     string      `json:"jobRunId"`
 	Status       string      `json:"status"`
 	Message      string      `json:"message,omitempty"`
 	WorkerID     string      `json:"workerId,omitempty"`
@@ -230,9 +232,51 @@ type ListPathData struct {
 
 // PreCheckInput is the input for the PreCheckWorkflow.
 type PreCheckInput struct {
-	TraceID  string      `json:"traceId"`
-	Payload  interface{} `json:"payload"`
-	Options  interface{} `json:"options,omitempty"`
+	TraceID string      `json:"traceId"`
+	Payload interface{} `json:"payload"`
+	Options interface{} `json:"options,omitempty"`
+}
+
+// PreCheckWorkflowResponse matches the TypeScript PreCheckWorkflowResponse
+// interface returned by the parent PreCheckValidationWorkflow.
+type PreCheckWorkflowResponse struct {
+	SourcePathID string                       `json:"sourcePathId"`
+	Status       string                       `json:"status"`
+	Destination  []PreCheckDestinationStatus  `json:"destination"`
+	Errors       []string                     `json:"errors"`
+}
+
+// PreCheckDestinationStatus matches the TypeScript PreCheckDestinationStatus
+// interface.
+type PreCheckDestinationStatus struct {
+	DestinationPathID string         `json:"destinationPathId"`
+	Status            string         `json:"status"`
+	Errors            []string       `json:"errors"`
+	CommonWorkers     []WorkerRecord `json:"commonWorkers"`
+	Warnings          []string       `json:"warnings"`
+}
+
+// WorkerRecord matches the TypeScript workerRecord interface.
+type WorkerRecord struct {
+	WorkerID  string `json:"workerId"`
+	IsHealthy bool   `json:"ishealthy"`
+}
+
+// PreCheckPathResult is the typed version of the activity output used during
+// result aggregation in the parent workflow.
+type PreCheckPathResult struct {
+	PathID                    string   `json:"pathId"`
+	Status                    string   `json:"status"`
+	ErrorCodes                []string `json:"errorCodes"`
+	WorkerID                  string   `json:"workerId"`
+	SourceDataSize            *int64   `json:"sourceDataSize,omitempty"`
+	DestinationAvailableSpace *int64   `json:"destinationAvailableSpace,omitempty"`
+}
+
+// PreCheckWorkerResult is the typed version of the child workflow output.
+type PreCheckWorkerResult struct {
+	WorkerID string               `json:"workerId"`
+	Paths    []PreCheckPathResult `json:"paths"`
 }
 
 // SpeedTestInput is the input for the SpeedTestWorkflow.

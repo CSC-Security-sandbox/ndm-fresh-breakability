@@ -2,9 +2,11 @@ package activities
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -24,34 +26,128 @@ type SpeedTestCleanupInput struct {
 	JobConfig *types.JobConfig        `json:"jobConfig"`
 }
 
+// SetupWorkerResult mirrors the TypeScript SetupOutput interface so that the
+// result can be consumed by executeWorkerSetup and other workflows.
+type SetupWorkerResult struct {
+	JobRunID     string `json:"jobRunId"`
+	Status       string `json:"status"`
+	ProtocolType string `json:"protocolType,omitempty"`
+	WorkerID     string `json:"workerId"`
+	Message      string `json:"message"`
+}
+
 // SetupWorker mounts the source and target paths using the appropriate protocol
-// (SMB or NFS) based on the job configuration stored in Redis.
-func (a *Activities) SetupWorker(ctx context.Context, jobRunID string) error {
+// (SMB or NFS) based on the job configuration stored in Redis. After a
+// successful mount it calls the config-service to update worker configs.
+//
+// Its signature matches the TypeScript SetupActivityService.setup():
+//
+//	setup(jobRunId: string): Promise<SetupOutput>
+//
+// Errors are NOT returned via the error return value. On failure it returns a
+// SetupWorkerResult with status "error" so the parent workflow can handle it
+// gracefully (matching TypeScript behaviour where errors are caught and
+// returned as a response object).
+func (a *Activities) SetupWorker(ctx context.Context, jobRunID string) (*SetupWorkerResult, error) {
 	a.Logger.Info("SetupWorker started", zap.String("jobRunId", jobRunID))
 
 	jobContext, err := a.getJobManagerContext(ctx, jobRunID)
 	if err != nil {
-		return fmt.Errorf("getting job manager context: %w", err)
+		msg := fmt.Sprintf("Setup failed: %v", err)
+		a.Logger.Error(msg, zap.String("jobRunId", jobRunID))
+		return &SetupWorkerResult{
+			JobRunID: jobRunID,
+			Status:   "error",
+			WorkerID: a.Config.WorkerID,
+			Message:  msg,
+		}, nil
 	}
 
 	cfg := jobContext.JobConfig
 	if cfg == nil {
-		return fmt.Errorf("job config not found for %s", jobRunID)
+		msg := fmt.Sprintf("Setup failed: job config not found for %s", jobRunID)
+		a.Logger.Error(msg, zap.String("jobRunId", jobRunID))
+		return &SetupWorkerResult{
+			JobRunID: jobRunID,
+			Status:   "error",
+			WorkerID: a.Config.WorkerID,
+			Message:  msg,
+		}, nil
 	}
+
+	protocolType := getProtocolType(cfg.SourceFileServer)
 
 	// Mount source path.
 	if err := a.mountFileServer(jobRunID, cfg.SourceFileServer); err != nil {
-		return fmt.Errorf("mounting source path: %w", err)
+		msg := fmt.Sprintf("Setup failed: %v", err)
+		a.Logger.Error(msg, zap.String("jobRunId", jobRunID))
+		return &SetupWorkerResult{
+			JobRunID: jobRunID,
+			Status:   "error",
+			WorkerID: a.Config.WorkerID,
+			Message:  msg,
+		}, nil
 	}
 
 	// Mount destination path if present.
 	if cfg.DestinationFileServer != nil {
 		if err := a.mountFileServer(jobRunID, *cfg.DestinationFileServer); err != nil {
-			return fmt.Errorf("mounting destination path: %w", err)
+			msg := fmt.Sprintf("Setup failed: %v", err)
+			a.Logger.Error(msg, zap.String("jobRunId", jobRunID))
+			return &SetupWorkerResult{
+				JobRunID: jobRunID,
+				Status:   "error",
+				WorkerID: a.Config.WorkerID,
+				Message:  msg,
+			}, nil
 		}
 	}
 
+	// Update worker configs via config-service API.
+	// TS: await axios.post(`${workerConfigUrl}/api/v1/work-manager/update/configs`,
+	//        { jobRunId, workerId }, { headers: { Authorization, projectId } })
+	if err := a.updateWorkerConfigs(jobRunID); err != nil {
+		msg := fmt.Sprintf("Setup failed: %v", err)
+		a.Logger.Error(msg, zap.String("jobRunId", jobRunID))
+		return &SetupWorkerResult{
+			JobRunID: jobRunID,
+			Status:   "error",
+			WorkerID: a.Config.WorkerID,
+			Message:  msg,
+		}, nil
+	}
+
+	// TS: await this.waitFor(1000)
+	time.Sleep(1 * time.Second)
+
 	a.Logger.Info("SetupWorker completed", zap.String("jobRunId", jobRunID))
+	return &SetupWorkerResult{
+		JobRunID:     jobRunID,
+		Status:       "success",
+		ProtocolType: protocolType,
+		WorkerID:     a.Config.WorkerID,
+		Message:      fmt.Sprintf("Worker %s successfully set up", a.Config.WorkerID),
+	}, nil
+}
+
+// updateWorkerConfigs posts the worker config update to the config-service,
+// matching the TypeScript axios.post to /api/v1/work-manager/update/configs.
+func (a *Activities) updateWorkerConfigs(jobRunID string) error {
+	apiURL := fmt.Sprintf("%s/api/v1/work-manager/update/configs", a.Config.ConfigServiceURL)
+
+	body, err := json.Marshal(map[string]string{
+		"jobRunId": jobRunID,
+		"workerId": a.Config.WorkerID,
+	})
+	if err != nil {
+		return fmt.Errorf("marshalling worker config update: %w", err)
+	}
+
+	_, err = a.HTTP.Post(apiURL, body, nil)
+	if err != nil {
+		return fmt.Errorf("updating worker configs: %w", err)
+	}
+
 	return nil
 }
 

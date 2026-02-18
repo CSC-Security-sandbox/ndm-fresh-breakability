@@ -25,8 +25,9 @@ type StreamMessage[T any] struct {
 // msgpack followed by base64, matching the wire format used by the TypeScript
 // jobs-lib (msgpack-lite + Buffer.toString('base64')).
 //
-// Each record is stored in a stream message with a single field named "data"
-// whose value is the base64-encoded msgpack bytes.
+// Each record is stored in a stream message with a single field named "obj"
+// whose value is the base64-encoded msgpack bytes. The field name "obj" matches
+// the TypeScript jobs-lib redis-stream-collection.ts.
 type StreamCollection[T any] struct {
 	rdb       *redis.Client
 	streamKey string
@@ -106,7 +107,8 @@ func (s *StreamCollection[T]) Cleanup(jobRunID string) error {
 }
 
 // Append encodes a single record with msgpack then base64 and appends it to
-// the stream via XADD. The field name in the stream message is "data".
+// the stream via XADD. The field name in the stream message is "obj",
+// matching the TypeScript jobs-lib wire format.
 // Retries up to 3 times on connection reset errors.
 func (s *StreamCollection[T]) Append(ctx context.Context, record T) error {
 	encoded, err := encode(record)
@@ -120,7 +122,7 @@ func (s *StreamCollection[T]) Append(ctx context.Context, record T) error {
 		lastErr = s.rdb.XAdd(ctx, &redis.XAddArgs{
 			Stream: s.streamKey,
 			Values: map[string]interface{}{
-				"data": encoded,
+				"obj": encoded,
 			},
 			ID: "*",
 		}).Err()
@@ -163,7 +165,7 @@ func (s *StreamCollection[T]) AppendBulk(ctx context.Context, records []T) error
 		pipe.XAdd(ctx, &redis.XAddArgs{
 			Stream: s.streamKey,
 			Values: map[string]interface{}{
-				"data": encoded,
+				"obj": encoded,
 			},
 			ID: "*",
 		})
@@ -213,9 +215,9 @@ func (s *StreamCollection[T]) GroupRead(ctx context.Context, jobRunID string, gr
 	var messages []StreamMessage[T]
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			dataStr, ok := msg.Values["data"].(string)
+			dataStr, ok := msg.Values["obj"].(string)
 			if !ok {
-				s.logger.Warn("Stream message missing 'data' field",
+				s.logger.Warn("Stream message missing 'obj' field",
 					zap.String("stream", s.streamKey),
 					zap.String("id", msg.ID))
 				continue

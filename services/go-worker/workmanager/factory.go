@@ -33,6 +33,12 @@ func registerWorkflows(w worker.Worker, wtype WorkerType) {
 		w.RegisterWorkflow(workflows.SpeedTestWorkflow)
 		// ValidateWorkingDirectoryWorkflow matches TS WorkFlows.VALIDATE_EXPORT_PATH_AND_WORKING_DIRECTORY.
 		w.RegisterWorkflow(workflows.ValidateWorkingDirectoryWorkflow)
+		// RedisMemoryCheckWorkflow is started as a child workflow by parent
+		// workflows (Discovery, Migration, CutOver) without specifying a task
+		// queue, so it inherits the parent task queue. In TypeScript all
+		// workflows are registered on every worker type via workflowsPath, so
+		// it must also be registered here.
+		w.RegisterWorkflow(workflows.RedisMemoryCheckWorkflow)
 
 	case WorkerSpecific:
 		// Per-worker workflows that run on ${workerId}-TaskQueue.

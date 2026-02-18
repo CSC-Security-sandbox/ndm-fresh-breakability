@@ -32,6 +32,14 @@ func ChildScanWorkflow(ctx workflow.Context, input ChildScanWorkflowInput) (*Chi
 	logger := workflow.GetLogger(ctx)
 
 	// Apply defaults matching TypeScript default parameter values.
+	// In TypeScript: isInitialScan = true by default. In Go, bool zero value
+	// is false. The only caller that intentionally sets IsInitialScan=false
+	// is ContinueAsNew (which also sets DirBatchIds). So when both are at
+	// their zero values, this is the first invocation and we must default to
+	// true to match the TypeScript behaviour.
+	if !input.IsInitialScan && len(input.DirBatchIds) == 0 {
+		input.IsInitialScan = true
+	}
 	if len(input.DirsToScan) == 0 {
 		input.DirsToScan = []string{"/"}
 	}

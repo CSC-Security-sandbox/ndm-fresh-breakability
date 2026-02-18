@@ -3,11 +3,11 @@ package activities
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/netapp/ndm/services/go-worker/types"
@@ -28,6 +28,13 @@ type SyncOutput struct {
 
 // SyncTaskActivity processes all commands for a given task by fetching them
 // from Redis and executing them concurrently in slices of MaxCommandConcurrency.
+//
+// This matches the TypeScript sync-activity.service.ts lifecycle:
+//  1. Get task from TaskMap by hash key
+//  2. Validate task (check retry count, mark commands IN_PROCESS)
+//  3. Set task status to RUNNING, publish to TaskStream
+//  4. Execute all commands concurrently
+//  5. Update and report final task status, delete from TaskMap
 func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*SyncOutput, error) {
 	a.Logger.Info("SyncTaskActivity started",
 		zap.String("jobRunId", input.JobRunID),
@@ -39,7 +46,7 @@ func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*Sy
 		return nil, fmt.Errorf("getting job manager context: %w", err)
 	}
 
-	// Get the task info.
+	// Get the task info from TaskMap by hash key.
 	taskInfo, err := jobContext.GetTask(ctx, input.TaskID)
 	if err != nil {
 		return nil, fmt.Errorf("getting task %s: %w", input.TaskID, err)
@@ -53,14 +60,45 @@ func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*Sy
 		return nil, fmt.Errorf("job config not found for %s", input.JobRunID)
 	}
 
-	// Resolve source and target paths.
-	sourcePrefix := a.getMountPath(input.JobRunID, cfg.SourceFileServer.PathID)
-	sourcePath := filepath.Join(sourcePrefix, cfg.SourcePath)
+	// --- Ensure task is valid (matches TS ensureTaskValid) ---
+
+	// Check retry count — if exceeded, mark as ERRORED and bail out.
+	maxRetry := a.Config.MaxRetryCount
+	if maxRetry <= 0 {
+		maxRetry = 3
+	}
+	if taskInfo.RetryCount >= maxRetry {
+		taskInfo.Status = types.TaskStatusErrored
+		_ = jobContext.PublishToTaskStream(ctx, *taskInfo)
+		_ = jobContext.DeleteTask(ctx, input.TaskID)
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("task %s exceeded max retry count %d", input.TaskID, maxRetry),
+			"RetryExceededError", nil)
+	}
+
+	// Mark non-completed commands as IN_PROCESS.
+	for i := range taskInfo.Commands {
+		if taskInfo.Commands[i].Status != types.CommandStatusCompleted {
+			taskInfo.Commands[i].Status = types.CommandStatusInProcess
+		}
+	}
+
+	// Set task status to RUNNING and publish to TaskStream for progress tracking.
+	taskInfo.Status = types.TaskStatusRunning
+	taskInfo.WorkerID = a.Config.WorkerID
+	_ = jobContext.PublishToTaskStream(ctx, *taskInfo)
+
+	// --- Resolve source and target paths ---
+	// Use mount path only (no cfg.SourcePath appending), matching the TS
+	// basePrefix(task.jobRunId, task.sPathId). The command's FPath is a
+	// relative path from the mount root and is joined later in ExecuteCommand.
+	sourcePath := a.getMountPath(input.JobRunID, taskInfo.SPathID)
 
 	var targetPath string
-	if cfg.DestinationFileServer != nil {
-		targetPrefix := a.getMountPath(input.JobRunID, cfg.DestinationFileServer.PathID)
-		targetPath = filepath.Join(targetPrefix, cfg.DestinationPath)
+	if taskInfo.TPathID != "" {
+		targetPath = a.getMountPath(input.JobRunID, taskInfo.TPathID)
+	} else if cfg.DestinationFileServer != nil {
+		targetPath = a.getMountPath(input.JobRunID, cfg.DestinationFileServer.PathID)
 	}
 
 	errorType := types.ErrorTypeTransient
@@ -72,6 +110,9 @@ func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*Sy
 
 	commands := taskInfo.Commands
 	if len(commands) == 0 {
+		taskInfo.Status = types.TaskStatusCompleted
+		_ = jobContext.PublishToTaskStream(ctx, *taskInfo)
+		_ = jobContext.DeleteTask(ctx, input.TaskID)
 		return &SyncOutput{Status: types.TaskStatusCompleted}, nil
 	}
 
@@ -99,9 +140,9 @@ func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*Sy
 
 		// Execute slice in parallel.
 		var wg sync.WaitGroup
-		for _, cmd := range slice {
+		for i, cmd := range slice {
 			wg.Add(1)
-			go func(c types.Cmd) {
+			go func(c types.Cmd, cmdIdx int) {
 				defer wg.Done()
 
 				execInput := CommandExecInput{
@@ -119,33 +160,54 @@ func (a *Activities) SyncTaskActivity(ctx context.Context, input SyncInput) (*Sy
 						zap.Error(execErr),
 					)
 					atomic.AddInt64(&totalSourceErrors, 1)
+					// Mark command as ERROR in taskInfo for status reporting.
+					taskInfo.Commands[start+cmdIdx].Status = types.CommandStatusError
 					return
 				}
 
 				if result != nil {
 					atomic.AddInt64(&totalSourceErrors, int64(len(result.SourceErrors)))
 					atomic.AddInt64(&totalTargetErrors, int64(len(result.TargetErrors)))
+					if len(result.SourceErrors) > 0 || len(result.TargetErrors) > 0 {
+						taskInfo.Commands[start+cmdIdx].Status = types.CommandStatusError
+					} else {
+						taskInfo.Commands[start+cmdIdx].Status = types.CommandStatusCompleted
+					}
+				} else {
+					taskInfo.Commands[start+cmdIdx].Status = types.CommandStatusCompleted
 				}
-			}(cmd)
+			}(cmd, i)
 		}
 		wg.Wait()
 	}
 
-	status := types.TaskStatusCompleted
-	if totalSourceErrors > 0 || totalTargetErrors > 0 {
-		status = types.TaskStatusCompletedWithError
+	// --- Update and report task status (matches TS updateAndReportTaskStatus) ---
+	srcErrs := int(totalSourceErrors)
+	tgtErrs := int(totalTargetErrors)
+
+	if srcErrs == 0 && tgtErrs == 0 {
+		taskInfo.Status = types.TaskStatusCompleted
+	} else {
+		taskInfo.Status = types.TaskStatusErrored
+		taskInfo.RetryCount++
 	}
 
+	// Publish final status to TaskStream for db-writer / progress tracking.
+	_ = jobContext.PublishToTaskStream(ctx, *taskInfo)
+
+	// Delete the task from TaskMap (completed or errored, matches TS behavior).
+	_ = jobContext.DeleteTask(ctx, input.TaskID)
+
 	output := &SyncOutput{
-		SourceErrors: int(totalSourceErrors),
-		TargetErrors: int(totalTargetErrors),
-		Status:       status,
+		SourceErrors: srcErrs,
+		TargetErrors: tgtErrs,
+		Status:       taskInfo.Status,
 	}
 
 	a.Logger.Info("SyncTaskActivity completed",
 		zap.String("jobRunId", input.JobRunID),
 		zap.String("taskId", input.TaskID),
-		zap.String("status", status),
+		zap.String("status", taskInfo.Status),
 		zap.Int("sourceErrors", output.SourceErrors),
 		zap.Int("targetErrors", output.TargetErrors),
 	)

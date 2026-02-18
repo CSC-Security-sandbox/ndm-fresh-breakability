@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -72,13 +73,17 @@ func (a *Activities) ScanDirectories(ctx context.Context, input ScanInput) (*Sca
 	}
 
 	// Resolve paths.
+	// The NFS/SMB mount already places the export contents at the mount point
+	// (e.g., "mount host:/srv/nfs_share /base/jobRunID/pathID"), so the mount
+	// point IS the scan root. The TS worker uses basePrefix(jobRunId, pathId)
+	// directly without appending sourcePath. We must match that behaviour.
 	sourcePrefix := a.getMountPath(input.JobRunID, cfg.SourceFileServer.PathID)
-	sourcePath := filepath.Join(sourcePrefix, cfg.SourcePath)
+	sourcePath := sourcePrefix
 
 	var targetPrefix, targetPath string
 	if cfg.DestinationFileServer != nil {
 		targetPrefix = a.getMountPath(input.JobRunID, cfg.DestinationFileServer.PathID)
-		targetPath = filepath.Join(targetPrefix, cfg.DestinationPath)
+		targetPath = targetPrefix
 	}
 
 	// Resolve exclusion options.
@@ -98,6 +103,12 @@ func (a *Activities) ScanDirectories(ctx context.Context, input ScanInput) (*Sca
 	output := &ScanOutput{
 		BatchDirs: make([]string, 0),
 	}
+
+	// Collect scan errors so they propagate through ScanOutput.Error to the
+	// calling workflow. The TS worker throws FatalError on directory-level
+	// failures, which surfaces through the error chain. We collect errors
+	// here so executeBatchScan → ChildScanWorkflow can mark the job ERRORED.
+	var scanErrors []string
 
 	// Heartbeat ticker.
 	heartbeatTicker := time.NewTicker(2 * time.Second)
@@ -167,6 +178,7 @@ func (a *Activities) ScanDirectories(ctx context.Context, input ScanInput) (*Sca
 			if pubErr := jobContext.PublishToErrorStream(ctx, dmErr); pubErr != nil {
 				a.Logger.Error("failed to publish scan error", zap.Error(pubErr))
 			}
+			scanErrors = append(scanErrors, err.Error())
 			continue
 		}
 
@@ -177,11 +189,17 @@ func (a *Activities) ScanDirectories(ctx context.Context, input ScanInput) (*Sca
 		}
 	}
 
+	// Surface collected errors so the workflow can mark the job as ERRORED.
+	if len(scanErrors) > 0 {
+		output.Error = strings.Join(scanErrors, "; ")
+	}
+
 	a.Logger.Info("ScanDirectories completed",
 		zap.String("jobRunId", input.JobRunID),
 		zap.Int("fileCount", output.FileCount),
 		zap.Int("dirCount", output.DirCount),
 		zap.Int("subDirs", len(output.BatchDirs)),
+		zap.String("error", output.Error),
 	)
 
 	return output, nil

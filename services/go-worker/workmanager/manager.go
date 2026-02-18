@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.uber.org/zap"
@@ -109,6 +110,14 @@ type configPayload struct {
 // WorkManager
 // ---------------------------------------------------------------------------
 
+// activeWorkerEntry bundles a running Temporal worker with the task queue it
+// polls, so that monitorTaskQueues can check whether the queue still has
+// active pollers.
+type activeWorkerEntry struct {
+	worker    worker.Worker
+	taskQueue string
+}
+
 // WorkManager coordinates the lifecycle of Temporal workers on behalf of the
 // go-worker process. It registers with the Config Service, creates a Temporal
 // client, and then polls for configuration changes -- starting and stopping
@@ -121,7 +130,7 @@ type WorkManager struct {
 	activities     *activities.Activities
 	logger         *logger.Logger
 
-	activeWorkers map[string]worker.Worker
+	activeWorkers map[string]activeWorkerEntry
 	mu            sync.Mutex
 
 	cancel context.CancelFunc
@@ -143,7 +152,7 @@ func NewWorkManager(
 		httpClient:    httpClient,
 		activities:    acts,
 		logger:        log,
-		activeWorkers: make(map[string]worker.Worker),
+		activeWorkers: make(map[string]activeWorkerEntry),
 		done:          make(chan struct{}),
 	}
 }
@@ -203,9 +212,9 @@ func (wm *WorkManager) Stop() {
 
 	// Stop every active Temporal worker.
 	wm.mu.Lock()
-	for id, w := range wm.activeWorkers {
+	for id, entry := range wm.activeWorkers {
 		wm.logger.Info("Stopping worker", zap.String("id", id))
-		w.Stop()
+		entry.worker.Stop()
 		delete(wm.activeWorkers, id)
 	}
 	wm.mu.Unlock()
@@ -501,6 +510,7 @@ func (wm *WorkManager) handleConfigurations(ctx context.Context) error {
 	}
 
 	wm.reconcileWorkers(cp.MetaConfig)
+	wm.monitorTaskQueues(ctx)
 	return nil
 }
 
@@ -582,12 +592,57 @@ func (wm *WorkManager) reconcileWorkers(configs []WorkerConfiguration) {
 	}
 
 	// Stop workers that are running but no longer desired.
-	for id, w := range wm.activeWorkers {
+	for id, entry := range wm.activeWorkers {
 		if _, ok := desired[id]; !ok {
 			wm.logger.Info("Stopping stale worker", zap.String("id", id))
-			w.Stop()
+			entry.worker.Stop()
 			delete(wm.activeWorkers, id)
 		}
+	}
+}
+
+// monitorTaskQueues checks each active worker's task queue for pollers using
+// Temporal's DescribeTaskQueue API. Workers whose queues have no active pollers
+// are shut down. This mirrors the TypeScript monitorTaskQueues() method in
+// work-manager.service.ts (lines 304-331).
+func (wm *WorkManager) monitorTaskQueues(ctx context.Context) {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+
+	if wm.temporalClient == nil {
+		return
+	}
+
+	var toShutdown []string
+
+	for id, entry := range wm.activeWorkers {
+		resp, err := wm.temporalClient.DescribeTaskQueue(ctx, entry.taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		if err != nil {
+			wm.logger.Warn("monitorTaskQueues: failed to describe task queue",
+				zap.String("id", id),
+				zap.String("taskQueue", entry.taskQueue),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if len(resp.Pollers) == 0 {
+			wm.logger.Info("No active pollers for task queue, scheduling shutdown",
+				zap.String("id", id),
+				zap.String("taskQueue", entry.taskQueue),
+			)
+			toShutdown = append(toShutdown, id)
+		}
+	}
+
+	for _, id := range toShutdown {
+		entry, ok := wm.activeWorkers[id]
+		if !ok {
+			continue
+		}
+		wm.logger.Info("Shutting down worker with no pollers", zap.String("id", id))
+		entry.worker.Stop()
+		delete(wm.activeWorkers, id)
 	}
 }
 
@@ -620,7 +675,7 @@ func (wm *WorkManager) startWorker(id, taskQueue string, wtype WorkerType) error
 		return fmt.Errorf("starting temporal worker on queue %s: %w", taskQueue, err)
 	}
 
-	wm.activeWorkers[id] = w
+	wm.activeWorkers[id] = activeWorkerEntry{worker: w, taskQueue: taskQueue}
 
 	wm.logger.Info("Started worker",
 		zap.String("id", id),

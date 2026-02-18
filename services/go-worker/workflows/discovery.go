@@ -60,9 +60,12 @@ func DiscoveryWorkflow(ctx workflow.Context, input DiscoveryWorkflowInput) (*Dis
 // waitUntilRedisMemoryOk starts a RedisMemoryCheckWorkflow as a child
 // workflow and waits for it to confirm that Redis memory is within acceptable
 // limits. Matches the TypeScript waitUntilRedisMemoryOk utility.
+//
+// TS: startChild('RedisMemoryCheckWorkflow', { args: [], workflowId: ... })
+// The TypeScript version passes NO args to the child workflow.
 func waitUntilRedisMemoryOk(ctx workflow.Context, traceID string) {
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		WorkflowID: "RedisMemoryCheckWorkflow-" + traceID,
 	})
-	_ = workflow.ExecuteChildWorkflow(childCtx, "RedisMemoryCheckWorkflow", traceID).Get(ctx, nil)
+	_ = workflow.ExecuteChildWorkflow(childCtx, "RedisMemoryCheckWorkflow").Get(ctx, nil)
 }
