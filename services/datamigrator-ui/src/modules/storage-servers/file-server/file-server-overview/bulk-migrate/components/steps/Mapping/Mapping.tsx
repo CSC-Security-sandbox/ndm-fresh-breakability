@@ -179,8 +179,7 @@ const Mapping = () => {
     return configName;
   }, [sourceFileServerDetails]);
 
-  // Protocol options (NFS, SMB) for filtering if needed
-  const protocolOptions = useMemo(() => {
+  const options = useMemo(() => {
     const _options = getOptionsFromArray(
       sourceFileServerDetails?.fileServers?.map((data) => data.protocol) || [
         "NFS",
@@ -267,6 +266,7 @@ const Mapping = () => {
     if (isPrefillingFromEditRef.current) return;
     setDestinationDirectoryPath("");
   }, [destinationForm.formState.destinationPath?.value]);
+
   // Prefill form when user clicks Edit on a mapping row
   useEffect(() => {
     if (!mappingToEdit) return;
