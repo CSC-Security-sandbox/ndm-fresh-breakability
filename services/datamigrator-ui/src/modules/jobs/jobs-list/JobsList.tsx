@@ -242,13 +242,13 @@ const JobsList = () => {
                     {row.sourceServer?.path && (
                       <div className="flex justify-between">
                         <span className="font-medium text-gray-600">Source Path:</span>
-                        <span className="font-mono text-xs text-gray-700 break-all">{row.sourceServer.path}</span>
+                        <span className="font-mono text-xs text-gray-700 break-all">{row.sourceServer.path+(row.sourceServer.directoryPath || '')}</span>
                       </div>
                     )}
                     {row.destinationServer?.path && (
                       <div className="flex justify-between">
                         <span className="font-medium text-gray-600">Destination Path:</span>
-                        <span className="font-mono text-xs text-gray-700 break-all">{row.destinationServer.path}</span>
+                        <span className="font-mono text-xs text-gray-700 break-all">{row.destinationServer.path+(row.destinationServer.directoryPath || '')}</span>
                       </div>
                     )}
                     {row.createdAt && (

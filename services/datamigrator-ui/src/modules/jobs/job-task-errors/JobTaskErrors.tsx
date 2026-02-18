@@ -6,7 +6,6 @@ import { useLazyGetJobConfigDetailsQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import { notify } from "@components/notification/NotificationWrapper";
 import ErrorsListTable from "@modules/jobs/job-task-errors/components/ErrorsListTable";
-import JobTaskDetails from "@modules/jobs/job-task-errors/components/JobTaskDetails";
 import JobTaskErrorsBreadcrumbs from "@modules/jobs/job-task-errors/components/JobTaskErrorsBreadcrumbs";
 import JobTaskErrorsTabs from "@modules/jobs/job-task-errors/components/JobTaskErrorsTabs";
 import { useEffect, useMemo, useState } from "react";
@@ -117,7 +116,6 @@ const JobTaskErrors = () => {
         currentErrorType={currentErrorType}
         setCurrentErrorType={setCurrentErrorType}
       />
-      <JobTaskDetails jobConfigDetails={jobConfigDetails} />
       <ErrorsListTable
         key={currentErrorType}
         currentErrorType={currentErrorType}

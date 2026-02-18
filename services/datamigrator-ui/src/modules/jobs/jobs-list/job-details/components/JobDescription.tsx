@@ -1,5 +1,5 @@
 import { Box } from "@components/container/index";
-import { JobDescriptionProps } from "@/types/app.type";
+import { JobDescriptionProps, JOBS_TYPE } from "@/types/app.type";
 import {
   Card,
   Text,
@@ -12,7 +12,7 @@ import { VolIcon } from "@netapp/bxp-style/react-icons/Storage";
 import JobDescriptionColumn from "@modules/jobs/jobs-list/job-details/components/JobDescriptionColumn";
 
 const JobDescription = (props: JobDescriptionProps) => {
-  const { source, destination } = props;
+  const { source, destination, jobType } = props;
   if (!source) {
     return (
       <Card className="h-full flex p-10">
@@ -24,27 +24,45 @@ const JobDescription = (props: JobDescriptionProps) => {
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle className="flex gap-4">
+        <CardTitle className="flex gap-4 items-center">
           <VolIcon />
-          <Text>{source.serverName}</Text>
+          <Text bold>Job Configuration</Text>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex gap-4 justify-between">
-        <Box className="flex flex-col gap-4 grow">
-          {/* <JobDescriptionColumn name="Id" value={id || ""} /> */}
-          <JobDescriptionColumn name="Source Path" value={source.path} />
-          <JobDescriptionColumn name="Protocol" value={source.protocol} />
-        </Box>
-
-        {destination && destination.serverName && (
-          <Box className="flex flex-col gap-4 grow">
+        <Box className="flex flex-col gap-4 w-1/2">
+          <JobDescriptionColumn
+            name="Source File Server"
+            value={source.serverName}
+          />
+          <JobDescriptionColumn
+            name="Source Export Path"
+            value={source.path}
+          />
+          {jobType !== JOBS_TYPE.DISCOVERY && (
             <JobDescriptionColumn
-              name="Destination"
+              name="Source Directory Path"
+              value={source.directoryPath || "-"}
+            />
+          )}
+          <JobDescriptionColumn
+            name="Protocol"
+            value={source.protocol}
+          />
+        </Box>
+        {destination && destination.serverName && (
+          <Box className="flex flex-col gap-4 w-1/2">
+            <JobDescriptionColumn
+              name="Destination File Server"
               value={destination.serverName}
             />
             <JobDescriptionColumn
-              name="destination Path"
+              name="Destination Export Path"
               value={destination.path}
+            />
+            <JobDescriptionColumn
+              name="Destination Directory Path"
+              value={destination.directoryPath || "-"}
             />
           </Box>
         )}

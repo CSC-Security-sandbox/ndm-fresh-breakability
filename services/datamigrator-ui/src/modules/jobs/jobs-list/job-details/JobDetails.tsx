@@ -1153,6 +1153,7 @@ const JobDetails = () => {
             id={jobId}
             source={jobConfigDetails?.sourceServer}
             destination={jobConfigDetails?.destinationServer}
+            jobType={jobConfigDetails?.jobType}
           />
         </Box>
         <Box className="grow basis-1/2 items-stretch">

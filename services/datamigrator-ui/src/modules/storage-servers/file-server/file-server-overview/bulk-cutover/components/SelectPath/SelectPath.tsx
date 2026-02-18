@@ -35,8 +35,8 @@ const SelectPath = () => {
     <>
       <Card>
         <CardContent className="flex gap-4 flex-col">
-          <Text>Source File Server</Text>
-          <Box className="text-sm font-semibold">
+          <Text bold>Source File Server</Text>
+          <Box className="text-sm">
             {sourceFileServerDisplayName}
           </Box>
         </CardContent>

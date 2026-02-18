@@ -7,8 +7,8 @@ const JobDescriptionColumn = ({
   value,
 }: JobDescriptionColumnPropType) => (
   <Box className="flex flex-col gap-0">
-    <Text>{name}</Text>
-    <Text bold>{value}</Text>
+    <Text bold>{name}</Text>
+    <Text>{value}</Text>
   </Box>
 );
 

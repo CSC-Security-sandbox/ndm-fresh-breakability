@@ -4,44 +4,37 @@ import MigrationJobsCountRenderer from "@modules/storage-servers/file-server/fil
 export const SELECT_PATH_COL_DEFS = [
   {
     id: 1,
-    header: "Source Path",
+    header: "Source Export Path",
     accessor: "sourcePath.sourcePathName",
   },
   {
     id: 2,
-    header: "Protocol",
-    accessor: "protocol",
+    header: "Source Directory Path",
+    accessor: "sourceDirectoryPath",
+    sort: { enabled: false },
+    Renderer: ({ value }: any) => value || "-",
   },
   {
     id: 3,
-    header: "Destination",
+    header: "Destination File Server",
     accessor: "destinationFileServer.destinationFileServerName",
   },
   {
     id: 4,
-    header: "Destination Path",
+    header: "Destination Export Path",
     accessor: "destinationPath.destinationPathName",
   },
   {
     id: 5,
-    header: "Discovery",
-    accessor: "jobConfig",
-    popoverText: "Running / Completed / Total Job Runs",
-    Renderer: DiscoveryJobsCountRenderer,
+    header: "Destination Directory Path",
+    accessor: "destinationDirectoryPath",
+    sort: { enabled: false },
+    Renderer: ({ value }: any) => value || "-",
   },
   {
     id: 6,
-    header: "Migration",
-    popoverText: "Running / Completed / Total Job Runs",
-    accessor: "jobConfig",
-    Renderer: MigrationJobsCountRenderer,
-  },
-  {
-    id: 7,
-    header: "Cutover",
-    popoverText: "Running / Completed / Total Job Runs",
-    accessor: "jobConfig",
-    Renderer: DiscoveryJobsCountRenderer,
+    header: "Protocol",
+    accessor: "protocol",
   },
 ];
 

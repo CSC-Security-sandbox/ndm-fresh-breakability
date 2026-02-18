@@ -38,10 +38,15 @@ export const JOB_LIST_COLUMN_DEFS = [
     },
     Renderer: ({
       value,
+      row,
     }: BlueXpTableRowType<JobRowType, JobRowType["sourceServer"]>) =>
       React.createElement(ServerPathRenderer, {
         server: value.serverName,
         path: value.path,
+        directoryPath: value.directoryPath,
+        fileServerName: value.fileServerName,
+        serverType: value.serverType,
+        jobType: row.jobType,
       }),
   },
   {
@@ -66,10 +71,15 @@ export const JOB_LIST_COLUMN_DEFS = [
     },
     Renderer: ({
       value,
+      row,
     }: BlueXpTableRowType<JobRowType, JobRowType["destinationServer"]>) =>
       React.createElement(ServerPathRenderer, {
         server: value.serverName,
         path: value.path,
+        directoryPath: value.directoryPath,
+        fileServerName: value.fileServerName,
+        serverType: value.serverType,
+        jobType: row.jobType,
       }),
   },
   {

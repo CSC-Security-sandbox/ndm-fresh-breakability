@@ -69,12 +69,15 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     },
     Renderer: ({
       value,
+      row,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["sourceServer"]>) =>
       React.createElement(ServerPathRenderer, {
         server: value?.serverName,
         path: value?.path,
+        directoryPath: value?.directoryPath,
         fileServerName: value?.fileServerName,
         serverType: value?.serverType,
+        jobType: row.jobType,
       }),
   },
   {
@@ -99,12 +102,15 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     },
     Renderer: ({
       value,
+      row,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType["destinationServer"]>) =>
       React.createElement(ServerPathRenderer, {
         server: value?.serverName,
         path: value?.path,
+        directoryPath: value?.directoryPath,
         fileServerName: value?.fileServerName,
         serverType: value?.serverType,
+        jobType: row.jobType,
       }),
   },
   {
