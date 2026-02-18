@@ -214,8 +214,8 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
   return errors;
 };
 
-/** Normalize directory path for comparison: empty or "-" becomes "" */
-const normalizeDirectoryPath = (path: string | undefined): string => {
+/** Normalize directory path for comparison/display: empty, "-", undefined, or null becomes "" */
+export const normalizeDirectoryPath = (path: string | undefined | null): string => {
   if (path === "-" || path === undefined || path === null) return "";
   return String(path).replace(/\/+$/, "").trim();
 };

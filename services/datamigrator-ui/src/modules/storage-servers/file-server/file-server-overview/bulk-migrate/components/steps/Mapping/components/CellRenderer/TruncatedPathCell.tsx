@@ -3,8 +3,6 @@ import { Text } from "@netapp/bxp-design-system-react";
 
 export interface TruncatedPathCellProps {
   value: string;
-  /** Optional; when omitted, truncation is purely CSS-based (by available width, adjusts with zoom/column width) */
-  maxLength?: number;
 }
 
 /**
