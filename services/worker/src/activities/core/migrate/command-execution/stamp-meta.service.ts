@@ -9,6 +9,8 @@ import { SourceAclError } from "./win-opeartions/acl-operation.error";
 import { WinOperationService } from "./win-opeartions/win-operation.service";
 import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
+import { MetricsService } from "src/metrics/metrics.service";
+import { Timed } from "src/metrics/timed.decorator";
 
 
 @Injectable()
@@ -17,11 +19,13 @@ export class StampMetaService {
     constructor(
         private readonly redisService: RedisService,
         private readonly winOperationService: WinOperationService,
+        private readonly metricsService: MetricsService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
     }
 
+    @Timed(MetricsService.METRIC.STAMP_META)
     async stampMetaData(input: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
@@ -81,6 +85,7 @@ export class StampMetaService {
         return output;
     }
 
+    @Timed({ category: 'stamp_phase', phase: 'permissions' })
     async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata?.mode && !command?.metadata?.isSymLink) {
@@ -97,6 +102,7 @@ export class StampMetaService {
     }
 
 
+    @Timed({ category: 'stamp_phase', phase: 'gid_uid' })
     async stampGIDandUID({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata?.gid && command.metadata?.uid && process.platform !== 'win32') {
@@ -128,6 +134,7 @@ export class StampMetaService {
         return output;
     }
 
+    @Timed({ category: 'stamp_phase', phase: 'stamp_time' })
     async stampAccessAndModifiedTime({ command, jobContext, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime) {
@@ -147,6 +154,7 @@ export class StampMetaService {
         return output;
     }
 
+    @Timed({ category: 'stamp_phase', phase: 'preserve_time' })
     async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
@@ -166,6 +174,7 @@ export class StampMetaService {
         return output;
     }
 
+    @Timed({ category: 'stamp_phase', phase: 'acl' })
     async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         try {

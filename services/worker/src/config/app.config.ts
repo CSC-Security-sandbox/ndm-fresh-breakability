@@ -61,6 +61,7 @@ export default registerAs(
     metrics: {
       versionsPathWindows: process.env.VERSIONS_PATH_WINDOWS || 'C:\\datamigrator\\conf\\versions.conf',
       versionsPathLinux: process.env.VERSIONS_PATH_LINUX || '/opt/datamigrator/conf/versions.conf',
+      additionalMetrics: process.env.ADDITIONAL_METRICS || 'false',
     }
   }),
 );

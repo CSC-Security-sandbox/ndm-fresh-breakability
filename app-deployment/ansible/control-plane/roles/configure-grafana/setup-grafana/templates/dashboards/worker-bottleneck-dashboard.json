@@ -1,0 +1,1415 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Select a workflow (job run) and set the time range to the workflow run. Duration panels show **total cumulative processing time** summed across all files and threads. Requires ADDITIONAL_METRICS=true.",
+      "gridPos": {
+        "h": 2,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "options": {
+        "content": "**Workflow (job run id):** $workflow_id  \n**Time range:** $__from \u2013 $__to (set to the workflow run period).  \nDuration panels show total cumulative processing time summed across all files and threads.  \nIf the dropdown is empty or only \"unknown\", set ADDITIONAL_METRICS=true on the worker and ensure workflows pass jobRunId to activities.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 2
+      },
+      "id": 100,
+      "title": "\ud83d\udd37 Top-level Operation Durations",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total number of files successfully migrated (copy + checksum completed) for the selected workflow.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3274D9",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 3
+      },
+      "id": 17,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(max by (worker_id) (worker_files_migrated_total{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}))",
+          "instant": true,
+          "legendFormat": "Files Migrated",
+          "refId": "files"
+        }
+      ],
+      "title": "Files Migrated",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total cumulative processing time for each top-level operation, summed across all files and threads. file_copy includes queue wait + file streaming + source & target checksum.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total (s)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "id": 1,
+      "options": {
+        "orientation": "vertical",
+        "barWidth": 0.5,
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (operation) (worker_additional_operation_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "total"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Total (s)",
+              "operation": "Operation"
+            }
+          }
+        }
+      ],
+      "title": "Total operation time (file_copy+checksum, stamp_meta, copy_dir) \u2014 seconds",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Percentage of total operation time spent in each operation (file_copy+checksum, stamp_meta, copy_dir). Shows where the migration spends its processing time proportionally.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 15,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "percent",
+            "value"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (operation) (worker_additional_operation_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}) / ignoring(operation) group_left sum(max by (operation) (worker_additional_operation_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})) * 100",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{operation}}",
+          "refId": "pct"
+        }
+      ],
+      "title": "Operation time \u2014 % breakdown",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 101,
+      "title": "\ud83d\udd37 Stamp Phase Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total cumulative time spent in each stamp phase (excl. ACL), summed across all files.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total (s)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 2,
+      "options": {
+        "orientation": "vertical",
+        "barWidth": 0.5,
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (phase) (worker_stamp_phase_duration_seconds_sum{phase!~\"acl_.*\", workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "total"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Total (s)",
+              "phase": "Phase"
+            }
+          }
+        }
+      ],
+      "title": "Total stamp phase time (s) \u2014 by phase",
+      "type": "barchart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 102,
+      "title": "\ud83d\udd37 Copy Phase Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total cumulative time for copy phases, summed across all files. copy_and_source_checksum includes file streaming + in-flight source SHA-256.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total (s)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 3,
+      "options": {
+        "orientation": "vertical",
+        "barWidth": 0.5,
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (phase) (worker_copy_phase_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "total"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Total (s)",
+              "phase": "Phase"
+            }
+          }
+        }
+      ],
+      "title": "Total Copy Phase Time \u2014 copy_and_source_checksum vs checksum_target",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Percentage of total copy-phase time spent in each sub-phase (copy_and_source_checksum vs checksum_target).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 18,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "percent",
+            "value"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (phase) (worker_copy_phase_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}) / ignoring(phase) group_left sum(max by (phase) (worker_copy_phase_duration_seconds_sum{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})) * 100",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{phase}}",
+          "refId": "pct"
+        }
+      ],
+      "title": "Copy phase time \u2014 % breakdown",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 108,
+      "title": "\ud83d\udd37 ACL Sub-phase Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total cumulative time for each ACL sub-phase, summed across all files.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total (s)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "id": 14,
+      "options": {
+        "orientation": "vertical",
+        "barWidth": 0.5,
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (phase) (worker_stamp_phase_duration_seconds_sum{phase=~\"acl_.*\", workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "total"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Total (s)",
+              "phase": "ACL Sub-phase"
+            }
+          }
+        }
+      ],
+      "title": "Total ACL Sub-phase Time \u2014 get_source / set_target / get_target / validate (+ sid_mapping if configured)",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Percentage of total ACL sub-phase time spent in each ACL sub-phase. Shows which ACL operation dominates.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "id": 16,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "percent",
+            "value"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (phase) (worker_stamp_phase_duration_seconds_sum{phase=~\"acl_.*\", workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}) / ignoring(phase) group_left sum(max by (phase) (worker_stamp_phase_duration_seconds_sum{phase=~\"acl_.*\", workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})) * 100",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{phase}}",
+          "refId": "pct"
+        }
+      ],
+      "title": "ACL sub-phase time \u2014 % breakdown",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 105,
+      "title": "\ud83d\udd37 Task Queue Wait Time",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Time a task waits in the queue before a thread picks it up, broken down by file size band (1kb, 1mb, 10mb, 100mb, 1gb). High wait times indicate thread pool saturation for that band.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "spanNulls": true,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max by (band_name) (worker_task_queue_wait_seconds{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "legendFormat": "{{band_name}}",
+          "refId": "wait"
+        }
+      ],
+      "title": "Task Queue Wait \u2014 by file size band",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 107,
+      "title": "\ud83d\udd37 Worker Threads",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Live thread pool status: total threads, available (idle), and busy (processing tasks). When available drops to 0 the thread pool is saturated.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisCenteredZero": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8AB8FF",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Available"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Busy"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_threads_status{worker_id=~\"$worker\", status=\"total\"})",
+          "legendFormat": "Total",
+          "refId": "total"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_threads_status{worker_id=~\"$worker\", status=\"available\"})",
+          "legendFormat": "Available",
+          "refId": "available"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_threads_status{worker_id=~\"$worker\", status=\"busy\"})",
+          "legendFormat": "Busy",
+          "refId": "busy"
+        }
+      ],
+      "title": "Thread Pool Status \u2014 total / available / busy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Number of tasks queued per file-size band (1kb, 1mb, 10mb, 100mb, 1gb). Spikes indicate backpressure in that band.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisCenteredZero": false,
+            "showPoints": "auto",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum by (band_name) (worker_tasks_queue_depth{worker_id=~\"$worker\"})",
+          "legendFormat": "{{band_name}}",
+          "refId": "queue"
+        }
+      ],
+      "title": "Task Queue Depth \u2014 by band",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Active tasks currently being processed by worker threads, and total thread errors (worker_error, worker_exit, task_timeout) over the selected time range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisCenteredZero": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active Tasks"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*error.*|.*exit.*|.*timeout.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_tasks_active_total{worker_id=~\"$worker\"})",
+          "legendFormat": "Active Tasks",
+          "refId": "active"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum by (error_type) (increase(worker_thread_errors_total{worker_id=~\"$worker\"}[$__range]))",
+          "legendFormat": "{{error_type}}",
+          "refId": "errors"
+        }
+      ],
+      "title": "Active Tasks & Thread Errors",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 106,
+      "title": "\ud83d\udd37 Shell Pool",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Live snapshot of the PowerShell pool: how many shells are available (idle), busy (executing), and total commands queued across all shells. Sampled every 3s by the shell monitoring interval.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisCenteredZero": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Available"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Busy"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Queue Depth"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 69
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_shell_pool_status{worker_id=~\"$worker\", status=\"available\"})",
+          "legendFormat": "Available",
+          "refId": "available"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_shell_pool_status{worker_id=~\"$worker\", status=\"busy\"})",
+          "legendFormat": "Busy",
+          "refId": "busy"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum(worker_shell_pool_status{worker_id=~\"$worker\", status=\"queue_depth\"})",
+          "legendFormat": "Queue Depth",
+          "refId": "queue_depth"
+        }
+      ],
+      "title": "Shell Pool Status \u2014 available / busy / queue depth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Average shell queue wait time: how long commands waited in the per-shell queue before execution. Computed as sum/count from the histogram. High values mean the shell pool is saturated.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "decimals": 4,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "spanNulls": true,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg Queue Wait"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Commands/s"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "ops"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 69
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max(worker_shell_queue_wait_seconds{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"})",
+          "legendFormat": "Queue Wait (latest)",
+          "refId": "wait"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "max(max_over_time(worker_shell_queue_wait_seconds{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}[5m]))",
+          "legendFormat": "Queue Wait (5m max)",
+          "refId": "max"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "avg(avg_over_time(worker_shell_queue_wait_seconds{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}[5m]))",
+          "legendFormat": "Queue Wait (5m avg)",
+          "refId": "avg"
+        }
+      ],
+      "title": "Shell Queue Wait \u2014 latest / max / avg",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$DataSource"
+      },
+      "description": "Total shell errors by type (command_failed, queue_full, shell_restart) and total command timeouts for the selected workflow and time range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 77
+      },
+      "id": 9,
+      "options": {
+        "orientation": "vertical",
+        "barWidth": 0.5,
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum by (error_type) (increase(worker_shell_errors_total{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{error_type}}",
+          "refId": "errors"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$DataSource"
+          },
+          "expr": "sum (increase(worker_shell_timeouts_total{workflow_id=~\"$workflow_id\", worker_id=~\"$worker\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "timeouts",
+          "refId": "timeouts"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "error_type",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true
+            },
+            "renameByName": {
+              "Value #errors": "Errors",
+              "Value #timeouts": "Timeouts",
+              "error_type": "Type"
+            }
+          }
+        }
+      ],
+      "title": "Shell Errors & Timeouts \u2014 by error type",
+      "type": "barchart"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [
+    "worker",
+    "smb",
+    "bottleneck",
+    "performance"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "DataSource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": true,
+        "label": "Workflow ID",
+        "name": "workflow_id",
+        "options": [],
+        "query": "label_values({__name__=~\"worker_.*_duration_seconds_bucket\"}, workflow_id)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": true,
+        "label": "Worker ID",
+        "name": "worker",
+        "options": [],
+        "query": "label_values(worker_info, worker_id)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Worker bottleneck analysis",
+  "uid": "worker-bottleneck",
+  "version": 7,
+  "weekStart": ""
+}

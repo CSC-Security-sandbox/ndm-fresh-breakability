@@ -16,6 +16,7 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MetricsService } from '../metrics/metrics.service';
+import { Timed } from '../metrics/timed.decorator';
 
 @Injectable()
 export class WorkerThreadService {
@@ -118,6 +119,11 @@ export class WorkerThreadService {
 
       worker.on('message', (results: WorkerThreadOutput[]) => {
         results.map((result) => {
+          if (result.isResolved && result.data) {
+            const workflowId = result.data.jobRunId || 'unknown';
+            this.metricsService.recordCopyPhaseResults(workflowId, result.data.copyStreamMs, result.data.checksumTargetMs);
+          }
+
           // resolve the task
           if (result.isResolved) {
             const task = this.activeTasks.get(result.id);
@@ -203,6 +209,16 @@ export class WorkerThreadService {
         this.workerDetails.get(worker.threadId).operationBand,
       );
       if (worker && tasks.length > 0) {
+        // Record queue wait time for each task being dispatched
+        const bandName = this.workerDetails.get(worker.threadId).operationBand;
+        const now = Date.now();
+        for (const task of tasks) {
+          if (task.enqueuedAt) {
+            const waitSeconds = (now - task.enqueuedAt) / 1000;
+            const workflowId = task.data?.jobRunId || 'unknown';
+            this.metricsService.recordTaskQueueWait(workflowId, bandName, waitSeconds);
+          }
+        }
         const input: ThreadTaskInput[] = tasks.map((task: ThreadTask) => {
           this.activeTasks.set(task.id, task);
           const detail: ThreadTaskInput = {
@@ -224,21 +240,24 @@ export class WorkerThreadService {
     }
   }
 
+  @Timed(MetricsService.METRIC.FILE_COPY)
   async migrateWorkerThread({
     destinationPath,
     sourcePath,
     operationId,
     size,
+    jobRunId,
   }: MigrateFile): Promise<any> {
     return new Promise((resolve, reject) => {
       const operationBand = this.getTaskBand(size);
       const maxBufferSize = this.maxBufferSize;
       this.operationBands.get(operationBand).task.push({
         id: operationId,
-        data: { sourcePath, destinationPath, operationId, size , maxBufferSize},
+        data: { sourcePath, destinationPath, operationId, size, maxBufferSize, jobRunId },
         Operation: ThreadOperation.COPY_FILE,
         resolve,
         reject,
+        enqueuedAt: Date.now(),
       });
 
       this.processQueue();

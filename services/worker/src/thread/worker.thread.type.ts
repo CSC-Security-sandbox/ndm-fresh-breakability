@@ -4,6 +4,7 @@ export interface ThreadTask {
     resolve: (value: any) => void;
     reject: (reason?: any) => void;
     id: string;
+    enqueuedAt: number;
 }
 
 export interface WorkerDetails{
@@ -41,9 +42,10 @@ export enum ThreadOperation {
     EXIT = 'EXIT'
 }
 
-export interface MigrateFile{
+export interface MigrateFile {
     sourcePath: string;
     destinationPath: string;
     operationId: string;
-    size: number;    
+    size: number;
+    jobRunId?: string;
 }

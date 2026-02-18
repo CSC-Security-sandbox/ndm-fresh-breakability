@@ -4,11 +4,13 @@ import { EventEmitter } from 'events';
 import { psBaseAclDefinition, psEnableBackupPrivilegeScript } from '../core/migrate/command-execution/win-opeartions/powershell.script';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from 'src/metrics/metrics.service';
 
 interface ShellResult {
     stdout: string;
     stderr: string;
     exitCode: number;
+    queueWaitMs: number;
 }
 
 interface QueuedCommand {
@@ -168,7 +170,8 @@ class PersistentShell extends EventEmitter {
         const result: ShellResult = { 
             stdout: stdout, 
             stderr: stderr, 
-            exitCode: exitCode 
+            exitCode: exitCode,
+            queueWaitMs: 0
         };
         
         // Clean the output buffer more aggressively to prevent state contamination
@@ -186,6 +189,7 @@ class PersistentShell extends EventEmitter {
         const waitTime = (cmd.startTime || cmd.queuedTime) - cmd.queuedTime;
         const executionTime = completionTime - (cmd.startTime || cmd.queuedTime);
         const totalTime = completionTime - cmd.queuedTime;
+        result.queueWaitMs = waitTime;
 
         if (hasError) {
             console.debug(`[PersistentShell:${this.id}] Command failed in ${executionTime}ms (waited: ${waitTime}ms, total: ${totalTime}ms): ${cmd.command.substring(0, 50)}...`);
@@ -366,7 +370,8 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
-        @Inject(LoggerFactory) loggerFactory: LoggerFactory
+        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        private readonly metricsService: MetricsService,
     ) {
         this.shellMonitoringInterval = this.configService.get('shellMonitoring.shellMonitoringInterval');
         this.enableShellMonitoring = this.configService.get('shellMonitoring.enableShellMonitoring');
@@ -427,6 +432,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async replaceShell(index: number, id: string) {
+        this.metricsService.recordShellError('', 'shell_restart');
         await this.addShellAtIndex(index, `${id}-restart-${Date.now()}`);
     }
 
@@ -439,7 +445,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         return shell;
     }
 
-    async executeCommand(command: string, timeout = 20000): Promise<{ stdout: string; stderr: string }> {
+    async executeCommand(command: string, workflowId = '', timeout = 20000): Promise<{ stdout: string; stderr: string }> {
         const target = await this.getHealthyShell();
         const startTime = Date.now();
 
@@ -450,6 +456,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
         if (target.getQueueLength() >= this.maxQueuePerShell) {
             if (this.dropWhenFull) {
                 this.totalErrors++;
+                this.metricsService.recordShellError(workflowId, 'queue_full');
                 throw new Error('Target shell queue full - dropped');
             } else {
                 await new Promise(r => setTimeout(r, 5));
@@ -462,7 +469,10 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
             const res = await target.execute(command, adjustedTimeout);
             const executionTime = Date.now() - startTime;
-            
+
+            // Record accurate shell queue wait time from PersistentShell internal tracking
+            this.metricsService.recordShellQueueWait(workflowId, res.queueWaitMs / 1000);
+
             // Track execution time
             this.executionTimes.push(executionTime);
             // Keep only last 100 execution times for statistics
@@ -473,6 +483,7 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             // Check for errors in the result
             if (res.exitCode !== 0 || res.stderr) {
                 this.totalErrors++;
+                this.metricsService.recordShellError(workflowId, 'command_failed');
                 this.logger.error(`[WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
                 this.logger.error(`[WinShellService] Error: ${res.stderr || 'Exit code: ' + res.exitCode}`);
 
@@ -500,6 +511,10 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             const executionTime = Date.now() - startTime;
             this.logger.error(`[WinShellService] ${isAclOperation ? 'ACL operation' : 'Command'} failed after ${executionTime}ms: ${command.substring(0, 50)}...`);
             this.totalErrors++;
+            // Detect timeout errors and record separately
+            if (err.message?.includes('Command timeout')) {
+                this.metricsService.recordShellTimeout(workflowId);
+            }
             throw err;
         }
     }
@@ -589,6 +604,9 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
             // Additional detailed stats
             const stats = this.getStats();
             const queuedCommands = stats.queues.reduce((sum, queue) => sum + queue.queueLength, 0);
+
+            // Record shell pool status to Prometheus
+            this.metricsService.recordShellPoolStatus(readyShells, busyShells, queuedCommands);
             
             // Calculate execution time statistics
             let avgTime = 0;

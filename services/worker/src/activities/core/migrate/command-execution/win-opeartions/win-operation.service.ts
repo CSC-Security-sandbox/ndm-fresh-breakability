@@ -11,6 +11,7 @@ import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershel
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { Cmd, ErrorType, JobManagerContext, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { MetricsService } from 'src/metrics/metrics.service';
 import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
@@ -37,6 +38,7 @@ export class WinOperationService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly winShellService: WinShellService,
     private readonly redisService: RedisService,
+    private readonly metricsService: MetricsService,
   ) {
     this.logger = loggerFactory.create(WinOperationService.name);
     if(process.platform === 'win32'){
@@ -74,10 +76,11 @@ export class WinOperationService {
   async getAclOperation(
     path: string,
     isSource: boolean,
+    workflowId = '',
   ): Promise<SecurityDescriptor> {
     try {
       const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
-      const output = await this.winShellService.executeCommand(script);
+      const output = await this.winShellService.executeCommand(script, workflowId);
       if (output.stderr) throw new Error(output.stderr);
       return JSON.parse(output.stdout) as SecurityDescriptor;
     } catch (error) {
@@ -96,11 +99,12 @@ export class WinOperationService {
   async setAclOperation(
     targetPath: string,
     acl: SecurityDescriptor,
+    workflowId = '',
   ): Promise<any> {
     try {
       const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
       const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
-      const output = await this.winShellService.executeCommand(script);
+      const output = await this.winShellService.executeCommand(script, workflowId);
       if (output.stderr) throw new Error(output.stderr);
       return output;
     } catch (error) {
@@ -121,14 +125,27 @@ export class WinOperationService {
     errorType,
   }: CommandExecInput): Promise<{ output: StampMetaOutput; errors: string[] }> {
     const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-    let acl: SecurityDescriptor = await this.getAclOperation(sourcePath, true);
+    const workflowId = jobContext?.jobRunId ?? '';
+
+    // 1. Get source ACL (PowerShell Get-Acl)
+    let acl: SecurityDescriptor = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_get_source' },
+      () => this.getAclOperation(sourcePath, true, workflowId),
+    );
     this.logger.debug(`Fetched source ACL for ${sourcePath}: ${JSON.stringify(acl)}`);
+
+    // 2. SID mapping (Redis lookups)
     if (jobContext.jobConfig?.options?.isIdentityMappingAvailable) {
       this.logger.log(
         'Mapping SID to target: ' +
         jobContext.jobConfig?.options?.isIdentityMappingAvailable,
       );
-      acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
+      acl = await this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_sid_mapping' },
+        () => this.mapSIDToTarget(acl, jobContext.jobRunId),
+      );
     }
     const errors: string[] = [];
     if (acl.Owner === 'Invalid') {
@@ -157,7 +174,13 @@ export class WinOperationService {
         return true;
       });
     }
-    const result = await this.setAclOperation(targetPath, acl);
+
+    // 3. Set target ACL (PowerShell Set-FileSecurityFast)
+    const result = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_set_target' },
+      () => this.setAclOperation(targetPath, acl, workflowId),
+    );
 
     if (result?.stdout && result.stdout.includes('unresolved_sids')) {
       const unresolved_sids = JSON.parse(result.stdout)?.unresolved_sids;
@@ -170,14 +193,21 @@ export class WinOperationService {
       }
     }
 
-    let targetAcl: SecurityDescriptor = await this.getAclOperation(
-      targetPath,
-      false,
+    // 4. Get target ACL (PowerShell Get-Acl for validation)
+    let targetAcl: SecurityDescriptor = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_get_target' },
+      () => this.getAclOperation(targetPath, false, workflowId),
     );
 
     this.logger.debug(`Fetched target ACL for ${targetPath}: ${JSON.stringify(targetAcl)}`);
 
-    const validation = await this.validateAclOperation(acl, targetAcl);
+    // 5. Validate ACL (compare source vs target)
+    const validation = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_validate' },
+      () => this.validateAclOperation(acl, targetAcl),
+    );
     if (validation.inValid.length > 0)
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
     command.ops[OPS_CMD.STAMP_META].params.sidMap = {

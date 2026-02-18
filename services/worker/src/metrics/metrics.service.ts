@@ -12,6 +12,7 @@ import {
   collectDefaultMetrics,
   Counter,
   Gauge,
+  Histogram,
   Pushgateway,
   Registry,
 } from 'prom-client';
@@ -22,6 +23,11 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import * as ping from 'ping';
+
+/** Metric or spec accepted by runWithTiming. */
+export type RunWithTimingMetricOrSpec =
+  | string
+  | { category: string; phase: string };
 
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
@@ -119,10 +125,92 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     registers: [this.registry],
   });
 
+  // Total files successfully migrated (copy completed) per workflow.
+  private readonly filesMigratedCounter = new Counter({
+    name: 'worker_files_migrated_total',
+    help: 'Total number of files successfully migrated (copy + checksum completed). Labels: worker_id, workflow_id.',
+    labelNames: ['worker_id', 'workflow_id'],
+    registers: [this.registry],
+  });
+
   private readonly networkLatencyGauge = new Gauge({
     name: 'worker_network_latency',
     help: 'Network latency to control plane in milliseconds',
     labelNames: ['worker_id', 'control_plane_ip', 'metric_type'],
+    registers: [this.registry],
+  });
+
+  // Workflow-level: one histogram for all optional operations (copy+checksum, stamp meta, copy dir). operation label distinguishes. Only when additionalMetrics is true.
+  private readonly additionalOperationDurationHistogram = new Histogram({
+    name: 'worker_additional_operation_duration_seconds',
+    help: 'Duration of optional operations (copy+checksum, stamp meta, copy dir). Labels: worker_id, workflow_id, operation. Collected when ADDITIONAL_METRICS=true.',
+    labelNames: ['worker_id', 'workflow_id', 'operation'],
+    buckets: [0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+    registers: [this.registry],
+  });
+
+  // Stamping phase duration per workflow (acl, preserve_time, stamp_time, gid_uid, permissions).
+  private readonly stampPhaseDurationHistogram = new Histogram({
+    name: 'worker_stamp_phase_duration_seconds',
+    help: 'Duration of each stamping phase per workflow. Labels: worker_id, workflow_id, phase.',
+    labelNames: ['worker_id', 'workflow_id', 'phase'],
+    buckets: [0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+    registers: [this.registry],
+  });
+
+  // Copy phase duration per workflow (copy_and_source_checksum, checksum_target).
+  private readonly copyPhaseDurationHistogram = new Histogram({
+    name: 'worker_copy_phase_duration_seconds',
+    help: 'Duration of copy phases per workflow. Labels: worker_id, workflow_id, phase.',
+    labelNames: ['worker_id', 'workflow_id', 'phase'],
+    buckets: [0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+    registers: [this.registry],
+  });
+
+  // Task queue wait time (enqueue to thread start) per workflow and band.
+  // Uses Gauge because Pushgateway doesn't reliably expose histogram _sum/_count.
+  private readonly taskQueueWaitGauge = new Gauge({
+    name: 'worker_task_queue_wait_seconds',
+    help: 'Last observed task queue wait time in seconds. Labels: worker_id, workflow_id, band_name.',
+    labelNames: ['worker_id', 'workflow_id', 'band_name'],
+    registers: [this.registry],
+  });
+
+
+
+  // --- Shell Pool Metrics ---
+
+  // Shell pool health snapshot (available, busy, queue_depth). Pool-wide gauge, no workflow_id.
+  private readonly shellPoolStatusGauge = new Gauge({
+    name: 'worker_shell_pool_status',
+    help: 'Shell pool status snapshot. Labels: worker_id, status (available|busy|queue_depth).',
+    labelNames: ['worker_id', 'status'],
+    registers: [this.registry],
+  });
+
+  // Shell queue wait time: how long a command sat in the per-shell queue before execution started.
+  // Uses a Gauge (not Histogram) because Pushgateway doesn't reliably expose _sum/_count,
+  // and histogram_quantile fails on pushed histogram buckets.
+  private readonly shellQueueWaitGauge = new Gauge({
+    name: 'worker_shell_queue_wait_seconds',
+    help: 'Last observed shell queue wait time in seconds. Labels: worker_id, workflow_id.',
+    labelNames: ['worker_id', 'workflow_id'],
+    registers: [this.registry],
+  });
+
+  // Shell errors counter by error type.
+  private readonly shellErrorsCounter = new Counter({
+    name: 'worker_shell_errors_total',
+    help: 'Total shell command errors. Labels: worker_id, workflow_id, error_type (command_failed|queue_full|health_check_failed).',
+    labelNames: ['worker_id', 'workflow_id', 'error_type'],
+    registers: [this.registry],
+  });
+
+  // Shell command timeouts counter.
+  private readonly shellTimeoutsCounter = new Counter({
+    name: 'worker_shell_timeouts_total',
+    help: 'Total shell command timeouts. Labels: worker_id, workflow_id.',
+    labelNames: ['worker_id', 'workflow_id'],
     registers: [this.registry],
   });
 
@@ -567,6 +655,116 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       worker_id: this.workerId,
       error_type: errorType,
     });
+  }
+
+  /** Metric keys for workflow-level timing. */
+  public static readonly METRIC = {
+    FILE_COPY: 'file_copy',
+    STAMP_META: 'stamp_meta',
+    COPY_DIR: 'copy_dir',
+  } as const;
+
+  /** All optional workflow/detailed metrics are gated by this single config (ADDITIONAL_METRICS env). */
+  public shouldRecordAdditionalMetrics(): boolean {
+    const value = this.configService.get('worker.metrics.additionalMetrics');
+    return String(value).toLowerCase() === 'true';
+  }
+
+  private recordTimingDuration(workflowId: string, metricOrSpec: RunWithTimingMetricOrSpec, startMs: number, endMs: number): void {
+    const wfId = workflowId?.trim() || 'unknown';
+    const labels = { worker_id: this.workerId, workflow_id: wfId };
+    const durationSeconds = (endMs - startMs) / 1000;
+    if (typeof metricOrSpec === 'object') {
+      const spec = metricOrSpec as { category: string; phase?: string };
+      if (spec.category === 'stamp_phase' && spec.phase) {
+        this.stampPhaseDurationHistogram.observe({ ...labels, phase: spec.phase }, durationSeconds);
+      }
+    } else {
+      this.additionalOperationDurationHistogram.observe({ ...labels, operation: metricOrSpec }, durationSeconds);
+    }
+  }
+
+  /**
+   * Runs fn(); when ADDITIONAL_METRICS is enabled, measures duration and records.
+   */
+  public async runWithTiming<T>(
+    workflowId: string,
+    metricOrSpec: RunWithTimingMetricOrSpec,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.shouldRecordAdditionalMetrics()) return fn();
+    const start = Date.now();
+    const result = await fn();
+    const end = Date.now();
+    this.recordTimingDuration(workflowId, metricOrSpec, start, end);
+    return result;
+  }
+
+  /** Record copy phase results: both sub-phase durations + increment files-migrated counter. */
+  public recordCopyPhaseResults(
+    workflowId: string,
+    copyStreamMs: number,
+    checksumTargetMs: number,
+  ): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    const wfId = workflowId?.trim() || 'unknown';
+    this.copyPhaseDurationHistogram.observe(
+      { worker_id: this.workerId, workflow_id: wfId, phase: 'copy_and_source_checksum' },
+      (copyStreamMs ?? 0) / 1000,
+    );
+    this.copyPhaseDurationHistogram.observe(
+      { worker_id: this.workerId, workflow_id: wfId, phase: 'checksum_target' },
+      (checksumTargetMs ?? 0) / 1000,
+    );
+    this.filesMigratedCounter.inc({ worker_id: this.workerId, workflow_id: wfId });
+  }
+
+  // --- Shell Pool Metric Recording Methods ---
+
+  /** Record shell pool health snapshot (call periodically from shell monitoring). */
+  public recordShellPoolStatus(available: number, busy: number, queueDepth: number): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    this.shellPoolStatusGauge.set({ worker_id: this.workerId, status: 'available' }, available);
+    this.shellPoolStatusGauge.set({ worker_id: this.workerId, status: 'busy' }, busy);
+    this.shellPoolStatusGauge.set({ worker_id: this.workerId, status: 'queue_depth' }, queueDepth);
+  }
+
+  /** Record how long a shell command waited in the queue before execution. */
+  public recordShellQueueWait(workflowId: string, waitSeconds: number): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    const wfId = workflowId?.trim() || 'unknown';
+    this.shellQueueWaitGauge.set(
+      { worker_id: this.workerId, workflow_id: wfId },
+      waitSeconds,
+    );
+  }
+
+  /** Record a shell command error. */
+  public recordShellError(workflowId: string, errorType: string): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    const wfId = workflowId?.trim() || 'unknown';
+    this.shellErrorsCounter.inc(
+      { worker_id: this.workerId, workflow_id: wfId, error_type: errorType },
+    );
+  }
+
+  /** Record a shell command timeout. */
+  public recordShellTimeout(workflowId: string): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    const wfId = workflowId?.trim() || 'unknown';
+    this.shellTimeoutsCounter.inc(
+      { worker_id: this.workerId, workflow_id: wfId },
+    );
+  }
+
+  /** Record how long a task waited in the thread queue before a worker picked it up. */
+  public recordTaskQueueWait(workflowId: string, bandName: string, waitSeconds: number): void {
+    if (!this.shouldRecordAdditionalMetrics()) return;
+    const wfId = workflowId?.trim() || 'unknown';
+    this.taskQueueWaitGauge.set(
+      { worker_id: this.workerId, workflow_id: wfId, band_name: bandName },
+      waitSeconds,
+    );
   }
 
   private async collectPingMetrics() {

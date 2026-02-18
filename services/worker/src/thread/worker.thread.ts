@@ -91,6 +91,7 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     writeStream = fs.createWriteStream(target, { flags: flag, highWaterMark: bufferSize });
     let hash = crypto.createHash('sha256');
 
+    const copyStreamStart = Date.now();
     const sourceCheckSum  = await new Promise((resolve, reject) => {
       let errored = false;
 
@@ -126,10 +127,18 @@ export async function smartCopy(source:string, target:string, filesize:number, m
 
       readStream.pipe(writeStream);
     });
+    const copyStreamMs = Date.now() - copyStreamStart;
 
+    const checksumTargetStart = Date.now();
     const targetCheckSum = await calculateChecksum(target);
+    const checksumTargetMs = Date.now() - checksumTargetStart;
     
-    return {sourceChecksum: sourceCheckSum, targetChecksum: targetCheckSum};
+    return {
+      sourceChecksum: sourceCheckSum,
+      targetChecksum: targetCheckSum,
+      copyStreamMs,
+      checksumTargetMs,
+    };
   }catch(error){
     console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
     throw error; 
@@ -148,7 +157,7 @@ parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
         const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize);
-        return { isResolved: true, id: task.id, data: result, Operation: task.Operation };
+        return { isResolved: true, id: task.id, data: { ...result, jobRunId: task.data?.jobRunId }, Operation: task.Operation };
     } catch (error) {
         console.error(`Worker Thread - ${workerData?.threadNumber} - Error processing task ${task.id}:`, error);
         return {  isRejected: true, id: task.id, data: {code: error?.code, message:error?.message }, Operation: task.Operation };

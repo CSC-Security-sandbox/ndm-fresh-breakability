@@ -11,6 +11,7 @@ import { FileType } from "src/activities/types/tasks";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { createDirectory } from "src/activities/utils/directory.utils";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
+import { MetricsService } from "src/metrics/metrics.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
@@ -25,6 +26,7 @@ export class CommandExecService {
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly workerThreadService: WorkerThreadService,
         private readonly stampMetaService: StampMetaService,
+        private readonly metricsService: MetricsService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
@@ -138,10 +140,13 @@ export class CommandExecService {
                 if(targetPathExists)
                     await this.stampMetaService.resetFileAttributes(targetPath);
 
-                // TODO: 
-                const checksums = await this.workerThreadService.migrateWorkerThread({ sourcePath, destinationPath: targetPath, operationId: command.id, size: command.metadata?.size ?? 0
+                const checksums = await this.workerThreadService.migrateWorkerThread({
+                    sourcePath,
+                    destinationPath: targetPath,
+                    operationId: command.id,
+                    size: command.metadata?.size ?? 0,
+                    jobRunId: jobContext.jobRunId,
                 });
-
 
                 output.shouldUpdateItemInfo = true;
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
@@ -178,7 +183,11 @@ export class CommandExecService {
             //TODO: add handling for the symlink to the directory. 
 
             try {
-                await createDirectory(targetPath);
+                await this.metricsService.runWithTiming(
+                    jobContext.jobRunId,
+                    MetricsService.METRIC.COPY_DIR,
+                    () => createDirectory(targetPath),
+                );
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.COMPLETED;
                 output.shouldStampMeta = true;
                 output.shouldUpdateItemInfo = true;
