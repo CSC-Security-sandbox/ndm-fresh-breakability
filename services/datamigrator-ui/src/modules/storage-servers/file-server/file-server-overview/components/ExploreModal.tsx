@@ -75,7 +75,7 @@ const fetchDirectoryContents = async (
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to fetch directories: ${response.status}`);
+    throw new Error(errorData.error || errorData.message || `Failed to fetch directories: ${response.status}`);
   }
 
   const result = await response.json();
@@ -816,6 +816,7 @@ const ExploreModal = ({
             </Button>
             <Button
               onClick={handleConfirmSelection}
+              disabled={isLoading || error !== null || selectedItems.size === 0 || directoryContents.length === 0}
             >
               Confirm Selection
             </Button>

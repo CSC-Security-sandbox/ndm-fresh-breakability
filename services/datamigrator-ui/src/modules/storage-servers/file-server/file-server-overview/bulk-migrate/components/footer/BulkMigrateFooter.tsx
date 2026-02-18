@@ -37,19 +37,19 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
       <Box className="flex justify-end gap-4">
         <Button
           color="secondary"
+          onClick={handleBack}
+          disabled={isFormSubmitting || currentStepIndex === 0}
+          style={{ width: 152 }}
+        >
+          Back
+        </Button>
+        <Button
+          color="secondary"
           onClick={handleCancel}
           disabled={isFormSubmitting}
           style={{ width: 152 }}
         >
           Cancel
-        </Button>
-        <Button
-          color="secondary"
-          onClick={handleBack}
-          disabled={isFormSubmitting}
-          style={{ width: 152 }}
-        >
-          Back
         </Button>
         <BulkMigrateProceedButton />
       </Box>

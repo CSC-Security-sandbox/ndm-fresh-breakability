@@ -20,10 +20,13 @@ import type { MigrationDetailsTableConfigurationType } from "@modules/storage-se
 import {
   findConflictingDestinationDirectoryMapping,
   findConflictingSourceDirectoryMapping,
+  normalizeDirectoryPath,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/TruncatedPathCell";
 import ExploreModal, { useExploreModal, SelectedItemInfo } from "@modules/storage-servers/file-server/file-server-overview/components/ExploreModal";
 import type { VolumeType } from "@/types/app.type";
+import { AddIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
+import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
 
 const Mapping = () => {
   const {
@@ -39,6 +42,7 @@ const Mapping = () => {
     fileServerWithPathsMap,
     mappingToEdit,
     setMappingToEdit,
+    setMigrationDetailsTableConfiguration,
   } = useContext(BulkMigrateContext);
   const { setFieldValue } = mappingStepForm;
   const dispatch = useDispatch();
@@ -175,8 +179,7 @@ const Mapping = () => {
     return configName;
   }, [sourceFileServerDetails]);
 
-  // Protocol options (NFS, SMB) for filtering if needed
-  const protocolOptions = useMemo(() => {
+  const options = useMemo(() => {
     const _options = getOptionsFromArray(
       sourceFileServerDetails?.fileServers?.map((data) => data.protocol) || [
         "NFS",
@@ -241,17 +244,28 @@ const Mapping = () => {
     }
   }, [protocolForm.formState.protocol?.value, setFieldValue, setSelectedMountPathsId, setSelectedReviewIds]);
 
-  // Reset destination path when destination file server changes (skip when change is from Edit prefill)
+  // Reset source directory when Select Source Path changes (skip when change is from Edit prefill; ref is cleared by destination-path effect).
   useEffect(() => {
-    if (isPrefillingFromEditRef.current) {
-      isPrefillingFromEditRef.current = false;
-      return;
-    }
+    if (isPrefillingFromEditRef.current) return;
+    setSourceDirectoryPath("");
+  }, [sourcePathForm.formState.selectedSourcePath?.value]);
+
+  // Reset destination path when destination file server changes (skip when change is from Edit prefill).
+  // Only depend on destinationFileServer value so we don't run on every form update (e.g. when user selects path – that would reset the path).
+  useEffect(() => {
+    if (isPrefillingFromEditRef.current) return;
     destinationForm.resetForm({
       ...destinationForm.formState,
       destinationPath: "" as any,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit destinationForm: it changes when path is selected and would reset the path
   }, [destinationForm.formState.destinationFileServer?.value]);
+
+  // Reset destination directory when Select Destination Path changes (skip when change is from Edit prefill).
+  useEffect(() => {
+    if (isPrefillingFromEditRef.current) return;
+    setDestinationDirectoryPath("");
+  }, [destinationForm.formState.destinationPath?.value]);
 
   // Prefill form when user clicks Edit on a mapping row
   useEffect(() => {
@@ -261,13 +275,7 @@ const Mapping = () => {
     sourcePathForm.resetForm({
       selectedSourcePath: pathName ? { value: pathName, label: pathName } : "",
     });
-    setSourceDirectoryPath(
-      mappingToEdit.sourceDirectoryPath === "-" ||
-        mappingToEdit.sourceDirectoryPath === "" ||
-        !mappingToEdit.sourceDirectoryPath
-        ? ""
-        : mappingToEdit.sourceDirectoryPath
-    );
+    setSourceDirectoryPath(normalizeDirectoryPath(mappingToEdit.sourceDirectoryPath));
     const destServerId = mappingToEdit.destinationFileServerDetails?.destinationFileServerId ?? "";
     const destServerName = mappingToEdit.destinationFileServerDetails?.destinationFileServerName ?? "";
     const destPathId = mappingToEdit.destinationPathDetails?.destinationPathId ?? "";
@@ -280,17 +288,35 @@ const Mapping = () => {
         ? { value: destPathId, label: destPathName }
         : ("" as any),
     });
-    setDestinationDirectoryPath(
-      mappingToEdit.destinationDirectoryPath === "-" ||
-        mappingToEdit.destinationDirectoryPath === "" ||
-        !mappingToEdit.destinationDirectoryPath
-        ? ""
-        : mappingToEdit.destinationDirectoryPath
-    );
+    setDestinationDirectoryPath(normalizeDirectoryPath(mappingToEdit.destinationDirectoryPath));
     setMappingToEdit(null);
-  }, [mappingToEdit, setMappingToEdit]);
+  }, [
+    mappingToEdit,
+    setMappingToEdit,
+    sourcePathForm,
+    destinationForm,
+    setSourceDirectoryPath,
+    setDestinationDirectoryPath,
+  ]);
 
-  // Source path, destination file server, and destination path required; directory paths optional (stored as "" when not set; displayed as "(whole export)" when empty)
+  // Clear prefill ref after all reset effects have run (so they can skip in the post-prefill render and not clear directory state).
+  useEffect(() => {
+    if (!mappingToEdit) {
+      isPrefillingFromEditRef.current = false;
+    }
+  }, [mappingToEdit]);
+
+  // Destination file server + destination path only (for "+ Add Destination Directory" – no source path required)
+  const canAddDestinationDirectory = useMemo(() => {
+    const destServer = destinationForm.formState.destinationFileServer?.value ?? "";
+    const destPath = destinationForm.formState.destinationPath?.value ?? "";
+    return !!(destServer && destPath);
+  }, [
+    destinationForm.formState.destinationFileServer?.value,
+    destinationForm.formState.destinationPath?.value,
+  ]);
+
+  // Source path, destination file server, and destination path required for adding a mapping; directory paths optional
   const canAddMapping = useMemo(() => {
     const sp = sourcePathForm.formState.selectedSourcePath?.value ?? "";
     const destServer = destinationForm.formState.destinationFileServer?.value ?? "";
@@ -314,12 +340,10 @@ const Mapping = () => {
       currentSourceDirPath
     );
     if (conflictingRow) {
-      const existingDisplay =
-        conflictingRow.sourceDirectoryPath === "-" || !conflictingRow.sourceDirectoryPath
-          ? "(whole export)"
-          : conflictingRow.sourceDirectoryPath;
-      const currentDisplay =
-        currentSourceDirPath === "-" ? "(whole export)" : currentSourceDirPath;
+      const currentNormalized = normalizeDirectoryPath(currentSourceDirPath);
+      const existingNormalized = normalizeDirectoryPath(conflictingRow.sourceDirectoryPath);
+      const currentDisplay = currentNormalized === "" ? "(whole export)" : currentNormalized;
+      const existingDisplay = existingNormalized === "" ? "(whole export)" : existingNormalized;
       dispatch(
         setModalProps({
           isOpen: true,
@@ -358,13 +382,12 @@ const Mapping = () => {
       currentDestDirPath
     );
     if (conflictingDestRow) {
-      const existingDisplay =
-        conflictingDestRow.destinationDirectoryPath === "-" ||
-        !conflictingDestRow.destinationDirectoryPath
-          ? "(whole export)"
-          : conflictingDestRow.destinationDirectoryPath;
-      const currentDisplay =
-        currentDestDirPath === "-" ? "(whole export)" : currentDestDirPath;
+      const currentNormalized = normalizeDirectoryPath(currentDestDirPath);
+      const existingNormalized = normalizeDirectoryPath(
+        conflictingDestRow.destinationDirectoryPath
+      );
+      const currentDisplay = currentNormalized === "" ? "(whole export)" : currentNormalized;
+      const existingDisplay = existingNormalized === "" ? "(whole export)" : existingNormalized;
       dispatch(
         setModalProps({
           isOpen: true,
@@ -426,10 +449,9 @@ const Mapping = () => {
       migrationJobCount: "",
       cutoverJobCount: "",
     };
-    setFieldValue("migrationDetailsTableConfigurationValue", [
-      ...currentRows,
-      newRow,
-    ]);
+    const nextRows = [...currentRows, newRow];
+    setFieldValue("migrationDetailsTableConfigurationValue", nextRows);
+    setMigrationDetailsTableConfiguration(nextRows);
     setFieldValue("selectedMountPathsId", [
       ...(mappingStepForm.values.selectedMountPathsId ?? []),
       String(newRow.id),
@@ -546,63 +568,73 @@ const Mapping = () => {
           {/* Row 3 - both Add links at same level; min-w-0 + truncation prevent long paths from overlapping */}
           <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] overflow-hidden">
             {!sourceDirectoryPath ? (
-              <Text
-                component="span"
-                className={`text-sm ${sourcePathForm.formState.selectedSourcePath?.value ? "cursor-pointer hover:underline" : "cursor-not-allowed opacity-60"}`}
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 text-sm border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded ${sourcePathForm.formState.selectedSourcePath?.value ? "cursor-pointer hover:underline" : "cursor-not-allowed opacity-60"}`}
                 style={{
                   color: sourcePathForm.formState.selectedSourcePath?.value
                     ? "#0067c5"
                     : "#6b7280",
                 }}
+                aria-label="Add source directory"
+                disabled={!sourcePathForm.formState.selectedSourcePath?.value}
                 onClick={
                   sourcePathForm.formState.selectedSourcePath?.value
                     ? openSourceExploreModal
                     : undefined
                 }
               >
-                + Add Source Directory
-              </Text>
+                <AddIcon size={16} aria-hidden />
+                Add Source Directory
+              </button>
             ) : (
               <>
                 <Text className="text-sm font-semibold text-gray-900">Source Directory</Text>
                 <TruncatedPathCell value={sourceDirectoryPath} />
-                <Text
-                  component="span"
-                  className="cursor-pointer text-sm hover:underline block mt-1"
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline mt-1 border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
                   style={{ color: "#0067c5" }}
+                  aria-label="Edit source directory"
                   onClick={openSourceExploreModal}
                 >
-                  - Edit Source Directory
-                </Text>
+                  <EditIcon size={16} aria-hidden />
+                  Edit Source Directory
+                </button>
               </>
             )}
           </Box>
           <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] md:pl-14 w-full max-w-[360px] overflow-hidden">
             {!destinationDirectoryPath ? (
-              <Text
-                component="span"
-                className={`text-sm ${canAddMapping ? "cursor-pointer hover:underline" : "cursor-not-allowed opacity-60"}`}
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 text-sm border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded ${canAddDestinationDirectory ? "cursor-pointer hover:underline" : "cursor-not-allowed opacity-60"}`}
                 style={{
-                  color: canAddMapping ? "#0067c5" : "#6b7280",
+                  color: canAddDestinationDirectory ? "#0067c5" : "#6b7280",
                 }}
+                aria-label="Add destination directory"
+                disabled={!canAddDestinationDirectory}
                 onClick={
-                  canAddMapping ? openDestinationExploreModal : undefined
+                  canAddDestinationDirectory ? openDestinationExploreModal : undefined
                 }
               >
-                + Add Destination Directory
-              </Text>
+                <AddIcon size={16} aria-hidden />
+                Add Destination Directory
+              </button>
             ) : (
               <>
                 <Text className="text-sm font-semibold text-gray-900">Destination Directory</Text>
                 <TruncatedPathCell value={destinationDirectoryPath} />
-                <Text
-                  component="span"
-                  className="cursor-pointer text-sm hover:underline block mt-1"
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline mt-1 border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
                   style={{ color: "#0067c5" }}
+                  aria-label="Edit destination directory"
                   onClick={openDestinationExploreModal}
                 >
-                  - Edit Destination Directory
-                </Text>
+                  <EditIcon size={16} aria-hidden />
+                  Edit Destination Directory
+                </button>
               </>
             )}
           </Box>
@@ -614,7 +646,10 @@ const Mapping = () => {
             disabled={!canAddMapping}
             onClick={handleAddMapping}
           >
-            + Add Mapping
+            <Box className="inline-flex items-center gap-1.5">
+              <AddIcon size={20} aria-hidden />
+              Add Mapping
+            </Box>
           </Button>
         </Box>
 
