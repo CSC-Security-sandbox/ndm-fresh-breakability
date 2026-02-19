@@ -11,7 +11,8 @@ import {
     isContentUpdate,
     isMetaUpdated,
     getErrorCode,
-    formatDate
+    formatDate,
+    basePrefix
 } from './utils';
 import { JobContext, JobContextFactory } from "@netapp-cloud-datamigrate/jobs-lib";
 import { FileType } from '../types/tasks';
@@ -541,6 +542,53 @@ describe("formatDate", () => {
     });
 
 
+});
+
+describe('basePrefix', () => {
+    const originalPlatform = process.platform;
+    const originalBasePath = process.env.BASE_WORKING_PATH;
+
+    const setPlatform = (platform: NodeJS.Platform) => {
+        Object.defineProperty(process, 'platform', {
+            value: platform,
+            configurable: true,
+        });
+    };
+
+    beforeEach(() => {
+        process.env.BASE_WORKING_PATH = '/var/work';
+    });
+
+    afterEach(() => {
+        if (originalBasePath) {
+            process.env.BASE_WORKING_PATH = originalBasePath;
+        } else {
+            delete process.env.BASE_WORKING_PATH;
+        }
+        Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+        });
+    });
+
+    it('should build POSIX paths without directory segments', () => {
+        setPlatform('linux');
+        const result = basePrefix('job-123', 'path-456');
+        expect(result).toBe('/var/work/job-123/path-456');
+    });
+
+    it('should append sanitized directory paths on POSIX systems', () => {
+        setPlatform('linux');
+        const result = basePrefix('job-123', 'path-456', '/nested/dir');
+        expect(result).toBe('/var/work/job-123/path-456/nested/dir');
+    });
+
+    it('should convert separators on Windows paths', () => {
+        process.env.BASE_WORKING_PATH = 'C\\work';
+        setPlatform('win32');
+        const result = basePrefix('job-789', 'path-000', '/nested/dir');
+        expect(result).toBe('C\\work\\job-789\\path-000\\nested\\dir');
+    });
 });
 
 

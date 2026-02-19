@@ -141,7 +141,9 @@ export class JobRunService {
           id: true,
           jobType: true,
           sourcePath: volumeSearch,
+          sourceDirectoryPath: true, 
           destinationPath: volumeSearch,
+          destinationDirectoryPath: true,
         },
         options: {
           preserveAccessTime: true,
@@ -172,6 +174,7 @@ export class JobRunService {
         sourceServer: {
           protocol: jobRun?.jobConfig?.sourcePath?.fileServer?.protocol,
           path: jobRun?.jobConfig?.sourcePath?.volumePath,
+          directoryPath: jobRun?.jobConfig?.sourceDirectoryPath,
           serverName:
             jobRun?.jobConfig?.sourcePath?.fileServer?.fileServerName,
           configName: jobRun?.jobConfig?.sourcePath?.fileServer?.config?.configName,
@@ -179,6 +182,7 @@ export class JobRunService {
         destinationServer: {
           protocol: jobRun?.jobConfig?.destinationPath?.fileServer?.protocol,
           path: jobRun?.jobConfig?.destinationPath?.volumePath,
+          directoryPath: jobRun?.jobConfig?.destinationDirectoryPath,
           serverName:
             jobRun?.jobConfig?.destinationPath?.fileServer?.fileServerName,
             configName: jobRun?.jobConfig?.destinationPath?.fileServer?.config?.configName,

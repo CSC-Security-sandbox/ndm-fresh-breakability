@@ -20,6 +20,8 @@ export const createBulkCutOverPayload = (
     return {
       sourcePathId: path?.sourcePath?.id,
       destinationPathId: [path?.destinationPath?.id],
+      sourceDirectoryPath: path?.sourceDirectoryPath,
+      destinationDirectoryPath: path?.destinationDirectoryPath,
     };
   });
   return { cutoverConfig };

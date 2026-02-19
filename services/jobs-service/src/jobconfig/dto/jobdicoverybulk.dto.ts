@@ -241,6 +241,16 @@ export class MigrateConfig {
   @ArrayUnique()
   @IsUUID("all", { each: true })
   destinationPathId: string[];
+
+  @ApiProperty({ description: "Source directory path to migrate (optional)", required: false })
+  @IsOptional()
+  @IsString()
+  sourceDirectoryPath?: string;
+
+  @ApiProperty({ description: "Destination directory path to migrate to (optional)", required: false })
+  @IsOptional()
+  @IsString()
+  destinationDirectoryPath?: string;
 }
 
 export class JobConfigMigrateBulk {

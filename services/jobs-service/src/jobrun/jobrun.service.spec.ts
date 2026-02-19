@@ -891,6 +891,7 @@ describe("JobRunService", () => {
 
   describe("getJobConfig", () => {
     it("should retrieve and process job configuration without targetPathId", async () => {
+      const sourceDirectoryPath = "/source/directory/path";
       const mockJobConfig = {
         id: "123",
         sourcePath: {
@@ -930,6 +931,7 @@ describe("JobRunService", () => {
           },
         },
         targetPath: null,
+        sourceDirectoryPath,
         jobType: "DATA_TRANSFER",
       };
 
@@ -966,6 +968,7 @@ describe("JobRunService", () => {
             protocolVersion: "2",
             isValidPath: undefined,
             isDisabled: undefined,
+            directoryPath: sourceDirectoryPath,
           },
         },
         preserveAccessTime: undefined,
@@ -980,6 +983,8 @@ describe("JobRunService", () => {
     });
 
     it("should retrieve and process job configuration with targetPathId", async () => {
+      const sourceDirectoryPath = "/source/directory/path";
+      const targetDirectoryPath = "/target/directory/path";
       const mockJobConfig = {
         id: "123",
         sourcePath: {
@@ -1053,6 +1058,8 @@ describe("JobRunService", () => {
           },
         },
         targetPathId: "target-id",
+        sourceDirectoryPath,
+        targetDirectoryPath,
         jobType: "DATA_TRANSFER",
       };
 
@@ -1089,6 +1096,7 @@ describe("JobRunService", () => {
             protocolVersion: "2",
             isValidPath: undefined,
             isDisabled: undefined,
+            directoryPath: sourceDirectoryPath,
           },
           targetCredential: {
             path: "/target/path",
@@ -1101,6 +1109,7 @@ describe("JobRunService", () => {
             protocolVersion: "2",
             isValidPath: undefined,
             isDisabled: undefined,
+            directoryPath: targetDirectoryPath,
           },
         },
         workers: ["worker-2"],
@@ -2120,6 +2129,7 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "createQueryBuilder").mockReturnValue({
         where: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue(mockJobConfigs),
       } as any);
 

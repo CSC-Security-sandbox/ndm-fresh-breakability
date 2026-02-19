@@ -69,8 +69,8 @@ export class SyncService {
 
     executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext ): Promise<SyncTaskOutput> => {
         const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
-        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId);
-        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId);
+        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
+        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
         const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
 
         let offset = 0;

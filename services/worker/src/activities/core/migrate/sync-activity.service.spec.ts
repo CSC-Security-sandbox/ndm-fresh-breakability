@@ -19,12 +19,21 @@ jest.mock('@temporalio/activity', () => ({
 }));
 
 // Mock utils functions
-jest.mock('src/activities/utils/utils', () => ({
-    basePrefix: jest.fn((jobRunId, pathId) => `/base/${jobRunId}/${pathId}`),
-    isFatalError: jest.fn((error) => error === 'FATAL'),
-    isSourceFatalError: jest.fn((error) => error === 'SOURCE_FATAL'),
-    isTransientError: jest.fn((error) => error === 'TRANSIENT'),
-}));
+jest.mock('src/activities/utils/utils', () => {
+    const basePrefix = jest.fn((jobRunId, pathId, directoryPath?: string) => {
+        const sanitizedDir = directoryPath ? directoryPath.replace(/^\/+/g, '') : '';
+        return sanitizedDir
+            ? `/base/${jobRunId}/${pathId}/${sanitizedDir}`
+            : `/base/${jobRunId}/${pathId}`;
+    });
+
+    return {
+        basePrefix,
+        isFatalError: jest.fn((error) => error === 'FATAL'),
+        isSourceFatalError: jest.fn((error) => error === 'SOURCE_FATAL'),
+        isTransientError: jest.fn((error) => error === 'TRANSIENT'),
+    };
+});
 
 describe('SyncService', () => {
     let service: SyncService;
@@ -60,6 +69,10 @@ describe('SyncService', () => {
             publishToTaskStream: jest.fn(),
             setTask: jest.fn(),
             deleteTask: jest.fn(),
+            jobConfig: {
+                sourceDirectoryPath: '/source-dir',
+                destinationDirectoryPath: '/target-dir',
+            },
         };
 
         redisService = {
@@ -488,8 +501,8 @@ describe('SyncService', () => {
                 expect(result.errors.source).toContain('E8DOT3_COLLISION');
                 expect(commandExecService.executeCommand).toHaveBeenCalledWith(
                     expect.objectContaining({
-                        sourcePath: `/base/job-collision-123/source-collision/LONGLO~1/test.txt`,
-                        targetPath: `/base/job-collision-123/target-collision/LONGLO~1/test.txt`,
+                        sourcePath: `/base/job-collision-123/source-collision/source-dir/LONGLO~1/test.txt`,
+                        targetPath: `/base/job-collision-123/target-collision/target-dir/LONGLO~1/test.txt`,
                         command: collisionCommand,
                         errorType: 'TRANSIENT_ERROR' // Should be TRANSIENT_ERROR due to max retries
                     })
@@ -546,8 +559,8 @@ describe('SyncService', () => {
                 expect(result.errors.source).toContain('E8DOT3_COLLISION');
                 expect(commandExecService.executeCommand).toHaveBeenCalledWith(
                     expect.objectContaining({
-                        sourcePath: `/base/job-collision-456/source-collision-2/SHORTF~1/document.docx`,
-                        targetPath: `/base/job-collision-456/target-collision-2/SHORTF~1/document.docx`,
+                        sourcePath: `/base/job-collision-456/source-collision-2/source-dir/SHORTF~1/document.docx`,
+                        targetPath: `/base/job-collision-456/target-collision-2/target-dir/SHORTF~1/document.docx`,
                         command: collisionCommand,
                         errorType: 'RECOVERABLE_ERROR' // Should be RECOVERABLE_ERROR under max retries
                     })
@@ -605,8 +618,8 @@ describe('SyncService', () => {
                 expect(result.errors.target).toEqual([]);
                 expect(commandExecService.executeCommand).toHaveBeenCalledWith(
                     expect.objectContaining({
-                        sourcePath: `/base/job-success-123/source-success/LONGLO~1/success.txt`,
-                        targetPath: `/base/job-success-123/target-success/LONGLO~1/success.txt`,
+                        sourcePath: `/base/job-success-123/source-success/source-dir/LONGLO~1/success.txt`,
+                        targetPath: `/base/job-success-123/target-success/target-dir/LONGLO~1/success.txt`,
                         command: successCommand,
                         errorType: 'RECOVERABLE_ERROR'
                     })

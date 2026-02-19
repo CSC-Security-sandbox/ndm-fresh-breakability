@@ -569,4 +569,10 @@
         </rollback>
     </changeSet>
 
+   <changeSet id="20260209_01_alter_jobconfig_add_directory_paths.sql" author="ss27372">
+      <sqlFile path="liquibase/20260209_01_alter_jobconfig_add_directory_paths.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260209_01_alter_jobconfig_remove_directory_paths.sql"/>
+      </rollback>
+   </changeSet> 
 </databaseChangeLog>

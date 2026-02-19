@@ -1,0 +1,1 @@
+ALTER TABLE jobconfig ADD COLUMN IF NOT EXISTS source_directory_path text NULL, ADD COLUMN IF NOT EXISTS target_directory_path text NULL;

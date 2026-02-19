@@ -32,7 +32,9 @@ export interface JobConfigBulkCutoverRes {
 }
 export type FlattenedCutoverConfig = {
     sourcePathId: string;
+    sourceDirectoryPath?: string;
     destinationPathId: string;
+    destinationDirectoryPath?: string;
 };
 
 export type SpeedTestJobRun = {

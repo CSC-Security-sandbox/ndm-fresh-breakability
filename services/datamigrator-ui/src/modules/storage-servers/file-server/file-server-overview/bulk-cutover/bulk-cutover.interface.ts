@@ -36,6 +36,8 @@ export interface CreateBulkCutOverApiPayloadType {
   cutoverConfig: {
     sourcePathId: string;
     destinationPathId: string[];
+    sourceDirectoryPath?: string;
+    destinationDirectoryPath?: string;
   }[];
 }
 

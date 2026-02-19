@@ -211,6 +211,8 @@ describe("JobRunService", () => {
     });
     it("should include lastRefreshed in the response", async () => {
       const jobId = "12345";
+      const sourceDirectoryPath = "/reports/source/dir";
+      const destinationDirectoryPath = "/reports/destination/dir";
       const mockJobRun = {
         id: jobId,
         startTime: new Date(),
@@ -218,6 +220,7 @@ describe("JobRunService", () => {
         jobConfig: {
           id: "configId",
           jobType: JobType.Migrate,
+          sourceDirectoryPath,
           sourcePath: {
             fileServer: {
               protocol: "http",
@@ -225,6 +228,7 @@ describe("JobRunService", () => {
             },
             volumePath: "/source",
           },
+          destinationDirectoryPath,
           destinationPath: {
             fileServer: {
               protocol: "ftp",
@@ -256,6 +260,10 @@ describe("JobRunService", () => {
       const result = await service.getJobStatsId(jobId);
 
       expect(result.lastRefreshed).toEqual(mockJobStatsSummary.lastRefreshed);
+      expect(result.jobConfig.sourceServer.directoryPath).toBe(sourceDirectoryPath);
+      expect(result.jobConfig.destinationServer.directoryPath).toBe(
+        destinationDirectoryPath
+      );
     });
     const jobId = "12345";
 

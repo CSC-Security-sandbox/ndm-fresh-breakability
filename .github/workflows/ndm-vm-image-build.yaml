@@ -324,9 +324,9 @@ jobs:
           # Upload Docker image tar
           if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
             if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar"
             else
-              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-${BUILD_VERSION}.tar"
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar"
             fi
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
               TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
@@ -343,9 +343,9 @@ jobs:
           # Upload Helm chart tgz
           if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tgz ]; then
             if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/helm/datamigrator-helmchart-${BUILD_VERSION}.tgz"
             else
-              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-${BUILD_VERSION}.tgz"
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/helm/datamigrator-helmchart-${BUILD_VERSION}.tgz"
             fi
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
               TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
@@ -859,8 +859,8 @@ jobs:
           UPGRADE="upgrade-${BUILD_VERSION}"
 
           mkdir -p "${UPGRADE}"/{docker,helm,worker}
-          cp ./artifacts/docker/datamigrator-${BUILD_VERSION}.tar  "${UPGRADE}/docker/datamigrator-${BUILD_VERSION}.tar"
-          cp ./artifacts/helm/datamigrator-${BUILD_VERSION}.tgz    "${UPGRADE}/helm/datamigrator-${BUILD_VERSION}.tgz"
+          cp ./artifacts/docker/datamigrator-${BUILD_VERSION}.tar  "${UPGRADE}/docker/datamigrator-images-${BUILD_VERSION}.tar"
+          cp ./artifacts/helm/datamigrator-${BUILD_VERSION}.tgz    "${UPGRADE}/helm/datamigrator-helmchart-${BUILD_VERSION}.tgz"
 
           # Place prepared worker packages into the bundle
           LINUX_WORKER="datamigrator-worker-linux-${BUILD_VERSION}"
@@ -872,8 +872,8 @@ jobs:
           # Checksums
           cd "${UPGRADE}"
           sha256sum \
-            "docker/datamigrator-${BUILD_VERSION}.tar" \
-            "helm/datamigrator-${BUILD_VERSION}.tgz" \
+            "docker/datamigrator-images-${BUILD_VERSION}.tar" \
+            "helm/datamigrator-helmchart-${BUILD_VERSION}.tgz" \
             "worker/datamigrator-worker-linux-${BUILD_VERSION}.tar.gz" \
             "worker/datamigrator-worker-windows-${BUILD_VERSION}.zip" \
             "upgrade.sh" \

@@ -74,8 +74,8 @@ export class FetchFailedOperationsActivity {
 
       // Extract settings once - these will be passed to all subsequent activities
       const settings: RetryScanSettings = {
-        sourcePrefix: basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
-        targetPrefix: basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId),
+        sourcePrefix: basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId, jobContext.jobConfig.sourceDirectoryPath),
+        targetPrefix: basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId, jobContext.jobConfig.destinationDirectoryPath),
         skipFile: jobContext.jobConfig.options?.skipsFilesModifiedInLast ?? '',
         excludePatterns: jobContext.jobConfig.options?.excludeFilePattern
           ? jobContext.jobConfig.options.excludeFilePattern.split(",")

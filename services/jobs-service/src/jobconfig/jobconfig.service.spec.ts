@@ -1252,11 +1252,15 @@ describe("JobConfigService", () => {
   });
 
   it("should create bulk migrate job configs successfully", async () => {
+    const sourceDirectoryPath = "/mnt/source/share";
+    const destinationDirectoryPath = "/mnt/destination/share";
     const mockBulkMigrate = {
       migrateConfigs: [
         {
           sourcePathId: "sourcePath1",
+          sourceDirectoryPath,
           destinationPathId: ["destinationPath1", "destinationPath2"],
+          destinationDirectoryPath,
         },
       ],
       options: {
@@ -1272,7 +1276,9 @@ describe("JobConfigService", () => {
     const mockExistingJobConfigs = [
       {
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
         scheduler: ScheduleStatus.SCHEDULING,
       },
     ];
@@ -1282,7 +1288,9 @@ describe("JobConfigService", () => {
         id: "jobConfigId1",
         jobType: JobType.MIGRATE,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath2",
+        targetDirectoryPath: destinationDirectoryPath,
         status: JobStatus.Active,
       },
     ];
@@ -1308,11 +1316,15 @@ describe("JobConfigService", () => {
       where: {
         jobType: JobType.MIGRATE,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
       },
       select: {
         sourcePathId: true,
+        sourceDirectoryPath: true,
         targetPathId: true,
+        targetDirectoryPath: true,
         scheduler: true,
         id: true,
         status: true,
@@ -1322,7 +1334,9 @@ describe("JobConfigService", () => {
       {
         jobType: JobType.MIGRATE,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
         scheduler: In([
           ScheduleStatus.READY_TO_BE_SCHEDULED,
           ScheduleStatus.SCHEDULING,
@@ -1345,7 +1359,9 @@ describe("JobConfigService", () => {
       jobType: JobType.MIGRATE,
       preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
       sourcePathId: "sourcePath1",
+      sourceDirectoryPath,
       targetPathId: "destinationPath2",
+      targetDirectoryPath: destinationDirectoryPath,
       excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
       firstRunAt: mockBulkMigrate.firstRunAt,
       scheduler: ScheduleStatus.SCHEDULING,
@@ -1359,7 +1375,9 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: mockBulkMigrate.migrateConfigs[0].destinationPathId[1],
+        targetDirectoryPath: destinationDirectoryPath,
         excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
         firstRunAt: mockBulkMigrate.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
@@ -1578,11 +1596,15 @@ describe("JobConfigService", () => {
   });
   
   it("should return warnings if inactive job exists", async () => {
+    const sourceDirectoryPath = "/staging/source";
+    const targetDirectoryPath = "/staging/destination";
     const mockBulkMigrate = {
       migrateConfigs: [
         {
           sourcePathId: "source1",
+          sourceDirectoryPath,
           destinationPathId: ["dest1"],
+          destinationDirectoryPath: targetDirectoryPath,
         },
       ],
       options: {
@@ -1599,7 +1621,9 @@ describe("JobConfigService", () => {
       {
         id: "job1",
         sourcePathId: "source1",
+        sourceDirectoryPath,
         targetPathId: "dest1",
+        targetDirectoryPath,
         status: "IN_ACTIVE",
         scheduler: "SCHEDULING",
       },
@@ -1612,12 +1636,14 @@ describe("JobConfigService", () => {
       jobs: [],
       warnings: [
         {
-          message: "Inactive job found. Please reactivate or remove the existing job.",
+            message: "Inactive job found. Please re-activate or remove the existing job.",
           sourcePath: undefined,
           sourcePathId: "source1",
+          sourceDirectoryPath,
           status: "IN_ACTIVE",
           targetPath: undefined,
           targetPathId: "dest1",
+          targetDirectoryPath,
         },
       ],
     });
@@ -1712,11 +1738,15 @@ describe("JobConfigService", () => {
     expect(jobConfigRepo.save).not.toHaveBeenCalled();
   });
   it("should create bulk cutover job configs successfully", async () => {
+    const sourceDirectoryPath = "/cutover/source";
+    const destinationDirectoryPath = "/cutover/destination";
     const mockBulkCutover = {
       cutoverConfig: [
         {
           sourcePathId: "sourcePath1",
+          sourceDirectoryPath,
           destinationPathId: ["destinationPath1", "destinationPath2"],
+          destinationDirectoryPath,
         },
       ],
     };
@@ -1727,7 +1757,9 @@ describe("JobConfigService", () => {
         id: "jobConfigId1",
         jobType: JobType.MIGRATE,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: "*.tmp",
         scheduler: ScheduleStatus.SCHEDULING,
         futureScheduleAt: "0 0 * * *",
@@ -1751,7 +1783,9 @@ describe("JobConfigService", () => {
         id: "newJobConfigId1",
         jobType: JobType.CUT_OVER,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath2",
+        targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: "*.tmp",
         scheduler: ScheduleStatus.SCHEDULING,
         futureScheduleAt: "0 0 * * *",
@@ -1762,8 +1796,18 @@ describe("JobConfigService", () => {
     ];
 
     jest.spyOn(service, "flattenCutoverConfig").mockReturnValue([
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath2" },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath1",
+        destinationDirectoryPath,
+      },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath2",
+        destinationDirectoryPath,
+      },
     ]);
     jest
       .spyOn(service, "findJobConfigs")
@@ -1783,7 +1827,9 @@ describe("JobConfigService", () => {
         firstRunAt: mockSavedJobs[0].firstRunAt,
         jobType: JobType.CUT_OVER,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath2",
+        targetDirectoryPath: destinationDirectoryPath,
         status: JobStatus.Active,
       },
     ]);
@@ -1791,8 +1837,18 @@ describe("JobConfigService", () => {
       mockBulkCutover.cutoverConfig
     );
     expect(service.findJobConfigs).toHaveBeenCalledWith([
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath2" },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath1",
+        destinationDirectoryPath,
+      },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath2",
+        destinationDirectoryPath,
+      },
     ]);
     expect(jobRunRepo.find).toHaveBeenCalledWith({
       where: {
@@ -1805,13 +1861,17 @@ describe("JobConfigService", () => {
       where: {
         jobType: JobType.CUT_OVER,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
       },
     });
     expect(jobConfigRepo.create).toHaveBeenCalledWith({
       jobType: JobType.CUT_OVER,
       sourcePathId: "sourcePath1",
+      sourceDirectoryPath,
       targetPathId: "destinationPath1",
+      targetDirectoryPath: destinationDirectoryPath,
       excludeFilePatterns: "*.tmp",
       scheduler: ScheduleStatus.SCHEDULING,
       futureScheduleAt: null,
@@ -1824,7 +1884,9 @@ describe("JobConfigService", () => {
       {
         jobType: JobType.CUT_OVER,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: "*.tmp",
         scheduler: ScheduleStatus.SCHEDULING,
         futureScheduleAt: null,
@@ -1837,16 +1899,30 @@ describe("JobConfigService", () => {
   });
 
   it("should flatten cutover config correctly", () => {
+    const sourceDirectoryPath = "/cutover/source";
+    const destinationDirectoryPath = "/cutover/destination";
     const mockCutoverConfig = [
       {
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         destinationPathId: ["destinationPath1", "destinationPath2"],
+        destinationDirectoryPath,
       },
     ];
 
     const expectedFlattenedConfig = [
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath2" },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath1",
+        destinationDirectoryPath,
+      },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath2",
+        destinationDirectoryPath,
+      },
     ];
 
     const result = service.flattenCutoverConfig(mockCutoverConfig);
@@ -1855,11 +1931,15 @@ describe("JobConfigService", () => {
   });
 
   it("should throw an error if cutover already exists", async () => {
+    const sourceDirectoryPath = "/cutover/source";
+    const destinationDirectoryPath = "/cutover/destination";
     const mockBulkCutover = {
       cutoverConfig: [
         {
           sourcePathId: "sourcePath1",
+          sourceDirectoryPath,
           destinationPathId: ["destinationPath1"],
+          destinationDirectoryPath,
         },
       ],
     };
@@ -1869,7 +1949,9 @@ describe("JobConfigService", () => {
         id: "jobConfigId1",
         jobType: JobType.MIGRATE,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: "*.tmp",
         scheduler: ScheduleStatus.SCHEDULING,
         futureScheduleAt: "0 0 * * *",
@@ -1891,14 +1973,21 @@ describe("JobConfigService", () => {
       id: "existingCutoverId",
       jobType: JobType.CUT_OVER,
       sourcePathId: "sourcePath1",
+      sourceDirectoryPath,
       targetPathId: "destinationPath1",
+      targetDirectoryPath: destinationDirectoryPath,
       status: JobStatus.Active,
     };
 
     jest
       .spyOn(service, "flattenCutoverConfig")
       .mockReturnValue([
-        { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
+        {
+          sourcePathId: "sourcePath1",
+          sourceDirectoryPath,
+          destinationPathId: "destinationPath1",
+          destinationDirectoryPath,
+        },
       ]);
     jest
       .spyOn(service, "findJobConfigs")
@@ -1915,7 +2004,12 @@ describe("JobConfigService", () => {
       mockBulkCutover.cutoverConfig
     );
     expect(service.findJobConfigs).toHaveBeenCalledWith([
-      { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
+      {
+        sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
+        destinationPathId: "destinationPath1",
+        destinationDirectoryPath,
+      },
     ]);
     expect(jobRunRepo.find).toHaveBeenCalledWith({
       where: {
@@ -1928,7 +2022,9 @@ describe("JobConfigService", () => {
       where: {
         jobType: JobType.CUT_OVER,
         sourcePathId: "sourcePath1",
+        sourceDirectoryPath,
         targetPathId: "destinationPath1",
+        targetDirectoryPath: destinationDirectoryPath,
       },
     });
   });
@@ -2232,11 +2328,13 @@ describe("JobConfigService", () => {
           serverName: "SourceServer",
           path: "/source/path",
           protocol: "NFS",
+          directoryPath: null,
         },
         destinationServer: {
           serverName: "TargetServer",
           path: "/target/path",
           protocol: "NFS",
+          directoryPath: null,
         },
         status: "Active",
         createdAt: startTime,
@@ -2248,6 +2346,7 @@ describe("JobConfigService", () => {
             startTime,
             endTime,
             jobType: "MIGRATE",
+            jobRunType: undefined,
             timeElapsed: 1000,
             scannedFilesCount: "10",
             scannedDirectoriesCount: "5",
@@ -2269,6 +2368,7 @@ describe("JobConfigService", () => {
           "Excluded Path Patterns": [],
           "Exclude file older than (UTC)": undefined,
           "Incremental sync schedule": undefined,
+          "Job Scheduled For": undefined,
         },
         errors: [],
       });
@@ -3033,8 +3133,18 @@ describe("JobConfigService", () => {
   describe("findJobConfigs", () => {
     it("should find job configs based on conditions", async () => {
       const mockConditions = [
-        { sourcePathId: "sourcePath1", destinationPathId: "destinationPath1" },
-        { sourcePathId: "sourcePath2", destinationPathId: "destinationPath2" },
+        {
+          sourcePathId: "sourcePath1",
+          sourceDirectoryPath: "/src/dir1",
+          destinationPathId: "destinationPath1",
+          destinationDirectoryPath: "/dest/dir1",
+        },
+        {
+          sourcePathId: "sourcePath2",
+          sourceDirectoryPath: "/src/dir2",
+          destinationPathId: "destinationPath2",
+          destinationDirectoryPath: "/dest/dir2",
+        },
       ];
 
       const mockJobConfigs = [
@@ -3053,6 +3163,7 @@ describe("JobConfigService", () => {
       const mockQueryBuilder = {
         where: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue(mockJobConfigs),
       };
 
@@ -3067,18 +3178,26 @@ describe("JobConfigService", () => {
         "jobConfig"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        `(jobConfig.sourcePathId = :sourcePathId_0 AND jobConfig.targetPathId = :destinationPathId_0) AND jobConfig.jobType = 'MIGRATE'`,
+        `(jobConfig.sourcePathId = :sourcePathId_0 AND jobConfig.sourceDirectoryPath = :sourceDirectoryPath_0 AND jobConfig.targetPathId = :destinationPathId_0 AND jobConfig.targetDirectoryPath = :destinationDirectoryPath_0)`,
         {
           sourcePathId_0: "sourcePath1",
+          sourceDirectoryPath_0: "/src/dir1",
           destinationPathId_0: "destinationPath1",
+          destinationDirectoryPath_0: "/dest/dir1",
         }
       );
       expect(mockQueryBuilder.orWhere).toHaveBeenCalledWith(
-        `(jobConfig.sourcePathId = :sourcePathId_1 AND jobConfig.targetPathId = :destinationPathId_1)`,
+        `(jobConfig.sourcePathId = :sourcePathId_1 AND jobConfig.sourceDirectoryPath = :sourceDirectoryPath_1 AND jobConfig.targetPathId = :destinationPathId_1 AND jobConfig.targetDirectoryPath = :destinationDirectoryPath_1)`,
         {
           sourcePathId_1: "sourcePath2",
+          sourceDirectoryPath_1: "/src/dir2",
           destinationPathId_1: "destinationPath2",
+          destinationDirectoryPath_1: "/dest/dir2",
         }
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        "jobConfig.jobType = :jobType",
+        { jobType: 'MIGRATE' }
       );
       expect(mockQueryBuilder.getMany).toHaveBeenCalled();
     });
@@ -4270,12 +4389,14 @@ describe("JobConfigService", () => {
       await service.createBulkMigrate(bulkMigrate);
 
       expect(jobConfigRepo.update).toHaveBeenCalledWith(
-        {
+        expect.objectContaining({
           jobType: JobType.MIGRATE,
           sourcePathId: "src1",
+          sourceDirectoryPath: null,
           targetPathId: "dest1",
+          targetDirectoryPath: null,
           scheduler: expect.anything(),
-        },
+        }),
         expect.objectContaining({ status: JobStatus.Active })
       );
     });
@@ -4895,13 +5016,22 @@ describe("JobConfigService", () => {
     it('should throw if inactive cutover already exists for source-destination pair', async () => {
       const sourcePathId = 'source-id';
       const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
     
-      const cutoverConfig = [{ sourcePathId, destinationPathId }];
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
       const completedMigrateJob = {
         id: 'migrate-job-id',
         jobType: JobType.MIGRATE,
         sourcePathId,
+        sourceDirectoryPath,
         targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: ['*.tmp'],
         preserveAccessTime: true,
         status: JobStatus.Active,
@@ -4917,7 +5047,9 @@ describe("JobConfigService", () => {
         id: 'cutover-id',
         jobType: JobType.CUT_OVER,
         sourcePathId,
+        sourceDirectoryPath,
         targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
         status: JobStatus.InActive, // <-- This triggers the throw
       };
     

@@ -1,0 +1,1 @@
+ALTER TABLE jobconfig DROP COLUMN IF EXISTS source_directory_path, DROP COLUMN IF EXISTS target_directory_path;

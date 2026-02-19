@@ -183,6 +183,8 @@ export interface PreCheckStatusType {
 export interface createPathMappingApiPayload {
   sourcePathId: string;
   destinationPathId: string[];
+  sourceDirectoryPath?: string;
+  destinationDirectoryPath?: string;
 }
 
 export interface UploadMappingTableDetailsType {

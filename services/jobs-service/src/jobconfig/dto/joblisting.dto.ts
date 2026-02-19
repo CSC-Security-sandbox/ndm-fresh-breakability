@@ -45,10 +45,12 @@ export class JobListingDTO{
 export interface SourceServer{
     serverName: string;
     path: string;
+    directoryPath?: string;
     protocol: string;
 }
 export interface DestinationServer{
     serverName?: string;
     path?: string;
+    directoryPath?: string;
     protocol?: string;
 }

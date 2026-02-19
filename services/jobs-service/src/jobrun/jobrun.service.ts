@@ -548,6 +548,8 @@ export class JobRunService {
         "sourceVolume.volumePath AS volumePath",
         "sourceFileServer.protocol AS sourceFileServerProtocol",
         "sourceFileServer.fileServerName AS sourceFileServerName",
+        "jobConfig.sourceDirectoryPath AS sourceDirectoryPath",
+        "jobConfig.targetDirectoryPath AS targetDirectoryPath",
         "sourceConfig.configName AS sourceConfigName",
         "sourceConfig.serverType AS sourceServerType",
         "targetVolume.volumePath AS targetVolumePath",
@@ -584,6 +586,7 @@ export class JobRunService {
             path: jobRun.volumepath,
             protocol: jobRun.sourcefileserverprotocol,
             serverType: jobRun.sourceservertype,
+            directoryPath: jobRun.sourcedirectorypath,
           },
           destinationServer: jobRun.targetvolumepath
             ? {
@@ -592,6 +595,7 @@ export class JobRunService {
                 path: jobRun.targetvolumepath,
                 protocol: jobRun.targetfileserverprotocol,
                 serverType: jobRun.targetservertype,
+                directoryPath: jobRun.targetdirectorypath,
               }
             : undefined,
           timeElapsed: jobRun.endtime

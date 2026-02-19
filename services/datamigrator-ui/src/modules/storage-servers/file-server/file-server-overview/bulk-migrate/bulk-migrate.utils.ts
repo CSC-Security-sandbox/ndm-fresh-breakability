@@ -313,6 +313,8 @@ export const createPathMapping = (
     data.push({
       sourcePathId: detail.sourcePath.sourcePathId,
       destinationPathId: [detail.destinationPathDetails.destinationPathId],
+      sourceDirectoryPath: detail.sourceDirectoryPath,
+      destinationDirectoryPath: detail.destinationDirectoryPath,
     });
   });
 

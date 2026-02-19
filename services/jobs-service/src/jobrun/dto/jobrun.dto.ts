@@ -104,6 +104,7 @@ export interface JobRunsDTO {
 export interface ServerDetailsDTO {
   serverName: string;
   path: string;
+  directoryPath?: string;
   protocol: string;
 }
 

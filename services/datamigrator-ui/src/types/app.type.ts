@@ -354,6 +354,7 @@ export enum JOB_CONFIG_STATUS_ENUM {
 export type FileServerApiPropType = {
   serverName: string;
   path: string;
+  directoryPath?: string;
   protocol: "NFS" | "SMB";
   fileServerName: string;
   serverType: string;
@@ -570,6 +571,7 @@ export type JobDescriptionProps = {
   id?: string;
   source?: FileServerApiPropType;
   destination?: FileServerApiPropType;
+  jobType?: JOBS_TYPE;
 };
 
 export type JobDescriptionColumnPropType = {
@@ -611,6 +613,8 @@ export type ValidationCellRendererPropType = {
 };
 export interface GetAllCutOverPathsApiType {
   id: string; // This id index ID  will be added by blueXp Table not UUID
+  sourceDirectoryPath?: string;
+  destinationDirectoryPath?: string; 
   sourcePath: {
     id: string;
     sourcePathName: string;
