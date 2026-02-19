@@ -11,6 +11,49 @@ import { mockLoggerFactory } from '../test-utils/logger-mocks';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+jest.mock('fs/promises');
+jest.mock('https');
+
+import { readFile } from 'fs/promises';
+import { request } from 'https';
+
+const mockedReadFile = readFile as jest.MockedFunction<typeof readFile>;
+const mockedRequest = request as jest.MockedFunction<typeof request>;
+
+function mockK8sSecretResponse(tlsCert: string | null, statusCode = 200) {
+  mockedReadFile.mockImplementation((path: any) => {
+    if (String(path).includes('token')) return Promise.resolve('mock-token');
+    if (String(path).includes('ca.crt')) return Promise.resolve('mock-ca');
+    return Promise.resolve('');
+  });
+
+  const mockRes: any = {
+    statusCode,
+    on: jest.fn((event: string, callback: Function) => {
+      if (event === 'data') {
+        const responseBody = statusCode === 200
+          ? JSON.stringify({ data: tlsCert ? { 'tls.crt': tlsCert } : {} })
+          : JSON.stringify({ message: 'Forbidden' });
+        callback(responseBody);
+      }
+      if (event === 'end') {
+        callback();
+      }
+      return mockRes;
+    }),
+  };
+
+  const mockReq: any = {
+    on: jest.fn(),
+    end: jest.fn(),
+  };
+
+  mockedRequest.mockImplementation((_options: any, callback: any) => {
+    callback(mockRes);
+    return mockReq;
+  });
+}
+
 describe('WorkerRegistrationService', () => {
   let service: WorkerRegistrationService;
 
@@ -32,8 +75,8 @@ describe('WorkerRegistrationService', () => {
             get: jest.fn().mockReturnValue(mockKeycloakConfig),
           },
         },
-        { 
-          provide: LoggerFactory, 
+        {
+          provide: LoggerFactory,
           useValue: mockLoggerFactory
         },
       ],
@@ -78,9 +121,11 @@ describe('WorkerRegistrationService', () => {
         data: { access_token: mockAccessToken },
       });
       mockedAxios.post.mockResolvedValueOnce(mockRegisterResponse);
+      mockedReadFile.mockRejectedValue(new Error('Not in K8s'));
 
       const result = await service.registerWorker(validDetails);
       expect(result).toBeDefined();
+      expect(result.gatewayCACertificate).toBeNull();
       expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     });
 
@@ -136,6 +181,46 @@ describe('WorkerRegistrationService', () => {
           'Unexpected error occurred while registering worker',
         ),
       );
+    });
+  });
+
+  describe('registerWorker with certificate', () => {
+    const validDetails: RegisterWorkerDto = { projectId: 'project1' };
+
+    it('should include gatewayCACertificate when K8s secret is available', async () => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: 'mock-token' } });
+      mockedAxios.post.mockResolvedValueOnce({ status: 201 });
+      mockK8sSecretResponse('base64-encoded-cert-data');
+
+      const result = await service.registerWorker(validDetails);
+      expect(result.gatewayCACertificate).toBe('base64-encoded-cert-data');
+    });
+
+    it('should return null gatewayCACertificate when secret lacks tls.crt', async () => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: 'mock-token' } });
+      mockedAxios.post.mockResolvedValueOnce({ status: 201 });
+      mockK8sSecretResponse(null);
+
+      const result = await service.registerWorker(validDetails);
+      expect(result.gatewayCACertificate).toBeNull();
+    });
+
+    it('should return null gatewayCACertificate when readFile rejects', async () => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: 'mock-token' } });
+      mockedAxios.post.mockResolvedValueOnce({ status: 201 });
+      mockedReadFile.mockRejectedValue(new Error('ENOENT'));
+
+      const result = await service.registerWorker(validDetails);
+      expect(result.gatewayCACertificate).toBeNull();
+    });
+
+    it('should return null gatewayCACertificate when K8s API returns non-200', async () => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { access_token: 'mock-token' } });
+      mockedAxios.post.mockResolvedValueOnce({ status: 201 });
+      mockK8sSecretResponse('ignored', 403);
+
+      const result = await service.registerWorker(validDetails);
+      expect(result.gatewayCACertificate).toBeNull();
     });
   });
 });

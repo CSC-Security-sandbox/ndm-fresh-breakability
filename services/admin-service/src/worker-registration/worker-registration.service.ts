@@ -5,6 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import axios from 'axios';
+import { readFile } from 'fs/promises';
+import { request } from 'https';
 import { ClientConfig } from './mappers/client-register.config';
 import {
   RegisterWorkerDto,
@@ -55,6 +57,90 @@ export class WorkerRegistrationService {
         }
     }
 
+    private async getGatewayCACertificate(): Promise<string | null> {
+        try {
+            const secretName = process.env.ISTIO_GATEWAY_TLS_SECRET || 'datamigrator-istio-tls';
+            const namespace = process.env.ISTIO_NAMESPACE || 'istio-system';
+
+            this.logger.debug(`Fetching Gateway TLS certificate from secret: ${secretName} in namespace: ${namespace}`);
+
+            const token = await readFile('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8');
+            const ca = await readFile('/var/run/secrets/kubernetes.io/serviceaccount/ca.crt', 'utf8');
+
+            const certificate = await this.fetchSecretFromK8sAPI(secretName, namespace, token, ca);
+
+            if (!certificate) {
+                this.logger.warn(`No certificate data found in secret ${secretName}`);
+                return null;
+            }
+
+            this.logger.debug(`Successfully fetched Gateway TLS certificate (${certificate.length} bytes)`);
+            return certificate;
+        } catch (error) {
+            this.logger.error(`Failed to fetch Gateway CA certificate: ${error.message}`, error.stack);
+            return null;
+        }
+    }
+
+    private fetchSecretFromK8sAPI(
+        secretName: string,
+        namespace: string,
+        token: string,
+        ca: string,
+    ): Promise<string | null> {
+        return new Promise((resolve, reject) => {
+            const options = {
+                hostname: 'kubernetes.default.svc',
+                port: 443,
+                path: `/api/v1/namespaces/${namespace}/secrets/${secretName}`,
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                ca: ca,
+            };
+
+            const req = request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode !== 200) {
+                            this.logger.error(`Kubernetes API returned status ${res.statusCode}: ${data}`);
+                            resolve(null);
+                            return;
+                        }
+
+                        const secret = JSON.parse(data);
+                        const tlsCert = secret?.data?.['tls.crt'];
+
+                        if (!tlsCert) {
+                            this.logger.error('Secret does not contain tls.crt field');
+                            resolve(null);
+                            return;
+                        }
+
+                        resolve(tlsCert);
+                    } catch (error) {
+                        this.logger.error(`Error parsing Kubernetes API response: ${error.message}`);
+                        resolve(null);
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                this.logger.error(`Error calling Kubernetes API: ${error.message}`);
+                reject(error);
+            });
+
+            req.end();
+        });
+    }
+
     async registerWorker(details: RegisterWorkerDto) {
         try {
                 if (!details.projectId)
@@ -75,12 +161,14 @@ export class WorkerRegistrationService {
             );
 
             if (response.status === 201) {
+                const gatewayCACertificate = await this.getGatewayCACertificate();
 
                 return new RegisterWorkerResponseDto(
                     details.projectId,
                     clientConfig.clientId,
                     clientConfig.secret,
                     this.workerRegisterConfig.controlPlaneIp,
+                    gatewayCACertificate,
                 );
             }
             throw new InternalServerErrorException(

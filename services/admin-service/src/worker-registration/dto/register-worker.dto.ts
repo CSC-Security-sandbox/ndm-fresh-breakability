@@ -1,4 +1,4 @@
-import { IsString, IsUUID } from 'class-validator';
+import { IsString, IsUUID, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterWorkerDto {
@@ -24,16 +24,23 @@ export class RegisterWorkerResponseDto {
   @IsString()
   controlPlaneIp: string;
 
+  @ApiProperty({ description: 'Gateway CA Certificate', nullable: true })
+  @IsString()
+  @IsOptional()
+  gatewayCACertificate: string | null;
+
   constructor(
     projectId: string,
     workerId?: string,
     workerSecret?: string,
     controlPlaneIp?: string,
+    gatewayCACertificate?: string | null,
   ) {
     this.projectId = projectId;
     this.workerId = workerId;
     this.workerSecret = workerSecret;
     this.controlPlaneIp = controlPlaneIp;
+    this.gatewayCACertificate = gatewayCACertificate ?? null;
   }
 
   set setWorkerSecret(value: string) {
@@ -46,5 +53,9 @@ export class RegisterWorkerResponseDto {
 
   set setWorkerId(value: string) {
     this.workerId = value;
+  }
+
+  set setGatewayCACertificate(value: string | null) {
+    this.gatewayCACertificate = value;
   }
 }
