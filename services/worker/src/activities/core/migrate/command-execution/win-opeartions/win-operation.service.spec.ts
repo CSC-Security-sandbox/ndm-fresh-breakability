@@ -6,6 +6,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { RedisService } from 'src/redis/redis.service';
+import { MetricsService } from 'src/metrics/metrics.service';
 import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -72,12 +73,20 @@ describe('WinOperationService', () => {
       setOwnerIdentity: jest.fn(),
     };
 
+    // Mock MetricsService (WinOperationService uses runWithTiming(workflowId, spec, fn) and runs fn)
+    const mockMetricsService = {
+      runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: unknown, fn: () => unknown) =>
+        typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+      ),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WinOperationService,
         { provide: LoggerFactory, useValue: mockLoggerFactory },
         { provide: WinShellService, useValue: mockWinShellService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: MetricsService, useValue: mockMetricsService },
       ],
     }).compile();
 
@@ -132,6 +141,7 @@ describe('WinOperationService', () => {
 
       expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
         expect.stringContaining(testPath),
+        '',
       );
       expect(result).toEqual(mockSecurityDescriptor);
     });
@@ -147,6 +157,7 @@ describe('WinOperationService', () => {
 
       expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
         expect.stringContaining("C:\\test\\path''s folder"),
+        '',
       );
     });
 
@@ -237,6 +248,7 @@ describe('WinOperationService', () => {
 
       expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
         expect.stringContaining(testPath),
+        '',
       );
       expect(result).toEqual(expectedOutput);
     });
@@ -252,6 +264,7 @@ describe('WinOperationService', () => {
 
       expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
         expect.stringContaining("C:\\test\\target''s folder"),
+        '',
       );
     });
 
@@ -1373,12 +1386,18 @@ describe('WinOperationService', () => {
     describe('when Windows API is not available', () => {
       it('should return default empty result after first WindowsAPINotAvailableError and set hasWindowsAPIs to false', async () => {
         // Arrange: Create a fresh service instance with mocked initializeWindowsAPI
+        const mockMetricsService = {
+          runWithTiming: jest.fn().mockImplementation((_w: string, _s: unknown, fn: () => unknown) =>
+            typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+          ),
+        };
         const module = await Test.createTestingModule({
           providers: [
             WinOperationService,
             { provide: LoggerFactory, useValue: mockLoggerFactory },
             { provide: WinShellService, useValue: mockWinShellService },
             { provide: RedisService, useValue: mockRedisService },
+            { provide: MetricsService, useValue: mockMetricsService },
           ],
         }).compile();
 
@@ -1403,12 +1422,18 @@ describe('WinOperationService', () => {
 
       it('should return empty result on subsequent calls after Windows API is unavailable', async () => {
         // Arrange: Create a fresh service instance with mocked initializeWindowsAPI
+        const mockMetricsService = {
+          runWithTiming: jest.fn().mockImplementation((_w: string, _s: unknown, fn: () => unknown) =>
+            typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+          ),
+        };
         const module = await Test.createTestingModule({
           providers: [
             WinOperationService,
             { provide: LoggerFactory, useValue: mockLoggerFactory },
             { provide: WinShellService, useValue: mockWinShellService },
             { provide: RedisService, useValue: mockRedisService },
+            { provide: MetricsService, useValue: mockMetricsService },
           ],
         }).compile();
 

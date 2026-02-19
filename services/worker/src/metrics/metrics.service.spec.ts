@@ -662,6 +662,196 @@ describe('MetricsService', () => {
     });
   });
 
+  describe('additional metrics', () => {
+    describe('shouldRecordAdditionalMetrics', () => {
+      it('should return true when config is "true"', () => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'true' : undefined,
+        );
+        expect(service.shouldRecordAdditionalMetrics()).toBe(true);
+      });
+
+      it('should return true when config is "TRUE" (case insensitive)', () => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'TRUE' : undefined,
+        );
+        expect(service.shouldRecordAdditionalMetrics()).toBe(true);
+      });
+
+      it('should return false when config is "false"', () => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'false' : undefined,
+        );
+        expect(service.shouldRecordAdditionalMetrics()).toBe(false);
+      });
+
+      it('should return false when config is undefined', () => {
+        jest.spyOn(configService, 'get').mockReturnValue(undefined);
+        expect(service.shouldRecordAdditionalMetrics()).toBe(false);
+      });
+    });
+
+    describe('runWithTiming and recordTimingDuration', () => {
+      beforeEach(() => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'true' : undefined,
+        );
+        jest.spyOn((service as any).additionalOperationDurationHistogram, 'observe').mockImplementation(jest.fn());
+        jest.spyOn((service as any).stampPhaseDurationHistogram, 'observe').mockImplementation(jest.fn());
+      });
+
+      it('should run fn and record duration for string metric when additional metrics enabled', async () => {
+        const result = await service.runWithTiming('wf-1', MetricsService.METRIC.FILE_COPY, async () => 'done');
+        expect(result).toBe('done');
+        expect((service as any).additionalOperationDurationHistogram.observe).toHaveBeenCalledWith(
+          expect.objectContaining({ worker_id: (service as any).workerId, workflow_id: 'wf-1', operation: 'file_copy' }),
+          expect.any(Number),
+        );
+      });
+
+      it('should run fn and record stamp phase when metricOrSpec is object with stamp_phase', async () => {
+        await service.runWithTiming('wf-2', { category: 'stamp_phase', phase: 'acl' }, async () => undefined);
+        expect((service as any).stampPhaseDurationHistogram.observe).toHaveBeenCalledWith(
+          expect.objectContaining({ worker_id: (service as any).workerId, workflow_id: 'wf-2', phase: 'acl' }),
+          expect.any(Number),
+        );
+      });
+
+      it('should not record when additional metrics disabled', async () => {
+        jest.spyOn(configService, 'get').mockReturnValue('false');
+        const result = await service.runWithTiming('wf-3', MetricsService.METRIC.STAMP_META, async () => 'ok');
+        expect(result).toBe('ok');
+        expect((service as any).additionalOperationDurationHistogram.observe).not.toHaveBeenCalled();
+      });
+
+      it('should use unknown workflow_id when workflowId is empty or whitespace', async () => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'true' : undefined,
+        );
+        await service.runWithTiming('  ', 'file_copy', async () => undefined);
+        expect((service as any).additionalOperationDurationHistogram.observe).toHaveBeenCalledWith(
+          expect.objectContaining({ workflow_id: 'unknown' }),
+          expect.any(Number),
+        );
+      });
+    });
+
+    describe('recordCopyPhaseResults', () => {
+      beforeEach(() => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'true' : undefined,
+        );
+        jest.spyOn((service as any).copyPhaseDurationHistogram, 'observe').mockImplementation(jest.fn());
+        jest.spyOn((service as any).filesMigratedCounter, 'inc').mockImplementation(jest.fn());
+      });
+
+      it('should record copy phases and increment files migrated when additional metrics enabled', () => {
+        service.recordCopyPhaseResults('wf-1', 100, 200);
+        expect((service as any).copyPhaseDurationHistogram.observe).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: 'copy_and_source_checksum' }),
+          0.1,
+        );
+        expect((service as any).copyPhaseDurationHistogram.observe).toHaveBeenCalledWith(
+          expect.objectContaining({ phase: 'checksum_target' }),
+          0.2,
+        );
+        expect((service as any).filesMigratedCounter.inc).toHaveBeenCalledWith({
+          worker_id: (service as any).workerId,
+          workflow_id: 'wf-1',
+        });
+      });
+
+      it('should use 0 when copyStreamMs or checksumTargetMs are null/undefined', () => {
+        service.recordCopyPhaseResults('wf-2', undefined as any, null as any);
+        expect((service as any).copyPhaseDurationHistogram.observe).toHaveBeenCalledWith(expect.anything(), 0);
+        expect((service as any).copyPhaseDurationHistogram.observe).toHaveBeenCalledWith(expect.anything(), 0);
+      });
+
+      it('should not record when additional metrics disabled', () => {
+        jest.spyOn(configService, 'get').mockReturnValue('false');
+        service.recordCopyPhaseResults('wf-3', 1, 2);
+        expect((service as any).copyPhaseDurationHistogram.observe).not.toHaveBeenCalled();
+        expect((service as any).filesMigratedCounter.inc).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('shell pool and task queue metrics', () => {
+      beforeEach(() => {
+        jest.spyOn(configService, 'get').mockImplementation((key: string) =>
+          key === 'worker.metrics.additionalMetrics' ? 'true' : undefined,
+        );
+        jest.spyOn((service as any).shellPoolStatusGauge, 'set').mockImplementation(jest.fn());
+        jest.spyOn((service as any).shellQueueWaitGauge, 'set').mockImplementation(jest.fn());
+        jest.spyOn((service as any).shellErrorsCounter, 'inc').mockImplementation(jest.fn());
+        jest.spyOn((service as any).shellTimeoutsCounter, 'inc').mockImplementation(jest.fn());
+        jest.spyOn((service as any).taskQueueWaitGauge, 'set').mockImplementation(jest.fn());
+      });
+
+      it('should record shell pool status when additional metrics enabled', () => {
+        service.recordShellPoolStatus(2, 3, 5);
+        expect((service as any).shellPoolStatusGauge.set).toHaveBeenCalledWith(
+          { worker_id: (service as any).workerId, status: 'available' },
+          2,
+        );
+        expect((service as any).shellPoolStatusGauge.set).toHaveBeenCalledWith(
+          { worker_id: (service as any).workerId, status: 'busy' },
+          3,
+        );
+        expect((service as any).shellPoolStatusGauge.set).toHaveBeenCalledWith(
+          { worker_id: (service as any).workerId, status: 'queue_depth' },
+          5,
+        );
+      });
+
+      it('should record shell queue wait when additional metrics enabled', () => {
+        service.recordShellQueueWait('wf-1', 1.5);
+        expect((service as any).shellQueueWaitGauge.set).toHaveBeenCalledWith(
+          { worker_id: (service as any).workerId, workflow_id: 'wf-1' },
+          1.5,
+        );
+      });
+
+      it('should record shell error when additional metrics enabled', () => {
+        service.recordShellError('wf-2', 'command_failed');
+        expect((service as any).shellErrorsCounter.inc).toHaveBeenCalledWith({
+          worker_id: (service as any).workerId,
+          workflow_id: 'wf-2',
+          error_type: 'command_failed',
+        });
+      });
+
+      it('should record shell timeout when additional metrics enabled', () => {
+        service.recordShellTimeout('wf-3');
+        expect((service as any).shellTimeoutsCounter.inc).toHaveBeenCalledWith({
+          worker_id: (service as any).workerId,
+          workflow_id: 'wf-3',
+        });
+      });
+
+      it('should record task queue wait when additional metrics enabled', () => {
+        service.recordTaskQueueWait('wf-4', '1mb', 0.25);
+        expect((service as any).taskQueueWaitGauge.set).toHaveBeenCalledWith(
+          { worker_id: (service as any).workerId, workflow_id: 'wf-4', band_name: '1mb' },
+          0.25,
+        );
+      });
+
+      it('should not record shell/task metrics when additional metrics disabled', () => {
+        jest.spyOn(configService, 'get').mockReturnValue('false');
+        service.recordShellPoolStatus(1, 1, 0);
+        service.recordShellQueueWait('wf-x', 1);
+        service.recordShellError('wf-x', 'err');
+        service.recordShellTimeout('wf-x');
+        service.recordTaskQueueWait('wf-x', '1kb', 1);
+        expect((service as any).shellPoolStatusGauge.set).not.toHaveBeenCalled();
+        expect((service as any).shellQueueWaitGauge.set).not.toHaveBeenCalled();
+        expect((service as any).shellErrorsCounter.inc).not.toHaveBeenCalled();
+        expect((service as any).shellTimeoutsCounter.inc).not.toHaveBeenCalled();
+        expect((service as any).taskQueueWaitGauge.set).not.toHaveBeenCalled();
+      });
+    });
+  });
+
   describe('Pushgateway Error Handling', () => {
     it('should handle Pushgateway initialization error and log properly', () => {
       // Mock the Pushgateway constructor to throw an error

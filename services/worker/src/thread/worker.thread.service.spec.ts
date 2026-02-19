@@ -47,6 +47,8 @@ describe('WorkerThreadService', () => {
           useValue: {
             recordWorkerThreadError: jest.fn(),
             setWorkerThreadService: jest.fn(),
+            recordTaskQueueWait: jest.fn(),
+            recordCopyPhaseResults: jest.fn(),
           },
         },
       ],

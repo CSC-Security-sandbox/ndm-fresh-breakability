@@ -7,6 +7,7 @@ import * as path from 'path';
 import { dmError, getFilePermissions, getFileType, } from 'src/activities/utils/utils';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { WorkerThreadService } from 'src/thread/worker.thread.service';
+import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecService } from './command-execution.service';
 import { StampMetaService } from './stamp-meta.service';
 import { createDirectory } from 'src/activities/utils/directory.utils';
@@ -88,6 +89,12 @@ describe('CommandExecService', () => {
             resetFileAttributes: jest.fn(),
         } as any;
 
+        const mockMetricsService = {
+            runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: string, fn: () => unknown) =>
+                typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+            ),
+        };
+
         mockJobContext = {
             publishToErrorStream: jest.fn().mockResolvedValue(undefined),
             publishToFileStream: jest.fn().mockResolvedValue(undefined),
@@ -100,6 +107,7 @@ describe('CommandExecService', () => {
                 { provide: LoggerFactory, useValue: loggerFactory },
                 { provide: WorkerThreadService, useValue: workerThreadService },
                 { provide: StampMetaService, useValue: stampMetaService },
+                { provide: MetricsService, useValue: mockMetricsService },
             ],
         }).compile();
 
@@ -118,6 +126,11 @@ describe('CommandExecService', () => {
 
         it('should handle undefined workerId from config', async () => {
             configService.get.mockReturnValue(undefined);
+            const mockMetricsService = {
+                runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: string, fn: () => unknown) =>
+                    typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+                ),
+            };
             const module = await Test.createTestingModule({
                 providers: [
                     CommandExecService,
@@ -125,6 +138,7 @@ describe('CommandExecService', () => {
                     { provide: LoggerFactory, useValue: loggerFactory },
                     { provide: WorkerThreadService, useValue: workerThreadService },
                     { provide: StampMetaService, useValue: stampMetaService },
+                    { provide: MetricsService, useValue: mockMetricsService },
                 ],
             }).compile();
 
@@ -160,15 +174,16 @@ describe('CommandExecService', () => {
             serialize: jest.fn(),
         });
 
-        const baseInput = {
+        const getBaseInput = () => ({
             sourcePath: '/source/testdir',
             targetPath: '/target/testdir',
             jobContext: mockJobContext,
             command: createMockCommand(),
             errorType: ErrorType.RECOVERABLE_ERROR,
-        };
+        });
 
         it('should skip if already completed', async () => {
+            const baseInput = getBaseInput();
             const input = {
                 ...baseInput,
                 command: createMockCommand(OPS_STATUS.COMPLETED),
@@ -182,7 +197,8 @@ describe('CommandExecService', () => {
 
         it('should successfully create directory', async () => {
             mockCreateDirectory.mockResolvedValue(undefined);
-            
+            const baseInput = getBaseInput();
+
             const result = await service.copyDirectory(baseInput);
 
             expect(result.shouldStampMeta).toBe(true);

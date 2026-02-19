@@ -64,6 +64,7 @@ describe('worker.config factory', () => {
     expect(cfg.metrics).toEqual({
       versionsPathWindows: 'C:\\datamigrator\\conf\\versions.conf',
       versionsPathLinux: '/opt/datamigrator/conf/versions.conf',
+      additionalMetrics: 'false',
     });
   });
 

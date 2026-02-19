@@ -11,6 +11,7 @@ import {
   ErrorType,
 } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
+import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
 
@@ -73,6 +74,12 @@ describe('StampMetaService', () => {
       resetFileAttributes: jest.fn(),
     } as any;
 
+    const mockMetricsService = {
+      runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: string, fn: () => unknown) =>
+        typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
+      ),
+    };
+
     // Setup fs.promises mocks
     (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
@@ -85,6 +92,7 @@ describe('StampMetaService', () => {
         { provide: RedisService, useValue: redisService },
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: WinOperationService, useValue: winOperationService },
+        { provide: MetricsService, useValue: mockMetricsService },
       ],
     }).compile();
 
