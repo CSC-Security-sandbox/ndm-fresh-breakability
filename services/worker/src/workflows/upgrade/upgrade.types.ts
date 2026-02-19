@@ -112,6 +112,8 @@ export interface DownloadBundleOutput {
   binaryPath: string;
   /** Path to extracted env file */
   envPath: string;
+  /** Path to extracted upgrade script */
+  upgradeScriptPath: string;
 }
 
 // =============================================================================

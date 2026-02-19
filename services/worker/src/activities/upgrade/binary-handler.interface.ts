@@ -73,6 +73,8 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
   protected abstract getEnvFile(files: string[], version: string): string | undefined;
 
+  protected abstract getUpgradeScript(files: string[]): string | undefined;
+
   // ===========================================================================
   // Public: download
   // ===========================================================================
@@ -123,11 +125,17 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
         throw new Error(`Env file not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
       }
 
+      const upgradeScript = this.getUpgradeScript(files);
+      if (!upgradeScript) {
+        throw new Error(`Upgrade script not found after extraction in ${stagingDir}. Files: ${files.join(', ')}`);
+      }
+
       const binaryPath = path.join(stagingDir, binaryFile);
       const checksumPath = path.join(stagingDir, checksumFile);
       const downloadedEnvPath = path.join(stagingDir, envFile);
+      const upgradeScriptPath = path.join(stagingDir, upgradeScript);
 
-      // 5. Verify checksums
+      // 5. Verify checksums (covers binary, env, AND upgrade script)
       heartbeatFn('verifying checksums');
       this.verifyChecksums(stagingDir, checksumPath);
       this.logger.log('Checksums verified');
@@ -140,10 +148,15 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       // 7. Make binary executable
       await this.makeExecutable(binaryPath);
 
-      // 8. Cleanup archive
+      // 8. Write versions.conf into staging dir
+      const stagedVersionsConf = path.join(stagingDir, 'versions.conf');
+      fs.writeFileSync(stagedVersionsConf, `current_version=${version}\n`);
+      this.logger.log(`Wrote versions.conf to staging: current_version=${version}`);
+
+      // 9. Cleanup archive
       this.safeDelete(archivePath);
 
-      this.logger.log(`Bundle staged: ${stagingDir} (binary: ${binaryFile})`);
+      this.logger.log(`Bundle staged: ${stagingDir} (binary: ${binaryFile}, script: ${upgradeScript})`);
 
       return {
         stagedPath: stagingDir,
@@ -151,6 +164,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
         platform: this.platform,
         binaryPath,
         envPath,
+        upgradeScriptPath,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -171,21 +185,38 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   async isBinaryStaged(version: string): Promise<{ staged: boolean; platform: 'linux' | 'windows' }> {
     this.validateVersion(version);
     const stagingDir = this.getStagingDir(version);
+    const notStaged = { staged: false, platform: this.platform } as const;
 
     if (!fs.existsSync(stagingDir)) {
-      return { staged: false, platform: this.platform };
+      return notStaged;
     }
 
     const files = fs.readdirSync(stagingDir);
-    const binaryFile = this.getBinary(files, version);
 
+    // Check binary exists and is valid
+    const binaryFile = this.getBinary(files, version);
     if (!binaryFile) {
-      return { staged: false, platform: this.platform };
+      return notStaged;
+    }
+    const binaryPath = path.join(stagingDir, binaryFile);
+    if (!this.verifyBinary(binaryPath, version)) {
+      return notStaged;
     }
 
-    const binaryPath = path.join(stagingDir, binaryFile);
-    const valid = this.verifyBinary(binaryPath, version);
-    return { staged: valid, platform: this.platform };
+    // Check versions.conf exists and matches the target version
+    const versionsConfPath = path.join(stagingDir, 'versions.conf');
+    if (!fs.existsSync(versionsConfPath)) {
+      this.logger.warn(`versions.conf missing in staging dir: ${stagingDir}`);
+      return notStaged;
+    }
+    const confContent = fs.readFileSync(versionsConfPath, 'utf-8');
+    const versionMatch = confContent.match(/current_version=(.+)/);
+    if (!versionMatch || versionMatch[1].trim() !== version) {
+      this.logger.warn(`versions.conf version mismatch: expected ${version}, found ${versionMatch?.[1]?.trim()}`);
+      return notStaged;
+    }
+
+    return { staged: true, platform: this.platform };
   }
 
   // ===========================================================================
@@ -340,7 +371,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
       // CRLF normalization fallback — only for known text files to avoid
       // corrupting binary checksums via Buffer→string→Buffer conversion
-      const textExtensions = ['.env', '.txt', '.sh', '.conf', '.cfg', '.yaml', '.yml', '.json'];
+      const textExtensions = ['.env', '.txt', '.sh', '.ps1', '.conf', '.cfg', '.yaml', '.yml', '.json'];
       const isTextFile = textExtensions.some((ext) => filename.endsWith(ext));
 
       if (isTextFile) {

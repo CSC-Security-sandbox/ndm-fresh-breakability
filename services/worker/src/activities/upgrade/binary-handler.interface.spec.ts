@@ -24,6 +24,9 @@ class TestLinuxHandler extends BaseBinaryHandler {
   protected getEnvFile(files: string[], version: string): string | undefined {
     return files.find((f) => f.endsWith('.env') && f !== '.env');
   }
+  protected getUpgradeScript(files: string[]): string | undefined {
+    return files.find((f) => f === 'upgrade.sh');
+  }
 }
 
 describe('BaseBinaryHandler', () => {

@@ -57,6 +57,14 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
     return match;
   }
 
+  protected getUpgradeScript(files: string[]): string | undefined {
+    const match = files.find((f) => f === 'upgrade.sh');
+    if (!match) {
+      this.logger.error(`Upgrade script not found. Expected: upgrade.sh. Available: ${files.join(', ')}`);
+    }
+    return match;
+  }
+
   protected getChecksumFile(files: string[], version: string): string | undefined {
     const match = files.find((f) =>
       f.match(new RegExp(`^datamigrator-worker-linux-${version}\\.sha256$`)),
