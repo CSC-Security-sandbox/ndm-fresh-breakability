@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { BaseBinaryHandler } from '../binary-handler.interface';
@@ -11,7 +11,7 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
   protected readonly stagingBase = '/opt/datamigrator/staging';
 
   protected async extractArchive(archivePath: string, destDir: string): Promise<void> {
-    if (!fs.existsSync(archivePath)) {
+    try { await fs.access(archivePath); } catch {
       throw new Error(`Archive not found: ${archivePath}`);
     }
     try {
@@ -36,7 +36,7 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
   }
 
   protected async makeExecutable(binaryPath: string): Promise<void> {
-    if (!fs.existsSync(binaryPath)) {
+    try { await fs.access(binaryPath); } catch {
       throw new Error(`Cannot make executable: file not found at ${binaryPath}`);
     }
     try {

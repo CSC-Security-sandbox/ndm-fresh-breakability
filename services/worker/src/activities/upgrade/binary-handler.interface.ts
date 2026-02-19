@@ -12,7 +12,8 @@
  * Everything else (auth, download, checksum, cleanup) is shared.
  */
 
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { createWriteStream } from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { HttpService } from '@nestjs/axios';
@@ -90,7 +91,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
     this.logger.log(`Downloading bundle for ${this.platform} v${version} from ${downloadUrl}`);
 
-    const stagingDir = this.ensureStagingDir(version);
+    const stagingDir = await this.ensureStagingDir(version);
     const archivePath = path.join(stagingDir, `bundle-${version}${this.archiveExtension}`);
 
     try {
@@ -103,11 +104,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       this.logger.log(`Extracted archive to ${stagingDir}`);
 
       // 3. Cleanup macOS junk files (.DS_Store, ._ resource forks)
-      this.cleanupMacOSJunk(stagingDir);
+      await this.cleanupMacOSJunk(stagingDir);
 
       // 4. Find files
       heartbeatFn('finding extracted files');
-      const files = fs.readdirSync(stagingDir);
+      const files = await fs.readdir(stagingDir);
       this.logger.log(`Extracted files: ${files.join(', ')}`);
 
       const binaryFile = this.getBinary(files, version);
@@ -137,24 +138,24 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
       // 5. Verify checksums (covers binary, env, AND upgrade script)
       heartbeatFn('verifying checksums');
-      this.verifyChecksums(stagingDir, checksumPath);
+      await this.verifyChecksums(stagingDir, checksumPath);
       this.logger.log('Checksums verified');
-      fs.unlinkSync(checksumPath);
+      await fs.unlink(checksumPath);
 
       // 6. Finalize env
       heartbeatFn('finalizing staged files');
-      const envPath = this.finalizeEnv(stagingDir, downloadedEnvPath);
+      const envPath = await this.finalizeEnv(stagingDir, downloadedEnvPath);
 
       // 7. Make binary executable
       await this.makeExecutable(binaryPath);
 
       // 8. Write versions.conf into staging dir
       const stagedVersionsConf = path.join(stagingDir, 'versions.conf');
-      fs.writeFileSync(stagedVersionsConf, `current_version=${version}\n`);
+      await fs.writeFile(stagedVersionsConf, `current_version=${version}\n`);
       this.logger.log(`Wrote versions.conf to staging: current_version=${version}`);
 
       // 9. Cleanup archive
-      this.safeDelete(archivePath);
+      await this.safeDelete(archivePath);
 
       this.logger.log(`Bundle staged: ${stagingDir} (binary: ${binaryFile}, script: ${upgradeScript})`);
 
@@ -172,7 +173,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
 
       // Clean up entire staging directory to avoid inconsistent state
       // on retry, isBinaryStaged could falsely report staged if partial files remain
-      this.cleanupStagingDir(stagingDir);
+      await this.cleanupStagingDir(stagingDir);
 
       throw error;
     }
@@ -187,11 +188,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
     const stagingDir = this.getStagingDir(version);
     const notStaged = { staged: false, platform: this.platform } as const;
 
-    if (!fs.existsSync(stagingDir)) {
+    if (!(await this.pathExists(stagingDir))) {
       return notStaged;
     }
 
-    const files = fs.readdirSync(stagingDir);
+    const files = await fs.readdir(stagingDir);
 
     // Check binary exists and is valid
     const binaryFile = this.getBinary(files, version);
@@ -199,17 +200,17 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       return notStaged;
     }
     const binaryPath = path.join(stagingDir, binaryFile);
-    if (!this.verifyBinary(binaryPath, version)) {
+    if (!(await this.verifyBinary(binaryPath, version))) {
       return notStaged;
     }
 
     // Check versions.conf exists and matches the target version
     const versionsConfPath = path.join(stagingDir, 'versions.conf');
-    if (!fs.existsSync(versionsConfPath)) {
+    if (!(await this.pathExists(versionsConfPath))) {
       this.logger.warn(`versions.conf missing in staging dir: ${stagingDir}`);
       return notStaged;
     }
-    const confContent = fs.readFileSync(versionsConfPath, 'utf-8');
+    const confContent = await fs.readFile(versionsConfPath, 'utf-8');
     const versionMatch = confContent.match(/current_version=(.+)/);
     if (!versionMatch || versionMatch[1].trim() !== version) {
       this.logger.warn(`versions.conf version mismatch: expected ${version}, found ${versionMatch?.[1]?.trim()}`);
@@ -264,13 +265,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
     return resolved;
   }
 
-  protected ensureStagingDir(version: string): string {
+  protected async ensureStagingDir(version: string): Promise<string> {
     const dir = this.getStagingDir(version);
     try {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-        this.logger.log(`Created staging directory: ${dir}`);
-      }
+      await fs.mkdir(dir, { recursive: true });
+      this.logger.log(`Ensured staging directory: ${dir}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to ensure staging directory ${dir}: ${msg}`);
@@ -317,7 +316,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       bytesReceived += chunk.length;
     });
 
-    const writer = fs.createWriteStream(destPath);
+    const writer = createWriteStream(destPath);
     response.data.pipe(writer);
 
     await new Promise<void>((resolve, reject) => {
@@ -326,17 +325,17 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       response.data.on('error', (err: Error) => { clearInterval(heartbeatInterval); reject(err); });
     });
 
-    if (!fs.existsSync(destPath)) {
+    if (!(await this.pathExists(destPath))) {
       throw new Error(`Download failed: file not written at ${destPath}`);
     }
 
-    const size = fs.statSync(destPath).size;
-    if (size === 0) {
+    const stat = await fs.stat(destPath);
+    if (stat.size === 0) {
       throw new Error(`Download failed: file at ${destPath} is empty (0 bytes)`);
     }
 
-    this.logger.log(`Downloaded: ${destPath} (${size} bytes)`);
-    return size;
+    this.logger.log(`Downloaded: ${destPath} (${stat.size} bytes)`);
+    return stat.size;
   }
 
 
@@ -345,8 +344,8 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // Protected: checksum verification
   // ===========================================================================
 
-  protected verifyChecksums(baseDir: string, checksumFilePath: string): void {
-    const content = fs.readFileSync(checksumFilePath, 'utf-8').trim();
+  protected async verifyChecksums(baseDir: string, checksumFilePath: string): Promise<void> {
+    const content = (await fs.readFile(checksumFilePath, 'utf-8')).trim();
     const lines = content.split('\n').filter((line) => line.trim());
 
     for (const line of lines) {
@@ -357,11 +356,11 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       const filename = parts[parts.length - 1].replace(/^\*/, '');
       const filePath = path.join(baseDir, filename);
 
-      if (!fs.existsSync(filePath)) {
+      if (!(await this.pathExists(filePath))) {
         throw new Error(`File listed in checksums not found: ${filename} (expected at ${filePath})`);
       }
 
-      const fileBuffer = fs.readFileSync(filePath);
+      const fileBuffer = await fs.readFile(filePath);
       const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex').toLowerCase();
 
       if (actualHash === expectedHash) {
@@ -392,9 +391,9 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // Protected: binary verification
   // ===========================================================================
 
-  protected verifyBinary(binaryPath: string, version: string): boolean {
+  protected async verifyBinary(binaryPath: string, version: string): Promise<boolean> {
     try {
-      if (!fs.existsSync(binaryPath)) return false;
+      if (!(await this.pathExists(binaryPath))) return false;
 
       const dirName = path.basename(path.dirname(binaryPath));
       if (!dirName.includes(version)) return false;
@@ -402,7 +401,7 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       const filename = path.basename(binaryPath);
       if (!filename.includes(version)) return false;
 
-      const stats = fs.statSync(binaryPath);
+      const stats = await fs.stat(binaryPath);
       if (stats.size < 1024 * 1024) return false;
 
       return true;
@@ -415,41 +414,53 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
   // Protected: finalize env + cleanup
   // ===========================================================================
 
-  protected finalizeEnv(stagingDir: string, downloadedEnvPath : string): string {
-    if (fs.existsSync(downloadedEnvPath)) {
-      fs.renameSync(downloadedEnvPath, path.join(stagingDir, '.env'));
+  protected async finalizeEnv(stagingDir: string, downloadedEnvPath: string): Promise<string> {
+    if (await this.pathExists(downloadedEnvPath)) {
+      await fs.rename(downloadedEnvPath, path.join(stagingDir, '.env'));
       this.logger.log(`Renamed ${downloadedEnvPath} → .env`);
     }
     return path.join(stagingDir, '.env');
   }
 
-  protected cleanupMacOSJunk(dirPath: string): void {
-    const junkPatterns = ['.DS_Store', '._'];
-    const files = fs.readdirSync(dirPath);
+  protected async cleanupMacOSJunk(dirPath: string): Promise<void> {
+    const files = await fs.readdir(dirPath);
     for (const file of files) {
       if (file === '.DS_Store' || file.startsWith('._')) {
-        fs.unlinkSync(path.join(dirPath, file));
+        await fs.unlink(path.join(dirPath, file));
         this.logger.log(`Removed macOS junk file: ${file}`);
       }
     }
   }
 
-  protected safeDelete(...paths: string[]): void {
+  protected async safeDelete(...paths: string[]): Promise<void> {
     for (const p of paths) {
-      if (fs.existsSync(p)) fs.unlinkSync(p);
+      if (await this.pathExists(p)) await fs.unlink(p);
     }
   }
 
   /** Remove entire staging directory and all its contents. */
-  protected cleanupStagingDir(dirPath: string): void {
+  protected async cleanupStagingDir(dirPath: string): Promise<void> {
     try {
-      if (fs.existsSync(dirPath)) {
-        fs.rmSync(dirPath, { recursive: true, force: true });
+      if (await this.pathExists(dirPath)) {
+        await fs.rm(dirPath, { recursive: true, force: true });
         this.logger.log(`Cleaned up staging directory: ${dirPath}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Failed to cleanup staging directory ${dirPath}: ${msg}`);
+    }
+  }
+
+  // ===========================================================================
+  // Private: helpers
+  // ===========================================================================
+
+  private async pathExists(p: string): Promise<boolean> {
+    try {
+      await fs.access(p);
+      return true;
+    } catch {
+      return false;
     }
   }
 }

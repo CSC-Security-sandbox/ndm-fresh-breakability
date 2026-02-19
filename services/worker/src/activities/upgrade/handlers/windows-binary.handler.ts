@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { BaseBinaryHandler } from '../binary-handler.interface';
@@ -11,7 +11,7 @@ export class WindowsBinaryHandler extends BaseBinaryHandler {
   protected readonly stagingBase = 'C:\\datamigrator\\staging';
 
   protected async extractArchive(archivePath: string, destDir: string): Promise<void> {
-    if (!fs.existsSync(archivePath)) {
+    try { await fs.access(archivePath); } catch {
       throw new Error(`Archive not found: ${archivePath}`);
     }
     try {

@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { v4 as uuid } from 'uuid';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import * as path from 'path';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WorkflowService } from '../workflow/workflow.service';
@@ -73,18 +74,20 @@ export class UpgradeService {
   }
 
   // Check bundle info for a version and platform.
-  private checkBundleInfo(version: string, platform: 'linux' | 'windows'): {
+  private async checkBundleInfo(version: string, platform: 'linux' | 'windows'): Promise<{
     available: boolean;
     filename?: string;
     size?: number;
-  } {
+  }> {
     const basePath = this.cpBundlePath(version, platform);
 
-    if (!fs.existsSync(basePath)) {
+    try {
+      await fs.access(basePath);
+    } catch {
       return { available: false };
     }
 
-    const files = fs.readdirSync(basePath);
+    const files = await fs.readdir(basePath);
     const bundleFile = files.find((f) =>
       f.startsWith(`datamigrator-worker-${platform}-`) && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
     );
@@ -93,17 +96,19 @@ export class UpgradeService {
       return { available: false };
     }
 
-    const stat = fs.statSync(path.join(basePath, bundleFile));
+    const stat = await fs.stat(path.join(basePath, bundleFile));
     return { available: true, filename: bundleFile, size: stat.size };
   }
   
   // Validate that upgrade bundles exist on CP for the given version.
-  private validateBundlesExist(version: string): {
+  private async validateBundlesExist(version: string): Promise<{
     linux: { available: boolean; filename?: string; size?: number };
     windows: { available: boolean; filename?: string; size?: number };
-  } {
-    const linux = this.checkBundleInfo(version, 'linux');
-    const windows = this.checkBundleInfo(version, 'windows');
+  }> {
+    const [linux, windows] = await Promise.all([
+      this.checkBundleInfo(version, 'linux'),
+      this.checkBundleInfo(version, 'windows'),
+    ]);
 
     if (!linux.available && !windows.available) {
       throw new BadRequestException(
@@ -128,38 +133,26 @@ export class UpgradeService {
     let workerIds: string[] = [];
     try {
       // 1. Precheck: ensure bundles exist for this version before starting workflow
-      this.validateBundlesExist(dto.version);
+      await this.validateBundlesExist(dto.version);
 
-      // 2. Fetch all healthy workers (health check received within last 60s)
-      const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
-      const allWorkers = await this.workerRepository.find({
-        where: { status: 'Online' },
-        relations: ['stats'],
-      });
-
-      const now = new Date();
-      const activeWorkers = allWorkers.filter((w) => {
-        if (!w.stats?.updatedAt) return false;
-        const diffSeconds = Math.floor(
-          Math.abs(now.getTime() - new Date(w.stats.updatedAt).getTime()) / 1000,
-        );
-        return diffSeconds < healthTimeout;
-      });
+      // 2. Fetch only healthy workers (Online + health ping within threshold)
+      const cutoff = new Date(Date.now() - WORKER_HEALTH_TIMEOUT_SECONDS * 1000);
+      const activeWorkers = await this.workerRepository
+        .createQueryBuilder('worker')
+        .innerJoinAndSelect('worker.stats', 'stats')
+        .where('worker.status = :status', { status: 'Online' })
+        .andWhere('stats.updated_at > :cutoff', { cutoff })
+        .getMany();
 
       if (activeWorkers.length === 0) {
-        const totalOnline = allWorkers.length;
         return {
           workflowId,
           status: 'error',
-          message: totalOnline > 0
-            ? `No healthy workers found. ${totalOnline} worker(s) are registered but not reporting health checks.`
-            : 'No active workers found',
+          message: 'No healthy workers found. Workers must be Online and reporting health checks.',
         };
       }
 
-      this.logger.log(
-        `Health check: ${activeWorkers.length}/${allWorkers.length} workers are healthy`,
-      );
+      this.logger.log(`Health check: ${activeWorkers.length} healthy worker(s) found`);
 
       workerIds = activeWorkers.map((w) => w.workerId);
 
@@ -319,11 +312,13 @@ export class UpgradeService {
 
     this.logger.log(`Serving bundle: version=${version}, platform=${platform}, path=${basePath}`);
 
-    if (!fs.existsSync(basePath)) {
+    try {
+      await fs.access(basePath);
+    } catch {
       throw new NotFoundException(`Bundle directory not found: ${basePath}`);
     }
 
-    const files = fs.readdirSync(basePath);
+    const files = await fs.readdir(basePath);
     let bundleFile: string | undefined;
     let contentType: string | undefined;
 
@@ -346,11 +341,11 @@ export class UpgradeService {
     }
 
     const bundlePath = path.join(basePath, bundleFile);
-    const stat = fs.statSync(bundlePath);
+    const stat = await fs.stat(bundlePath);
 
     this.logger.log(`Streaming: ${bundlePath} (${stat.size} bytes)`);
 
-    return new StreamableFile(fs.createReadStream(bundlePath), {
+    return new StreamableFile(createReadStream(bundlePath), {
       type: contentType,
       disposition: `attachment; filename="${bundleFile}"`,
       length: stat.size,

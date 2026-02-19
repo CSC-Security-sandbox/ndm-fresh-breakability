@@ -16,6 +16,7 @@ jest.mock('fs');
 jest.mock('uuid', () => ({ v4: () => 'test-trace-id' }));
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
+const PARENT_TASK_QUEUE = 'ParentWorkflow-TaskQueue';
 
 describe('UpgradeService', () => {
   let service: UpgradeService;
@@ -167,7 +168,7 @@ describe('UpgradeService', () => {
       expect(mockWorkflowService.startWorkflow).toHaveBeenCalledWith(
         'BinaryMulticastWorkflow',
         expect.objectContaining({
-          taskQueue: 'ParentWorkflow-TaskQueue',
+          taskQueue: PARENT_TASK_QUEUE,
           args: [expect.objectContaining({
             workerIds: ['worker-1', 'worker-2'],
             version: '1.0.0',
