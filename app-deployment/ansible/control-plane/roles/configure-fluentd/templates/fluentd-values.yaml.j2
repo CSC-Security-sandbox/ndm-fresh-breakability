@@ -72,6 +72,24 @@ fileConfigs:
       @label @WORKER
     </source>
 
+    # Istio ingress gateway access logs
+    <source>
+      @type tail
+      @id in_tail_istio_access_logs
+      @label @ISTIO
+      path /var/log/containers/*istio-ingressgateway*istio-proxy*.log
+      pos_file /var/log/fluentd-istio-access.log.pos
+      tag istio.access
+      read_from_head true
+      <parse>
+        @type regexp
+        expression /^(?<time>.+) (?<stream>stdout|stderr) (?<flags>[^ ]*) (?<log>.*)$/
+        time_format '%Y-%m-%dT%H:%M:%S.%NZ'
+        keep_time_key false
+      </parse>
+      emit_unmatched_lines true
+    </source>
+
     # expose metrics in prometheus format
     <source>
       @type prometheus
@@ -130,6 +148,53 @@ fileConfigs:
       </match>
     </label>
   
+    <label @ISTIO>
+      # Filter: Only keep logs that start with '{' (JSON access logs)
+      # This excludes operational logs like "info\tCA Endpoint..." which are not access logs
+      <filter istio.access>
+        @type grep
+        <regexp>
+          key log
+          pattern ^{
+        </regexp>
+      </filter>
+
+      # Parse the nested JSON access log from the 'log' field
+      <filter istio.access>
+        @type parser
+        key_name log
+        reserve_data true
+        remove_key_name_field false
+        emit_invalid_record_to_error false
+        <parse>
+          @type json
+          time_key timestamp
+          time_type string
+          time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+        </parse>
+      </filter>
+
+      # Add component label for Loki queries
+      <filter istio.access>
+        @type record_transformer
+        enable_ruby true
+        <record>
+          component ingress
+          service istio-ingressgateway
+          # Extract destination namespace from upstream_cluster
+          destination_namespace ${begin; match_data = record['upstream_cluster'].to_s.match(/\.([^.]+)\.svc\.cluster\.local/); match_data ? match_data[1] : "unknown"; rescue; "unknown"; end}
+          # Extract destination service name
+          destination_service ${begin; match_data = record['upstream_cluster'].to_s.match(/\|\|([^.]+)\./); match_data ? match_data[1] : "unknown"; rescue; "unknown"; end}
+        </record>
+      </filter>
+
+      # Route to standard dispatch (goes to Loki + File)
+      <match istio.access>
+        @type relabel
+        @label @DISPATCH
+      </match>
+    </label>
+
   03_dispatch.conf: |-
     <label @DISPATCH>
       <filter **>
@@ -179,6 +244,10 @@ fileConfigs:
           namespace $.kubernetes.namespace_name
           pod $.kubernetes.pod_name
           container $.kubernetes.container_name
+          component $.component
+          service $.service
+          destination_namespace $.destination_namespace
+          destination_service $.destination_service
         </label>
         flush_interval 10s
         flush_at_shutdown true

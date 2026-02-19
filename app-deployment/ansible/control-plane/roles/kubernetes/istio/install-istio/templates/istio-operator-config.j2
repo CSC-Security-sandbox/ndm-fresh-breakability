@@ -70,3 +70,27 @@ spec:
             cpu: 1000m    # Cap at 1 CPU per sidecar
             memory: 512Mi
 {% endif %}
+  
+  # Enable access logging for ingress gateway
+  meshConfig:
+    accessLogFile: /dev/stdout
+    accessLogEncoding: JSON
+    accessLogFormat: |
+      {
+        "timestamp": "%START_TIME%",
+        "method": "%REQ(:METHOD)%",
+        "path": "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+        "protocol": "%PROTOCOL%",
+        "response_code": %RESPONSE_CODE%,
+        "response_flags": "%RESPONSE_FLAGS%",
+        "duration_ms": %DURATION%,
+        "bytes_sent": %BYTES_SENT%,
+        "bytes_received": %BYTES_RECEIVED%,
+        "user_agent": "%REQ(USER-AGENT)%",
+        "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+        "upstream_host": "%UPSTREAM_HOST%",
+        "upstream_cluster": "%UPSTREAM_CLUSTER%",
+        "x_forwarded_for": "%REQ(X-FORWARDED-FOR)%",
+        "requested_server_name": "%REQUESTED_SERVER_NAME%",
+        "route_name": "%ROUTE_NAME%"
+      }
