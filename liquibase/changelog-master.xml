@@ -582,4 +582,11 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="20260219_01_alter_worker_table_add_upgrade_execution.sql" author="kb93278">
+        <sqlFile path="liquibase/20260219_01_alter_worker_table_add_upgrade_execution.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/20260219_01_alter_worker_table_add_upgrade_execution_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

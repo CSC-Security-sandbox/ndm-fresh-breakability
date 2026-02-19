@@ -168,6 +168,105 @@ export enum MulticastStatus {
 // Worker-side constants live in the handler classes.
 // =============================================================================
 
+// =============================================================================
+// Upgrade Execution Workflow Types (triggers upgrade.sh / upgrade.ps1)
+// =============================================================================
+
+export interface ExecuteUpgradeApiInput {
+  /** Target version to execute upgrade for */
+  version: string;
+}
+
+export interface ExecuteUpgradeApiOutput {
+  /** Workflow ID for tracking */
+  workflowId: string;
+  /** Status */
+  status: 'started' | 'error';
+  /** Message */
+  message?: string;
+  /** Workers that were triggered */
+  triggeredWorkers?: string[];
+}
+
+export interface UpgradeExecutionWorkflowInput {
+  /** Unique trace ID */
+  traceId: string;
+  /** Worker IDs to trigger upgrade on */
+  workerIds: string[];
+  /** Target version */
+  version: string;
+}
+
+export interface UpgradeExecutionWorkflowOutput {
+  /** Trace ID */
+  traceId: string;
+  /** Overall status */
+  status: 'completed' | 'partial' | 'failed';
+  /** Summary counts */
+  summary: {
+    total: number;
+    triggered: number;
+    failed: number;
+  };
+  /** Per-worker results */
+  results: UpgradeExecutionResult[];
+}
+
+export interface WorkerUpgradeExecutionWorkflowInput {
+  /** Trace ID */
+  traceId: string;
+  /** Worker ID */
+  workerId: string;
+  /** Target version */
+  version: string;
+}
+
+export interface WorkerUpgradeExecutionWorkflowOutput {
+  /** Worker ID */
+  workerId: string;
+  /** Status */
+  status: 'triggered' | 'failed';
+  /** Message */
+  message?: string;
+}
+
+export interface ExecuteUpgradeInput {
+  /** Target version */
+  version: string;
+}
+
+export interface ExecuteUpgradeOutput {
+  /** Whether the upgrade script was spawned */
+  status: 'triggered' | 'failed';
+  /** Message */
+  message?: string;
+}
+
+export interface UpgradeExecutionResult {
+  /** Worker ID */
+  workerId: string;
+  /** Status */
+  status: 'triggered' | 'failed';
+  /** Message */
+  message?: string;
+  /** Timestamp */
+  timestamp: string;
+}
+
+export interface UpgradeExecutionAckInput {
+  /** Worker ID */
+  workerId: string;
+  /** Version the worker upgraded to */
+  version: string;
+  /** Previous version before upgrade */
+  previousVersion?: string;
+}
+
+// =============================================================================
+// Constants (used by admin-service for CP-side path building)
+// Worker-side constants live in the handler classes.
+// =============================================================================
+
 /**
  * Base path on CP where upgrade bundles are stored.
  * Structure: /upgrade/{version}/worker/{platform}/

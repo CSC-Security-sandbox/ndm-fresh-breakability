@@ -82,6 +82,9 @@ export class WorkManagerService implements OnModuleDestroy{
       // so it gets sent to config-service during registration
       await this.loadWorkerVersion();
 
+      // Check UPGRADED flag and send ACK to CP if this is a post-upgrade boot
+      await this.checkUpgradedFlagAndAck();
+
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
       const accessToken = await this.authService.getAccessToken();
@@ -158,6 +161,63 @@ export class WorkManagerService implements OnModuleDestroy{
       this.logger.warn('versions.conf not found or current_version missing, WORKER_VERSION not set');
     } catch (err) {
       this.logger.error(`Failed to read worker version: ${err.message || err}`);
+    }
+  }
+
+  /**
+   * Check if the UPGRADED flag is set to "true" (written by upgrade.sh/ps1).
+   * If so, send an execution ACK to CP and clear the flag.
+   */
+  private async checkUpgradedFlagAndAck(): Promise<void> {
+    try {
+      const fs = require('fs');
+      const upgradedPath = process.platform === 'win32'
+        ? 'C:\\datamigrator\\conf\\UPGRADED'
+        : '/opt/datamigrator/conf/UPGRADED';
+
+      if (!fs.existsSync(upgradedPath)) return;
+
+      const content = fs.readFileSync(upgradedPath, 'utf8').trim();
+      if (content !== 'true') return;
+
+      const version = process.env.WORKER_VERSION;
+      if (!version) {
+        this.logger.warn('[checkUpgradedFlagAndAck] - UPGRADED flag is true but WORKER_VERSION not set, skipping ACK');
+        return;
+      }
+
+      this.logger.log(`[checkUpgradedFlagAndAck] - Post-upgrade boot detected, version ${version}`);
+
+      const cpBaseUrl = process.env.CP_BASE_URL
+        || (process.env.CONTROL_PLANE_IP ? `https://${process.env.CONTROL_PLANE_IP}` : null);
+
+      if (!cpBaseUrl) {
+        this.logger.warn('[checkUpgradedFlagAndAck] - No CP_BASE_URL or CONTROL_PLANE_IP, cannot send ACK');
+        return;
+      }
+
+      const ackUrl = `${cpBaseUrl}/api/v1/upgrade/worker/execution-ack`;
+      const accessToken = await this.authService.getAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      const { firstValueFrom: fvf } = require('rxjs');
+      await fvf(
+        this.httpService.post(ackUrl, {
+          workerId: this.workerId,
+          version,
+        }, { headers, timeout: 30000 }),
+      );
+
+      this.logger.log(`[checkUpgradedFlagAndAck] - ACK sent for version ${version}`);
+
+      fs.writeFileSync(upgradedPath, 'false', 'utf8');
+      this.logger.log('[checkUpgradedFlagAndAck] - UPGRADED flag cleared');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[checkUpgradedFlagAndAck] - Failed to send ACK: ${msg}`);
     }
   }
 

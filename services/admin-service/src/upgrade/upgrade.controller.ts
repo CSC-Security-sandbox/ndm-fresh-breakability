@@ -24,6 +24,10 @@ import {
   MulticastResponseDto,
   MulticastStatusDto,
   WorkerAckDto,
+  ExecuteUpgradeRequestDto,
+  ExecuteUpgradeResponseDto,
+  ExecutionStatusDto,
+  ExecutionAckDto,
 } from './dto/multicast.dto';
 
 @ApiTags('upgrade')
@@ -149,5 +153,56 @@ export class UpgradeController {
     @Param('workflowId') workflowId: string,
   ): Promise<MulticastStatusDto> {
     return this.upgradeService.getWorkflowStatus(workflowId);
+  }
+
+  // POST /api/v1/upgrade/execute
+  @Auth(Permission.AgentDeployment)
+  @ApiBearerAuth()
+  @Post('execute')
+  @ApiOperation({
+    summary: 'Trigger upgrade execution on staged workers',
+    description:
+      'Starts a Temporal workflow to execute upgrade.sh/ps1 on all workers that have completed binary staging.',
+  })
+  @ApiBody({ type: ExecuteUpgradeRequestDto })
+  @ApiResponse({ status: 201, description: 'Upgrade execution started', type: ExecuteUpgradeResponseDto })
+  @ApiResponse({ status: 400, description: 'No staged workers found' })
+  async startExecution(
+    @Body() dto: ExecuteUpgradeRequestDto,
+  ): Promise<ExecuteUpgradeResponseDto> {
+    return this.upgradeService.startExecution(dto);
+  }
+
+  //GET /api/v1/upgrade/execute/:workflowId
+  @Auth(Permission.AgentDeployment)
+  @ApiBearerAuth()
+  @Get('execute/:workflowId')
+  @ApiOperation({
+    summary: 'Get upgrade execution status',
+    description:
+      'Returns per-worker execution status.',
+  })
+  @ApiParam({ name: 'workflowId', description: 'The execution workflow ID' })
+  @ApiResponse({ status: 200, description: 'Execution status', type: ExecutionStatusDto })
+  async getExecutionStatus(
+    @Param('workflowId') workflowId: string,
+  ): Promise<ExecutionStatusDto> {
+    return this.upgradeService.getExecutionStatus(workflowId);
+  }
+
+  //POST /api/v1/upgrade/worker/execution-ack
+  @AuthWorker()
+  @ApiBearerAuth()
+  @Post('worker/execution-ack')
+  @ApiOperation({
+    summary: 'Acknowledge upgrade execution',
+    description: 'Worker sends this after rebooting with the new version. Updates execution status to COMPLETED.',
+  })
+  @ApiBody({ type: ExecutionAckDto })
+  @ApiResponse({ status: 201, description: 'Acknowledged' })
+  async acknowledgeExecution(
+    @Body() dto: ExecutionAckDto,
+  ): Promise<{ acknowledged: boolean }> {
+    return this.upgradeService.acknowledgeExecution(dto);
   }
 }

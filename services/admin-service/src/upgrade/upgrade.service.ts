@@ -14,9 +14,14 @@ import {
   MulticastResponseDto,
   MulticastStatusDto,
   WorkerAckDto,
+  ExecuteUpgradeRequestDto,
+  ExecuteUpgradeResponseDto,
+  ExecutionStatusDto,
+  ExecutionAckDto,
+  WorkerExecutionStatusDto,
 } from './dto/multicast.dto';
 import { WorkerEntity } from '../entities/worker.entity';
-import { UpgradeBundleStatus } from '../constants/worker.enums';
+import { UpgradeBundleStatus, UpgradeExecutionStatus } from '../constants/worker.enums';
 
 /**
  * Base path for upgrade bundles on CP.
@@ -301,6 +306,220 @@ export class UpgradeService {
       workers: workerStatuses,
       workflowResult,
     };
+  }
+
+  // =========================================================================
+  // Upgrade Execution
+  // =========================================================================
+
+  /** Trigger upgrade execution on all workers where bundles are staged. */
+  async startExecution(
+    dto: ExecuteUpgradeRequestDto,
+  ): Promise<ExecuteUpgradeResponseDto> {
+    const traceId = uuid();
+    const workflowId = `UpgradeExecution-${traceId}`;
+    let workerIds: string[] = [];
+
+    try {
+      const stagedWorkers = await this.workerRepository.find({
+        where: {
+          upgradeBundleStaged: UpgradeBundleStatus.COMPLETED,
+          stagedVersion: dto.version,
+        },
+      });
+
+      if (stagedWorkers.length === 0) {
+        return {
+          workflowId,
+          status: 'error',
+          message: `No workers have completed binary staging for version ${dto.version}`,
+        };
+      }
+
+      workerIds = stagedWorkers.map((w) => w.workerId);
+
+      this.logger.log(
+        `Starting execution workflow: ${workflowId} for ${workerIds.length} staged workers, version ${dto.version}`,
+      );
+
+      await this.workerRepository.update(
+        { workerId: In(workerIds) },
+        { upgradeExecutionStatus: UpgradeExecutionStatus.IN_PROGRESS },
+      );
+
+      await this.workflowService.startWorkflow(
+        WorkFlows.UPGRADE_EXECUTION,
+        {
+          taskQueue: PARENT_TASK_QUEUE,
+          workflowId,
+          args: [{ traceId, workerIds, version: dto.version }],
+        },
+      );
+
+      this.logger.log(`Execution workflow started: ${workflowId}`);
+
+      return {
+        workflowId,
+        status: 'started',
+        message: `Upgrade execution triggered for ${workerIds.length} workers`,
+        triggeredWorkers: workerIds,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to start execution workflow: ${error}`);
+
+      if (workerIds?.length) {
+        try {
+          await this.workerRepository.update(
+            { workerId: In(workerIds) },
+            { upgradeExecutionStatus: UpgradeExecutionStatus.IDLE },
+          );
+        } catch (resetError) {
+          this.logger.error(`Failed to reset execution status: ${resetError}`);
+        }
+      }
+
+      if (error instanceof BadRequestException) throw error;
+
+      return { workflowId, status: 'error', message: error.message };
+    }
+  }
+
+  /** Get upgrade execution status. After 5-minute window, marks remaining as timed out. */
+  async getExecutionStatus(workflowId: string): Promise<ExecutionStatusDto> {
+    const EXECUTION_WINDOW_MS = 5 * 60 * 1000;
+
+    const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
+
+    const allWorkers = await this.workerRepository.find();
+
+    // Workers involved in execution (IN_PROGRESS, COMPLETED, FAILED)
+    const executionWorkers = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus !== UpgradeExecutionStatus.IDLE,
+    );
+
+    const earliestUpdate = executionWorkers
+      .map((w) => w.updatedAt ? new Date(w.updatedAt).getTime() : Date.now())
+      .reduce((min, t) => Math.min(min, t), Date.now());
+    const elapsed = Date.now() - earliestUpdate;
+    const windowElapsed = elapsed >= EXECUTION_WINDOW_MS;
+
+    if (windowElapsed) {
+      const stillInProgress = executionWorkers.filter(
+        (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS,
+      );
+      if (stillInProgress.length > 0) {
+        await this.workerRepository.update(
+          { workerId: In(stillInProgress.map((w) => w.workerId)) },
+          { upgradeExecutionStatus: UpgradeExecutionStatus.FAILED },
+        );
+        stillInProgress.forEach((w) => {
+          w.upgradeExecutionStatus = UpgradeExecutionStatus.FAILED;
+        });
+        this.logger.log(
+          `Timed out ${stillInProgress.length} workers after 5-minute window`,
+        );
+      }
+    }
+
+    const toDto = (w: WorkerEntity): WorkerExecutionStatusDto => ({
+      workerId: w.workerId,
+      workerName: w.workerName,
+      ipAddress: w.ipAddress,
+      platform: w.platform,
+      currentVersion: w.workerVersion,
+      executionStatus: w.upgradeExecutionStatus,
+      upgradeCompletedAt: w.upgradeCompletedAt?.toISOString(),
+    });
+
+    const completed = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.COMPLETED,
+    );
+    const notCompleted = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS
+        || w.upgradeExecutionStatus === UpgradeExecutionStatus.FAILED,
+    );
+    const notStaged = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IDLE,
+    );
+    const failedCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.FAILED,
+    ).length;
+    const inProgressCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS,
+    ).length;
+    const notStartedCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IDLE,
+    ).length;
+
+    const allDone = inProgressCount === 0 && executionWorkers.length > 0;
+    const upgradeCompleted = allDone || windowElapsed;
+
+    let upgradeStatus: 'success' | 'failure' | 'in_progress';
+    if (!upgradeCompleted) {
+      upgradeStatus = 'in_progress';
+    } else if (failedCount === 0 && notStartedCount === 0 && completed.length === allWorkers.length) {
+      upgradeStatus = 'success';
+    } else {
+      upgradeStatus = 'failure';
+    }
+
+    return {
+      workflowId,
+      workflowStatus: workflowData.status,
+      upgradeCompleted,
+      upgradeStatus,
+      summary: {
+        total: allWorkers.length,
+        completed: completed.length,
+        inProgress: inProgressCount,
+        failed: failedCount,
+        notStarted: notStartedCount,
+      },
+      completed: completed.map(toDto),
+      notCompleted: notCompleted.map(toDto),
+      notStaged: notStaged.map(toDto),
+    };
+  }
+
+  /** Worker ACK after upgrade execution. Only marks COMPLETED if ACK version matches staged version. */
+  async acknowledgeExecution(
+    dto: ExecutionAckDto,
+  ): Promise<{ acknowledged: boolean; message?: string }> {
+    this.logger.log(
+      `Worker ${dto.workerId} execution ack: upgraded to ${dto.version}`,
+    );
+
+    const worker = await this.workerRepository.findOne({ where: { workerId: dto.workerId } });
+
+    if (!worker) {
+      this.logger.warn(`Worker ${dto.workerId} not found in DB`);
+      return { acknowledged: false, message: 'Worker not found' };
+    }
+
+    if (worker.stagedVersion && worker.stagedVersion !== dto.version) {
+      this.logger.warn(
+        `Worker ${dto.workerId} ACK version mismatch: ack=${dto.version}, staged=${worker.stagedVersion}`,
+      );
+      await this.workerRepository.update(dto.workerId, {
+        upgradeExecutionStatus: UpgradeExecutionStatus.FAILED,
+      });
+      this.logger.log(`Worker ${dto.workerId}: execution=FAILED (version mismatch)`);
+      return {
+        acknowledged: false,
+        message: `Version mismatch: worker sent ${dto.version} but staged version is ${worker.stagedVersion}`,
+      };
+    }
+
+    await this.workerRepository.update(dto.workerId, {
+      upgradeExecutionStatus: UpgradeExecutionStatus.COMPLETED,
+      upgradeBundleStaged: UpgradeBundleStatus.IDLE,
+      stagedVersion: null,
+      workerVersion: dto.version,
+      upgradeCompletedAt: new Date(),
+    });
+
+    this.logger.log(`Worker ${dto.workerId}: execution=COMPLETED, bundle_staged=IDLE, version=${dto.version}`);
+    return { acknowledged: true };
   }
 
   // Stream the upgrade bundle for a specific version and platform.

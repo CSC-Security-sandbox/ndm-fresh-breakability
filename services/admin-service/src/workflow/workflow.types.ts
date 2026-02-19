@@ -1,5 +1,6 @@
 export enum WorkFlows {
     BINARY_MULTICAST = 'BinaryMulticastWorkflow',
+    UPGRADE_EXECUTION = 'UpgradeExecutionWorkflow',
   }
 
   export enum WorkflowExecutionStatus {

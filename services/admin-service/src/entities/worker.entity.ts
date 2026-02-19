@@ -1,5 +1,5 @@
-import { Entity, Column, PrimaryColumn, OneToOne, JoinColumn } from 'typeorm';
-import { UpgradeBundleStatus } from '../constants/worker.enums';
+import { Entity, Column, PrimaryColumn, OneToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
+import { UpgradeBundleStatus, UpgradeExecutionStatus } from '../constants/worker.enums';
 import { WorkerStatsEntity } from './worker-stats.entity';
 
 /**
@@ -36,6 +36,20 @@ export class WorkerEntity {
 
   @Column({ type: 'varchar', length: 100, name: 'worker_version', nullable: true })
   workerVersion: string;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'upgrade_execution_status',
+    default: UpgradeExecutionStatus.IDLE,
+  })
+  upgradeExecutionStatus: UpgradeExecutionStatus;
+
+  @Column({ type: 'timestamp', name: 'upgrade_completed_at', nullable: true })
+  upgradeCompletedAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', nullable: true })
+  updatedAt: Date;
 
   @OneToOne(() => WorkerStatsEntity)
   @JoinColumn({ name: 'id', referencedColumnName: 'workerId' })

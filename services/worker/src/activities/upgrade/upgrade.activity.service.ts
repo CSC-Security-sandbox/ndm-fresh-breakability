@@ -14,11 +14,19 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Context } from '@temporalio/activity';
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import axios from 'axios';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { AuthService } from '../../auth/auth.service';
 import { IBinaryHandler } from './binary-handler.interface';
-import { DownloadBundleInput, DownloadBundleOutput } from '../../workflows/upgrade/upgrade.types';
+import {
+  DownloadBundleInput,
+  DownloadBundleOutput,
+  ExecuteUpgradeInput,
+  ExecuteUpgradeOutput,
+} from '../../workflows/upgrade/upgrade.types';
 
 @Injectable()
 export class UpgradeActivityService {
@@ -58,6 +66,68 @@ export class UpgradeActivityService {
   /** Download bundle from CP, extract, verify, stage. */
   async downloadBundle(input: DownloadBundleInput): Promise<DownloadBundleOutput> {
     return this.handler.download(input.version, (stage) => this.heartbeat(stage));
+  }
+
+  /**
+   * Spawn the upgrade script as a detached process and return immediately.
+   * The script will stop/restart the worker service — this process will die.
+   */
+  async executeUpgrade(input: ExecuteUpgradeInput): Promise<ExecuteUpgradeOutput> {
+    const { version } = input;
+    const isWindows = process.platform === 'win32';
+
+    const stagingBase = isWindows
+      ? 'C:\\datamigrator\\staging'
+      : '/opt/datamigrator/staging';
+    const stagingDir = path.join(stagingBase, version);
+
+    const scriptName = isWindows ? 'upgrade.ps1' : 'upgrade.sh';
+    const scriptPath = path.join(stagingDir, scriptName);
+
+    this.logger.log(`[executeUpgrade] platform=${process.platform}, isWindows=${isWindows}, scriptPath=${scriptPath}`);
+
+    if (!fs.existsSync(scriptPath)) {
+      this.logger.error(`Upgrade script not found: ${scriptPath}`);
+      return { status: 'failed', message: `Upgrade script not found: ${scriptPath}` };
+    }
+
+    this.logger.log(`[executeUpgrade] Script exists, spawning: ${scriptPath} ${version}`);
+
+    try {
+      const logBase = isWindows ? 'C:\\datamigrator' : '/opt/datamigrator';
+      const outLog = fs.openSync(path.join(logBase, 'upgrade-spawn.log'), 'a');
+      const errLog = fs.openSync(path.join(logBase, 'upgrade-spawn-err.log'), 'a');
+
+      let child;
+      if (isWindows) {
+        const cmd = `powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}" "${version}"`;
+        this.logger.log(`[executeUpgrade] Windows cmd: ${cmd}`);
+        child = spawn('cmd.exe', ['/c', 'start', '/b', 'powershell.exe',
+          '-ExecutionPolicy', 'Bypass', '-File', scriptPath, version], {
+          detached: true,
+          stdio: ['ignore', outLog, errLog],
+          windowsHide: true,
+        });
+      } else {
+        child = spawn('bash', [scriptPath, version], {
+          detached: true,
+          stdio: ['ignore', outLog, errLog],
+        });
+      }
+
+      child.on('error', (err) => {
+        this.logger.error(`[executeUpgrade] Spawn error: ${err.message}`);
+      });
+
+      child.unref();
+
+      this.logger.log(`[executeUpgrade] Spawned PID ${child.pid}`);
+      return { status: 'triggered', message: `Upgrade script spawned with PID ${child.pid}` };
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[executeUpgrade] Failed to spawn: ${msg}`);
+      return { status: 'failed', message: msg };
+    }
   }
 
   /** Acknowledge download status to CP. POST /api/v1/upgrade/worker/ack */

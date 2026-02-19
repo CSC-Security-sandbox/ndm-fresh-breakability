@@ -92,11 +92,11 @@ export class WorkerOptionsService {
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
             validatePath: this.validatePathActivity.validatePath.bind(this.validatePathActivity),
-            // Upgrade activities (for WorkerDownloadWorkflow)
-            // Platform detection, auth, and URL construction are handled internally by each activity
+            // Upgrade activities (for WorkerDownloadWorkflow + WorkerUpgradeExecutionWorkflow)
             downloadBundle: this.upgradeActivityService.downloadBundle.bind(this.upgradeActivityService),
             isBinaryStaged: this.upgradeActivityService.isBinaryStaged.bind(this.upgradeActivityService),
             ackUpgrade: this.upgradeActivityService.ackUpgrade.bind(this.upgradeActivityService),
+            executeUpgrade: this.upgradeActivityService.executeUpgrade.bind(this.upgradeActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
