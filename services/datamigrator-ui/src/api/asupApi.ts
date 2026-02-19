@@ -53,7 +53,14 @@ export const asupApi = createApi({
       query: () => "asup/settings",
       providesTags: ["ASUP_SETTINGS"],
       transformResponse: (response: any) => {
-        return response?.data || response || { enabled: false, consentGiven: false };
+        // API response format: { data: { items: { enabled, consentGiven, ... } } }
+        const settings = response?.data?.items || response?.data || response || {};
+        return {
+          enabled: settings.enabled ?? false,
+          consentGiven: settings.consentGiven ?? false,
+          lastUpdated: settings.lastUpdated || null,
+          lastTransmission: settings.lastTransmission || null,
+        };
       },
     }),
 
