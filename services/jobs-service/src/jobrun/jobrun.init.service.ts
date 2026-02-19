@@ -288,6 +288,7 @@ export class JobRunInitService {
       connection: {
         sourceCredential: {
           path: jobConfig?.sourcePath?.volumePath,
+          directoryPath: jobConfig?.sourceDirectoryPath,
           isValidPath: jobConfig?.sourcePath?.isValid,
           isDisabled: jobConfig?.sourcePath?.isDisabled,
           pathId: jobConfig?.sourcePath?.id,
@@ -331,6 +332,7 @@ export class JobRunInitService {
 
       details.connection["targetCredential"] = {
         path: jobConfig?.targetPath?.volumePath,
+        directoryPath: jobConfig?.targetDirectoryPath,
         pathId: jobConfig?.targetPath?.id,
         isValidPath: jobConfig?.targetPath?.isValid,
         isDisabled: jobConfig?.targetPath?.isDisabled,
@@ -617,11 +619,15 @@ export class JobRunInitService {
       jobRunConfig.jobType,
       sourcefileServerDetails,
       jobRunConfig.connection.sourceCredential.path,
+      jobRunConfig.connection.sourceCredential.directoryPath,
       jobRunConfig.jobType !== JobType.DISCOVER
         ? targetfileServerDetails
         : undefined,
       jobRunConfig.jobType !== JobType.DISCOVER
         ? jobRunConfig.connection.targetCredential.path
+        : undefined,
+      jobRunConfig.jobType !== JobType.DISCOVER
+        ? jobRunConfig.connection.targetCredential.directoryPath
         : undefined,
       jobRunConfig.workers,
       {

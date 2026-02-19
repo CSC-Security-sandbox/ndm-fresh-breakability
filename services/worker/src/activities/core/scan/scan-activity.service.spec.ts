@@ -15,12 +15,16 @@ jest.mock('@temporalio/activity', () => ({
     },
 }));
 
+const BASE_WORKING_PATH = '/tmp/base-worker';
+
 const mockJobContext = {
     jobConfig: {
         options: {
             skipsFilesModifiedInLast: '2d',
             excludeFilePattern: 'node_modules,.git',
         },
+        sourceDirectoryPath: '/source-dir',
+        destinationDirectoryPath: '/target-dir',
     },
     jobRunId: 'test-job-run-id',
     publishToTaskStream: jest.fn(),
@@ -56,6 +60,8 @@ describe('ScanService', () => {
     let discoveryScanService: jest.Mocked<DiscoveryScanService>;
 
     beforeEach(() => {
+        process.env.BASE_WORKING_PATH = BASE_WORKING_PATH;
+
         configService = {
             get: jest.fn((key: string) => {
                 switch (key) {
@@ -225,6 +231,13 @@ describe('ScanService', () => {
             } as any);
 
             expect(migrateScanService.scanDirectory).toHaveBeenCalledTimes(2);
+            const firstCallInput = migrateScanService.scanDirectory.mock.calls[0][0];
+            const expectedSourcePrefix = `${BASE_WORKING_PATH}/job-1/${task.sPathId}/source-dir`;
+            const expectedTargetPrefix = `${BASE_WORKING_PATH}/job-1/${task.tPathId}/target-dir`;
+            expect(firstCallInput.sourcePrefix).toBe(expectedSourcePrefix);
+            expect(firstCallInput.targetPrefix).toBe(expectedTargetPrefix);
+            expect(firstCallInput.sourcePath).toBe(`${expectedSourcePrefix}/foo`);
+            expect(firstCallInput.targetPath).toBe(`${expectedTargetPrefix}/foo`);
             expect(result.result.fileCount).toBe(2);
             expect(result.result.dirCount).toBe(2);
             expect(result.result.batchDirs).toEqual(['batch1']);

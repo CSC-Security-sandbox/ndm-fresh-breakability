@@ -679,6 +679,203 @@ describe('ConfigurationService', () => {
       expect(result[0].sourcePath.id).toBe('source1');
       expect(result[1].sourcePath.id).toBe('source2');
     });
+
+    it('should extract sourceDirectoryPath and targetDirectoryPath from job configs', async () => {
+      const mockConfig = {
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source1',
+                    sourceDirectoryPath: '/source/directory',
+                    targetPathId: 'target1',
+                    targetDirectoryPath: '/target/directory',
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+
+      jest.spyOn(volumeRepository, 'find').mockResolvedValue([
+        {
+          id: 'source1',
+          volumePath: '/source1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+      ] as any);
+
+      const result = await service.getCutoverDetailsByConfigId(uuidv4());
+
+      expect(result.length).toBe(1);
+      expect(result[0].sourceDirectoryPath).toBe('/source/directory');
+      expect(result[0].destinationDirectoryPath).toBe('/target/directory');
+    });
+
+    it('should handle null sourceDirectoryPath and targetDirectoryPath', async () => {
+      const mockConfig = {
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source1',
+                    sourceDirectoryPath: null,
+                    targetPathId: 'target1',
+                    targetDirectoryPath: null,
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+
+      jest.spyOn(volumeRepository, 'find').mockResolvedValue([
+        {
+          id: 'source1',
+          volumePath: '/source1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+      ] as any);
+
+      const result = await service.getCutoverDetailsByConfigId(uuidv4());
+
+      expect(result.length).toBe(1);
+      expect(result[0].sourceDirectoryPath).toBeNull();
+      expect(result[0].destinationDirectoryPath).toBeNull();
+    });
+
+    it('should extract directory paths for multiple job configs', async () => {
+      const mockConfig = {
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source1',
+                    sourceDirectoryPath: '/path1/source',
+                    targetPathId: 'target1',
+                    targetDirectoryPath: '/path1/target',
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                  {
+                    jobType: JobType.Migrate,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source2',
+                    sourceDirectoryPath: '/path2/source',
+                    targetPathId: 'target2',
+                    targetDirectoryPath: '/path2/target',
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Completed,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+
+      jest.spyOn(volumeRepository, 'find').mockResolvedValue([
+        {
+          id: 'source1',
+          volumePath: '/source1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+        {
+          id: 'source2',
+          volumePath: '/source2',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target2',
+          volumePath: '/target2',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+      ] as any);
+
+      const result = await service.getCutoverDetailsByConfigId(uuidv4());
+
+      expect(result.length).toBe(2);
+      expect(result[0].sourceDirectoryPath).toBe('/path1/source');
+      expect(result[0].destinationDirectoryPath).toBe('/path1/target');
+      expect(result[1].sourceDirectoryPath).toBe('/path2/source');
+      expect(result[1].destinationDirectoryPath).toBe('/path2/target');
+    });
   });
 
   describe('getVolumeDetailsMap', () => {
@@ -801,6 +998,116 @@ describe('ConfigurationService', () => {
           sourcePath: { id: 'source1', sourcePathName: '/source1' },
         },
       ]);
+    });
+
+    it('should include sourceDirectoryPath and destinationDirectoryPath in response', async () => {
+      const mockConfig = {
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source1',
+                    sourceDirectoryPath: '/home/user/source',
+                    targetPathId: 'target1',
+                    targetDirectoryPath: '/home/user/destination',
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+
+      jest.spyOn(volumeRepository, 'find').mockResolvedValue([
+        {
+          id: 'source1',
+          volumePath: '/source1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+      ] as any);
+
+      const result = await service.getCutoverDetailsByConfigId(uuidv4());
+
+      expect(result[0]).toHaveProperty('sourceDirectoryPath', '/home/user/source');
+      expect(result[0]).toHaveProperty('destinationDirectoryPath', '/home/user/destination');
+    });
+
+    it('should handle empty directory paths in response', async () => {
+      const mockConfig = {
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'source1',
+                    sourceDirectoryPath: '',
+                    targetPathId: 'target1',
+                    targetDirectoryPath: '',
+                    jobRunDetails: [
+                      {
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      jest
+        .spyOn(configRepository, 'findOne')
+        .mockResolvedValue(mockConfig as any);
+
+      jest.spyOn(volumeRepository, 'find').mockResolvedValue([
+        {
+          id: 'source1',
+          volumePath: '/source1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config1', configName: 'Config 1' } },
+        },
+        {
+          id: 'target1',
+          volumePath: '/target1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'config2', configName: 'Config 2' } },
+        },
+      ] as any);
+
+      const result = await service.getCutoverDetailsByConfigId(uuidv4());
+
+      expect(result[0].sourceDirectoryPath).toBe('');
+      expect(result[0].destinationDirectoryPath).toBe('');
     });
   });
 
@@ -2710,6 +3017,233 @@ describe('ConfigurationService', () => {
       await expect(
         service.getCutoverDetailsByConfigId(configId),
       ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should include sourceDirectoryPath and destinationDirectoryPath in cutover details', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job-1',
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'vol-1',
+                    sourceDirectoryPath: '/mnt/source/data',
+                    targetPathId: 'vol-2',
+                    targetDirectoryPath: '/mnt/target/data',
+                    jobRunDetails: [
+                      {
+                        id: 'run-1',
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'vol-1',
+          volumePath: '/export/share1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: {
+            config: {
+              id: 'config-1',
+              configName: 'Source Config',
+            },
+          },
+        },
+        {
+          id: 'vol-2',
+          volumePath: '/export/share2',
+          isValid: true,
+          isDisabled: false,
+          fileServer: {
+            config: {
+              id: 'config-2',
+              configName: 'Target Config',
+            },
+          },
+        },
+      ];
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue(mockVolumes);
+
+      const result = await service.getCutoverDetailsByConfigId(configId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        protocol: Protocol.NFS,
+        sourceDirectoryPath: '/mnt/source/data',
+        destinationDirectoryPath: '/mnt/target/data',
+        sourcePath: {
+          id: 'vol-1',
+          sourcePathName: '/export/share1',
+        },
+        destinationPath: {
+          id: 'vol-2',
+          destinationPathName: '/export/share2',
+        },
+      });
+    });
+
+    it('should handle multiple cutover jobs with different directory paths', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.SMB,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job-1',
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'vol-1',
+                    sourceDirectoryPath: '/dir1/source',
+                    targetPathId: 'vol-2',
+                    targetDirectoryPath: '/dir1/target',
+                    jobRunDetails: [
+                      { id: 'run-1', status: JobRunStatus.Errored },
+                    ],
+                  },
+                  {
+                    id: 'job-2',
+                    jobType: JobType.Migrate,
+                    status: 'ACTIVE',
+                    sourcePathId: 'vol-3',
+                    sourceDirectoryPath: '/dir2/source',
+                    targetPathId: 'vol-4',
+                    targetDirectoryPath: '/dir2/target',
+                    jobRunDetails: [
+                      { id: 'run-2', status: JobRunStatus.Completed },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'vol-1',
+          volumePath: '/share1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'c1', configName: 'Config 1' } },
+        },
+        {
+          id: 'vol-2',
+          volumePath: '/share2',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'c2', configName: 'Config 2' } },
+        },
+        {
+          id: 'vol-3',
+          volumePath: '/share3',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'c1', configName: 'Config 1' } },
+        },
+        {
+          id: 'vol-4',
+          volumePath: '/share4',
+          isValid: true,
+          isDisabled: false,
+          fileServer: { config: { id: 'c2', configName: 'Config 2' } },
+        },
+      ];
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue(mockVolumes);
+
+      const result = await service.getCutoverDetailsByConfigId(configId);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].sourceDirectoryPath).toBe('/dir1/source');
+      expect(result[0].destinationDirectoryPath).toBe('/dir1/target');
+      expect(result[1].sourceDirectoryPath).toBe('/dir2/source');
+      expect(result[1].destinationDirectoryPath).toBe('/dir2/target');
+    });
+
+    it('should handle cutover details with null directory paths', async () => {
+      const configId = uuidv4();
+      const mockConfig = {
+        id: configId,
+        fileServers: [
+          {
+            protocol: Protocol.NFS,
+            volumes: [
+              {
+                jobConfig: [
+                  {
+                    id: 'job-1',
+                    jobType: JobType.CutOver,
+                    status: 'ACTIVE',
+                    sourcePathId: 'vol-1',
+                    sourceDirectoryPath: null,
+                    targetPathId: 'vol-2',
+                    targetDirectoryPath: null,
+                    jobRunDetails: [
+                      {
+                        id: 'run-1',
+                        status: JobRunStatus.Errored,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockVolumes = [
+        {
+          id: 'vol-1',
+          volumePath: '/export/share1',
+          isValid: true,
+          isDisabled: false,
+          fileServer: {
+            config: { id: 'config-1', configName: 'Source Config' },
+          },
+        },
+        {
+          id: 'vol-2',
+          volumePath: '/export/share2',
+          isValid: true,
+          isDisabled: false,
+          fileServer: {
+            config: { id: 'config-2', configName: 'Target Config' },
+          },
+        },
+      ];
+
+      mockConfigRepository.findOne.mockResolvedValue(mockConfig);
+      mockVolumeRepository.find.mockResolvedValue(mockVolumes);
+
+      const result = await service.getCutoverDetailsByConfigId(configId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].sourceDirectoryPath).toBeNull();
+      expect(result[0].destinationDirectoryPath).toBeNull();
     });
   });
 

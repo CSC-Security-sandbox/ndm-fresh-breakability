@@ -172,7 +172,9 @@ describe("JobRunActionService", () => {
                     firstRunAt: new Date(),
                     futureScheduleAt: "",
                     sourcePathId: "src1",
+                    sourceDirectoryPath: "/mnt/src/dir",
                     targetPathId: "tgt1",
+                    targetDirectoryPath: "/mnt/tgt/dir",
                     jobRunDetails: [],
                     paths: {
                         inventory: [],

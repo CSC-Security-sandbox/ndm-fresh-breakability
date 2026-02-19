@@ -1038,12 +1038,14 @@ describe("buildJobContext", () => {
     it('should handle undefined protocolVersion correctly', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
+      const sourceDirectoryPath = '/source/directory';
       const mockJobConfig = {
         id: jobConfigId,
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
         excludeFilePatterns: '*.tmp',
         excludeOlderThan: new Date(),
+        sourceDirectoryPath,
         sourcePath: {
           id: 'sourcePathId',
           volumePath: '/source/path',
@@ -1075,6 +1077,7 @@ describe("buildJobContext", () => {
 
       expect(result).toBeDefined();
       expect(result.connection.sourceCredential).toBeDefined();
+      expect(result.connection.sourceCredential.directoryPath).toBe(sourceDirectoryPath);
       // Should not throw an error when protocolVersion is undefined
       expect(result.connection.sourceCredential.protocolVersion).toBe(undefined);
     });
@@ -1134,6 +1137,8 @@ describe("buildJobContext", () => {
     it('should return empty workers array when there are no common workers between source and target', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
+      const sourceDirectoryPath = '/migrate/source/dir';
+      const targetDirectoryPath = '/migrate/target/dir';
       const mockJobConfig = {
         id: jobConfigId,
         jobType: JobType.MIGRATE,
@@ -1141,6 +1146,8 @@ describe("buildJobContext", () => {
         excludeFilePatterns: '*.tmp',
         excludeOlderThan: new Date(),
         targetPathId: 'targetPathId',
+        sourceDirectoryPath,
+        targetDirectoryPath,
         sourcePath: {
           id: 'sourcePathId',
           volumePath: '/source/path',
@@ -1196,12 +1203,14 @@ describe("buildJobContext", () => {
     it('should filter out unhealthy workers', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
+      const sourceDirectoryPath = '/discover/source/dir';
       const mockJobConfig = {
         id: jobConfigId,
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
         excludeFilePatterns: '*.tmp',
         excludeOlderThan: new Date(),
+        sourceDirectoryPath,
         sourcePath: {
           id: 'sourcePathId',
           volumePath: '/source/path',
@@ -1301,6 +1310,8 @@ describe("buildJobContext", () => {
     it('should return job config details for MIGRATE job type', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
+      const sourceDirectoryPath = '/migrate/source/dir';
+      const targetDirectoryPath = '/migrate/target/dir';
       const mockJobConfig = {
         id: jobConfigId,
         jobType: JobType.MIGRATE,
@@ -1308,6 +1319,8 @@ describe("buildJobContext", () => {
         excludeFilePatterns: '*.tmp',
         excludeOlderThan: new Date(),
         targetPathId: 'targetPathId',
+        sourceDirectoryPath,
+        targetDirectoryPath,
         sourcePath: {
           id: 'sourcePathId',
           volumePath: '/source/path',
@@ -1362,13 +1375,17 @@ describe("buildJobContext", () => {
       expect(result.workers).toContain('worker1');
       expect(result.connection.sourceCredential).toBeDefined();
       expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.sourceCredential.directoryPath).toBe(sourceDirectoryPath);
       expect(result.connection.targetCredential).toBeDefined();
       expect(result.connection.targetCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.targetCredential.directoryPath).toBe(targetDirectoryPath);
     });
 
     it('should return job config details for CUT_OVER job type', async () => {
       const jobConfigId = 'jobConfigId';
       const healthStatsTimeout = 60;
+      const sourceDirectoryPath = '/cutover/source/dir';
+      const targetDirectoryPath = '/cutover/target/dir';
       const mockJobConfig = {
         id: jobConfigId,
         jobType: JobType.CUT_OVER,
@@ -1376,6 +1393,8 @@ describe("buildJobContext", () => {
         excludeFilePatterns: '*.tmp',
         excludeOlderThan: new Date(),
         targetPathId: 'targetPathId',
+        sourceDirectoryPath,
+        targetDirectoryPath,
         sourcePath: {
           id: 'sourcePathId',
           volumePath: '/source/path',
@@ -1430,8 +1449,10 @@ describe("buildJobContext", () => {
       expect(result.workers).toContain('worker1');
       expect(result.connection.sourceCredential).toBeDefined();
       expect(result.connection.sourceCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.sourceCredential.directoryPath).toBe(sourceDirectoryPath);
       expect(result.connection.targetCredential).toBeDefined();
       expect(result.connection.targetCredential.protocol).toBe(Protocol.NFS);
+      expect(result.connection.targetCredential.directoryPath).toBe(targetDirectoryPath);
     });
 
     /**

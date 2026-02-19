@@ -97,8 +97,8 @@ export class ScanService {
     }
 
     async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
-        const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
-        const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
+        const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
+        const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
         const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
         let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
@@ -171,7 +171,7 @@ export class ScanService {
     }
 
     private generateDMErr(task: any, jobContext: JobManagerContext, error: Error) {
-        const baseSourcePrefixPath = basePrefix(jobContext.jobRunId, task.sPathId);
+        const baseSourcePrefixPath = basePrefix(jobContext.jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
         const relativePath = task.commands && task.commands.length > 0 ? task.commands[0].fPath : '/';
         const fullSourcePath = `${baseSourcePrefixPath}${relativePath}`;
         

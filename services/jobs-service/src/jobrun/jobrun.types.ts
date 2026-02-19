@@ -11,6 +11,7 @@ interface Credential {
     protocol: Protocol,
     password?: string,
     pathId: string,
+    directoryPath?: string,
     username: string,
     path:string,
     isValidPath: boolean,

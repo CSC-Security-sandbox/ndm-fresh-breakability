@@ -10,6 +10,8 @@ import { RetryBatchInfo } from '@netapp-cloud-datamigrate/jobs-lib';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+const BASE_WORKING_PATH = '/tmp/base-worker';
+
 describe('FetchFailedOperationsActivity', () => {
     let activity: FetchFailedOperationsActivity;
     let configService: jest.Mocked<ConfigService>;
@@ -30,6 +32,8 @@ describe('FetchFailedOperationsActivity', () => {
             destinationFileServer: {
                 pathId: 'target-path-id',
             },
+            sourceDirectoryPath: '/source-dir',
+            destinationDirectoryPath: '/target-dir',
             options: {
                 skipsFilesModifiedInLast: '2d',
                 excludeFilePattern: 'node_modules,.git',
@@ -48,6 +52,7 @@ describe('FetchFailedOperationsActivity', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        process.env.BASE_WORKING_PATH = BASE_WORKING_PATH;
 
         mockLogger = {
             debug: jest.fn(),
@@ -200,10 +205,15 @@ describe('FetchFailedOperationsActivity', () => {
                 originalJobRunId,
             });
 
+            const expectedSourcePrefix = `${BASE_WORKING_PATH}/${jobRunId}/source-path-id/source-dir`;
+            const expectedTargetPrefix = `${BASE_WORKING_PATH}/${jobRunId}/target-path-id/target-dir`;
+
             expect(result.settings).toBeDefined();
             expect(result.settings.skipFile).toBe('2d');
             expect(result.settings.excludePatterns).toEqual(['node_modules', '.git']);
             expect(result.settings.isSMB).toBe(false);
+            expect(result.settings.sourcePrefix).toBe(expectedSourcePrefix);
+            expect(result.settings.targetPrefix).toBe(expectedTargetPrefix);
         });
 
         it('should detect SMB protocol', async () => {

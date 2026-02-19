@@ -90,6 +90,16 @@ export class MigrateConfig {
   @Validate(UniqueDestinationPathIdConstraint)
   @Validate(SourceNotInDestinationConstraint)
   destinationPathId: string[];
+
+  @ApiProperty({ description: 'Directory path on source volume', required: false })
+  @IsOptional()
+  @IsString()
+  sourceDirectoryPath?: string;
+
+  @ApiProperty({ description: 'Directory path on destination volume', required: false })
+  @IsOptional()
+  @IsString()
+  destinationDirectoryPath?: string;
 }
 
 export class BulkMigrateJobConfig {

@@ -526,7 +526,9 @@ export class ConfigurationService {
                 id: true,
                 jobType: true,
                 sourcePathId: true,
+                sourceDirectoryPath: true,
                 targetPathId: true,
+                targetDirectoryPath: true,
                 status: true,
               },
             },
@@ -590,7 +592,9 @@ export class ConfigurationService {
             .map((job) => ({
               protocol: fileServer.protocol,
               sourcePathId: job.sourcePathId,
+              sourceDirectoryPath: job.sourceDirectoryPath,
               targetPathId: job.targetPathId,
+              targetDirectoryPath: job.targetDirectoryPath,
               jobConfig: {
                 id: job.id,
                 jobType: job.jobType,
@@ -687,6 +691,8 @@ export class ConfigurationService {
     try {
       return validJobConfigs.map((job) => ({
         protocol: job.protocol,
+        sourceDirectoryPath: job.sourceDirectoryPath,
+        destinationDirectoryPath: job.targetDirectoryPath,
         sourcePath: volumeMap.get(job.sourcePathId)
           ? {
               id: volumeMap.get(job.sourcePathId)?.id,

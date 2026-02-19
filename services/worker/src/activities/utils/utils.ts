@@ -156,10 +156,10 @@ export function getFileType(stats: fs.Stats, isDirectory:boolean): FileType {
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobContext | JobManagerContext, commands: Command[]): Task => new Task(
   uuid4(), jobRunId, taskType, TaskStatus.PENDING, jobContext.jobConfig.workerIds[0],
-  basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId),
+  basePrefix(jobRunId, jobContext.jobConfig.sourceFileServer.pathId, jobContext.jobConfig.sourceDirectoryPath),
   jobContext.jobConfig.sourceFileServer.pathId,
   commands,
-  jobContext.jobConfig.destinationFileServer ?  basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId) : null,
+  jobContext.jobConfig.destinationFileServer ?  basePrefix(jobRunId, jobContext.jobConfig.destinationFileServer.pathId, jobContext.jobConfig.destinationDirectoryPath) : null,
   jobContext.jobConfig.destinationFileServer ? jobContext.jobConfig.destinationFileServer.pathId: null,
   ''
 )
@@ -317,9 +317,14 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
   }
 }
 
-export const basePrefix = (jobRunId: string, pathId: string): string => {
-  if(process.platform === 'win32') return `${process.env.BASE_WORKING_PATH}\\${jobRunId}\\${pathId}`;
-  return `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
+export const basePrefix = (jobRunId: string, pathId: string, directoryPath?: string): string => {
+  const dirPath = directoryPath || '';
+  if(process.platform === 'win32') {
+    const basePath = `${process.env.BASE_WORKING_PATH}\\${jobRunId}\\${pathId}`;
+    return dirPath ? `${basePath}\\${dirPath.replace(/^\/+/, '').replace(/\//g, '\\')}` : basePath;
+  }
+  const basePath = `${process.env.BASE_WORKING_PATH}/${jobRunId}/${pathId}`;
+  return dirPath ? `${basePath}/${dirPath.replace(/^\/+/, '')}` : basePath;
 }
 
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])

@@ -644,11 +644,15 @@ export class JobConfigService {
           where: {
             jobType: JobType.MIGRATE,
             sourcePathId: config?.sourcePathId,
+            sourceDirectoryPath: config?.sourceDirectoryPath || null,
             targetPathId: destinationPath,
+            targetDirectoryPath: config?.destinationDirectoryPath || null,
           },
           select: {
             sourcePathId: true,
+            sourceDirectoryPath: true,
             targetPathId: true,
+            targetDirectoryPath: true,
             scheduler: true,
             id: true,
             status: true,
@@ -676,9 +680,11 @@ export class JobConfigService {
                 targetPathId: jobConfig.targetPathId,
                 sourcePath: sourcePath?.volumePath,
                 targetPath: targetPath?.volumePath,
+                sourceDirectoryPath: jobConfig.sourceDirectoryPath,
+                targetDirectoryPath: jobConfig.targetDirectoryPath,
                 status: jobConfig.status,
                 message:
-                  "Inactive job found. Please reactivate or remove the existing job.",
+                  "Inactive job found. Please re-activate or remove the existing job.",
               });
             }
           }
@@ -689,16 +695,18 @@ export class JobConfigService {
         const existingSet = new Set(
           existingJobConfigs.map(
             (jobConfig) =>
-              `${jobConfig?.sourcePathId}-${jobConfig?.targetPathId}`
+              `${jobConfig?.sourcePathId}-${jobConfig?.sourceDirectoryPath || null}-${jobConfig?.targetPathId}-${jobConfig?.targetDirectoryPath || null}`
           )
         );
 
-        if (existingSet.has(`${config?.sourcePathId}-${destinationPath}`)) {
+        if (existingSet.has(`${config?.sourcePathId}-${config?.sourceDirectoryPath || null}-${destinationPath}-${config?.destinationDirectoryPath || null}`)) {
           await this.jobConfigRepo.update(
             {
               jobType: JobType.MIGRATE,
               sourcePathId: config?.sourcePathId,
               targetPathId: destinationPath,
+              sourceDirectoryPath: config?.sourceDirectoryPath || null,
+              targetDirectoryPath: config?.destinationDirectoryPath || null,
               scheduler: In([
                 ScheduleStatus.READY_TO_BE_SCHEDULED,
                 ScheduleStatus.SCHEDULING,
@@ -774,7 +782,9 @@ export class JobConfigService {
               jobType: JobType.MIGRATE,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               sourcePathId: config?.sourcePathId,
+              sourceDirectoryPath: config?.sourceDirectoryPath || null,
               targetPathId: destinationPath,
+              targetDirectoryPath: config?.destinationDirectoryPath || null,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan,
               firstRunAt: firstRunAt,
               scheduler: ScheduleStatus.SCHEDULING,
@@ -881,17 +891,21 @@ export class JobConfigService {
       const newCutoverJobs: JobConfigEntity[] = [];
       const updatedCutoverJobs: JobConfigEntity[] = [];
 
-      for (const { sourcePathId, destinationPathId } of allCutoverConfigs) {
+      for (const { sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath } of allCutoverConfigs) {
         for (const config of jobConfigMap.values()) {
           if (
             config.sourcePathId === sourcePathId &&
-            config.targetPathId === destinationPathId
+            config.sourceDirectoryPath === sourceDirectoryPath &&
+            config.targetPathId === destinationPathId &&
+            config.targetDirectoryPath === destinationDirectoryPath
           ) {
             const existingCutover = await this.jobConfigRepo.findOne({
               where: {
                 jobType: JobType.CUT_OVER,
                 sourcePathId,
+                sourceDirectoryPath: config.sourceDirectoryPath || null,
                 targetPathId: destinationPathId,
+                targetDirectoryPath: config.targetDirectoryPath || null,
               },
             });
 
@@ -900,7 +914,9 @@ export class JobConfigService {
                 this.jobConfigRepo.create({
                   jobType: JobType.CUT_OVER,
                   sourcePathId,
+                  sourceDirectoryPath: config.sourceDirectoryPath || null,
                   targetPathId: destinationPathId,
+                  targetDirectoryPath: config.targetDirectoryPath || null,
                   excludeFilePatterns: config.excludeFilePatterns,
                   scheduler: ScheduleStatus.SCHEDULING,
                   futureScheduleAt: null,
@@ -949,7 +965,9 @@ export class JobConfigService {
         firstRunAt: job.firstRunAt,
         jobType: job.jobType,
         sourcePathId: job.sourcePathId,
+        sourceDirectoryPath: job.sourceDirectoryPath,
         targetPathId: job.targetPathId,
+        targetDirectoryPath: job.targetDirectoryPath,
         status: JobStatus.Active,
       }));
     } catch (error) {
@@ -966,10 +984,12 @@ export class JobConfigService {
   }
 
   flattenCutoverConfig(config: MigrateConfig[]): FlattenedCutoverConfig[] {
-    return config.flatMap(({ sourcePathId, destinationPathId }) =>
+    return config.flatMap(({ sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath }) =>
       destinationPathId.map((destId) => ({
         sourcePathId,
+        sourceDirectoryPath,
         destinationPathId: destId,
+        destinationDirectoryPath,
       }))
     );
   }
@@ -1156,6 +1176,7 @@ export class JobConfigService {
         serverName:
           jobConfig.sourcePath?.fileServer?.config?.configName || null,
         path: jobConfig.sourcePath?.volumePath || null,
+        directoryPath: jobConfig.sourceDirectoryPath || null,
         protocol: jobConfig.sourcePath?.fileServer?.protocol || null,
       },
 
@@ -1164,6 +1185,7 @@ export class JobConfigService {
             serverName:
               jobConfig.targetPath?.fileServer?.config?.configName || null,
             path: jobConfig.targetPath?.volumePath || null,
+            directoryPath: jobConfig.targetDirectoryPath || null,
             protocol: jobConfig.targetPath?.fileServer?.protocol || null,
           }
         : {},
@@ -1402,6 +1424,8 @@ export class JobConfigService {
         "jobconfig.sourcePathId AS sourcePath",
         "jobconfig.targetPathId AS targetPath",
         "jobconfig.futureScheduleAt AS futureSchedule",
+        "jobconfig.sourceDirectoryPath AS sourceDirectoryPath",
+        "jobconfig.targetDirectoryPath AS targetDirectoryPath",
         "sourceVolumes.volumePath AS sourcePath",
         "targetVolumes.volumePath AS targetPath",
         "sourceFileServer.protocol AS sourceProtocol",
@@ -1467,12 +1491,14 @@ export class JobConfigService {
         sourceServer: {
           serverName: job.sourceservername,
           path: job.sourcepath,
+          directoryPath: job.sourcedirectorypath,
           protocol: job.sourceprotocol,
         },
         destinationServer: job.targetpath
           ? {
               serverName: job.targetservername,
               path: job.targetpath,
+              directoryPath: job.targetdirectorypath,
               protocol: job.targetprotocol,
             }
           : {},
@@ -1533,25 +1559,38 @@ export class JobConfigService {
   }
 
   async findJobConfigs(
-    conditions: { sourcePathId: string; destinationPathId: string }[]
+    conditions: FlattenedCutoverConfig[]
   ) {
     if (conditions.length === 0) return [];
     const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
-    conditions.forEach(({ sourcePathId, destinationPathId }, index) => {
+    conditions.forEach(({ sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath }, index) => {
       const sourceParam = `sourcePathId_${index}`;
+      const sourceDirParam = `sourceDirectoryPath_${index}`;
       const targetParam = `destinationPathId_${index}`;
+      const targetDirParam = `destinationDirectoryPath_${index}`;
+
+      const sourceDirCondition = sourceDirectoryPath === null ? `jobConfig.sourceDirectoryPath IS NULL` : `jobConfig.sourceDirectoryPath = :${sourceDirParam}`;
+      const targetDirCondition = destinationDirectoryPath === null ? `jobConfig.targetDirectoryPath IS NULL` : `jobConfig.targetDirectoryPath = :${targetDirParam}`;
+
+      const whereClause = `(jobConfig.sourcePathId = :${sourceParam} AND ${sourceDirCondition} AND jobConfig.targetPathId = :${targetParam} AND ${targetDirCondition})`;
+      const params: any = {
+        [sourceParam]: sourcePathId,
+        [targetParam]: destinationPathId,
+      };
+      if (sourceDirectoryPath !== null) {
+        params[sourceDirParam] = sourceDirectoryPath;
+      }
+      if (destinationDirectoryPath !== null) {
+        params[targetDirParam] = destinationDirectoryPath;
+      }
+
       if (index === 0) {
-        queryBuilder.where(
-          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam}) AND jobConfig.jobType = 'MIGRATE'`,
-          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
-        );
+        queryBuilder.where(whereClause, params);
       } else {
-        queryBuilder.orWhere(
-          `(jobConfig.sourcePathId = :${sourceParam} AND jobConfig.targetPathId = :${targetParam})`,
-          { [sourceParam]: sourcePathId, [targetParam]: destinationPathId }
-        );
+        queryBuilder.orWhere(whereClause, params);
       }
     });
+    queryBuilder.andWhere("jobConfig.jobType = :jobType", { jobType: 'MIGRATE' });
     return await queryBuilder.getMany();
   }
 

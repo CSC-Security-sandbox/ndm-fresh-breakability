@@ -17,6 +17,11 @@ class FileServerDto {
   @ApiProperty()
   @IsString()
   path: string;
+  
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  directoryPath?: string; 
 
   @ApiProperty()
   @IsString()

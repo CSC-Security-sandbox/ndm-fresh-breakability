@@ -51,9 +51,17 @@ export class JobConfigEntity extends Base {
   @Column({ type: 'uuid', nullable: false, name: 'source_path_id' })
   sourcePathId: string;
 
+  @ApiProperty({ description: 'Directory path on the source volume' })
+  @Column({ type: 'text', nullable: true, name: 'source_directory_path' })
+  sourceDirectoryPath: string;
+
   @ApiProperty({ description: 'UUID of the target path configuration' })
   @Column({ type: 'uuid', nullable: true, name: 'target_path_id' })
   targetPathId: string;
+
+  @ApiProperty({ description: 'Directory path on the target volume' })
+  @Column({ type: 'text', nullable: true, name: 'target_directory_path' })
+  targetDirectoryPath: string;
 
   @OneToMany(() => JobRunEntity, jobRun => jobRun.jobConfig, { cascade: true, eager: false })
   jobRuns: JobRunEntity[];
