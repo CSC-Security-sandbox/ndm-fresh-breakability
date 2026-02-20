@@ -42,6 +42,12 @@ type KeycloakCredentials struct {
 	ClientSecret  string
 }
 
+// PostgresCredentials holds DM Postgres admin user/password from OpenBao (for seeding operation_errors etc.).
+type PostgresCredentials struct {
+	DMAdminUser     string
+	DMAdminPassword string
+}
+
 // =============================================================================
 // GENERIC API RESPONSE TYPES
 // =============================================================================
@@ -833,6 +839,45 @@ func GetKeyCloakAdminCredentials() (KeycloakCredentials, error) {
 	return creds, nil
 }
 
+// GetPostgresCredentials returns Postgres DM admin user and password from OpenBao (same host as KEYCLOAK_IP).
+func GetPostgresCredentials() (PostgresCredentials, error) {
+	token, err := getOpenBaoRootToken()
+	if err != nil {
+		return PostgresCredentials{}, fmt.Errorf("failed to get OpenBao root token: %w", err)
+	}
+	if KEYCLOAK_IP == "" {
+		return PostgresCredentials{}, fmt.Errorf("environment variable KEYCLOAK_IP not set")
+	}
+	url := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, POSTGRES_CREDENTIALS_URL)
+	headers := getOpenbaoHeaders(token)
+	resp, err := SendAPIRequest("GET", url, nil, headers)
+	if err != nil {
+		return PostgresCredentials{}, fmt.Errorf("failed to execute HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return PostgresCredentials{}, fmt.Errorf("failed to read response body: %w", err)
+	}
+	type PostgresResponse struct {
+		Data struct {
+			DMAdminUser     string `json:"POSTGRES_DMADMIN_USER"`
+			DMAdminPassword string `json:"POSTGRES_DMADMIN_PASSWORD"`
+		} `json:"data"`
+	}
+	var pgResp PostgresResponse
+	if err := json.Unmarshal(bodyBytes, &pgResp); err != nil {
+		return PostgresCredentials{}, fmt.Errorf("failed to parse Postgres credentials JSON: %w", err)
+	}
+	if pgResp.Data.DMAdminUser == "" || pgResp.Data.DMAdminPassword == "" {
+		return PostgresCredentials{}, fmt.Errorf("postgres credentials not found in response (POSTGRES_DMADMIN_USER/POSTGRES_DMADMIN_PASSWORD)")
+	}
+	return PostgresCredentials{
+		DMAdminUser:     pgResp.Data.DMAdminUser,
+		DMAdminPassword: pgResp.Data.DMAdminPassword,
+	}, nil
+}
+
 // getOpenBaoRootToken reads the JSON file from the remote host, parses it, and returns the root token.
 func getOpenBaoRootToken() (string, error) {
 	type ClusterKeys struct {
@@ -1332,6 +1377,42 @@ func sshRunScript(config SSHConfig, script string) (string, error) {
 	return stdout.String(), nil
 }
 
+// sshRunWithStdin runs a command on the remote host via SSH, piping stdinData to its stdin.
+// This avoids command-line length limits for large payloads (e.g. bulk SQL).
+func sshRunWithStdin(config SSHConfig, command string, stdinData string) (string, error) {
+	sshConfig := &ssh.ClientConfig{
+		User: config.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(config.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	session.Stdin = strings.NewReader(stdinData)
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	err = session.Run(command)
+	if err != nil {
+		return "", fmt.Errorf("failed to run command: %w\nstderr: %s", err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
+
 func GetCurrentUTCTimestamp() string {
 	return time.Now().UTC().Format(TIME_FORMAT)
 }
@@ -1460,6 +1541,37 @@ func (f *FlexibleItems[T]) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &items)
 }
 
+// RunScriptOnControlPlane runs a shell script on the control plane VM via SSH (NDM_VM_* env vars).
+// Returns combined stdout output and any error.
+func RunScriptOnControlPlane(script string) (string, error) {
+	port, err := strconv.Atoi(NDM_VM_PORT)
+	if err != nil {
+		return "", fmt.Errorf("invalid NDM_VM_PORT: %w", err)
+	}
+	sshConfig := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
+		Port:     port,
+		Password: NDM_VM_PASSWORD,
+	}
+	return sshRunScript(sshConfig, script)
+}
+
+// RunScriptOnControlPlaneWithStdin runs a command on the CP VM, piping stdinData to its stdin.
+func RunScriptOnControlPlaneWithStdin(command string, stdinData string) (string, error) {
+	port, err := strconv.Atoi(NDM_VM_PORT)
+	if err != nil {
+		return "", fmt.Errorf("invalid NDM_VM_PORT: %w", err)
+	}
+	sshConfig := SSHConfig{
+		Username: NDM_VM_USER_NAME,
+		Host:     NDM_VM_HOST,
+		Port:     port,
+		Password: NDM_VM_PASSWORD,
+	}
+	return sshRunWithStdin(sshConfig, command, stdinData)
+}
+
 func GetCPVersion() (string, error) {
 	script := "grep '^current_version=' /opt/datamigrator/conf/versions.conf | cut -d'=' -f2 | xargs echo -n "
 	port, err := strconv.Atoi(NDM_VM_PORT)
@@ -1536,4 +1648,210 @@ func GetVersions(headers map[string]string) (abouNDMResp AboutNDMResponse, err e
 	}
 
 	return abouNDMResp, nil
+}
+
+// RetryFnamesInput is the JSON input for retry test: list of f_paths per protocol.
+// User provides one JSON file with "nfs" and "smb" keys; each value is a list of paths
+// used as f_path for operations (protocol-appropriate format).
+type RetryFnamesInput struct {
+	NFS []string `json:"nfs"`
+	SMB []string `json:"smb"`
+}
+
+// LoadRetryFnames loads the JSON file at path and returns the struct.
+// Path can be relative to current working directory or absolute.
+func LoadRetryFnames(path string) (*RetryFnamesInput, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read retry fnames json: %w", err)
+	}
+	var out RetryFnamesInput
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("parse retry fnames json: %w", err)
+	}
+	return &out, nil
+}
+
+// FnamesForProtocol returns the list of f_paths for the given protocol.
+// protocol is normalized to lower case; use "nfs" or "smb".
+func FnamesForProtocol(input *RetryFnamesInput, protocol string) []string {
+	switch strings.ToLower(protocol) {
+	case "nfs":
+		return input.NFS
+	case "smb":
+		return input.SMB
+	default:
+		return nil
+	}
+}
+
+// parseUUIDFromOutput extracts the first UUID from arbitrary psql output.
+func parseUUIDFromOutput(output string) string {
+	re := regexp.MustCompile(`([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})`)
+	m := re.FindStringSubmatch(output)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+// SeedResult holds the IDs created by SeedRetryTestData.
+type SeedResult struct {
+	JobConfigID string
+	JobRunID    string
+}
+
+// SeedRetryTestData creates a full jobconfig + jobrun + task + operations + operation_errors
+// directly in the DB for retry e2e testing.  It creates a jobconfig from the supplied
+// path IDs and options, then seeds ERRORED operations with UNRESOLVED errors.
+//
+// options keys (all optional):
+//
+//	excludePatterns    []string  – exclude file patterns  (default: empty)
+//	preserveAccessTime bool      – preserve access time   (default: false)
+//	skipFile           string    – skip file threshold     (default: "")
+//	isSMB              bool      – unused in SQL, reserved for future use
+//
+// Requires: NDM_VM_* (CP SSH), KEYCLOAK_IP (OpenBao), CP with kubectl + Postgres access.
+func SeedRetryTestData(sourcePathID, destinationPathID string, fnames []string, options map[string]interface{}) (*SeedResult, error) {
+	if sourcePathID == "" || destinationPathID == "" {
+		return nil, fmt.Errorf("sourcePathID and destinationPathID must not be empty")
+	}
+	if len(fnames) == 0 {
+		return nil, fmt.Errorf("fnames must not be empty")
+	}
+
+	// Resolve optional parameters.
+	preserveAccessTime := false
+	if v, ok := options["preserveAccessTime"].(bool); ok {
+		preserveAccessTime = v
+	}
+	skipFile := ""
+	if v, ok := options["skipFile"].(string); ok {
+		skipFile = v
+	}
+	excludePatterns := ""
+	if v, ok := options["excludePatterns"].([]string); ok && len(v) > 0 {
+		excludePatterns = strings.Join(v, ",")
+	}
+	workerID := ""
+	if v, ok := options["workerID"].(string); ok {
+		workerID = v
+	}
+
+	creds, err := GetPostgresCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("get postgres credentials: %w", err)
+	}
+	if creds.DMAdminUser == "" || creds.DMAdminPassword == "" {
+		return nil, fmt.Errorf("postgres credentials empty")
+	}
+
+	postgresPod := "postgresql-0"
+	if v := os.Getenv("POSTGRES_POD"); v != "" {
+		postgresPod = v
+	}
+	postgresNamespace := "postgres"
+	if v := os.Getenv("POSTGRES_NAMESPACE"); v != "" {
+		postgresNamespace = v
+	}
+	pgPassEscaped := strings.ReplaceAll(creds.DMAdminPassword, "'", "'\"'\"'")
+
+	// Generate a deterministic jobconfig ID so we can return it.
+	jobConfigID := uuid.New().String()
+
+	// ── Step 1: Create jobconfig ──────────────────────────────────────
+	step1 := fmt.Sprintf(
+		`kubectl exec -i %s -n %s -- env PGPASSWORD='%s' psql -U '%s' -d datamigrator -t -A -c `+
+			`"INSERT INTO datamigrator.jobconfig (id, job_type, status, source_path_id, target_path_id, preserve_access_time, exclude_file_patterns, skip_file, created_at) `+
+			`VALUES ('%s', 'MIGRATE', 'ACTIVE', '%s', '%s', %t, '%s', '%s', NOW());"`,
+		postgresPod, postgresNamespace, pgPassEscaped, creds.DMAdminUser,
+		jobConfigID, sourcePathID, destinationPathID, preserveAccessTime, excludePatterns, skipFile,
+	)
+	out1, err := RunScriptOnControlPlane(step1)
+	if err != nil {
+		return nil, fmt.Errorf("step1 create jobconfig: %w (output: %s)", err, out1)
+	}
+
+	// ── Step 2: Create jobrun (COMPLETED_WITH_ERRORS) ─────────────────
+	step2 := fmt.Sprintf(
+		`kubectl exec -i %s -n %s -- env PGPASSWORD='%s' psql -U '%s' -d datamigrator -t -A -c `+
+			`"WITH i AS (SELECT COALESCE(MAX(iteration_number),0)+1 AS n FROM datamigrator.jobrun WHERE job_config_id = '%s') `+
+			`INSERT INTO datamigrator.jobrun (id, status, start_time, end_time, iteration_number, job_config_id) `+
+			`SELECT gen_random_uuid(), 'FAILED', NOW(), NOW(), i.n, '%s' FROM i RETURNING id;"`,
+		postgresPod, postgresNamespace, pgPassEscaped, creds.DMAdminUser,
+		jobConfigID, jobConfigID,
+	)
+	out2, err := RunScriptOnControlPlane(step2)
+	if err != nil {
+		return nil, fmt.Errorf("step2 create jobrun: %w (output: %s)", err, out2)
+	}
+	jobRunID := parseUUIDFromOutput(out2)
+	if jobRunID == "" {
+		return nil, fmt.Errorf("step2 did not return JOB_RUN_ID (output: %s)", out2)
+	}
+
+	// ── Step 3: Create task ───────────────────────────────────────────
+	step3 := fmt.Sprintf(
+		`kubectl exec -i %s -n %s -- env PGPASSWORD='%s' psql -U '%s' -d datamigrator -t -A -c `+
+			`"INSERT INTO datamigrator.tasks (id, job_run_id, status, task_type, worker_id) `+
+			`VALUES (gen_random_uuid(), '%s', 'COMPLETED_WITH_ERROR', 'SCAN', '%s') RETURNING id;"`,
+		postgresPod, postgresNamespace, pgPassEscaped, creds.DMAdminUser,
+		jobRunID, workerID,
+	)
+	out3, err := RunScriptOnControlPlane(step3)
+	if err != nil {
+		return nil, fmt.Errorf("step3 create task: %w (output: %s)", err, out3)
+	}
+	taskID := parseUUIDFromOutput(out3)
+	if taskID == "" {
+		return nil, fmt.Errorf("step3 did not return task ID (output: %s)", out3)
+	}
+
+	// ── Step 4: Insert operations + operation_errors per f_path ───────
+	// Build individual SQL statements for each file path in Go, avoiding
+	// PL/pgSQL DO blocks and shell quoting issues entirely.
+	// SQL is piped via stdin to avoid shell ARG_MAX limits.
+	var sqlStatements strings.Builder
+	sqlStatements.WriteString("BEGIN;\n")
+	for _, fp := range fnames {
+		escapedFP := strings.ReplaceAll(fp, "'", "''")
+		// Extract file name from path (last component after / or \)
+		fname := fp
+		if idx := strings.LastIndexAny(fp, "/\\"); idx >= 0 && idx < len(fp)-1 {
+			fname = fp[idx+1:]
+		}
+		escapedFname := strings.ReplaceAll(fname, "'", "''")
+
+		sqlStatements.WriteString(fmt.Sprintf(
+			"WITH ins_op AS ( "+
+				"INSERT INTO datamigrator.operations (id, task_id, job_run_id, status, operation_type, request, error_details, f_path, retry_count, source_path_id, target_path_id) "+
+				"VALUES (gen_random_uuid(), '%s', '%s', 'ERRORED', 'COPY', "+
+				"jsonb_build_object('sourcePath', '%s', 'targetPath', '%s'), 'E2E seeded for retry', '%s', 0, '%s', '%s') "+
+				"RETURNING id "+
+			") "+
+			"INSERT INTO datamigrator.operation_errors (id, operation_id, error_code, error_message, created_at, file_name, file_path, error_type, operation_type, origin, error_status) "+
+			"SELECT gen_random_uuid(), ins_op.id, 'E2E_SEED', 'seeded for retry e2e', NOW(), '%s', '%s', 'TRANSIENT_ERROR', 'COPY', 'e2e', 'UNRESOLVED' "+
+			"FROM ins_op;\n",
+			taskID, jobRunID,
+			escapedFP, escapedFP, escapedFP, sourcePathID, destinationPathID,
+			escapedFname, escapedFP,
+		))
+	}
+	sqlStatements.WriteString("COMMIT;\n")
+
+	// Pipe SQL via stdin to kubectl exec -> psql to avoid shell ARG_MAX limit.
+	step4Cmd := fmt.Sprintf(
+		`kubectl exec -i %s -n %s -- env PGPASSWORD='%s' psql -U '%s' -d datamigrator -f -`,
+		postgresPod, postgresNamespace, pgPassEscaped, creds.DMAdminUser,
+	)
+	out4, err := RunScriptOnControlPlaneWithStdin(step4Cmd, sqlStatements.String())
+	if err != nil {
+		return nil, fmt.Errorf("step4 insert operations: %w (output: %s)", err, out4)
+	}
+
+	return &SeedResult{
+		JobConfigID: jobConfigID,
+		JobRunID:    jobRunID,
+	}, nil
 }

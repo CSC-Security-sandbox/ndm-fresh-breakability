@@ -142,6 +142,7 @@ const (
 	KEYCLOAK_TOKEN_URL                               = "keycloak/realms/master/protocol/openid-connect/token"
 	KEYCLOAK_BASE_URL                                = "keycloak/admin/realms/datamigrator/users"
 	KEYCLOAK_CREDENTIALS_URL                         = "v1/secrets/keycloak-secrets/keycloak-creds"
+	POSTGRES_CREDENTIALS_URL                         = "v1/secrets/postgres-secrets/postgres-creds"
 	TOKEN_URL                                        = "keycloak/realms/datamigrator/protocol/openid-connect/token"
 	BASE_ACCOUNT_NAME                                = "TestAccount"
 	KEYCLOAK_CLIENT_ID                               = "admin-cli"

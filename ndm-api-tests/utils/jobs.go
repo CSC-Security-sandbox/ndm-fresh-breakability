@@ -98,6 +98,7 @@ type BulkCutoverJobParams struct {
 
 type AdHocJobRunRequest struct {
 	JobConfigId string `json:"jobConfigId"`
+	JobRunId    string `json:"jobRunId,omitempty"` // when set, triggers retry of this run instead of new adhoc
 }
 
 type AdHocJobRunResponse struct {
@@ -391,6 +392,37 @@ func TriggerAdHocJobRun(jobConfigId string) (string, *http.Response, error) {
 		return "", resp, fmt.Errorf("adhoc job run failed: job run ID not found in response")
 	}
 
+	return jobRunResp.Data.ID, resp, nil
+}
+
+// TriggerRetryRun triggers a retry of failed operations for the given job run (same POST /job-run/ad-hoc with jobRunId).
+// Does not start a new adhoc run; directly creates a retry run for the given jobRunId.
+func TriggerRetryRun(jobConfigId, jobRunId string) (string, *http.Response, error) {
+	url := fmt.Sprintf("%s%s", CONFIG_SERVICE_URL, ADHOC_JOBRUN_URL)
+	reqBody := AdHocJobRunRequest{JobConfigId: jobConfigId, JobRunId: jobRunId}
+	payloadBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", nil, fmt.Errorf("retry run failed: error marshaling request: %v", err)
+	}
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	resp, err := SendAPIRequest(http.MethodPost, url, payloadBytes, headers)
+	if err != nil {
+		return "", nil, fmt.Errorf("retry run failed: API request error: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return "", resp, fmt.Errorf("retry run failed: expected HTTP 200 or 201, got %d", resp.StatusCode)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp, fmt.Errorf("retry run failed: error reading response: %v", err)
+	}
+	var jobRunResp AdHocJobRunResponse
+	if err := json.Unmarshal(bodyBytes, &jobRunResp); err != nil {
+		return "", resp, fmt.Errorf("retry run failed: error unmarshaling response: %v", err)
+	}
+	if jobRunResp.Data.ID == "" {
+		return "", resp, fmt.Errorf("retry run failed: job run ID not found in response")
+	}
 	return jobRunResp.Data.ID, resp, nil
 }
 
