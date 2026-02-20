@@ -32,4 +32,15 @@ export class UpgradeBundle extends Base {
 
   @Column({ type: 'timestamp', nullable: true, name: 'upgrade_completed_at' })
   upgradeCompletedAt: Date;
+
+  @Column({ type: 'varchar', length: 50, nullable: true, name: 'installed_cp_version' })
+  installedCpVersion: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['pending', 'staged', 'in_progress', 'success', 'failed', 'rolled_back'],
+    default: 'pending',
+    name: 'upgrade_status',
+  })
+  upgradeStatus: string;
 }

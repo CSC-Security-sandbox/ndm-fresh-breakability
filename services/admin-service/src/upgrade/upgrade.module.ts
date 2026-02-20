@@ -9,10 +9,10 @@ import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([UpgradeBundle]),
-    AuthKeycloakModule,    // Enables @Auth() decorator to work
-    LoggerModule.forRoot(), // Enables logging
+    AuthKeycloakModule,
+    LoggerModule.forRoot(),
   ],
-  controllers: [UpgradeController],  // Register HTTP routes
-  providers: [UpgradeService],       // Register injectable services
+  controllers: [UpgradeController],
+  providers: [UpgradeService],
 })
 export class UpgradeModule {}
