@@ -437,6 +437,22 @@ describe('CommandExecService', () => {
             );
         });
 
+        it('should publish deleted directory info with null checksumTime', async () => {
+            const input = {
+                sourcePath: '/source/testdir',
+                targetPath: '/target/testdir',
+                jobContext: mockJobContext,
+                command: createMockCommand(),
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            await service.deleteDirectory(input);
+
+            // Assert: checksumTime should be null for delete operations (no checksum generated)
+            const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
+            expect(publishedItemInfo.checksumTime).toBeNull();
+        });
+
         it('should not publish to file stream when directory deletion fails', async () => {
             const input = {
                 sourcePath: '/source/testdir',
@@ -688,6 +704,87 @@ describe('CommandExecService', () => {
             expect(path.extname).toHaveBeenCalledWith('/target/test.txt');
             expect(service.validateCommand).toHaveBeenCalled();
             expect(mockJobContext.publishToFileStream).toHaveBeenCalledWith(expect.any(Object));
+            });
+
+            it('should include checksumTime in published ItemInfo when present in command params', async () => {
+            const checksumTimestamp = new Date('2026-02-04T10:30:00.000Z');
+            const command = {
+                ...createMockCommand(),
+                ops: {
+                    [OPS_CMD.COPY_FILE]: {
+                        status: OPS_STATUS.COMPLETED,
+                        params: {
+                            checksums: {
+                                sourceChecksum: 'src-checksum',
+                                targetChecksum: 'tgt-checksum'
+                            },
+                            checksumTime: checksumTimestamp.toISOString()
+                        }
+                    },
+                    [OPS_CMD.STAMP_META]: {
+                        params: {
+                            sidMap: {
+                                sourceAcl: 'source-sid',
+                                targetAcl: 'target-sid'
+                            }
+                        }
+                    }
+                }
+            };
+            const input = {
+                command,
+                jobContext: mockJobContext,
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+
+            await service.publishFileInfo(input as any);
+
+            // Assert: checksumTime should be present and match the timestamp from command params
+            const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
+            expect(publishedItemInfo.checksumTime).toEqual(checksumTimestamp);
+            });
+
+            it('should set checksumTime to null when not present in command params', async () => {
+            const command = {
+                ...createMockCommand(),
+                ops: {
+                    [OPS_CMD.COPY_FILE]: {
+                        status: OPS_STATUS.COMPLETED,
+                        params: {
+                            checksums: {
+                                sourceChecksum: 'src-checksum',
+                                targetChecksum: 'tgt-checksum'
+                            }
+                            // No checksumTime
+                        }
+                    },
+                    [OPS_CMD.STAMP_META]: {
+                        params: {
+                            sidMap: {
+                                sourceAcl: 'source-sid',
+                                targetAcl: 'target-sid'
+                            }
+                        }
+                    }
+                }
+            };
+            const input = {
+                command,
+                jobContext: mockJobContext,
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+
+            await service.publishFileInfo(input as any);
+
+            // Assert: checksumTime should be null when not present in command params
+            const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
+            expect(publishedItemInfo.checksumTime).toBeNull();
             });
         });
 
@@ -955,6 +1052,60 @@ describe('CommandExecService', () => {
             });
             expect(result.shouldStampMeta).toBe(true);
             expect(result.shouldUpdateItemInfo).toBe(true);
+        });
+
+        it('should store checksumTime in command params after successful copy', async () => {
+            // Test that checksumTime is captured when checksum is generated
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(true);
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'abc123'
+            });
+
+            const command = createMockCommand();
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command,
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            await service.copyFile(input as any);
+
+            // Verify checksumTime is stored in the command params
+            expect((command.ops[OPS_CMD.COPY_FILE].params as any).checksumTime).toBeInstanceOf(Date);
+            expect(command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+        });
+
+        it('should store checksumTime in command params even when checksum mismatch occurs', async () => {
+            // Test that checksumTime is captured even on checksum mismatch error
+            coreUtils.isPathExists.mockResolvedValue(true);
+            coreUtils.isNotWritable.mockResolvedValue(false);
+            workerThreadService.migrateWorkerThread.mockResolvedValue({
+                sourceChecksum: 'abc123',
+                targetChecksum: 'def456' // Mismatch
+            });
+
+            const command = createMockCommand();
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                },
+                command,
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            await service.copyFile(input as any);
+
+            // Verify checksumTime is stored even on error
+            expect((command.ops[OPS_CMD.COPY_FILE].params as any).checksumTime).toBeInstanceOf(Date);
+            expect(command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.ERROR);
         });
 
         it('should handle checksum mismatch error (lines 95-96)', async () => {

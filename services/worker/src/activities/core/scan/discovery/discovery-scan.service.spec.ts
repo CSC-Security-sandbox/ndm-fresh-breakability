@@ -959,6 +959,23 @@ describe('DiscoveryScanService', () => {
         // Assert: No ADS-related operations performed
         expect(mockWinOperationService.detectADSInfo).not.toHaveBeenCalled();
       });
+
+      it('should publish ItemInfo with null checksumTime for discovery scan', async () => {
+        // Act: Publish file info (discovery scan does not calculate checksum)
+        await service.publishFileInfo({
+          jobContext: mockJobContext,
+          command: mockCommand,
+          stats: mockFileStats,
+          fPath: '/mock/test-file.txt',
+          relativeSourcePath: 'test-file.txt',
+          fileType: FileType.FILE,
+          shouldScanADS: false,
+        } as any);
+
+        // Assert: checksumTime should be null for discovery scan (checksum is only generated during copy/migration)
+        const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
+        expect(publishedItemInfo.checksumTime).toBeNull();
+      });
     });
 
     describe('Platform-specific behavior (ADS is Windows-only)', () => {

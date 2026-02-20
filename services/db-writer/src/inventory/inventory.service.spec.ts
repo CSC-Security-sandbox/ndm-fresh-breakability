@@ -246,7 +246,8 @@ describe("InventoryService", () => {
             sourceMeta: expect.any(Object),
             targetMeta: expect.any(Object),
             inode: 0,
-            isDeleted: false
+            isDeleted: false,
+            checksumTime: null
         });
     });
 

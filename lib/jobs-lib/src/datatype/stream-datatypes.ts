@@ -62,8 +62,7 @@ export interface ItemMeta{
     sid?: string;
     uid?: number;
     gid?: number;
-    checksum?: string
-
+    checksum?: string;
 }
 
 

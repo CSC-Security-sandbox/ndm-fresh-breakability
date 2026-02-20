@@ -148,12 +148,14 @@ export class CommandExecService {
                     jobRunId: jobContext.jobRunId,
                 });
 
+                // Capture the timestamp when checksum was generated
+                const checksumTime = new Date();
+
                 output.shouldUpdateItemInfo = true;
+                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums, checksumTime } };
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
-                    command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums } };
                     throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
                 }
-                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.COMPLETED, params : { checksums } };
                 output.shouldStampMeta = true;
             }catch(error){
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
@@ -262,7 +264,8 @@ export class CommandExecService {
                 null,                               
                 0,                                  
                 0,                                  
-                true                               
+                true,
+                null // checksumTime is null for delete operations                               
             );
             await jobContext.publishToFileStream(deletedDirectoryInfo);
             this.logger.debug(`Published deleted directory info for: ${directoryPath}`);
@@ -314,6 +317,7 @@ export class CommandExecService {
                 0, 
                 command.metadata?.inode ?? 0,
                 true, 
+                null // checksumTime is null for delete operations
             );
     
             await jobContext.publishToFileStream(itemInfo);
@@ -325,6 +329,11 @@ export class CommandExecService {
             fs.promises.lstat(sourcePath),
             fs.promises.lstat(targetPath),
         ]);
+
+        // Capture checksum timestamp - when the checksum was generated during file copy
+        const checksumTime = command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksumTime 
+            ? new Date(command.ops[OPS_CMD.COPY_FILE].params.checksumTime) 
+            : null;
 
         const sourceMeta: ItemMeta = {
             accessTime: sourceStats.atime,
@@ -361,6 +370,7 @@ export class CommandExecService {
             targetStats.size,
             command.metadata.inode,
             false, // isDeleted is false for copy operations
+            checksumTime // checksum generated timestamp
         )
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});
