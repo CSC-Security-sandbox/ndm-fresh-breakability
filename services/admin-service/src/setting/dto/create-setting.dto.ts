@@ -25,4 +25,5 @@ export class CreateSettingDto {
 export enum SettingType {
   SMTP = 'SMTP',
   BACKUP_LOCATION = 'BACKUP_LOCATION',
+  SYSTEM = 'SYSTEM',
 }

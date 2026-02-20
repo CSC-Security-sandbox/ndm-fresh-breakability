@@ -233,6 +233,19 @@ restart_keycloak_and_gateway() {
     fi
 }
 
+update_cp_version_in_db() {
+    log "Updating control plane version in global_settings table..."
+    local PG_POD=$(kubectl get pod -n postgres -l app=postgres-postgresql -o jsonpath='{.items[0].metadata.name}')
+    [ -z "$PG_POD" ] && handle_failure "Failed to find PostgreSQL pod"
+
+    local SQL="INSERT INTO datamigrator.global_settings (id, setting_key, setting_value, description, setting_type, created_at, updated_at)
+        VALUES (uuid_generate_v4(), 'CP_VERSION', '${BUILD_VERSION}', 'Deployed control plane version', 'SYSTEM', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = '${BUILD_VERSION}', updated_at = CURRENT_TIMESTAMP;"
+
+    retry $MAX_RETRIES "kubectl exec -n postgres $PG_POD -- psql -U postgres -d datamigrator -c \"$SQL\"" || handle_failure "Failed to update CP_VERSION in database"
+    log "Control plane version updated to ${BUILD_VERSION} in global_settings table"
+}
+
 apply_admin_configs() {
     log "Applying admin-entry configmap..."
     retry $MAX_RETRIES "kubectl apply -f $HOME/admin-entry-configmap.yaml -n datamigrator" || handle_failure "Failed to apply admin-entry-configmap"
@@ -432,6 +445,7 @@ main() {
     load_docker_images
     install_keycloak_chart
     install_helm_chart
+    update_cp_version_in_db
     apply_postgres_cronjob_and_wait
     restart_statefulsets
     regenerate_istio_certificate

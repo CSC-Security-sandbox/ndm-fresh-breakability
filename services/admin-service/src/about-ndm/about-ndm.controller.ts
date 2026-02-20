@@ -30,7 +30,7 @@ export class AboutNdmController {
   @ApiBearerAuth()
   @Get()
   @ApiOperation({
-    summary: 'Get NDM product and build information from Prometheus',
+    summary: 'Get NDM product and build information',
   })
   @ApiResponse({
     status: 200,

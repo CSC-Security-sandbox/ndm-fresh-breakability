@@ -574,5 +574,12 @@
       <rollback>
          <sqlFile path="liquibase/20260209_01_alter_jobconfig_remove_directory_paths.sql"/>
       </rollback>
-   </changeSet> 
+   </changeSet>
+
+   <changeSet id="20260220_01_seed_cp_version.sql" author="si82974">
+      <sqlFile path="liquibase/20260220_01_seed_cp_version.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260220_01_seed_cp_version_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>

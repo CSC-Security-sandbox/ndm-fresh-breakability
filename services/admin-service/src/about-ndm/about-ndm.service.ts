@@ -7,8 +7,11 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { PrometheusService } from 'src/utils/prometheus';
-import BUILD_VERSION_QUERIES from './about-ndm.constants';
+import { GlobalSettings } from 'src/entities/global-setting.entity';
+import BUILD_VERSION_QUERIES, { GLOBAL_SETTING_KEYS } from './about-ndm.constants';
 import { AboutNdmResponse } from './about-ndm.interface';
 import { ConfigService } from '@nestjs/config';
 
@@ -18,6 +21,8 @@ export class AboutNdmService {
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    @InjectRepository(GlobalSettings)
+    private readonly globalSettingsRepo: Repository<GlobalSettings>,
     private readonly prometheusService: PrometheusService,
     private readonly configService: ConfigService,
   ) {
@@ -27,14 +32,10 @@ export class AboutNdmService {
   async getAboutNdm(): Promise<AboutNdmResponse> {
     try {
       const results = await Promise.allSettled([
-        this.prometheusService.queryPrometheus(
-          BUILD_VERSION_QUERIES.CONTROL_PLANE,
-        ),
         this.prometheusService.queryPrometheus(BUILD_VERSION_QUERIES.WORKER),
       ]);
-
-      const controlPlaneVersion = this.extractBuildVersion(results[0]);
-      const workerVersion = this.extractBuildVersion(results[1]);
+      const workerVersion = this.extractBuildVersion(results[0]);
+      const controlPlaneVersion = await this.getControlPlaneVersion();
 
       return {
         product: {
@@ -68,16 +69,47 @@ export class AboutNdmService {
     }
   }
 
-  private extractBuildVersion(
-    result: PromiseSettledResult<any>,
-  ): string | null {
+  private async getControlPlaneVersion(): Promise<string | null> {
     try {
-      if (result.status !== 'fulfilled') {
-        this.logger.warn('Prometheus query was rejected:', result.reason);
+      const setting = await this.globalSettingsRepo.findOne({
+        where: { settingKey: GLOBAL_SETTING_KEYS.CP_VERSION },
+      });
+
+      if (!setting) {
+        this.logger.warn(
+          `Global setting '${GLOBAL_SETTING_KEYS.CP_VERSION}' not found in database`,
+        );
         return null;
       }
 
-      const prometheusResponse = result.value;
+      this.logger.debug(
+        `Found control plane version from global_settings: ${setting.settingValue}`,
+      );
+      return setting.settingValue;
+    } catch (error) {
+      this.logger.error(
+        'Error reading control plane version from global_settings',
+        error,
+      );
+      return null;
+    }
+  }
+
+  private extractBuildVersion(
+    prometheusSettledResult: PromiseSettledResult<any>,
+  ): string | null {
+    try {
+      // Handle rejected promise
+      if (prometheusSettledResult.status === 'rejected') {
+        this.logger.warn(
+          'Prometheus query for worker version failed:',
+          prometheusSettledResult.reason,
+        );
+        return null;
+      }
+
+      // Handle fulfilled promise
+      const prometheusResponse = prometheusSettledResult.value;
 
       if (!prometheusResponse?.data?.result) {
         this.logger.warn(
@@ -89,7 +121,6 @@ export class AboutNdmService {
 
       const prometheusResult = prometheusResponse.data.result;
 
-      // Look for label_build_version in any of the results
       for (const item of prometheusResult) {
         if (item.metric?.label_build_version) {
           this.logger.debug(
