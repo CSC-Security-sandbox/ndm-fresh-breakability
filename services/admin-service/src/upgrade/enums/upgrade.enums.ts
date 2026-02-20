@@ -35,3 +35,13 @@ export enum UpgradeStatus {
   FAILED = 'failed',
   SKIPPED = 'skipped',
 }
+
+/**
+ * Aggregate worker-level status on upgrade_bundles.
+ * Tracks progress of multicast distribution and upgrade execution across all workers.
+ */
+export enum WorkerAggregateStatus {
+  IDLE = 'IDLE',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}

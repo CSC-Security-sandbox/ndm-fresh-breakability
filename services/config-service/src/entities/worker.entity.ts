@@ -77,6 +77,10 @@ export class WorkerEntity extends Base {
   })
   jobRunMap: WorkerJobRunMap[];
 
+  @ApiProperty({ description: 'workerVersion' })
+  @Column({ type: 'varchar', length: 100, name: 'worker_version', nullable: true })
+  workerVersion: string;
+
   @OneToOne(() => WorkerStatsEntity, (workerStats) => workerStats.worker, {
     cascade: true,
   })

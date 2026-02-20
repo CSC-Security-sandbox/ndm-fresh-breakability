@@ -33,3 +33,8 @@ export { RetryMigrationWorkflow } from './core/parent/retry-migration-parent-wor
 export { ValidatePathWorkerWorkflow } from './validate-path/validate-path-worker-workflow';
 export { ValidatePathsWorkflow } from './validate-path/validate-path-workflow';
 
+// Upgrade Workflows
+export { BinaryMulticastWorkflow } from './upgrade/binary-multicast.workflow';
+export { WorkerDownloadWorkflow } from './upgrade/worker-download.workflow';
+export { UpgradeExecutionWorkflow } from './upgrade/upgrade-execution.workflow';
+export { WorkerUpgradeExecutionWorkflow } from './upgrade/worker-upgrade-execution.workflow';

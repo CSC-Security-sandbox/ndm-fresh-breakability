@@ -5,26 +5,61 @@ import {
   NotFoundException,
   InternalServerErrorException,
   OnModuleInit,
+  StreamableFile,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
+import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
+import { createReadStream } from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { spawn } from 'child_process';
+import { v4 as uuidv4, v4 as uuid } from 'uuid';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+
+// Upload (Control Plane) imports
 import { Request } from 'express';
-import * as fs from 'fs';
-import * as fsPromises from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { spawn } from 'child_process';
-import { v4 as uuidv4 } from 'uuid';
 import { InitUploadDto, InitUploadResponseDto, UploadChunkResponseDto } from './dto/upgrade.dto';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
-import { UploadStatus, UpgradeStatus } from './enums/upgrade.enums';
+import { UploadStatus, UpgradeStatus, WorkerAggregateStatus } from './enums/upgrade.enums';
 
+// Worker multicast imports
+import { WorkflowService } from '../workflow/workflow.service';
+import { WorkFlows } from '../workflow/workflow.types';
+import {
+  MulticastRequestDto,
+  MulticastResponseDto,
+  MulticastStatusDto,
+  WorkerAckDto,
+  ExecuteUpgradeRequestDto,
+  ExecuteUpgradeResponseDto,
+  ExecutionStatusDto,
+  ExecutionAckDto,
+  WorkerExecutionStatusDto,
+} from './dto/multicast.dto';
+import { WorkerEntity } from '../entities/worker.entity';
+import { UpgradeBundleStatus, UpgradeExecutionStatus } from '../constants/worker.enums';
 
+/**
+ * Base path for upgrade bundles on CP.
+ * Structure: /upgrade/{version}/worker/{linux|windows|env}/
+ */
+const CP_UPGRADE_BASE = '/upgrade';
+
+/**
+ * Task queue for parent workflows
+ */
+const PARENT_TASK_QUEUE = 'ParentWorkflow-TaskQueue';
+
+/** Max seconds since last health check to consider a worker healthy. */
+const WORKER_HEALTH_TIMEOUT_SECONDS = 20; // window of 3 pings from worker 
+
+// UploadSession type for Control Plane chunked upload
 interface UploadSession {
   uploadId: string;
   fileName: string;
@@ -39,22 +74,29 @@ interface UploadSession {
 
 @Injectable()
 export class UpgradeService implements OnModuleInit {
+  // UPLOAD (Control Plane) fields
   private readonly logger: LoggerService;
   private readonly uploadPath: string;
   private readonly chunkSize: number = 15 * 1024 * 1024; // 15MB
 
   private sessions: Map<string, UploadSession> = new Map();
 
+  // MULTICAST (Worker Distribution) fields
   constructor(
     private readonly configService: ConfigService,
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(UpgradeBundle)
     private readonly upgradeBundleRepository: Repository<UpgradeBundle>,
+    // Worker multicast
+    private readonly workflowService: WorkflowService,
+    @InjectRepository(WorkerEntity)
+    private readonly workerRepository: Repository<WorkerEntity>,
+    @Inject(LoggerFactory) private loggerFactory: LoggerFactory, // Only used for worker multicast logger init
   ) {
     this.logger = loggerFactory.create(UpgradeService.name);
     this.uploadPath = this.configService.getOrThrow<string>('UPLOAD_PATH');
   }
 
+  // === UPGRADE UPLOAD FLOW ==
   async onModuleInit(): Promise<void> {
     await this.ensureDirectories();
   }
@@ -144,95 +186,95 @@ export class UpgradeService implements OnModuleInit {
   // ═══════════════════════════════════════════════════════════════════════════
   async getLatestUploadStatus() {
     try {
-    const latest = await this.upgradeBundleRepository.findOne({
-      where: {},
-      order: { created_at: 'DESC' },
-    });
+      const latest = await this.upgradeBundleRepository.findOne({
+        where: {},
+        order: { created_at: 'DESC' },
+      });
 
-    if (!latest) {
-      return {
-        hasUpload: false,
-        showUploadUI: true,
-        showUpgradeUI: false,
-        isUploadInProgress: false,
-        isProcessing: false,
-      };
-    }
+      if (!latest) {
+        return {
+          hasUpload: false,
+          showUploadUI: true,
+          showUpgradeUI: false,
+          isUploadInProgress: false,
+          isProcessing: false,
+        };
+      }
 
     // Check if there's an upload currently in progress (chunks being uploaded)
-    let isUploadInProgress = latest.uploadStatus === UploadStatus.UPLOADING;
+      let isUploadInProgress = latest.uploadStatus === UploadStatus.UPLOADING;
     
     // Check if processing is in progress (extraction, validation, organization)
-    let isProcessing = latest.uploadStatus === UploadStatus.PROCESSING;
+      let isProcessing = latest.uploadStatus === UploadStatus.PROCESSING;
 
     // Handle stale uploads - timeout based on file size (only for UPLOADING)
-    if (isUploadInProgress && latest.uploadStartedAt) {
-      const timeout = this.calculateUploadTimeout(Number(latest.fileSize));
-      const elapsed = Date.now() - new Date(latest.uploadStartedAt).getTime();
-      if (elapsed > timeout) {
-        await this.upgradeBundleRepository.update(latest.id, {
-          uploadStatus: UploadStatus.FAILED,
-          uploadCompletedAt: new Date(),
-        });
-        isUploadInProgress = false;
-      }
-    }
-
-    // Handle stale PROCESSING status - timeout for extraction/validation
-    if (isProcessing) {
-      const PROCESSING_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for processing
-      
-      // Use processingStartedAt if available, fallback to uploadStartedAt for older records
-      const processingStart = latest.processingStartedAt || latest.uploadStartedAt;
-      
-      if (processingStart) {
-        const elapsed = Date.now() - new Date(processingStart).getTime();
-        if (elapsed > PROCESSING_TIMEOUT_MS) {
-          this.logger.warn(`Processing timeout for bundle ${latest.id} after ${Math.round(elapsed / 60000)} minutes`);
+      if (isUploadInProgress && latest.uploadStartedAt) {
+        const timeout = this.calculateUploadTimeout(Number(latest.fileSize));
+        const elapsed = Date.now() - new Date(latest.uploadStartedAt).getTime();
+        if (elapsed > timeout) {
           await this.upgradeBundleRepository.update(latest.id, {
             uploadStatus: UploadStatus.FAILED,
             uploadCompletedAt: new Date(),
           });
-          isProcessing = false;
+          isUploadInProgress = false;
         }
       }
-    }
+
+    // Handle stale PROCESSING status - timeout for extraction/validation
+      if (isProcessing) {
+      const PROCESSING_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes max for processing
+      
+      // Use processingStartedAt if available, fallback to uploadStartedAt for older records
+        const processingStart = latest.processingStartedAt || latest.uploadStartedAt;
+
+        if (processingStart) {
+          const elapsed = Date.now() - new Date(processingStart).getTime();
+          if (elapsed > PROCESSING_TIMEOUT_MS) {
+            this.logger.warn(`Processing timeout for bundle ${latest.id} after ${Math.round(elapsed / 60000)} minutes`);
+            await this.upgradeBundleRepository.update(latest.id, {
+              uploadStatus: UploadStatus.FAILED,
+              uploadCompletedAt: new Date(),
+            });
+            isProcessing = false;
+          }
+        }
+      }
 
     // Determine UI state based on latest record
     // Show upload UI if: upgrade completed successfully, upload failed, or upload cancelled
     // NOTE: Do NOT include upgrade failed here - user must click "Start Over" first
-    const showUploadUI =
-      (latest.uploadStatus === UploadStatus.SUCCESS && latest.upgradeStatus === UpgradeStatus.SUCCESS) ||
-      latest.uploadStatus === UploadStatus.FAILED ||
-      latest.uploadStatus === UploadStatus.CANCELLED;
+      const showUploadUI =
+        (latest.uploadStatus === UploadStatus.SUCCESS && latest.upgradeStatus === UpgradeStatus.SUCCESS) ||
+        latest.uploadStatus === UploadStatus.FAILED ||
+        latest.uploadStatus === UploadStatus.CANCELLED;
 
     // Show upgrade UI if: upload succeeded AND upgrade is pending OR failed (allow retry)
-    const showUpgradeUI =
-      latest.uploadStatus === UploadStatus.SUCCESS && 
-      (latest.upgradeStatus === UpgradeStatus.PENDING || latest.upgradeStatus === UpgradeStatus.FAILED);
+      const showUpgradeUI =
+        latest.uploadStatus === UploadStatus.SUCCESS &&
+        (latest.upgradeStatus === UpgradeStatus.PENDING || latest.upgradeStatus === UpgradeStatus.FAILED);
 
     // Check if upgrade is currently in progress
-    const isUpgradeInProgress =
-      latest.uploadStatus === UploadStatus.SUCCESS && 
-      latest.upgradeStatus === UpgradeStatus.IN_PROGRESS;
+      const isUpgradeInProgress =
+        latest.uploadStatus === UploadStatus.SUCCESS &&
+        latest.upgradeStatus === UpgradeStatus.IN_PROGRESS;
 
-    return {
-      hasUpload: true,
+      return {
+        hasUpload: true,
       bundleId: latest.id,       // Use bundleId for triggerUpgrade instead of filePath
-      uploadStatus: latest.uploadStatus,
-      upgradeStatus: latest.upgradeStatus,
-      fileName: latest.fileName,
-      fileSize: Number(latest.fileSize),
-      version: latest.version,
-      uploadCompletedAt: latest.uploadCompletedAt,
-      upgradeCompletedAt: latest.upgradeCompletedAt,
-      uploadedBy: latest.uploadedBy,
-      upgradedBy: latest.upgradedBy,
-      showUploadUI,
-      showUpgradeUI,
+        uploadStatus: latest.uploadStatus,
+        upgradeStatus: latest.upgradeStatus,
+        fileName: latest.fileName,
+        fileSize: Number(latest.fileSize),
+        version: latest.version,
+        uploadCompletedAt: latest.uploadCompletedAt,
+        upgradeCompletedAt: latest.upgradeCompletedAt,
+        uploadedBy: latest.uploadedBy,
+        upgradedBy: latest.upgradedBy,
+        showUploadUI,
+        showUpgradeUI,
       isUploadInProgress,       // true when chunks are being uploaded (can be cancelled)
       isProcessing,             // true when extracting/validating (should NOT be cancelled)
-      isUpgradeInProgress,
+        isUpgradeInProgress,
       };
     } catch (error) {
       this.logger.error(`Failed to get latest upload status: ${error.message}`);
@@ -328,7 +370,7 @@ export class UpgradeService implements OnModuleInit {
       const bundle = this.upgradeBundleRepository.create({
         fileName: dto.fileName,
         fileSize: dto.fileSize,
-          uploadStatus: UploadStatus.UPLOADING,
+        uploadStatus: UploadStatus.UPLOADING,
         uploadStartedAt: new Date(),
         version,
           uploadedBy: userId, // Track who uploaded the bundle
@@ -336,27 +378,27 @@ export class UpgradeService implements OnModuleInit {
       savedBundle = await this.upgradeBundleRepository.save(bundle);
 
     // Store session info
-    const session: UploadSession = {
-      uploadId,
-      fileName: dto.fileName,
-      fileSize: dto.fileSize,
-      chunkSize: this.chunkSize,
-      totalChunks,
-      receivedChunks: new Set(),
-      tempDir,
-      createdAt: new Date(),
-      bundleId: savedBundle.id,
-    };
+      const session: UploadSession = {
+        uploadId,
+        fileName: dto.fileName,
+        fileSize: dto.fileSize,
+        chunkSize: this.chunkSize,
+        totalChunks,
+        receivedChunks: new Set(),
+        tempDir,
+        createdAt: new Date(),
+        bundleId: savedBundle.id,
+      };
 
-    this.sessions.set(uploadId, session);
+      this.sessions.set(uploadId, session);
 
-    this.logger.debug(`Upload session initialized: ${uploadId}, DB record: ${savedBundle.id}`);
+      this.logger.debug(`Upload session initialized: ${uploadId}, DB record: ${savedBundle.id}`);
 
-    return {
-      uploadId,
-      chunkSize: this.chunkSize,
-      totalChunks,
-    };
+      return {
+        uploadId,
+        chunkSize: this.chunkSize,
+        totalChunks,
+      };
     } catch (error) {
       // Cleanup temp directory if created
       try {
@@ -564,7 +606,7 @@ export class UpgradeService implements OnModuleInit {
       // Mark as PROCESSING (extraction/validation in progress)
       // This helps UI distinguish between "stuck upload" vs "actively processing"
       await this.upgradeBundleRepository.update(session.bundleId, {
-        uploadStatus: UploadStatus.PROCESSING,  
+        uploadStatus: UploadStatus.PROCESSING,
         processingStartedAt: new Date(),  // Track when processing started for timeout calculation
       });
 
@@ -652,22 +694,22 @@ export class UpgradeService implements OnModuleInit {
   // ═══════════════════════════════════════════════════════════════════════════
   async cancelUpload(uploadId: string) {
     const session = this.sessions.get(uploadId);
-    
+
     // If session not found in memory, it may have been lost due to pod restart
     if (!session) {
       this.logger.warn(`Cancel requested for unknown session: ${uploadId}. Session may have expired or pod restarted.`);
-      
+
       // Try to cleanup temp directory anyway (in case session was lost but files remain)
       const tempDir = path.join(this.uploadPath, 'temp');
       await this.cleanupTempDir(tempDir);
-      
+
       // This handles the case where session was lost but DB record exists
       try {
         const uploadingRecord = await this.upgradeBundleRepository.findOne({
           where: { uploadStatus: UploadStatus.UPLOADING },
           order: { created_at: 'DESC' },
         });
-        
+
         if (uploadingRecord) {
           await this.upgradeBundleRepository.update(uploadingRecord.id, {
             uploadStatus: UploadStatus.CANCELLED,
@@ -679,9 +721,9 @@ export class UpgradeService implements OnModuleInit {
         this.logger.error(`Failed to cancel stale DB record: ${dbError.message}`);
         // Continue anyway - timeout will eventually handle it
       }
-      
-      return { 
-        cancelled: true, 
+
+      return {
+        cancelled: true,
         uploadId,
         message: 'Session not found, but cleanup attempted'
       };
@@ -689,10 +731,10 @@ export class UpgradeService implements OnModuleInit {
 
     try {
     // Update DB to cancelled
-    await this.upgradeBundleRepository.update(session.bundleId, {
+      await this.upgradeBundleRepository.update(session.bundleId, {
         uploadStatus: UploadStatus.CANCELLED,
-      uploadCompletedAt: new Date(),
-    });
+        uploadCompletedAt: new Date(),
+      });
     } catch (dbError) {
       this.logger.error(`Failed to update DB on cancel: ${dbError.message}`);
       // Continue with cleanup even if DB update fails
@@ -728,7 +770,7 @@ export class UpgradeService implements OnModuleInit {
 
     // Clean up the same version folder if it exists (e.g., /upload/2026.01.1)
     if (newVersion) {
-      const versionDir = path.join(this.uploadPath, newVersion);      
+      const versionDir = path.join(this.uploadPath, newVersion);
       try {
         if (await this.pathExists(versionDir)) {
           await fsPromises.rm(versionDir, { recursive: true, force: true });
@@ -1073,7 +1115,7 @@ export class UpgradeService implements OnModuleInit {
           if (file.includes('windows')) {
             await this.copyFile(filePath, path.join(workerWindowsDir, file));
           } else if (
-            file.includes('linux') 
+            file.includes('linux')
           ) {
             await this.copyFile(filePath, path.join(workerLinuxDir, file));
           } else {
@@ -1194,9 +1236,9 @@ export class UpgradeService implements OnModuleInit {
 
 
       // Re-throw NestJS exceptions as-is
-      if (error instanceof NotFoundException || 
-          error instanceof BadRequestException || 
-          error instanceof InternalServerErrorException) {
+      if (error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException) {
         throw error;
       }
 
@@ -1222,7 +1264,7 @@ export class UpgradeService implements OnModuleInit {
     const bundle = await this.upgradeBundleRepository.findOne({
       where: { id: bundleId },
     });
-    
+
     if (!bundle) {
       throw new NotFoundException(
         `Bundle not found with ID: ${bundleId}. The upload may have failed or been deleted.`
@@ -1245,7 +1287,7 @@ export class UpgradeService implements OnModuleInit {
 
     // Pattern: /upload/${version}  (e.g., /upload/v2.1.0)
     const deployPath = path.join(this.uploadPath, bundle.version);
-    
+
     // Validate deploy directory exists on disk
     if (!(await this.pathExists(deployPath))) {
       throw new NotFoundException(`Upgrade bundle not found at: ${deployPath}`);
@@ -1286,7 +1328,7 @@ export class UpgradeService implements OnModuleInit {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       this.logger.error(`Failed to trigger upgrade: ${error.message}`);
       throw new InternalServerErrorException(
         `Failed to trigger upgrade: ${error.message}`
@@ -1310,7 +1352,7 @@ export class UpgradeService implements OnModuleInit {
     const bundle = await this.upgradeBundleRepository.findOne({
       where: { id: bundleId },
     });
-    
+
     if (!bundle) {
       // Bundle not found - might have been deleted, just return success
       this.logger.warn(`Bundle not found for skip: ${bundleId}`);
@@ -1349,4 +1391,561 @@ export class UpgradeService implements OnModuleInit {
     };
   }
 
+  // === WORKER BUNDLE MULTICAST =
+
+  // Helper functions for worker upgrade bundle streaming
+  // Sanitize version string to prevent path traversal attacks.
+  private sanitizeVersion(version: string): string {
+    if (!version || !/^[a-zA-Z0-9._-]+$/.test(version)) {
+      throw new BadRequestException(
+        `Invalid version string: ${version}. Only alphanumeric, dots, dashes, and underscores allowed.`,
+      );
+    }
+    return version;
+  }
+
+  private cpBundlePath(version: string, platform: 'linux' | 'windows'): string {
+    if (platform !== 'linux' && platform !== 'windows') {
+      throw new BadRequestException(`Invalid platform: ${platform}. Must be 'linux' or 'windows'.`);
+    }
+    const safeVersion = this.sanitizeVersion(version);
+    const resolved = path.resolve(CP_UPGRADE_BASE, safeVersion, 'worker', platform);
+
+    if (!resolved.startsWith(path.resolve(CP_UPGRADE_BASE))) {
+      throw new BadRequestException(`Invalid version path: ${version}`);
+    }
+    return resolved;
+  }
+
+  private async checkBundleInfo(version: string, platform: 'linux' | 'windows'): Promise<{
+    available: boolean;
+    filename?: string;
+    size?: number;
+  }> {
+    const basePath = this.cpBundlePath(version, platform);
+
+    try {
+      await fsPromises.access(basePath);
+    } catch {
+      return { available: false };
+    }
+
+    const files = await fsPromises.readdir(basePath);
+    const bundleFile = files.find((f) =>
+      f.startsWith(`datamigrator-worker-${platform}-`) && (f.endsWith('.tar.gz') || f.endsWith('.zip')),
+    );
+
+    if (!bundleFile) {
+      return { available: false };
+    }
+
+    const stat = await fsPromises.stat(path.join(basePath, bundleFile));
+    return { available: true, filename: bundleFile, size: stat.size };
+  }
+
+  private async validateBundlesExist(version: string): Promise<{
+    linux: { available: boolean; filename?: string; size?: number };
+    windows: { available: boolean; filename?: string; size?: number };
+  }> {
+    const [linux, windows] = await Promise.all([
+      this.checkBundleInfo(version, 'linux'),
+      this.checkBundleInfo(version, 'windows'),
+    ]);
+
+    if (!linux.available && !windows.available) {
+      throw new BadRequestException(
+        `No upgrade bundles found for version ${version}. Expected files in ${this.cpBundlePath(version, 'linux')} or ${this.cpBundlePath(version, 'windows')}`,
+      );
+    }
+
+    this.logger.log(
+      `Precheck passed for version ${version}: linux=${linux.available}, windows=${windows.available}`,
+    );
+
+    return { linux, windows };
+  }
+
+  async startMulticast(
+    dto: MulticastRequestDto,
+  ): Promise<MulticastResponseDto> {
+    const traceId = uuid();
+    const workflowId = `BinaryMulticast-${traceId}`;
+    let workerIds: string[] = [];
+    try {
+      await this.validateBundlesExist(dto.version);
+
+      const cutoff = new Date(Date.now() - WORKER_HEALTH_TIMEOUT_SECONDS * 1000);
+      const activeWorkers = await this.workerRepository
+        .createQueryBuilder('worker')
+        .innerJoinAndSelect('worker.stats', 'stats')
+        .where('worker.status = :status', { status: 'Online' })
+        .andWhere('stats.updated_at > :cutoff', { cutoff })
+        .getMany();
+
+      if (activeWorkers.length === 0) {
+        return {
+          workflowId,
+          status: 'error',
+          message: 'No healthy workers found. Workers must be Online and reporting health checks.',
+        };
+      }
+
+      this.logger.log(`Health check: ${activeWorkers.length} healthy worker(s) found`);
+
+      workerIds = activeWorkers.map((w) => w.workerId);
+
+      this.logger.log(
+        `Starting multicast workflow: ${workflowId} for ${workerIds.length} active workers, version ${dto.version}`,
+      );
+
+      await this.workerRepository.update(
+        { workerId: In(workerIds) },
+        { upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS , stagedVersion: dto.version },
+      );
+      this.logger.log(`Set upgrade_bundle_staged=IN_PROGRESS for ${workerIds.length} workers`);
+
+      const handle = await this.workflowService.startWorkflow(
+        WorkFlows.BINARY_MULTICAST,
+        {
+          taskQueue: PARENT_TASK_QUEUE,
+          workflowId,
+          args: [
+            {
+              traceId,
+              workerIds,
+              version: dto.version,
+            },
+          ],
+        },
+      );
+
+      this.logger.log(
+        `Multicast workflow started: ${handle.workflowId}, runId: ${handle.firstExecutionRunId}`,
+      );
+
+      await this.upgradeBundleRepository.update(dto.bundleId, {
+        multicastWorkflowId: handle.workflowId,
+        workerUploadStatus: WorkerAggregateStatus.IN_PROGRESS,
+      });
+      this.logger.log(`Stored multicast_workflow_id=${handle.workflowId}, worker_upload_status=IN_PROGRESS on bundle ${dto.bundleId}`);
+
+      return {
+        workflowId: handle.workflowId,
+        status: 'started',
+        message: `Multicast workflow started for ${workerIds.length} active workers`,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to start multicast workflow: ${error}`);
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      if (workerIds?.length) {
+        try {
+          await this.workerRepository.update(
+            { workerId: In(workerIds) },
+            { upgradeBundleStaged: UpgradeBundleStatus.IDLE, stagedVersion: null },
+          );
+          this.logger.log(`Reset upgrade_bundle_staged=IDLE for ${workerIds.length} workers after workflow start failure`);
+        } catch (resetError) {
+          this.logger.error(`Failed to reset worker status after workflow start failure: ${resetError}`);
+        }
+      }
+
+      return {
+        workflowId,
+        status: 'error',
+        message: error.message,
+      };
+    }
+  }
+
+  async acknowledgeWorkerDownload(
+    dto: WorkerAckDto,
+  ): Promise<{ acknowledged: boolean }> {
+    this.logger.log(
+      `Worker ${dto.workerId} ack: ${dto.status} for version ${dto.version}`,
+    );
+
+    if (dto.status === 'success') {
+      await this.workerRepository.update(dto.workerId, {
+        upgradeBundleStaged: UpgradeBundleStatus.COMPLETED,
+      });
+      this.logger.log(`Set upgrade_bundle_staged=COMPLETED for worker ${dto.workerId}`);
+    } else {
+      await this.workerRepository.update(dto.workerId, {
+        upgradeBundleStaged: UpgradeBundleStatus.FAILED,
+        stagedVersion: null,
+      });
+      this.logger.log(`Worker ${dto.workerId} reported failure: ${dto.message}`);
+    }
+
+    // Check if all workers with this version are done (no more IN_PROGRESS)
+    const remaining = await this.workerRepository.count({
+      where: {
+        stagedVersion: dto.version,
+        upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS,
+      },
+    });
+    if (remaining === 0) {
+      await this.upgradeBundleRepository.update(
+        { version: dto.version },
+        { workerUploadStatus: WorkerAggregateStatus.COMPLETED },
+      );
+      this.logger.log(`All workers done for version ${dto.version}, worker_upload_status=COMPLETED`);
+    }
+
+    return { acknowledged: true };
+  }
+
+  async getMulticastStatus(bundleId: string, version: string): Promise<MulticastStatusDto> {
+    this.logger.log(`Getting multicast status for bundle ${bundleId}, version ${version}`);
+
+    const bundle = await this.upgradeBundleRepository.findOne({
+      where: { id: bundleId, version },
+    });
+
+    if (!bundle?.multicastWorkflowId) {
+      throw new NotFoundException(`No multicast workflow found for bundle ${bundleId}, version ${version}`);
+    }
+
+    const workflowId = bundle.multicastWorkflowId;
+    const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
+
+    const workers = await this.workerRepository.find({
+      relations: ['stats'],
+    });
+
+    const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
+    const now = new Date();
+
+    const workerStatuses = workers.map((w) => {
+      const lastSeen = w.stats?.updatedAt ? new Date(w.stats.updatedAt) : null;
+      const healthy = lastSeen
+        ? Math.floor(Math.abs(now.getTime() - lastSeen.getTime()) / 1000) < healthTimeout
+        : false;
+
+      return {
+        workerId: w.workerId,
+        workerName: w.workerName,
+        ipAddress: w.ipAddress,
+        platform: w.platform,
+        currentVersion: w.workerVersion,
+        stagedVersion: w.stagedVersion,
+        bundleStatus: w.upgradeBundleStaged,
+        healthy,
+        lastSeen: lastSeen?.toISOString(),
+      };
+    });
+
+    const summary = {
+      total: workerStatuses.length,
+      completed: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.COMPLETED).length,
+      inProgress: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.IN_PROGRESS).length,
+      failed: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.FAILED).length,
+      idle: workerStatuses.filter((w) => w.bundleStatus === UpgradeBundleStatus.IDLE).length,
+    };
+
+    const workflowResult = workflowData.status === 'COMPLETED' ? workflowData.completed : undefined;
+
+    return {
+      workflowId,
+      workflowStatus: workflowData.status,
+      summary,
+      workers: workerStatuses,
+      workflowResult,
+    };
+  }
+
+  // =========================================================================
+  // Upgrade Execution
+  // =========================================================================
+
+  /** Trigger upgrade execution on all workers where bundles are staged. */
+  async startExecution(
+    dto: ExecuteUpgradeRequestDto,
+  ): Promise<ExecuteUpgradeResponseDto> {
+    const traceId = uuid();
+    const workflowId = `UpgradeExecution-${traceId}`;
+    let workerIds: string[] = [];
+
+    try {
+      const stagedWorkers = await this.workerRepository.find({
+        where: {
+          upgradeBundleStaged: UpgradeBundleStatus.COMPLETED,
+          stagedVersion: dto.version,
+        },
+      });
+
+      if (stagedWorkers.length === 0) {
+        return {
+          workflowId,
+          status: 'error',
+          message: `No workers have completed binary staging for version ${dto.version}`,
+        };
+      }
+
+      workerIds = stagedWorkers.map((w) => w.workerId);
+
+      this.logger.log(
+        `Starting execution workflow: ${workflowId} for ${workerIds.length} staged workers, version ${dto.version}`,
+      );
+
+      await this.workerRepository.update(
+        { workerId: In(workerIds) },
+        { upgradeExecutionStatus: UpgradeExecutionStatus.IN_PROGRESS },
+      );
+
+      await this.workflowService.startWorkflow(
+        WorkFlows.UPGRADE_EXECUTION,
+        {
+          taskQueue: PARENT_TASK_QUEUE,
+          workflowId,
+          args: [{ traceId, workerIds, version: dto.version }],
+        },
+      );
+
+      this.logger.log(`Execution workflow started: ${workflowId}`);
+
+      await this.upgradeBundleRepository.update(dto.bundleId, {
+        executionWorkflowId: workflowId,
+        upgradeWorkerTriggeredAt: new Date(),
+        workerUpgradeStatus: WorkerAggregateStatus.IN_PROGRESS,
+      });
+      this.logger.log(`Stored execution_workflow_id=${workflowId}, worker_upgrade_status=IN_PROGRESS on bundle ${dto.bundleId}`);
+
+      return {
+        workflowId,
+        status: 'started',
+        message: `Upgrade execution triggered for ${workerIds.length} workers`,
+        triggeredWorkers: workerIds,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to start execution workflow: ${error}`);
+
+      if (workerIds?.length) {
+        try {
+          await this.workerRepository.update(
+            { workerId: In(workerIds) },
+            { upgradeExecutionStatus: UpgradeExecutionStatus.IDLE },
+          );
+        } catch (resetError) {
+          this.logger.error(`Failed to reset execution status: ${resetError}`);
+        }
+      }
+
+      if (error instanceof BadRequestException) throw error;
+
+      return { workflowId, status: 'error', message: error.message };
+    }
+  }
+
+  /** Get upgrade execution status. After 5-minute window, marks remaining as timed out. */
+  async getExecutionStatus(bundleId: string, version: string): Promise<ExecutionStatusDto> {
+    const EXECUTION_WINDOW_MS = 5 * 60 * 1000;
+
+    const bundle = await this.upgradeBundleRepository.findOne({
+      where: { id: bundleId, version },
+    });
+
+    if (!bundle?.executionWorkflowId) {
+      throw new NotFoundException(`No execution workflow found for bundle ${bundleId}, version ${version}`);
+    }
+
+    const workflowId = bundle.executionWorkflowId;
+    const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
+
+    const allWorkers = await this.workerRepository.find();
+
+    // Workers involved in execution (IN_PROGRESS, COMPLETED, FAILED)
+    const executionWorkers = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus !== UpgradeExecutionStatus.IDLE,
+    );
+
+    const triggeredAt = bundle.upgradeWorkerTriggeredAt
+      ? new Date(bundle.upgradeWorkerTriggeredAt).getTime()
+      : Date.now();
+    const elapsed = Date.now() - triggeredAt;
+    const windowElapsed = elapsed >= EXECUTION_WINDOW_MS;
+
+    if (windowElapsed) {
+      const stillInProgress = executionWorkers.filter(
+        (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS,
+      );
+      if (stillInProgress.length > 0) {
+        await this.workerRepository.update(
+          { workerId: In(stillInProgress.map((w) => w.workerId)) },
+          { upgradeExecutionStatus: UpgradeExecutionStatus.FAILED },
+        );
+        stillInProgress.forEach((w) => {
+          w.upgradeExecutionStatus = UpgradeExecutionStatus.FAILED;
+        });
+        this.logger.log(
+          `Timed out ${stillInProgress.length} workers after 5-minute window`,
+        );
+      }
+    }
+
+    const toDto = (w: WorkerEntity): WorkerExecutionStatusDto => ({
+      workerId: w.workerId,
+      workerName: w.workerName,
+      ipAddress: w.ipAddress,
+      platform: w.platform,
+      currentVersion: w.workerVersion,
+      executionStatus: w.upgradeExecutionStatus,
+      upgradeCompletedAt: w.upgradeCompletedAt?.toISOString(),
+    });
+
+    const completed = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.COMPLETED,
+    );
+    const notCompleted = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS
+        || w.upgradeExecutionStatus === UpgradeExecutionStatus.FAILED,
+    );
+    const notStaged = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IDLE,
+    );
+    const failedCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.FAILED,
+    ).length;
+    const inProgressCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IN_PROGRESS,
+    ).length;
+    const notStartedCount = allWorkers.filter(
+      (w) => w.upgradeExecutionStatus === UpgradeExecutionStatus.IDLE,
+    ).length;
+
+    const allDone = inProgressCount === 0 && executionWorkers.length > 0;
+    const upgradeCompleted = allDone || windowElapsed;
+
+    let upgradeStatus: 'success' | 'failure' | 'in_progress';
+    if (!upgradeCompleted) {
+      upgradeStatus = 'in_progress';
+    } else if (failedCount === 0 && notStartedCount === 0 && completed.length === allWorkers.length) {
+      upgradeStatus = 'success';
+    } else {
+      upgradeStatus = 'failure';
+    }
+
+    return {
+      workflowId,
+      workflowStatus: workflowData.status,
+      upgradeCompleted,
+      upgradeStatus,
+      summary: {
+        total: allWorkers.length,
+        completed: completed.length,
+        inProgress: inProgressCount,
+        failed: failedCount,
+        notStarted: notStartedCount,
+      },
+      completed: completed.map(toDto),
+      notCompleted: notCompleted.map(toDto),
+      notStaged: notStaged.map(toDto),
+    };
+  }
+
+  /** Worker ACK after upgrade execution. Only marks COMPLETED if ACK version matches staged version. */
+  async acknowledgeExecution(
+    dto: ExecutionAckDto,
+  ): Promise<{ acknowledged: boolean; message?: string }> {
+    this.logger.log(
+      `Worker ${dto.workerId} execution ack: upgraded to ${dto.version}`,
+    );
+
+    const worker = await this.workerRepository.findOne({ where: { workerId: dto.workerId } });
+
+    if (!worker) {
+      this.logger.warn(`Worker ${dto.workerId} not found in DB`);
+      return { acknowledged: false, message: 'Worker not found' };
+    }
+
+    if (worker.stagedVersion && worker.stagedVersion !== dto.version) {
+      this.logger.warn(
+        `Worker ${dto.workerId} ACK version mismatch: ack=${dto.version}, staged=${worker.stagedVersion}`,
+      );
+      await this.workerRepository.update(dto.workerId, {
+        upgradeExecutionStatus: UpgradeExecutionStatus.FAILED,
+      });
+      this.logger.log(`Worker ${dto.workerId}: execution=FAILED (version mismatch)`);
+      return {
+        acknowledged: false,
+        message: `Version mismatch: worker sent ${dto.version} but staged version is ${worker.stagedVersion}`,
+      };
+    }
+
+    await this.workerRepository.update(dto.workerId, {
+      upgradeExecutionStatus: UpgradeExecutionStatus.COMPLETED,
+      upgradeBundleStaged: UpgradeBundleStatus.IDLE,
+      stagedVersion: null,
+      workerVersion: dto.version,
+      upgradeCompletedAt: new Date(),
+    });
+
+    this.logger.log(`Worker ${dto.workerId}: execution=COMPLETED, bundle_staged=IDLE, version=${dto.version}`);
+
+    // Check if all workers with execution in progress are done
+    const remaining = await this.workerRepository.count({
+      where: { upgradeExecutionStatus: UpgradeExecutionStatus.IN_PROGRESS },
+    });
+    if (remaining === 0) {
+      await this.upgradeBundleRepository.update(
+        { version: dto.version },
+        { workerUpgradeStatus: WorkerAggregateStatus.COMPLETED },
+      );
+      this.logger.log(`All workers upgraded for version ${dto.version}, worker_upgrade_status=COMPLETED`);
+    }
+
+    return { acknowledged: true };
+  }
+
+  // Stream the upgrade bundle for a specific version and platform.
+  async streamBundle(
+    version: string,
+    platform: 'linux' | 'windows',
+  ): Promise<StreamableFile> {
+    const basePath = this.cpBundlePath(version, platform);
+
+    this.logger.log(`Serving bundle: version=${version}, platform=${platform}, path=${basePath}`);
+
+    try {
+      await fsPromises.access(basePath);
+    } catch {
+      throw new NotFoundException(`Bundle directory not found: ${basePath}`);
+    }
+
+    const files = await fsPromises.readdir(basePath);
+    let bundleFile: string | undefined;
+    let contentType: string | undefined;
+
+    if (platform === 'linux') {
+      const tarGzName = `datamigrator-worker-linux-${version}.tar.gz`;
+      if (files.includes(tarGzName)) {
+        bundleFile = tarGzName;
+        contentType = 'application/gzip';
+      }
+    } else if (platform === 'windows') {
+      const zipName = `datamigrator-worker-windows-${version}.zip`;
+      if (files.includes(zipName)) {
+        bundleFile = zipName;
+        contentType = 'application/zip';
+      }
+    }
+
+    if (!bundleFile) {
+      throw new NotFoundException(`Bundle not found in ${basePath}`);
+    }
+
+    const bundlePath = path.join(basePath, bundleFile);
+    const stat = await fsPromises.stat(bundlePath);
+
+    this.logger.log(`Streaming: ${bundlePath} (${stat.size} bytes)`);
+
+    return new StreamableFile(createReadStream(bundlePath), {
+      type: contentType,
+      disposition: `attachment; filename="${bundleFile}"`,
+      length: stat.size,
+    });
+  }
 }

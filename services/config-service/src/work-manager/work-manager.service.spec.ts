@@ -630,6 +630,7 @@ describe('WorkManagerService', () => {
           workerName: expect.any(String),
           platform: Platform.WINDOWS,
           envVariables,
+          workerVersion: null,
         },
       );
     });
