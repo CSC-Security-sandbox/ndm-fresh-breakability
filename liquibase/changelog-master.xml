@@ -568,6 +568,12 @@
             <sqlFile path="liquibase/rollback/20260128_03_add_operations_indexes_rollback.sql"/>
         </rollback>
     </changeSet>
+    <changeSet id="20260211_01_create_upgrade_bundles_table.sql" author="dk49889">
+      <sqlFile path="liquibase/20260211_01_create_upgrade_bundles_table.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260211_01_create_upgrade_bundles_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
 
    <changeSet id="20260209_01_alter_jobconfig_add_directory_paths.sql" author="ss27372">
       <sqlFile path="liquibase/20260209_01_alter_jobconfig_add_directory_paths.sql"/>

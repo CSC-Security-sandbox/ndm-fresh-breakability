@@ -36,6 +36,11 @@ args:
 
 imagePullSecrets: azure-dev-acr-creds
 
+persistentVolumes:
+  - name: upgrade
+    mountPath: /upgrade
+    hostPath: /upgrade
+
 env:
   - name: MY_HOST_IP
     valueFrom:
@@ -97,6 +102,8 @@ env:
     value: "$(MY_HOST_IP)"
   - name: PROMETHEUS_BASE_URL
     value: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1"
+  - name: UPLOAD_PATH
+    value: "/upgrade"
 
 service:
   type: ClusterIP
@@ -140,6 +147,7 @@ ingress:
     - /api/v1/email
     - /api/v1/worker-registration
     - /api/v1/secrets
+    - /api/v1/upgrade
   ingressClassName: public
   userDefinedAnnotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
