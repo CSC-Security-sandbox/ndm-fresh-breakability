@@ -848,11 +848,11 @@ jobs:
           zip "../${WINDOWS_WORKER}.zip" *
           cd ..
 
-      - name: Upload upgrade.sh to Artifactory
+      - name: Upload upgrade-playbook.yaml to Artifactory
         run: |
           curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
-            --upload-file upgrade/upgrade.sh \
-            "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}/upgrade.sh"
+            --upload-file upgrade/upgrade-playbook.yaml \
+            "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/upgrade-${BUILD_VERSION}/upgrade-playbook.yaml"
 
       - name: Assemble bundle, create checksums and tar
         run: |
@@ -867,7 +867,7 @@ jobs:
           cp "${LINUX_WORKER}.tar.gz" "${UPGRADE}/worker/${LINUX_WORKER}.tar.gz"
           WINDOWS_WORKER="datamigrator-worker-windows-${BUILD_VERSION}"
           cp "${WINDOWS_WORKER}.zip"  "${UPGRADE}/worker/${WINDOWS_WORKER}.zip"
-          cp upgrade/upgrade.sh  "${UPGRADE}/upgrade.sh"
+          cp upgrade/upgrade-playbook.yaml  "${UPGRADE}/upgrade-playbook.yaml"
 
           # Checksums
           cd "${UPGRADE}"
@@ -876,7 +876,7 @@ jobs:
             "helm/datamigrator-helmchart-${BUILD_VERSION}.tgz" \
             "worker/datamigrator-worker-linux-${BUILD_VERSION}.tar.gz" \
             "worker/datamigrator-worker-windows-${BUILD_VERSION}.zip" \
-            "upgrade.sh" \
+            "upgrade-playbook.yaml" \
             > checksums-${BUILD_VERSION}.sha256
           echo "checksums-${BUILD_VERSION}.sha256:"; cat checksums-${BUILD_VERSION}.sha256
           cd ..

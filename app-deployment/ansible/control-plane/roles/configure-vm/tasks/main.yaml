@@ -59,6 +59,7 @@
       - acl
       - jq
       - xmlstarlet
+      - ansible
     state: present
   # retries: 3
   # delay: 10

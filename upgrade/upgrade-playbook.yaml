@@ -1,0 +1,547 @@
+---
+- name: NDM Control Plane Upgrade
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    # Required: pass via --extra-vars "build_version=2026.01.15"
+    # build_version: "2026.01.15"
+
+    upgrade_dir: "/upgrade"
+    bundle_tar: "{{ upgrade_dir }}/{{ build_version }}.tar"
+    bundle_dir: "{{ upgrade_dir }}/{{ build_version }}"
+    checksum_file: "checksums-{{ build_version }}.sha256"
+    docker_tar: "docker/datamigrator-images-{{ build_version }}.tar"
+    helm_tgz: "helm/datamigrator-helmchart-{{ build_version }}.tgz"
+    worker_linux_tar: "worker/datamigrator-worker-linux-{{ build_version }}.tar.gz"
+    worker_windows_zip: "worker/datamigrator-worker-windows-{{ build_version }}.zip"
+    namespace: datamigrator
+    release_name: datamigrator
+    postgres_pod: "postgresql-0"
+    postgres_namespace: "postgres"
+    db_host: "postgresql.postgres.svc.cluster.local"
+    db_port: "5432"
+    db_name: "datamigrator"
+    db_schema: "datamigrator"
+    liquibase_schema: "liquibase"
+    openbao_pod: "openbao-0"
+    openbao_namespace: "openbao"
+    openbao_secret_path: "secrets/postgres-secrets/postgres-creds"
+
+    datamigrator_services:
+      - admin-service
+      - config-service
+      - datamigrator-ui
+      - db-writer
+      - jobs-service
+      - reports-service
+      - support-service
+
+    helm_environment:
+      PATH: "/snap/bin:/usr/local/bin:/usr/bin:{{ ansible_env.PATH | default('') }}"
+      KUBECONFIG: "/var/snap/microk8s/current/credentials/client.config"
+
+  pre_tasks:
+    - name: Rotate previous Ansible log (if any)
+      ansible.builtin.shell: |
+        [ -f /opt/datamigrator/logs/ndm-upgrade.log ] && \
+          mv /opt/datamigrator/logs/ndm-upgrade.log "/opt/datamigrator/ndm-upgrade-$(date +%Y%m%d_%H%M%S).log" || true
+      changed_when: false
+
+    - name: Display upgrade log location
+      ansible.builtin.debug:
+        msg: "Ansible log will be saved to /opt/datamigrator/logs/ndm-upgrade.log (previous logs rotated with timestamp)"
+
+    - name: Validate build_version is provided
+      ansible.builtin.assert:
+        that:
+          - build_version is defined
+          - build_version | length > 0
+        fail_msg: "build_version must be provided. Run with: --extra-vars 'build_version=2026.01.15'"
+
+    - name: Check required CLI tools are available
+      ansible.builtin.command: "which {{ item }}"
+      loop:
+        - microk8s
+        - kubectl
+        - sha256sum
+        - jq
+        - microk8s.helm3
+      changed_when: false
+
+  tasks:
+
+    # =========================================================================
+    # Step 1: Check checksum file exists
+    # =========================================================================
+    - name: "Step 1 — Check checksum file exists"
+      ansible.builtin.stat:
+        path: "{{ bundle_dir }}/{{ checksum_file }}"
+      register: checksum_stat
+
+    - name: "Step 1 — Fail if checksum file not found"
+      ansible.builtin.fail:
+        msg: "Checksum file '{{ checksum_file }}' not found in {{ bundle_dir }}/"
+      when: not checksum_stat.stat.exists
+
+    # =========================================================================
+    # Step 2: Validate checksums
+    # =========================================================================
+    - name: "Step 2 — Verify required bundle files exist"
+      ansible.builtin.stat:
+        path: "{{ bundle_dir }}/{{ item.path }}"
+      loop:
+        - { path: "{{ docker_tar }}", label: "Docker image tar" }
+        - { path: "{{ helm_tgz }}", label: "Helm chart tgz" }
+        - { path: "{{ worker_linux_tar }}", label: "Linux worker tar.gz" }
+        - { path: "{{ worker_windows_zip }}", label: "Windows worker zip" }
+      loop_control:
+        label: "{{ item.label }}"
+      register: bundle_files
+
+    - name: "Step 2 — Fail if any bundle file is missing"
+      ansible.builtin.fail:
+        msg: "Missing bundle file: {{ item.item.label }} ({{ item.item.path }})"
+      when: not item.stat.exists
+      loop: "{{ bundle_files.results }}"
+      loop_control:
+        label: "{{ item.item.label }}"
+
+    - name: "Step 2 — Validate checksums"
+      ansible.builtin.command:
+        cmd: sha256sum -c "{{ checksum_file }}"
+        chdir: "{{ bundle_dir }}"
+      register: checksum_result
+      changed_when: false
+
+    - name: "Step 2 — Display checksum validation result"
+      ansible.builtin.debug:
+        msg: "{{ checksum_result.stdout_lines }}"
+
+    # =========================================================================
+    # Step 3: Print current deployed version
+    # =========================================================================
+
+    - name: "Step 3 — Get currently deployed chart version"
+      ansible.builtin.shell: >
+        microk8s helm3 list -n {{ namespace }} -o json |
+        jq -r '.[0].chart' | sed 's/^datamigrator-//'
+      register: deployed_version_raw
+      changed_when: false
+      failed_when: false
+      environment: "{{ helm_environment }}"
+
+    - name: "Step 3 — Store deployed version"
+      ansible.builtin.set_fact:
+        current_deployed_version: "{{ deployed_version_raw.stdout | trim }}"
+
+    - name: "Step 3 — Display deployed version"
+      ansible.builtin.debug:
+        msg: "Currently deployed version: {{ current_deployed_version }}"
+
+    # # =========================================================================
+    # # Step 4: Back up current release for rollback
+    # # =========================================================================
+    - name: "Step 4 — Check if Helm release exists"
+      ansible.builtin.shell: >
+        microk8s helm3 list -n {{ namespace }} -q | grep -w {{ release_name }}
+      register: helm_release_check
+      changed_when: false
+      failed_when: false
+      environment: "{{ helm_environment }}"
+
+    - name: "Step 4 — Find previous Helm chart on disk"
+      ansible.builtin.shell: >
+        find /root -maxdepth 3 -name 'datamigrator-helmchart-{{ current_deployed_version }}.tgz'
+        2>/dev/null | head -1
+      register: old_helm_chart_search
+      changed_when: false
+
+    - name: "Step 4 — Save rollback paths"
+      ansible.builtin.set_fact:
+        old_helm_chart: "{{ old_helm_chart_search.stdout | trim }}"
+
+
+    - name: "Step 4 — Display rollback readiness"
+      ansible.builtin.debug:
+        msg:
+          - "Previous Helm chart: {{ old_helm_chart if old_helm_chart | length > 0 else 'NOT FOUND' }}"
+          - "Old Docker images: already in MicroK8s registry (import is additive)"
+          - "{{ 'Full rollback to previous version is available.' if old_helm_chart | length > 0 else 'WARNING: Old Helm chart not found on disk. Keep previous upgrade bundle for rollback capability.' }}"
+
+    # =========================================================================
+    # Step 5: Uninstall Datamigrator release and clean namespace
+    # =========================================================================
+    - name: "Step 5 — Uninstall Datamigrator Helm release"
+      ansible.builtin.command: >
+        microk8s helm3 uninstall {{ release_name }} -n {{ namespace }}
+      register: helm_uninstall
+      environment: "{{ helm_environment }}"
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Display uninstall result"
+      ansible.builtin.debug:
+        msg: "{{ helm_uninstall.stdout | default('Release was not installed, skipping uninstall') }}"
+
+    - name: "Step 5 — Delete all CronJobs in namespace"
+      ansible.builtin.command: >
+        kubectl delete cronjobs --all -n {{ namespace }}
+      environment: "{{ helm_environment }}"
+      failed_when: false
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Force delete all remaining pods in namespace"
+      ansible.builtin.command: >
+        kubectl delete pods --all -n {{ namespace }} --force --grace-period=0
+      environment: "{{ helm_environment }}"
+      failed_when: false
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Remove finalizers from any stuck pods"
+      ansible.builtin.shell: |
+        for pod in $(kubectl get pods -n {{ namespace }} --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+          kubectl patch pod "$pod" -n {{ namespace }} -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+        done
+      environment: "{{ helm_environment }}"
+      failed_when: false
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Wait for all pods to terminate"
+      ansible.builtin.shell: >
+        kubectl get pods -n {{ namespace }} --no-headers 2>/dev/null | wc -l
+      register: pod_count
+      until: (pod_count.stdout | trim | int) == 0
+      retries: 30
+      delay: 10
+      changed_when: false
+      environment: "{{ helm_environment }}"
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Confirm namespace is clean"
+      ansible.builtin.debug:
+        msg: "All pods, CronJobs, and completed tasks in '{{ namespace }}' namespace have been removed."
+      when: helm_release_check.rc == 0
+
+    # =========================================================================
+    # Step 6: Verify PVs still exist after uninstall
+    # =========================================================================
+    - name: "Step 6 — List all Persistent Volumes"
+      ansible.builtin.shell: >
+        kubectl get pv --no-headers 2>/dev/null || true
+      register: pv_list_all
+      changed_when: false
+      environment: "{{ helm_environment }}"
+
+    - name: "Step 6 — Display all PVs"
+      ansible.builtin.debug:
+        msg: |
+          ############# Persistent Volumes #############
+          {{ pv_list_all.stdout if pv_list_all.stdout | length > 0 else 'No PVs found in cluster' }}
+          ###############################################
+
+    - name: "Step 6 — Verify critical PVs exist (postgres, redis, openbao)"
+      ansible.builtin.shell: >
+        kubectl get pv --no-headers 2>/dev/null |
+        grep -E "{{ item.pattern }}" || true
+      loop:
+        - { name: "PostgreSQL", pattern: "postgres" }
+        - { name: "Redis", pattern: "redis" }
+        - { name: "OpenBao", pattern: "openbao" }
+      loop_control:
+        label: "{{ item.name }}"
+      register: critical_pvs
+      changed_when: false
+      environment: "{{ helm_environment }}"
+
+    - name: "Step 6 — Fail if critical PVs are missing"
+      ansible.builtin.fail:
+        msg: >
+          Critical PV not found: {{ item.item.name }}.
+          Data may have been lost. Aborting upgrade — investigate before proceeding.
+      when: item.stdout | length == 0
+      loop: "{{ critical_pvs.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # =========================================================================
+    # Steps 7-10: Import images, fresh Helm install, wait for pods
+    #            — with automatic rollback on failure
+    # =========================================================================
+    - name: "Steps 7-10 — Deploy new version (with auto-rollback on failure)"
+      block:
+        # === Step 7: Import Docker images ===
+        - name: "Step 7 — Import Docker images into MicroK8s"
+          ansible.builtin.command: >
+            microk8s ctr images import "{{ bundle_dir }}/{{ docker_tar }}"
+          environment: "{{ helm_environment }}"
+
+        - name: "Step 7 — Display Docker import result"
+          ansible.builtin.debug:
+            msg: "Docker images imported successfully from {{ docker_tar }}"
+
+        # === Step 8: Fresh Helm install ===
+        - name: "Step 8 — Install Datamigrator via Helm"
+          ansible.builtin.command: >
+            microk8s helm3 install {{ release_name }}
+            -n {{ namespace }}
+            "{{ bundle_dir }}/{{ helm_tgz }}"
+            --timeout 15m
+          register: helm_install_output
+          environment: "{{ helm_environment }}"
+
+        - name: "Step 8 — Display Helm install output"
+          ansible.builtin.debug:
+            msg: "{{ helm_install_output.stdout_lines | default([]) }}"
+
+        - name: "Step 8 — Wait for Datamigrator pods to become ready"
+          ansible.builtin.command: >
+            kubectl wait --namespace={{ namespace }}
+            --for=condition=Ready pod
+            -l app.kubernetes.io/name={{ release_name }}
+            --timeout=60s
+          register: pod_ready
+          retries: 10
+          delay: 25
+          until: pod_ready.rc == 0
+          environment: "{{ helm_environment }}"
+
+        - name: "Step 9 — Check JWT issuer in RequestAuthentication resources"
+          ansible.builtin.shell: |
+            kubectl get requestauthentication -n istio-system \
+              -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.jwtRules[0].issuer}{"\n"}{end}'
+          register: jwt_issuer_check
+          changed_when: false
+          environment: "{{ helm_environment }}"
+
+        - name: "Step 9 — Display current JWT issuers"
+          ansible.builtin.debug:
+            msg: "{{ jwt_issuer_check.stdout_lines }}"
+
+        - name: "Step 9 — Get VM IP address"
+          ansible.builtin.shell: >
+            ip route get 1.1.1.1 | grep -oP 'src \K\S+'
+          register: vm_ip
+          changed_when: false
+          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
+
+        - name: "Step 9 — Patch keycloak-jwt RequestAuthentication with VM IP"
+          ansible.builtin.command: >
+            kubectl patch requestauthentication keycloak-jwt -n istio-system
+            --type=json
+            -p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]
+          environment: "{{ helm_environment }}"
+          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
+
+        - name: "Step 9 — Patch temporal-jwt-validation RequestAuthentication with VM IP"
+          ansible.builtin.command: >
+            kubectl patch requestauthentication temporal-jwt-validation -n istio-system
+            --type=json
+            -p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]
+          environment: "{{ helm_environment }}"
+          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
+
+        - name: "Step 10 — Move upgrade artifacts to /root for future rollback"
+          ansible.builtin.command: >
+            mv "{{ bundle_dir }}/{{ item }}" /root/
+          loop:
+            - "{{ docker_tar }}"
+            - "{{ helm_tgz }}"
+
+      rescue:
+        # =================================================================
+        # Automatic rollback flow:
+        #   1. Collect diagnostics from failed deployment
+        #   2. Uninstall failed Helm release and clean namespace
+        #   3. Rollback Liquibase DB schema (while no app pods are running)
+        #   4. Reinstall previous version (old images already in MicroK8s)
+        #   5. Verify restored versions
+        # =================================================================
+
+        - name: "Rollback — Deployment failed, collecting pod logs for diagnostics"
+          ansible.builtin.shell: |
+            for pod in $(kubectl get pods -n {{ namespace }} -o jsonpath='{.items[*].metadata.name}'); do
+              echo "=== Logs for pod: $pod ==="
+              kubectl logs -n {{ namespace }} "$pod" --all-containers=true --tail=50
+              echo "========================================"
+            done
+          register: pod_logs
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Display pod logs"
+          ansible.builtin.debug:
+            msg: "{{ pod_logs.stdout | default('No pod logs available') }}"
+
+        # --- Phase 1: Clean up failed install ---
+
+        - name: "Rollback — Uninstall failed Helm release"
+          ansible.builtin.command: >
+            microk8s helm3 uninstall {{ release_name }} -n {{ namespace }}
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Delete all CronJobs in namespace"
+          ansible.builtin.command: >
+            kubectl delete cronjobs --all -n {{ namespace }}
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Force delete all remaining pods in namespace"
+          ansible.builtin.command: >
+            kubectl delete pods --all -n {{ namespace }} --force --grace-period=0
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Remove finalizers from any stuck pods"
+          ansible.builtin.shell: |
+            for pod in $(kubectl get pods -n {{ namespace }} --no-headers -o custom-columns=':metadata.name' 2>/dev/null); do
+              kubectl patch pod "$pod" -n {{ namespace }} -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+            done
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Wait for all pods to terminate"
+          ansible.builtin.shell: >
+            kubectl get pods -n {{ namespace }} --no-headers 2>/dev/null | wc -l
+          register: rollback_pod_count
+          until: (rollback_pod_count.stdout | trim | int) == 0
+          retries: 30
+          delay: 10
+          changed_when: false
+          failed_when: false
+          environment: "{{ helm_environment }}"
+
+        # --- Phase 2: Rollback Liquibase DB schema (no app pods running) ---
+
+        - name: "Rollback — Set rollback tag to pre-upgrade version"
+          ansible.builtin.set_fact:
+            rollback_tag: "{{ current_deployed_version }}"
+
+        - name: "Rollback — Display rollback target"
+          ansible.builtin.debug:
+            msg: "Rolling back database to Liquibase tag: {{ rollback_tag }}"
+          when: rollback_tag | length > 0
+
+        - name: "Rollback — Find db-migrations image for old version"
+          ansible.builtin.shell: >
+            microk8s ctr images list | grep 'db-migrations:{{ current_deployed_version }}' | awk '{print $1}' | head -1
+          register: rollback_db_image
+          changed_when: false
+          environment: "{{ helm_environment }}"
+
+        - name: "Rollback — Get DB credentials from OpenBao"
+          ansible.builtin.shell: |
+            kubectl exec -n {{ openbao_namespace }} {{ openbao_pod }} -- \
+              bao kv get -format=json {{ openbao_secret_path }} 2>/dev/null | \
+              jq -r '.data.{{ item }}'
+          loop:
+            - POSTGRES_USER
+            - POSTGRES_PASSWORD
+          register: rollback_db_creds
+          changed_when: false
+          no_log: true
+          environment: "{{ helm_environment }}"
+
+        - name: "Rollback — Revert database schema via Liquibase"
+          ansible.builtin.shell: |
+            kubectl run liquibase-rollback --rm -i --restart=Never \
+              -n {{ namespace }} \
+              --image="{{ rollback_db_image.stdout }}" \
+              --env="LIQUIBASE_COMMAND_URL=jdbc:postgresql://{{ db_host }}:{{ db_port }}/{{ db_name }}" \
+              --env="LIQUIBASE_COMMAND_USERNAME={{ rollback_db_creds.results[0].stdout }}" \
+              --env="LIQUIBASE_COMMAND_PASSWORD={{ rollback_db_creds.results[1].stdout }}" \
+              --env="LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME={{ db_schema }}" \
+              --env="LIQUIBASE_LIQUIBASE_SCHEMA_NAME={{ liquibase_schema }}" \
+              --env="LIQUIBASE_SEARCH_PATH=/app" \
+              --command -- liquibase rollback "{{ rollback_tag }}" 2>&1
+          register: liquibase_rollback_result
+          no_log: true
+          environment: "{{ helm_environment }}"
+          failed_when: "'was executed successfully' not in liquibase_rollback_result.stdout"
+          when: rollback_tag | length > 0 and rollback_db_image.stdout | length > 0
+
+        - name: "Rollback — Database schema reverted"
+          ansible.builtin.debug:
+            msg: "Database schema rolled back to tag: {{ rollback_tag }}"
+          when: rollback_tag | length > 0
+
+        # --- Phase 3: Reinstall previous version ---
+
+        - name: "Rollback — Install previous Helm chart"
+          ansible.builtin.command: >
+            microk8s helm3 install {{ release_name }}
+            -n {{ namespace }}
+            "{{ old_helm_chart }}"
+            --timeout 15m
+          register: rollback_helm_install
+          environment: "{{ helm_environment }}"
+          when: old_helm_chart | length > 0
+
+        - name: "Rollback — Wait for restored pods to become ready"
+          ansible.builtin.command: >
+            kubectl wait --namespace={{ namespace }}
+            --for=condition=Ready pod
+            -l app.kubernetes.io/name={{ release_name }}
+            --timeout=60s
+          register: rollback_pod_ready
+          retries: 10
+          delay: 25
+          until: rollback_pod_ready.rc == 0
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        # --- Phase 4: Verify restored versions ---
+
+        - name: "Rollback — Get restored image versions"
+          ansible.builtin.shell: |
+            kubectl get pods -n {{ namespace }} -l app="{{ item }}" \
+              -o jsonpath='{.items[*].spec.containers[*].image}' 2>/dev/null || echo ""
+          loop: "{{ datamigrator_services }}"
+          register: restored_versions
+          changed_when: false
+          failed_when: false
+          environment: "{{ helm_environment }}"
+
+        - name: "Rollback — Display restored versions"
+          ansible.builtin.debug:
+            msg:
+              - "############# Automatic Rollback Completed #############"
+              - "{{ result.item }}: {{ result.stdout | default('not found') }}"
+          loop: "{{ restored_versions.results }}"
+          loop_control:
+            loop_var: result
+            label: "{{ result.item }}"
+          when: restored_versions is defined
+
+        - name: "Rollback — Fail the play to signal upgrade failure"
+          ansible.builtin.fail:
+            msg: >-
+              Upgrade FAILED. Database schema reverted to tag '{{ rollback_tag }}'.
+              {{ 'Previous version reinstalled from ' ~ old_helm_chart ~ '.'
+                 if old_helm_chart | length > 0
+                 else 'No old Helm chart found. Manual intervention required.' }}
+
+    # =========================================================================
+    # Post-upgrade: Verify new versions
+    # =========================================================================
+    - name: "Post-upgrade — Get new image versions for each service"
+      ansible.builtin.shell: |
+        kubectl get pods -n {{ namespace }} -l app="{{ item }}" \
+          -o jsonpath='{.items[*].spec.containers[*].image}' 2>/dev/null || echo ""
+      loop: "{{ datamigrator_services }}"
+      register: new_service_versions
+      changed_when: false
+      failed_when: false
+      environment: "{{ helm_environment }}"
+
+    - name: "Post-upgrade — Display new deployed versions"
+      ansible.builtin.debug:
+        msg:
+          - "############# Upgrade Completed Successfully! #############"
+          - "{{ result.item }}: {{ result.stdout | default('not found') }}"
+      loop: "{{ new_service_versions.results }}"
+      loop_control:
+        loop_var: result
+        label: "{{ result.item }}"
