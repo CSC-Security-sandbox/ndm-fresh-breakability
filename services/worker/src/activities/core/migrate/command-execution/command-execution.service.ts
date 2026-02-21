@@ -152,10 +152,14 @@ export class CommandExecService {
                 const checksumTime = new Date();
 
                 output.shouldUpdateItemInfo = true;
-                command.ops[OPS_CMD.COPY_FILE] = {  status: OPS_STATUS.ERROR, params : { checksums, checksumTime } };
+                
+                // Check for checksum mismatch before setting final status
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
+                    command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.ERROR, params: { checksums, checksumTime } };
                     throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
                 }
+                // Checksums match - mark as completed
+                command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.COMPLETED, params: { checksums, checksumTime } };
                 output.shouldStampMeta = true;
             }catch(error){
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
