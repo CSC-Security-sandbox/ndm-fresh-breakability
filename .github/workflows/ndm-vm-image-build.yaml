@@ -868,6 +868,7 @@ jobs:
           WINDOWS_WORKER="datamigrator-worker-windows-${BUILD_VERSION}"
           cp "${WINDOWS_WORKER}.zip"  "${UPGRADE}/worker/${WINDOWS_WORKER}.zip"
           cp upgrade/upgrade-playbook.yaml  "${UPGRADE}/upgrade-playbook.yaml"
+          cp upgrade/upgrade-ansible.cfg   "${UPGRADE}/upgrade-ansible.cfg"
 
           # Checksums
           cd "${UPGRADE}"
@@ -877,11 +878,12 @@ jobs:
             "worker/datamigrator-worker-linux-${BUILD_VERSION}.tar.gz" \
             "worker/datamigrator-worker-windows-${BUILD_VERSION}.zip" \
             "upgrade-playbook.yaml" \
+            "upgrade-ansible.cfg" \
             > checksums-${BUILD_VERSION}.sha256
           echo "checksums-${BUILD_VERSION}.sha256:"; cat checksums-${BUILD_VERSION}.sha256
           cd ..
 
-          tar -cvf "${UPGRADE}.tar" "${UPGRADE}"
+          tar -cvzf "${UPGRADE}.tar.gz" "${UPGRADE}"
 
       - name: Upload checksums and upgrade tar to Artifactory
         run: |
@@ -891,13 +893,13 @@ jobs:
           curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" \
             -T "${UPGRADE}/checksums-${BUILD_VERSION}.sha256" "${ARTIFACTORY_URL}/${REPO}/${BASE}/checksums-${BUILD_VERSION}.sha256.txt"
           curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
-            --upload-file "${UPGRADE}.tar" "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar"
+            --upload-file "${UPGRADE}.tar.gz" "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar.gz"
 
       - name: Upload upgrade tar as workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: upgrade-${{ env.BUILD_VERSION }}
-          path: upgrade-${{ env.BUILD_VERSION }}.tar
+          path: upgrade-${{ env.BUILD_VERSION }}.tar.gz
           
   packer:
     if: ${{ github.event.inputs.component != 'windows-installer' }}

@@ -10,13 +10,12 @@
     # build_version: "2026.01.15"
 
     upgrade_dir: "/upgrade"
-    bundle_tar: "{{ upgrade_dir }}/{{ build_version }}.tar"
     bundle_dir: "{{ upgrade_dir }}/{{ build_version }}"
     checksum_file: "checksums-{{ build_version }}.sha256"
-    docker_tar: "docker/datamigrator-images-{{ build_version }}.tar"
-    helm_tgz: "helm/datamigrator-helmchart-{{ build_version }}.tgz"
-    worker_linux_tar: "worker/datamigrator-worker-linux-{{ build_version }}.tar.gz"
-    worker_windows_zip: "worker/datamigrator-worker-windows-{{ build_version }}.zip"
+    docker_tar: "CP/docker/datamigrator-images-{{ build_version }}.tar"
+    helm_tgz: "CP/helm/datamigrator-helmchart-{{ build_version }}.tgz"
+    worker_linux_tar: "worker/linux/datamigrator-worker-linux-{{ build_version }}.tar.gz"
+    worker_windows_zip: "worker/windows/datamigrator-worker-windows-{{ build_version }}.zip"
     namespace: datamigrator
     release_name: datamigrator
     postgres_pod: "postgresql-0"
@@ -70,6 +69,7 @@
         - jq
         - microk8s.helm3
       changed_when: false
+      environment: "{{ helm_environment }}"
 
   tasks:
 
