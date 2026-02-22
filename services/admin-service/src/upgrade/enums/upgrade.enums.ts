@@ -21,17 +21,19 @@ export enum UploadStatus {
  * Enum for upgrade status values
  * Used for tracking the state of upgrade operations
  * 
- * Flow: PENDING -> IN_PROGRESS -> SUCCESS/FAILED
+ * Flow: PENDING -> STAGED -> SUCCESS/FAILED/ROLLED_BACK
  * - PENDING: Upload successful, waiting for user to trigger upgrade
- * - IN_PROGRESS: Upgrade is running
- * - SUCCESS: Upgrade completed successfully
- * - FAILED: Upgrade failed
+ * - STAGED: Upgrade triggered, ansible playbook launched on host
+ * - SUCCESS: Upgrade completed successfully (set by ansible)
+ * - FAILED: Upgrade failed (set by ansible or stale timeout)
+ * - ROLLED_BACK: Upgrade failed and was rolled back (set by ansible)
  * - SKIPPED: User chose not to upgrade (clicked Reset after successful upload)
  */
 export enum UpgradeStatus {
   PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
+  STAGED = 'staged',
   SUCCESS = 'success',
   FAILED = 'failed',
+  ROLLED_BACK = 'rolled_back',
   SKIPPED = 'skipped',
 }

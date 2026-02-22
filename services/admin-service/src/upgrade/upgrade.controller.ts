@@ -106,18 +106,42 @@ import {
 
     // ═══════════════════════════════════════════════════════════════
     // ENDPOINT 6: Trigger Upgrade
-    // Uses bundleId (primary key) for faster, safer queries
+    // Checks for running/scheduled jobs, stages DB, fires ansible
+    // Returns 409 with job list if blocked, 200 if upgrade initiated
     // ═══════════════════════════════════════════════════════════════
     @Auth(Permission.AgentDeployment)
     @ApiBearerAuth()
     @Post('trigger-upgrade')
-    @ApiOperation({ summary: 'Trigger the upgrade process' })
+    @ApiOperation({
+      summary: 'Trigger the upgrade process',
+      description:
+        'Checks for running/scheduled jobs, saves current CP version, ' +
+        'and starts the ansible upgrade playbook on the host via nsenter.',
+    })
+    @ApiResponse({ status: 200, description: 'Upgrade initiated successfully' })
+    @ApiResponse({ status: 409, description: 'Blocked by running or scheduled jobs' })
     async triggerUpgrade(
       @Body() body: { bundleId: string },
       @Request() userPermissions: UserPermissionResponse,
     ) {
       const userId = userPermissions?.user?.id;
       return this.upgradeService.triggerUpgrade(body.bundleId, userId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ENDPOINT 6b: Get Upgrade Status (for UI polling after restart)
+    // ═══════════════════════════════════════════════════════════════
+    @Auth(Permission.AgentDeployment)
+    @ApiBearerAuth()
+    @Get('upgrade-status')
+    @ApiOperation({
+      summary: 'Get the current upgrade status',
+      description:
+        'Returns upgrade outcome after pod restarts. ' +
+        'Includes worker upgrade readiness when CP upgrade succeeds.',
+    })
+    async getUpgradeStatus() {
+      return this.upgradeService.getUpgradeStatus();
     }
 
     // ═══════════════════════════════════════════════════════════════

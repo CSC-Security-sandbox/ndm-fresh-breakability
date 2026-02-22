@@ -8,9 +8,10 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { PrometheusService } from 'src/utils/prometheus';
-import BUILD_VERSION_QUERIES from './about-ndm.constants';
+import BUILD_VERSION_QUERIES, { VERSIONS_CONF_PATH } from './about-ndm.constants';
 import { AboutNdmResponse } from './about-ndm.interface';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 
 @Injectable()
 export class AboutNdmService {
@@ -26,15 +27,12 @@ export class AboutNdmService {
 
   async getAboutNdm(): Promise<AboutNdmResponse> {
     try {
-      const results = await Promise.allSettled([
-        this.prometheusService.queryPrometheus(
-          BUILD_VERSION_QUERIES.CONTROL_PLANE,
-        ),
+      const controlPlaneVersion = this.readCpVersionFromFile();
+
+      const workerResult = await Promise.allSettled([
         this.prometheusService.queryPrometheus(BUILD_VERSION_QUERIES.WORKER),
       ]);
-
-      const controlPlaneVersion = this.extractBuildVersion(results[0]);
-      const workerVersion = this.extractBuildVersion(results[1]);
+      const workerVersion = this.extractBuildVersion(workerResult[0]);
 
       return {
         product: {
@@ -68,6 +66,43 @@ export class AboutNdmService {
     }
   }
 
+  /**
+   * Reads the CP version from /etc/ndm/versions.conf (host-mounted file).
+   * The file uses KEY=VALUE format; we look for CP_VERSION.
+   */
+  private readCpVersionFromFile(): string | null {
+    try {
+      const versionsPath = this.configService.get<string>(
+        'VERSIONS_CONF_PATH',
+        VERSIONS_CONF_PATH,
+      );
+
+      if (!fs.existsSync(versionsPath)) {
+        this.logger.warn(`versions.conf not found at ${versionsPath}`);
+        return null;
+      }
+
+      const content = fs.readFileSync(versionsPath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+
+        const [key, ...rest] = trimmed.split('=');
+        if (key.trim() === 'CP_VERSION') {
+          const version = rest.join('=').trim().replace(/^["']|["']$/g, '');
+          this.logger.debug(`Read CP version from file: ${version}`);
+          return version || null;
+        }
+      }
+
+      this.logger.warn('CP_VERSION not found in versions.conf');
+      return null;
+    } catch (error) {
+      this.logger.error(`Error reading versions.conf: ${error.message}`);
+      return null;
+    }
+  }
+
   private extractBuildVersion(
     result: PromiseSettledResult<any>,
   ): string | null {
@@ -89,7 +124,6 @@ export class AboutNdmService {
 
       const prometheusResult = prometheusResponse.data.result;
 
-      // Look for label_build_version in any of the results
       for (const item of prometheusResult) {
         if (item.metric?.label_build_version) {
           this.logger.debug(

@@ -8,14 +8,20 @@
   delay: 60
 
 # Install MicroK8s
+# Uses command instead of community.general.snap to avoid the
+# "list index out of range" bug when the snap store is transiently unreachable.
+- name: 4.2. Check if MicroK8s is already installed
+  command: snap list microk8s
+  register: microk8s_check
+  changed_when: false
+  failed_when: false
+
 - name: 4.2. Install MicroK8s
-  community.general.snap:
-    name: microk8s
-    classic: yes
-    channel: "{{ microk8s_version }}"
+  command: snap install microk8s --classic --channel={{ microk8s_version }}
   register: microk8s_install
   retries: 3
-  delay: 10
+  delay: 30
+  when: microk8s_check.rc != 0
 
 - name: debug
   debug:

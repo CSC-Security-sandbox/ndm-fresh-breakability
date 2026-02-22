@@ -4,11 +4,12 @@ import {
   BadRequestException,
   NotFoundException,
   InternalServerErrorException,
+  ConflictException,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import {
   LoggerFactory,
   LoggerService,
@@ -18,10 +19,12 @@ import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 import { InitUploadDto, InitUploadResponseDto, UploadChunkResponseDto } from './dto/upgrade.dto';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
+import { JobConfigEntity, JobStatus } from '../entities/jobconfig.entity';
+import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
 import { UploadStatus, UpgradeStatus } from './enums/upgrade.enums';
 
 
@@ -41,7 +44,9 @@ interface UploadSession {
 export class UpgradeService implements OnModuleInit {
   private readonly logger: LoggerService;
   private readonly uploadPath: string;
+  private readonly deployPath: string;
   private readonly chunkSize: number = 15 * 1024 * 1024; // 15MB
+  private static readonly UPGRADE_STALE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
   private sessions: Map<string, UploadSession> = new Map();
 
@@ -50,14 +55,80 @@ export class UpgradeService implements OnModuleInit {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     @InjectRepository(UpgradeBundle)
     private readonly upgradeBundleRepository: Repository<UpgradeBundle>,
+    @InjectRepository(JobConfigEntity)
+    private readonly jobConfigRepository: Repository<JobConfigEntity>,
+    @InjectRepository(JobRunEntity)
+    private readonly jobRunRepository: Repository<JobRunEntity>,
+    private readonly dataSource: DataSource,
   ) {
     this.logger = loggerFactory.create(UpgradeService.name);
     this.uploadPath = this.configService.getOrThrow<string>('UPLOAD_PATH');
+    this.deployPath = this.configService.get<string>('UPGRADE_DEPLOY_PATH') || '/upgrade';
   }
 
   async onModuleInit(): Promise<void> {
     await this.ensureDirectories();
     await this.cleanupOrphanedUploads();
+    await this.checkUpgradeOutcome();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ON STARTUP: Check upgrade outcome written by ansible
+  // Ansible writes success/rolled_back/failed to DB via psql.
+  // This handles the edge case where ansible crashed without writing.
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async checkUpgradeOutcome(): Promise<void> {
+    try {
+      const latest = await this.upgradeBundleRepository.findOne({
+        where: {},
+        order: { created_at: 'DESC' },
+      });
+
+      if (!latest) return;
+
+      switch (latest.upgradeStatus) {
+        case UpgradeStatus.SUCCESS:
+          this.logger.log(
+            `Upgrade to ${latest.version} was successful. Worker upgrade is ready.`,
+          );
+          break;
+
+        case UpgradeStatus.ROLLED_BACK:
+          this.logger.warn(
+            `Upgrade to ${latest.version} failed and was rolled back.`,
+          );
+          break;
+
+        case UpgradeStatus.FAILED:
+          this.logger.error(`Upgrade to ${latest.version} failed.`);
+          break;
+
+        case UpgradeStatus.STAGED: {
+          const stagedAt = new Date(latest.updated_at).getTime();
+          const isStale = (Date.now() - stagedAt) > UpgradeService.UPGRADE_STALE_TIMEOUT_MS;
+
+          if (isStale) {
+            this.logger.error(
+              `Staged upgrade to ${latest.version} has been pending for >30min with no result from ansible. Marking as failed.`,
+            );
+            await this.upgradeBundleRepository.update(latest.id, {
+              upgradeStatus: UpgradeStatus.FAILED,
+              upgradeCompletedAt: new Date(),
+            });
+          } else {
+            this.logger.log(
+              `Upgrade to ${latest.version} is staged. Ansible playbook may still be running on the host.`,
+            );
+          }
+          break;
+        }
+
+        default:
+          break;
+      }
+    } catch (error) {
+      this.logger.error('Error checking upgrade outcome on startup', error);
+    }
   }
 
   /**
@@ -268,23 +339,21 @@ export class UpgradeService implements OnModuleInit {
     }
 
     // Determine UI state based on latest record
-    // Show upload UI if: upgrade completed/skipped, upload failed, or upload cancelled
-    // NOTE: Do NOT include upgrade failed here - user must click "Start Over" first
     const showUploadUI =
       (latest.uploadStatus === UploadStatus.SUCCESS && 
-        (latest.upgradeStatus === UpgradeStatus.SUCCESS || latest.upgradeStatus === UpgradeStatus.SKIPPED)) ||
+        (latest.upgradeStatus === UpgradeStatus.SUCCESS || latest.upgradeStatus === UpgradeStatus.SKIPPED || latest.upgradeStatus === UpgradeStatus.ROLLED_BACK)) ||
       latest.uploadStatus === UploadStatus.FAILED ||
       latest.uploadStatus === UploadStatus.CANCELLED;
 
-    // Show upgrade UI if: upload succeeded AND upgrade is pending OR failed (allow retry)
+    // Show upgrade UI if: upload succeeded AND upgrade is pending or failed (allow retry)
     const showUpgradeUI =
       latest.uploadStatus === UploadStatus.SUCCESS && 
       (latest.upgradeStatus === UpgradeStatus.PENDING || latest.upgradeStatus === UpgradeStatus.FAILED);
 
-    // Check if upgrade is currently in progress
+    // Upgrade is in progress when staged (ansible running on host)
     const isUpgradeInProgress =
       latest.uploadStatus === UploadStatus.SUCCESS && 
-      latest.upgradeStatus === UpgradeStatus.IN_PROGRESS;
+      latest.upgradeStatus === UpgradeStatus.STAGED;
 
     return {
       hasUpload: true,
@@ -1292,93 +1361,225 @@ export class UpgradeService implements OnModuleInit {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TRIGGER UPGRADE: Called after upload is successful
-  // Uses bundleId (primary key) instead of filePath for faster, safer queries
+  // TRIGGER UPGRADE: Check jobs → stage in DB → fire ansible via nsenter
   // ═══════════════════════════════════════════════════════════════════════════
   async triggerUpgrade(bundleId: string, userId?: string) {
-    // Validate bundleId is provided
+    this.logger.log('Inside  triggerUpgrade');
     if (!bundleId || bundleId.trim() === '') {
       throw new BadRequestException('Bundle ID is required to trigger upgrade');
     }
 
-    this.logger.log(`Triggering upgrade for bundle: ${bundleId}`);
+    // Step 1: Check if another upgrade is already staged/in-progress
+    const existingStaged = await this.upgradeBundleRepository.findOne({
+      where: { upgradeStatus: UpgradeStatus.STAGED },
+    });
+    if (existingStaged) {
+      throw new ConflictException(
+        `An upgrade is already in progress for version ${existingStaged.version}`,
+      );
+    }
+    this.logger.log('After step 1');
 
-    // Find the bundle record by ID (primary key - fast query)
+    // Step 2: Check for running, scheduled, and active jobs from DB
+    const { runningJobs, scheduledJobs, activeJobConfigs } = await this.checkBlockingJobs();
+
+    if (runningJobs.length > 0 || scheduledJobs.length > 0 || activeJobConfigs.length > 0) {
+      this.logger.log(`Blocking: ${activeJobConfigs.length} active configs, ${runningJobs.length} running, ${scheduledJobs.length} scheduled`);
+      let message = 'Cannot upgrade — ';
+      if (runningJobs.length > 0) {
+        message += 'jobs are currently running. Wait for them to complete or cancel them.';
+      } else if (activeJobConfigs.length > 0) {
+        message += 'active job configurations exist. Please deactivate all job configurations before upgrading.';
+      } else {
+        message += 'scheduled jobs are active. Please deactivate all scheduled jobs before upgrading.';
+      }
+      return {
+        success: false,
+        canUpgrade: false,
+        message,
+        runningJobs,
+        scheduledJobs,
+        activeJobConfigs: activeJobConfigs.map((jc) => ({
+          id: jc.id,
+          jobType: jc.jobType,
+          status: jc.status,
+          scheduler: jc.scheduler,
+          futureScheduleAt: jc.futureScheduleAt,
+        })),
+      };
+    }
+
+    this.logger.log('After step 2');
+
+    // Step 3: Find and validate bundle
     const bundle = await this.upgradeBundleRepository.findOne({
       where: { id: bundleId },
     });
-    
+
     if (!bundle) {
       throw new NotFoundException(
         `Bundle not found with ID: ${bundleId}. The upload may have failed or been deleted.`
       );
     }
+    this.logger.log('After step 3');
 
-    // Validate bundle is in correct state (upload successful)
     if (bundle.uploadStatus !== UploadStatus.SUCCESS) {
       throw new BadRequestException(
         `Cannot upgrade bundle with upload status: ${bundle.uploadStatus}. Upload must be successful first.`
       );
     }
+    this.logger.log('After step 4');
 
-    // Validate version exists (needed to construct deploy path)
     if (!bundle.version) {
       throw new BadRequestException(
         'Bundle version not found. The upload may not have been processed correctly.'
       );
     }
+    this.logger.log('After step 5');
 
-    // Pattern: /upload/${version}  (e.g., /upload/v2.1.0)
-    const deployPath = path.join(this.uploadPath, bundle.version);
-    // Validate the constructed path stays within uploadPath (prevents path traversal)
-    this.validatePathWithinBase(deployPath, this.uploadPath);
-
-    // Validate deploy directory exists on disk
-    if (!(await this.pathExists(deployPath))) {
-      throw new NotFoundException(`Upgrade bundle not found at: ${deployPath}`);
-    }
-
-    // Check if upgrade is already in progress
-    if (bundle.upgradeStatus === UpgradeStatus.IN_PROGRESS) {
-      throw new BadRequestException('An upgrade is already in progress');
-    }
-
-    try {
-      // TODO: Add your upgrade logic here
-      // This could be:
-      // - Calling a shell script
-      // - Triggering a Kubernetes job
-      // - Sending message to another service
-      // 
-      // The bundle deploy path is: deployPath (derived from version)
-      // The version is: bundle.version
-
-      // Update DB record to mark upgrade success
-      await this.upgradeBundleRepository.update(bundle.id, {
-        upgradeStatus: UpgradeStatus.SUCCESS,
-        upgradeCompletedAt: new Date(),
-        upgradedBy: userId,
-      });
-      this.logger.log(`Updated bundle ${bundle.id} with upgradeStatus=${UpgradeStatus.SUCCESS}, upgradedBy=${userId}`);
-
-      return {
-        success: true,
-        message: 'Upgrade initiated',
-        bundleId: bundle.id,
-        version: bundle.version,
-        fileName: bundle.fileName,
-      };
-    } catch (error) {
-      // If it's already a NestJS exception, re-throw it
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-      
-      this.logger.error(`Failed to trigger upgrade: ${error.message}`);
-      throw new InternalServerErrorException(
-        `Failed to trigger upgrade: ${error.message}`
+    // Step 4: Validate version format to prevent command injection
+    const buildVersion = bundle.version;
+    if (!/^[\w.\-]+$/.test(buildVersion)) {
+      throw new BadRequestException(
+        `Invalid version format: ${buildVersion}. Only alphanumeric, dots, hyphens, and underscores are allowed.`,
       );
     }
+    this.logger.log('After step 6');
+
+    const bundleDeployPath = path.join(this.uploadPath, bundle.version);
+    this.validatePathWithinBase(bundleDeployPath, this.uploadPath);
+
+    this.logger.log('After step 7');
+
+    if (!(await this.pathExists(bundleDeployPath))) {
+      throw new NotFoundException(`Upgrade bundle not found at: ${bundleDeployPath}`);
+    }
+    this.logger.log('After step 8');
+
+    // Step 5: Stage the upgrade in DB
+    await this.upgradeBundleRepository.update(bundle.id, {
+      upgradeStatus: UpgradeStatus.STAGED,
+      upgradedBy: userId,
+    });
+
+    this.logger.log('After step 9');
+    this.logger.log(
+      `Upgrade staged: bundle=${bundle.id}, target=${bundle.version}`,
+    );
+    this.logger.log('After step 10');
+    // Step 6: Fire ansible-playbook on the HOST via nsenter (fire and forget)
+    const bundleDir = path.join(this.deployPath, buildVersion);
+    const playbookPath = path.join(bundleDir, 'upgrade-playbook.yaml');
+    const logFile = path.join(this.deployPath, `upgrade-${buildVersion}.log`);
+
+    const nsenterCmd =
+      `nsenter -t 1 -m -u -i -n -p -- bash -c ` +
+      `'export PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin:$PATH && ` +
+      `cd ${bundleDir} && ANSIBLE_CONFIG=${bundleDir}/upgrade-ansible.cfg ` +
+      `nohup ansible-playbook ${playbookPath} ` +
+      `--extra-vars "build_version=${buildVersion}" ` +
+      `> ${logFile} 2>&1 &'`;
+
+    this.logger.log(`Executing upgrade on host: ${nsenterCmd}`);
+
+    this.logger.log('After step 11');
+
+    exec(nsenterCmd, (error, _stdout, stderr) => {
+      if (error) {
+        this.logger.error(`Failed to start upgrade process: ${error.message}`);
+        this.logger.error(`stderr: ${stderr}`);
+        this.upgradeBundleRepository.update(bundle.id, {
+          upgradeStatus: UpgradeStatus.FAILED,
+          upgradeCompletedAt: new Date(),
+        }).catch((dbErr) => {
+          this.logger.error(`Failed to update DB after nsenter failure: ${dbErr.message}`);
+        });
+      } else {
+        this.logger.log('Upgrade process started on host successfully');
+      }
+    });
+
+    return {
+      success: true,
+      message: 'Upgrade initiated. The system will restart during the upgrade process.',
+      bundleId: bundle.id,
+      targetVersion: bundle.version,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHECK BLOCKING JOBS: Query for running/scheduled jobs using TypeORM
+  // Pattern follows isRefreshPossible in configuration.service.ts
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async checkBlockingJobs(): Promise<{
+    runningJobs: any[];
+    scheduledJobs: any[];
+    activeJobConfigs: any[];
+  }> {
+    try {
+      const activeJobConfigs = await this.jobConfigRepository.find({
+        where: { status: JobStatus.Active },
+      });
+
+      const scheduledJobs = activeJobConfigs.filter(
+        (jc) => !!jc.futureScheduleAt || jc.scheduler === 'SCHEDULING',
+      );
+
+      const runningJobs = activeJobConfigs.length > 0
+        ? await this.jobRunRepository.find({
+            where: {
+              jobConfigId: In(activeJobConfigs.map((jc) => jc.id)),
+              status: In([
+                JobRunStatus.Running,
+                JobRunStatus.Pending,
+                JobRunStatus.Ready,
+                JobRunStatus.Pausing,
+                JobRunStatus.Stopping,
+              ]),
+            },
+          })
+        : [];
+
+      this.logger.log(
+        `Job check: ${activeJobConfigs.length} active configs, ${runningJobs.length} running/pending, ${scheduledJobs.length} scheduled`,
+      );
+
+      return { runningJobs, scheduledJobs, activeJobConfigs };
+    } catch (error) {
+      this.logger.warn(
+        `Could not query job tables: ${error.message}. Proceeding with upgrade.`,
+      );
+      return { runningJobs: [], scheduledJobs: [], activeJobConfigs: [] };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GET UPGRADE STATUS: For UI to poll after reconnecting post-upgrade
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getUpgradeStatus() {
+    const latest = await this.upgradeBundleRepository.findOne({
+      where: {},
+      order: { created_at: 'DESC' },
+    });
+
+    if (!latest || latest.upgradeStatus === UpgradeStatus.PENDING) {
+      return { upgradeStatus: 'none' };
+    }
+
+    const workerUpgradeReady = latest.upgradeStatus === UpgradeStatus.SUCCESS;
+
+    return {
+      upgradeStatus: latest.upgradeStatus,
+      targetVersion: latest.version,
+      upgradeCompletedAt: latest.upgradeCompletedAt,
+      workerUpgradeReady,
+      workerLinuxPath: workerUpgradeReady
+        ? path.join(this.uploadPath, latest.version, 'worker', 'linux')
+        : null,
+      workerWindowsPath: workerUpgradeReady
+        ? path.join(this.uploadPath, latest.version, 'worker', 'windows')
+        : null,
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

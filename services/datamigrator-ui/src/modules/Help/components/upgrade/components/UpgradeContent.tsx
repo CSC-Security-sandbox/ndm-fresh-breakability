@@ -24,6 +24,7 @@ const UpgradeContent = () => {
     handleUpload,
     handleUpgrade,
     isUpgrading,
+    blockingJobs,
     handleReset,
     showUploadUI,
     showUpgradeUI,
@@ -102,6 +103,114 @@ const UpgradeContent = () => {
         </Show.When>
       </Show>
 
+      {/* Blocking Jobs Warning */}
+      <Show>
+        <Show.When isTrue={!!blockingJobs && (blockingJobs.runningJobs.length > 0 || blockingJobs.scheduledJobs.length > 0 || blockingJobs.activeJobConfigs.length > 0)}>
+          <Box className="mb-4 p-4 bg-red-50 border border-red-300 rounded">
+            <p className="font-medium text-red-800 mb-2">
+              Cannot upgrade while jobs are active
+            </p>
+            <p className="text-sm text-red-700 mb-3">
+              Please stop all running migrations and deactivate all job configurations before upgrading.
+            </p>
+
+            {blockingJobs?.runningJobs && blockingJobs.runningJobs.length > 0 && (
+              <Box className="mb-3">
+                <p className="text-sm font-medium text-red-800 mb-1">
+                  Running Jobs ({blockingJobs.runningJobs.length}):
+                </p>
+                <Box className="bg-white rounded border border-red-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-red-100 text-red-800">
+                        <th className="px-3 py-1.5 text-left font-medium">Job ID</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blockingJobs.runningJobs.map((job) => (
+                        <tr key={job.id} className="border-t border-red-100">
+                          <td className="px-3 py-1.5 font-mono text-xs">{job.id.slice(0, 8)}...</td>
+                          <td className="px-3 py-1.5">
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
+                              {job.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              </Box>
+            )}
+
+            {blockingJobs?.activeJobConfigs && blockingJobs.activeJobConfigs.length > 0 && (
+              <Box className="mb-3">
+                <p className="text-sm font-medium text-red-800 mb-1">
+                  Active Job Configurations ({blockingJobs.activeJobConfigs.length}):
+                </p>
+                <Box className="bg-white rounded border border-red-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-red-100 text-red-800">
+                        <th className="px-3 py-1.5 text-left font-medium">Job ID</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blockingJobs.activeJobConfigs.map((job) => (
+                        <tr key={job.id} className="border-t border-red-100">
+                          <td className="px-3 py-1.5 font-mono text-xs">{job.id.slice(0, 8)}...</td>
+                          <td className="px-3 py-1.5 text-xs">{job.jobType || "—"}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
+                              {job.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              </Box>
+            )}
+
+            {blockingJobs?.scheduledJobs && blockingJobs.scheduledJobs.length > 0 && (
+              <Box className="mb-1">
+                <p className="text-sm font-medium text-red-800 mb-1">
+                  Scheduled Jobs ({blockingJobs.scheduledJobs.length}):
+                </p>
+                <Box className="bg-white rounded border border-red-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-red-100 text-red-800">
+                        <th className="px-3 py-1.5 text-left font-medium">Job ID</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Schedule</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blockingJobs.scheduledJobs.map((job) => (
+                        <tr key={job.id} className="border-t border-red-100">
+                          <td className="px-3 py-1.5 font-mono text-xs">{job.id.slice(0, 8)}...</td>
+                          <td className="px-3 py-1.5 text-xs">{job.jobType || "—"}</td>
+                          <td className="px-3 py-1.5 text-xs">{job.scheduler === "SCHEDULING" ? "Scheduling..." : job.futureScheduleAt || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              </Box>
+            )}
+
+            <p className="text-xs text-red-600 mt-2">
+              Deactivate all job configurations, then click Upgrade again.
+            </p>
+          </Box>
+        </Show.When>
+      </Show>
+
       {/* Action Buttons */}
       <Box className="flex justify-center gap-4 mt-6">
         {/* Upload Button - Only show if allowed and no in-progress upload */}
@@ -117,7 +226,7 @@ const UpgradeContent = () => {
           </Show.When>
         </Show>
 
-        {/* Upgrade Button - Calls handleUpgrade (DRAFT - controlled by UPGRADE_ENABLED flag in context) */}
+        {/* Upgrade Button */}
         <Show>
           <Show.When isTrue={isUploaded || showUpgradeUI}>
             <Button

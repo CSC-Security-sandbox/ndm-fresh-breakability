@@ -5,14 +5,16 @@ import { UpgradeService } from './upgrade.service';
 import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobRunEntity } from '../entities/jobrun.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UpgradeBundle]),
-    AuthKeycloakModule,    // Enables @Auth() decorator to work
-    LoggerModule.forRoot(), // Enables logging
+    TypeOrmModule.forFeature([UpgradeBundle, JobConfigEntity, JobRunEntity]),
+    AuthKeycloakModule,
+    LoggerModule.forRoot(),
   ],
-  controllers: [UpgradeController],  // Register HTTP routes
-  providers: [UpgradeService],       // Register injectable services
+  controllers: [UpgradeController],
+  providers: [UpgradeService],
 })
 export class UpgradeModule {}

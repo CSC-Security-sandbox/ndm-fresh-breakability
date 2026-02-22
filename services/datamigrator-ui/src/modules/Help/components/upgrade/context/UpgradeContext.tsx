@@ -3,6 +3,7 @@ import { UpgradeContext } from "./context";
 import {
   UploadProgress,
   UpgradeContextType,
+  BlockingJobs,
 } from "../types/upgrade.types";
 import {
   INITIAL_UPLOAD_STATE,
@@ -100,6 +101,7 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [skipUpgrade] = useSkipUpgradeMutation();
 
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [blockingJobs, setBlockingJobs] = useState<BlockingJobs>(null);
 
   // ═══════════════════════════════════════════════════════════════
   // RESTORE STATE FROM DB ON MOUNT / POLL UPDATES
@@ -473,17 +475,9 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   // ═══════════════════════════════════════════════════════════════
   // UPGRADE HANDLER (DRAFT - Ready to activate)
   // Calls triggerUpgrade API endpoint
-  // To activate: Set UPGRADE_ENABLED = true below
   // ═══════════════════════════════════════════════════════════════
-  const UPGRADE_ENABLED = false; // <-- Set to true to activate upgrade functionality
 
   const handleUpgrade = async () => {
-    // Guard: Check if upgrade is enabled
-    if (!UPGRADE_ENABLED) {
-      console.log("Upgrade button clicked - functionality not yet enabled");
-      notify.info("Upgrade functionality is not yet enabled. Please contact support.");
-      return;
-    }
 
     // Guard: Check if file is uploaded and bundleId exists
     if (!isUploaded || !uploadProgress.bundleId) {
@@ -493,25 +487,29 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
 
     try {
       setIsUpgrading(true);
+      setBlockingJobs(null);
 
-      // Call the triggerUpgrade API with bundleId (primary key - fast query)
       const result = await triggerUpgrade({
         bundleId: uploadProgress.bundleId,
       }).unwrap();
 
       if (result.success) {
         notify.success(result.message || "Upgrade initiated successfully!");
-        
-        // Reset UI state after successful upgrade
         setShowUploadUI(true);
         setShowUpgradeUI(false);
-        
-        // Refetch status to sync with DB
+
         try {
           await refetchStatus();
         } catch (refetchError) {
           console.error("Failed to refresh status after upgrade:", refetchError);
         }
+      } else if (result.canUpgrade === false) {
+        setBlockingJobs({
+          runningJobs: result.runningJobs || [],
+          scheduledJobs: result.scheduledJobs || [],
+          activeJobConfigs: result.activeJobConfigs || [],
+        });
+        notify.error(result.message || "Cannot upgrade while jobs are active.");
       } else {
         notify.error(result.message || "Upgrade failed");
       }
@@ -532,14 +530,15 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     isUploaded,
     handleUpload,
     handleCancelUpload,
-    handleUpgrade,            // DRAFT - ready to activate (set UPGRADE_ENABLED = true)
+    handleUpgrade,
     isUpgrading,
+    blockingJobs,
     handleReset,
     showUploadUI,
-    showUpgradeUI,            // true when upload complete, ready for upgrade
+    showUpgradeUI,
     isLoadingStatus,
-    isProcessing,             // true when extracting/validating (should NOT be cancelled)
-    isUploadInProgress,       // true when interrupted upload detected from DB
+    isProcessing,
+    isUploadInProgress,
     inProgressFileName,
   };
 
