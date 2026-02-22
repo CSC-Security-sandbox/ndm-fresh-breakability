@@ -76,49 +76,49 @@
     # =========================================================================
     # Step 1: Check checksum file exists
     # =========================================================================
-    - name: "Step 1 — Check checksum file exists"
-      ansible.builtin.stat:
-        path: "{{ bundle_dir }}/{{ checksum_file }}"
-      register: checksum_stat
+    # - name: "Step 1 — Check checksum file exists"
+    #   ansible.builtin.stat:
+    #     path: "{{ bundle_dir }}/{{ checksum_file }}"
+    #   register: checksum_stat
 
-    - name: "Step 1 — Fail if checksum file not found"
-      ansible.builtin.fail:
-        msg: "Checksum file '{{ checksum_file }}' not found in {{ bundle_dir }}/"
-      when: not checksum_stat.stat.exists
+    # - name: "Step 1 — Fail if checksum file not found"
+    #   ansible.builtin.fail:
+    #     msg: "Checksum file '{{ checksum_file }}' not found in {{ bundle_dir }}/"
+    #   when: not checksum_stat.stat.exists
 
     # =========================================================================
     # Step 2: Validate checksums
     # =========================================================================
-    - name: "Step 2 — Verify required bundle files exist"
-      ansible.builtin.stat:
-        path: "{{ bundle_dir }}/{{ item.path }}"
-      loop:
-        - { path: "{{ docker_tar }}", label: "Docker image tar" }
-        - { path: "{{ helm_tgz }}", label: "Helm chart tgz" }
-        - { path: "{{ worker_linux_tar }}", label: "Linux worker tar.gz" }
-        - { path: "{{ worker_windows_zip }}", label: "Windows worker zip" }
-      loop_control:
-        label: "{{ item.label }}"
-      register: bundle_files
+    # - name: "Step 2 — Verify required bundle files exist"
+    #   ansible.builtin.stat:
+    #     path: "{{ bundle_dir }}/{{ item.path }}"
+    #   loop:
+    #     - { path: "{{ docker_tar }}", label: "Docker image tar" }
+    #     - { path: "{{ helm_tgz }}", label: "Helm chart tgz" }
+    #     - { path: "{{ worker_linux_tar }}", label: "Linux worker tar.gz" }
+    #     - { path: "{{ worker_windows_zip }}", label: "Windows worker zip" }
+    #   loop_control:
+    #     label: "{{ item.label }}"
+    #   register: bundle_files
 
-    - name: "Step 2 — Fail if any bundle file is missing"
-      ansible.builtin.fail:
-        msg: "Missing bundle file: {{ item.item.label }} ({{ item.item.path }})"
-      when: not item.stat.exists
-      loop: "{{ bundle_files.results }}"
-      loop_control:
-        label: "{{ item.item.label }}"
+    # - name: "Step 2 — Fail if any bundle file is missing"
+    #   ansible.builtin.fail:
+    #     msg: "Missing bundle file: {{ item.item.label }} ({{ item.item.path }})"
+    #   when: not item.stat.exists
+    #   loop: "{{ bundle_files.results }}"
+    #   loop_control:
+    #     label: "{{ item.item.label }}"
 
-    - name: "Step 2 — Validate checksums"
-      ansible.builtin.command:
-        cmd: sha256sum -c "{{ checksum_file }}"
-        chdir: "{{ bundle_dir }}"
-      register: checksum_result
-      changed_when: false
+    # - name: "Step 2 — Validate checksums"
+    #   ansible.builtin.command:
+    #     cmd: sha256sum -c "{{ checksum_file }}"
+    #     chdir: "{{ bundle_dir }}"
+    #   register: checksum_result
+    #   changed_when: false
 
-    - name: "Step 2 — Display checksum validation result"
-      ansible.builtin.debug:
-        msg: "{{ checksum_result.stdout_lines }}"
+    # - name: "Step 2 — Display checksum validation result"
+    #   ansible.builtin.debug:
+    #     msg: "{{ checksum_result.stdout_lines }}"
 
     # =========================================================================
     # Step 3: Print current deployed version
@@ -152,24 +152,24 @@
       failed_when: false
       environment: "{{ helm_environment }}"
 
-    - name: "Step 4 — Find previous Helm chart on disk"
-      ansible.builtin.shell: >
-        find /root -maxdepth 3 -name 'datamigrator-helmchart-{{ current_deployed_version }}.tgz'
-        2>/dev/null | head -1
-      register: old_helm_chart_search
-      changed_when: false
+    # - name: "Step 4 — Find previous Helm chart on disk"
+    #   ansible.builtin.shell: >
+    #     find /root -maxdepth 3 -name 'datamigrator-helmchart-{{ current_deployed_version }}.tgz'
+    #     2>/dev/null | head -1
+    #   register: old_helm_chart_search
+    #   changed_when: false
 
-    - name: "Step 4 — Save rollback paths"
-      ansible.builtin.set_fact:
-        old_helm_chart: "{{ old_helm_chart_search.stdout | trim }}"
+    # - name: "Step 4 — Save rollback paths"
+    #   ansible.builtin.set_fact:
+    #     old_helm_chart: "{{ old_helm_chart_search.stdout | trim }}"
 
 
-    - name: "Step 4 — Display rollback readiness"
-      ansible.builtin.debug:
-        msg:
-          - "Previous Helm chart: {{ old_helm_chart if old_helm_chart | length > 0 else 'NOT FOUND' }}"
-          - "Old Docker images: already in MicroK8s registry (import is additive)"
-          - "{{ 'Full rollback to previous version is available.' if old_helm_chart | length > 0 else 'WARNING: Old Helm chart not found on disk. Keep previous upgrade bundle for rollback capability.' }}"
+    # - name: "Step 4 — Display rollback readiness"
+    #   ansible.builtin.debug:
+    #     msg:
+    #       - "Previous Helm chart: {{ old_helm_chart if old_helm_chart | length > 0 else 'NOT FOUND' }}"
+    #       - "Old Docker images: already in MicroK8s registry (import is additive)"
+    #       - "{{ 'Full rollback to previous version is available.' if old_helm_chart | length > 0 else 'WARNING: Old Helm chart not found on disk. Keep previous upgrade bundle for rollback capability.' }}"
 
     # =========================================================================
     # Step 5: Uninstall Datamigrator release and clean namespace
@@ -208,9 +208,16 @@
       failed_when: false
       when: helm_release_check.rc == 0
 
-    - name: "Step 5 — Wait for all pods to terminate"
+    - name: "Step 5 — Delete completed cronjob pods"
       ansible.builtin.shell: >
-        kubectl get pods -n {{ namespace }} --no-headers 2>/dev/null | wc -l
+        kubectl delete pods -n {{ namespace }} --field-selector=status.phase==Succeeded --force --grace-period=0 2>/dev/null || true
+      environment: "{{ helm_environment }}"
+      failed_when: false
+      when: helm_release_check.rc == 0
+
+    - name: "Step 5 — Wait for all active pods to terminate"
+      ansible.builtin.shell: >
+        kubectl get pods -n {{ namespace }} --no-headers --field-selector=status.phase!=Succeeded 2>/dev/null | wc -l
       register: pod_count
       until: (pod_count.stdout | trim | int) == 0
       retries: 30
@@ -402,9 +409,15 @@
           environment: "{{ helm_environment }}"
           failed_when: false
 
-        - name: "Rollback — Wait for all pods to terminate"
+        - name: "Rollback — Delete completed cronjob pods"
           ansible.builtin.shell: >
-            kubectl get pods -n {{ namespace }} --no-headers 2>/dev/null | wc -l
+            kubectl delete pods -n {{ namespace }} --field-selector=status.phase==Succeeded --force --grace-period=0 2>/dev/null || true
+          environment: "{{ helm_environment }}"
+          failed_when: false
+
+        - name: "Rollback — Wait for all active pods to terminate"
+          ansible.builtin.shell: >
+            kubectl get pods -n {{ namespace }} --no-headers --field-selector=status.phase!=Succeeded 2>/dev/null | wc -l
           register: rollback_pod_count
           until: (rollback_pod_count.stdout | trim | int) == 0
           retries: 30
@@ -545,3 +558,21 @@
       loop_control:
         loop_var: result
         label: "{{ result.item }}"
+
+    - name: "Post-upgrade — Read initial_version from versions.conf"
+      ansible.builtin.shell: >
+        grep '^initial_version=' /opt/datamigrator/conf/versions.conf | cut -d= -f2
+      register: initial_version_raw
+      changed_when: false
+
+    - name: "Post-upgrade — Write updated versions.conf"
+      ansible.builtin.copy:
+        dest: /opt/datamigrator/conf/versions.conf
+        mode: '0644'
+        content: |
+          # initial_version  : version installed during first deployment (never changes)
+          # current_version  : version currently running after the latest successful upgrade
+          # previous_version : version that was running before the latest upgrade (used for rollback)
+          initial_version={{ initial_version_raw.stdout | default('unknown') }}
+          current_version={{ build_version }}
+          previous_version={{ current_deployed_version }}

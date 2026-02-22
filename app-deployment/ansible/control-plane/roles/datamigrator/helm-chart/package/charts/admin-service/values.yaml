@@ -31,6 +31,12 @@ annotations:
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
+
+# Required for nsenter to execute ansible-playbook on the host during upgrades
+hostPID: true
+containerSecurityContext:
+  privileged: true
+
 args:
   - "--source-vault"
 

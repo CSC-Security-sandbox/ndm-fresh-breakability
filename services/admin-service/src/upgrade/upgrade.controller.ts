@@ -328,4 +328,21 @@ export class UpgradeController {
   ): Promise<ExecutionStatusDto> {
     return this.upgradeService.getExecutionStatus(bundleId);
   }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // ENDPOINT 6b: Get Upgrade Status (for UI polling after restart)
+  // ═══════════════════════════════════════════════════════════════
+  @Auth(Permission.AgentDeployment)
+  @ApiBearerAuth()
+  @Get('upgrade-status')
+  @ApiOperation({
+    summary: 'Get the current upgrade status',
+    description:
+      'Returns upgrade outcome after pod restarts. ' +
+      'Includes worker upgrade readiness when CP upgrade succeeds.',
+  })
+  async getUpgradeStatus() {
+    return this.upgradeService.getUpgradeStatus();
+  }
 }
