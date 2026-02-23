@@ -91,13 +91,13 @@ export class WorkManagerService implements OnModuleDestroy{
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
       const accessToken = await this.authService.getAccessToken();
-      const updatedEnvVariables = await this.registerAndGetEnvironment(accessToken);
+      // const updatedEnvVariables = await this.registerAndGetEnvironment(accessToken);
       
-      // Apply critical environment variables to process.env for Temporal config
-      if (updatedEnvVariables.TEMPORAL_TLS_CA_CERT) {
-        process.env.TEMPORAL_TLS_CA_CERT = updatedEnvVariables.TEMPORAL_TLS_CA_CERT;
-        this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
-      }
+      // // Apply critical environment variables to process.env for Temporal config
+      // if (updatedEnvVariables.TEMPORAL_TLS_CA_CERT) {
+      //   process.env.TEMPORAL_TLS_CA_CERT = updatedEnvVariables.TEMPORAL_TLS_CA_CERT;
+      //   this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
+      // }
       
       // Debug: Log Temporal-related environment variables
       this.logger.log(`[onApplicationBootstrap] - Current Temporal env vars:

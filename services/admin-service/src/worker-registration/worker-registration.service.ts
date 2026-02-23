@@ -62,7 +62,7 @@ export class WorkerRegistrationService {
             const secretName = process.env.ISTIO_GATEWAY_TLS_SECRET || 'datamigrator-istio-tls';
             const namespace = process.env.ISTIO_NAMESPACE || 'istio-system';
 
-            this.logger.debug(`Fetching Gateway TLS certificate from secret: ${secretName} in namespace: ${namespace}`);
+            this.logger.log(`Fetching Gateway TLS certificate from secret: ${secretName} in namespace: ${namespace}`);
 
             const token = await readFile('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8');
             const ca = await readFile('/var/run/secrets/kubernetes.io/serviceaccount/ca.crt', 'utf8');
@@ -74,7 +74,7 @@ export class WorkerRegistrationService {
                 return null;
             }
 
-            this.logger.debug(`Successfully fetched Gateway TLS certificate (${certificate.length} bytes)`);
+            this.logger.log(`Successfully fetched Gateway TLS certificate (${certificate.length} bytes)`);
             return certificate;
         } catch (error) {
             this.logger.error(`Failed to fetch Gateway CA certificate: ${error.message}`, error.stack);

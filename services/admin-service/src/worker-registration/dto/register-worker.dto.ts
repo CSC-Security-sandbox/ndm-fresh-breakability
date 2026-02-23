@@ -25,9 +25,8 @@ export class RegisterWorkerResponseDto {
   controlPlaneIp: string;
 
   @ApiProperty({ description: 'Gateway CA Certificate', nullable: true })
-  @IsString()
-  @IsOptional()
-  gatewayCACertificate: string | null;
+  @IsString()  
+  gatewayCACertificate: string;
 
   constructor(
     projectId: string,
