@@ -931,6 +931,7 @@ describe("JobConfigService", () => {
       sourcePathIds: ["path1", "path2"],
       excludeFilePatterns: "*.tmp",
       preserveAccessTime: true,
+      preservePermissions: true,
       excludeOlderThan: new Date("2025-04-04T13:01:08.226Z"),
       firstRunAt: new Date("2025-04-04T13:01:08.226Z"),
       createdBy: "user1",
@@ -946,6 +947,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: "*.tmp",
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
+        preservePermissions: true,
         sourcePathId: "path2",
         excludeOlderThan: new Date("2025-04-04T13:01:08.226Z"),
         firstRunAt: new Date("2025-04-04T13:01:08.226Z"),
@@ -990,6 +992,7 @@ describe("JobConfigService", () => {
       {
         excludeFilePatterns: mockBulkDiscovery.excludeFilePatterns,
         preserveAccessTime: mockBulkDiscovery.preserveAccessTime,
+        preservePermissions: mockBulkDiscovery.preservePermissions,
         excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
@@ -1002,6 +1005,7 @@ describe("JobConfigService", () => {
       excludeFilePatterns: mockBulkDiscovery.excludeFilePatterns,
       jobType: JobType.DISCOVER,
       preserveAccessTime: mockBulkDiscovery.preserveAccessTime,
+      preservePermissions: mockBulkDiscovery.preservePermissions,
       sourcePathId: "path2",
       excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
       firstRunAt: mockBulkDiscovery.firstRunAt,
@@ -1017,6 +1021,7 @@ describe("JobConfigService", () => {
       sourcePathIds: [],
       excludeFilePatterns: "*.tmp",
       preserveAccessTime: true,
+      preservePermissions: true,
       excludeOlderThan: new Date(),
       firstRunAt: new Date(),
       createdBy: "user1",
@@ -1053,6 +1058,7 @@ describe("JobConfigService", () => {
       {
         excludeFilePatterns: mockBulkDiscovery.excludeFilePatterns,
         preserveAccessTime: mockBulkDiscovery.preserveAccessTime,
+        preservePermissions: mockBulkDiscovery.preservePermissions,
         excludeOlderThan: mockBulkDiscovery.excludeOlderThan,
         firstRunAt: mockBulkDiscovery.firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
@@ -1076,6 +1082,7 @@ describe("JobConfigService", () => {
         sourcePathIds: ['smbPath1'],
         excludeFilePatterns: '*.tmp',
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: true,
         excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
         firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
@@ -1094,6 +1101,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: '*.tmp',
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: true,
         sourcePathId: 'smbPath1',
         excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
@@ -1127,6 +1135,7 @@ describe("JobConfigService", () => {
         sourcePathIds: ['nfsPath1'],
         excludeFilePatterns: '*.tmp',
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: true,
         excludeOlderThan: new Date(),
         firstRunAt: new Date(),
@@ -1153,6 +1162,7 @@ describe("JobConfigService", () => {
         sourcePathIds: ['smbPath1', 'nfsPath1'],
         excludeFilePatterns: '*.tmp',
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: true,
         excludeOlderThan: new Date(),
         firstRunAt: new Date(),
@@ -1184,6 +1194,7 @@ describe("JobConfigService", () => {
         sourcePathIds: ['path1'],
         excludeFilePatterns: '*.tmp',
         preserveAccessTime: true,
+        preservePermissions: true,
         // shouldScanADS not provided - should default to false
         excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
         firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
@@ -1195,6 +1206,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: '*.tmp',
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: false,
         sourcePathId: 'path1',
         excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
@@ -1223,6 +1235,7 @@ describe("JobConfigService", () => {
         sourcePathIds: ['nfsPath1'],
         excludeFilePatterns: '*.tmp',
         preserveAccessTime: true,
+        preservePermissions: true,
         shouldScanADS: false,
         excludeOlderThan: new Date('2025-04-04T13:01:08.226Z'),
         firstRunAt: new Date('2025-04-04T13:01:08.226Z'),
@@ -1234,6 +1247,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: '*.tmp',
         jobType: JobType.DISCOVER,
         preserveAccessTime: true,
+      preservePermissions: true,
         shouldScanADS: false,
         sourcePathId: 'nfsPath1',
       };
@@ -1248,6 +1262,46 @@ describe("JobConfigService", () => {
       expect(result).toEqual([mockJobConfigEntity]);
       // volumeRepo.find should NOT be called when shouldScanADS is false
       expect(volumeRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('should create bulk discovery job with preservePermissions flag', async () => {
+      const mockBulkDiscovery = {
+        sourcePathIds: ['testPath1'],
+        excludeFilePatterns: '*.log',
+        preserveAccessTime: false,
+        preservePermissions: false,
+        excludeOlderThan: new Date('2025-05-01T00:00:00.000Z'),
+        firstRunAt: new Date('2025-05-01T00:00:00.000Z'),
+        createdBy: 'testUser',
+      };
+
+      const mockJobConfigEntity = {
+        status: JobStatus.Active,
+        excludeFilePatterns: '*.log',
+        jobType: JobType.DISCOVER,
+        preserveAccessTime: false,
+        preservePermissions: false,
+        sourcePathId: 'testPath1',
+        excludeOlderThan: new Date('2025-05-01T00:00:00.000Z'),
+        firstRunAt: new Date('2025-05-01T00:00:00.000Z'),
+        scheduler: ScheduleStatus.SCHEDULING,
+        createdBy: 'testUser',
+        shouldScanADS: false,
+      };
+
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 0 } as any);
+      jest.spyOn(jobConfigRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(jobConfigRepo, 'save').mockResolvedValue([mockJobConfigEntity] as any);
+
+      const result = await service.createBulkDiscovery(mockBulkDiscovery as any);
+
+      expect(result).toEqual([mockJobConfigEntity]);
+      expect(jobConfigRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preservePermissions: false,
+        })
+      );
     });
   });
 
@@ -1266,6 +1320,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1345,6 +1400,7 @@ describe("JobConfigService", () => {
       {
         excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
+        preservePermissions: mockBulkMigrate.options.preservePermissions,
         excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
         skipFile: mockBulkMigrate.options.skipFile,
         firstRunAt: mockBulkMigrate.firstRunAt,
@@ -1358,6 +1414,7 @@ describe("JobConfigService", () => {
       excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
       jobType: JobType.MIGRATE,
       preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
+      preservePermissions: mockBulkMigrate.options.preservePermissions,
       sourcePathId: "sourcePath1",
       sourceDirectoryPath,
       targetPathId: "destinationPath2",
@@ -1374,6 +1431,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
         jobType: JobType.MIGRATE,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
+        preservePermissions: mockBulkMigrate.options.preservePermissions,
         sourcePathId: "sourcePath1",
         sourceDirectoryPath,
         targetPathId: mockBulkMigrate.migrateConfigs[0].destinationPathId[1],
@@ -1384,6 +1442,43 @@ describe("JobConfigService", () => {
         futureScheduleAt: mockBulkMigrate.futureRunSchedule,
         skipFile: mockBulkMigrate.options.skipFile,
       },
+    ]);
+  });
+
+  it("should create bulk migrate job with preservePermissions set to false", async () => {
+    const mockBulkMigrate = {
+      migrateConfigs: [
+        {
+          sourcePathId: "sourcePath1",
+          destinationPathId: ["destinationPath1"],
+        },
+      ],
+      options: {
+        excludeFilePatterns: "*.bak",
+        preserveAccessTime: true,
+        preservePermissions: false,
+        excludeOlderThan: new Date('2025-06-01T00:00:00.000Z'),
+        skipFile: false,
+      },
+      firstRunAt: new Date('2025-06-01T00:00:00.000Z'),
+      futureRunSchedule: null,
+    };
+
+    jest.spyOn(jobConfigRepo, "find").mockResolvedValue([]);
+    jest.spyOn(jobConfigRepo, "update").mockResolvedValue({ affected: 0 } as any);
+    jest.spyOn(jobConfigRepo, "create").mockImplementation((data) => data as any);
+    jest.spyOn(jobConfigRepo, "save").mockResolvedValue([{ id: "jobConfigId1" }] as any);
+    jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+
+    const result = await service.createBulkMigrate(mockBulkMigrate as any);
+
+    expect(result.jobs).toBeDefined();
+    expect(result.jobs.length).toBe(1);
+    expect(jobConfigRepo.save).toHaveBeenCalledWith([
+      expect.objectContaining({
+        preservePermissions: false,
+        preserveAccessTime: true,
+      })
     ]);
   });
 
@@ -1423,6 +1518,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1485,6 +1581,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1541,6 +1638,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1610,6 +1708,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1722,6 +1821,7 @@ describe("JobConfigService", () => {
       options: {
         excludeFilePatterns: "*.tmp",
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         skipFile: false,
       },
@@ -1765,6 +1865,7 @@ describe("JobConfigService", () => {
         futureScheduleAt: "0 0 * * *",
         status: JobStatus.Active,
         preserveAccessTime: true,
+        preservePermissions: true,
         firstRunAt: new Date(),
         excludeOlderThan,
       },
@@ -1791,6 +1892,7 @@ describe("JobConfigService", () => {
         futureScheduleAt: "0 0 * * *",
         status: JobStatus.Active,
         preserveAccessTime: true,
+        preservePermissions: true,
         firstRunAt: new Date(),
       },
     ];
@@ -1877,6 +1979,7 @@ describe("JobConfigService", () => {
       futureScheduleAt: null,
       status: JobStatus.Active,
       preserveAccessTime: true,
+      preservePermissions: true,
       firstRunAt: expect.any(Date),
       excludeOlderThan: expect.any(Date),
     });
@@ -1892,6 +1995,7 @@ describe("JobConfigService", () => {
         futureScheduleAt: null,
         status: JobStatus.Active,
         preserveAccessTime: true,
+        preservePermissions: true,
         firstRunAt: expect.any(Date),
         excludeOlderThan: expect.any(Date),
       },
@@ -1957,6 +2061,7 @@ describe("JobConfigService", () => {
         futureScheduleAt: "0 0 * * *",
         status: JobStatus.Active,
         preserveAccessTime: true,
+        preservePermissions: true,
         firstRunAt: new Date(),
       },
     ];
@@ -2365,6 +2470,7 @@ describe("JobConfigService", () => {
         configurationsSetToJob: {
           "Skip Files modified in last": "-",
           "Preserve a-time": "Disabled",
+          "Preserve permissions": "Disabled",
           "Excluded Path Patterns": [],
           "Exclude file older than (UTC)": undefined,
           "Incremental sync schedule": undefined,
@@ -2578,6 +2684,7 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         skipFile: "35-M",
         preserveAccessTime: false,
+        preservePermissions: false,
         excludeFilePatterns: "*/logs/*,*/tmp/*",
         excludeOlderThan: null,
         futureScheduleAt: null,
@@ -2592,6 +2699,7 @@ describe("JobConfigService", () => {
       const jobConfig = {
         jobType: JobType.CUT_OVER,
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeFilePatterns: "*/snapshot/*",
         excludeOlderThan: "2025-01-01",
       };
@@ -2614,6 +2722,7 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         skipFile: "2-H",
         preserveAccessTime: false,
+        preservePermissions: false,
         excludeFilePatterns: "",
         excludeOlderThan: null,
         futureScheduleAt: null,
@@ -2627,6 +2736,7 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         skipFile: "5-D",
         preserveAccessTime: false,
+        preservePermissions: false,
         excludeFilePatterns: "",
         excludeOlderThan: null,
         futureScheduleAt: null,
@@ -2804,6 +2914,7 @@ describe("JobConfigService", () => {
     //       { sourcePathId: "src1", destinationPathId: ["dest1"] },
     //     ],
     //     preserveAccessTime: true,
+    //     preservePermissions: true,
     //     options: {
     //       workflowExecutionTimeout: "300",
     //       workflowTaskTimeout: "60",
@@ -4372,6 +4483,7 @@ describe("JobConfigService", () => {
         options: {
           excludeFilePatterns: "*.tmp",
           preserveAccessTime: true,
+          preservePermissions: true,
         },
       } as any;
 
@@ -4406,7 +4518,7 @@ describe("JobConfigService", () => {
         migrateConfigs: [
           { sourcePathId: "src1", destinationPathId: ["dest1"] },
         ],
-        options: { excludeFilePatterns: "*.tmp" },
+        options: { excludeFilePatterns: "*.tmp", preserveAccessTime: true, preservePermissions: true },
       } as any;
 
       jobConfigRepo.find = jest.fn().mockResolvedValue([]);
@@ -5034,6 +5146,7 @@ describe("JobConfigService", () => {
         targetDirectoryPath: destinationDirectoryPath,
         excludeFilePatterns: ['*.tmp'],
         preserveAccessTime: true,
+        preservePermissions: true,
         status: JobStatus.Active,
       };
     

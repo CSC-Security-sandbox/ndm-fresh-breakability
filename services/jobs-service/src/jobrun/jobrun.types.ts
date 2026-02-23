@@ -30,6 +30,7 @@ export interface JobRunConfig{
     excludeFilePatterns?: string,
     excludeOlderThan?: Date,
     preserveAccessTime: boolean,
+    preservePermissions: boolean,
     shouldScanADS?: boolean,
     workers: string[],
     skipFile?: string,

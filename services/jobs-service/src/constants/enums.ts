@@ -186,6 +186,7 @@ export const SIZE_UNITS: Record<string, number> = {
 export enum JobConfigurationEnum {
   skipFile = "Skip Files modified in last",
   preserveAccessTime = "Preserve a-time",
+  preservePermissions = "Preserve permissions",
   excludeFilePatterns = "Excluded Path Patterns",
   excludeOlderThan = "Exclude file older than (UTC)",
   futureScheduleAt = "Incremental sync schedule",

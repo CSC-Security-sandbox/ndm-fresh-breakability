@@ -23,6 +23,10 @@ export class JobOptionsEntity extends Base {
   @Column({ name: 'preserve_access_time', type: 'boolean', default: false })
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: 'Preserve permissions flag' })
+  @Column({ name: 'preserve_permissions', type: 'boolean', default: true })
+  preservePermissions: boolean;
+
   @ApiProperty({ description: 'Scan Alternate Data Streams (ADS) flag for SMB sources' })
   @Column({ name: 'should_scan_ads', type: 'boolean', default: false })
   shouldScanADS: boolean;

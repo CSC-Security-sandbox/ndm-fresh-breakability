@@ -857,13 +857,21 @@ describe('CommandExecService', () => {
                 sourceMeta: { ...baseItem.sourceMeta, permission: '755' },
                 targetMeta: { ...baseItem.targetMeta, permission: '644' }
             };
+            const ctx = {
+                ...jobContext,
+                jobConfig: {
+                options: {
+                    preservePermissions: true
+                }
+                }
+            };
             await service.validateCommand({
                 cmd: baseCmd as any,
                 item: item as any,
-                jobContext,
+                jobContext: ctx,
                 errorType: ErrorType.RECOVERABLE_ERROR
             }as any);
-            expect(jobContext.publishToErrorStream).toHaveBeenCalled();
+            expect(ctx.publishToErrorStream).toHaveBeenCalled();
             });
 
             it('should publish error if accessTime mismatch and preserveAccessTime is true', async () => {

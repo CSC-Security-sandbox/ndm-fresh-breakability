@@ -63,7 +63,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 WORKDIR /app
 
 # Copy package files and install dependencies
-COPY ["package.json","./"]
+COPY ["package.json","package-lock.json","./"]
 COPY [".npmrc", "./"]
 RUN --mount=type=secret,id=git_token \
     GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install --legacy-peer-deps --only=production \

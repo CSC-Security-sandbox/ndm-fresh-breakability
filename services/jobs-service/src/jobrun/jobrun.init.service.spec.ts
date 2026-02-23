@@ -280,6 +280,7 @@ describe('JobRunInitService', () => {
       const mockJobConfig = {
         id: jobConfigId,
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeFilePatterns: '*.txt',
         excludeOlderThan: excludeOlderThan, // 30 days ago
         sourcePath: {
@@ -306,6 +307,7 @@ describe('JobRunInitService', () => {
       const expectedJobRunConfig: JobRunConfig = {
         id: 'jobConfigId',
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeFilePatterns: '*.txt',
         excludeOlderThan: excludeOlderThan, // 30 days ago
         connection: {
@@ -716,6 +718,7 @@ describe('JobRunInitService', () => {
         workers: ['worker1', 'worker2'],
         excludeFilePatterns: '*.txt',
         preserveAccessTime: true,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         connection: {
           sourceCredential: {
@@ -802,6 +805,7 @@ describe('JobRunInitService', () => {
         workers: [],
         excludeFilePatterns: '',
         preserveAccessTime: false,
+        preservePermissions: true,
         excludeOlderThan: new Date(),
         connection: {
           sourceCredential: {

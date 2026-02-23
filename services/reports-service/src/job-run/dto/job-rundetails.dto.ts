@@ -56,6 +56,10 @@ class JobOptionsDto {
   @IsBoolean()
   preserveAccessTime: boolean;
 
+  @ApiProperty()
+  @IsBoolean()
+  preservePermissions: boolean;
+
   @ApiProperty({ nullable: true, required: false })
   @IsOptional()
   @Type(() => Date)

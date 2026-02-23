@@ -207,7 +207,7 @@ describe('StampMetaService', () => {
     });
 
     it('should set status to ERROR when there are errors', async () => {
-      const input = createMockInput();
+      const input = createMockInput({}, { preservePermissions: true });
 
       // Mock an error in permission stamping
       const error = new Error('Permission denied') as any;
@@ -238,7 +238,7 @@ describe('StampMetaService', () => {
 
   describe('stampPermission', () => {
     it('should successfully stamp permissions when metadata.mode is available', async () => {
-      const input = createMockInput({ mode: 0o755 });
+      const input = createMockInput({ mode: 0o755 }, { preservePermissions: true });
       (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.stampPermission(input);
@@ -262,7 +262,7 @@ describe('StampMetaService', () => {
     });
 
     it('should handle chmod errors gracefully', async () => {
-      const input = createMockInput({ mode: 0o755 });
+      const input = createMockInput({ mode: 0o755 }, { preservePermissions: true });
       const error = new Error('Permission denied') as any;
       error.code = 'EACCES';
       (mockFs.promises.chmod as jest.Mock).mockRejectedValue(error);
@@ -289,7 +289,7 @@ describe('StampMetaService', () => {
     });
 
     it('should successfully stamp GID and UID without identity mapping', async () => {
-      const input = createMockInput({ gid: 1000, uid: 1001 });
+      const input = createMockInput({ gid: 1000, uid: 1001 }, { preservePermissions: true });
       (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.stampGIDandUID(input);
@@ -306,7 +306,7 @@ describe('StampMetaService', () => {
     it('should successfully stamp GID and UID with identity mapping', async () => {
       const input = createMockInput(
         { gid: 1000, uid: 1001 },
-        { isIdentityMappingAvailable: true },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
       );
       (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
       redisService.getOwnerIdentity
@@ -372,7 +372,7 @@ describe('StampMetaService', () => {
     });
 
     it('should handle chown errors gracefully', async () => {
-      const input = createMockInput({ gid: 1000, uid: 1001 });
+      const input = createMockInput({ gid: 1000, uid: 1001 }, { preservePermissions: true });
       const error = new Error('Operation not permitted') as any;
       error.code = 'EPERM';
       (mockFs.promises.chown as jest.Mock).mockRejectedValue(error);
@@ -542,7 +542,7 @@ describe('StampMetaService', () => {
 
   describe('stampObjectACL', () => {
     it('should successfully stamp ACL', async () => {
-      const input = createMockInput();
+      const input = createMockInput({}, { preservePermissions: true });
 
       winOperationService.stampAclOperation.mockResolvedValue({
         output: null,
@@ -557,7 +557,7 @@ describe('StampMetaService', () => {
     });
 
     it('should handle ACL stamping errors', async () => {
-      const input = createMockInput();
+      const input = createMockInput({}, { preservePermissions: true });
 
       winOperationService.stampAclOperation.mockResolvedValue({
         output: null,
@@ -573,7 +573,7 @@ describe('StampMetaService', () => {
     });
 
     it('should handle ACL stamping exceptions', async () => {
-      const input = createMockInput();
+      const input = createMockInput({}, { preservePermissions: true });
       const error = new Error('ACL operation failed') as any;
       error.code = 'ACCESS_DENIED';
 
@@ -626,6 +626,185 @@ describe('StampMetaService', () => {
       expect(winOperationService.resetFileAttributes).toHaveBeenCalledWith(
         '/test/path.txt',
       );
+    });
+  });
+
+  describe('preservePermissions flag behavior', () => {
+    describe('Linux - chmod and chown operations', () => {
+      beforeEach(() => {
+        Object.defineProperty(process, 'platform', {
+          value: 'linux',
+          writable: true,
+        });
+      });
+
+      it('should skip chmod when preservePermissions is false', async () => {
+        const input = createMockInput({}, { preservePermissions: false });
+
+        const result = await service.stampMetaData(input);
+
+        expect(mockFs.promises.chmod).not.toHaveBeenCalled();
+        expect(result.targetErrors).toEqual([]);
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+      });
+
+      it('should execute chmod when preservePermissions is true', async () => {
+        const input = createMockInput(
+          { mode: 0o755 },
+          { preservePermissions: true }
+        );
+
+        await service.stampMetaData(input);
+
+        expect(mockFs.promises.chmod).toHaveBeenCalledWith(
+          '/target/test-file.txt',
+          0o755
+        );
+      });
+
+      it('should skip chown when preservePermissions is false', async () => {
+        const input = createMockInput(
+          { gid: 1000, uid: 1001 },
+          { preservePermissions: false }
+        );
+
+        const result = await service.stampMetaData(input);
+
+        expect(mockFs.promises.chown).not.toHaveBeenCalled();
+        expect(result.targetErrors).toEqual([]);
+      });
+
+      it('should execute chown when preservePermissions is true', async () => {
+        const input = createMockInput(
+          { gid: 1000, uid: 1001 },
+          { preservePermissions: true }
+        );
+
+        await service.stampMetaData(input);
+
+        expect(mockFs.promises.chown).toHaveBeenCalledWith(
+          '/target/test-file.txt',
+          1001,
+          1000
+        );
+      });
+
+      it('should still stamp atime when preservePermissions is false but preserveAccessTime is true', async () => {
+        const input = createMockInput(
+          { atime: new Date('2023-01-02T14:00:00Z'), mtime: new Date('2023-01-02T12:00:00Z') },
+          { preservePermissions: false, preserveAccessTime: true }
+        );
+
+        await service.stampMetaData(input);
+
+        expect(mockFs.promises.chmod).not.toHaveBeenCalled();
+        expect(mockFs.promises.chown).not.toHaveBeenCalled();
+        expect(mockFs.promises.utimes).toHaveBeenCalledWith(
+          '/target/test-file.txt',
+          expect.any(Date),
+          expect.any(Date)
+        );
+      });
+    });
+
+    describe('Windows - ACL operations', () => {
+      beforeEach(() => {
+        Object.defineProperty(process, 'platform', {
+          value: 'win32',
+          writable: true,
+        });
+      });
+
+      it('should skip ACL stamping when preservePermissions is false', async () => {
+        const input = createMockInput(
+          { sid: 'S-1-5-21-123456789' },
+          { preservePermissions: false }
+        );
+
+        const result = await service.stampMetaData(input);
+
+        expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
+        expect(result.targetErrors).toEqual([]);
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+      });
+
+      it('should execute ACL stamping when preservePermissions is true', async () => {
+        const input = createMockInput(
+          { sid: 'S-1-5-21-123456789' },
+          { preservePermissions: true }
+        );
+
+        winOperationService.stampAclOperation.mockResolvedValue({
+          output: null,
+          errors: [],
+        });
+
+        await service.stampMetaData(input);
+
+        expect(winOperationService.stampAclOperation).toHaveBeenCalled();
+      });
+
+      it('should skip both chmod and ACL when preservePermissions is false on Windows', async () => {
+        const input = createMockInput(
+          { mode: 0o644, sid: 'S-1-5-21-123456789' },
+          { preservePermissions: false }
+        );
+
+        await service.stampMetaData(input);
+
+        expect(mockFs.promises.chmod).not.toHaveBeenCalled();
+        expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Edge cases', () => {
+      beforeEach(() => {
+        Object.defineProperty(process, 'platform', {
+          value: 'linux',
+          writable: true,
+        });
+      });
+
+      it('should default to skipping permissions when preservePermissions is undefined', async () => {
+        const input = createMockInput({ mode: 0o755 }, {});
+        delete input.jobContext.jobConfig.options.preservePermissions;
+
+        await service.stampMetaData(input);
+
+        expect(mockFs.promises.chmod).not.toHaveBeenCalled();
+      });
+
+      it('should handle preservePermissions true with identity mapping enabled', async () => {
+        redisService.getOwnerIdentity.mockResolvedValueOnce('2000'); // mapped gid
+        redisService.getOwnerIdentity.mockResolvedValueOnce('2001'); // mapped uid
+
+        const input = createMockInput(
+          { gid: 1000, uid: 1001 },
+          { preservePermissions: true, isIdentityMappingAvailable: true }
+        );
+
+        await service.stampMetaData(input);
+
+        expect(redisService.getOwnerIdentity).toHaveBeenCalledTimes(2);
+        expect(mockFs.promises.chown).toHaveBeenCalledWith(
+          '/target/test-file.txt',
+          2001,
+          2000
+        );
+      });
+
+      it('should not error when permissions operations are skipped', async () => {
+        const input = createMockInput(
+          { mode: 0o755, gid: 1000, uid: 1001 },
+          { preservePermissions: false }
+        );
+
+        const result = await service.stampMetaData(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(result.targetErrors).toEqual([]);
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+      });
     });
   });
 });

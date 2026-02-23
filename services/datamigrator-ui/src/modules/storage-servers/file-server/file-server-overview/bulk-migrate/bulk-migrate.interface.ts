@@ -76,6 +76,7 @@ export interface FormFileUploadType {
 
 export interface OptionsFormType {
   preserve_a_time: boolean;
+  preserve_permissions: boolean;
   exclude_file_patterns: string;
   upload_sid_mapping: FormFileUploadType;
   upload_uid_mapping: FormFileUploadType;
@@ -199,6 +200,7 @@ export interface bulkMigrateCreateApiType {
     excludeOlderThan?: Dayjs;
     excludeFilePatterns: string;
     preserveAccessTime: boolean;
+    preservePermissions: boolean;
     skipFile: string;
   };
   sidMapping?: any;

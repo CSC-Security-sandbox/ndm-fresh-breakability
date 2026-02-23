@@ -383,17 +383,18 @@ export class CommandExecService {
 
     async validateCommand({ cmd, item, jobContext, errorType, targetPath}:ValidateCommandInput): Promise<void> {
         let validateMisMatch : string = ""
+        let shouldPreservePermissions = jobContext.jobConfig.options.preservePermissions
 
         if (!cmd.metadata?.isSymLink && item.sourceMeta.checksum !== item.targetMeta.checksum) 
             validateMisMatch += `CheckSum Mismatch detected, source: ${item.sourceMeta.checksum}, target: ${item.targetMeta.checksum} \n`;
         
-        if (!cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
+        if (shouldPreservePermissions && !cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
-        if(cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
+        if(shouldPreservePermissions && cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
             validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
         if(validateMisMatch.length > 0) {

@@ -88,6 +88,7 @@ export class PrecheckActivity {
       }
 
       this.logger.log(`Preserve Access Time - ${settings?.preserveAccessTime}`);
+      this.logger.log(`Preserve Permissions - ${settings?.preservePermissions}`);
       this.logger.log(`IsDestination - ${!serverPaths?.isSource}`);
 
       if (settings.preserveAccessTime || !serverPaths.isSource) {

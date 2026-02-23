@@ -547,7 +547,7 @@
          <sqlFile path="liquibase/20260116_01_jobs_report_proc_rollback.sql" splitStatements="false"/>
       </rollback>
    </changeSet>
-
+   
      <changeSet id="20260128_01_add_error_status_column.sql" author="achyutas">
         <sqlFile path="liquibase/20260128_01_add_error_status_column.sql"/>
         <rollback>
@@ -574,7 +574,6 @@
          <sqlFile path="liquibase/20260211_01_create_upgrade_bundles_table_rollback.sql"/>
       </rollback>
    </changeSet>
-
    <changeSet id="20260209_01_alter_jobconfig_add_directory_paths.sql" author="ss27372">
       <sqlFile path="liquibase/20260209_01_alter_jobconfig_add_directory_paths.sql"/>
       <rollback>
@@ -588,8 +587,7 @@
          <sqlFile path="liquibase/20260219_01_alter_inventory_table_add_checksum_time_column_rollback.sql"/>
       </rollback>
    </changeSet>
-   
-    <changeSet id="20260220_01_alter_worker_table_add_upgrade_columns.sql" author="kb93278">
+   <changeSet id="20260220_01_alter_worker_table_add_upgrade_columns.sql" author="kb93278">
         <sqlFile path="liquibase/20260220_01_alter_worker_table_add_upgrade_columns.sql"/>
         <rollback>
             <sqlFile path="liquibase/20260220_01_alter_worker_table_add_upgrade_columns_rollback.sql"/>
@@ -602,5 +600,11 @@
             <sqlFile path="liquibase/20260220_02_alter_upgrade_bundles_add_workflow_columns_rollback.sql"/>
         </rollback>
     </changeSet>
-
+    
+    <changeSet id="202602023_01_alter_jobconfig_add_preserve_permissions_column.sql" author="abhinav">
+      <sqlFile path="liquibase/20260223_01_alter_jobconfig_add_preserve_permissions_column.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260223_01_alter_jobconfig_add_preserve_permissions_column_rollback.sql"/>
+      </rollback>
+   </changeSet>
 </databaseChangeLog>

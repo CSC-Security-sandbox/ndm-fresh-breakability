@@ -73,6 +73,10 @@ export class MigrateJobConfigOptions {
   @IsBoolean()
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: "Preserve permissions flag", example: true })
+  @IsBoolean()
+  preservePermissions: boolean;
+
   @ApiProperty({ description: 'Skip Files time duration', example: '1h' })
   @IsString()
   skipFile: string

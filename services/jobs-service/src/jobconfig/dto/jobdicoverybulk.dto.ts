@@ -70,6 +70,10 @@ export class JobConfigDiscoverBulk {
   @IsBoolean()
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: "Preserve permissions flag", example: true })
+  @IsBoolean()
+  preservePermissions: boolean;
+
   @ApiProperty({ description: "Scan Alternate Data Streams flag (Windows/SMB only)", example: false, required: false })
   @IsOptional()
   @IsBoolean()
@@ -178,6 +182,15 @@ export class UpdateMigrationConfigDto {
   preserveAccessTime?: boolean;
 
   @ApiProperty({ 
+    description: 'Preserve permissions flag', 
+    example: true,
+    required: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  preservePermissions?: boolean;
+
+  @ApiProperty({ 
     description: 'Skip file configuration', 
     required: false,
     example: '15-Mins'
@@ -229,6 +242,14 @@ export class MigrateJobConfigOptions {
   @ApiProperty({ description: "Preserve access time flag", example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
+
+  @ApiProperty({ 
+    description: 'Preserve permissions flag', 
+    example: true,
+    required: false
+  })
+  @IsBoolean()
+  preservePermissions?: boolean;
 }
 
 export class MigrateConfig {

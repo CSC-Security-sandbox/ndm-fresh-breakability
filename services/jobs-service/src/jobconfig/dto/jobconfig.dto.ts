@@ -30,6 +30,11 @@ export class JobConfigDto {
   @IsBoolean()
   preserveAccessTime?: boolean;
 
+  @ApiProperty({ description: 'Preserve permissions flag', example: true})
+  @IsOptional()
+  @IsBoolean()
+  preservePermissions?: boolean;
+
   @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)', example: false, required: false })
   @IsOptional()
   @IsBoolean()

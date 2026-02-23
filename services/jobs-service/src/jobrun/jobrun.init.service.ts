@@ -191,6 +191,7 @@ export class JobRunInitService {
         sourceWorkingDir: this.mountBasePath,
         targetWorkingDir: this.mountBasePath,
         preserveAccessTime: details.preserveAccessTime,
+        preservePermissions: details.preservePermissions,
         excludeOlderThan: details.excludeOlderThan,
         shouldScanADS: details.shouldScanADS,
         skipFile: details.skipFile,
@@ -238,6 +239,7 @@ export class JobRunInitService {
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig?.preserveAccessTime,
+      preservePermissions: jobConfig?.preservePermissions,
       excludeFilePatterns: jobConfig?.excludeFilePatterns,
       excludeOlderThan: jobConfig?.excludeOlderThan,
       connection: {
@@ -282,6 +284,7 @@ export class JobRunInitService {
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
+      preservePermissions: jobConfig.preservePermissions,
       shouldScanADS: jobConfig.shouldScanADS ?? false,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
       excludeOlderThan: jobConfig.excludeOlderThan,
@@ -633,6 +636,7 @@ export class JobRunInitService {
       {
         excludeFilePattern: jobRunConfig.excludeFilePatterns,
         preserveAccessTime: jobRunConfig.preserveAccessTime,
+        preservePermissions: jobRunConfig.preservePermissions,
         shouldScanADS: jobRunConfig.shouldScanADS ?? false,
         skipsFilesModifiedInLast: jobRunConfig?.skipFile,
         excludeOlderThan: !!jobRunConfig.excludeOlderThan

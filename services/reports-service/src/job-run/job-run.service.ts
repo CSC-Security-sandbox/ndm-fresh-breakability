@@ -147,6 +147,7 @@ export class JobRunService {
         },
         options: {
           preserveAccessTime: true,
+          preservePermissions: true,
           excludeOlderThan: true,
           excludeFilePatterns: true,
           skipFile: true,
@@ -190,6 +191,7 @@ export class JobRunService {
       },
       jobOptions: jobRun.options && {
         preserveAccessTime: jobRun.options.preserveAccessTime,
+        preservePermissions: jobRun.options.preservePermissions,
         excludeOlderThan: jobRun.options.excludeOlderThan,
         excludeFilePatterns: jobRun.options.excludeFilePatterns,
         skipFile: jobRun.options.skipFile,

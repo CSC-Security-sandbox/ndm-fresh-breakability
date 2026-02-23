@@ -231,6 +231,7 @@ export function withBulkMigrateCreateForm(
           "\n"
         ),
         preserve_a_time: true,
+        preserve_permissions: true,
         sid_mapping: "",
         uid_mapping: "",
         migrate_file_option: MIGRATE_OPTION_ENUM.ALL,
@@ -402,6 +403,7 @@ export function withBulkMigrateCreateForm(
         ),
 
         preserveAccessTime: optionForm.formState?.preserve_a_time,
+        preservePermissions: optionForm.formState?.preserve_permissions,
       };
 
       preCheckApi(body)
@@ -537,6 +539,7 @@ export function withBulkMigrateCreateForm(
           excludeFilePatterns:
             optionForm.formState.exclude_file_patterns?.replaceAll("\n", ","),
           preserveAccessTime: optionForm.formState?.preserve_a_time,
+          preservePermissions: optionForm.formState?.preserve_permissions,
           skipFile: `${optionForm.formState?.skipFileNum}-${optionForm.formState?.skipFileOption?.value}`,
         },
       };

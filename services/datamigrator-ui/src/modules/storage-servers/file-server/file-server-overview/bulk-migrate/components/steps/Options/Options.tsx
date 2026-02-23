@@ -30,13 +30,23 @@ const Options = () => {
     <FormFrame>
       <Box className="p-6 flex">
         <Box className="w-3/6 flex flex-col gap-10">
-          <Box className="flex gap-2 items-center">
-            <Toggle name="preserve_a_time" form={optionForm}>
-              Preserve a-time
-            </Toggle>
-            <Popover placement="right" verticalPlacement="center">
-              In order to preserve access time, toggle it on.
-            </Popover>
+          <Box className="flex gap-6 items-center">
+            <Box className="flex gap-2 items-center">
+              <Toggle name="preserve_a_time" form={optionForm}>
+                Preserve a-time
+              </Toggle>
+              <Popover placement="right" verticalPlacement="center">
+                In order to preserve access time, toggle it on.
+              </Popover>
+            </Box>
+            <Box className="flex gap-2 items-center">
+              <Toggle name="preserve_permissions" form={optionForm}>
+                Preserve Permissions
+              </Toggle>
+              <Popover placement="right" verticalPlacement="center">
+                Preserve file and directory source permissions (on destination)
+              </Popover>
+            </Box>
           </Box>
           <MigrateFileOption />
           <Box className="w-5/6 flex flex-col gap-1">
@@ -85,6 +95,7 @@ const Options = () => {
               name="upload_uid_mapping"
               placeholder="Choose a file"
               className="!mb-0"
+              disabled={!optionForm.formState.preserve_permissions}
               labelChildren={
                 <Box className="flex gap-1 items-center">
                   <Button
@@ -95,10 +106,15 @@ const Options = () => {
                         "gid-template.csv"
                       )
                     }
+                    disabled={!optionForm.formState.preserve_permissions}
                   >
                     Download Template
                   </Button>
-                  <Popover>Download/Upload GID & UID Mapping</Popover>
+                  <Popover>
+                    {optionForm.formState.preserve_permissions
+                      ? "Download/Upload GID & UID Mapping"
+                      : "Enable 'Preserve Permissions' to upload GID/UID Mapping"}
+                  </Popover>
                 </Box>
               }
               errorMessage={
@@ -115,6 +131,7 @@ const Options = () => {
               name="upload_sid_mapping"
               placeholder="Choose a file"
               className="!mb-0"
+              disabled={!optionForm.formState.preserve_permissions}
               labelChildren={
                 <Box className="flex gap-1 items-center">
                   <Button
@@ -125,10 +142,15 @@ const Options = () => {
                         "sid-template.csv"
                       )
                     }
+                    disabled={!optionForm.formState.preserve_permissions}
                   >
                     Download Template
                   </Button>
-                  <Popover>Download/Upload SID Mapping</Popover>
+                  <Popover>
+                    {optionForm.formState.preserve_permissions
+                      ? "Download/Upload SID Mapping"
+                      : "Enable 'Preserve Permissions' to upload SID Mapping"}
+                  </Popover>
                 </Box>
               }
               errorMessage={

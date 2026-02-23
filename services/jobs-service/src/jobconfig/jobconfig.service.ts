@@ -194,6 +194,7 @@ export class JobConfigService {
       {
         excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
         preserveAccessTime: bulkDiscovery.preserveAccessTime,
+        preservePermissions: bulkDiscovery.preservePermissions,
         shouldScanADS: bulkDiscovery.shouldScanADS ?? false,
         excludeOlderThan: bulkDiscovery.excludeOlderThan,
         firstRunAt: firstRunAt,
@@ -213,6 +214,7 @@ export class JobConfigService {
             excludeFilePatterns: bulkDiscovery.excludeFilePatterns,
             jobType: JobType.DISCOVER,
             preserveAccessTime: bulkDiscovery.preserveAccessTime,
+            preservePermissions: bulkDiscovery.preservePermissions,
             shouldScanADS: bulkDiscovery.shouldScanADS ?? false,
             sourcePathId: path,
             excludeOlderThan: bulkDiscovery.excludeOlderThan,
@@ -559,6 +561,7 @@ export class JobConfigService {
         firstRunAt: firstRunAt,
         scheduler: ScheduleStatus.SCHEDULING,
         preserveAccessTime: false,
+        preservePermissions: true,
         sourcePathId: uuidv4(),
         createdBy: speedTest.createdBy,
       });
@@ -715,6 +718,7 @@ export class JobConfigService {
             {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+              preservePermissions: bulkMigrate?.options?.preservePermissions,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan ?? null,
               skipFile: bulkMigrate?.options?.skipFile,
               status: JobStatus.Active,
@@ -781,6 +785,7 @@ export class JobConfigService {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               jobType: JobType.MIGRATE,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
+              preservePermissions: bulkMigrate?.options?.preservePermissions,
               sourcePathId: config?.sourcePathId,
               sourceDirectoryPath: config?.sourceDirectoryPath || null,
               targetPathId: destinationPath,
@@ -922,6 +927,7 @@ export class JobConfigService {
                   futureScheduleAt: null,
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
+                  preservePermissions: config.preservePermissions,
                   firstRunAt: new Date(),
                   excludeOlderThan: config.excludeOlderThan,
                 })
@@ -941,6 +947,7 @@ export class JobConfigService {
                       ? JobStatus.Active
                       : config.status,
                   preserveAccessTime: config.preserveAccessTime,
+                  preservePermissions: config.preservePermissions,
                   firstRunAt: new Date(),
                 });
                 updatedCutoverJobs.push({ ...existingCutover, ...config });
@@ -1253,6 +1260,7 @@ export class JobConfigService {
               .join("")
           : "-",
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.preservePermissions]: jobConfig.preservePermissions ? "Enabled" : "Disabled",
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
         [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
@@ -1261,6 +1269,7 @@ export class JobConfigService {
     } else if (jobConfig.jobType === JobType.CUT_OVER) {
       return {
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
+        [JobConfigurationEnum.preservePermissions]: jobConfig.preservePermissions ? "Enabled" : "Disabled",
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
       }

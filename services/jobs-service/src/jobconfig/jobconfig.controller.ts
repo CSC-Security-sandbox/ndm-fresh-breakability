@@ -256,6 +256,7 @@ export class JobConfigController {
       firstRunAt: updateData.firstRunAt,
       excludeOlderThan: updateData.excludeOlderThan,
       preserveAccessTime: updateData.preserveAccessTime,
+      preservePermissions: updateData.preservePermissions,
       futureSchedule: updateData.futureScheduleAt,
       skipFile: updateData.skipFile,
     };

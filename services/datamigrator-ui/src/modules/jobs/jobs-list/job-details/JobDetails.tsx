@@ -475,6 +475,7 @@ const JobDetails = () => {
   const isScheduledForFuture = jobScheduledFor ? dayjs.utc(jobScheduledFor).isAfter(dayjs.utc()) : false;
   const jobProtocol = jobConfigDetails?.sourceServer?.protocol;
   const preserveATime = configurationsSetToJob?.["Preserve a-time"];
+  const preservePermissions = configurationsSetToJob?.["Preserve permissions"];
   const skipFilesModified = configurationsSetToJob?.["Skip Files modified in last"] || "-";
 
   const MigrationConfigDetailsModalContent = ({
@@ -509,6 +510,7 @@ const JobDetails = () => {
     const optionForm: BlueXpFormType<OptionsFormType> = useForm({
         exclude_file_patterns: Array.isArray(excludeFilePatterns) ? excludeFilePatterns.join("\n") : "",
         preserve_a_time: preserveATime  === "Enabled",
+        preserve_permissions: preservePermissions === "Enabled",
         sid_mapping: "",
         uid_mapping: "",
         migrate_file_option: migrateFileOption,
@@ -583,6 +585,7 @@ const JobDetails = () => {
         firstRunAt: mappingData.scheduleTime === "schedule_date" ? mappingData.scheduledDateTime?.toISOString() : null,
         excludeOlderThan: formData.migrate_file_option === "excludeFilesOlderThan" ? formData.migrate_file_option_exclude?.toISOString() : null,
         preserveAccessTime: formData.preserve_a_time,
+        preservePermissions: formData.preserve_permissions,
         skipFile: `${formData.skipFileNum}-${formData.skipFileOption?.value || 'M'}`,
         futureScheduleAt: futureScheduleValue,
       };
@@ -654,18 +657,33 @@ const JobDetails = () => {
         <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
           <Box className="p-6 flex">
             <Box className="w-3/6 flex flex-col gap-8">
-              <Box className="flex gap-2 items-center">
-                <Toggle 
-                  name="preserve_a_time"
-                  form={optionForm}
-                  value={optionForm.formState.preserve_a_time}
-                  toggle={(value) => optionForm.wrappedHandleFormChange('preserve_a_time')(value, null)}
-                >
-                  Preserve a-time
-                </Toggle>
-                <Popover placement="right" verticalPlacement="center">
-                  In order to preserve access time, toggle it on.
-                </Popover>
+              <Box className="flex gap-6 items-center">
+                <Box className="flex gap-2 items-center">
+                  <Toggle 
+                    name="preserve_a_time"
+                    form={optionForm}
+                    value={optionForm.formState.preserve_a_time}
+                    toggle={(value) => optionForm.wrappedHandleFormChange('preserve_a_time')(value, null)}
+                  >
+                    Preserve a-time
+                  </Toggle>
+                  <Popover placement="right" verticalPlacement="center">
+                    In order to preserve access time, toggle it on.
+                  </Popover>
+                </Box>
+                <Box className="flex gap-2 items-center">
+                  <Toggle 
+                    name="preserve_permissions"
+                    form={optionForm}
+                    value={optionForm.formState.preserve_permissions}
+                    toggle={(value) => optionForm.wrappedHandleFormChange('preserve_permissions')(value, null)}
+                  >
+                    Preserve Permissions
+                  </Toggle>
+                  <Popover placement="right" verticalPlacement="center">
+                    Preserve file and directory permissions (ACLs for SMB, POSIX for NFS).
+                  </Popover>
+                </Box>
               </Box>
               <Box>
                 <Box className="flex gap-2 items-center mb-1">
@@ -761,6 +779,7 @@ const JobDetails = () => {
                     labelClassName="!mb-0 font-semibold"
                     name="upload_uid_mapping"
                     placeholder="Choose a file"
+                    disabled={!optionForm.formState.preserve_permissions}
                     labelChildren={
                       <Box className="flex gap-1 items-center">
                         <Button
@@ -771,10 +790,15 @@ const JobDetails = () => {
                               "gid-template.csv"
                             )
                           }
+                          disabled={!optionForm.formState.preserve_permissions}
                         >
                           Download Template
                         </Button>
-                        <Popover>Download/Upload GID & UID Mapping</Popover>
+                        <Popover>
+                          {optionForm.formState.preserve_permissions
+                            ? "Download/Upload GID & UID Mapping to map source IDs to target IDs for preserving permissions"
+                            : "Enable 'Preserve Permissions' toggle to upload GID/UID Mapping"}
+                        </Popover>
                       </Box>
                     }
                     errorMessage={
@@ -792,6 +816,7 @@ const JobDetails = () => {
                     labelClassName="!mb-0 font-semibold"
                     name="upload_sid_mapping"
                     placeholder="Choose a file"
+                    disabled={!optionForm.formState.preserve_permissions}
                     labelChildren={
                       <Box className="flex gap-1 items-center">
                         <Button
@@ -802,10 +827,15 @@ const JobDetails = () => {
                               "sid-template.csv"
                             )
                           }
+                          disabled={!optionForm.formState.preserve_permissions}
                         >
                           Download Template
                         </Button>
-                        <Popover>Download/Upload SID Mapping</Popover>
+                        <Popover>
+                          {optionForm.formState.preserve_permissions
+                            ? "Download/Upload SID Mapping to map source SIDs to target SIDs for preserving permissions"
+                            : "Enable 'Preserve Permissions' toggle to upload SID Mapping"}
+                        </Popover>
                       </Box>
                     }
                     errorMessage={

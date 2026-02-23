@@ -88,7 +88,7 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'permissions' })
     async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (command.metadata?.mode && !command?.metadata?.isSymLink) {
+        if (command.metadata?.mode && !command?.metadata?.isSymLink && jobContext.jobConfig.options.preservePermissions) {
             try {
                 await fs.promises.chmod(targetPath, command.metadata.mode);
             } catch (error) {
@@ -105,7 +105,7 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'gid_uid' })
     async stampGIDandUID({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (command.metadata?.gid && command.metadata?.uid && process.platform !== 'win32') {
+        if (command.metadata?.gid && command.metadata?.uid && process.platform !== 'win32' && jobContext.jobConfig.options.preservePermissions) {
             try {
                 let gid = command.metadata.gid?.toString();
                 let uid = command.metadata.uid?.toString();
@@ -117,13 +117,13 @@ export class StampMetaService {
                     gid = gid_res;
                     uid = uid_res;
                 }
-                if (gid && uid){
-                    if(command?.metadata?.isSymLink){
+                if (gid && uid) {
+                    if (command?.metadata?.isSymLink) {
                         await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
-                    }else{
+                    } else {
                         await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
-                    }   
-                }                 
+                    }
+                }
             } catch (error) {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
@@ -177,19 +177,21 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'acl' })
     async stampObjectACL({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        try {
-            this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
-          const { output, errors } = await this.winOperationService.stampAclOperation({command, jobContext, sourcePath, targetPath, errorType});
-          if(errors && errors.length > 0){
-            const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
-            await jobContext.publishToErrorStream(dmErr);
-          }
-        } catch (error) {
-            const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
-            this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-            const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-            await jobContext.publishToErrorStream(dmErr);
-            output.sourceErrors.push(error.code);
+        if (jobContext.jobConfig.options.preservePermissions) {
+            try {
+                this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
+                const { output, errors } = await this.winOperationService.stampAclOperation({ command, jobContext, sourcePath, targetPath, errorType });
+                if (errors && errors.length > 0) {
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
+                    await jobContext.publishToErrorStream(dmErr);
+                }
+            } catch (error) {
+                const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
+                this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
+                const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+                await jobContext.publishToErrorStream(dmErr);
+                output.sourceErrors.push(error.code);
+            }
         }
         return output;
     }

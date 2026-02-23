@@ -107,6 +107,7 @@ export const OPTIONS_FORM = Yup.object().shape({
     "Invalid selection."
   ),
   preserve_a_time: Yup.boolean(),
+  preserve_permissions: Yup.boolean(),
   sid_mapping: Yup.string().notRequired(),
   uid_mapping: Yup.string().notRequired(),
   incremental_sync_schedule_weekly: Yup.string()

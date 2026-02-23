@@ -27,6 +27,7 @@ export interface Destination {
 
 export interface Settings {
   preserveAccessTime: boolean;
+  preservePermissions: boolean;
 }
 
 export interface ServerCredential {

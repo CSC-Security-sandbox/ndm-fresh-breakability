@@ -154,6 +154,7 @@ const JobRunDetails = () => {
     const jobRunProtocol = jobRunDetails?.jobConfig?.sourceServer?.protocol;
     const jobRunConfig = jobRunDetails?.jobOptions;
     const preserveATime = jobRunConfig?.preserveAccessTime ? "Enabled" : "Disabled";
+    const preservePermissions = jobRunConfig?.preservePermissions ? "Enabled" : "Disabled";
     const excludeOlderThan = jobRunConfig?.excludeOlderThan ? format(new Date(jobRunConfig.excludeOlderThan), "dd MMM yyyy, hh:mm a") : "-";
     const excludeFilePatterns = jobRunConfig?.excludeFilePatterns?.split(',').join('\n') || "-";
     if (isDiscoveryJob) {
@@ -209,6 +210,10 @@ const JobRunDetails = () => {
                       <Text>{preserveATime}</Text>
                     </Box>
                     <Box>
+                      <Text className="!mb-0 font-semibold">Preserve Permissions:</Text>
+                      <Text>{preservePermissions}</Text>
+                    </Box>
+                    <Box>
                       <Text className="!mb-0 font-semibold">Exclude files older than:</Text>
                       <Text>{excludeOlderThan}</Text>
                     </Box>
@@ -261,6 +266,10 @@ const JobRunDetails = () => {
                     <Box>
                       <Text className="!mb-0 font-semibold">Preserve a-time:</Text>
                       <Text>{preserveATime}</Text>
+                    </Box>
+                    <Box>
+                      <Text className="!mb-0 font-semibold">Preserve Permissions:</Text>
+                      <Text>{preservePermissions}</Text>
                     </Box>
                     <Box>
                       <Text className="!mb-0 font-semibold">Exclude files older than:</Text>
