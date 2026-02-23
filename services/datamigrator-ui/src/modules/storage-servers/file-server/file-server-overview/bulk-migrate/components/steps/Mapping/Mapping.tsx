@@ -26,7 +26,7 @@ import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-
 import ExploreModal, { useExploreModal, SelectedItemInfo } from "@modules/storage-servers/file-server/file-server-overview/components/ExploreModal";
 import type { VolumeType } from "@/types/app.type";
 import { AddIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
-import { EditIcon } from "@netapp/bxp-style/react-icons/Action";
+import { CloseIcon, EditIcon } from "@netapp/bxp-style/react-icons/Action";
 
 const Mapping = () => {
   const {
@@ -591,16 +591,28 @@ const Mapping = () => {
               <>
                 <Text className="text-sm font-semibold text-gray-900">Source Directory</Text>
                 <TruncatedPathCell value={sourceDirectoryPath} />
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline mt-1 border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
-                  style={{ color: "#0067c5" }}
-                  aria-label="Edit source directory"
-                  onClick={openSourceExploreModal}
-                >
-                  <EditIcon size={16} aria-hidden />
-                  Edit Source Directory
-                </button>
+                <Box className="flex items-center gap-3 mt-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    style={{ color: "#0067c5" }}
+                    aria-label="Edit source directory"
+                    onClick={openSourceExploreModal}
+                  >
+                    <EditIcon size={16} aria-hidden />
+                    Edit Source Directory
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    style={{ color: "#0067c5" }}
+                    aria-label="Clear source directory"
+                    onClick={() => setSourceDirectoryPath("")}
+                  >
+                    <CloseIcon size={16} aria-hidden />
+                    Clear source directory
+                  </button>
+                </Box>
               </>
             )}
           </Box>
@@ -625,16 +637,28 @@ const Mapping = () => {
               <>
                 <Text className="text-sm font-semibold text-gray-900">Destination Directory</Text>
                 <TruncatedPathCell value={destinationDirectoryPath} />
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline mt-1 border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
-                  style={{ color: "#0067c5" }}
-                  aria-label="Edit destination directory"
-                  onClick={openDestinationExploreModal}
-                >
-                  <EditIcon size={16} aria-hidden />
-                  Edit Destination Directory
-                </button>
+                <Box className="flex items-center gap-3 mt-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    style={{ color: "#0067c5" }}
+                    aria-label="Edit destination directory"
+                    onClick={openDestinationExploreModal}
+                  >
+                    <EditIcon size={16} aria-hidden />
+                    Edit Destination Directory
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    style={{ color: "#0067c5" }}
+                    aria-label="Clear destination directory"
+                    onClick={() => setDestinationDirectoryPath("")}
+                  >
+                    <CloseIcon size={16} aria-hidden />
+                    Clear destination directory
+                  </button>
+                </Box>
               </>
             )}
           </Box>
