@@ -5,6 +5,7 @@ import { Show } from "@components/show/Show";
 import { UpgradeContext } from "../context/context";
 import UploadFileSelector from "./UploadFileSelector";
 import UploadProgress from "./UploadProgress";
+import StagingProgress from "./StagingProgress";
 import {
   UPLOAD_LABEL,
   UPGRADE_LABEL,
@@ -30,6 +31,7 @@ const UpgradeContent = () => {
     isProcessing,
     isUploadInProgress,
     inProgressFileName,
+    workerUploadStatus,
   } = useContext(UpgradeContext);
 
   const showResetButton =
@@ -117,9 +119,9 @@ const UpgradeContent = () => {
           </Show.When>
         </Show>
 
-        {/* Upgrade Button - Calls handleUpgrade (DRAFT - controlled by UPGRADE_ENABLED flag in context) */}
+        {/* Upgrade Button - Enabled only when all workers have binaries staged */}
         <Show>
-          <Show.When isTrue={isUploaded || showUpgradeUI}>
+          <Show.When isTrue={(isUploaded || showUpgradeUI) && workerUploadStatus === 'COMPLETED'}>
             <Button
               onClick={handleUpgrade}
               disabled={isUpgrading}
@@ -151,11 +153,16 @@ const UpgradeContent = () => {
               </code>
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              Bundle is ready for upgrade. Click the Upgrade button to proceed.
+              {workerUploadStatus === 'COMPLETED'
+                ? 'All workers staged. Click Upgrade to proceed.'
+                : 'Distributing binaries to workers...'}
             </p>
           </Box>
         </Show.When>
       </Show>
+
+      {/* Worker binary staging progress */}
+      <StagingProgress />
     </Card>
   );
 };

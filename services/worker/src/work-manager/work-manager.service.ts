@@ -1,3 +1,5 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -48,6 +50,7 @@ export class WorkManagerService implements OnModuleDestroy{
   private isRefreshingConnection = false; // Prevent concurrent refresh operations
   private temporalConfig: TemporalConfig = null;
   private readonly jwtRefreshInterval: number;
+  private workerVersion: string;
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -78,6 +81,13 @@ export class WorkManagerService implements OnModuleDestroy{
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
     try {
+      // Read worker version from versions.conf and set in process.env
+      // so it gets sent to config-service during registration
+      await this.loadWorkerVersion();
+
+      // Check UPGRADED flag and send ACK to CP if this is a post-upgrade boot
+      await this.checkUpgradedFlagAndAck();
+
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
       const accessToken = await this.authService.getAccessToken();
@@ -128,6 +138,126 @@ export class WorkManagerService implements OnModuleDestroy{
     } catch (err) {
       this.logger.error(`Error on setting temporal connection: ${err}`);
       throw err;
+    }
+  }
+
+  /**
+   * Read current_version from versions.conf and set this.workerVersion.
+   */
+  private async loadWorkerVersion(): Promise<void> {
+    try {
+      const versionsPath = process.platform === 'win32'
+        ? this.configService.get<string>('worker.metrics.versionsPathWindows')
+        : this.configService.get<string>('worker.metrics.versionsPathLinux');
+
+      try {
+        await fs.access(versionsPath);
+      } catch {
+        this.logger.warn('versions.conf not found or current_version missing, workerVersion not set');
+        return;
+      }
+
+      const content = await fs.readFile(versionsPath, 'utf8');
+      const match = content.match(/current_version=(.+)/);
+      if (match && match[1]) {
+        this.workerVersion = match[1].trim();
+        this.logger.log(`Worker version: ${this.workerVersion}`);
+        return;
+      }
+      this.logger.warn('versions.conf not found or current_version missing, workerVersion not set');
+    } catch (err) {
+      this.logger.error(`Failed to read worker version: ${err.message || err}`);
+    }
+  }
+
+  /**
+   * Check if the UPGRADED flag is set to "true" (written by upgrade.sh/ps1).
+   * If so, send an execution ACK to CP and clear the flag.
+   */
+  private async checkUpgradedFlagAndAck(): Promise<void> {
+    try {
+      const confDir = process.platform === 'win32'
+        ? this.configService.get<string>('worker.upgrade.confDirWindows')
+        : this.configService.get<string>('worker.upgrade.confDirLinux');
+      const upgradedPath = path.join(confDir, 'UPGRADED');
+      const bundleInfoPath = path.join(confDir, 'upgrade-bundle-id-info');
+
+      try {
+        await fs.access(upgradedPath);
+      } catch {
+        return;
+      }
+
+      const content = (await fs.readFile(upgradedPath, 'utf8')).trim();
+      if (content !== 'true') return;
+
+      const version = this.workerVersion;
+      if (!version) {
+        this.logger.warn('[checkUpgradedFlagAndAck] - UPGRADED flag is true but workerVersion not set, skipping ACK');
+        return;
+      }
+
+      let bundleId: string | undefined;
+      try {
+        await fs.access(bundleInfoPath);
+        const infoContent = await fs.readFile(bundleInfoPath, 'utf8');
+        const match = infoContent.match(/bundle_id=(.+)/);
+        if (match) bundleId = match[1].trim();
+      } catch {
+        this.logger.log('[checkUpgradedFlagAndAck] - upgrade-bundle-id-info file not found, skipping');
+      }
+
+      this.logger.log(`[checkUpgradedFlagAndAck] - Post-upgrade boot detected, version ${version}, bundleId ${bundleId || 'unknown'}`);
+
+      if (!bundleId) {
+        this.logger.warn(
+          '[checkUpgradedFlagAndAck] - bundleId missing from upgrade-bundle-id-info, ' +
+          'clearing UPGRADED flag without sending ACK to avoid retry loop',
+        );
+        await fs.writeFile(upgradedPath, 'false', 'utf8');
+        try {
+          await fs.unlink(bundleInfoPath);
+        } catch {
+          this.logger.log('[checkUpgradedFlagAndAck] - upgrade-bundle-id-info file not found, skipping');
+        }
+        return;
+      }
+
+      const cpBaseUrl = process.env.CP_BASE_URL
+        || (process.env.CONTROL_PLANE_IP ? `https://${process.env.CONTROL_PLANE_IP}` : null);
+
+      if (!cpBaseUrl) {
+        this.logger.warn('[checkUpgradedFlagAndAck] - No CP_BASE_URL or CONTROL_PLANE_IP, cannot send ACK');
+        return;
+      }
+
+      const ackUrl = `${cpBaseUrl}/api/v1/upgrade/worker/execution-ack`;
+      const accessToken = await this.authService.getAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      await firstValueFrom(
+        this.httpService.post(ackUrl, {
+          workerId: this.workerId,
+          bundleId,
+          version,
+        }, { headers, timeout: 30000 }),
+      );
+
+      this.logger.log(`[checkUpgradedFlagAndAck] - ACK sent for version ${version}, bundleId ${bundleId}`);
+
+      await fs.writeFile(upgradedPath, 'false', 'utf8');
+      try {
+        await fs.unlink(bundleInfoPath);
+      } catch {
+        this.logger.log('[checkUpgradedFlagAndAck] - upgrade-bundle-id-info file not found, skipping');
+      }
+      this.logger.log('[checkUpgradedFlagAndAck] - UPGRADED flag cleared, bundle info removed');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[checkUpgradedFlagAndAck] - Failed to send ACK: ${msg}`);
     }
   }
 

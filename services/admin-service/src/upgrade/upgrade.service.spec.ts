@@ -6,11 +6,14 @@ import {
   BadRequestException,
   NotFoundException,
   InternalServerErrorException,
+  StreamableFile,
 } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpgradeService } from './upgrade.service';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
-import { UploadStatus, UpgradeStatus} from './enums/upgrade.enums';
+import { WorkerEntity } from '../entities/worker.entity';
+import { WorkflowService } from '../workflow/workflow.service';
+import { UploadStatus, UpgradeStatus, WorkerAggregateStatus } from './enums/upgrade.enums';
 import {
   mockLoggerService,
   mockLoggerFactory,
@@ -50,6 +53,8 @@ jest.mock('child_process', () => ({
 describe('UpgradeService', () => {
   let service: UpgradeService;
   let upgradeBundleRepository: jest.Mocked<Repository<UpgradeBundle>>;
+  let workerRepository: any;
+  let workflowService: any;
 
   const mockConfigService = {
     getOrThrow: jest.fn().mockReturnValue('/upload'),
@@ -59,8 +64,7 @@ describe('UpgradeService', () => {
   const createMockBundle = (overrides: Partial<UpgradeBundle> = {}): UpgradeBundle => ({
     id: 'bundle-uuid-123',
     fileName: 'upgrade-v2.1.0.tar.gz',
-    // Note: filePath removed - deploy path is derived from version: /upload/${version}
-    fileSize: 1024 * 1024 * 15, // 100MB
+    fileSize: 1024 * 1024 * 15,
     version: 'v2.1.0',
     uploadStatus: UploadStatus.UPLOADING,
     upgradeStatus: UpgradeStatus.PENDING,
@@ -70,6 +74,12 @@ describe('UpgradeService', () => {
     upgradeCompletedAt: null,
     uploadedBy: 'user-123',
     upgradedBy: null,
+    multicastWorkflowId: null,
+    executionWorkflowId: null,
+    workerUploadTriggeredAt: null,
+    upgradeWorkerTriggeredAt: null,
+    workerUploadStatus: WorkerAggregateStatus.IDLE,
+    workerUpgradeStatus: WorkerAggregateStatus.IDLE,
     created_at: new Date(),
     created_by: 'user-123',
     updated_at: new Date(),
@@ -114,6 +124,28 @@ describe('UpgradeService', () => {
           },
         },
         {
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn().mockReturnValue({
+              innerJoinAndSelect: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              getMany: jest.fn().mockResolvedValue([]),
+            }),
+          },
+        },
+        {
+          provide: WorkflowService,
+          useValue: {
+            startWorkflow: jest.fn(),
+            getWorkflowStatus: jest.fn(),
+            terminateWorkflow: jest.fn(),
+          },
+        },
+        {
           provide: ConfigService,
           useValue: mockConfigService,
         },
@@ -126,6 +158,8 @@ describe('UpgradeService', () => {
 
     service = module.get<UpgradeService>(UpgradeService);
     upgradeBundleRepository = module.get(getRepositoryToken(UpgradeBundle));
+    workerRepository = module.get(getRepositoryToken(WorkerEntity));
+    workflowService = module.get(WorkflowService);
 
     resetLoggerMocks();
   });
@@ -164,6 +198,14 @@ describe('UpgradeService', () => {
               find: jest.fn(),
               update: jest.fn(),
             },
+          },
+          {
+            provide: getRepositoryToken(WorkerEntity),
+            useValue: { find: jest.fn(), update: jest.fn(), createQueryBuilder: jest.fn() },
+          },
+          {
+            provide: WorkflowService,
+            useValue: { startWorkflow: jest.fn(), getWorkflowStatus: jest.fn() },
           },
           {
             provide: ConfigService,
@@ -804,8 +846,9 @@ describe('UpgradeService', () => {
             { name: 'docker', isDirectory: () => true, isFile: () => false },
             { name: 'helm', isDirectory: () => true, isFile: () => false },
             { name: 'worker', isDirectory: () => true, isFile: () => false },
-            { name: 'upgrade.sh', isDirectory: () => false, isFile: () => true },
-            { name: 'checksums.sha256', isDirectory: () => false, isFile: () => true },
+            { name: 'upgrade-playbook.yaml', isDirectory: () => false, isFile: () => true },
+            { name: 'upgrade.conf', isDirectory: () => false, isFile: () => true },
+            { name: 'checksums-v2.1.0.sha256', isDirectory: () => false, isFile: () => true },
           ] as any);
         }
         return Promise.resolve([]);
@@ -817,9 +860,9 @@ describe('UpgradeService', () => {
       // Mock checksum file - return string for checksum file, Buffer for chunks
       // SHA256 hash is 64 hex characters
       (mockFsPromises.readFile as jest.Mock).mockImplementation((filePath: any, encoding?: any) => {
-        if (typeof filePath === 'string' && filePath.includes('checksums.sha256')) {
+        if (typeof filePath === 'string' && filePath.includes('checksums-')) {
           // Return string when utf-8 encoding is specified - 64 char hash
-          return Promise.resolve('a123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  upgrade.sh\n');
+          return Promise.resolve('a123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  upgrade-playbook.yaml\n');
         }
         return Promise.resolve(Buffer.from('chunk data'));
       });
@@ -1011,7 +1054,7 @@ describe('UpgradeService', () => {
       await expect(processPromise).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('should handle missing checksums.sha256 file', async () => {
+    it('should handle missing checksums file', async () => {
       const dto = { fileName: 'upgrade-v2.1.0.tar.gz', fileSize: 15 * 1024 * 1024 };
       const savedBundle = createMockBundle();
       upgradeBundleRepository.findOne.mockResolvedValue(null);
@@ -1055,9 +1098,9 @@ describe('UpgradeService', () => {
         ] as any);
       });
 
-      // Mock access to indicate checksums.sha256 doesn't exist
+      // Mock access to indicate checksums file doesn't exist
       mockFsPromises.access.mockImplementation((filePath: string) => {
-        if (typeof filePath === 'string' && filePath.includes('checksums.sha256')) {
+        if (typeof filePath === 'string' && filePath.includes('checksums-')) {
           return Promise.reject(new Error('ENOENT'));
         }
         return Promise.resolve(undefined);
@@ -1098,7 +1141,7 @@ describe('UpgradeService', () => {
 
       // Mock readFile to return empty checksum file - return string for checksum
       (mockFsPromises.readFile as jest.Mock).mockImplementation((filePath: any, encoding?: any) => {
-        if (typeof filePath === 'string' && filePath.includes('checksums.sha256')) {
+        if (typeof filePath === 'string' && filePath.includes('checksums-')) {
           return Promise.resolve('');
         }
         return Promise.resolve(Buffer.from('chunk'));
@@ -1117,7 +1160,7 @@ describe('UpgradeService', () => {
           ] as any);
         }
         return Promise.resolve([
-          { name: 'checksums.sha256', isDirectory: () => false, isFile: () => true },
+          { name: 'checksums-v2.1.0.sha256', isDirectory: () => false, isFile: () => true },
         ] as any);
       });
 
@@ -1157,7 +1200,7 @@ describe('UpgradeService', () => {
 
       // Mock readFile to return invalid checksum format - return string for checksum
       (mockFsPromises.readFile as jest.Mock).mockImplementation((filePath: any, encoding?: any) => {
-        if (typeof filePath === 'string' && filePath.includes('checksums.sha256')) {
+        if (typeof filePath === 'string' && filePath.includes('checksums-')) {
           return Promise.resolve('invalid line without proper format\nno hash here');
         }
         return Promise.resolve(Buffer.from('chunk'));
@@ -1176,7 +1219,7 @@ describe('UpgradeService', () => {
           ] as any);
         }
         return Promise.resolve([
-          { name: 'checksums.sha256', isDirectory: () => false, isFile: () => true },
+          { name: 'checksums-v2.1.0.sha256', isDirectory: () => false, isFile: () => true },
         ] as any);
       });
 
@@ -1521,18 +1564,23 @@ describe('UpgradeService', () => {
       expect(result.message).toContain('Only pending upgrades can be skipped');
     });
 
-    it('should skip upgrade successfully', async () => {
+    it('should skip upgrade successfully (calls resetUpgrade)', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         upgradeStatus: UpgradeStatus.PENDING,
       });
       upgradeBundleRepository.findOne.mockResolvedValue(bundle);
       upgradeBundleRepository.update.mockResolvedValue(undefined);
+      workerRepository.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+      workflowService.terminateWorkflow = jest.fn().mockResolvedValue(false);
 
-      const result = await service.skipUpgrade('bundle-uuid-123');
+      const result = await service.skipUpgrade('bundle-uuid-123') as any;
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Upgrade skipped successfully');
       expect(result.bundleId).toBe(bundle.id);
       expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
         bundle.id,
@@ -1979,9 +2027,9 @@ describe('UpgradeService', () => {
       await expect(promise).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('should handle missing checksums.sha256 in bundle', async () => {
+    it('should handle missing checksums file in bundle', async () => {
       mockFsPromises.access.mockImplementation(async (p: string) => {
-        if (String(p).includes('checksums.sha256')) throw new Error('ENOENT');
+        if (String(p).includes('checksums-')) throw new Error('ENOENT');
       });
       mockFsPromises.rm.mockResolvedValue(undefined);
 
@@ -2036,7 +2084,7 @@ describe('UpgradeService', () => {
 
       const hash = 'a'.repeat(64);
       mockFsPromises.readFile.mockImplementation(async (p: any, enc?: any) => {
-        if (String(p).includes('checksums.sha256')) return `${hash}  file.txt\n`;
+        if (String(p).includes('checksums-')) return `${hash}  file.txt\n`;
         return Buffer.from('data');
       });
 
@@ -2071,7 +2119,7 @@ describe('UpgradeService', () => {
 
       const hash = 'a'.repeat(64);
       mockFsPromises.readFile.mockImplementation(async (p: any, enc?: any) => {
-        if (String(p).includes('checksums.sha256')) return `${hash}  file.txt\n`;
+        if (String(p).includes('checksums-')) return `${hash}  file.txt\n`;
         return Buffer.from('data');
       });
 
@@ -2197,6 +2245,246 @@ describe('UpgradeService', () => {
       await expect(service.processUpload(initResult.uploadId)).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // MULTICAST
+  // ═══════════════════════════════════════════════════════════════
+
+  describe('startMulticast', () => {
+    it('should return error when no healthy workers found', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue(['datamigrator-worker-linux-1.0.0.tar.gz'] as any);
+      mockFsPromises.stat.mockResolvedValue({ size: 1024 } as any);
+      workerRepository.createQueryBuilder.mockReturnValue({
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.startMulticast({ bundleId: 'b1', version: '1.0.0' });
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('No healthy workers');
+    });
+
+    it('should start multicast for healthy workers', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue(['datamigrator-worker-linux-1.0.0.tar.gz'] as any);
+      mockFsPromises.stat.mockResolvedValue({ size: 1024 } as any);
+      workerRepository.createQueryBuilder.mockReturnValue({
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          { workerId: 'w1' },
+          { workerId: 'w2' },
+        ]),
+      });
+      workerRepository.update.mockResolvedValue({});
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+      workflowService.startWorkflow.mockResolvedValue({
+        workflowId: 'BinaryMulticast-123',
+        firstExecutionRunId: 'run-1',
+      });
+
+      const result = await service.startMulticast({ bundleId: 'b1', version: '1.0.0' });
+      expect(result.status).toBe('started');
+      expect(result.message).toContain('2 active workers');
+    });
+
+    it('should reset workers on workflow start failure', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue(['datamigrator-worker-linux-1.0.0.tar.gz'] as any);
+      mockFsPromises.stat.mockResolvedValue({ size: 1024 } as any);
+      workerRepository.createQueryBuilder.mockReturnValue({
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ workerId: 'w1' }]),
+      });
+      workerRepository.update.mockResolvedValue({});
+      workflowService.startWorkflow.mockRejectedValue(new Error('Temporal down'));
+
+      await expect(service.startMulticast({ bundleId: 'b1', version: '1.0.0' })).rejects.toThrow('Temporal down');
+      expect(workerRepository.update).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('acknowledgeWorkerDownload', () => {
+    it('should set COMPLETED on success', async () => {
+      workerRepository.update.mockResolvedValue({});
+      workerRepository.count = jest.fn().mockResolvedValue(0);
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.acknowledgeWorkerDownload({
+        workerId: 'w1', bundleId: 'b1', version: '1.0.0', status: 'success',
+      });
+      expect(result).toEqual({ acknowledged: true });
+    });
+
+    it('should set FAILED on failure', async () => {
+      workerRepository.update.mockResolvedValue({});
+      workerRepository.count = jest.fn().mockResolvedValue(1);
+
+      const result = await service.acknowledgeWorkerDownload({
+        workerId: 'w1', bundleId: 'b1', version: '1.0.0', status: 'failed', message: 'checksum error',
+      });
+      expect(result).toEqual({ acknowledged: true });
+    });
+  });
+
+  describe('getMulticastStatus', () => {
+    it('should return workflow and worker statuses', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        multicastWorkflowId: 'BinaryMulticast-123',
+        workerUploadStatus: 'COMPLETED',
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'COMPLETED', completed: {} });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', workerName: 'w1', upgradeBundleStaged: 'COMPLETED', stats: { updated_at: new Date() } },
+      ]);
+
+      const result = await service.getMulticastStatus('b1');
+      expect(result.workflowId).toBe('BinaryMulticast-123');
+      expect(result.workflowStatus).toBe('COMPLETED');
+      expect(result.summary.total).toBe(1);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // EXECUTION
+  // ═══════════════════════════════════════════════════════════════
+
+  describe('startExecution', () => {
+    it('should return error when no staged workers', async () => {
+      workerRepository.find.mockResolvedValue([]);
+
+      const result = await service.startExecution({ bundleId: 'b1', version: '1.0.0' });
+      expect(result.status).toBe('error');
+      expect(result.message).toContain('No workers have completed binary staging');
+    });
+
+    it('should start execution for staged workers', async () => {
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1' },
+        { workerId: 'w2' },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+      workerRepository.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+      workflowService.startWorkflow.mockResolvedValue({
+        workflowId: 'UpgradeExecution-123',
+      });
+
+      const result = await service.startExecution({ bundleId: 'b1', version: '1.0.0' });
+      expect(result.status).toBe('started');
+      expect(result.triggeredWorkers).toEqual(['w1', 'w2']);
+    });
+
+    it('should reset workers on failure', async () => {
+      workerRepository.find.mockResolvedValue([{ workerId: 'w1' }]);
+      workerRepository.update.mockResolvedValue({});
+      workerRepository.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+      workflowService.startWorkflow.mockRejectedValue(new Error('fail'));
+
+      await expect(service.startExecution({ bundleId: 'b1', version: '1.0.0' })).rejects.toThrow('fail');
+    });
+  });
+
+  describe('acknowledgeExecution', () => {
+    it('should mark worker as COMPLETED on matching version', async () => {
+      workerRepository.findOne.mockResolvedValue({ workerId: 'w1', stagedVersion: '1.0.0' });
+      workerRepository.update.mockResolvedValue({});
+      workerRepository.count = jest.fn().mockResolvedValue(0);
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.acknowledgeExecution({ workerId: 'w1', bundleId: 'b1', version: '1.0.0' });
+      expect(result).toEqual({ acknowledged: true });
+    });
+
+    it('should return not found for unknown worker', async () => {
+      workerRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.acknowledgeExecution({ workerId: 'w1', bundleId: 'b1', version: '1.0.0' });
+      expect(result.acknowledged).toBe(false);
+      expect(result.message).toContain('not found');
+    });
+
+    it('should fail on version mismatch', async () => {
+      workerRepository.findOne.mockResolvedValue({ workerId: 'w1', stagedVersion: '2.0.0' });
+      workerRepository.update.mockResolvedValue({});
+
+      const result = await service.acknowledgeExecution({ workerId: 'w1', bundleId: 'b1', version: '1.0.0' });
+      expect(result.acknowledged).toBe(false);
+      expect(result.message).toContain('mismatch');
+    });
+  });
+
+  describe('getExecutionStatus', () => {
+    it('should throw when no execution workflow found', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getExecutionStatus('b1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return execution status', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        executionWorkflowId: 'exec-wf-1',
+        upgradeWorkerTriggeredAt: new Date(),
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'COMPLETED' });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', upgradeExecutionStatus: 'COMPLETED', workerVersion: '1.0.0' },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+
+      const result = await service.getExecutionStatus('b1');
+      expect(result.workflowId).toBe('exec-wf-1');
+      expect(result.summary.completed).toBe(1);
+    });
+  });
+
+  describe('streamBundle', () => {
+    it('should throw when directory not found', async () => {
+      mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
+
+      await expect(service.streamBundle('1.0.0', 'linux')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw when bundle file not found', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue([] as any);
+
+      await expect(service.streamBundle('1.0.0', 'linux')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return streamable file for linux', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue(['datamigrator-worker-linux-1.0.0.tar.gz'] as any);
+      mockFsPromises.stat.mockResolvedValue({ size: 5000 } as any);
+
+      const result = await service.streamBundle('1.0.0', 'linux');
+      expect(result).toBeInstanceOf(StreamableFile);
+    });
+
+    it('should return streamable file for windows', async () => {
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockResolvedValue(['datamigrator-worker-windows-1.0.0.zip'] as any);
+      mockFsPromises.stat.mockResolvedValue({ size: 5000 } as any);
+
+      const result = await service.streamBundle('1.0.0', 'windows');
+      expect(result).toBeInstanceOf(StreamableFile);
     });
   });
 });

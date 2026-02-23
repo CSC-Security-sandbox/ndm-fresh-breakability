@@ -21,6 +21,27 @@ export type UploadProgress = {
   bundleId?: string;  // Use bundleId for triggerUpgrade (primary key - fast query)
 };
 
+export type WorkerStagingInfo = {
+  workerId: string;
+  workerName?: string;
+  ipAddress?: string;
+  platform?: string;
+  bundleStatus: string;
+};
+
+export type MulticastStatus = {
+  workflowId?: string;
+  workflowStatus?: string;
+  summary?: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    failed: number;
+    idle: number;
+  };
+  workers?: WorkerStagingInfo[];
+};
+
 export type UpgradeContextType = {
   // File selection
   selectedFile: File | null;
@@ -47,5 +68,9 @@ export type UpgradeContextType = {
   isProcessing: boolean;             // true when extracting/validating (should NOT be cancelled)
   isUploadInProgress: boolean;       // true when a previous upload was interrupted (pod restart)
   inProgressFileName: string;
+
+  // Worker binary distribution (multicast) status
+  workerUploadStatus: string | null;  // IDLE | IN_PROGRESS | COMPLETED
+  multicastStatus: MulticastStatus | null;
 };
 

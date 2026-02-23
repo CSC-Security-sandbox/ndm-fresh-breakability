@@ -3,6 +3,7 @@ import { UpgradeContext } from "./context";
 import {
   UploadProgress,
   UpgradeContextType,
+  MulticastStatus,
 } from "../types/upgrade.types";
 import {
   INITIAL_UPLOAD_STATE,
@@ -16,6 +17,7 @@ import {
   useCancelUploadMutation,
   useTriggerUpgradeMutation,
   useSkipUpgradeMutation,
+  useLazyGetMulticastStatusQuery,
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
 
@@ -101,6 +103,46 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
 
   const [isUpgrading, setIsUpgrading] = useState(false);
 
+  // Multicast (worker binary distribution) state
+  const [workerUploadStatus, setWorkerUploadStatus] = useState<string | null>(null);
+  const [multicastStatus, setMulticastStatus] = useState<MulticastStatus | null>(null);
+  const [getMulticastStatus] = useLazyGetMulticastStatusQuery();
+
+  // ═══════════════════════════════════════════════════════════════
+  // POLL MULTICAST STATUS - 10s interval while workerUploadStatus=IN_PROGRESS
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (workerUploadStatus !== 'IN_PROGRESS' || !latestStatus?.bundleId) return;
+
+    const MULTICAST_POLL_INTERVAL_MS = 10000; // Poll every 10 seconds
+
+    // Fetch immediately on entering IN_PROGRESS state
+    const fetchMulticastStatus = async () => {
+      try {
+        const result = await getMulticastStatus(latestStatus.bundleId!).unwrap();
+        setMulticastStatus({
+          workflowId: result.workflowId,
+          workflowStatus: result.workflowStatus,
+          summary: result.summary,
+          workers: result.workers,
+        });
+
+        // If all workers are done, refetch the main status to update workerUploadStatus
+        if (result.summary.inProgress === 0 && result.summary.total > 0) {
+          refetchStatus();
+        }
+      } catch (error) {
+        console.error("Failed to fetch multicast status:", error);
+      }
+    };
+
+    fetchMulticastStatus(); // Immediate first fetch
+
+    const intervalId = setInterval(fetchMulticastStatus, MULTICAST_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [workerUploadStatus, latestStatus?.bundleId, getMulticastStatus, refetchStatus]);
+
   // ═══════════════════════════════════════════════════════════════
   // RESTORE STATE FROM DB ON MOUNT / POLL UPDATES
   // ═══════════════════════════════════════════════════════════════
@@ -122,6 +164,19 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       setShowUpgradeUI(latestStatus.showUpgradeUI);
       setIsProcessing(latestStatus.isProcessing || false);
       setIsUploadInProgress(latestStatus.isUploadInProgress || false);
+      setWorkerUploadStatus(latestStatus.workerUploadStatus || null);
+
+      // Fetch final worker list when distribution completes
+      if (latestStatus.workerUploadStatus === 'COMPLETED' && latestStatus.bundleId && !multicastStatus?.workers?.length) {
+        getMulticastStatus(latestStatus.bundleId).unwrap().then((result) => {
+          setMulticastStatus({
+            workflowId: result.workflowId,
+            workflowStatus: result.workflowStatus,
+            summary: result.summary,
+            workers: result.workers,
+          });
+        }).catch((err) => console.error('Failed to fetch final multicast status:', err));
+      }
       
       // Show filename for processing or interrupted upload state
       setInProgressFileName(
@@ -541,6 +596,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     isProcessing,             // true when extracting/validating (should NOT be cancelled)
     isUploadInProgress,       // true when interrupted upload detected from DB
     inProgressFileName,
+    workerUploadStatus,       // IDLE | IN_PROGRESS | COMPLETED
+    multicastStatus,          // Per-worker distribution summary (populated while polling)
   };
 
   return (

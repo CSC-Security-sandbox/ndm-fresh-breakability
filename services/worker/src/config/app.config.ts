@@ -62,7 +62,17 @@ export default registerAs(
       versionsPathWindows: process.env.VERSIONS_PATH_WINDOWS || 'C:\\datamigrator\\conf\\versions.conf',
       versionsPathLinux: process.env.VERSIONS_PATH_LINUX || '/opt/datamigrator/conf/versions.conf',
       additionalMetrics: process.env.ADDITIONAL_METRICS || 'false',
-    }
+    },
+
+    // upgrade paths
+    upgrade: {
+      baseDirWindows: process.env.UPGRADE_BASE_DIR_WINDOWS || 'C:\\datamigrator',
+      baseDirLinux: process.env.UPGRADE_BASE_DIR_LINUX || '/opt/datamigrator',
+      confDirWindows: process.env.UPGRADE_CONF_DIR_WINDOWS || 'C:\\datamigrator\\conf',
+      confDirLinux: process.env.UPGRADE_CONF_DIR_LINUX || '/opt/datamigrator/conf',
+      stagingDirWindows: process.env.UPGRADE_STAGING_DIR_WINDOWS || 'C:\\datamigrator\\staging',
+      stagingDirLinux: process.env.UPGRADE_STAGING_DIR_LINUX || '/opt/datamigrator/staging',
+    },
   }),
 );
 

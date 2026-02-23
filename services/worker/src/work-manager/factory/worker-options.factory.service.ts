@@ -21,6 +21,7 @@ import { MappingResolverService } from "src/activities/core/initializer/mapping-
 import { SetupExportsPathPermissionService } from "src/activities/core/initializer/setup-exports-path-permission.service";
 import { FetchFailedOperationsActivity } from "src/activities/core/retry/fetch-failed-operations.activity";
 import { ProcessRetryBatchActivity } from "src/activities/core/retry/process-retry-batch.activity";
+import { UpgradeActivityService } from "src/activities/upgrade/upgrade.activity.service";
 
 @Injectable()
 export class WorkerOptionsService {
@@ -45,6 +46,7 @@ export class WorkerOptionsService {
     private readonly setupExportsPathPermissionService: SetupExportsPathPermissionService,
     private readonly fetchFailedOperationsActivity: FetchFailedOperationsActivity,
     private readonly processRetryBatchActivity: ProcessRetryBatchActivity,
+    private readonly upgradeActivityService: UpgradeActivityService,
 
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -90,6 +92,10 @@ export class WorkerOptionsService {
             writeActivity: this.speedTestReadActivity.writeActivity.bind(this.speedTestReadActivity),
             postResultsActivity: this.speedTestReadActivity.postResultsActivity.bind(this.speedTestReadActivity),
             validatePath: this.validatePathActivity.validatePath.bind(this.validatePathActivity),
+            downloadBundle: this.upgradeActivityService.downloadBundle.bind(this.upgradeActivityService),
+            isBinaryStaged: this.upgradeActivityService.isBinaryStaged.bind(this.upgradeActivityService),
+            ackUpgrade: this.upgradeActivityService.ackUpgrade.bind(this.upgradeActivityService),
+            executeUpgrade: this.upgradeActivityService.executeUpgrade.bind(this.upgradeActivityService),
         });
       case WorkFlowType.JOB_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

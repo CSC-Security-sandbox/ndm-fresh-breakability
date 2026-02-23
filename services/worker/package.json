@@ -34,7 +34,9 @@
       "logs/**",
       "node_modules/tslib/**",
       "node_modules/@netapp-cloud-datamigrate/**",
-      "node_modules/@temporalio/**"
+      "node_modules/@temporalio/**",
+      "node_modules/tar/**",
+      "node_modules/adm-zip/**"
     ],
     "targets": [
       "node18-linux-x64",
@@ -67,7 +69,9 @@
     "redis": "^4.7.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "systeminformation": "^5.30.0"
+    "systeminformation": "^5.30.0",
+    "tar": "^7.5.7",
+    "adm-zip": "^0.5.16"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.16",
@@ -77,6 +81,7 @@
     "@temporalio/worker": "^1.11.7",
     "@types/express": "^4.17.17",
     "@types/jest": "^29.5.2",
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.3.1",
     "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "8.25.0",

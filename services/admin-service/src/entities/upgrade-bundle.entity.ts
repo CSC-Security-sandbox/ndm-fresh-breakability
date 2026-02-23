@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import { Base } from './base.entity';
-import { UploadStatus, UpgradeStatus} from '../upgrade/enums/upgrade.enums';
+import { UploadStatus, UpgradeStatus, WorkerAggregateStatus } from '../upgrade/enums/upgrade.enums';
 
 @Entity('upgrade_bundles')
 export class UpgradeBundle extends Base {
@@ -41,4 +41,22 @@ export class UpgradeBundle extends Base {
 
   @Column({ type: 'uuid', nullable: true, name: 'upgraded_by' })
   upgradedBy: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'multicast_workflow_id' })
+  multicastWorkflowId: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'execution_workflow_id' })
+  executionWorkflowId: string;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'worker_upload_triggered_at' })
+  workerUploadTriggeredAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'upgrade_worker_triggered_at' })
+  upgradeWorkerTriggeredAt: Date;
+
+  @Column({ type: 'varchar', length: 20, default: WorkerAggregateStatus.IDLE, name: 'worker_upload_status' })
+  workerUploadStatus: WorkerAggregateStatus;
+
+  @Column({ type: 'varchar', length: 20, default: WorkerAggregateStatus.IDLE, name: 'worker_upgrade_status' })
+  workerUpgradeStatus: WorkerAggregateStatus;
 }
