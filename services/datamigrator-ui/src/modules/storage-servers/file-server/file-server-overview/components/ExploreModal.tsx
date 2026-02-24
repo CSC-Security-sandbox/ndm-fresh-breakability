@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import { Box } from "@components/container/index";
 import {
   Button,
@@ -9,7 +10,7 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { ArrowBackIcon, FolderIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { VolumeType } from "@/types/app.type";
-import { store } from "@store/store";
+import { RootStateType } from "@store/store";
 
 // API base URL for jobs service
 const JOBS_SERVICE_URL = window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL;
@@ -44,12 +45,9 @@ interface DirectoryItem {
 const fetchDirectoryContents = async (
   fileServerId: string,
   exportPath: string,
-  currentPath: string
+  currentPath: string,
+  token: string | null
 ): Promise<DirectoryItem[]> => {
-  // Get token from Redux store (same approach as userApi.ts)
-  const state = store.getState();
-  const token = state.authSlice?.accessToken;
-  
   // The API expects:
   // - exportPath: the NFS/SMB export path (e.g., "/nfs/smallEDA")
   // - path: the relative path within the export (e.g., "" for root, or "/subdir")
@@ -238,6 +236,8 @@ interface DirectoriesContentProps {
   onPathChange: (path: string) => void;
   onBackToExportPaths: () => void;
   fileServerId: string;
+  /** Auth token for API calls */
+  token: string | null;
   /** Whether to show the back button (hidden when skipExportPathsView is true) */
   showBackButton?: boolean;
 }
@@ -254,6 +254,7 @@ const DirectoriesContent = ({
   onPathChange,
   onBackToExportPaths,
   fileServerId,
+  token,
   showBackButton = true,
 }: DirectoriesContentProps) => {
   // Search/Jump to path state - independent from current path navigation
@@ -300,7 +301,8 @@ const DirectoriesContent = ({
       const contents = await fetchDirectoryContents(
         fileServerId,
         exportPath.volumePath,
-        normalizedPath
+        normalizedPath,
+        token
       );
       
       // Check if the path exists - if it returns empty and it's not root, 
@@ -314,7 +316,8 @@ const DirectoriesContent = ({
           const parentContents = await fetchDirectoryContents(
             fileServerId,
             exportPath.volumePath,
-            parentPath
+            parentPath,
+            token
           );
           
           // Check if the folder exists in parent directory
@@ -574,6 +577,9 @@ const ExploreModal = ({
   initialSelectedPath,
   skipExportPathsView = false,
 }: ExploreModalProps) => {
+  // Get auth token reactively from Redux store
+  const token = useSelector((state: RootStateType) => state.authSlice?.accessToken);
+
   // View state: "export-paths" or "directories"
   const [currentView, setCurrentView] = useState<"export-paths" | "directories">("export-paths");
 
@@ -654,7 +660,8 @@ const ExploreModal = ({
           const contents = await fetchDirectoryContents(
             fileServerId,
             selectedExportPathDetails.volumePath,
-            currentPath
+            currentPath,
+            token
           );
           setDirectoryContents(contents);
           
@@ -679,7 +686,7 @@ const ExploreModal = ({
       };
       fetchData();
     }
-  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId, initialSelectedPath, initialSelectionApplied]);
+  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId, initialSelectedPath, initialSelectionApplied, token]);
 
   // Handle export path selection
   const handlePathSelect = useCallback((pathId: string) => {
@@ -792,6 +799,7 @@ const ExploreModal = ({
             onPathChange={handlePathChange}
             onBackToExportPaths={handleBackToExportPaths}
             fileServerId={fileServerId}
+            token={token}
             showBackButton={!skipExportPathsView}
           />
         )}
