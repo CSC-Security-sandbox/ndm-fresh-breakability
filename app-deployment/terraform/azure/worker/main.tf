@@ -3,21 +3,26 @@ provider "azurerm" {
 
 }
 
+locals {
+  # Treat "latest" (case-insensitive) or empty string as "use latest image from the gallery"
+  use_specific_version = var.image_version != "" && lower(var.image_version) != "latest"
+}
+
 # Get the desired image version if specified
 data "azurerm_shared_image_version" "worker_version" {
-  count               = var.image_version != "" ? 1 : 0
+  count               = local.use_specific_version ? 1 : 0
   name                = var.image_version
   image_name          = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = var.gallery_resource_group
 }
 
 # Get the latest image if no version is specified
 data "azurerm_shared_image" "worker" {
-  count               = var.image_version == "" ? 1 : 0
+  count               = local.use_specific_version ? 0 : 1
   name                = var.image_definition
   gallery_name        = var.gallery_name
-  resource_group_name = var.resource_group
+  resource_group_name = var.gallery_resource_group
 }
 
 # Get network and subnet
@@ -66,7 +71,7 @@ resource "azurerm_linux_virtual_machine" "wr_vm" {
   }
 
   # Conditional source_image_id
-  source_image_id = var.image_version != "" ? data.azurerm_shared_image_version.worker_version[0].id : data.azurerm_shared_image.worker[0].id
+  source_image_id = local.use_specific_version ? data.azurerm_shared_image_version.worker_version[0].id : data.azurerm_shared_image.worker[0].id
 
   tags = {
     environment = "dev"

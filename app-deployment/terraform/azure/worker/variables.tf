@@ -63,6 +63,12 @@ variable "gallery_name" {
   default     = "datamigrator"
 }
 
+variable "gallery_resource_group" {
+  description = "The resource group where the shared image gallery resides."
+  type        = string
+  default     = "datamigrate-acr-resource-group"
+}
+
 variable "image_definition" {
   description = "The image definition name."
   type        = string
