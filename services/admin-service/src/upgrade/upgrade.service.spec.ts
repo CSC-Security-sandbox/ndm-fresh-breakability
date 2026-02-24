@@ -6,12 +6,15 @@ import {
   BadRequestException,
   NotFoundException,
   InternalServerErrorException,
+  ConflictException,
   StreamableFile,
 } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpgradeService } from './upgrade.service';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
 import { WorkerEntity } from '../entities/worker.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobRunEntity } from '../entities/jobrun.entity';
 import { WorkflowService } from '../workflow/workflow.service';
 import { UploadStatus, UpgradeStatus, WorkerAggregateStatus } from './enums/upgrade.enums';
 import {
@@ -46,13 +49,17 @@ const mockFsPromises = fsPromises as jest.Mocked<typeof fsPromises>;
 
 // Mock child_process
 const mockSpawn = jest.fn();
+const mockExec = jest.fn();
 jest.mock('child_process', () => ({
   spawn: (...args: any[]) => mockSpawn(...args),
+  exec: (...args: any[]) => mockExec(...args),
 }));
 
 describe('UpgradeService', () => {
   let service: UpgradeService;
   let upgradeBundleRepository: jest.Mocked<Repository<UpgradeBundle>>;
+  let jobConfigRepository: any;
+  let jobRunRepository: any;
   let workerRepository: any;
   let workflowService: any;
 
@@ -124,6 +131,20 @@ describe('UpgradeService', () => {
           },
         },
         {
+          provide: getRepositoryToken(JobConfigEntity),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(JobRunEntity),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn(),
+          },
+        },
+        {
           provide: getRepositoryToken(WorkerEntity),
           useValue: {
             find: jest.fn(),
@@ -158,6 +179,8 @@ describe('UpgradeService', () => {
 
     service = module.get<UpgradeService>(UpgradeService);
     upgradeBundleRepository = module.get(getRepositoryToken(UpgradeBundle));
+    jobConfigRepository = module.get(getRepositoryToken(JobConfigEntity));
+    jobRunRepository = module.get(getRepositoryToken(JobRunEntity));
     workerRepository = module.get(getRepositoryToken(WorkerEntity));
     workflowService = module.get(WorkflowService);
 
@@ -198,6 +221,14 @@ describe('UpgradeService', () => {
               find: jest.fn(),
               update: jest.fn(),
             },
+          },
+          {
+            provide: getRepositoryToken(JobConfigEntity),
+            useValue: { find: jest.fn().mockResolvedValue([]) },
+          },
+          {
+            provide: getRepositoryToken(JobRunEntity),
+            useValue: { find: jest.fn().mockResolvedValue([]) },
           },
           {
             provide: getRepositoryToken(WorkerEntity),
@@ -252,6 +283,199 @@ describe('UpgradeService', () => {
       mockFsPromises.mkdir.mockRejectedValue(new Error('Permission denied'));
 
       await expect(service.onModuleInit()).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should start background poller when bundle is STAGED and not resolve immediately', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      await service.onModuleInit();
+
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('starting background poller'),
+      );
+
+      service.onModuleDestroy();
+    });
+
+    it('should trigger worker execution on SUCCESS bundle with workerUploadStatus=COMPLETED and workerUpgradeStatus=IDLE', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        version: '2026.02.23',
+        workerUploadStatus: WorkerAggregateStatus.COMPLETED,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      workerRepository.find.mockResolvedValue([]);
+
+      await service.onModuleInit();
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({
+          workerUpgradeStatus: WorkerAggregateStatus.COMPLETED,
+        }),
+      );
+    });
+
+    it('should trigger worker multicast on SUCCESS bundle with workerUploadStatus=IDLE', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        version: '2026.02.23',
+        workerUploadStatus: WorkerAggregateStatus.IDLE,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      workerRepository.find.mockResolvedValue([]);
+
+      await service.onModuleInit();
+
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('auto-triggering worker binary multicast'),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // UPGRADE POLLER (pollUpgradeCompletion)
+  // ═══════════════════════════════════════════════════════════════
+  describe('pollUpgradeCompletion', () => {
+    const callPoll = (bundleId: string) =>
+      (service as any).pollUpgradeCompletion(bundleId);
+
+    it('should mark STAGED as SUCCESS when versions.conf matches bundle version', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+      });
+      const successBundle = createMockBundle({
+        ...bundle,
+        upgradeStatus: UpgradeStatus.SUCCESS,
+      });
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(bundle)        // poll reads bundle
+        .mockResolvedValueOnce(successBundle); // re-read after update
+      mockConfigService.get.mockReturnValue('/opt/datamigrator/conf/versions.conf');
+      mockFsPromises.readFile.mockResolvedValue(
+        'initial_version=2026.01.01\ncurrent_version=2026.02.23\nprevious_version=2026.01.01' as any,
+      );
+
+      await callPoll(bundle.id);
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({
+          upgradeStatus: UpgradeStatus.SUCCESS,
+          upgradeCompletedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should keep polling when versions.conf has different version (Ansible still running)', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(bundle);
+      mockConfigService.get.mockReturnValue('/opt/datamigrator/conf/versions.conf');
+      mockFsPromises.readFile.mockResolvedValue(
+        'initial_version=2026.01.01\ncurrent_version=2026.01.01\nprevious_version=2026.01.01' as any,
+      );
+
+      await callPoll(bundle.id);
+
+      // No update — mismatch means Ansible may still be running, keep polling
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('does not yet match'),
+      );
+    });
+
+    it('should mark STAGED as FAILED after stale timeout', async () => {
+      const staledAt = new Date(Date.now() - 31 * 60 * 1000);
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+        updated_at: staledAt,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(bundle);
+
+      await callPoll(bundle.id);
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({
+          upgradeStatus: UpgradeStatus.FAILED,
+          upgradeCompletedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should keep polling when versions.conf is not readable yet', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(bundle);
+      mockConfigService.get.mockReturnValue('/opt/datamigrator/conf/versions.conf');
+      mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
+
+      await callPoll(bundle.id);
+
+      // No update — still waiting
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should stop polling if bundle status changed externally', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.FAILED,
+        version: '2026.02.23',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(bundle);
+
+      await callPoll(bundle.id);
+
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('no longer STAGED'),
+      );
+    });
+
+    it('should trigger worker execution after resolving SUCCESS with workerUploadStatus=COMPLETED', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+        workerUploadStatus: WorkerAggregateStatus.COMPLETED,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      const successBundle = createMockBundle({
+        ...bundle,
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        workerUploadStatus: WorkerAggregateStatus.COMPLETED,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(bundle)
+        .mockResolvedValueOnce(successBundle);
+      mockConfigService.get.mockReturnValue('/opt/datamigrator/conf/versions.conf');
+      mockFsPromises.readFile.mockResolvedValue(
+        'initial_version=2026.01.01\ncurrent_version=2026.02.23\nprevious_version=2026.01.01' as any,
+      );
+      workerRepository.find.mockResolvedValue([]);
+
+      await callPoll(bundle.id);
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({ upgradeStatus: UpgradeStatus.SUCCESS }),
+      );
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('auto-triggering worker upgrade execution'),
+      );
     });
   });
 
@@ -416,7 +640,7 @@ describe('UpgradeService', () => {
     it('should detect upgrade in progress', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
-        upgradeStatus: UpgradeStatus.IN_PROGRESS,
+        upgradeStatus: UpgradeStatus.STAGED,
       });
       upgradeBundleRepository.findOne.mockResolvedValue(bundle);
 
@@ -1408,9 +1632,15 @@ describe('UpgradeService', () => {
   // TRIGGER UPGRADE
   // ═══════════════════════════════════════════════════════════════
   describe('triggerUpgrade', () => {
+    const mockNoBlockingJobs = () => {
+      jobConfigRepository.find.mockResolvedValueOnce([]);
+    };
+
     it('should throw NotFoundException when bundle not found in DB', async () => {
-      // Bundle not found in database
-      upgradeBundleRepository.findOne.mockResolvedValue(null);
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)   // staged check
+        .mockResolvedValueOnce(null);  // bundle lookup
+      mockNoBlockingJobs();
 
       await expect(
         service.triggerUpgrade('non-existent-bundle-id', 'user-123'),
@@ -1422,8 +1652,10 @@ describe('UpgradeService', () => {
         uploadStatus: UploadStatus.SUCCESS,
         version: 'v2.1.0',
       });
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
-      // pathExists uses fsPromises.access - rejecting means path doesn't exist
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
       mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
 
       await expect(
@@ -1431,24 +1663,26 @@ describe('UpgradeService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should update bundle status to SUCCESS on trigger', async () => {
+    it('should stage upgrade and fire nsenter on success', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         version: 'v2.1.0',
       });
-      // pathExists uses fsPromises.access - resolving means path exists
       mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
       upgradeBundleRepository.update.mockResolvedValue(undefined);
+      mockExec.mockImplementation((_cmd: string, cb: Function) => cb(null, '', ''));
 
-      // New signature: triggerUpgrade(bundleId, userId)
       const result = await service.triggerUpgrade('bundle-uuid-123', 'user-123');
 
       expect(result.success).toBe(true);
       expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
         bundle.id,
         expect.objectContaining({
-          upgradeStatus: UpgradeStatus.SUCCESS,
+          upgradeStatus: UpgradeStatus.STAGED,
           upgradedBy: 'user-123',
         }),
       );
@@ -1456,9 +1690,12 @@ describe('UpgradeService', () => {
 
     it('should throw BadRequestException if upload not successful', async () => {
       const bundle = createMockBundle({
-        uploadStatus: UploadStatus.UPLOADING, // Not SUCCESS
+        uploadStatus: UploadStatus.UPLOADING,
       });
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
 
       await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
         .rejects.toThrow(BadRequestException);
@@ -1479,42 +1716,90 @@ describe('UpgradeService', () => {
         uploadStatus: UploadStatus.SUCCESS,
         version: null,
       });
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
 
       await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
         .rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException if upgrade already in progress', async () => {
-      const bundle = createMockBundle({
+    it('should throw ConflictException if another upgrade is already staged', async () => {
+      const stagedBundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
-        upgradeStatus: UpgradeStatus.IN_PROGRESS,
-        version: 'v2.1.0',
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: 'v2.0.0',
       });
-      mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(stagedBundle);
 
       await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
-        .rejects.toThrow(BadRequestException);
+        .rejects.toThrow(ConflictException);
     });
 
-    it('should return success response with bundle info', async () => {
+    it('should return running jobs list when jobs are running', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(null);
+      const activeConfig = { id: 'cfg-1', status: 'ACTIVE', futureScheduleAt: null, scheduler: null };
+      const runningJob = { id: 'job-1', status: 'RUNNING', jobConfigId: 'cfg-1', startTime: new Date() };
+      jobConfigRepository.find.mockResolvedValueOnce([activeConfig as any]);
+      jobRunRepository.find.mockResolvedValueOnce([runningJob as any]);
+
+      const result = await service.triggerUpgrade('bundle-uuid-123', 'user-123');
+
+      expect(result.success).toBe(false);
+      expect(result.canUpgrade).toBe(false);
+      expect(result.runningJobs).toHaveLength(1);
+      expect(result.runningJobs[0].id).toBe('job-1');
+      expect(result.scheduledJobs).toHaveLength(0);
+    });
+
+    it('should return scheduled jobs list when scheduled jobs are active', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(null);
+      const scheduledConfig = { id: 'job-2', status: 'ACTIVE', futureScheduleAt: '0 0 * * *', scheduler: null };
+      jobConfigRepository.find.mockResolvedValueOnce([scheduledConfig as any]);
+      jobRunRepository.find.mockResolvedValueOnce([]);
+
+      const result = await service.triggerUpgrade('bundle-uuid-123', 'user-123');
+
+      expect(result.success).toBe(false);
+      expect(result.canUpgrade).toBe(false);
+      expect(result.runningJobs).toHaveLength(0);
+      expect(result.scheduledJobs).toHaveLength(1);
+      expect(result.scheduledJobs[0].id).toBe('job-2');
+    });
+
+    it('should throw InternalServerErrorException when job query fails', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValueOnce(null);
+      jobConfigRepository.find.mockRejectedValueOnce(new Error('connection refused'));
+
+      await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
+        .rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should return success and fire nsenter when no blocking jobs', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         upgradeStatus: UpgradeStatus.PENDING,
         version: 'v2.1.0',
         fileName: 'upgrade-v2.1.0.tar.gz',
       });
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      jobConfigRepository.find.mockResolvedValueOnce([]);
       mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
       upgradeBundleRepository.update.mockResolvedValue(undefined);
+      mockExec.mockImplementation((_cmd: string, cb: Function) => cb(null, '', ''));
 
       const result = await service.triggerUpgrade('bundle-uuid-123', 'user-123');
 
       expect(result.success).toBe(true);
       expect(result.bundleId).toBe(bundle.id);
-      expect(result.version).toBe(bundle.version);
-      expect(result.fileName).toBe(bundle.fileName);
+      expect(result.targetVersion).toBe(bundle.version);
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({ upgradeStatus: UpgradeStatus.STAGED }),
+      );
     });
   });
 
@@ -1593,50 +1878,67 @@ describe('UpgradeService', () => {
   // TRIGGER UPGRADE - Error Handling
   // ═══════════════════════════════════════════════════════════════
   describe('triggerUpgrade error handling', () => {
-    it('should handle DB update error gracefully', async () => {
+    const mockNoBlockingJobs = () => {
+      jobConfigRepository.find.mockResolvedValueOnce([]);
+    };
+
+    it('should propagate DB error when staging fails', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         upgradeStatus: UpgradeStatus.PENDING,
         version: 'v2.1.0',
       });
       mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
       upgradeBundleRepository.update.mockRejectedValue(new Error('DB error'));
 
       await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
-        .rejects.toThrow(InternalServerErrorException);
+        .rejects.toThrow('DB error');
     });
 
-    it('should re-throw BadRequestException from within try block', async () => {
+    it('should throw BadRequestException for invalid version format', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         upgradeStatus: UpgradeStatus.PENDING,
-        version: 'v2.1.0',
+        version: 'v2.1.0; rm -rf /',
       });
-      mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
-      upgradeBundleRepository.update.mockRejectedValue(
-        new BadRequestException('validation failed'),
-      );
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
 
       await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
         .rejects.toThrow(BadRequestException);
     });
 
-    it('should re-throw NotFoundException from within try block', async () => {
+    it('should mark upgrade as FAILED if nsenter command fails', async () => {
       const bundle = createMockBundle({
         uploadStatus: UploadStatus.SUCCESS,
         upgradeStatus: UpgradeStatus.PENDING,
         version: 'v2.1.0',
       });
       mockFsPromises.access.mockResolvedValue(undefined);
-      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
-      upgradeBundleRepository.update.mockRejectedValue(
-        new NotFoundException('entity not found'),
+      upgradeBundleRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bundle);
+      mockNoBlockingJobs();
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      mockExec.mockImplementation((_cmd: string, cb: Function) =>
+        cb(new Error('nsenter failed'), '', 'permission denied'),
       );
 
-      await expect(service.triggerUpgrade('bundle-uuid-123', 'user-123'))
-        .rejects.toThrow(NotFoundException);
+      const result = await service.triggerUpgrade('bundle-uuid-123', 'user-123');
+
+      expect(result.success).toBe(true);
+      // nsenter failure is async; the DB update to FAILED happens in the callback
+      await new Promise((r) => setTimeout(r, 50));
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({ upgradeStatus: UpgradeStatus.FAILED }),
+      );
     });
   });
 
@@ -2265,8 +2567,11 @@ describe('UpgradeService', () => {
       });
 
       const result = await service.startMulticast({ bundleId: 'b1', version: '1.0.0' });
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('No healthy workers');
+      expect(result.status).toBe('started');
+      expect(result.message).toContain('No healthy workers attached');
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith('b1', expect.objectContaining({
+        workerUploadStatus: 'COMPLETED',
+      }));
     });
 
     it('should start multicast for healthy workers', async () => {
@@ -2362,8 +2667,11 @@ describe('UpgradeService', () => {
       workerRepository.find.mockResolvedValue([]);
 
       const result = await service.startExecution({ bundleId: 'b1', version: '1.0.0' });
-      expect(result.status).toBe('error');
-      expect(result.message).toContain('No workers have completed binary staging');
+      expect(result.status).toBe('started');
+      expect(result.message).toContain('No workers have staged binaries');
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith('b1', expect.objectContaining({
+        workerUpgradeStatus: 'COMPLETED',
+      }));
     });
 
     it('should start execution for staged workers', async () => {

@@ -137,6 +137,10 @@ export abstract class BaseBinaryHandler implements IBinaryHandler {
       const downloadedEnvPath = path.join(stagingDir, envFile);
       const upgradeScriptPath = path.join(stagingDir, upgradeScript);
 
+      await fs.chmod(binaryPath, 0o755);
+      await fs.chmod(upgradeScriptPath, 0o755);
+      this.logger.log('Set execute permissions on binary and upgrade script');
+
       // 4. Verify checksums (covers binary, env, AND upgrade script)
       heartbeatFn('verifying checksums');
       await this.verifyChecksums(stagingDir, checksumPath);

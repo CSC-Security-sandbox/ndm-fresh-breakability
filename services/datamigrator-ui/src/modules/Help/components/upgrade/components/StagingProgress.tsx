@@ -16,7 +16,24 @@ const StagingProgress = () => {
   const completed = summary?.completed ?? 0;
   const inProgress = summary?.inProgress ?? 0;
   const failed = summary?.failed ?? 0;
+  const noWorkers = isCompleted && total === 0;
   const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  if (noWorkers) {
+    return (
+      <Box className="mt-4 p-4 rounded border" style={{ backgroundColor: '#fefce8', borderColor: '#fde047' }}>
+        <Box className="flex items-center gap-3">
+          <svg className="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+          </svg>
+          <p className="font-medium" style={{ color: '#854d0e' }}>No Workers Found</p>
+        </Box>
+        <p className="text-xs mt-2" style={{ color: '#a16207' }}>
+          No workers are currently attached. You can proceed with the upgrade — only Control Plane will be upgraded.
+        </p>
+      </Box>
+    );
+  }
 
   return (
     <Box className="mt-4 p-4 rounded border" style={{
