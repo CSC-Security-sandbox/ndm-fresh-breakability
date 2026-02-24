@@ -119,12 +119,12 @@ jobs:
 
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
       with:
         terraform_version: 1.5.0
 
     - name: Azure Login
-      uses: azure/login@v1
+      uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v1
       with:
         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
 
@@ -222,7 +222,7 @@ jobs:
         echo "Azure Deployment completed successfully!"
 
     - name: Upload Azure Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       if: always()
       with:
         name: azure-deployment-logs
@@ -255,17 +255,17 @@ jobs:
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
       with:
         terraform_version: latest
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+      uses: google-github-actions/auth@955352c3b43196640b567e4646256d2fbb4aa1c7 # v1
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@e30db14379863a8c79331b04a9969f4c1e225e0b # v1
       with:
         version: 'latest'
 
@@ -392,7 +392,7 @@ jobs:
         fi
 
     - name: Upload GCP Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       if: always()
       with:
         name: gcp-deployment-logs
@@ -458,12 +458,12 @@ jobs:
         echo "SSH_PASSWORD=$SSH_PASSWORD" >> $GITHUB_ENV
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v4
       with:
         node-version: '18'
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
       with:
         terraform_version: 1.5.0
     
@@ -572,7 +572,7 @@ jobs:
         echo "📋 Control Plane: ${{ env.CONTROL_PLANE_NAME }} (${{ env.CONTROL_PLANE_IP }})"
         echo "👥 Workers: ${{ env.WORKER_NAMES_LINE }} (${{ env.WORKER_IPS_LINE }})"
     - name: Upload vSphere Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       if: always()
       with:
         name: vsphere-deployment-logs
