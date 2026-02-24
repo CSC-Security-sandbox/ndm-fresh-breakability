@@ -607,4 +607,11 @@
          <sqlFile path="liquibase/20260223_01_alter_jobconfig_add_preserve_permissions_column_rollback.sql"/>
       </rollback>
    </changeSet>
+
+    <changeSet id="20260223_02_add_upgrade_management_permission.sql" author="kb93278">
+        <sqlFile path="liquibase/20260223_02_add_upgrade_management_permission.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/20260223_02_add_upgrade_management_permission_rollback.sql"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>
