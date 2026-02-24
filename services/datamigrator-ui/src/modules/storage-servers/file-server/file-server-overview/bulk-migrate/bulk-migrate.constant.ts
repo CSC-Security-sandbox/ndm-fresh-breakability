@@ -5,7 +5,9 @@ import DestinationFileServer from "@modules/storage-servers/file-server/file-ser
 import DestinationPath from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DestinationPath";
 import DiscoveryJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DiscoveryJobsCountRenderer";
 import MigrationJobsCountRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/MigrationJobsCountRenderer";
+import DeleteMappingCellRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/DeleteMappingCellRenderer";
 import SourcePathCellRenderer from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/SourcePathCellRenderer";
+import TruncatedPathCell from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/components/CellRenderer/TruncatedPathCell";
 import * as Yup from "yup";
 import ValidationCellRenderer from "@components/custom-cell-renderer/ValidationCellRenderer";
 import Mapping from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Mapping/Mapping";
@@ -63,26 +65,46 @@ export const WEEKDAY_OPTIONS = [
 export const DOW_OPTIONS = generateOptionsWithRange(7); // day of the week
 export const WEEK_OPTIONS = generateOptionsWithRange(52);
 
+const ReviewPathCellRenderer = (getValue: (row: any) => string) => (props: any) =>
+  React.createElement(TruncatedPathCell, {
+    value: getValue(props.row) || "-",
+  });
+
 export const REVIEW_LIST_COLUMN_DEFS: any[] = [
   {
-    id: 2,
+    id: 1,
     header: "Source Path",
     accessor: "source.path",
+    Renderer: ReviewPathCellRenderer((row) => row?.source?.path ?? ""),
   },
   {
-    header: "Destination",
-    accessor: "destination.server",
+    id: 2,
+    header: "Source Directory",
+    accessor: "sourceDirectoryPath",
+    Renderer: ReviewPathCellRenderer((row) => row?.sourceDirectoryPath ?? ""),
+  },
+  {
     id: 3,
+    header: "Destination File Server",
+    accessor: "destination.server",
+    Renderer: ReviewPathCellRenderer((row) => row?.destination?.server ?? ""),
   },
   {
+    id: 4,
     header: "Destination Path",
     accessor: "destination.path",
-    id: 4,
+    Renderer: ReviewPathCellRenderer((row) => row?.destination?.path ?? ""),
+  },
+  {
+    id: 5,
+    header: "Destination Directory",
+    accessor: "destinationDirectoryPath",
+    Renderer: ReviewPathCellRenderer((row) => row?.destinationDirectoryPath ?? ""),
   },
   {
     header: "Precheck Status",
     accessor: "",
-    id: 5,
+    id: 6,
     Renderer: ({ row: value }: any) => {
       return React.createElement(ValidationCellRenderer, {
         isValidated: value.isValidated,
@@ -140,6 +162,73 @@ export const OPTIONS_FORM = Yup.object().shape({
     fileSize: Yup.number(),
   }),
 });
+
+const DirectoryPathCellRenderer =
+  (field: "sourceDirectoryPath" | "destinationDirectoryPath") =>
+  ({ row }: any) => {
+    const value =
+      field === "sourceDirectoryPath"
+        ? row?.sourceDirectoryPath ?? row?.sourcePath?.sourcePathName ?? ""
+        : row?.destinationDirectoryPath ??
+          row?.destinationPathDetails?.destinationPathName ??
+          "";
+    return React.createElement(TruncatedPathCell, { value: value || "-" });
+  };
+
+const DestinationFileServerTextRenderer = ({ row }: any) =>
+  React.createElement(TruncatedPathCell, {
+    value: row?.destinationFileServerDetails?.destinationFileServerName || "-",
+  });
+const DestinationPathTextRenderer = ({ row }: any) =>
+  React.createElement(TruncatedPathCell, {
+    value: row?.destinationPathDetails?.destinationPathName || "-",
+  });
+
+// Column defs for Mapping step table (Source and Destination Path Selectors) - text only, no checkboxes or dropdowns
+export const BULK_MIGRATION_MAPPING_TABLE_COL_DEFS: any[] = [
+  {
+    id: 1,
+    header: "Source Path",
+    accessor: "sourcePath.sourcePathName",
+    Renderer: SourcePathCellRenderer,
+    sort: { enabled: false },
+  },
+  {
+    id: 2,
+    header: "Source Directory",
+    accessor: "sourceDirectoryPath",
+    Renderer: DirectoryPathCellRenderer("sourceDirectoryPath"),
+    sort: { enabled: false },
+  },
+  {
+    id: 3,
+    header: "Destination File Server",
+    accessor: "destinationFileServerDetails.destinationFileServerName",
+    Renderer: DestinationFileServerTextRenderer,
+    sort: { enabled: false },
+  },
+  {
+    id: 4,
+    header: "Destination Path",
+    accessor: "destinationPathDetails.destinationPathName",
+    Renderer: DestinationPathTextRenderer,
+    sort: { enabled: false },
+  },
+  {
+    id: 5,
+    header: "Destination Directory",
+    accessor: "destinationDirectoryPath",
+    Renderer: DirectoryPathCellRenderer("destinationDirectoryPath"),
+    sort: { enabled: false },
+  },
+  {
+    id: 6,
+    header: "Actions",
+    accessor: "id",
+    Renderer: DeleteMappingCellRenderer,
+    sort: { enabled: false },
+  },
+];
 
 export const BULK_MIGRATION_MOUNT_PATH_COL_DEFS: any[] = [
   {

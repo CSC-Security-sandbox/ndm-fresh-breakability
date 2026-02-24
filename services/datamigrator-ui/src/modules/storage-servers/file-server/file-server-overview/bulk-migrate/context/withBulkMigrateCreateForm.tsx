@@ -51,7 +51,7 @@ import dayjs from "dayjs";
 import { useFormik } from "formik";
 import { ComponentType, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BULK_MIGRATION_MOUNT_PATH_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { BULK_MIGRATION_MAPPING_TABLE_COL_DEFS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { MAX_RETRY_API_ATTEMPTS } from "@/utils/constants";
 import { getPreCheckStatus, getPrecheckErrors } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/PreCheck/pre-check.utils";
 import { Box } from "@components/container";
@@ -90,6 +90,9 @@ export function withBulkMigrateCreateForm(
       migrationDetailsTableConfiguration,
       setMigrationDetailsTableConfiguration,
     ] = useState<MigrationDetailsTableConfigurationType[]>([]);
+    const [mappingToEdit, setMappingToEdit] = useState<
+      MigrationDetailsTableConfigurationType | null
+    >(null);
     const [allFileServers, setAllFileServers] = useState<
       AllFileServerWithVolumesApiType[]
     >([]);
@@ -143,39 +146,11 @@ export function withBulkMigrateCreateForm(
           const resp = await getAllFileServersApi({ projectId }).unwrap();
           const allFileServers: AllFileServerWithVolumesApiType[] =
             resp?.configs;
-          const _migrationTableDetails: MigrationDetailsTableConfigurationType[] =
-            [];
-
           const _fileServerDetailsMap = new Map<
             string,
             DestinationPathsOptionsType[]
           >();
 
-          fileServerDetails?.fileServers?.flatMap((fileServer) => {
-            fileServer.volumes.forEach((volume, index) => {
-              _migrationTableDetails.push({
-                id: index,
-                sourceFileServerDetails: fileServerDetails,
-                protocol: fileServer.protocol,
-                sourcePath: {
-                  volume: volume,
-                  sourcePathName: volume.volumePath,
-                  sourcePathId: volume.id,
-                },
-                destinationFileServerDetails: {
-                  destinationFileServerId: "",
-                  destinationFileServerName: "",
-                },
-                destinationPathDetails: {
-                  destinationPathId: "",
-                  destinationPathName: "",
-                },
-                discoveryJobCount: "",
-                migrationJobCount: "",
-                cutoverJobCount: "",
-              });
-            });
-          });
           const notReachableVolumes = [];
           const sourceDisabledPathsHashSet = [];
           allFileServers.forEach((config) => {
@@ -203,14 +178,15 @@ export function withBulkMigrateCreateForm(
             _fileServerDetailsMap.set(config?.id, _destinationPaths);
           });
 
+          // Start with empty table; rows are added only via "+ Add Mapping" on the Mapping step
           mappingStepForm.setValues({
             selectedMountPathsId: [],
-            migrationDetailsTableConfigurationValue: _migrationTableDetails,
+            migrationDetailsTableConfigurationValue: [],
             scheduleTime: "start_now",
             scheduledDateTime: dayjs().add(1, "minute"),
           });
           setFileServerWithPathsMap(_fileServerDetailsMap);
-          setMigrationDetailsTableConfiguration(_migrationTableDetails);
+          setMigrationDetailsTableConfiguration([]);
           setAllFileServers(allFileServers);
         } catch (error) {
           console.error("Error fetching file servers:", error);
@@ -624,21 +600,35 @@ export function withBulkMigrateCreateForm(
       );
     };
 
-    // Migration Table
+    // Migration Table (5-column layout for Mapping step; read-only text, no checkboxes or dropdowns)
     const mappingStepTableState: BlueXpTableStateType<any> = useTable({
-      columns: BULK_MIGRATION_MOUNT_PATH_COL_DEFS,
+      columns: BULK_MIGRATION_MAPPING_TABLE_COL_DEFS,
       rows: mappingStepForm?.values?.migrationDetailsTableConfigurationValue?.filter(
         (row) => row.protocol === protocolForm.formState.protocol.value
       ),
       isSorting: true,
-      isRowSelecting: true,
-      defaultSelectionState: {
-        rows: createSelectedMountPathsObject(
-          mappingStepForm?.values?.selectedMountPathsId
-        ),
-      },
+      isRowSelecting: false,
+      isFiltering: true,
       pageSize: 10,
     });
+
+    const deleteMapping = (rowId: number) => {
+      const current =
+        mappingStepForm?.values?.migrationDetailsTableConfigurationValue ?? [];
+      const next = current.filter((row) => row.id !== rowId);
+      const nextSelected = (mappingStepForm?.values?.selectedMountPathsId ?? []).filter(
+        (id) => id !== String(rowId)
+      );
+      mappingStepForm.setFieldValue("migrationDetailsTableConfigurationValue", next);
+      mappingStepForm.setFieldValue("selectedMountPathsId", nextSelected);
+      setMigrationDetailsTableConfiguration(next);
+      setSelectedMountPathsId(nextSelected);
+    };
+
+    const editMapping = (row: MigrationDetailsTableConfigurationType) => {
+      setMappingToEdit(row);
+      deleteMapping(row.id);
+    };
 
     const createBulkMigrateHelpers: BulkMigrateContextType = {
       migrationDetailsTableConfiguration,
@@ -669,6 +659,10 @@ export function withBulkMigrateCreateForm(
       sourceDisabledPaths,
       refetch,
       isFetching,
+      deleteMapping,
+      mappingToEdit,
+      setMappingToEdit,
+      editMapping,
     };
 
     return <WrappedComponent {...props} {...createBulkMigrateHelpers} />;

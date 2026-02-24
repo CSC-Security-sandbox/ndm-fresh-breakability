@@ -18,7 +18,7 @@ const BulkMigrate = () => {
   return (
     <Box className="h-[70vh]">
       <BulkMigrateContextWrapper>
-        <Box className="font-semibold text-lg pt-8 px-8">Bulk Migrate</Box>
+        <Box className="font-semibold text-lg pt-6 px-8">Bulk Migrate</Box>
         <Wizard
           stepsMap={STEPS_MAP_BULK_MIGRATION}
           stepPaths={STEPS_PATHS_BULK_MIGRATION}

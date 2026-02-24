@@ -69,7 +69,6 @@ const BulkMigrateScheduleComponent = ({
   if(variant === "normal_run") {
     return (
       <Box className="w-1/2">
-        <Text>Job Schedule</Text>
         <RadioGroup
           name="scheduleTime"
           value={values?.scheduleTime || SCHEDULE_OPTIONS?.START_NOW}

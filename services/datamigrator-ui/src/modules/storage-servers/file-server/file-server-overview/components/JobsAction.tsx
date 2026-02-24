@@ -37,7 +37,7 @@ const JobsAction = ({
     return fileServerDetails?.status === FILE_SERVER_STATUS_ENUM.ACTIVE;
   }, [fileServerDetails, zoneFileServerId]);
 
-  // Check if all export paths are disabled (isValid = false or isDisabled = true)
+    // Check if all export paths are disabled (isValid = false or isDisabled = true)
   const areAllExportPathsDisabled = useMemo(() => {
     if (!allExportPaths || allExportPaths.length === 0) {
       return true; // If no export paths, consider all disabled
@@ -71,7 +71,7 @@ const JobsAction = ({
   }, [zoneFileServerId, zoneNameParam]);
 
   return (
-    <Box className="flex justify-between align-middle">
+      <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
         <Box className="text-lg">File Server Overview:</Box>
         <Box className="text-lg font-semibold flex gap-3">

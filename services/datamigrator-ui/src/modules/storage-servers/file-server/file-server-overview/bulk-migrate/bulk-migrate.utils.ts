@@ -31,41 +31,38 @@ export const downloadBulkMigrationCsv = async (
       values?.migrationDetailsTableConfigurationValue;
 
     if (_mappingStepFormValue && Array.isArray(_mappingStepFormValue)) {
+      const headers = [
+        "Source Path",
+        "Source Directory",
+        "Destination File Server",
+        "Destination Path",
+        "Destination Directory",
+      ];
       const dataToExport = _mappingStepFormValue.map(
-        (detail: MigrationDetailsTableConfigurationType) => {
-          return {
-            id: detail.id,
-            "Source Path Name": detail.sourcePath.sourcePathName,
-            "Source File Server": JSON.stringify(
-              detail.sourceFileServerDetails
-            ),
-            "Source Path ID": detail.sourcePath.sourcePathId,
-            Protocol: detail.protocol,
-            Destination:
-              detail.destinationFileServerDetails?.destinationFileServerName,
-            "Destination ID":
-              detail.destinationFileServerDetails?.destinationFileServerId,
-            "Destination Path":
-              detail.destinationPathDetails?.destinationPathName,
-            "Destination Path ID":
-              detail.destinationPathDetails?.destinationPathId,
-            "Discovery Job Count": detail.discoveryJobCount,
-            "Migration Job Count": detail.migrationJobCount,
-            "Cutover Job Count": detail.cutoverJobCount,
-          };
-        }
+        (detail: MigrationDetailsTableConfigurationType) => ({
+          "Source Path": detail.sourcePath?.sourcePathName ?? "",
+          "Source Directory":
+            detail.sourceDirectoryPath && detail.sourceDirectoryPath !== "-"
+              ? detail.sourceDirectoryPath
+              : "-",
+          "Destination File Server":
+            detail.destinationFileServerDetails?.destinationFileServerName ?? "-",
+          "Destination Path":
+            detail.destinationPathDetails?.destinationPathName ?? "-",
+          "Destination Directory":
+            detail.destinationDirectoryPath &&
+            detail.destinationDirectoryPath !== "-"
+              ? detail.destinationDirectoryPath
+              : "-",
+        })
       );
 
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet(fileName || "Sheet 1");
+      const worksheet = workbook.addWorksheet(fileName || "Mappings");
 
-      const headers = Object.keys(dataToExport[0]);
       worksheet.addRow(headers);
-
       const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell, colNumber) => {
-        const columnHeader = headers[colNumber - 1];
-
+      headerRow.eachCell((cell) => {
         cell.fill = {
           type: "pattern",
           pattern: "solid",
@@ -73,70 +70,19 @@ export const downloadBulkMigrationCsv = async (
         };
         cell.font = { bold: true };
         cell.alignment = { horizontal: "center" };
-
-        if (
-          columnHeader === "Source File Server" ||
-          columnHeader === "Source Path ID" ||
-          columnHeader === "Destination ID" ||
-          columnHeader === "Destination Path ID"
-        ) {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFCCCB" },
-          };
-        }
       });
 
       dataToExport.forEach((row) => {
-        const newRow = worksheet.addRow(Object.values(row));
+        worksheet.addRow(headers.map((h) => row[h]));
+      });
 
-        newRow.eachCell((cell, colNumber) => {
-          const columnHeader = headers[colNumber - 1];
-          if (
-            columnHeader === "Source File Server" ||
-            columnHeader === "Source Path ID" ||
-            columnHeader === "Destination ID" ||
-            columnHeader === "Destination Path ID"
-          ) {
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFCCCB" },
-            };
-          }
+      worksheet.columns.forEach((column, index) => {
+        let maxLength = headers[index]?.length ?? 10;
+        column?.eachCell({ includeEmpty: true }, (cell) => {
+          const cellLength = cell.value ? cell.value.toString().length : 0;
+          if (cellLength > maxLength) maxLength = cellLength;
         });
-      });
-
-      worksheet.columns.forEach((column, index) => {
-        const columnHeader = headers[index];
-        if (
-          columnHeader === "Source File Server" ||
-          columnHeader === "Source Path ID" ||
-          columnHeader === "Destination ID" ||
-          columnHeader === "Destination Path ID"
-        ) {
-          column.hidden = true;
-        }
-      });
-
-      worksheet.columns.forEach((column, index) => {
-        const columnHeader = headers[index];
-        if (
-          columnHeader !== "Source File Server" &&
-          columnHeader !== "Source Path ID" &&
-          columnHeader !== "Destination ID" &&
-          columnHeader !== "Destination Path ID"
-        ) {
-          let maxLength = 0;
-          column?.eachCell({ includeEmpty: true }, (cell) => {
-            const cellLength = cell.value ? cell.value.toString().length : 0;
-            if (cellLength > maxLength) {
-              maxLength = cellLength;
-            }
-          });
-          column.width = maxLength + 2;
-        }
+        column.width = Math.min(maxLength + 2, 80);
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -265,6 +211,65 @@ export const validateMappingStepForm = (values: MappingStepFormikFormType) => {
   return errors;
 };
 
+/** Normalize directory path for comparison/display: empty, "-", undefined, or null becomes "" */
+export const normalizeDirectoryPath = (path: string | undefined | null): string => {
+  if (path === "-" || path === undefined || path === null) return "";
+  return String(path).replace(/\/+$/, "").trim();
+};
+
+/** True if one path is parent or child of the other (same path, or one is prefix of the other) */
+export const isDirectoryPathChildOrParent = (
+  pathA: string | undefined,
+  pathB: string | undefined
+): boolean => {
+  const a = normalizeDirectoryPath(pathA);
+  const b = normalizeDirectoryPath(pathB);
+  if (a === b) return true;
+  if (b === "") return true;
+  if (a === "") return true;
+  return a.startsWith(b + "/") || b.startsWith(a + "/");
+};
+
+/**
+ * Find an existing row whose SOURCE directory conflicts (parent/child) with the given source path + directory.
+ * Same source export path only. Returns the conflicting row or undefined.
+ */
+export const findConflictingSourceDirectoryMapping = (
+  currentRows: MigrationDetailsTableConfigurationType[],
+  sourcePathName: string,
+  newSourceDirectoryPath: string
+): MigrationDetailsTableConfigurationType | undefined =>
+  currentRows.find(
+    (row) =>
+      (row.sourcePath?.sourcePathName ?? "") === sourcePathName &&
+      isDirectoryPathChildOrParent(
+        newSourceDirectoryPath,
+        row.sourceDirectoryPath ?? "-"
+      )
+  );
+
+/**
+ * Find an existing row whose DESTINATION directory conflicts (parent/child) with the given destination + directory.
+ * Same destination file server + destination path only. Returns the conflicting row or undefined.
+ */
+export const findConflictingDestinationDirectoryMapping = (
+  currentRows: MigrationDetailsTableConfigurationType[],
+  destinationFileServerId: string,
+  destinationPathId: string,
+  newDestinationDirectoryPath: string
+): MigrationDetailsTableConfigurationType | undefined =>
+  currentRows.find(
+    (row) =>
+      (row.destinationFileServerDetails?.destinationFileServerId ?? "") ===
+        destinationFileServerId &&
+      (row.destinationPathDetails?.destinationPathId ?? "") ===
+        destinationPathId &&
+      isDirectoryPathChildOrParent(
+        newDestinationDirectoryPath,
+        row.destinationDirectoryPath ?? "-"
+      )
+  );
+
 // FOR PRE-SELECTION OF TABLE ROWS
 export const createSelectedMountPathsObject = (
   selectedMountPathsId: string[]
@@ -289,11 +294,13 @@ export const structureDataForReviewList = (
         path: detail.sourcePath.sourcePathName,
         sourcePathId: detail.sourcePath.sourcePathId,
       },
+      sourceDirectoryPath: detail.sourceDirectoryPath ?? "",
       destination: {
         server: detail.destinationFileServerDetails.destinationFileServerName,
         path: detail.destinationPathDetails.destinationPathName,
         pathId: [detail.destinationPathDetails.destinationPathId],
       },
+      destinationDirectoryPath: detail.destinationDirectoryPath ?? "",
       status: preCheckStatus,
     });
   });
@@ -310,11 +317,20 @@ export const createPathMapping = (
 
   migrationDetails.forEach((detail) => {
     if (!selectedMountPathsId.includes(String(detail?.id))) return;
+    // Display shows "-" when empty; API must receive "" for no directory selected
+    const sourceDir =
+      detail.sourceDirectoryPath && detail.sourceDirectoryPath !== "-"
+        ? detail.sourceDirectoryPath
+        : "";
+    const destDir =
+      detail.destinationDirectoryPath && detail.destinationDirectoryPath !== "-"
+        ? detail.destinationDirectoryPath
+        : "";
     data.push({
       sourcePathId: detail.sourcePath.sourcePathId,
       destinationPathId: [detail.destinationPathDetails.destinationPathId],
-      sourceDirectoryPath: detail.sourceDirectoryPath,
-      destinationDirectoryPath: detail.destinationDirectoryPath,
+      sourceDirectoryPath: sourceDir,
+      destinationDirectoryPath: destDir,
     });
   });
 
