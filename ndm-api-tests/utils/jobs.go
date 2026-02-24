@@ -92,8 +92,10 @@ type MigrationJobParams struct {
 }
 
 type BulkCutoverJobParams struct {
-	SourcePathIDs      []string
-	DestinationPathIDs []string
+	SourcePathIDs             []string
+	DestinationPathIDs        []string
+	SourceDirectoryPath      string
+	DestinationDirectoryPath string
 }
 
 type AdHocJobRunRequest struct {
@@ -285,9 +287,19 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 		minLen = len(params.DestinationPathIDs)
 	}
 	for i := 0; i < minLen; i++ {
+		var srcDirPath interface{} = nil
+		if params.SourceDirectoryPath != "" {
+			srcDirPath = params.SourceDirectoryPath
+		}
+		var destDirPath interface{} = nil
+		if params.DestinationDirectoryPath != "" {
+			destDirPath = params.DestinationDirectoryPath
+		}
 		cutoverConfigs = append(cutoverConfigs, map[string]interface{}{
-			"sourcePathId":      params.SourcePathIDs[i],
-			"destinationPathId": []string{params.DestinationPathIDs[i]},
+			"sourcePathId":             params.SourcePathIDs[i],
+			"destinationPathId":        []string{params.DestinationPathIDs[i]},
+			"sourceDirectoryPath":      srcDirPath,
+			"destinationDirectoryPath": destDirPath,
 		})
 	}
 
@@ -305,9 +317,9 @@ func CreateBulkCutoverJob(params BulkCutoverJobParams, headers map[string]string
 		return nil, nil, err
 	}
 
-	// Validate HTTP response status
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("cutover job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+	// Validate HTTP response status (bulk-cutover endpoint returns 201 Created)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("cutover job creation failed: expected HTTP 201 Created, got %d", resp.StatusCode)
 		return nil, resp, err
 	}
 
