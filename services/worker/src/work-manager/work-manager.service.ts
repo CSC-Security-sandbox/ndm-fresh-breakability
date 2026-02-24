@@ -371,7 +371,8 @@ export class WorkManagerService implements OnModuleDestroy{
       await this.monitorTaskQueues();
     } catch (error) {
       this.logger.error(`Error fetching configurations: ${error.message}`);
-      if(error.message?.includes('UNAUTHENTICATED: Jwt is expired')){
+      if (AuthService.isUnauthorized(error) || error.message?.includes('UNAUTHENTICATED: Jwt is expired')) {
+        this.logger.warn('Received 401 — refreshing token and Temporal connections');
         await this.refreshTemporalConnectionCron();
       }
     } finally {

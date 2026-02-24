@@ -367,14 +367,18 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.startExecution).toHaveBeenCalledWith(dto);
     });
 
-    it('should propagate BadRequestException when no staged workers', async () => {
-      mockUpgradeService.startExecution.mockRejectedValue(
-        new BadRequestException('No workers have completed binary staging'),
-      );
+    it('should return started when no staged workers', async () => {
+      const expected = {
+        workflowId: 'UpgradeExecution-123',
+        status: 'started' as const,
+        message: 'No workers have staged binaries. Execution marked as completed.',
+        triggeredWorkers: [],
+      };
+      mockUpgradeService.startExecution.mockResolvedValue(expected);
 
-      await expect(
-        controller.startExecution({ bundleId: 'bundle-1', version: '1.0.0' }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await controller.startExecution({ bundleId: 'bundle-1', version: '1.0.0' });
+      expect(result.status).toBe('started');
+      expect(result.triggeredWorkers).toEqual([]);
     });
   });
 

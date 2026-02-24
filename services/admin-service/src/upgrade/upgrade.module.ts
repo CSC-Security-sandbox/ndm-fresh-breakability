@@ -9,10 +9,12 @@ import { UpgradeService } from './upgrade.service';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
 import { WorkerEntity } from '../entities/worker.entity';
 import { WorkerStatsEntity } from '../entities/worker-stats.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobRunEntity } from '../entities/jobrun.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UpgradeBundle, WorkerEntity, WorkerStatsEntity]),
+    TypeOrmModule.forFeature([UpgradeBundle, WorkerEntity, WorkerStatsEntity, JobConfigEntity, JobRunEntity]),
     LoggerModule.forRoot(),
     ConfigModule,
     WorkflowModule,

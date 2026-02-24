@@ -54,4 +54,10 @@ export class AuthService {
             return null;
         }
     }
+
+    static isUnauthorized(error: any): boolean {
+        return error?.response?.status === 401 ||
+            error?.message?.includes('401') ||
+            error?.message?.includes('UNAUTHENTICATED');
+    }
 }

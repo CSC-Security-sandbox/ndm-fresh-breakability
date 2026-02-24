@@ -42,6 +42,9 @@ spec:
         {{- toYaml .Values.extraNodeAffinity | nindent 8 }}
       {{- end }}
       {{- end }}
+      {{- if .Values.hostPID }}
+      hostPID: true
+      {{- end }}
       serviceAccountName: {{- if .Values.serviceAccountName }} {{ .Values.serviceAccountName }} {{- end }}
       {{- if .Values.podSecurityContext }}
       securityContext:
