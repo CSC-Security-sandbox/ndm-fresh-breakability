@@ -145,6 +145,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
                     pathId: config.sourcePathId,
                     serverId: sourceVolume.fileServer.id,
                     pathName: sourceVolume.volumePath,
+                    sourceDirectoryPath: config.sourceDirectoryPath || null,  
                     destinations: [],
                     discoveredSize
                 };
@@ -172,6 +173,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
                             pathId: destinationPathId,
                             serverId: destinationVolume.fileServer.id,
                             pathName: destinationVolume.volumePath,
+                            targetDirectoryPath: config.destinationDirectoryPath || null,
                             workers: workerWithStatus,
                         });
                     }

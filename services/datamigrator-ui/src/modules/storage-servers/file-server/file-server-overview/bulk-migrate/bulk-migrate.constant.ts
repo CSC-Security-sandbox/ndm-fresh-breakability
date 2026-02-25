@@ -73,13 +73,13 @@ const ReviewPathCellRenderer = (getValue: (row: any) => string) => (props: any) 
 export const REVIEW_LIST_COLUMN_DEFS: any[] = [
   {
     id: 1,
-    header: "Source Path",
+    header: "Source Export Path",
     accessor: "source.path",
     Renderer: ReviewPathCellRenderer((row) => row?.source?.path ?? ""),
   },
   {
     id: 2,
-    header: "Source Directory",
+    header: "Source Directory Path",
     accessor: "sourceDirectoryPath",
     Renderer: ReviewPathCellRenderer((row) => row?.sourceDirectoryPath ?? ""),
   },
@@ -91,13 +91,13 @@ export const REVIEW_LIST_COLUMN_DEFS: any[] = [
   },
   {
     id: 4,
-    header: "Destination Path",
+    header: "Destination Export Path",
     accessor: "destination.path",
     Renderer: ReviewPathCellRenderer((row) => row?.destination?.path ?? ""),
   },
   {
     id: 5,
-    header: "Destination Directory",
+    header: "Destination Directory Path",
     accessor: "destinationDirectoryPath",
     Renderer: ReviewPathCellRenderer((row) => row?.destinationDirectoryPath ?? ""),
   },

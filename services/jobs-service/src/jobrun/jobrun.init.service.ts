@@ -90,10 +90,12 @@ export class JobRunInitService {
   async scheduleAJob() {
     const currentTime = new Date();
     const jobs: JobConfigEntity[] = await this.jobConfigRepo.find({
-      select: { 
-        id: true, 
-        sourcePathId: true, 
+      select: {
+        id: true,
+        sourcePathId: true,
         targetPathId: true,
+        sourceDirectoryPath: true,
+        targetDirectoryPath: true,
         sourcePath: {
           fileServer: {
             config: {
@@ -121,6 +123,8 @@ export class JobRunInitService {
         migrateConfigs: [
           {
             sourcePathId: job.sourcePathId,
+            sourceDirectoryPath: job.sourceDirectoryPath ?? undefined,
+            destinationDirectoryPath: job.targetDirectoryPath ?? undefined,
             destinationPathId: job.targetPathId ? [job.targetPathId] : [],
           },
         ],

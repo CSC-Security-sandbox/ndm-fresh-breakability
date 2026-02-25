@@ -15,45 +15,18 @@ import {
     ValidationArguments
 } from 'class-validator';
 
-
-@ValidatorConstraint({ name: 'UniqueSourcePathId', async: false })
-export class UniqueSourcePathIdConstraint implements ValidatorConstraintInterface {
-  validate(migrateConfigs: MigrateConfig[], args: ValidationArguments) {
-    const sourcePathIds = migrateConfigs.map(config => config.sourcePathId);
-    const uniqueSourcePathIds = new Set(sourcePathIds);
-    return uniqueSourcePathIds.size === sourcePathIds.length;
-  }
-
-  defaultMessage(args: ValidationArguments) {
-    return `sourcePathId values must be unique within migrateConfigs[]`;
-  }
-}
-
 @ValidatorConstraint({ name: 'SourceNotInDestination', async: false })
 export class SourceNotInDestinationConstraint implements ValidatorConstraintInterface {
   validate(destinationPathIds: string[], args: ValidationArguments) {
     const migrateConfig = args.object as MigrateConfig;
-
     if (!migrateConfig || !migrateConfig.sourcePathId || !Array.isArray(destinationPathIds)) {
       return false;
     }
-
     return !destinationPathIds.includes(migrateConfig.sourcePathId);
   }
 
   defaultMessage(args: ValidationArguments) {
     return `sourcePathId must not be present in destinationPathId[]`;
-  }
-}
-
-@ValidatorConstraint({ name: 'UniqueDestinationPathId', async: false })
-export class UniqueDestinationPathIdConstraint implements ValidatorConstraintInterface {
-  validate(destinationPathIds: string[], args: ValidationArguments) {
-    return new Set(destinationPathIds).size === destinationPathIds.length;
-  }
-
-  defaultMessage(args: ValidationArguments) {
-    return `destinationPathId[] must contain only unique values`;
   }
 }
 
@@ -91,7 +64,6 @@ export class MigrateConfig {
   @IsArray()
   @ArrayUnique()
   @IsUUID('all', { each: true }) 
-  @Validate(UniqueDestinationPathIdConstraint)
   @Validate(SourceNotInDestinationConstraint)
   destinationPathId: string[];
 
@@ -125,7 +97,6 @@ export class BulkMigrateJobConfig {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  @Validate(UniqueSourcePathIdConstraint)
   migrateConfigs: MigrateConfig[]
 
   @ApiProperty({

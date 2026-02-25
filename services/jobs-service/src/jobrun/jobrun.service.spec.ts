@@ -697,6 +697,7 @@ describe("JobRunService", () => {
           targetPathId: 'source-path-id',
           sourceServerId: 'server-1',
           targetServerId: 'server-2',
+          conflictType: 'circular',
         }
       ];
 
@@ -712,7 +713,7 @@ describe("JobRunService", () => {
         expect(true).toBe(false); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(BadRequestException);
-        expect(error.message).toBe(`Circular dependency detected for job config ${mockJobConfigId}`);
+        expect(error.message).toBe(`Circular conflict detected for job config ${mockJobConfigId}`);
         expect(error.options.cause).toEqual(mockCircularDependency);
       }
 
@@ -745,6 +746,7 @@ describe("JobRunService", () => {
           targetPathId: 'source-path-id',
           sourceServerId: 'server-1',
           targetServerId: 'server-2',
+          conflictType: 'circular',
         }
       ];
 
@@ -759,7 +761,7 @@ describe("JobRunService", () => {
         expect(true).toBe(false); // Should not reach here
       } catch (error) {
         expect(error).toBeInstanceOf(BadRequestException);
-        expect(error.message).toBe(`Circular dependency detected for job config ${mockJobConfigId}`);
+        expect(error.message).toBe(`Circular conflict detected for job config ${mockJobConfigId}`);
         expect(error.options.cause).toEqual(mockCircularDependency);
       }
     });

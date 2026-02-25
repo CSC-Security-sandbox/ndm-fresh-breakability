@@ -192,10 +192,12 @@ describe('JobRunInitService', () => {
 
       expect(result).toEqual(jobs);
       expect(jobConfigRepo.find).toHaveBeenCalledWith({
-        select: { 
-          id: true, 
-          sourcePathId: true, 
+        select: {
+          id: true,
+          sourcePathId: true,
           targetPathId: true,
+          sourceDirectoryPath: true,
+          targetDirectoryPath: true,
           sourcePath: {
             fileServer: {
               config: {

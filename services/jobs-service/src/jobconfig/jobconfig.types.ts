@@ -91,10 +91,12 @@ export interface PreChecks {
   pathId: string;
   discoveredSize?: number;
   pathName: string;
+  sourceDirectoryPath?: string;
   serverId: string
   destinations: {
     pathId: string;
     pathName: string;
+    targetDirectoryPath?: string;
     serverId: string
     workers: workerWithStatus[]
   }[],
@@ -112,9 +114,11 @@ export interface PreCheckCircularDependency {
   jobId: string;
   sourcePathId: string;
   targetPathId: string;
+  sourceDirectoryPath?: string | null;
+  targetDirectoryPath?: string | null;
   sourceServerId: string;
   targetServerId: string;
-  conflictType: 'circular' | 'destination';
+  conflictType: 'circular' | 'destination' | 'source';
   jobType: string;
 }
 

@@ -112,7 +112,7 @@ export class MigrationConflictService {
             ]
         });
 
-        // Circular dependency conflicts (always added regardless of active job runs)
+        // Circular dependency: conflict at export level only (reverse direction A→B vs B→A).
         for (const job of conflictingJobs) {
             dependencies.push({
                 status: job.status.toString(),
@@ -134,21 +134,123 @@ export class MigrationConflictService {
 
         // Normal destination path conflicts
         for (const job of uniqueDestinationPathConflicts) {
-            // Only block if it's a different source path with same destination (not same source+destination)
-            if (job.sourcePathId !== config.sourcePathId) {
-                dependencies.push({
-                    status: job.status.toString(),
-                    jobId: job.id,
-                    sourcePathId: job.sourcePath.volumePath,
-                    targetPathId: job.targetPath.volumePath,
-                    sourceServerId: job.sourcePath.fileServer.config.configName,
-                    targetServerId: job.targetPath.fileServer.config.configName,
-                    conflictType: 'destination',
-                    jobType: job.jobType,
-                });
+            // Block when destinations overlap (same dir or parent/child relationship)
+            if (this.hasDirectoryOverlap(config.destinationDirectoryPath, job.targetDirectoryPath)) {
+                // Allow only exact duplicate: same source path, same source directory, and same destination directory
+                const isExactDuplicate = job.sourcePathId === config.sourcePathId &&
+                    this.isSameDirectory(config.sourceDirectoryPath, job.sourceDirectoryPath) &&
+                    this.isSameDirectory(config.destinationDirectoryPath, job.targetDirectoryPath);
+
+                if (!isExactDuplicate) {
+                    dependencies.push({
+                        status: job.status.toString(),
+                        jobId: job.id,
+                        sourcePathId: job.sourcePath.volumePath,
+                        targetPathId: job.targetPath.volumePath,
+                        sourceServerId: job.sourcePath.fileServer.config.configName,
+                        targetServerId: job.targetPath.fileServer.config.configName,
+                        conflictType: 'destination',
+                        jobType: job.jobType,
+                        sourceDirectoryPath: job.sourceDirectoryPath ?? null,
+                        targetDirectoryPath: job.targetDirectoryPath ?? null,
+                    });
+                }
+            }
+        }
+
+        // Source-side parent-child conflicts: same source path with overlapping source directories
+        const sourcePathConflictingJobs = await this.jobConfigEntity.find({
+            where: {
+                jobType: In([JobType.MIGRATE, JobType.CUT_OVER]),
+                status: JobStatus.Active,
+                sourcePathId: config.sourcePathId,
+            },
+            relations: [
+                'targetPath',
+                'sourcePath',
+                'sourcePath.fileServer.config',
+                'targetPath.fileServer.config'
+            ]
+        });
+        const addedJobIds = new Set(dependencies.map(d => d.jobId));
+        const uniqueSourcePathConflicts = sourcePathConflictingJobs.filter(
+            job => !addedJobIds.has(job.id)
+        );
+
+        for (const job of uniqueSourcePathConflicts) {
+            // Block when source directories overlap (same dir or parent/child relationship)
+            if (this.hasDirectoryOverlap(config.sourceDirectoryPath, job.sourceDirectoryPath)) {
+                // Allow only exact duplicate: same source path and same source directory
+                const isExactDuplicate = this.isSameDirectory(config.sourceDirectoryPath, job.sourceDirectoryPath);
+
+                if (!isExactDuplicate) {
+                    dependencies.push({
+                        status: job.status.toString(),
+                        jobId: job.id,
+                        sourcePathId: job.sourcePath.volumePath,
+                        targetPathId: job.targetPath.volumePath,
+                        sourceServerId: job.sourcePath.fileServer.config.configName,
+                        targetServerId: job.targetPath.fileServer.config.configName,
+                        conflictType: 'source',
+                        jobType: job.jobType,
+                        sourceDirectoryPath: job.sourceDirectoryPath ?? null,
+                        targetDirectoryPath: job.targetDirectoryPath ?? null,
+                    });
+                }
             }
         }
         return dependencies;
+    }
+
+    /**
+     * Trims trailing slashes from a path without using regex (avoids ReDoS on user-controlled input).
+     */
+    private trimTrailingSlashes(s: string): string {
+        let end = s.length;
+        while (end > 0 && s[end - 1] === '/') end--;
+        return end === s.length ? s : s.slice(0, end);
+    }
+
+    /**
+     * Checks if two directory paths overlap (one is a parent/ancestor of the other, or they are the same).
+     * If either is null,undefined, or an empty string, it's an export-level job which overlaps with everything.
+     */
+    private hasDirectoryOverlap(dirA?: string, dirB?: string): boolean {
+        // If either side is export-level (no directory), they always overlap
+        if (!dirA || !dirB) return true;
+
+        const normA = this.trimTrailingSlashes(dirA);
+        const normB = this.trimTrailingSlashes(dirB);
+
+        // Check if paths are exactly the same
+        if (normA === normB) return true;
+
+        // Check if one path is a parent of the other with proper directory boundary checking
+        return this.isParentPath(normA, normB) || this.isParentPath(normB, normA);
+    }
+
+    /**
+     * Checks if parentPath is a parent directory of childPath.
+     * Ensures proper directory boundary checking to avoid false positives like "/data" vs "/data2".
+     */
+    private isParentPath(parentPath: string, childPath: string): boolean {
+        // Child path must be longer than parent path
+        if (childPath.length <= parentPath.length) return false;
+        
+        // Child path must start with parent path
+        if (!childPath.startsWith(parentPath)) return false;
+        
+        // The character immediately after the parent path must be a directory separator
+        return childPath[parentPath.length] === '/';
+    }
+
+    /**
+     * Checks if two directory paths are exactly the same (normalized).
+     */
+    private isSameDirectory(dirA?: string, dirB?: string): boolean {
+        const normA = this.trimTrailingSlashes(dirA || '');
+        const normB = this.trimTrailingSlashes(dirB || '');
+        return normA === normB;
     }
 
     /**

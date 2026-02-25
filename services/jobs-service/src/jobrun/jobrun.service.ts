@@ -205,13 +205,20 @@ export class JobRunService {
           migrateConfigs: [
             {
               sourcePathId: jobConfig.sourcePathId,
+              sourceDirectoryPath: jobConfig.sourceDirectoryPath,
+              destinationDirectoryPath: jobConfig.targetDirectoryPath,
               destinationPathId: [jobConfig.targetPathId],
             },
           ],
         });
       if (circularDependencies && circularDependencies.length > 0) {
+        const conflictTypes = [...new Set(circularDependencies.map(c => c.conflictType))];
+        const conflictMessage = conflictTypes.length === 1 
+          ? `${conflictTypes[0].charAt(0).toUpperCase() + conflictTypes[0].slice(1)} conflict detected`
+          : `Migration conflicts detected (${conflictTypes.join(', ')})`;
+        
         throw new BadRequestException(
-          `Circular dependency detected for job config ${jobConfigId}`,
+          `${conflictMessage} for job config ${jobConfigId}`,
           {
             cause: circularDependencies,
           }

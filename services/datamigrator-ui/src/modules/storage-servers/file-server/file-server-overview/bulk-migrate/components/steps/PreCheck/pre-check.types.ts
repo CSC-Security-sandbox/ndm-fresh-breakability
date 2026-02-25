@@ -20,9 +20,11 @@ export type MigrationConflictDetail = {
   jobId: string;
   sourcePathId: string;
   targetPathId: string;
+  sourceDirectoryPath?: string | null;
+  targetDirectoryPath?: string | null;
   sourceServerId: string;
   targetServerId: string;
-  conflictType: 'circular' | 'destination';
+  conflictType: 'circular' | 'destination' | 'source';
   jobType: string;
 };
 

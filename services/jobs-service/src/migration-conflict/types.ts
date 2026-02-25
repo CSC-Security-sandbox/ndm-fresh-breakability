@@ -3,6 +3,8 @@
  */
 export interface MigrationConflictCheckConfig {
     sourcePathId: string;
+    sourceDirectoryPath?: string;
+    destinationDirectoryPath?: string;
     destinationPathId: string[];
 }
 
