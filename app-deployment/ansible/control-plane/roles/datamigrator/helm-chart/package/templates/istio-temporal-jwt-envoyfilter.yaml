@@ -12,6 +12,8 @@ kind: RequestAuthentication
 metadata:
   name: temporal-jwt-validation
   namespace: istio-system
+  annotations:
+    "helm.sh/resource-policy": keep
 spec:
   selector:
     matchLabels:
@@ -32,6 +34,8 @@ kind: AuthorizationPolicy
 metadata:
   name: temporal-require-jwt
   namespace: istio-system
+  annotations:
+    "helm.sh/resource-policy": keep
 spec:
   selector:
     matchLabels:

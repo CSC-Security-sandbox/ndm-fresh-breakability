@@ -10,6 +10,8 @@ kind: RequestAuthentication
 metadata:
   name: {{ $jwt.requestAuthenticationName | default "keycloak-jwt" }}
   namespace: {{ $istio.namespace | default "istio-system" }}
+  annotations:
+    "helm.sh/resource-policy": keep
 spec:
   {{- if $jwt.selector }}
   selector:
