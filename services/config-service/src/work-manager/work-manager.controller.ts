@@ -61,6 +61,7 @@ export class WorkManagerController {
       req?.headers['x-client-platform'],
       body?.envVariables,
       body?.isRebootCall,
+      body?.workerVersion,
     );
   }
 
@@ -88,6 +89,7 @@ export class WorkManagerController {
       req?.headers['x-client-platform'],
       {},     
       false,
+      null,
     );
   }
 

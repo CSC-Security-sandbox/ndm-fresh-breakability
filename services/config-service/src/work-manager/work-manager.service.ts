@@ -155,6 +155,7 @@ export class WorkManagerService {
     platform: Platform,
     envVariables: Record<string, any>,
     isRebootCall: boolean,
+    workerVersion: string,
   ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
     try {
       // Debug: Log what we received
@@ -235,7 +236,7 @@ export class WorkManagerService {
               ),
               platform: platform,
               envVariables: envVariables,
-              workerVersion: envVariables?.WORKER_VERSION || null,
+              workerVersion: workerVersion,
             },
           );
         }
@@ -253,7 +254,7 @@ export class WorkManagerService {
         projectId,
         platform: platform,
         envVariables: envVariables,
-        workerVersion: envVariables?.WORKER_VERSION || null,
+        workerVersion: workerVersion,
       });
       const result = await this.workerEntity.save(newWorker);
 
