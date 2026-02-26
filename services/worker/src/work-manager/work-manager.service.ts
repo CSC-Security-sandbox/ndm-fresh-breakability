@@ -280,6 +280,7 @@ export class WorkManagerService implements OnModuleDestroy{
           {
             envVariables: process.env,
             isRebootCall: true,
+            workerVersion: this.workerVersion,
           },
           {
             headers: {
