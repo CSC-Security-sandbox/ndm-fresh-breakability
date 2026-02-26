@@ -29,7 +29,7 @@ RUN ARCH=$(dpkg --print-architecture) \
     && apt-get purge -y build-essential equivs && apt-get autoremove -y
 
 # Install remaining system dependencies including Firefox ESR
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     libappindicator3-1 \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y \
 # Install global npm packages
 RUN npm install -g @nestjs/cli pm2@latest
 
-RUN npm install -g npm@11.7.0
+RUN npm install -g npm@11.8.0
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/firefox \
