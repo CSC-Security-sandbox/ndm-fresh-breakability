@@ -79,12 +79,12 @@ export class CsvService {
         if (jobType?.toUpperCase() === JobType.CutOver) {
             query = await this.getCutoverInventoryDataQuery(jobRunId, limit, offset);
         } else {
-            query = await this.getInventoryDataQuery(jobRunId, limit, offset);
+            query = await this.getInventoryDataQuery(jobRunId, limit, offset, jobType);
         }
         return this.dataSource.query(query.query, query.values);
     }
 
-    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number) {
+    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number, jobType?: string) {
         const dbSchema = process.env.SCHEMA;
         const protocolQuery = `
         SELECT fs.protocol
@@ -96,8 +96,9 @@ export class CsvService {
     `;
         const protocolResult = await this.dataSource.query(protocolQuery, [jobRunId]);
         const protocol = protocolResult[0]?.protocol || CsvService.DEFAULT_PROTOCOL;
-        const columns = this.getMigrationCoCColumns(protocol);
-    
+        const isMigrate = jobType?.toUpperCase() === JobType.Migrate;
+        const columns = this.getMigrationCoCColumns(protocol, isMigrate);
+
         const query = `
         SELECT DISTINCT ON (i.path)
             COALESCE(v_source.volume_path, '') || i.path as "Source Path",
@@ -174,7 +175,12 @@ export class CsvService {
         return { query, values: [jobRunId, limit, offset] };
     }
 
-    getMigrationCoCColumns(protocol: string): string {
+    getMigrationCoCColumns(protocol: string, includeCocStatusColumns: boolean = false): string {
+        const statusColumns = includeCocStatusColumns
+            ? `
+            COALESCE(i.copy_content_status, 'not_applicable') as "CopyContentStatus",
+            COALESCE(i.stamp_meta_data_status, 'not_applicable') as "StampMetaDataStatus",`
+            : '';
         const baseColumns = `
             i.source_checksum as "Source Checksum",
             i.target_checksum as "Destination Checksum",
@@ -186,7 +192,7 @@ export class CsvService {
                         ELSE 'no'
                     END
             END AS "ChecksumMatchStatus",
-            TO_CHAR(i.checksum_time AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') as "Checksum Generated Timestamp (UTC)",
+            TO_CHAR(i.checksum_time AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') as "Checksum Generated Timestamp (UTC)",${statusColumns}${statusColumns ? '' : ','}
             CASE
                 WHEN i.is_directory THEN 'directory'
                 ELSE 'file'

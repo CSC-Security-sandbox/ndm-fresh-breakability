@@ -247,7 +247,9 @@ describe("InventoryService", () => {
             targetMeta: expect.any(Object),
             inode: 0,
             isDeleted: false,
-            checksumTime: null
+            checksumTime: null,
+            copyContentStatus: null,
+            stampMetaDataStatus: null
         });
     });
 
