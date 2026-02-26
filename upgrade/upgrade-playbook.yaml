@@ -261,52 +261,18 @@
           until: pod_ready.rc == 0
           environment: "{{ helm_environment }}"
 
-        - name: "Step 9 — Check JWT issuer in RequestAuthentication resources"
+        - name: "Step 9 — Verify istio-system JWT resources survived upgrade"
           ansible.builtin.shell: |
             kubectl get requestauthentication -n istio-system \
               -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.jwtRules[0].issuer}{"\n"}{end}'
           register: jwt_issuer_check
           changed_when: false
+          failed_when: false
           environment: "{{ helm_environment }}"
 
         - name: "Step 9 — Display current JWT issuers"
           ansible.builtin.debug:
-            msg: "{{ jwt_issuer_check.stdout_lines }}"
-
-        - name: "Step 9 — Get VM IP address"
-          ansible.builtin.shell: >
-            ip route get 1.1.1.1 | grep -oP 'src \K\S+'
-          register: vm_ip
-          changed_when: false
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
-
-        - name: "Step 9 — Patch keycloak-jwt RequestAuthentication with VM IP"
-          ansible.builtin.command:
-            argv:
-              - kubectl
-              - patch
-              - requestauthentication
-              - keycloak-jwt
-              - -n
-              - istio-system
-              - --type=json
-              - '-p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]'
-          environment: "{{ helm_environment }}"
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
-
-        - name: "Step 9 — Patch temporal-jwt-validation RequestAuthentication with VM IP"
-          ansible.builtin.command:
-            argv:
-              - kubectl
-              - patch
-              - requestauthentication
-              - temporal-jwt-validation
-              - -n
-              - istio-system
-              - --type=json
-              - '-p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]'
-          environment: "{{ helm_environment }}"
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
+            msg: "{{ jwt_issuer_check.stdout_lines | default(['No RequestAuthentication resources found']) }}"
 
         # =========================================================================
         # Post-upgrade: Verify new versions

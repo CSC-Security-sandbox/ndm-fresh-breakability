@@ -3,51 +3,6 @@
 {{- $jwt := $istio.jwt | default dict -}}
 {{- if and ($istio.enabled | default false) ($jwt.enabled | default false) }}
 ---
-# RequestAuthentication validates JWT tokens from Keycloak
-# MUST be in istio-system namespace to apply to istio-ingressgateway
-apiVersion: security.istio.io/v1
-kind: RequestAuthentication
-metadata:
-  name: {{ $jwt.requestAuthenticationName | default "keycloak-jwt" }}
-  namespace: {{ $istio.namespace | default "istio-system" }}
-spec:
-  {{- if $jwt.selector }}
-  selector:
-    matchLabels:
-      {{- range $key, $value := $jwt.selector }}
-      {{ $key }}: {{ $value }}
-      {{- end }}
-  {{- end }}
-  jwtRules:
-  - issuer: {{ $jwt.issuer | quote }}
-    jwksUri: {{ $jwt.jwksUri | quote }}
-    {{- if $jwt.audiences }}
-    audiences:
-    {{- range $jwt.audiences }}
-    - {{ . | quote }}
-    {{- end }}
-    {{- end }}
-    {{- if $jwt.fromHeaders }}
-    fromHeaders:
-    {{- range $jwt.fromHeaders }}
-    - name: {{ .name | quote }}
-      {{- if .prefix }}
-      prefix: {{ .prefix | quote }}
-      {{- end }}
-    {{- end }}
-    {{- else }}
-    fromHeaders:
-    - name: "Authorization"
-      prefix: "Bearer "
-    {{- end }}
-    {{- if $jwt.forwardOriginalToken }}
-    forwardOriginalToken: {{ $jwt.forwardOriginalToken }}
-    {{- end }}
-    {{- if $jwt.outputPayloadToHeader }}
-    outputPayloadToHeader: {{ $jwt.outputPayloadToHeader | quote }}
-    {{- end }}
-
----
 # AuthorizationPolicy enforces JWT authentication on protected endpoints
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
@@ -65,7 +20,6 @@ spec:
   action: {{ $jwt.action | default "ALLOW" }}
   rules:
   {{- if $jwt.protectedPaths }}
-  # Protected paths require valid JWT
   {{- range $idx, $pathConfig := $jwt.protectedPaths }}
   - to:
     - operation:
