@@ -75,4 +75,8 @@ export class FileServerEntity extends Base {
     @ApiProperty({ description: 'Export path source' })
     @Column({ type: 'varchar', nullable: true,  name: 'export_path_source' })
     exportPathSource: ExportPathSource;
+
+    @ApiProperty({ description: 'DNS server used for resolution' })
+    @Column({ type: 'text', nullable: true, name: 'dns_server' })
+    dnsServer: string;
 }

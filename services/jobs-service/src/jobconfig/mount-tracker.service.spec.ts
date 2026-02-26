@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { MountTrackerService } from './mount-tracker.service';
 import { MountRequest, ListDirsInput } from './jobconfig.types';
+import { FileServerEntity } from '../entities/fileserver.entity';
 import { Protocol } from 'src/constants/enums';
 import * as path from 'path';
 
@@ -37,9 +39,24 @@ jest.mock('fast-glob', () => {
   return { __esModule: true, default: fn };
 });
 
+jest.mock('dns', () => ({
+  ...jest.requireActual('dns'),
+  Resolver: jest.fn(),
+  promises: {
+    lookup: jest.fn()
+  }
+}));
+
+jest.mock('net', () => ({
+  ...jest.requireActual('net'),
+  isIP: jest.fn()
+}));
+
 import * as fs from 'fs';
+import * as net from 'net';
 
 const mockExecAsync: jest.Mock = (global as any).__mockExecAsync;
+const mockIsIP = net.isIP as jest.MockedFunction<typeof net.isIP>;
 
 describe('MountTrackerService', () => {
   let service: MountTrackerService;
@@ -94,11 +111,16 @@ describe('MountTrackerService', () => {
       }),
     } as unknown as ConfigService;
 
+    const mockFileServerRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MountTrackerService,
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: ConfigService, useValue: configService },
+        { provide: getRepositoryToken(FileServerEntity), useValue: mockFileServerRepository },
       ],
     }).compile();
 
@@ -109,6 +131,12 @@ describe('MountTrackerService', () => {
     (fs.promises.rm as jest.Mock).mockReset().mockResolvedValue(undefined);
     ((global as any).__mockFg as jest.Mock)?.mockReset?.();
     ((global as any).__mockFg as jest.Mock)?.mockResolvedValue?.([]);
+    
+    // Set up net.isIP mock behavior
+    mockIsIP.mockImplementation((input: string) => {
+      // Simple IP check for testing
+      return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(input) ? 4 : 0;
+    });
   });
 
   afterEach(() => {
@@ -887,6 +915,583 @@ describe('MountTrackerService', () => {
         expect.arrayContaining([expect.stringMatching(/^\/\/192\.168\.1\.200\/smb\/share/)]),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('DNS resolution functionality', () => {
+    let mockFileServerRepository: any;
+
+    beforeEach(() => {
+      mockFileServerRepository = {
+        findOne: jest.fn().mockResolvedValue(null),
+      };
+      
+      // Replace the existing mock with our new one
+      const module = (service as any).fileServerRepository = mockFileServerRepository;
+    });
+
+    it('should use hostname directly when it is already an IP address', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+
+      const ipRequest: MountRequest = {
+        ...smbRequest,
+        hostname: '10.0.0.100', // Already an IP
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(ipRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.100/')]),
+        expect.any(Object)
+      );
+      expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('is already an IP address'));
+    });
+
+    it('should use custom DNS servers from FileServer configuration', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10,192.168.1.11'
+      });
+
+      // Mock DNS resolution
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callback(null, ['10.0.0.200']);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testhost',
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockFileServerRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'test-server' },
+        select: ['dnsServer']
+      });
+      expect(dnsMock.setServers).toHaveBeenCalledWith(['192.168.1.10', '192.168.1.11']);
+      
+      // Restore original
+      require('dns').Resolver = originalResolver;
+    });
+
+    it('should fallback to system DNS when custom DNS fails', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer : '192.168.1.10'
+      });
+
+      // Mock DNS resolution - custom fails, system succeeds
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callback(new Error('Custom DNS failed'), null);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      // Mock system DNS to succeed
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.201' });
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testhost2',
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.201/')]),
+        expect.any(Object)
+      );
+      
+      // Restore originals
+      require('dns').Resolver = originalResolver;
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should try FQDN resolution for short hostnames when custom DNS fails', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      let callCount = 0;
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callCount++;
+          if (callCount === 1 && hostname === 'shortname') {
+            // First call (shortname) fails
+            callback(new Error('Not found'), null);
+          } else if (callCount === 2 && hostname === 'shortname.rootdomain.local') {
+            // Second call (FQDN) succeeds
+            callback(null, ['10.0.0.202']);
+          } else {
+            callback(new Error('Unexpected call'), null);
+          }
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'shortname', // No dots - should trigger FQDN attempt
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(dnsMock.resolve4).toHaveBeenCalledWith('shortname', expect.any(Function));
+      expect(dnsMock.resolve4).toHaveBeenCalledWith('shortname.rootdomain.local', expect.any(Function));
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.202/')]),
+        expect.any(Object)
+      );
+      
+      // Restore original
+      require('dns').Resolver = originalResolver;
+    });
+
+    it('should fallback to original hostname when all DNS strategies fail', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      // Mock DNS resolution to always fail
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callback(new Error('DNS failed'), null);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      // Mock system DNS to also fail
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'failhost',
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//failhost/')]), // Should use original hostname
+        expect.any(Object)
+      );
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('All DNS resolution strategies failed for failhost')
+      );
+      
+      // Restore originals
+      require('dns').Resolver = originalResolver;
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should handle FileServer repository errors gracefully', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer repository to throw error
+      mockFileServerRepository.findOne.mockRejectedValue(new Error('Database error'));
+
+      // Mock system DNS to succeed
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.203' });
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testhost3',
+        fileServerId: 'error-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get DNS servers from FileServer error-server')
+      );
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.203/')]),
+        expect.any(Object)
+      );
+      
+      // Restore original
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should handle empty DNS servers configuration', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with empty dnsServer
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: ''
+      });
+
+      // Mock system DNS to succeed
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.204' });
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testhost4',
+        fileServerId: 'empty-dns-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.204/')]),
+        expect.any(Object)
+      );
+      
+      // Restore original
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should use cached resolved IP for subsequent mounts with same key', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with DNS servers to trigger resolution logic
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      // Mock DNS resolution to track how many times it's called
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callback(null, ['10.0.0.205']);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'cachetest', // Use hostname to trigger DNS resolution
+        fileServerId: 'cache-test',
+      };
+
+      // First mount - should resolve DNS and mount
+      const result1 = await service.ensureMounted(hostnameRequest);
+      
+      // Verify DNS resolution happened
+      expect(dnsMock.resolve4).toHaveBeenCalledTimes(1);
+      expect(result1.key).toBe('cache-test:smb/share:');
+      
+      // Clear the DNS mock call count but don't unmount
+      dnsMock.resolve4.mockClear();
+      
+      // Call resolveHostToIp directly (simulates what happens during mount creation)
+      // This should use the cached IP from the existing mount
+      const resolvedIp = await (service as any).resolveHostToIp('cachetest', '/share', result1.key, 'cache-test');
+      
+      expect(resolvedIp).toBe('10.0.0.205');
+      
+      // Should not perform DNS resolution again (IP was cached in the mount record)
+      expect(dnsMock.resolve4).not.toHaveBeenCalled();
+      
+      // Restore original
+      require('dns').Resolver = originalResolver;
+    });
+
+    it('should cache IP in existing mount record during resolution', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      // Mock DNS resolution
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          callback(null, ['10.0.0.206']);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testcache',
+        fileServerId: 'cache-test-2',
+      };
+
+      // First mount - creates mount record with resolved IP
+      const result = await service.ensureMounted(hostnameRequest);
+      
+      // Verify the mount record has the resolved IP stored
+      const mountRecord = (service as any).mounts.get(result.key);
+      expect(mountRecord.resolvedIp).toBe('10.0.0.206');
+      
+      // Verify caching log was written
+      expect(loggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('Using IP 10.0.0.206 for CIFS mount')
+      );
+      
+      // Restore original
+      require('dns').Resolver = originalResolver;
+    });
+
+    it('should try individual DNS servers when custom resolver fails', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with multiple DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10,192.168.1.11,192.168.1.12'
+      });
+
+      let resolveCallCount = 0;
+      const createMockResolver = () => ({
+        resolve4: jest.fn((hostname, callback) => {
+          resolveCallCount++;
+          if (resolveCallCount <= 2) {
+            // First resolver and system DNS fail
+            callback(new Error('DNS failed'), null);
+          } else if (resolveCallCount === 3 && hostname === 'testhost5') {
+            // Third individual server succeeds
+            callback(null, ['10.0.0.206']);
+          } else {
+            callback(new Error('Unexpected'), null);
+          }
+        }),
+        setServers: jest.fn()
+      });
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => createMockResolver());
+      require('dns').Resolver = mockResolver;
+
+      // Mock system DNS to fail
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'testhost5',
+        fileServerId: 'multi-dns-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.206/')]),
+        expect.any(Object)
+      );
+      
+      // Restore originals
+      require('dns').Resolver = originalResolver;
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should handle system DNS usage when no fileServerId provided', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock system DNS to succeed
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.207' });
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'nofileserver',
+        fileServerId: undefined, // No fileServerId
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      // Should not attempt to query repository
+      expect(mockFileServerRepository.findOne).not.toHaveBeenCalled();
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//10.0.0.207/')]),
+        expect.any(Object)
+      );
+      
+      // Restore original
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should disable DNS resolution for SMB mounts when config is false', async () => {
+      // Create a new service instance with DNS resolution disabled
+      const disabledConfigService = {
+        get: jest.fn((key: string) => {
+          switch (key) {
+            case 'app.mount.basePath':
+              return '/mnt';
+            case 'app.mount.idleTimeoutMs':
+              return 600000;
+            case 'app.mount.timeoutMs':
+              return 120000;
+            case 'app.mount.resolveCifsHostnameToIp':
+              return false; // Disable DNS resolution
+            default:
+              return undefined;
+          }
+        }),
+      } as unknown as ConfigService;
+
+      const mockFileServerRepository = {
+        findOne: jest.fn().mockResolvedValue(null),
+      };
+
+      const disabledModule: TestingModule = await Test.createTestingModule({
+        providers: [
+          MountTrackerService,
+          { provide: LoggerFactory, useValue: loggerFactory },
+          { provide: ConfigService, useValue: disabledConfigService },
+          { provide: getRepositoryToken(FileServerEntity), useValue: mockFileServerRepository },
+        ],
+      }).compile();
+
+      const disabledService = disabledModule.get<MountTrackerService>(MountTrackerService);
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+
+      const smbHostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'smb-hostname', // Use hostname instead of IP
+        fileServerId: 'test-server',
+      };
+
+      await disabledService.ensureMounted(smbHostnameRequest);
+
+      // Should use original hostname without DNS resolution
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//smb-hostname/')]),
+        expect.any(Object)
+      );
+      
+      // Should not attempt to query FileServer repository for DNS servers
+      expect(mockFileServerRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('should handle FQDN resolution failure gracefully', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      const dnsMock = {
+        resolve4: jest.fn((hostname, callback) => {
+          // All DNS resolution attempts fail
+          callback(new Error('DNS resolution failed'), null);
+        }),
+        setServers: jest.fn()
+      };
+      
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => dnsMock);
+      require('dns').Resolver = mockResolver;
+
+      // Mock system DNS to also fail
+      const originalLookup = require('dns').promises.lookup;
+      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'short', // Should trigger FQDN attempt
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      // Should try both short name and FQDN
+      expect(dnsMock.resolve4).toHaveBeenCalledWith('short', expect.any(Function));
+      expect(dnsMock.resolve4).toHaveBeenCalledWith('short.rootdomain.local', expect.any(Function));
+      
+      // Should fallback to original hostname
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//short/')]),
+        expect.any(Object)
+      );
+      
+      // Restore originals
+      require('dns').Resolver = originalResolver;
+      require('dns').promises.lookup = originalLookup;
+    });
+
+    it('should handle non-Error objects in DNS resolution', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      
+      // Mock FileServer with custom DNS servers
+      mockFileServerRepository.findOne.mockResolvedValue({
+        dnsServer: '192.168.1.10'
+      });
+
+      // Mock DNS resolution to throw non-Error object
+      const originalResolver = require('dns').Resolver;
+      const mockResolver = jest.fn(() => {
+        throw 'string error'; // Non-Error object
+      });
+      require('dns').Resolver = mockResolver;
+
+      const hostnameRequest: MountRequest = {
+        ...smbRequest,
+        hostname: 'errorhost',
+        fileServerId: 'test-server',
+      };
+
+      await service.ensureMounted(hostnameRequest);
+
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'mount',
+        expect.arrayContaining([expect.stringContaining('//errorhost/')]), // Should use original hostname
+        expect.any(Object)
+      );
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('DNS resolution error for errorhost')
+      );
+      
+      // Restore original
+      require('dns').Resolver = originalResolver;
     });
   });
 });

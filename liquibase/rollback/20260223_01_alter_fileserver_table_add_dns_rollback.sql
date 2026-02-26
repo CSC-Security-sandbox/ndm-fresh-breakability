@@ -1,0 +1,1 @@
+ALTER TABLE file_server DROP COLUMN IF EXISTS dns_server;

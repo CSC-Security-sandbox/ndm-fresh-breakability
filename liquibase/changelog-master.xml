@@ -607,4 +607,12 @@
          <sqlFile path="liquibase/20260223_01_alter_jobconfig_add_preserve_permissions_column_rollback.sql"/>
       </rollback>
    </changeSet>
+
+   <changeSet id="20260223_01_alter_fileserver_table_add_dns.sql" author="dm">
+      <sqlFile path="liquibase/20260223_01_alter_fileserver_table_add_dns.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260223_01_alter_fileserver_table_add_dns_rollback.sql"/>
+      </rollback>
+   </changeSet>
+   
 </databaseChangeLog>
