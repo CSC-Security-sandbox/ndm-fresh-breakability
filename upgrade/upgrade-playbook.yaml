@@ -307,42 +307,7 @@
           until: pod_ready.rc == 0
           environment: "{{ helm_environment }}"
 
-        - name: "Step 9 — Check JWT issuer in RequestAuthentication resources"
-          ansible.builtin.shell: |
-            kubectl get requestauthentication -n istio-system \
-              -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.jwtRules[0].issuer}{"\n"}{end}'
-          register: jwt_issuer_check
-          changed_when: false
-          environment: "{{ helm_environment }}"
-
-        - name: "Step 9 — Display current JWT issuers"
-          ansible.builtin.debug:
-            msg: "{{ jwt_issuer_check.stdout_lines }}"
-
-        - name: "Step 9 — Get VM IP address"
-          ansible.builtin.shell: >
-            ip route get 1.1.1.1 | grep -oP 'src \K\S+'
-          register: vm_ip
-          changed_when: false
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
-
-        - name: "Step 9 — Patch keycloak-jwt RequestAuthentication with VM IP"
-          ansible.builtin.command: >
-            kubectl patch requestauthentication keycloak-jwt -n istio-system
-            --type=json
-            -p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]
-          environment: "{{ helm_environment }}"
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
-
-        - name: "Step 9 — Patch temporal-jwt-validation RequestAuthentication with VM IP"
-          ansible.builtin.command: >
-            kubectl patch requestauthentication temporal-jwt-validation -n istio-system
-            --type=json
-            -p=[{"op":"replace","path":"/spec/jwtRules/0/issuer","value":"https://{{ vm_ip.stdout }}/keycloak/realms/datamigrator"}]
-          environment: "{{ helm_environment }}"
-          when: "'DEPLOYMENT_IP_PLACEHOLDER' in jwt_issuer_check.stdout"
-
-        - name: "Step 10 — Move upgrade artifacts to /root for future rollback"
+        - name: "Step 9 — Move upgrade artifacts to /root for future rollback"
           ansible.builtin.command: >
             mv "{{ bundle_dir }}/{{ item }}" /root/
           loop:

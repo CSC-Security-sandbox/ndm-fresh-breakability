@@ -148,23 +148,77 @@ install_keycloak_chart() {
     log "Keycloak installation completed successfully"
 }
 
-patch_jwt_issuer() {
-    log "Patching JWT issuer with VM IP..."
+apply_istio_jwt_resources() {
+    log "Applying Istio JWT resources to istio-system (managed outside Helm)..."
     ensure_vm_ip
-    
-    cat > /tmp/jwt-patch.yaml << EOF
+
+    cat > /tmp/istio-jwt-request-authentication.yaml << 'MANIFEST_EOF'
+---
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt
+  namespace: istio-system
 spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
   jwtRules:
-  - issuer: "https://${VM_IP}/keycloak/realms/datamigrator"
-    jwksUri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
-    forwardOriginalToken: true
-    fromHeaders:
-    - name: Authorization
-      prefix: "Bearer "
-EOF
-    
-    retry $MAX_RETRIES "kubectl patch requestauthentication keycloak-jwt -n istio-system --type merge --patch-file /tmp/jwt-patch.yaml" || handle_failure "Failed to patch JWT issuer in RequestAuthentication"
-    log "JWT issuer patched successfully with IP: ${VM_IP}"
+    - issuer: "ISSUER_PLACEHOLDER"
+      jwksUri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
+      fromHeaders:
+        - name: "Authorization"
+          prefix: "Bearer "
+      forwardOriginalToken: true
+MANIFEST_EOF
+
+    cat > /tmp/istio-temporal-jwt-resources.yaml << 'MANIFEST_EOF'
+---
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: temporal-jwt-validation
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
+  jwtRules:
+    - issuer: "ISSUER_PLACEHOLDER"
+      jwksUri: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/certs"
+      fromHeaders:
+        - name: authorization
+          prefix: "Bearer "
+      forwardOriginalToken: true
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: temporal-require-jwt
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            ports: ["7233"]
+      when:
+        - key: request.auth.principal
+          notValues: ["*"]
+MANIFEST_EOF
+
+    # Replace placeholder with actual VM IP
+    sed -i "s|ISSUER_PLACEHOLDER|https://${VM_IP}/keycloak/realms/datamigrator|g" /tmp/istio-jwt-request-authentication.yaml
+    sed -i "s|ISSUER_PLACEHOLDER|https://${VM_IP}/keycloak/realms/datamigrator|g" /tmp/istio-temporal-jwt-resources.yaml
+
+    retry $MAX_RETRIES "kubectl apply -f /tmp/istio-jwt-request-authentication.yaml" || handle_failure "Failed to apply JWT RequestAuthentication"
+    retry $MAX_RETRIES "kubectl apply -f /tmp/istio-temporal-jwt-resources.yaml" || handle_failure "Failed to apply Temporal JWT resources"
+
+    rm -f /tmp/istio-jwt-request-authentication.yaml /tmp/istio-temporal-jwt-resources.yaml
+    log "Istio JWT resources applied successfully with issuer IP: ${VM_IP}"
 }
 
 regenerate_istio_certificate() {
@@ -435,7 +489,7 @@ main() {
     apply_postgres_cronjob_and_wait
     restart_statefulsets
     regenerate_istio_certificate
-    patch_jwt_issuer
+    apply_istio_jwt_resources
     restart_keycloak_and_gateway
     apply_admin_configs
     restart_temporal_deployments

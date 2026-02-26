@@ -192,6 +192,57 @@
     kubectl label namespace datamigrator istio-injection=enabled --overwrite
   when: enable_istio | default(false) | bool
 
+# ============================================================================
+# Istio JWT Resources (applied outside Helm to survive helm uninstall)
+# These live in istio-system and must not be part of the Datamigrator Helm
+# release, otherwise they get deleted during upgrade uninstall/reinstall.
+# ============================================================================
+- name: Template Istio JWT RequestAuthentication manifest
+  become: yes
+  template:
+    src: istio-jwt-request-authentication.j2
+    dest: /tmp/istio-jwt-request-authentication.yaml
+    mode: '0644'
+  when:
+    - enable_istio | default(false) | bool
+    - istio_jwt_auth.enabled | default(false) | bool
+
+- name: Apply Istio JWT RequestAuthentication to istio-system
+  become: yes
+  shell: kubectl apply -f /tmp/istio-jwt-request-authentication.yaml
+  when:
+    - enable_istio | default(false) | bool
+    - istio_jwt_auth.enabled | default(false) | bool
+
+- name: Template Istio Temporal JWT resources manifest
+  become: yes
+  template:
+    src: istio-temporal-jwt-resources.j2
+    dest: /tmp/istio-temporal-jwt-resources.yaml
+    mode: '0644'
+  when:
+    - enable_istio | default(false) | bool
+    - temporal_mtls.enabled | default(false) | bool
+    - temporal_mtls.jwt_auth.enabled | default(false) | bool
+
+- name: Apply Istio Temporal JWT resources to istio-system
+  become: yes
+  shell: kubectl apply -f /tmp/istio-temporal-jwt-resources.yaml
+  when:
+    - enable_istio | default(false) | bool
+    - temporal_mtls.enabled | default(false) | bool
+    - temporal_mtls.jwt_auth.enabled | default(false) | bool
+
+- name: Clean up temporary Istio JWT manifests
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/istio-jwt-request-authentication.yaml
+    - /tmp/istio-temporal-jwt-resources.yaml
+  when: enable_istio | default(false) | bool
+
 - name: Patch Istio ingress gateway to mount TLS certificate volume
   become: yes
   vars:
