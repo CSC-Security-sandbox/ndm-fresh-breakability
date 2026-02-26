@@ -68,7 +68,7 @@ const BulkMigrateScheduleComponent = ({
 
   if(variant === "normal_run") {
     return (
-      <Box className="w-1/2">
+      <Box>
         <RadioGroup
           name="scheduleTime"
           value={values?.scheduleTime || SCHEDULE_OPTIONS?.START_NOW}
@@ -102,6 +102,7 @@ const BulkMigrateScheduleComponent = ({
                   textField: {
                     helperText: errorMessage,
                     error: !!errorMessage,
+                    sx: { width: '30%' },
                   },
                 }}
                 onError={(newError) => setPickerError(newError)}
@@ -157,7 +158,7 @@ else{
                   textField: {
                     helperText: errorMessage,
                     error: !!errorMessage,
-                    sx: { width: '300px' },
+                    sx: { width: '75%' },
                   },
                   popper: { sx: { zIndex: MODAL_POPPER_ZINDEX } },
                 }}

@@ -29,8 +29,8 @@ export const MountPathConfigurationTable = () => {
   };
 
   return (
-    <Box className="mb-4">
-      <Box className="flex justify-end mx-2 mt-3 mb-1">
+    <Box>
+      <Box className="flex justify-end mx-2 mb-1">
         <Box className="flex gap-5 items-center">
           <SearchWidget setFilter={updateTextFilter} />
           <Button

@@ -61,7 +61,7 @@ const fetchDirectoryContents = async (
   const baseUrl = JOBS_SERVICE_URL?.endsWith('/api/v1') 
     ? JOBS_SERVICE_URL 
     : `${JOBS_SERVICE_URL}/api/v1`;
-  
+
   const response = await fetch(`${baseUrl}/jobs/get-dirs`, {
     method: "POST",
     headers: {
@@ -77,11 +77,11 @@ const fetchDirectoryContents = async (
   }
 
   const result = await response.json();
-  
+
   // Handle the API response structure: { data: { items: [...] } }
   // The items array contains objects with { name: string }
   let items: DirectoryEntryResponse[] = [];
-  
+
   if (result?.data?.items && Array.isArray(result.data.items)) {
     items = result.data.items;
   } else if (result?.items && Array.isArray(result.items)) {
@@ -105,9 +105,11 @@ const fetchDirectoryContents = async (
     const relativePath = currentPath === "/" || currentPath === "" 
       ? `/${name}` 
       : `${currentPath}/${name}`;
-    
+
+    // Generate unique ID by including the path to avoid collisions across directories
+    const pathForId = relativePath.replace(/\//g, '-').replace(/^-/, '');
     return {
-      id: `dir-${index}-${name}`,
+      id: `dir-${pathForId}-${index}-${name}`,
       name: name,
       path: relativePath, // This is the path relative to export path root
       type: "directory" as const,
@@ -230,8 +232,8 @@ interface DirectoriesContentProps {
   directoryContents: DirectoryItem[];
   isLoading: boolean;
   error: string | null;
-  selectedItems: Set<string>;
-  onItemToggle: (itemId: string) => void;
+  selectedDirectoryItem: DirectoryItem | null;
+  onItemToggle: (item: DirectoryItem) => void;
   onNavigateToFolder: (folderPath: string) => void;
   onPathChange: (path: string) => void;
   onBackToExportPaths: () => void;
@@ -248,7 +250,7 @@ const DirectoriesContent = ({
   directoryContents,
   isLoading,
   error,
-  selectedItems,
+  selectedDirectoryItem,
   onItemToggle,
   onNavigateToFolder,
   onPathChange,
@@ -257,10 +259,21 @@ const DirectoriesContent = ({
   token,
   showBackButton = true,
 }: DirectoriesContentProps) => {
-  // Search/Jump to path state - independent from current path navigation
+  // Search/Jump to path state - synced with current path navigation
   const [searchPath, setSearchPath] = useState<string>("");
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Sync searchPath with currentPath when currentPath changes
+  useEffect(() => {
+    setSearchPath(currentPath === "/" ? "" : currentPath);
+  }, [currentPath]);
+
+  // Get the selected item full path (uses stored item that persists across navigation)
+  const selectedItemPath = useMemo(() => {
+    if (!selectedDirectoryItem) return null;
+    return selectedDirectoryItem.path;
+  }, [selectedDirectoryItem]);
 
   // Note: searchError persists until a valid path is entered and Validate is clicked
   // This ensures users see the error message until they correct the path
@@ -304,14 +317,14 @@ const DirectoriesContent = ({
         normalizedPath,
         token
       );
-      
+
       // Check if the path exists - if it returns empty and it's not root, 
       // we should verify by trying to fetch the parent directory
       if (contents.length === 0 && normalizedPath !== "/") {
         // Try to fetch the parent to see if the target folder exists as a child
         const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) || "/";
         const folderName = normalizedPath.substring(normalizedPath.lastIndexOf("/") + 1);
-        
+
         try {
           const parentContents = await fetchDirectoryContents(
             fileServerId,
@@ -319,12 +332,12 @@ const DirectoriesContent = ({
             parentPath,
             token
           );
-          
+
           // Check if the folder exists in parent directory
           const folderExists = parentContents.some(
             (item) => item.name === folderName
           );
-          
+
           if (!folderExists) {
             setSearchError(`Path not found: "${normalizedPath}" does not exist`);
             return;
@@ -336,16 +349,15 @@ const DirectoriesContent = ({
           return;
         }
       }
-      
+
       // If successful, navigate to that path
       onPathChange(normalizedPath);
-      // Clear the search bar after successful navigation
-      setSearchPath("");
+      // searchPath will be updated by useEffect when currentPath changes
       setSearchError(null);
     } catch (err) {
       console.error("Path validation failed:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      
+
       // Provide user-friendly error messages
       if (errorMessage.includes("404") || errorMessage.includes("not found")) {
         setSearchError(`Path not found: "${normalizedPath}" does not exist`);
@@ -379,24 +391,16 @@ const DirectoriesContent = ({
         </Box>
       )}
 
-      {/* Current Path Display - Now on top */}
-      <Box className="mb-4 p-3 bg-gray-100 rounded-md">
-        <Box className="text-sm font-semibold text-gray-700 mb-1">Export Path</Box>
-        <Box className="font-mono text-sm text-gray-800 mb-2">
-          {exportPath?.volumePath}
-        </Box>
-        <Box className="text-sm font-semibold text-gray-700 mb-1">Directory Path (relative to export)</Box>
-        <Box className="font-mono text-sm text-gray-800">
-          {currentPath === "/" || currentPath === "" ? "/" : currentPath}
-        </Box>
-      </Box>
-
-      {/* Jump to Path Search Bar - Now in middle */}
-      <Box className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+      {/* Jump to Path Search Bar with Directory Path */}
+      <Box className="mb-4 p-3 border border-blue-200 rounded-md bg-table-header-background">
         <Box className="text-sm font-semibold text-gray-700 mb-2">
           Search
         </Box>
         <Box className="flex gap-2">
+          {/* Static Export Path Box */}
+          <Box className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm font-mono text-gray-700 whitespace-nowrap">
+            {exportPath?.volumePath}
+          </Box>
           <input
             type="text"
             value={searchPath}
@@ -413,7 +417,7 @@ const DirectoriesContent = ({
             onClick={handleJumpToPath}
             disabled={!searchPath.trim() || isValidating}
           >
-            {isValidating ? "Validating..." : "Validate"}
+            {isValidating ? "Searching..." : "Search"}
           </Button>
         </Box>
         {searchError && (
@@ -422,69 +426,69 @@ const DirectoriesContent = ({
           </Box>
         )}
         <Box className="mt-2 text-xs text-gray-500">
-          Enter an absolute path relative to the export path to jump directly to that directory.
+          Shows your current directory path. Enter a path to navigate directly.
         </Box>
       </Box>
 
       {/* Parent Directory Link */}
-      {currentPath !== "/" && (
-        <Box className="mb-4">
-          <Button variant="secondary" onClick={handleParentClick}>
-            ↑ Go to Parent Directory
-          </Button>
-        </Box>
-      )}
+      <Box className="mb-4">
+        <Button 
+          variant="secondary" 
+          onClick={handleParentClick}
+          disabled={currentPath === "/"}
+          className={`text-sm font-semibold ${currentPath === "/" ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          ↑ Go to Parent Directory
+        </Button>
+      </Box>
 
-      {/* Selected Item Indicator */}
-      {selectedItems.size > 0 && !searchError && (
-        <Box className="mb-4 p-2 bg-blue-50 rounded-md text-sm text-blue-700">
-          1 item selected
+      {/* Currently Selected Indicator */}
+      {selectedItemPath && (
+        <Box className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <Box className="text-sm font-semibold text-gray-700">
+            Currently Selected: <span className="font-mono text-blue-700">{selectedItemPath}</span>
+          </Box>
         </Box>
       )}
 
       {/* Directory Contents */}
-      {isLoading ? (
-        <Box className="text-center py-8 text-gray-500">
-          Loading directory contents...
-        </Box>
-      ) : searchError ? (
-        <Box className="text-center py-8">
-          <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-            <Box className="font-semibold mb-1">Path Not Found</Box>
-            <Box className="text-sm">{searchError}</Box>
-          </Box>
-        </Box>
-      ) : error ? (
-        <Box className="text-center py-8">
-          <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-            <Box className="font-semibold mb-1">Error Loading Directory</Box>
-            <Box className="text-sm">{error}</Box>
-          </Box>
-        </Box>
-      ) : directoryContents.length === 0 ? (
-        <Box className="text-center py-8 text-gray-500">
-          This directory is empty.
-        </Box>
-      ) : (
-        <Box className="bg-white rounded-lg border">
-          {/* Table Header */}
-          <Box className="grid grid-cols-12 gap-4 p-4 border-b bg-gray-50 font-semibold">
-            <Box className="col-span-1 flex items-center">
-              Select
+      <Box className="bg-white rounded-lg border min-h-[150px]">
+        {isLoading ? (
+          <Box className="flex items-center justify-center py-8 text-gray-500">
+            <Box className="flex items-center gap-2">
+              <Box className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span>Loading...</span>
             </Box>
-            <Box className="col-span-11">Name</Box>
           </Box>
-
-          {/* Directory Items */}
+        ) : searchError ? (
+          <Box className="p-4">
+            <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+              <Box className="font-semibold mb-1">Path Not Found</Box>
+              <Box className="text-sm">{searchError}</Box>
+            </Box>
+          </Box>
+        ) : error ? (
+          <Box className="p-4">
+            <Box className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+              <Box className="font-semibold mb-1">Error Loading Directory</Box>
+              <Box className="text-sm">{error}</Box>
+            </Box>
+          </Box>
+        ) : directoryContents.length === 0 ? (
+          <Box className="flex items-center justify-center py-8 text-gray-500">
+            This directory is empty.
+          </Box>
+        ) : (
+          /* Directory Items */
           <Box className="max-h-64 overflow-y-auto">
             {directoryContents.map((item) => {
-              const isSelected = selectedItems.has(item.id);
+              const isSelected = selectedDirectoryItem?.id === item.id;
               const isDirectory = item.type === "directory";
 
               return (
                 <Box
                   key={item.id}
-                  className={`grid grid-cols-12 gap-4 p-4 border-b hover:bg-gray-50 transition-colors ${
+                  className={`grid grid-cols-12 gap-4 px-4 py-2 border-b hover:bg-gray-50 transition-colors ${
                     isSelected ? "bg-blue-50" : ""
                   }`}
                 >
@@ -494,12 +498,12 @@ const DirectoriesContent = ({
                       type="radio"
                       name="directory-selection"
                       checked={isSelected}
-                      onChange={() => onItemToggle(item.id)}
+                      onChange={() => onItemToggle(item)}
                       onClick={(e) => {
                         e.stopPropagation();
                         // Allow deselection by clicking an already selected radio button
                         if (isSelected) {
-                          onItemToggle(item.id);
+                          onItemToggle(item);
                         }
                       }}
                       className="w-4 h-4 cursor-pointer"
@@ -525,18 +529,13 @@ const DirectoriesContent = ({
                     >
                       {item.name}
                     </Box>
-                    {isDirectory && (
-                      <Box className="text-xs text-gray-400 ml-2">
-                        (click to open)
-                      </Box>
-                    )}
                   </Box>
                 </Box>
               );
             })}
           </Box>
-        </Box>
-      )}
+        )}
+      </Box>
     </>
   );
 };
@@ -591,10 +590,10 @@ const ExploreModal = ({
   const [directoryContents, setDirectoryContents] = useState<DirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Selected items (checkbox selection)
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  
+
+  // Store the selected directory item (persists across navigation)
+  const [selectedDirectoryItem, setSelectedDirectoryItem] = useState<DirectoryItem | null>(null);
+
   // Track if initial selection has been applied (to avoid re-applying on every render)
   const [initialSelectionApplied, setInitialSelectionApplied] = useState<boolean>(false);
 
@@ -627,10 +626,10 @@ const ExploreModal = ({
         setCurrentView("export-paths");
         setCurrentPath("/");
       }
-      
+
       // Reset other state
       setDirectoryContents([]);
-      setSelectedItems(new Set());
+      setSelectedDirectoryItem(null);
       setError(null);
       setInitialSelectionApplied(false);
     }
@@ -643,7 +642,7 @@ const ExploreModal = ({
       setSelectedExportPath(null);
       setCurrentPath("/");
       setDirectoryContents([]);
-      setSelectedItems(new Set());
+      setSelectedDirectoryItem(null);
       setError(null);
       setInitialSelectionApplied(false);
     }
@@ -672,7 +671,7 @@ const ExploreModal = ({
             // Find the matching item in the loaded contents
             const matchingItem = contents.find((item) => item.name === targetName);
             if (matchingItem) {
-              setSelectedItems(new Set([matchingItem.id]));
+              setSelectedDirectoryItem(matchingItem);
             }
             setInitialSelectionApplied(true);
           }
@@ -694,27 +693,23 @@ const ExploreModal = ({
   }, []);
 
   // Handle item toggle (radio button selection - single select with toggle)
-  const handleItemToggle = useCallback((itemId: string) => {
+  const handleItemToggle = useCallback((item: DirectoryItem) => {
     // Toggle behavior: if already selected, deselect; otherwise select
-    setSelectedItems((prev) => {
-      if (prev.has(itemId)) {
-        return new Set(); // Deselect
-      }
-      return new Set([itemId]); // Select this one
-    });
-  }, []);
+    if (selectedDirectoryItem?.id === item.id) {
+      setSelectedDirectoryItem(null); // Deselect
+    } else {
+      setSelectedDirectoryItem(item); // Select this one
+    }
+  }, [selectedDirectoryItem]);
 
-  // Handle path change (navigating into a folder)
+  // Handle path change, persist currently selected path (navigating into a folder)
   const handlePathChange = useCallback((path: string) => {
     setCurrentPath(path);
-    // Clear selection when navigating to a new folder
-    setSelectedItems(new Set());
   }, []);
 
-  // Handle navigating into a folder (click on folder name)
+  // Handle navigating into a folder, persist currently selected path across navigation (click on folder name)
   const handleNavigateToFolder = useCallback((folderPath: string) => {
     setCurrentPath(folderPath);
-    setSelectedItems(new Set());
   }, []);
 
   // Handle explore export path (switch to directories view)
@@ -730,7 +725,7 @@ const ExploreModal = ({
     setCurrentView("export-paths");
     setCurrentPath("/");
     setDirectoryContents([]);
-    setSelectedItems(new Set());
+    setSelectedDirectoryItem(null);
     setError(null);
   }, []);
 
@@ -740,26 +735,24 @@ const ExploreModal = ({
     setSelectedExportPath(null);
     setCurrentPath("/");
     setDirectoryContents([]);
-    setSelectedItems(new Set());
+    setSelectedDirectoryItem(null);
     setError(null);
     onClose();
   }, [onClose]);
 
-  // Handle confirm selection (supports empty selection for clearing directory path)
+  // Handle confirm selection (uses persistent selected directory item)
   const handleConfirmSelection = useCallback(() => {
-    if (selectedExportPathDetails && onConfirm) {
-      const selectedItemsInfo: SelectedItemInfo[] = directoryContents
-        .filter((item) => selectedItems.has(item.id))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          path: item.path,
-          type: item.type,
-        }));
+    if (selectedExportPathDetails && onConfirm && selectedDirectoryItem) {
+      const selectedItemsInfo: SelectedItemInfo[] = [{
+        id: selectedDirectoryItem.id,
+        name: selectedDirectoryItem.name,
+        path: selectedDirectoryItem.path,
+        type: selectedDirectoryItem.type,
+      }];
       onConfirm(selectedItemsInfo, selectedExportPathDetails);
       handleClose();
     }
-  }, [selectedItems, directoryContents, selectedExportPathDetails, onConfirm, handleClose]);
+  }, [selectedDirectoryItem, selectedExportPathDetails, onConfirm, handleClose]);
 
   if (!isOpen) {
     return null;
@@ -779,7 +772,7 @@ const ExploreModal = ({
           ? `Explore Export Paths - ${fileServerName}`
           : "Directory Explorer"}
       </ModalHeader>
-      <ModalContent className="" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+      <ModalContent className="pb-2" style={{ maxHeight: "60vh", overflowY: "auto" }}>
         {currentView === "export-paths" ? (
           <ExportPathsContent
             allExportPaths={allExportPaths}
@@ -793,7 +786,7 @@ const ExploreModal = ({
             directoryContents={directoryContents}
             isLoading={isLoading}
             error={error}
-            selectedItems={selectedItems}
+            selectedDirectoryItem={selectedDirectoryItem}
             onItemToggle={handleItemToggle}
             onNavigateToFolder={handleNavigateToFolder}
             onPathChange={handlePathChange}
@@ -824,7 +817,7 @@ const ExploreModal = ({
             </Button>
             <Button
               onClick={handleConfirmSelection}
-              disabled={isLoading || error !== null || selectedItems.size === 0 || directoryContents.length === 0}
+              disabled={isLoading || error !== null || !selectedDirectoryItem}
             >
               Confirm Selection
             </Button>

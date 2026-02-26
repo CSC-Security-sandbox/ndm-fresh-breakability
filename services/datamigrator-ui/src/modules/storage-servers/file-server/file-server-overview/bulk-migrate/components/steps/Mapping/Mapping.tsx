@@ -52,6 +52,7 @@ const Mapping = () => {
   const [destinationDirectoryPath, setDestinationDirectoryPath] = useState<string>("");
   const isPrefillingFromEditRef = useRef(false);
   const prevProtocolValueRef = useRef<string | undefined>(undefined);
+  const mappingsTableRef = useRef<HTMLDivElement>(null);
 
   // Form for Select Source Path dropdown (export paths from File Server Overview table)
   const sourcePathForm = useForm({ selectedSourcePath: "" });
@@ -464,6 +465,14 @@ const Mapping = () => {
       destinationPath: "" as any,
     });
     setDestinationDirectoryPath("");
+    
+    // Scroll to mappings table after adding a mapping
+    setTimeout(() => {
+      mappingsTableRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 100);
   };
 
   const hasMappings =
@@ -498,7 +507,7 @@ const Mapping = () => {
       />
 
       {/* Job Schedule card */}
-      <Card className="min-h-24 p-6">
+      <Card className="min-h-24 p-6 mx-auto w-4/6">
         <Text bold className="mb-3">
           Job Schedule
         </Text>
@@ -509,15 +518,15 @@ const Mapping = () => {
       </Card>
 
       {/* Source and Destination Path Selectors card */}
-      <Card className="mt-6 p-6 flex flex-col">
+      <Card className="mt-6 pt-6 pb-6 pl-8 pr-8 flex flex-col mx-auto w-4/6">
         <Text bold className="mb-6 text-base text-gray-900">
           Source and Destination Path Selectors
         </Text>
 
         {/* 3 rows x 2 columns so "+ Add ..." links sit on the same row */}
-        <Box className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 max-w-4xl items-start min-w-0">
+        <Box className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 items-start min-w-0">
           {/* Row 1 */}
-          <Box className="flex flex-col gap-2">
+          <Box className="flex flex-col md:pr-10 gap-2">
             <Text className="text-sm font-semibold text-gray-900">Source File Server</Text>
             <Text bold className="text-base">
               {isFetching && !sourceFileServerDisplayName
@@ -525,7 +534,7 @@ const Mapping = () => {
                 : sourceFileServerDisplayName || "—"}
             </Text>
           </Box>
-          <Box className="flex flex-col gap-2 md:pl-14 w-full max-w-[360px]">
+          <Box className="flex flex-col gap-2 md:pl-10 w-full">
             <FormFieldSelect
               label="Select Destination File Server"
               labelClassName="text-sm font-semibold text-gray-900"
@@ -538,7 +547,7 @@ const Mapping = () => {
             />
           </Box>
           {/* Row 2 - all dropdowns same width as Select Destination File Server */}
-          <Box className="flex flex-col gap-2 w-full max-w-[360px]">
+          <Box className="flex flex-col gap-2 md:pr-10 w-full">
             <FormFieldSelect
               label="Select Source Path"
               labelClassName="text-sm font-semibold text-gray-900"
@@ -550,7 +559,7 @@ const Mapping = () => {
               placeholder="Select Source Path"
             />
           </Box>
-          <Box className="flex flex-col gap-2 md:pl-14 w-full max-w-[360px]">
+          <Box className="flex flex-col gap-2 md:pl-10 w-full">
             <FormFieldSelect
               label="Select Destination Path"
               labelClassName="text-sm font-semibold text-gray-900"
@@ -566,7 +575,7 @@ const Mapping = () => {
             />
           </Box>
           {/* Row 3 - both Add links at same level; min-w-0 + truncation prevent long paths from overlapping */}
-          <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] overflow-hidden">
+          <Box className="flex min-w-0 flex-col gap-2 md:pr-10 min-h-[2.5rem] overflow-hidden">
             {!sourceDirectoryPath ? (
               <button
                 type="button"
@@ -600,23 +609,23 @@ const Mapping = () => {
                     onClick={openSourceExploreModal}
                   >
                     <EditIcon size={16} aria-hidden />
-                    Edit Source Directory
+                    Edit
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    className="inline-flex items-center cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
                     style={{ color: "#0067c5" }}
-                    aria-label="Clear source directory"
+                    aria-label="Remove source directory"
                     onClick={() => setSourceDirectoryPath("")}
                   >
-                    <CloseIcon size={16} aria-hidden />
-                    Clear source directory
+                    <CloseIcon size={24} aria-hidden />
+                    Remove
                   </button>
                 </Box>
               </>
             )}
           </Box>
-          <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] md:pl-14 w-full max-w-[360px] overflow-hidden">
+          <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] md:pl-10 w-full overflow-hidden">
             {!destinationDirectoryPath ? (
               <button
                 type="button"
@@ -646,17 +655,17 @@ const Mapping = () => {
                     onClick={openDestinationExploreModal}
                   >
                     <EditIcon size={16} aria-hidden />
-                    Edit Destination Directory
+                    Edit
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
+                    className="inline-flex items-center cursor-pointer text-sm hover:underline border-0 bg-transparent p-0 font-inherit text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 rounded"
                     style={{ color: "#0067c5" }}
-                    aria-label="Clear destination directory"
+                    aria-label="Remove destination directory"
                     onClick={() => setDestinationDirectoryPath("")}
                   >
-                    <CloseIcon size={16} aria-hidden />
-                    Clear destination directory
+                    <CloseIcon size={24} aria-hidden />
+                    Remove
                   </button>
                 </Box>
               </>
@@ -664,7 +673,7 @@ const Mapping = () => {
           </Box>
         </Box>
 
-        <Box className="flex justify-end mt-8">
+        <Box className="flex justify-center mt-8">
           <Button
             color="primary"
             disabled={!canAddMapping}
@@ -676,27 +685,31 @@ const Mapping = () => {
             </Box>
           </Button>
         </Box>
-
-        {/* Mappings table - headers always visible; when no mappings show empty table + No Data message */}
-        <Box className="mt-6">
-          {hasMappings ? (
-            <MountPathConfigurationTable key={key} />
-          ) : (
-            <Box className="border border-gray-200 rounded-lg overflow-hidden">
-              {mappingStepTableState?.columns?.length ? (
-                <Table
-                  columns={mappingStepTableState.columns}
-                  rows={[]}
-                  sortState={mappingStepTableState.sortState}
-                  toggleSort={mappingStepTableState.toggleSort}
-                  filterState={mappingStepTableState.filterState}
-                  updateFilterState={mappingStepTableState.updateFilterState}
-                />
-              ) : null}
-            </Box>
-          )}
-        </Box>
       </Card>
+      
+      <div ref={mappingsTableRef}>
+        <Card className="mt-6 p-4">
+          {/* Mappings table - headers always visible; when no mappings show empty table + No Data message */}
+          <Box>
+            {hasMappings ? (
+              <MountPathConfigurationTable key={key} />
+            ) : (
+              <Box className="border border-gray-200 rounded-lg overflow-hidden">
+                {mappingStepTableState?.columns?.length ? (
+                  <Table
+                    columns={mappingStepTableState.columns}
+                    rows={[]}
+                    sortState={mappingStepTableState.sortState}
+                    toggleSort={mappingStepTableState.toggleSort}
+                    filterState={mappingStepTableState.filterState}
+                    updateFilterState={mappingStepTableState.updateFilterState}
+                  />
+                ) : null}
+              </Box>
+            )}
+          </Box>
+        </Card>
+      </div>
     </>
   );
 };
