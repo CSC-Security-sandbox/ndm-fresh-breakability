@@ -10,7 +10,7 @@ on:
         description: "Control Plane SIG Image ID from Azure Image gallery(eg: /subscriptions/1630c6a9-d99b-498a-aca8-a271f7506bc0/resourceGroups/datamigrate-acr-resource-group/providers/Microsoft.Compute/galleries/datamigrator/images/ndm-control-plane/versions/2025.24.11173418)"
         required: true
       windows_installer_name:
-        description: "Windows Installer filename (without .exe extension) name of he installer that is in the scratch space"
+        description: "Windows Installer filename (without .exe extension) name of he installer that is in the /mnt/image_signing on github runner"
         required: true
       copy_sas_duration_hours:
         description: "SAS token (read-only-access) duration for copy of disk to blob in hours (default: 1)"
