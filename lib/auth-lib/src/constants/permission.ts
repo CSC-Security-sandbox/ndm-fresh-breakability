@@ -19,4 +19,5 @@ export enum Permission {
     ViewAgentsList="ViewAgentsList",
     SaveSMTP="SaveSMTP",
     CreateProject="CreateProject",
+    UpgradeManagement="UpgradeManagement",
 }
