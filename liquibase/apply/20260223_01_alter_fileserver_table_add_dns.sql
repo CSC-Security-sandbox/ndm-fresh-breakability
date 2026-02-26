@@ -1,0 +1,1 @@
+ALTER TABLE file_server ADD COLUMN dns_server TEXT NULL;

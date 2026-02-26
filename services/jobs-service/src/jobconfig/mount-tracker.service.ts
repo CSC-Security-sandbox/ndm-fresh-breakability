@@ -7,8 +7,12 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import { execFile } from "child_process";
 import { randomBytes } from "crypto";
+import * as dns from "dns";
+import * as net from "net";
 import { promisify } from "util";
 import * as fs from "fs";
 import fg from "fast-glob";
@@ -25,6 +29,7 @@ import {
   ListDirsInput,
   DirectoryEntry,
 } from "./jobconfig.types";
+import { FileServerEntity } from "../entities/fileserver.entity";
 
 const execFileAsync = promisify(execFile);
 
@@ -72,6 +77,7 @@ function getNormalizedMountSegments(request: MountRequest): {
 
 interface MountRecord extends MountDetails {
   timeoutHandle?: NodeJS.Timeout;
+  resolvedIp?: string; 
 }
 
 @Injectable()
@@ -81,12 +87,15 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private readonly idleTimeoutMs: number;
   private readonly mountTimeoutMs: number;
   private readonly unmountTimeoutMs: number;
+  private readonly resolveCifsHostnameToIp: boolean;
   private readonly mounts = new Map<string, MountRecord>();
   private readonly inflightMounts = new Map<string, Promise<MountRecord>>();
 
   constructor(
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly configService: ConfigService,
+    @InjectRepository(FileServerEntity)
+    private readonly fileServerRepository: Repository<FileServerEntity>,
   ) {
     this.logger = loggerFactory.create(MountTrackerService.name);
     this.mountBase =
@@ -97,6 +106,163 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<number>("app.mount.timeoutMs") ?? 120000;
     this.unmountTimeoutMs =
       this.configService.get<number>("app.mount.unmountTimeoutMs") ?? 30000;
+    this.resolveCifsHostnameToIp =
+      this.configService.get<boolean>("app.mount.resolveCifsHostnameToIp") ?? true;
+  }
+
+  private async resolveHostToIp(host: string, exportPath: string, mountKey: string, fileServerId?: string): Promise<string> {
+    const trimmed = host.replace(/\0/g, "").trim();
+    const normalizedExportPath = exportPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\0/g, "").trim();
+    
+    this.logger.log(`Resolving hostname ${trimmed} with export ${normalizedExportPath} for mount`);
+    
+    // Check if we have a cached resolved IP for this mount
+    const existingMount = this.mounts.get(mountKey);
+    if (existingMount?.resolvedIp) {
+      this.logger.log(`Using cached resolved IP ${existingMount.resolvedIp} for mount key ${mountKey}`);
+      return existingMount.resolvedIp;
+    }
+    
+    let resolvedIp: string;
+    
+    if (net.isIP(trimmed)) {
+      this.logger.log(`Host ${trimmed} is already an IP address`);
+      resolvedIp = trimmed;
+    } else {
+      resolvedIp = await this.performDnsResolution(trimmed, fileServerId);
+    }
+    
+    // Cache the resolved IP in the existing mount record if it exists
+    if (existingMount) {
+      existingMount.resolvedIp = resolvedIp;
+      this.logger.log(`Cached resolved IP ${resolvedIp} for existing mount key ${mountKey}`);
+    }
+    
+    this.logger.log(`Resolved hostname ${trimmed} to IP ${resolvedIp} for mount key ${mountKey}`);
+    return resolvedIp;
+  }
+  
+  private async performDnsResolution(hostname: string, fileServerId?: string): Promise<string> {
+    let customDnsServers: string[] = []; 
+    
+    if (fileServerId) {
+      try {
+        const fileServer = await this.fileServerRepository.findOne({
+          where: { id: fileServerId },
+          select: ['dnsServer']
+        });
+        
+        // Use FileServer's DNS servers if configured
+        if (fileServer?.dnsServer) {
+          customDnsServers = fileServer.dnsServer.split(',').map(s => s.trim()).filter(Boolean);
+          this.logger.debug(`Using custom DNS servers from FileServer ${fileServerId}: ${customDnsServers.join(', ')}`);
+        } else {
+          this.logger.debug(`No custom DNS servers configured for FileServer ${fileServerId}, using system DNS`);
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to get DNS servers from FileServer ${fileServerId}: ${error.message}`);
+      }
+    }
+    
+    try {
+      let resolvedIp: string | null = null;
+      
+      // Strategy 1: Use custom DNS servers if configured
+      if (customDnsServers.length > 0) {
+        const resolver = new dns.Resolver();
+        resolver.setServers(customDnsServers);
+
+        try {
+          const addresses = await new Promise<string[]>((resolve, reject) => {
+            resolver.resolve4(hostname, (err, addresses) => {
+              if (err) reject(err);
+              else resolve(addresses || []);
+            });
+          });
+        
+        if (addresses.length > 0) {
+          this.logger.log(`Resolved ${hostname} to ${addresses[0]} using custom resolver`);
+          resolvedIp = addresses[0];
+        }
+      } catch (resolverError) {
+        this.logger.debug(`Custom resolver failed for ${hostname}: ${resolverError.message}`);
+        
+        if (!hostname.includes('.')) {
+          const fqdn = `${hostname}.rootdomain.local`;
+          this.logger.debug(`Trying FQDN: ${fqdn}`);
+          
+          try {
+            const addresses = await new Promise<string[]>((resolve, reject) => {
+              resolver.resolve4(fqdn, (err, addresses) => {
+                if (err) reject(err);
+                else resolve(addresses || []);
+              });
+            });
+            
+            if (addresses.length > 0) {
+              this.logger.log(`Resolved ${fqdn} to ${addresses[0]} using custom resolver`);
+              resolvedIp = addresses[0];
+            }
+          } catch (fqdnError) {
+            this.logger.debug(`FQDN resolution failed for ${fqdn}: ${fqdnError.message}`);
+          }
+        }
+      }
+      
+      } else {
+        this.logger.debug(`Using system DNS for ${hostname}`);
+        try {
+          const { address } = await dns.promises.lookup(hostname, { family: 4 });
+          this.logger.log(`Resolved ${hostname} to ${address} using system DNS`);
+          resolvedIp = address;
+        } catch (systemError) {
+          this.logger.debug(`System DNS failed for ${hostname}: ${systemError.message}`);
+        }
+      }
+      if (!resolvedIp && customDnsServers.length > 0) {
+        this.logger.debug(`Custom DNS failed, trying system DNS for ${hostname}`);
+        try {
+          const { address } = await dns.promises.lookup(hostname, { family: 4 });
+          this.logger.log(`Resolved ${hostname} to ${address} using system DNS fallback`);
+          resolvedIp = address;
+        } catch (systemError) {
+          this.logger.debug(`System DNS fallback failed for ${hostname}: ${systemError.message}`);
+        }
+      }
+      if (!resolvedIp && customDnsServers.length > 0) {
+        for (const dnsServer of customDnsServers) {
+          try {
+            this.logger.debug(`Trying DNS server ${dnsServer} for ${hostname}`);
+            const singleResolver = new dns.Resolver();
+            singleResolver.setServers([dnsServer]);
+            
+            const addresses = await new Promise<string[]>((resolve, reject) => {
+              singleResolver.resolve4(hostname, (err, addresses) => {
+                if (err) reject(err);
+                else resolve(addresses || []);
+              });
+            });
+            
+            if (addresses.length > 0) {
+              this.logger.log(`Resolved ${hostname} to ${addresses[0]} using DNS server ${dnsServer}`);
+              resolvedIp = addresses[0];
+              break;
+            }
+          } catch (serverError) {
+            this.logger.debug(`DNS server ${dnsServer} failed for ${hostname}: ${serverError.message}`);
+          }
+        }
+      }
+      if (!resolvedIp) {
+        this.logger.warn(`All DNS resolution strategies failed for ${hostname}, using original hostname for mount`);
+        return hostname; 
+      }
+      return resolvedIp;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`DNS resolution error for ${hostname}: ${message}, using original hostname for mount`);
+      return hostname; 
+    }
   }
 
   private buildSafeMountDir(request: MountRequest): string {
@@ -226,11 +392,13 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     request: MountRequest,
     mountDest: string,
     smbCredentialsPath?: string,
+    /** Resolved IP (whether direct IP or DNS resolved) */
+    resolvedIp?: string,
   ): string[] {
     this.logger.log(
       `Building mount args for ${request.protocol} to ${mountDest}`,
     );
-    const hostname = request.hostname.replace(/\0/g, "").trim();
+    const hostname = (resolvedIp ?? request.hostname).replace(/\0/g, "").trim();
     const exportPath = request.exportPath.replace(/\\/g, "/").replace(/\0/g, "").trim();
 
     if (request.protocol === Protocol.NFS) {
@@ -239,7 +407,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
         "nfs",
         "-o",
         "nolock",
-        `${hostname}:${exportPath}`,
+        `${request.hostname.replace(/\0/g, "").trim()}:${exportPath}`,
         mountDest,
       ];
     }
@@ -407,6 +575,18 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private async createMount(request: MountRequest, key: string): Promise<MountRecord> {
     const mountDir = this.buildSafeMountDir(request);
     let credsPath: string | undefined;
+    let resolvedIp: string | undefined;
+    
+    if (request.protocol === Protocol.SMB && this.resolveCifsHostnameToIp) {
+      // Always resolve/store IP for CIFS mounts (whether direct IP or DNS resolution)
+      resolvedIp = await this.resolveHostToIp(
+        request.hostname, 
+        request.exportPath, 
+        key, // Pass mount key for caching
+        request.fileServerId
+      );
+      this.logger.log(`Using IP ${resolvedIp} for CIFS mount ${request.hostname}:${request.exportPath}`);
+    }
     if (request.protocol === Protocol.SMB && request.username) {
       credsPath = path.join(os.tmpdir(), `.cifs-${randomBytes(8).toString("hex")}.cred`);
       const username = request.username.replace(/\0/g, "").trim();
@@ -418,7 +598,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       );
     }
     try {
-      const mountArgs = this.buildMountArgs(request, mountDir, credsPath);
+      const mountArgs = this.buildMountArgs(request, mountDir, credsPath, resolvedIp);
       await fs.promises.mkdir(mountDir, { recursive: true });
 
       this.logger.log(`Mounting ${request.hostname}:${request.exportPath} to ${mountDir}`);
@@ -470,6 +650,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       mountPath: mountDir,
       mountedAt: Date.now(),
       lastAccessAt: Date.now(),
+      resolvedIp: resolvedIp, 
     };
 
     this.mounts.set(key, record);
