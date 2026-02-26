@@ -17,6 +17,34 @@ export interface LatestUploadStatusResponse {
   isUploadInProgress?: boolean;      // true when chunks are being uploaded (can be cancelled)
   isUpgradeInProgress?: boolean;
   workerUploadStatus?: string;       // IDLE | IN_PROGRESS | COMPLETED - worker binary distribution status
+  workerUpgradeStatus?: string;      // IDLE | IN_PROGRESS | COMPLETED - worker upgrade execution status
+}
+
+export interface WorkerExecutionItem {
+  workerId: string;
+  workerName?: string;
+  ipAddress?: string;
+  platform?: string;
+  currentVersion?: string;
+  executionStatus: string;
+  upgradeCompletedAt?: string;
+}
+
+export interface ExecutionStatusResponse {
+  workflowId: string;
+  workflowStatus: string;
+  upgradeCompleted: boolean;
+  upgradeStatus: 'success' | 'failure' | 'in_progress';
+  summary: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    failed: number;
+    notStarted: number;
+  };
+  completed: WorkerExecutionItem[];
+  notCompleted: WorkerExecutionItem[];
+  notStaged: WorkerExecutionItem[];
 }
 
 export interface MulticastStatusResponse {
@@ -159,6 +187,14 @@ export const upgradeApi = createApi({
       },
     }),
 
+    // Get worker upgrade execution status
+    getExecutionStatus: builder.query<ExecutionStatusResponse, string>({
+      query: (bundleId: string) => `/upgrade/execute/${bundleId}`,
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response;
+      },
+    }),
+
     // Reset upgrade — terminate workflows, reset workers and bundle state
     resetUpgrade: builder.mutation({
       query: (bundleId: string) => ({
@@ -182,5 +218,6 @@ export const {
   useTriggerUpgradeMutation,
   useSkipUpgradeMutation,
   useLazyGetMulticastStatusQuery,
+  useLazyGetExecutionStatusQuery,
   useResetUpgradeMutation,
 } = upgradeApi;

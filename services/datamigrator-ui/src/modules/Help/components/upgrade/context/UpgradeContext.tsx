@@ -19,6 +19,8 @@ import {
   useTriggerUpgradeMutation,
   useSkipUpgradeMutation,
   useLazyGetMulticastStatusQuery,
+  useLazyGetExecutionStatusQuery,
+  ExecutionStatusResponse,
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
 
@@ -104,6 +106,7 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
 
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [blockingJobs, setBlockingJobs] = useState<BlockingJobs>(null);
+  const [upgradeStatus, setUpgradeStatus] = useState<string | null>(null);
 
   // Multicast (worker binary distribution) state
   const [workerUploadStatus, setWorkerUploadStatus] = useState<string | null>(null);
@@ -145,6 +148,64 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     return () => clearInterval(intervalId);
   }, [workerUploadStatus, latestStatus?.bundleId, getMulticastStatus, refetchStatus]);
 
+  // Worker upgrade execution state
+  const [workerUpgradeStatus, setWorkerUpgradeStatus] = useState<string | null>(null);
+  const [isUpgradeExecuting, setIsUpgradeExecuting] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatusResponse | null>(null);
+  const [getExecutionStatus] = useLazyGetExecutionStatusQuery();
+
+  // ═══════════════════════════════════════════════════════════════
+  // POLL EXECUTION STATUS - 10s interval while workerUpgradeStatus=IN_PROGRESS
+  // ═══════════════════════════════════════════════════════════════
+
+  // Restore execution status on page refresh when COMPLETED
+  useEffect(() => {
+    if (workerUpgradeStatus === 'COMPLETED' && !executionStatus && latestStatus?.bundleId) {
+      getExecutionStatus(latestStatus.bundleId).unwrap()
+        .then((result) => setExecutionStatus(result))
+        .catch((error) => {
+          if (error?.status === 404) {
+            setExecutionStatus(null);
+          } else {
+            console.error("Failed to fetch execution status:", error);
+          }
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerUpgradeStatus, latestStatus?.bundleId]);
+
+  // Poll while IN_PROGRESS
+  useEffect(() => {
+    if (workerUpgradeStatus !== 'IN_PROGRESS' || !latestStatus?.bundleId) return;
+
+    setIsUpgradeExecuting(true);
+    const EXECUTION_POLL_INTERVAL_MS = 10000;
+
+    const fetchStatus = async () => {
+      try {
+        const result = await getExecutionStatus(latestStatus.bundleId!).unwrap();
+        setExecutionStatus(result);
+
+        if (result.upgradeCompleted) {
+          setIsUpgradeExecuting(false);
+          setWorkerUpgradeStatus('COMPLETED');
+          const msg = result.upgradeStatus === 'success'
+            ? 'All workers upgraded successfully!'
+            : 'Worker upgrade completed with issues. See details below.';
+          notify[result.upgradeStatus === 'success' ? 'success' : 'warning'](msg);
+        }
+      } catch (error: any) {
+        if (error?.status !== 404) {
+          console.error("Failed to fetch execution status:", error);
+        }
+      }
+    };
+
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, EXECUTION_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [workerUpgradeStatus, latestStatus?.bundleId, getExecutionStatus]);
+
   // ═══════════════════════════════════════════════════════════════
   // RESTORE STATE FROM DB ON MOUNT / POLL UPDATES
   // ═══════════════════════════════════════════════════════════════
@@ -167,6 +228,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       setIsProcessing(latestStatus.isProcessing || false);
       setIsUploadInProgress(latestStatus.isUploadInProgress || false);
       setWorkerUploadStatus(latestStatus.workerUploadStatus || null);
+      setWorkerUpgradeStatus(latestStatus.workerUpgradeStatus || null);
+      setUpgradeStatus(latestStatus.upgradeStatus || null);
 
       // Fetch final worker list when distribution completes
       if (latestStatus.workerUploadStatus === 'COMPLETED' && latestStatus.bundleId && !multicastStatus?.workers?.length) {
@@ -518,6 +581,10 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     setShowUploadUI(true);
     setShowUpgradeUI(false);
     setIsUploadInProgress(false);
+    setIsUpgradeExecuting(false);
+    setExecutionStatus(null);
+    setWorkerUpgradeStatus(null);
+    setUpgradeStatus(null);
 
     // Refresh status from DB to sync state
     try {
@@ -552,7 +619,7 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
         notify.success(result.message || "Upgrade initiated successfully!");
         setShowUploadUI(true);
         setShowUpgradeUI(false);
-
+        
         try {
           await refetchStatus();
         } catch (refetchError) {
@@ -597,6 +664,10 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     inProgressFileName,
     workerUploadStatus,       // IDLE | IN_PROGRESS | COMPLETED
     multicastStatus,          // Per-worker distribution summary (populated while polling)
+    upgradeStatus,
+    workerUpgradeStatus,      // IDLE | IN_PROGRESS | COMPLETED
+    isUpgradeExecuting,
+    executionStatus,
   };
 
   return (

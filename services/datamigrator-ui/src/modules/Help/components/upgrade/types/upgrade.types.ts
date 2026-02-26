@@ -79,5 +79,13 @@ export type UpgradeContextType = {
   // Worker binary distribution (multicast) status
   workerUploadStatus: string | null;  // IDLE | IN_PROGRESS | COMPLETED
   multicastStatus: MulticastStatus | null;
+
+  // Upgrade status from DB
+  upgradeStatus: string | null;  // pending | staged | success | failed | skipped | rolled_back
+
+  // Worker upgrade execution status
+  workerUpgradeStatus: string | null;  // IDLE | IN_PROGRESS | COMPLETED
+  isUpgradeExecuting: boolean;
+  executionStatus: import("@api/upgradeApi").ExecutionStatusResponse | null;
 };
 
