@@ -45,6 +45,35 @@ jobs:
           ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      - name: Transfer GCP Key to Remote VM
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          GCP_KEY: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+        run: |
+          # Transfer the GCP service account key to the remote VM
+          # Check if secret is set
+          if [ -z "$GCP_KEY" ]; then
+            echo "ERROR: PACKER_GCP_CREDENTIALS_JSON secret is empty or not set"
+            exit 1
+          fi
+          
+          # Decode base64 and write to temp file locally, then scp to remote
+          TEMP_KEY_FILE=$(mktemp)
+          echo "$GCP_KEY" | base64 --decode > "$TEMP_KEY_FILE"
+          
+          # Copy to remote VM using scp
+          sshpass -p "$RUNNER_PASSWORD" scp "$TEMP_KEY_FILE" ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }}:/tmp/gcp-key.json
+          
+          # Set permissions on remote file
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "chmod 600 /tmp/gcp-key.json"
+          
+          # Clean up local temp file
+          rm -f "$TEMP_KEY_FILE"
+          
+          # Verify file was created on remote and is valid JSON (do not log contents)
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} \
+            "test -f /tmp/gcp-key.json && python3 -c 'import json; json.load(open(\"/tmp/gcp-key.json\"))' && echo 'GCP key file exists and is valid JSON' || (echo 'ERROR: GCP key file was not created or is invalid JSON' && exit 1)"
+
       - name: Execute GCP Operations
         id: execute-gcp
         env:
@@ -56,29 +85,41 @@ jobs:
           sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} << 'ENDSSH' | tee "$SSH_OUTPUT_FILE"
           set -e
 
+          # Authenticate to GCP using the service account key
+          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+          gcloud config set project ${{ env.PROJECT_ID }}
+          
+          # Clean up key file immediately after authentication
+          rm -f /tmp/gcp-key.json
+
           WORKER_IMAGE="${{ github.event.inputs.release_worker_image_name }}"
           CP_IMAGE="${{ github.event.inputs.release_controlplane_image_name }}"
           EXPORT_PREFIX="${{ github.event.inputs.release_folder }}"
           BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME_SAFE=$(echo "$BRANCH_NAME" | tr '/' '-')
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          WORKER_ARCHIVE="${WORKER_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
-          CP_ARCHIVE="${CP_IMAGE}-${BRANCH_NAME}-signed.tar.gz"
-          CHECKSUM_FILE="GCP_SHA256SUMS-${BRANCH_NAME}.sha256"
+          WORKER_ARCHIVE="${WORKER_IMAGE}-${BRANCH_NAME_SAFE}-signed.tar.gz"
+          CP_ARCHIVE="${CP_IMAGE}-${BRANCH_NAME_SAFE}-signed.tar.gz"
+          CHECKSUM_FILE="GCP_SHA256SUMS-${BRANCH_NAME_SAFE}.sha256"
           LOCAL_PATH="${{ env.LOCAL_EXPORT_PATH }}"
           SCRATCH_SPACE="${{ env.SCRATCH_SPACE }}"
           
           echo "Exporting Worker Image: $WORKER_IMAGE"
-          WORKER_EXPORT_OUTPUT=$(sudo gcloud compute images export \
+          # Use tee to show output in real-time while also capturing it
+          gcloud compute images export \
             --project=${{ env.PROJECT_ID }} \
             --image="$WORKER_IMAGE" \
             --destination-uri="gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" \
             --network=${{ env.VPC_NAME }} \
             --subnet=${{ env.SUBNET_NAME }} \
             --zone=${{ env.ZONE }} \
-            --async \
-            --quiet 2>&1)
+            2>&1 | tee /tmp/worker_export.log
+          WORKER_EXPORT_OUTPUT=$(cat /tmp/worker_export.log)
           
+          # Extract region and build ID from output (format: locations/REGION/builds/BUILD_ID)
+          WORKER_BUILD_REGION=$(echo "$WORKER_EXPORT_OUTPUT" | grep -oP 'locations/\K[^/]+(?=/builds)' | head -1)
           WORKER_BUILD_ID=$(echo "$WORKER_EXPORT_OUTPUT" | grep -oP 'builds/\K[a-f0-9-]+' | head -1)
+          [ -n "$WORKER_BUILD_REGION" ] && echo "Worker Build Region: $WORKER_BUILD_REGION" || WORKER_BUILD_REGION="us-east4"
           [ -n "$WORKER_BUILD_ID" ] && echo "Worker Build ID: $WORKER_BUILD_ID" || echo "Warning: No Worker Build ID"
           
           echo "Monitoring Worker Export..."
@@ -88,11 +129,24 @@ jobs:
           
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             WORKER_EXISTS="no"
-            timeout 10s sudo gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" 2>/dev/null && WORKER_EXISTS="yes"
+            timeout 10s gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" 2>/dev/null && WORKER_EXISTS="yes"
             
             BUILD_STATUS="UNKNOWN"
             if [ -n "$WORKER_BUILD_ID" ]; then
-              BUILD_STATUS=$(timeout 60s sudo gcloud builds describe "$WORKER_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+              echo "[DEBUG] Fetching build status for: $WORKER_BUILD_ID in region: $WORKER_BUILD_REGION"
+              set +e
+              BUILD_CMD_OUTPUT=$(timeout 60s gcloud builds describe "$WORKER_BUILD_ID" --region="$WORKER_BUILD_REGION" --project=${{ env.PROJECT_ID }} --format="value(status)" 2>&1)
+              BUILD_CMD_EXIT=$?
+              set -e
+              echo "[DEBUG] Command exit code: $BUILD_CMD_EXIT"
+              echo "[DEBUG] Command output: $BUILD_CMD_OUTPUT"
+              
+              if [ $BUILD_CMD_EXIT -eq 0 ] && [ -n "$BUILD_CMD_OUTPUT" ]; then
+                BUILD_STATUS="$BUILD_CMD_OUTPUT"
+              else
+                BUILD_STATUS="UNKNOWN"
+                echo "[DEBUG] Failed to get build status, defaulting to UNKNOWN"
+              fi
               
               [ "$BUILD_STATUS" == "SUCCESS" ] && WORKER_EXISTS="yes"
               
@@ -105,19 +159,21 @@ jobs:
                 echo ""
                 echo "Cloud Build Logs:"
                 echo "------------------------------------------"
-                sudo gcloud builds log "$WORKER_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
+                gcloud builds log "$WORKER_BUILD_ID" --region="$WORKER_BUILD_REGION" --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
                 echo "------------------------------------------"
                 echo ""
                 echo "View full logs in Cloud Console:"
-                echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
+                echo "https://console.cloud.google.com/cloud-build/builds;region=${WORKER_BUILD_REGION}/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
                 echo ""
                 exit 1
               fi
             fi
             
+            # Always print status on every iteration
+            echo "Worker status: $BUILD_STATUS | ${ELAPSED}s"
+            
             [ "$WORKER_EXISTS" == "yes" ] && echo "Worker export complete (${ELAPSED}s)" && break
             
-            echo "Worker status: $BUILD_STATUS | ${ELAPSED}s"
             sleep $SLEEP_INTERVAL
             ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
           done
@@ -128,22 +184,26 @@ jobs:
           if [ -n "$WORKER_BUILD_ID" ]; then
             echo ""
             echo "Worker Cloud Build Logs:"
-            echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
+            echo "https://console.cloud.google.com/cloud-build/builds;region=${WORKER_BUILD_REGION}/$WORKER_BUILD_ID?project=${{ env.PROJECT_ID }}"
             echo ""
           fi
           
           echo "Exporting Control Plane Image: $CP_IMAGE"
-          CP_EXPORT_OUTPUT=$(sudo gcloud compute images export \
+          # Use tee to show output in real-time while also capturing it
+          gcloud compute images export \
             --project=${{ env.PROJECT_ID }} \
             --image="$CP_IMAGE" \
             --destination-uri="gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" \
             --network=${{ env.VPC_NAME }} \
             --subnet=${{ env.SUBNET_NAME }} \
             --zone=${{ env.ZONE }} \
-            --async \
-            --quiet 2>&1)
+            2>&1 | tee /tmp/cp_export.log
+          CP_EXPORT_OUTPUT=$(cat /tmp/cp_export.log)
           
+          # Extract region and build ID from output (format: locations/REGION/builds/BUILD_ID)
+          CP_BUILD_REGION=$(echo "$CP_EXPORT_OUTPUT" | grep -oP 'locations/\K[^/]+(?=/builds)' | head -1)
           CP_BUILD_ID=$(echo "$CP_EXPORT_OUTPUT" | grep -oP 'builds/\K[a-f0-9-]+' | head -1)
+          [ -n "$CP_BUILD_REGION" ] && echo "CP Build Region: $CP_BUILD_REGION" || CP_BUILD_REGION="us-east4"
           [ -n "$CP_BUILD_ID" ] && echo "CP Build ID: $CP_BUILD_ID" || echo "Warning: No CP Build ID"
           
           echo "Monitoring Control Plane Export..."
@@ -151,11 +211,24 @@ jobs:
           
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             CP_EXISTS="no"
-            timeout 10s sudo gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" 2>/dev/null && CP_EXISTS="yes"
+            timeout 10s gsutil -q stat "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" 2>/dev/null && CP_EXISTS="yes"
             
             BUILD_STATUS="UNKNOWN"
             if [ -n "$CP_BUILD_ID" ]; then
-              BUILD_STATUS=$(timeout 60s sudo gcloud builds describe "$CP_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+              echo "[DEBUG] Fetching build status for: $CP_BUILD_ID in region: $CP_BUILD_REGION"
+              set +e
+              BUILD_CMD_OUTPUT=$(timeout 60s gcloud builds describe "$CP_BUILD_ID" --region="$CP_BUILD_REGION" --project=${{ env.PROJECT_ID }} --format="value(status)" 2>&1)
+              BUILD_CMD_EXIT=$?
+              set -e
+              echo "[DEBUG] Command exit code: $BUILD_CMD_EXIT"
+              echo "[DEBUG] Command output: $BUILD_CMD_OUTPUT"
+              
+              if [ $BUILD_CMD_EXIT -eq 0 ] && [ -n "$BUILD_CMD_OUTPUT" ]; then
+                BUILD_STATUS="$BUILD_CMD_OUTPUT"
+              else
+                BUILD_STATUS="UNKNOWN"
+                echo "[DEBUG] Failed to get build status, defaulting to UNKNOWN"
+              fi
               
               [ "$BUILD_STATUS" == "SUCCESS" ] && CP_EXISTS="yes"
               
@@ -168,19 +241,21 @@ jobs:
                 echo ""
                 echo "Cloud Build Logs:"
                 echo "------------------------------------------"
-                sudo gcloud builds log "$CP_BUILD_ID" --region=us-east4 --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
+                gcloud builds log "$CP_BUILD_ID" --region="$CP_BUILD_REGION" --project=${{ env.PROJECT_ID }} 2>/dev/null || echo "Could not retrieve logs"
                 echo "------------------------------------------"
                 echo ""
                 echo "View full logs in Cloud Console:"
-                echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
+                echo "https://console.cloud.google.com/cloud-build/builds;region=${CP_BUILD_REGION}/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
                 echo ""
                 exit 1
               fi
             fi
             
+            # Always print status on every iteration
+            echo "CP status: $BUILD_STATUS | ${ELAPSED}s"
+            
             [ "$CP_EXISTS" == "yes" ] && echo "CP export complete (${ELAPSED}s)" && break
             
-            echo "CP status: $BUILD_STATUS | ${ELAPSED}s"
             sleep $SLEEP_INTERVAL
             ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
           done
@@ -191,19 +266,20 @@ jobs:
           if [ -n "$CP_BUILD_ID" ]; then
             echo ""
             echo "Control Plane Cloud Build Logs:"
-            echo "https://console.cloud.google.com/cloud-build/builds;region=us-east4/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
+            echo "https://console.cloud.google.com/cloud-build/builds;region=${CP_BUILD_REGION}/$CP_BUILD_ID?project=${{ env.PROJECT_ID }}"
             echo ""
           fi
           
           echo "Downloading from GCS..."
           sudo mkdir -p "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
+          sudo chown -R $(whoami):$(whoami) "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
           cd "$LOCAL_PATH/$EXPORT_PREFIX/gcp"
-          sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" .
-          sudo gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" .
+          gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${WORKER_ARCHIVE}" .
+          gsutil cp "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/${CP_ARCHIVE}" .
           
           echo "Generating checksums..."
           sha256sum "${CP_ARCHIVE}" "${WORKER_ARCHIVE}" | sudo tee "${CHECKSUM_FILE}" > /dev/null
-          sudo gsutil cp "${CHECKSUM_FILE}" "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/"
+          gsutil cp "${CHECKSUM_FILE}" "gs://${{ env.GCS_BUCKET }}/${EXPORT_PREFIX}/"
 
           # Function: Copy with retry
           copy_with_retry() {
@@ -240,15 +316,17 @@ jobs:
 
       - name: Set Outputs
         id: set-outputs
+        env:
+          SSH_OUTPUT: ${{ steps.execute-gcp.outputs.ssh_output }}
         run: |
           # Extract pipe-delimited data from previous step
-          OUTPUT='${{ steps.execute-gcp.outputs.ssh_output }}'
+          # Using env var to safely handle multi-line output with special characters
           
           echo "Raw output from remote:"
-          echo "$OUTPUT"
+          echo "$SSH_OUTPUT"
           
           # Extract data line (ignores SSH banner)
-          DATA_LINE=$(echo "$OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
+          DATA_LINE=$(echo "$SSH_OUTPUT" | grep '^OUTPUT_DATA:' | cut -d: -f2)
           
           # Validate data was found
           if [ -z "$DATA_LINE" ]; then

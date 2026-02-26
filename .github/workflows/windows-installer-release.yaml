@@ -272,7 +272,7 @@ jobs:
           # Generate checksums and copy to scratch space
           echo "Copying signed installer to local path..."
           sudo mkdir -p "${LOCAL_PATH}/signed"
-          SIGNED_INSTALLER_NAME="${INSTALLER_NAME}_signed-${TIMESTAMP}-${BRANCH_SUFFIX}.exe"
+          SIGNED_INSTALLER_NAME="${INSTALLER_NAME}_signed.exe"
           sudo cp "${IMAGE_SIGNING_PATH}/${INSTALLER_NAME}.exe" "${LOCAL_PATH}/signed/${SIGNED_INSTALLER_NAME}"
           
           # Generate SHA256 Checksum
