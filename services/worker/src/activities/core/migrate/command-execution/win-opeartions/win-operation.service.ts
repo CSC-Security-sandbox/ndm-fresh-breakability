@@ -7,7 +7,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript, psGetAclBatchScript, psSetAclBatchScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { Cmd, ErrorType, JobManagerContext, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -115,6 +115,235 @@ export class WinOperationService {
         `Failed to set ACL for ${targetPath}: ${error.message}`,
       );
     }
+  }
+
+  async getAclOperationBatch(
+    paths: string[],
+    isSource: boolean,
+    workflowId = '',
+  ): Promise<Map<string, SecurityDescriptor | Error>> {
+    const result = new Map<string, SecurityDescriptor | Error>();
+    if (paths.length === 0) return result;
+    try {
+      const pathsJson = JSON.stringify(paths).replace(/'/g, "''");
+      const script = `$pathsJson = '${pathsJson}'\n${psGetAclBatchScript}`;
+      const output = await this.winShellService.executeCommand(script, workflowId);
+      if (output.stderr) throw new Error(output.stderr);
+      const arr = JSON.parse(output.stdout) as Array<{ path: string; acl?: SecurityDescriptor; error?: string }>;
+      for (const item of arr) {
+        if (item.error) {
+          result.set(item.path, new Error(item.error));
+        } else if (item.acl) {
+          result.set(item.path, item.acl);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Batch get ACL failed: ${error.message}`);
+      for (const p of paths) {
+        result.set(p, error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    return result;
+  }
+
+  async setAclOperationBatch(
+    entries: Array<{ targetPath: string; acl: SecurityDescriptor }>,
+    workflowId = '',
+  ): Promise<Map<string, { unresolved_sids?: string[] } | Error>> {
+    const result = new Map<string, { unresolved_sids?: string[] } | Error>();
+    if (entries.length === 0) return result;
+    try {
+      const entriesPayload = entries.map((e) => ({
+        path: e.targetPath,
+        aclJson: JSON.stringify(e.acl),
+      }));
+      const entriesJson = JSON.stringify(entriesPayload).replace(/'/g, "''");
+      const script = `$entriesJson = '${entriesJson}'\n${psSetAclBatchScript}`;
+      const output = await this.winShellService.executeCommand(script, workflowId);
+      if (output.stderr) throw new Error(output.stderr);
+      const arr = JSON.parse(output.stdout) as Array<{
+        path: string;
+        success: boolean;
+        error?: string;
+        unresolved_sids?: string[];
+      }>;
+      for (const item of arr) {
+        if (!item.success && item.error) {
+          result.set(item.path, new Error(item.error));
+        } else {
+          result.set(item.path, { unresolved_sids: item.unresolved_sids ?? [] });
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Batch set ACL failed: ${error.message}`);
+      const err = error instanceof Error ? error : new Error(String(error));
+      for (const e of entries) {
+        result.set(e.targetPath, err);
+      }
+    }
+    return result;
+  }
+
+  async stampAclOperationBatch(
+    inputs: CommandExecInput[],
+  ): Promise<Map<string, { output: StampMetaOutput; errors: string[] }>> {
+    const results = new Map<string, { output: StampMetaOutput; errors: string[] }>();
+    if (inputs.length === 0) return results;
+    const workflowId = inputs[0]?.jobContext?.jobRunId ?? '';
+
+    const sourcePaths = inputs.map((i) => i.sourcePath);
+    const targetPaths = inputs.map((i) => i.targetPath);
+
+    const getSourceTiming = () =>
+      this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_get_source_batch' },
+        () => this.getAclOperationBatch(sourcePaths, true, workflowId),
+      );
+
+    let sourceAclMap: Map<string, SecurityDescriptor | Error>;
+    try {
+      sourceAclMap = await getSourceTiming();
+    } catch (err) {
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      for (const input of inputs) {
+        results.set(input.command.id, {
+          output: { sourceErrors: [errObj.message], targetErrors: [] },
+          errors: [errObj.message],
+        });
+      }
+      return results;
+    }
+
+    const aclsToSet: Array<{ targetPath: string; acl: SecurityDescriptor; input: CommandExecInput }> = [];
+    const jobRunId = inputs[0].jobContext.jobRunId;
+    const isIdentityMapping = inputs[0].jobContext.jobConfig?.options?.isIdentityMappingAvailable ?? false;
+
+    for (const input of inputs) {
+      const aclOrErr = sourceAclMap.get(input.sourcePath);
+      if (aclOrErr instanceof Error) {
+        results.set(input.command.id, {
+          output: { sourceErrors: [aclOrErr.message], targetErrors: [] },
+          errors: [aclOrErr.message],
+        });
+        continue;
+      }
+      let acl: SecurityDescriptor = aclOrErr;
+
+      if (isIdentityMapping) {
+        acl = await this.metricsService.runWithTiming(
+          workflowId,
+          { category: 'stamp_phase', phase: 'acl_sid_mapping' },
+          () => this.mapSIDToTarget(acl, jobRunId),
+        );
+      }
+
+      const errors: string[] = [];
+      if (acl.Owner === 'Invalid') {
+        errors.push(`Invalid Owner SID for ${acl.originalOwner} found in SID mapping`);
+        acl.Owner = acl.originalOwner;
+        delete acl.originalOwner;
+      }
+      if (acl.Group === 'Invalid') {
+        errors.push(`Invalid Group SID for ${acl.originalGroup} found in SID mapping`);
+        acl.Group = acl.originalGroup;
+        delete acl.originalGroup;
+      }
+      if (acl.DaclAces) {
+        acl.DaclAces = acl.DaclAces.filter((ace) => {
+          if (ace.Sid === 'Invalid') {
+            errors.push(`Invalid ACL SID for ${ace.originalSid} found in SID mapping`);
+            return false;
+          }
+          return true;
+        });
+      }
+
+      if (errors.length > 0) {
+        results.set(input.command.id, {
+          output: { sourceErrors: [], targetErrors: errors },
+          errors,
+        });
+        continue;
+      }
+      aclsToSet.push({ targetPath: input.targetPath, acl, input });
+    }
+
+    if (aclsToSet.length === 0) return results;
+
+    const setResultMap = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_set_target_batch' },
+      () =>
+        this.setAclOperationBatch(
+          aclsToSet.map((x) => ({ targetPath: x.targetPath, acl: x.acl })),
+          workflowId,
+        ),
+    );
+
+    const targetPathsToValidate = aclsToSet.map((x) => x.targetPath);
+    let targetAclMap: Map<string, SecurityDescriptor | Error>;
+    try {
+      targetAclMap = await this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_get_target_batch' },
+        () => this.getAclOperationBatch(targetPathsToValidate, false, workflowId),
+      );
+    } catch (err) {
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      for (const { input } of aclsToSet) {
+        const existing = results.get(input.command.id);
+        if (!existing) {
+          results.set(input.command.id, {
+            output: { sourceErrors: [], targetErrors: [errObj.message] },
+            errors: [errObj.message],
+          });
+        }
+      }
+      return results;
+    }
+
+    for (const { targetPath, acl, input } of aclsToSet) {
+      const setResult = setResultMap.get(targetPath);
+      const setErr = setResult instanceof Error ? setResult : null;
+      const unresolvedSids = setResult && !(setResult instanceof Error) ? setResult.unresolved_sids : undefined;
+
+      const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+      const errors: string[] = [];
+
+      if (setErr) {
+        output.targetErrors.push(setErr.message);
+        errors.push(setErr.message);
+      }
+      if (unresolvedSids?.length) {
+        unresolvedSids.forEach((sid) =>
+          errors.push(`Unresolved SID ${sid} found while setting ACL on target`),
+        );
+        output.targetErrors.push('ACL_STAMP_ERROR');
+      }
+
+      const targetAcl = targetAclMap.get(targetPath);
+      const targetAclObj = targetAcl instanceof Error ? undefined : targetAcl;
+      if (targetAclObj) {
+        const validation = await this.validateAclOperation(acl, targetAclObj);
+        if (!input.command.ops[OPS_CMD.STAMP_META].params) {
+          input.command.ops[OPS_CMD.STAMP_META].params = {};
+        }
+        if (validation.inValid.length > 0) {
+          input.command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
+          errors.push(validation.inValid);
+        }
+        input.command.ops[OPS_CMD.STAMP_META].params.sidMap = {
+          targetAcl: validation.targetSID,
+          sourceAcl: validation.sourceSID,
+          validationError: validation.inValid,
+        };
+      }
+
+      results.set(input.command.id, { output, errors });
+    }
+
+    return results;
   }
 
   async stampAclOperation({

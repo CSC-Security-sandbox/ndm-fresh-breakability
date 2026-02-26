@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
+import { SourceAclError } from './win-opeartions/acl-operation.error';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -568,7 +569,7 @@ describe('StampMetaService', () => {
       const result = await service.stampObjectACL(input);
 
       expect(result.sourceErrors).toEqual([]);
-      expect(result.targetErrors).toEqual([]);
+      expect(result.targetErrors).toEqual(['ACL_STAMP_ERROR']);
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
 
@@ -582,13 +583,27 @@ describe('StampMetaService', () => {
 
       const result = await service.stampObjectACL(input);
 
-      expect(result.sourceErrors).toEqual(['ACCESS_DENIED']);
-      expect(result.targetErrors).toEqual([]);
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual(['ACCESS_DENIED']);
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Stamping ACL from /source/test-file.txt to /target/test-file.txt, Error: ACL operation failed',
         error.stack,
       );
+    });
+
+    it('should record source errors when SourceAclError is thrown', async () => {
+      const input = createMockInput({}, { preservePermissions: true });
+      const error = new SourceAclError('Failed to get source ACL', 'SRC_ACL_ERROR');
+
+      winOperationService.stampAclOperation.mockRejectedValue(error);
+      dmError.mockReturnValue({});
+
+      const result = await service.stampObjectACL(input);
+
+      expect(result.sourceErrors).toEqual(['SRC_ACL_ERROR']);
+      expect(result.targetErrors).toEqual([]);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
   });
 

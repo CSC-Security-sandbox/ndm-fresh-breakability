@@ -180,20 +180,73 @@ export class StampMetaService {
         if (jobContext.jobConfig.options.preservePermissions) {
             try {
                 this.logger.debug(`Stamping ACL from ${sourcePath} to ${targetPath}`);
-                const { output, errors } = await this.winOperationService.stampAclOperation({ command, jobContext, sourcePath, targetPath, errorType });
-                if (errors && errors.length > 0) {
-                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(errors.join(",\n")), { name: command.fPath, path: targetPath });
+                const aclResult = await this.winOperationService.stampAclOperation({ command, jobContext, sourcePath, targetPath, errorType });
+                if (aclResult.errors && aclResult.errors.length > 0) {
+                    const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(aclResult.errors.join(",\n")), { name: command.fPath, path: targetPath });
                     await jobContext.publishToErrorStream(dmErr);
+                    output.targetErrors.push('ACL_STAMP_ERROR');
                 }
             } catch (error) {
                 const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
                 this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr);
-                output.sourceErrors.push(error.code);
+                if (origin === Origin.SOURCE) {
+                    output.sourceErrors.push(error.code);
+                } else {
+                    output.targetErrors.push(error.code);
+                }
             }
         }
         return output;
+    }
+
+    @Timed(MetricsService.METRIC.STAMP_META)
+    async stampAclBatch(inputs: CommandExecInput[]): Promise<Map<string, CommandOutput>> {
+        const results = new Map<string, CommandOutput>();
+        if (inputs.length === 0) return results;
+        if (process.platform !== 'win32') return results;
+
+        const toStamp = inputs.filter(
+            (i) =>
+                i.jobContext.jobConfig?.options?.preservePermissions &&
+                i.command.ops?.[OPS_CMD.STAMP_META] &&
+                i.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED,
+        );
+        if (toStamp.length === 0) return results;
+
+        const batchResults = await this.winOperationService.stampAclOperationBatch(toStamp);
+        const inputByCommandId = new Map(toStamp.map((i) => [i.command.id, i]));
+
+        for (const [commandId, { output: stampOutput, errors }] of batchResults) {
+            const input = inputByCommandId.get(commandId);
+            if (!input) continue;
+            const { command, jobContext, targetPath, errorType } = input;
+            const cmdOutput: CommandOutput = {
+                shouldStampMeta: true,
+                sourceErrors: [...stampOutput.sourceErrors],
+                targetErrors: [...stampOutput.targetErrors],
+                shouldUpdateItemInfo: true,
+            };
+            results.set(commandId, cmdOutput);
+
+            if (stampOutput.sourceErrors.length > 0 || stampOutput.targetErrors.length > 0) {
+                const dmErr = dmError(
+                    'OPERATION',
+                    stampOutput.sourceErrors.length > 0 ? Origin.SOURCE : Origin.DESTINATION,
+                    Operation.STAMP_META,
+                    errorType,
+                    command.id,
+                    new Error(errors.join('; ')),
+                    { name: command.fPath, path: targetPath },
+                );
+                await jobContext.publishToErrorStream(dmErr);
+                command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
+            } else {
+                command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
+            }
+        }
+        return results;
     }
 
     async resetFileAttributes(path: string): Promise<boolean> {

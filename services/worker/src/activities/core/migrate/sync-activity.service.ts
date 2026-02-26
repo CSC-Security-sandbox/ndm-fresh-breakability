@@ -78,32 +78,38 @@ export class SyncService {
             let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
             offset += this.maxWriteConcurrency;
             const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
-            const results = await Promise.allSettled(filteredCommands.map(command => {
-                const scanInput: CommandExecInput = {
-                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-                  command,
-                  jobContext,
-                  errorType
-                };
-                return this.commandExecService.executeCommand(scanInput);
+            const scanInputs: CommandExecInput[] = filteredCommands.map(command => ({
+                sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+                targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+                command,
+                jobContext,
+                errorType
             }));
-            results.forEach((result) => {
-                if (result.status === 'fulfilled') {
-                    syncOutput.errors.source.push(...result.value.sourceErrors);
-                    syncOutput.errors.target.push(...result.value.targetErrors);
-                } else {
-                    // Handle rejected promises - treat them as errors (push array of strings)
-                    const messages: string[] = Array.isArray(result.reason)
-                        ? result.reason.map((err: any) =>
-                            typeof err === 'string'
-                              ? err
-                              : err?.message || JSON.stringify(err) || 'Unknown error'
-                        )
-                        : [result.reason?.message || String(result.reason) || 'Unknown error'];
-                    syncOutput.errors.source.push(...messages);                    
-                }
-            });
+
+            if (process.platform === 'win32' && scanInputs.length > 0) {
+                const result = await this.commandExecService.executeCommandsWithBatchAcl(scanInputs);
+                syncOutput.errors.source.push(...result.sourceErrors);
+                syncOutput.errors.target.push(...result.targetErrors);
+            } else {
+                const results = await Promise.allSettled(
+                    scanInputs.map((scanInput) => this.commandExecService.executeCommand(scanInput))
+                );
+                results.forEach((result) => {
+                    if (result.status === 'fulfilled') {
+                        syncOutput.errors.source.push(...result.value.sourceErrors);
+                        syncOutput.errors.target.push(...result.value.targetErrors);
+                    } else {
+                        const messages: string[] = Array.isArray(result.reason)
+                            ? result.reason.map((err: any) =>
+                                typeof err === 'string'
+                                    ? err
+                                    : err?.message || JSON.stringify(err) || 'Unknown error'
+                            )
+                            : [result.reason?.message || String(result.reason) || 'Unknown error'];
+                        syncOutput.errors.source.push(...messages);
+                    }
+                });
+            }
         }
         await jobContext.setTask(taskHashId, task);
         return syncOutput

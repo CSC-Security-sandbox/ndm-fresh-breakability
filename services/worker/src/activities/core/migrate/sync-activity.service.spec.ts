@@ -43,8 +43,11 @@ describe('SyncService', () => {
     let commonTaskService: jest.Mocked<CommonTaskService>;
     let commandExecService: jest.Mocked<CommandExecService>;
     let mockJobContext: any;
+    let originalPlatform: string;
 
     beforeEach(async () => {
+        originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
         configService = {
             get: jest.fn().mockImplementation((key: string) => {
                 switch (key) {
@@ -85,6 +88,11 @@ describe('SyncService', () => {
 
         commandExecService = {
             executeCommand: jest.fn(),
+            executeCommandsWithBatchAcl: jest.fn().mockImplementation((inputs: any[]) => ({
+                sourceErrors: [] as string[],
+                targetErrors: [] as string[],
+                cmd: inputs?.[0]?.command ?? {},
+            })),
         } as any;
 
         const module: TestingModule = await Test.createTestingModule({
@@ -102,6 +110,7 @@ describe('SyncService', () => {
     });
 
     afterEach(() => {
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
         jest.clearAllMocks();
     });
 
@@ -333,6 +342,42 @@ describe('SyncService', () => {
 
             expect(result.errors.source).toEqual(['source-error-1']);
             expect(result.errors.target).toEqual(['target-error-1']);
+        });
+
+        it('should use executeCommandsWithBatchAcl on Windows', async () => {
+            Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt' } as any],
+                'target-path'
+            );
+            mockTask.retryCount = 0;
+            commandExecService.executeCommandsWithBatchAcl.mockResolvedValue({
+                sourceErrors: [],
+                targetErrors: [],
+                cmd: {} as any,
+            });
+
+            await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(commandExecService.executeCommandsWithBatchAcl).toHaveBeenCalledTimes(1);
+            expect(commandExecService.executeCommandsWithBatchAcl).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        sourcePath: expect.any(String),
+                        targetPath: expect.any(String),
+                        command: expect.any(Object),
+                        jobContext: mockJobContext,
+                    }),
+                ])
+            );
+            expect(commandExecService.executeCommand).not.toHaveBeenCalled();
+            Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
         });
     });
 

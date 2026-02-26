@@ -12,7 +12,7 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { createDirectory } from "src/activities/utils/directory.utils";
 import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { MetricsService } from "src/metrics/metrics.service";
-import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
+import { CommandExecInput, CommandExecOutput, CommandOutput, ExecuteCommandOptions, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
 
@@ -31,7 +31,7 @@ export class CommandExecService {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
     }
-    async executeCommand(input: CommandExecInput): Promise<CommandExecOutput> {
+    async executeCommand(input: CommandExecInput, options?: ExecuteCommandOptions): Promise<CommandExecOutput> {
 
         const output: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: input.command };
         let baseCmdRes: CommandOutput = { shouldStampMeta: false, shouldUpdateItemInfo: false, sourceErrors: [], targetErrors: [] };
@@ -71,12 +71,23 @@ export class CommandExecService {
 
        // Stamp Meta if needed
         if (baseCmdRes.shouldStampMeta) {
-            const metaResult = await this.stampMetaService.stampMetaData(input);
-            baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
-            output.targetErrors.push(...metaResult.targetErrors);
-            output.sourceErrors.push(...metaResult.sourceErrors);
+            const skipAclStamp = options?.skipAclStamp && process.platform === 'win32';
+            if (skipAclStamp) {
+                const [preserveTimeOutput, timeOutput] = await Promise.all([
+                    this.stampMetaService.preserveAccessAndModifiedTime(input),
+                    this.stampMetaService.stampAccessAndModifiedTime(input),
+                ]);
+                baseCmdRes.shouldUpdateItemInfo = true;
+                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...preserveTimeOutput.targetErrors, ...timeOutput.targetErrors);
+            } else {
+                const metaResult = await this.stampMetaService.stampMetaData(input);
+                baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
+                output.targetErrors.push(...metaResult.targetErrors);
+                output.sourceErrors.push(...metaResult.sourceErrors);
+            }
         }
-        if( baseCmdRes.shouldUpdateItemInfo ) {
+        if (!options?.skipAclStamp && baseCmdRes.shouldUpdateItemInfo) {
             await this.publishFileInfo(input);
         }
         if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
@@ -85,6 +96,66 @@ export class CommandExecService {
             input.command.status = CommandStatus.COMPLETED;
 
         return output
+    }
+
+    async executeCommandsWithBatchAcl(inputs: CommandExecInput[]): Promise<CommandExecOutput> {
+        const aggregated: CommandExecOutput = { sourceErrors: [], targetErrors: [], cmd: inputs[0]?.command };
+        if (inputs.length === 0) return aggregated;
+
+        const results = await Promise.allSettled(
+            inputs.map((input) => this.executeCommand(input, { skipAclStamp: true })),
+        );
+        results.forEach((result, idx) => {
+            if (result.status === 'fulfilled') {
+                aggregated.sourceErrors.push(...result.value.sourceErrors);
+                aggregated.targetErrors.push(...result.value.targetErrors);
+            } else {
+                const msg = result.reason?.message ?? String(result.reason);
+                aggregated.sourceErrors.push(msg);
+            }
+        });
+
+        let batchResults: Map<string, CommandOutput> | undefined;
+        const useBatchAcl = process.platform === 'win32';
+        const pendingAcl = useBatchAcl
+            ? inputs.filter(
+                  (i) =>
+                      i.command.status === CommandStatus.COMPLETED &&
+                      i.command.ops?.[OPS_CMD.STAMP_META]?.status !== OPS_STATUS.COMPLETED &&
+                      i.jobContext.jobConfig?.options?.preservePermissions,
+              )
+            : [];
+        if (pendingAcl.length > 0) {
+            batchResults = await this.stampMetaService.stampAclBatch(pendingAcl);
+            for (const [, cmdOutput] of batchResults) {
+                aggregated.sourceErrors.push(...cmdOutput.sourceErrors);
+                aggregated.targetErrors.push(...cmdOutput.targetErrors);
+            }
+        }
+
+        for (const input of inputs) {
+            if (input.command.ops?.[OPS_CMD.STAMP_META]?.status === OPS_STATUS.ERROR) {
+                input.command.status = CommandStatus.ERROR;
+            }
+            await this.publishFileInfo(input);
+        }
+
+        const hasErrors = aggregated.sourceErrors.length > 0 || aggregated.targetErrors.length > 0;
+        for (const input of inputs) {
+            if (input.command.status === CommandStatus.COMPLETED || input.command.status === CommandStatus.ERROR) continue;
+            const fromBatch = pendingAcl.some((p) => p.command.id === input.command.id);
+            if (fromBatch && batchResults) {
+                const batchOut = batchResults.get(input.command.id);
+                if (batchOut && (batchOut.sourceErrors.length > 0 || batchOut.targetErrors.length > 0)) {
+                    input.command.status = CommandStatus.ERROR;
+                }
+            }
+            if (input.command.status !== CommandStatus.ERROR && input.command.status !== CommandStatus.COMPLETED) {
+                input.command.status = hasErrors ? CommandStatus.ERROR : CommandStatus.COMPLETED;
+            }
+        }
+        aggregated.cmd = inputs[0].command;
+        return aggregated;
     }
 
     async copySymlink({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {

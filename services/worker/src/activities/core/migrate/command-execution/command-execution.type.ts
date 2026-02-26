@@ -16,6 +16,11 @@ export interface CommandExecOutput {
     cmd: Cmd;
 }
 
+export interface ExecuteCommandOptions {
+    /** When true on Windows, skip ACL stamp (caller will run stampAclBatch); only times are stamped. */
+    skipAclStamp?: boolean;
+}
+
 export interface CommandOutput {
     shouldStampMeta: boolean;
     sourceErrors: string[];

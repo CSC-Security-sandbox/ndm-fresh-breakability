@@ -428,6 +428,47 @@ try {
 }
 `;
 
+export const psGetAclBatchScript = `
+$paths = $pathsJson | ConvertFrom-Json
+$results = @()
+foreach ($p in $paths) {
+    try {
+        if (!(Test-Path $p)) { throw "File not found: $p" }
+        $acl = Get-FileSecurityFast $p
+        $aclObj = $acl | ConvertFrom-Json
+        $results += @{ path = $p; acl = $aclObj }
+    } catch {
+        $results += @{ path = $p; error = $_.Exception.Message }
+    }
+}
+$results | ConvertTo-Json -Compress -Depth 20
+`;
+
+export const psSetAclBatchScript = `
+$entries = $entriesJson | ConvertFrom-Json
+$results = @()
+foreach ($e in $entries) {
+    try {
+        if (!(Test-Path $e.path)) { throw "File not found: $e.path" }
+        $out = Set-FileSecurityFast $e.path $e.aclJson 2>&1 | Out-String
+        $out = $out.Trim()
+        $unresolved_sids = @()
+        if ($out -match '"unresolved_sids":\s*\[(.*?)\]') {
+            $match = $matches[1]
+            if ($match) {
+                try {
+                    $unresolved_sids = @($match | ConvertFrom-Json)
+                } catch { }
+            }
+        }
+        $results += @{ path = $e.path; success = $true; unresolved_sids = $unresolved_sids }
+    } catch {
+        $results += @{ path = $e.path; success = $false; error = $_.Exception.Message }
+    }
+}
+$results | ConvertTo-Json -Compress -Depth 10
+`;
+
 export const psGetLinkInfoScript = `
 try {
     Get-NTFSLinkInfo $srcFile
