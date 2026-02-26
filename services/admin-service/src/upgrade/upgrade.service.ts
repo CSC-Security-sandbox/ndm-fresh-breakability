@@ -535,14 +535,14 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
     // Determine UI state based on latest record
     const showUploadUI =
       (latest.uploadStatus === UploadStatus.SUCCESS && 
-        (latest.upgradeStatus === UpgradeStatus.SUCCESS || latest.upgradeStatus === UpgradeStatus.SKIPPED || latest.upgradeStatus === UpgradeStatus.ROLLED_BACK)) ||
+        (latest.upgradeStatus === UpgradeStatus.SUCCESS || latest.upgradeStatus === UpgradeStatus.SKIPPED)) ||
       latest.uploadStatus === UploadStatus.FAILED ||
       latest.uploadStatus === UploadStatus.CANCELLED;
 
-    // Show upgrade UI if: upload succeeded AND upgrade is pending OR failed (allow retry)
+    // Show upgrade UI if: upload succeeded AND upgrade is pending, failed, or rolled back (allow retry)
       const showUpgradeUI =
         latest.uploadStatus === UploadStatus.SUCCESS &&
-        (latest.upgradeStatus === UpgradeStatus.PENDING || latest.upgradeStatus === UpgradeStatus.FAILED);
+        (latest.upgradeStatus === UpgradeStatus.PENDING || latest.upgradeStatus === UpgradeStatus.FAILED || latest.upgradeStatus === UpgradeStatus.ROLLED_BACK);
 
     // Check if upgrade is currently in progress
       const isUpgradeInProgress =
@@ -562,6 +562,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         uploadedBy: latest.uploadedBy,
         upgradedBy: latest.upgradedBy,
         workerUploadStatus: latest.workerUploadStatus,  // IDLE | IN_PROGRESS | COMPLETED
+        workerUpgradeStatus: latest.workerUpgradeStatus,  // IDLE | IN_PROGRESS | COMPLETED
         showUploadUI,
         showUpgradeUI,
       isUploadInProgress,       // true when chunks are being uploaded (can be cancelled)
