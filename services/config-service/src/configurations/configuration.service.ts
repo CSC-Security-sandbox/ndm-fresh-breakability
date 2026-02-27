@@ -288,6 +288,7 @@ export class ConfigurationService {
             zone_id: true,
             status: true, // Per-zone status
             errorMessage: true, // Per-zone error message
+            dnsServer: true,
             workers: {
               workerId: true,
               workerName: true,
@@ -345,6 +346,7 @@ export class ConfigurationService {
       if (config?.fileServers) {
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
+          adServerIp: fileServer.dnsServer, // Expose as adServerIp for UI (SMB edit form)
           volumes: fileServer.volumes.map((volume) => ({
             ...volume,
             validationResult:
@@ -803,6 +805,7 @@ export class ConfigurationService {
             zone_id: fileServer.zone_id,
             smartConnectSsip: fileServer.smartConnectSsip, // SSIP for SmartConnect DNS resolution
             smartConnectDnsZone: fileServer.smartConnectDnsZone, // DNS zone from Isilon API
+            dnsServer: fileServer.adServerIp, // AD Server IP from UI (SMB)
             status: workers.length > 0
               ? ConfigStatus.IN_PROGRESS
               : ConfigStatus.DRAFT,
@@ -1043,6 +1046,7 @@ export class ConfigurationService {
           zone_id: update.zone_id,
           smartConnectSsip: update.smartConnectSsip, // SSIP for SmartConnect DNS resolution
           smartConnectDnsZone: update.smartConnectDnsZone, // DNS zone from Isilon API
+          dnsServer: update.adServerIp, // AD Server IP from UI (SMB)
           status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
@@ -1106,6 +1110,7 @@ export class ConfigurationService {
           zone_id: newFs.zone_id,
           smartConnectSsip: newFs.smartConnectSsip, // SSIP for SmartConnect DNS resolution
           smartConnectDnsZone: newFs.smartConnectDnsZone, // DNS zone from Isilon API
+          dnsServer: newFs.adServerIp, // AD Server IP from UI (SMB)
           status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
@@ -1402,6 +1407,7 @@ export class ConfigurationService {
             exportPathSource: fileServer.exportPathSource,
             smartConnectSsip: fileServer.smartConnectSsip,
             smartConnectDnsZone: fileServer.smartConnectDnsZone,
+            dnsServer: fileServer.dnsServer,
         }];
 
         // Build base payload

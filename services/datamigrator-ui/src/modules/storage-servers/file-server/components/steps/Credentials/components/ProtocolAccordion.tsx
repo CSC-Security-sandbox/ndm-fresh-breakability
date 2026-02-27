@@ -18,10 +18,10 @@ interface ProtocolAccordion {
 
 const ProtocolAccordion = ({ children, title }: ProtocolAccordion) => {
   const { isJobRunning, selectedProtocol } = useContext(CommonFileServerContext);
-  
+
   const isProtocolDisabled = selectedProtocol !== title;
-  const accordionClassName = `w-full ${isProtocolDisabled ? 'opacity-50' : ''}`;
-  
+  const accordionClassName = `w-full ${isProtocolDisabled ? "opacity-50" : ""}`;
+
   return (
     <Box className="mt-8">
       <Box className="flex gap-3 -my-3">
@@ -40,7 +40,8 @@ const ProtocolAccordion = ({ children, title }: ProtocolAccordion) => {
               )}
               {isProtocolDisabled && !isJobRunning && (
                 <InlineNotification type="info">
-                  This protocol is not selected. Switch to {title} protocol to edit these credentials.
+                  This protocol is not selected. Switch to {title} protocol to
+                  edit these credentials.
                 </InlineNotification>
               )}
             </AccordionCardContent>

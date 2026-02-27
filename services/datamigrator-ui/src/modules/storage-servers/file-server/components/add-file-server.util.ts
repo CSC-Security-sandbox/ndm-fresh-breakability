@@ -22,6 +22,7 @@ interface protocolsType {
   type: string;
   username: string;
   password: string;
+  adServerIp?: string;
 }
 
 // TODO: CHANGE username and hostname to ----->  userName and hostName (BE Pending)
@@ -49,6 +50,7 @@ export const createValidateConnectionPayload = (
       type: smbCredentialsForm.formState?.protocol,
       username: smbCredentialsForm.formState?.userName,
       password: smbCredentialsForm.formState?.password,
+      adServerIp: smbCredentialsForm.formState?.adServerIp?.trim() ?? "",
     });
   }
   return {
@@ -150,6 +152,7 @@ export const patchCredentialsFormValue = (
     protocol: protocolValue?.protocol || "",
     userName: protocolValue?.userName || "",
     protocolVersion: protocolValue.protocolVersion,
+    adServerIp: protocolValue?.adServerIp ?? "",
     exportPathSource:
       protocolValue?.exportPathSource || EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER,
   };
@@ -198,6 +201,12 @@ const getFileServerDetails = (
     // Only include protocolVersion if it has a valid non-empty value
     if (protocolVersionValue && protocolVersionValue.trim() !== "") {
       fileServerDetails.protocolVersion = protocolVersionValue;
+    }
+
+    // SMB only: AD Server IP is required
+    if (credentialsForm.formState?.protocol === "SMB") {
+      fileServerDetails.adServerIp =
+        credentialsForm?.formState?.adServerIp?.trim() ?? "";
     }
 
     if (existingId) {

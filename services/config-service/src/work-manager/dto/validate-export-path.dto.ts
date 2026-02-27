@@ -38,6 +38,11 @@ export class ListPathDTO {
     @IsOptional()
     @IsString()
     smartConnectDnsZone?: string;
+
+    @ApiProperty({ description: 'DNS server / AD Server IP (SMB)', required: false })
+    @IsOptional()
+    @IsString()
+    dnsServer?: string;
 }
 
 export class ConfigStatusPayloadDTO {

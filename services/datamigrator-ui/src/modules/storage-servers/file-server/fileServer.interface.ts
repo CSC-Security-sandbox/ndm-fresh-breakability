@@ -147,6 +147,8 @@ export interface CredentialsValidationSchemaType {
     value: string;
   };
   exportPathSource: string;
+  /** SMB only: Active Directory server IP */
+  adServerIp?: string;
 }
 
 // FOR JOB CONFIG STEP (4th)
@@ -166,6 +168,8 @@ export interface FileServerType {
   workers: string[];
   protocolVersion?: string;
   exportPathSource?: string;
+  /** SMB only: Active Directory server IP */
+  adServerIp?: string;
   createdBy?: string;
 }
 

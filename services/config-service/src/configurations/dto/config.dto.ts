@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsIP, isIP, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidateNested } from "class-validator";
 import { ConfigurationType, ExportPathSource, Protocol, ProtocolVersion, ServerType } from "src/constants/enums";
 
 
@@ -70,6 +70,12 @@ export class FileServersDTO {
     @IsString()
     @IsOptional()
     smartConnectDnsZone?: string;
+
+    @ApiPropertyOptional({ description: 'AD Server IP (SMB) - persisted as dns_server', example: '10.0.0.1' })
+    @IsString()
+    @IsOptional()
+    @IsIP()
+    adServerIp?: string;
 
     @ApiProperty({ description: 'Array of Worker IDs', type: [String] , example: ['4160b89b-bb37-48e0-81bb-16a027622d2e']})
     @IsArray()

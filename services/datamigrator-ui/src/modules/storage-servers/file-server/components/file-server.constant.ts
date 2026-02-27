@@ -45,6 +45,7 @@ export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
     label: Yup.string(),
     value: Yup.string(),
   }).optional(),
+  adServerIp: Yup.string().required("AD Server IP is required"),
   protocol: Yup.string()
     .oneOf(["SMB"], "Invalid protocol selected")
     .required("Protocol selection is required"),
@@ -127,6 +128,7 @@ export const INITIAL_VALUE_SMB_CREDENTIALS_FORM = {
     label: "",
     value: "",
   },
+  adServerIp: "",
   exportPathSource: EXPORT_PATH_SOURCE_ENUM.AUTO_DISCOVER, // Required for unified schema
 };
 

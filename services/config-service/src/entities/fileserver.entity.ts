@@ -99,4 +99,7 @@ export class FileServerEntity extends Base {
     @IsOptional()
     smartConnectDnsZone?: string;
 
+    @ApiProperty({ description: 'DNS server used for resolution' })
+    @Column({ type: 'text', nullable: true, name: 'dns_server' })
+    dnsServer: string;
 }
