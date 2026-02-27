@@ -154,8 +154,9 @@ export abstract class StorageClient {
           const certHosts: string[] = [];
           
           // Add Common Name (CN) to list of valid hosts
-          if (cert.subject?.CN) {
-            certHosts.push(cert.subject.CN.toLowerCase());
+          const cn = this.normalizeCertField(cert.subject?.CN);
+          if (cn) {
+            certHosts.push(cn.toLowerCase());
           }
           
           // Add Subject Alternative Names (SANs) - these are more reliable than CN
@@ -227,20 +228,20 @@ export abstract class StorageClient {
           const response: FetchCertificateResponseDTO = {
             isSelfSigned,
             subject: {
-              CN: cert.subject?.CN,
-              O: cert.subject?.O,
-              OU: cert.subject?.OU,
-              C: cert.subject?.C,
-              ST: cert.subject?.ST,
-              L: cert.subject?.L,
+              CN: this.normalizeCertField(cert.subject?.CN),
+              O: this.normalizeCertField(cert.subject?.O),
+              OU: this.normalizeCertField(cert.subject?.OU),
+              C: this.normalizeCertField(cert.subject?.C),
+              ST: this.normalizeCertField(cert.subject?.ST),
+              L: this.normalizeCertField(cert.subject?.L),
             },
             issuer: {
-              CN: cert.issuer?.CN,
-              O: cert.issuer?.O,
-              OU: cert.issuer?.OU,
-              C: cert.issuer?.C,
-              ST: cert.issuer?.ST,
-              L: cert.issuer?.L,
+              CN: this.normalizeCertField(cert.issuer?.CN),
+              O: this.normalizeCertField(cert.issuer?.O),
+              OU: this.normalizeCertField(cert.issuer?.OU),
+              C: this.normalizeCertField(cert.issuer?.C),
+              ST: this.normalizeCertField(cert.issuer?.ST),
+              L: this.normalizeCertField(cert.issuer?.L),
             },
             validFrom: validFrom.toISOString(),
             validTo: validTo.toISOString(),
@@ -323,6 +324,17 @@ export abstract class StorageClient {
     
     return { host, port };
   }
+
+  /**
+   * Normalize a certificate field that may be a string or string array to a single string.
+   * Node.js tls.PeerCertificate fields can be string | string[] when multiple values exist.
+   */
+    protected normalizeCertField(value: string | string[] | undefined): string | undefined {
+      if (Array.isArray(value)) {
+        return value.join(', ');
+      }
+      return value;
+    }
 
   /**
    * Extract issuer chain from certificate
