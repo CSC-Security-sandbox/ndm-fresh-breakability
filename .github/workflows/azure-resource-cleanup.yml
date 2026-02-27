@@ -1,0 +1,939 @@
+name: Azure Resource Cleanup
+
+# This workflow automatically cleans up Azure resources (VMs, images, snapshots,
+# ANF volumes) based on age and tag criteria. 
+#
+# Required GitHub Secrets:
+#   - AZURE_RESOURCE_GROUP: Resource group name 
+#   - NDM_AZURE_CREDENTIALS: NDM Azure Login credentials
+#   - AZ_VM_RESOURCE_GROUP: Resource group name for VMs
+
+on:
+  schedule:
+    # Run on Wednesday and Friday at 11:00 PM IST (17:30 UTC)
+    - cron: '30 17 * * 3,5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview deletions without executing)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions: {}
+
+env:
+  AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
+  AZ_VM_RESOURCE_GROUP: ${{ secrets.AZ_VM_RESOURCE_GROUP || vars.AZ_VM_RESOURCE_GROUP }}
+  NDM_AZURE_CREDENTIALS: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+  
+  AGE_THRESHOLD_DAYS_VMS_VOLUMES: ${{ secrets.CLEANUP_AGE_DAYS_VMS_DISKS_VOLUMES || '2' }}
+  AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS: ${{ secrets.CLEANUP_AGE_DAYS_IMAGES_SNAPSHOTS || '7' }}
+  EXCLUDE_TAG_KEY: 'DoNotDelete'
+  EXCLUDE_TAG_VALUE: 'true'
+  COMPUTE_GALLERY_NAME: 'datamigrator'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run: ${{ steps.config.outputs.dry_run }}
+      resource_types: ${{ steps.config.outputs.resource_types }}
+      cutoff_date_vms_volumes: ${{ steps.config.outputs.cutoff_date_vms_volumes }}
+      cutoff_date_images_snapshots: ${{ steps.config.outputs.cutoff_date_images_snapshots }}
+    
+    steps:
+      - name: Configure cleanup parameters
+        id: config
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          if [ -z "$DRY_RUN" ]; then
+            DRY_RUN="false"
+          fi
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          
+          RESOURCE_TYPES="vms,disks,images,snapshots,anf-volumes"
+          echo "resource_types=$RESOURCE_TYPES" >> $GITHUB_OUTPUT
+          
+          CUTOFF_DATE_VMS_VOLUMES=$(date -u -d "${AGE_THRESHOLD_DAYS_VMS_VOLUMES} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_DATE_IMAGES_SNAPSHOTS=$(date -u -d "${AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "cutoff_date_vms_volumes=$CUTOFF_DATE_VMS_VOLUMES" >> $GITHUB_OUTPUT
+          echo "cutoff_date_images_snapshots=$CUTOFF_DATE_IMAGES_SNAPSHOTS" >> $GITHUB_OUTPUT
+          
+          echo "=== Cleanup Configuration ==="
+          echo "Resource Group: $AZURE_RESOURCE_GROUP"
+          echo "Compute Gallery: $COMPUTE_GALLERY_NAME"
+          echo "Age Threshold - VMs/Disks/ANF Volumes: $AGE_THRESHOLD_DAYS_VMS_VOLUMES days (cutoff: $CUTOFF_DATE_VMS_VOLUMES)"
+          echo "Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days (cutoff: $CUTOFF_DATE_IMAGES_SNAPSHOTS)"
+          echo "Dry Run: $DRY_RUN"
+          echo "Resource Types: $RESOURCE_TYPES"
+          echo "Exclude Tag: $EXCLUDE_TAG_KEY=$EXCLUDE_TAG_VALUE"
+
+  cleanup-vms:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_vms: ${{ steps.cleanup.outputs.deleted_vms }}
+      failed_vms: ${{ steps.cleanup.outputs.failed_vms }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup Virtual Machines
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_VMS_VOLUMES="${{ needs.setup.outputs.cutoff_date_vms_volumes }}"
+          
+          DELETED_VMS=0
+          FAILED_VMS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Virtual Machines (older than $AGE_THRESHOLD_DAYS_VMS_VOLUMES days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_VMS_VOLUMES"
+          
+          VMS_JSON=$(az vm list --query "[?timeCreated < '$CUTOFF_DATE_VMS_VOLUMES'].{name:name, resourceGroup:resourceGroup, timeCreated:timeCreated, tags:tags}" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$VMS_JSON" != "[]" ] && [ -n "$VMS_JSON" ]; then
+            VM_COUNT=$(echo "$VMS_JSON" | jq '. | length')
+            echo -e "\nFound $VM_COUNT VM(s) matching age criteria\n"
+            
+            for i in $(seq 0 $((VM_COUNT - 1))); do
+              VM_NAME=$(echo "$VMS_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$VMS_JSON" | jq -r ".[$i].resourceGroup")
+              TIME_CREATED=$(echo "$VMS_JSON" | jq -r ".[$i].timeCreated // \"\"")
+              TAGS=$(echo "$VMS_JSON" | jq -c ".[$i].tags // {}")
+              
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "VM excluded: $VM_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete VM $VM_NAME"
+                DELETED_VMS=$((DELETED_VMS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VM_NAME"
+              else
+                VM_STATE=$(az vm get-instance-view --resource-group "$RESOURCE_GROUP" --name "$VM_NAME" --query "instanceView.statuses[?code=='PowerState/running']" --output tsv 2>/dev/null || echo "")
+                if [ -n "$VM_STATE" ]; then
+                  echo "Deallocating VM: $VM_NAME"
+                  az vm deallocate --resource-group "$RESOURCE_GROUP" --name "$VM_NAME" 2>&1 || echo "Warning: Failed to deallocate VM $VM_NAME"
+                  sleep 10
+                fi
+                
+                if az vm delete --resource-group "$RESOURCE_GROUP" --name "$VM_NAME" --yes 2>&1; then
+                  echo "Deleted VM $VM_NAME"
+                  DELETED_VMS=$((DELETED_VMS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VM_NAME"
+                else
+                  echo "Failed to delete VM $VM_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nVM: $VM_NAME"
+                  FAILED_VMS=$((FAILED_VMS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No VMs found matching criteria"
+          fi
+          
+          echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
+          echo "failed_vms=$FAILED_VMS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_VMS, Failed=$FAILED_VMS"
+          
+          if [ "$FAILED_VMS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_VMS VM(s)"
+            exit 1
+          fi
+
+  cleanup-disks:
+    runs-on: ubuntu-latest
+    needs: [setup, cleanup-vms]
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_disks: ${{ steps.cleanup.outputs.deleted_disks }}
+      failed_disks: ${{ steps.cleanup.outputs.failed_disks }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup Unused Disks
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          
+          DELETED_DISKS=0
+          FAILED_DISKS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Unused Disks ==="
+          
+          if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+            echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+            exit 1
+          fi
+          
+          DISKS_JSON=$(az disk list --resource-group "$AZ_VM_RESOURCE_GROUP" --query "[?managedBy == null || managedBy == ''].{name:name, resourceGroup:resourceGroup, timeCreated:timeCreated, diskState:diskState, managedBy:managedBy, tags:tags}" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$DISKS_JSON" != "[]" ] && [ -n "$DISKS_JSON" ]; then
+            DISK_COUNT=$(echo "$DISKS_JSON" | jq '. | length')
+            echo -e "Found $DISK_COUNT unattached disk(s) \n"
+            
+            for i in $(seq 0 $((DISK_COUNT - 1))); do
+              DISK_NAME=$(echo "$DISKS_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$DISKS_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$DISKS_JSON" | jq -c ".[$i].tags // {}")
+              
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded disk: $DISK_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete disk $DISK_NAME"
+                DELETED_DISKS=$((DELETED_DISKS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $DISK_NAME"
+              else
+                if az disk delete --resource-group "$RESOURCE_GROUP" --name "$DISK_NAME" --yes 2>&1; then
+                  echo "Deleted disk $DISK_NAME"
+                  DELETED_DISKS=$((DELETED_DISKS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $DISK_NAME"
+                else
+                  echo "Failed to delete disk $DISK_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nDisk: $DISK_NAME"
+                  FAILED_DISKS=$((FAILED_DISKS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No disks found matching criteria"
+          fi
+          
+          echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
+          echo "failed_disks=$FAILED_DISKS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_DISKS, Failed=$FAILED_DISKS"
+          
+          if [ "$FAILED_DISKS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_DISKS disk(s)"
+            exit 1
+          fi
+
+  cleanup-snapshots:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_snapshots: ${{ steps.cleanup.outputs.deleted_snapshots }}
+      failed_snapshots: ${{ steps.cleanup.outputs.failed_snapshots }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup Disk Snapshots
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_IMAGES_SNAPSHOTS="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+          
+          DELETED_SNAPSHOTS=0
+          FAILED_SNAPSHOTS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Disk Snapshots (older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_IMAGES_SNAPSHOTS"
+          
+          SNAPSHOTS_JSON=$(az snapshot list --resource-group "$AZURE_RESOURCE_GROUP" --query "[?timeCreated < '$CUTOFF_DATE_IMAGES_SNAPSHOTS']" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$SNAPSHOTS_JSON" != "[]" ] && [ -n "$SNAPSHOTS_JSON" ]; then
+            SNAPSHOT_COUNT=$(echo "$SNAPSHOTS_JSON" | jq '. | length')
+            echo -e "Found $SNAPSHOT_COUNT snapshot(s) matching age criteria\n"
+            
+            for i in $(seq 0 $((SNAPSHOT_COUNT - 1))); do
+              SNAPSHOT_NAME=$(echo "$SNAPSHOTS_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$SNAPSHOTS_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$SNAPSHOTS_JSON" | jq -c ".[$i].tags // {}")
+              
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded snapshot: $SNAPSHOT_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete snapshot $SNAPSHOT_NAME"
+                DELETED_SNAPSHOTS=$((DELETED_SNAPSHOTS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SNAPSHOT_NAME"
+              else
+                if az snapshot delete --resource-group "$RESOURCE_GROUP" --name "$SNAPSHOT_NAME" 2>&1; then
+                  echo "Deleted snapshot $SNAPSHOT_NAME"
+                  DELETED_SNAPSHOTS=$((DELETED_SNAPSHOTS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SNAPSHOT_NAME"
+                else
+                  echo "Failed to delete snapshot $SNAPSHOT_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nSnapshot: $SNAPSHOT_NAME"
+                  FAILED_SNAPSHOTS=$((FAILED_SNAPSHOTS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No snapshots found matching criteria"
+          fi
+          
+          echo "deleted_snapshots=$DELETED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "failed_snapshots=$FAILED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_SNAPSHOTS, Failed=$FAILED_SNAPSHOTS"
+          
+          if [ "$FAILED_SNAPSHOTS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_SNAPSHOTS snapshot(s)"
+            exit 1
+          fi
+
+  cleanup-images:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_images: ${{ steps.cleanup.outputs.deleted_images }}
+      failed_images: ${{ steps.cleanup.outputs.failed_images }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup Compute Images
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_IMAGES_SNAPSHOTS="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+          
+          DELETED_IMAGES=0
+          FAILED_IMAGES=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Compute Gallery Images (older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+          echo -e "Cutoff date: $CUTOFF_DATE_IMAGES_SNAPSHOTS\n"
+          echo -e "Resource group: $AZURE_RESOURCE_GROUP\n"
+          
+          GALLERY_JSON=$(az sig list --resource-group "$AZURE_RESOURCE_GROUP" --query "[?name=='$COMPUTE_GALLERY_NAME']" --output json 2>/dev/null || echo "[]")
+          
+          GALLERY_COUNT=$(echo "$GALLERY_JSON" | jq '. | length' 2>/dev/null || echo "0")
+          
+          if [ "$GALLERY_COUNT" -eq 0 ]; then
+            echo "Compute Gallery '$COMPUTE_GALLERY_NAME' not found in resource group '$AZURE_RESOURCE_GROUP'"
+            echo "deleted_images=0" >> $GITHUB_OUTPUT
+            echo "failed_images=0" >> $GITHUB_OUTPUT
+            echo "failed_resources=" >> $GITHUB_OUTPUT
+            echo "deleted_resources=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          GALLERY_RG=$(echo "$GALLERY_JSON" | jq -r ".[0].resourceGroup")
+          
+          IMAGE_DEFINITIONS_JSON=$(az sig image-definition list --gallery-name "$COMPUTE_GALLERY_NAME" --resource-group "$GALLERY_RG" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$IMAGE_DEFINITIONS_JSON" = "[]" ] || [ -z "$IMAGE_DEFINITIONS_JSON" ]; then
+            echo "No image definitions found in gallery"
+            echo "deleted_images=0" >> $GITHUB_OUTPUT
+            echo "failed_images=0" >> $GITHUB_OUTPUT
+            echo "failed_resources=" >> $GITHUB_OUTPUT
+            echo "deleted_resources=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          DEF_COUNT=$(echo "$IMAGE_DEFINITIONS_JSON" | jq '. | length')
+          
+          for def_idx in $(seq 0 $((DEF_COUNT - 1))); do
+            IMAGE_DEF_NAME=$(echo "$IMAGE_DEFINITIONS_JSON" | jq -r ".[$def_idx].name")
+            
+            IMAGE_VERSIONS_JSON=$(az sig image-version list --gallery-image-definition "$IMAGE_DEF_NAME" --gallery-name "$COMPUTE_GALLERY_NAME" --resource-group "$GALLERY_RG" --query "[?publishingProfile.publishedDate < '$CUTOFF_DATE_IMAGES_SNAPSHOTS']" --output json 2>/dev/null || echo "[]")
+            
+            if [ "$IMAGE_VERSIONS_JSON" = "[]" ] || [ -z "$IMAGE_VERSIONS_JSON" ]; then
+              continue
+            fi
+            
+            VERSION_COUNT=$(echo "$IMAGE_VERSIONS_JSON" | jq '. | length')
+            
+            for ver_idx in $(seq 0 $((VERSION_COUNT - 1))); do
+              IMAGE_VERSION_NAME=$(echo "$IMAGE_VERSIONS_JSON" | jq -r ".[$ver_idx].name")
+              TAGS=$(echo "$IMAGE_VERSIONS_JSON" | jq -c ".[$ver_idx].tags // {}")
+              
+              FULL_IMAGE_NAME="$IMAGE_DEF_NAME/$IMAGE_VERSION_NAME"
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded image: $FULL_IMAGE_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete $IMAGE_DEF_NAME image $IMAGE_VERSION_NAME"
+                DELETED_IMAGES=$((DELETED_IMAGES + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $FULL_IMAGE_NAME"
+              else
+                if az sig image-version delete --gallery-image-definition "$IMAGE_DEF_NAME" --gallery-image-version "$IMAGE_VERSION_NAME" --gallery-name "$COMPUTE_GALLERY_NAME" --resource-group "$GALLERY_RG" 2>&1; then
+                  echo "Deleted image $FULL_IMAGE_NAME"
+                  DELETED_IMAGES=$((DELETED_IMAGES + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $FULL_IMAGE_NAME"
+                else
+                  echo "Failed to delete image $FULL_IMAGE_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nImage: $FULL_IMAGE_NAME"
+                  FAILED_IMAGES=$((FAILED_IMAGES + 1))
+                fi
+              fi
+            done
+          done
+          
+          if [ "$DELETED_IMAGES" -eq 0 ] && [ "$FAILED_IMAGES" -eq 0 ]; then
+            echo "No images found matching criteria"
+          fi
+          
+          echo "deleted_images=$DELETED_IMAGES" >> $GITHUB_OUTPUT
+          echo "failed_images=$FAILED_IMAGES" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_IMAGES, Failed=$FAILED_IMAGES"
+          
+          if [ "$FAILED_IMAGES" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_IMAGES image(s)"
+            exit 1
+          fi
+          
+  cleanup-anf:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_anf_volumes: ${{ steps.cleanup.outputs.deleted_anf_volumes }}
+      failed_anf_volumes: ${{ steps.cleanup.outputs.failed_anf_volumes }}
+      deleted_anf_pools: ${{ steps.cleanup.outputs.deleted_anf_pools }}
+      failed_anf_pools: ${{ steps.cleanup.outputs.failed_anf_pools }}
+      deleted_anf_accounts: ${{ steps.cleanup.outputs.deleted_anf_accounts }}
+      failed_anf_accounts: ${{ steps.cleanup.outputs.failed_anf_accounts }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI, jq and anf extension
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+          az extension add --name netappfiles-preview 2>/dev/null || az extension add --name netappfiles 2>/dev/null || echo "Warning: Could not install netappfiles extension"
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup ANF Volumes, Capacity Pools and Accounts
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_VMS_VOLUMES="${{ needs.setup.outputs.cutoff_date_vms_volumes }}"
+          
+          DELETED_ANF_VOLUMES=0
+          FAILED_ANF_VOLUMES=0
+          DELETED_ANF_POOLS=0
+          FAILED_ANF_POOLS=0
+          DELETED_ANF_ACCOUNTS=0
+          FAILED_ANF_ACCOUNTS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing ANF Volumes (older than $AGE_THRESHOLD_DAYS_VMS_VOLUMES days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_VMS_VOLUMES"
+          
+          VOLUMES_JSON=$(az resource list --resource-type "Microsoft.NetApp/netAppAccounts/capacityPools/volumes" --query "[?systemData.createdAt < '$CUTOFF_DATE_VMS_VOLUMES']" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$VOLUMES_JSON" != "[]" ] && [ -n "$VOLUMES_JSON" ]; then
+            VOLUME_COUNT=$(echo "$VOLUMES_JSON" | jq '. | length')
+            echo -e "\nFound $VOLUME_COUNT ANF volume(s) matching age criteria\n"
+            
+            for vol_idx in $(seq 0 $((VOLUME_COUNT - 1))); do
+              RESOURCE_GROUP=$(echo "$VOLUMES_JSON" | jq -r ".[$vol_idx].resourceGroup")
+              RESOURCE_ID=$(echo "$VOLUMES_JSON" | jq -r ".[$vol_idx].id")
+              ACCOUNT_NAME=$(echo "$RESOURCE_ID" | sed 's|.*/netAppAccounts/||' | sed 's|/.*||')
+              POOL_NAME=$(echo "$RESOURCE_ID" | sed 's|.*/capacityPools/||' | sed 's|/.*||')
+              VOLUME_NAME=$(echo "$RESOURCE_ID" | sed 's|.*/volumes/||')
+              TAGS=$(echo "$VOLUMES_JSON" | jq -c ".[$vol_idx].tags // {}")
+              
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded ANF volume $VOLUME_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete volume $VOLUME_NAME"
+                DELETED_ANF_VOLUMES=$((DELETED_ANF_VOLUMES + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME"
+              else
+                if az netappfiles volume delete --resource-group "$RESOURCE_GROUP" --account-name "$ACCOUNT_NAME" --pool-name "$POOL_NAME" --volume-name "$VOLUME_NAME" --yes --only-show-errors 2>&1; then
+                  echo "Deleted volume $VOLUME_NAME"
+                  DELETED_ANF_VOLUMES=$((DELETED_ANF_VOLUMES + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME"
+                else
+                  echo "Failed to delete volume $VOLUME_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nANF Volume: $VOLUME_NAME"
+                  FAILED_ANF_VOLUMES=$((FAILED_ANF_VOLUMES + 1))
+                fi
+              fi
+            done
+          else
+            echo "No ANF volumes found matching age criteria"
+          fi
+          
+          echo -e "\n=== Processing Empty ANF Capacity Pools (older than $AGE_THRESHOLD_DAYS_VMS_VOLUMES days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_VMS_VOLUMES"
+          
+          POOLS_JSON=$(az resource list --resource-type "Microsoft.NetApp/netAppAccounts/capacityPools" --query "[?systemData.createdAt < '$CUTOFF_DATE_VMS_VOLUMES']" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$POOLS_JSON" != "[]" ] && [ -n "$POOLS_JSON" ]; then
+            POOL_COUNT=$(echo "$POOLS_JSON" | jq '. | length')
+            echo -e "\nFound $POOL_COUNT capacity pool(s) matching age criteria\n"
+            
+            for pool_idx in $(seq 0 $((POOL_COUNT - 1))); do
+              POOL_RESOURCE_GROUP=$(echo "$POOLS_JSON" | jq -r ".[$pool_idx].resourceGroup")
+              POOL_RESOURCE_ID=$(echo "$POOLS_JSON" | jq -r ".[$pool_idx].id")
+              POOL_ACCOUNT_NAME=$(echo "$POOL_RESOURCE_ID" | sed 's|.*/netAppAccounts/||' | sed 's|/.*||')
+              POOL_NAME=$(echo "$POOL_RESOURCE_ID" | sed 's|.*/capacityPools/||')
+              POOL_TAGS=$(echo "$POOLS_JSON" | jq -c ".[$pool_idx].tags // {}")
+              
+              if should_exclude "$POOL_TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded ANF capacity pool $POOL_NAME"
+                continue
+              fi
+              
+              REMAINING_VOLUMES=$(az netappfiles volume list --resource-group "$POOL_RESOURCE_GROUP" --account-name "$POOL_ACCOUNT_NAME" --pool-name "$POOL_NAME" --query "length(@)" --output tsv 2>/dev/null || echo "0")
+              
+              if [ "$REMAINING_VOLUMES" = "0" ]; then
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "DRY RUN: Would delete empty capacity pool $POOL_NAME"
+                  DELETED_ANF_POOLS=$((DELETED_ANF_POOLS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - Capacity Pool: $POOL_NAME"
+                else
+                  if az netappfiles pool delete --resource-group "$POOL_RESOURCE_GROUP" --account-name "$POOL_ACCOUNT_NAME" --pool-name "$POOL_NAME" --yes --only-show-errors 2>&1; then
+                    echo "Deleted empty capacity pool $POOL_NAME"
+                    DELETED_ANF_POOLS=$((DELETED_ANF_POOLS + 1))
+                    DELETED_RESOURCES="$DELETED_RESOURCES\n  - Capacity Pool: $POOL_NAME"
+                  else
+                    echo "Failed to delete capacity pool $POOL_NAME"
+                    FAILED_RESOURCES="$FAILED_RESOURCES\nANF Capacity Pool: $POOL_NAME"
+                    FAILED_ANF_POOLS=$((FAILED_ANF_POOLS + 1))
+                  fi
+                fi
+              else
+                echo "Skipping capacity pool $POOL_NAME as it still has $REMAINING_VOLUMES volume(s)"
+              fi
+            done
+          else
+            echo "No capacity pools found matching age criteria"
+          fi
+          
+          echo -e "\n=== Processing Empty ANF Accounts (older than $AGE_THRESHOLD_DAYS_VMS_VOLUMES days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_VMS_VOLUMES"
+          
+          ACCOUNTS_JSON=$(az resource list --resource-type "Microsoft.NetApp/netAppAccounts" --query "[?systemData.createdAt < '$CUTOFF_DATE_VMS_VOLUMES']" --output json 2>/dev/null || echo "[]")
+          
+          if [ "$ACCOUNTS_JSON" != "[]" ] && [ -n "$ACCOUNTS_JSON" ]; then
+            ACCOUNT_COUNT=$(echo "$ACCOUNTS_JSON" | jq '. | length')
+            echo -e "\nFound $ACCOUNT_COUNT ANF account(s) matching age criteria\n"
+            
+            for account_idx in $(seq 0 $((ACCOUNT_COUNT - 1))); do
+              ACCOUNT_RESOURCE_GROUP=$(echo "$ACCOUNTS_JSON" | jq -r ".[$account_idx].resourceGroup")
+              ACCOUNT_NAME=$(echo "$ACCOUNTS_JSON" | jq -r ".[$account_idx].name")
+              ACCOUNT_TAGS=$(echo "$ACCOUNTS_JSON" | jq -c ".[$account_idx].tags // {}")
+              
+              if should_exclude "$ACCOUNT_TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded ANF account $ACCOUNT_NAME"
+                continue
+              fi
+              
+              REMAINING_POOLS=$(az netappfiles pool list --resource-group "$ACCOUNT_RESOURCE_GROUP" --account-name "$ACCOUNT_NAME" --query "length(@)" --output tsv 2>/dev/null || echo "0")
+              
+              if [ "$REMAINING_POOLS" = "0" ]; then
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "DRY RUN: Would delete empty ANF account $ACCOUNT_NAME"
+                  DELETED_ANF_ACCOUNTS=$((DELETED_ANF_ACCOUNTS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - ANF Account: $ACCOUNT_NAME"
+                else
+                  if az netappfiles account delete --resource-group "$ACCOUNT_RESOURCE_GROUP" --account-name "$ACCOUNT_NAME" --yes --only-show-errors 2>&1; then
+                    echo "Deleted empty ANF account $ACCOUNT_NAME"
+                    DELETED_ANF_ACCOUNTS=$((DELETED_ANF_ACCOUNTS + 1))
+                    DELETED_RESOURCES="$DELETED_RESOURCES\n  - ANF Account: $ACCOUNT_NAME"
+                  else
+                    echo "Failed to delete ANF account $ACCOUNT_NAME"
+                    FAILED_RESOURCES="$FAILED_RESOURCES\nANF Account: $ACCOUNT_NAME"
+                    FAILED_ANF_ACCOUNTS=$((FAILED_ANF_ACCOUNTS + 1))
+                  fi
+                fi
+              else
+                echo "Skipping empty ANF account $ACCOUNT_NAME as it still has $REMAINING_POOLS capacity pool(s)"
+              fi
+            done
+          else
+            echo "No ANF accounts found matching age criteria"
+          fi
+          
+          echo "deleted_anf_volumes=$DELETED_ANF_VOLUMES" >> $GITHUB_OUTPUT
+          echo "failed_anf_volumes=$FAILED_ANF_VOLUMES" >> $GITHUB_OUTPUT
+          echo "deleted_anf_pools=$DELETED_ANF_POOLS" >> $GITHUB_OUTPUT
+          echo "failed_anf_pools=$FAILED_ANF_POOLS" >> $GITHUB_OUTPUT
+          echo "deleted_anf_accounts=$DELETED_ANF_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "failed_anf_accounts=$FAILED_ANF_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted Volumes=$DELETED_ANF_VOLUMES, Failed Volumes=$FAILED_ANF_VOLUMES"
+          echo -e "Summary: Deleted Pools=$DELETED_ANF_POOLS, Failed Pools=$FAILED_ANF_POOLS"
+          echo -e "Summary: Deleted Accounts=$DELETED_ANF_ACCOUNTS, Failed Accounts=$FAILED_ANF_ACCOUNTS"
+          
+          if [ "$FAILED_ANF_VOLUMES" -gt 0 ] || [ "$FAILED_ANF_POOLS" -gt 0 ] || [ "$FAILED_ANF_ACCOUNTS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_ANF_VOLUMES ANF volume(s), $FAILED_ANF_POOLS capacity pool(s), and/or $FAILED_ANF_ACCOUNTS account(s)"
+            exit 1
+          fi
+
+  generate-report:
+    runs-on: ubuntu-latest
+    needs: [cleanup-vms, cleanup-disks, cleanup-snapshots, cleanup-images, cleanup-anf, setup]
+    if: always()
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Generate cleanup summary
+        id: summary
+        run: |
+          DELETED_VMS="${{ needs.cleanup-vms.outputs.deleted_vms || '0' }}"
+          DELETED_DISKS="${{ needs.cleanup-disks.outputs.deleted_disks || '0' }}"
+          DELETED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.deleted_snapshots || '0' }}"
+          DELETED_IMAGES="${{ needs.cleanup-images.outputs.deleted_images || '0' }}"
+          DELETED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.deleted_anf_volumes || '0' }}"
+          DELETED_ANF_POOLS="${{ needs.cleanup-anf.outputs.deleted_anf_pools || '0' }}"
+          DELETED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.deleted_anf_accounts || '0' }}"
+          
+          FAILED_VMS="${{ needs.cleanup-vms.outputs.failed_vms || '0' }}"
+          FAILED_DISKS="${{ needs.cleanup-disks.outputs.failed_disks || '0' }}"
+          FAILED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.failed_snapshots || '0' }}"
+          FAILED_IMAGES="${{ needs.cleanup-images.outputs.failed_images || '0' }}"
+          FAILED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.failed_anf_volumes || '0' }}"
+          FAILED_ANF_POOLS="${{ needs.cleanup-anf.outputs.failed_anf_pools || '0' }}"
+          FAILED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.failed_anf_accounts || '0' }}"
+          
+          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_ANF_VOLUMES + DELETED_ANF_POOLS + DELETED_ANF_ACCOUNTS))
+          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_ANF_VOLUMES + FAILED_ANF_POOLS + FAILED_ANF_ACCOUNTS))
+          
+          echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
+          echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
+          echo "deleted_snapshots=$DELETED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "deleted_images=$DELETED_IMAGES" >> $GITHUB_OUTPUT
+          echo "deleted_anf_volumes=$DELETED_ANF_VOLUMES" >> $GITHUB_OUTPUT
+          echo "deleted_anf_pools=$DELETED_ANF_POOLS" >> $GITHUB_OUTPUT
+          echo "deleted_anf_accounts=$DELETED_ANF_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "total_deleted=$TOTAL_DELETED" >> $GITHUB_OUTPUT
+          echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+          
+          FAILED_RESOURCES=""
+          if [ -n "${{ needs.cleanup-vms.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-vms.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-disks.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-disks.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-snapshots.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-snapshots.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-images.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-images.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-anf.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-anf.outputs.failed_resources }}"
+          fi
+          
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          DELETED_RESOURCES=""
+          if [ -n "${{ needs.cleanup-vms.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_VMS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\nVMs ($DELETED_VMS):${{ needs.cleanup-vms.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-disks.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_DISKS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nDisks ($DELETED_DISKS):${{ needs.cleanup-disks.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-snapshots.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_SNAPSHOTS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nSnapshots ($DELETED_SNAPSHOTS):${{ needs.cleanup-snapshots.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-images.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_IMAGES" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nImages ($DELETED_IMAGES):${{ needs.cleanup-images.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-anf.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_ANF_VOLUMES" -gt 0 ] || [ "$DELETED_ANF_POOLS" -gt 0 ] || [ "$DELETED_ANF_ACCOUNTS" -gt 0 ]; then
+              ANF_SECTION="\nANF Resources"
+              ANF_PARTS=""
+              if [ "$DELETED_ANF_VOLUMES" -gt 0 ]; then
+                ANF_PARTS="${ANF_PARTS}Volumes: $DELETED_ANF_VOLUMES"
+              fi
+              if [ "$DELETED_ANF_POOLS" -gt 0 ]; then
+                if [ -n "$ANF_PARTS" ]; then
+                  ANF_PARTS="${ANF_PARTS}, "
+                fi
+                ANF_PARTS="${ANF_PARTS}Pools: $DELETED_ANF_POOLS"
+              fi
+              if [ "$DELETED_ANF_ACCOUNTS" -gt 0 ]; then
+                if [ -n "$ANF_PARTS" ]; then
+                  ANF_PARTS="${ANF_PARTS}, "
+                fi
+                ANF_PARTS="${ANF_PARTS}Accounts: $DELETED_ANF_ACCOUNTS"
+              fi
+              if [ -n "$ANF_PARTS" ]; then
+                ANF_SECTION="$ANF_SECTION ($ANF_PARTS):"
+              fi
+              DELETED_RESOURCES="$DELETED_RESOURCES$ANF_SECTION${{ needs.cleanup-anf.outputs.deleted_resources }}"
+            fi
+          fi
+          
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "=== Overall Cleanup Summary ==="
+          echo "VMs deleted: $DELETED_VMS (failed: $FAILED_VMS)"
+          echo "Disks deleted: $DELETED_DISKS (failed: $FAILED_DISKS)"
+          echo "Snapshots deleted: $DELETED_SNAPSHOTS (failed: $FAILED_SNAPSHOTS)"
+          echo "Images deleted: $DELETED_IMAGES (failed: $FAILED_IMAGES)"
+          echo "ANF Volumes deleted: $DELETED_ANF_VOLUMES (failed: $FAILED_ANF_VOLUMES)"
+          echo "ANF Capacity Pools deleted: $DELETED_ANF_POOLS (failed: $FAILED_ANF_POOLS)"
+          echo "ANF Accounts deleted: $DELETED_ANF_ACCOUNTS (failed: $FAILED_ANF_ACCOUNTS)"
+          echo "----------------------------------------"
+          echo "Total deleted: $TOTAL_DELETED"
+          echo "Total failed: $TOTAL_FAILED"
+          
+          if [ "$TOTAL_DELETED" -gt 0 ]; then
+            echo ""
+            echo "Deleted resources:"
+            echo -e "$DELETED_RESOURCES"
+          fi
+          
+          if [ "$TOTAL_FAILED" -gt 0 ]; then
+            echo ""
+            echo "Failed resources:"
+            echo -e "$FAILED_RESOURCES"
+          fi
+
+      - name: Generate cleanup report
+        id: report
+        run: |
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          MODE="DRY RUN"
+          if [ "$DRY_RUN" != "true" ]; then
+            MODE="LIVE"
+          fi
+          
+          WORKFLOW_STATUS="Completed"
+          if [ "${{ needs.cleanup-vms.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-disks.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-snapshots.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-images.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-anf.result }}" = "cancelled" ]; then
+            WORKFLOW_STATUS="Cancelled"
+          elif [ "${{ needs.cleanup-vms.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-disks.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-snapshots.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-images.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-anf.result }}" = "failure" ]; then
+            WORKFLOW_STATUS="Failed"
+          fi
+          
+          REPORT=$(cat <<EOF
+          Azure Resource Cleanup Report
+          ============================
+          
+          Mode: $MODE
+          Workflow Status: $WORKFLOW_STATUS
+          Resource Group: $AZURE_RESOURCE_GROUP
+          Compute Gallery: $COMPUTE_GALLERY_NAME
+          Age Threshold - VMs/Disks/ANF Volumes: $AGE_THRESHOLD_DAYS_VMS_VOLUMES days
+          Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days
+          Execution Time: $(date -u +"%Y-%m-%dT%H:%M:%S UTC")
+          
+          Results:
+          --------
+          VMs: ${{ steps.summary.outputs.deleted_vms || '0' }}
+          Disks: ${{ steps.summary.outputs.deleted_disks || '0' }}
+          Snapshots: ${{ steps.summary.outputs.deleted_snapshots || '0' }}
+          Images: ${{ steps.summary.outputs.deleted_images || '0' }}
+          ANF Volumes: ${{ steps.summary.outputs.deleted_anf_volumes || '0' }}
+          ANF Capacity Pools: ${{ steps.summary.outputs.deleted_anf_pools || '0' }}
+          ANF Accounts: ${{ steps.summary.outputs.deleted_anf_accounts || '0' }}
+          Total: ${{ steps.summary.outputs.total_deleted || '0' }}
+          Failed: ${{ steps.summary.outputs.total_failed || '0' }}
+          
+          EOF
+          )
+          
+          if [ "${{ steps.summary.outputs.total_deleted || '0' }}" -gt 0 ]; then
+            REPORT="$REPORT
+          Deleted Resources:
+          ${{ steps.summary.outputs.deleted_resources }}
+          "
+          fi
+          
+          if [ "${{ steps.summary.outputs.total_failed || '0' }}" -gt 0 ]; then
+            REPORT="$REPORT
+          Failed Resources:
+          ${{ steps.summary.outputs.failed_resources }}
+          "
+          fi
+          
+          echo "$REPORT" > cleanup-report.txt
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "$REPORT"
+
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
+        with:
+          name: cleanup-report
+          path: cleanup-report.txt
+          retention-days: 30
