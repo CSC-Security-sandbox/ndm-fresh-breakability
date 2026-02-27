@@ -28,8 +28,10 @@ import { Request } from 'express';
 import { InitUploadDto, InitUploadResponseDto, UploadChunkResponseDto } from './dto/upgrade.dto';
 import { UpgradeBundle } from '../entities/upgrade-bundle.entity';
 import { UploadStatus, UpgradeStatus, WorkerAggregateStatus } from './enums/upgrade.enums';
-import { JobConfigEntity, JobStatus } from '../entities/jobconfig.entity';
-import { JobRunEntity, JobRunStatus } from '../entities/jobrun.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
+import { JobStatus } from '../constants/job-config.enum';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunStatus } from '../constants/job-run.enums';
 
 // Worker multicast imports
 import { WorkflowService } from '../workflow/workflow.service';
@@ -1593,7 +1595,6 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
   // TRIGGER UPGRADE: Check jobs → stage in DB → fire ansible via nsenter
   // ═══════════════════════════════════════════════════════════════════════════
   async triggerUpgrade(bundleId: string, userId?: string) {
-    this.logger.log('Inside  triggerUpgrade');
     if (!bundleId || bundleId.trim() === '') {
       throw new BadRequestException('Bundle ID is required to trigger upgrade');
     }
