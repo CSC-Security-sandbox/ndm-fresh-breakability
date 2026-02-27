@@ -3,6 +3,11 @@ import { LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as tls from 'tls';
 import { FetchCertificateResponseDTO } from '../configurations/dto/config.dto';
 
+function certFieldToString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 /**
  * Abstract base class for storage clients
  * Provides common functionality and defines interface for storage-specific implementations
@@ -155,7 +160,8 @@ export abstract class StorageClient {
           
           // Add Common Name (CN) to list of valid hosts
           if (cert.subject?.CN) {
-            certHosts.push(cert.subject.CN.toLowerCase());
+            const cn = certFieldToString(cert.subject.CN);
+            if (cn) certHosts.push(cn.toLowerCase());
           }
           
           // Add Subject Alternative Names (SANs) - these are more reliable than CN
@@ -227,20 +233,20 @@ export abstract class StorageClient {
           const response: FetchCertificateResponseDTO = {
             isSelfSigned,
             subject: {
-              CN: cert.subject?.CN,
-              O: cert.subject?.O,
-              OU: cert.subject?.OU,
-              C: cert.subject?.C,
-              ST: cert.subject?.ST,
-              L: cert.subject?.L,
+              CN: certFieldToString(cert.subject?.CN),
+              O: certFieldToString(cert.subject?.O),
+              OU: certFieldToString(cert.subject?.OU),
+              C: certFieldToString(cert.subject?.C),
+              ST: certFieldToString(cert.subject?.ST),
+              L: certFieldToString(cert.subject?.L),
             },
             issuer: {
-              CN: cert.issuer?.CN,
-              O: cert.issuer?.O,
-              OU: cert.issuer?.OU,
-              C: cert.issuer?.C,
-              ST: cert.issuer?.ST,
-              L: cert.issuer?.L,
+              CN: certFieldToString(cert.issuer?.CN),
+              O: certFieldToString(cert.issuer?.O),
+              OU: certFieldToString(cert.issuer?.OU),
+              C: certFieldToString(cert.issuer?.C),
+              ST: certFieldToString(cert.issuer?.ST),
+              L: certFieldToString(cert.issuer?.L),
             },
             validFrom: validFrom.toISOString(),
             validTo: validTo.toISOString(),
