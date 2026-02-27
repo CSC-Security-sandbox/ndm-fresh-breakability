@@ -1,3 +1,9 @@
+export interface WorkerVersionInfo {
+  workerName: string;
+  ipAddress: string;
+  platform: string;
+}
+
 export interface AboutNdmResponse {
   product: {
     name: string | null;
@@ -12,6 +18,7 @@ export interface AboutNdmResponse {
       version: string | null;
       time: string | null;
     };
+    workersByVersion?: Record<string, WorkerVersionInfo[]>;
   };
   contact: {
     email: string | null;

@@ -7,10 +7,13 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { PrometheusService } from 'src/utils/prometheus';
 import BUILD_VERSION_QUERIES from './about-ndm.constants';
-import { AboutNdmResponse } from './about-ndm.interface';
+import { AboutNdmResponse, WorkerVersionInfo } from './about-ndm.interface';
 import { ConfigService } from '@nestjs/config';
+import { WorkerEntity } from '../entities/worker.entity';
 
 @Injectable()
 export class AboutNdmService {
@@ -20,21 +23,46 @@ export class AboutNdmService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly prometheusService: PrometheusService,
     private readonly configService: ConfigService,
+    @InjectRepository(WorkerEntity)
+    private readonly workerRepository: Repository<WorkerEntity>,
   ) {
     this.logger = loggerFactory.create(AboutNdmService.name);
   }
 
   async getAboutNdm(): Promise<AboutNdmResponse> {
     try {
-      const results = await Promise.allSettled([
-        this.prometheusService.queryPrometheus(
-          BUILD_VERSION_QUERIES.CONTROL_PLANE,
-        ),
-        this.prometheusService.queryPrometheus(BUILD_VERSION_QUERIES.WORKER),
-      ]);
+      // CP version from Prometheus (unchanged)
+      const cpResult = await this.prometheusService.queryPrometheus(
+        BUILD_VERSION_QUERIES.CONTROL_PLANE,
+      ).catch((err) => {
+        this.logger.warn(`Prometheus CP query failed: ${err.message}`);
+        return null;
+      });
 
-      const controlPlaneVersion = this.extractBuildVersion(results[0]);
-      const workerVersion = this.extractBuildVersion(results[1]);
+      const controlPlaneVersion = cpResult
+        ? this.extractBuildVersion({ status: 'fulfilled', value: cpResult } as PromiseSettledResult<any>)
+        : null;
+
+      // Worker versions from DB (replaces Prometheus worker_info query)
+      const workers = await this.workerRepository.find({
+        select: ['workerName', 'ipAddress', 'workerVersion', 'platform'],
+      });
+
+      // Group workers by version
+      const workersByVersion: Record<string, WorkerVersionInfo[]> = {};
+      for (const w of workers) {
+        const ver = w.workerVersion || 'unknown';
+        if (!workersByVersion[ver]) workersByVersion[ver] = [];
+        workersByVersion[ver].push({
+          workerName: w.workerName,
+          ipAddress: w.ipAddress,
+          platform: w.platform,
+        });
+      }
+
+      // Pick latest worker version for backward compatibility
+      const versions = Object.keys(workersByVersion).filter(v => v !== 'unknown');
+      const latestWorkerVersion = versions.length > 0 ? versions[0] : 'N/A';
 
       return {
         product: {
@@ -43,13 +71,14 @@ export class AboutNdmService {
         },
         build: {
           worker_version: {
-            version: workerVersion || 'N/A',
+            version: latestWorkerVersion,
             time: null,
           },
           controlPlane_version: {
             version: controlPlaneVersion || 'N/A',
             time: null,
           },
+          workersByVersion,
         },
         contact: {
           email: this.configService.get<string>(

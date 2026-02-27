@@ -849,6 +849,11 @@ export interface AboutNDMApiRespType {
       version: string;
       time: string | null;
     };
+    workersByVersion?: Record<string, Array<{
+      workerName: string;
+      ipAddress: string;
+      platform: string;
+    }>>;
   };
   contact: {
     email: string;
