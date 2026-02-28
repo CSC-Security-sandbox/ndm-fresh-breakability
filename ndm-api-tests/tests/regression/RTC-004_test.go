@@ -110,6 +110,7 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}

@@ -112,6 +112,7 @@ var _ = Describe("RTC-005: Test migration with 2 worker and make worker unhealth
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}

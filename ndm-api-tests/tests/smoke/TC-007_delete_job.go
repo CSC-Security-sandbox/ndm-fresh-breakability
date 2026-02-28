@@ -129,6 +129,7 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}
@@ -148,6 +149,7 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

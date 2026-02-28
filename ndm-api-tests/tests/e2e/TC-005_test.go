@@ -155,6 +155,7 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 				ExtraParams: map[string]interface{}{

@@ -236,6 +236,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

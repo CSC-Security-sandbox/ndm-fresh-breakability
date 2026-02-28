@@ -72,7 +72,8 @@ export class JobConfigDiscoverBulk {
 
   @ApiProperty({ description: "Preserve permissions flag", example: true })
   @IsBoolean()
-  preservePermissions: boolean;
+  @IsOptional()
+  preservePermissions?: boolean;
 
   @ApiProperty({ description: "Scan Alternate Data Streams flag (Windows/SMB only)", example: false, required: false })
   @IsOptional()

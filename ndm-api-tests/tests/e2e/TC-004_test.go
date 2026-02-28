@@ -142,6 +142,7 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

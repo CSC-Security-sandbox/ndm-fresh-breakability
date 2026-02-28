@@ -134,6 +134,7 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}
@@ -161,6 +162,7 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

@@ -664,6 +664,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}
@@ -700,6 +701,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}
@@ -737,6 +739,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}

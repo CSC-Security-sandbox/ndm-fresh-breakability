@@ -246,6 +246,7 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

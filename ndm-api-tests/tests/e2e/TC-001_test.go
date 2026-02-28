@@ -214,6 +214,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*,*/logs/*,*/tmp/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}

@@ -192,6 +192,7 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 					"excludeOlderThan":    "2024-06-30T16:37:00.000Z", // providing the hisotrical date before which some data is modified
 					"excludeFilePatterns": "*/folder_2/*, */symlink_2_to_jpg/*, */hardlink_2_to_pdf/*, /*.mp4/, /*.mp3/, /*.pdf/, /*.txt/, /*.csv/, /*.doc/, /*.text/, /*.jpg/, /*.json/, /*.png/",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "15-M",
 				},
 			}

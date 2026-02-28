@@ -193,6 +193,7 @@ scenarios:
       options:
         excludeFilePatterns: ""
         preserveAccessTime: true
+        preservePermissions: true
         skipFile: "15-M"
     response:
       - status_code: 201

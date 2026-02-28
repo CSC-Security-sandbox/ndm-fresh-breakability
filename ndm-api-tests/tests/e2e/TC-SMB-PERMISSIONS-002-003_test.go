@@ -285,6 +285,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}
@@ -611,6 +612,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Options: map[string]interface{}{
 					"excludeFilePatterns": "*/snapshots/*",
 					"preserveAccessTime":  true,
+					"preservePermissions": true,
 					"skipFile":            "0-M",
 				},
 			}
