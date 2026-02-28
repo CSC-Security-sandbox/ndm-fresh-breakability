@@ -27,6 +27,7 @@ describe('UpgradeController', () => {
     startExecution: jest.fn(),
     acknowledgeExecution: jest.fn(),
     getExecutionStatus: jest.fn(),
+    getUpgradeStatus: jest.fn(),
   };
 
   const mockJwtService = {
@@ -430,6 +431,52 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.getExecutionStatus).toHaveBeenCalledWith(
         '53d5f0cd-bdf8-4e59-86d2-2b4443670586',
       );
+    });
+  });
+
+  // ===========================================================================
+  // GET /upgrade-status
+  // ===========================================================================
+
+  describe('getUpgradeStatus', () => {
+    it('should return upgrade status when upgrade succeeded', async () => {
+      const expected = {
+        status: 'success',
+        version: '2026.02.01',
+        message: 'Upgrade completed successfully',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
+      expect(mockUpgradeService.getUpgradeStatus).toHaveBeenCalled();
+    });
+
+    it('should return upgrade status when upgrade failed', async () => {
+      const expected = {
+        status: 'failed',
+        version: '2026.02.01',
+        message: 'Upgrade failed: pod readiness timeout',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
+      expect(mockUpgradeService.getUpgradeStatus).toHaveBeenCalled();
+    });
+
+    it('should return upgrade status when no upgrade in progress', async () => {
+      const expected = {
+        status: 'none',
+        message: 'No upgrade in progress',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
     });
   });
 });

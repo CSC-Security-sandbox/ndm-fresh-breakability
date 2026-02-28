@@ -49,7 +49,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // GET LATEST STATUS - For UI state restoration after page refresh
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Get('latest-upload-status')
   @ApiOperation({ summary: 'Get the latest upload status for UI state restoration' })
@@ -60,7 +60,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 1: Initialize Upload Session
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('init')
   @ApiOperation({ summary: 'Initialize a new upgrade bundle upload session' })
@@ -76,7 +76,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 2: Upload a Single Chunk
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('chunk-upload/:uploadId')
   @ApiOperation({ summary: 'Upload a single chunk of the upgrade bundle' })
@@ -103,7 +103,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 3: Process Upload (Assemble Chunks, Validate, Organize)
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('process-upload/:uploadId')
   @ApiOperation({ summary: 'Process upload: assemble chunks, validate checksums, organize files' })
@@ -114,7 +114,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 5: Cancel Upload (Cleanup)
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('cancel-upload/:uploadId')
   @ApiOperation({ summary: 'Cancel upload and cleanup temporary files' })
@@ -126,7 +126,7 @@ export class UpgradeController {
   // ENDPOINT 6: Trigger Upgrade
   // Uses bundleId (primary key) for faster, safer queries
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('trigger-upgrade')
   @ApiOperation({ summary: 'Trigger the upgrade process' })
@@ -142,7 +142,7 @@ export class UpgradeController {
   // ENDPOINT 7: Skip Upgrade
   // Called when user clicks Reset after successful upload
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('skip')
   @ApiOperation({
@@ -157,7 +157,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 8: Start Binary Multicast to Workers
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('multicast')
   @ApiOperation({
@@ -247,7 +247,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 11: Get Multicast Workflow Status
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Get('multicast/:bundleId')
   @ApiOperation({
@@ -271,7 +271,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 12: Start Upgrade Execution on Workers
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('execute')
   @ApiOperation({
@@ -312,7 +312,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 14: Get Upgrade Execution Status
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Get('execute/:bundleId')
   @ApiOperation({
@@ -333,7 +333,7 @@ export class UpgradeController {
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 6b: Get Upgrade Status (for UI polling after restart)
   // ═══════════════════════════════════════════════════════════════
-  @Auth(Permission.AgentDeployment)
+  @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Get('upgrade-status')
   @ApiOperation({
