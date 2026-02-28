@@ -1,0 +1,35 @@
+---
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: temporal-jwt-validation
+  namespace: {{ istio_namespace | default('istio-system') }}
+spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
+  jwtRules:
+    - issuer: {{ istio_jwt_auth.issuer | quote }}
+      jwksUri: {{ istio_jwt_auth.jwks_uri | quote }}
+      fromHeaders:
+        - name: authorization
+          prefix: "Bearer "
+      forwardOriginalToken: true
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: temporal-require-jwt
+  namespace: {{ istio_namespace | default('istio-system') }}
+spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            ports: ["7233"]
+      when:
+        - key: request.auth.principal
+          notValues: ["*"]

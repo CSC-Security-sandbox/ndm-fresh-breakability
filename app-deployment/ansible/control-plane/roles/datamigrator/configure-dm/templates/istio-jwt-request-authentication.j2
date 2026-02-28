@@ -1,0 +1,42 @@
+---
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: {{ istio_jwt_auth.request_authentication_name | default('keycloak-jwt') }}
+  namespace: {{ istio_namespace | default('istio-system') }}
+spec:
+{% if istio_jwt_auth.selector is defined %}
+  selector:
+    matchLabels:
+{% for key, value in istio_jwt_auth.selector | dictsort %}
+      {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}
+  jwtRules:
+    - issuer: {{ istio_jwt_auth.issuer | quote }}
+      jwksUri: {{ istio_jwt_auth.jwks_uri | quote }}
+{% if istio_jwt_auth.from_headers is defined %}
+      fromHeaders:
+{% for header in istio_jwt_auth.from_headers %}
+        - name: {{ header.name | quote }}
+{% if header.prefix is defined %}
+          prefix: {{ header.prefix | quote }}
+{% endif %}
+{% endfor %}
+{% else %}
+      fromHeaders:
+        - name: "Authorization"
+          prefix: "Bearer "
+{% endif %}
+{% if istio_jwt_auth.forward_original_token is defined %}
+      forwardOriginalToken: {{ istio_jwt_auth.forward_original_token | bool | string | lower }}
+{% endif %}
+{% if istio_jwt_auth.audiences is defined %}
+      audiences:
+{% for audience in istio_jwt_auth.audiences %}
+        - {{ audience | quote }}
+{% endfor %}
+{% endif %}
+{% if istio_jwt_auth.output_payload_to_header is defined %}
+      outputPayloadToHeader: {{ istio_jwt_auth.output_payload_to_header | quote }}
+{% endif %}
