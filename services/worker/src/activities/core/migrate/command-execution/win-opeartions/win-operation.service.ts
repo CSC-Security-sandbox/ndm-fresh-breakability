@@ -7,7 +7,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript, psCompareAclsScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { Cmd, ErrorType, JobManagerContext, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -265,6 +265,24 @@ export class WinOperationService {
       return true;
     } catch {
       throw new Error(`Failed to reset file attributes for ${path}`);
+    }
+  }
+
+  /**
+   * Returns true if source and destination ACLs differ (so STAMP_META is needed).
+   * Uses a single PowerShell invocation: get both ACLs and compare in-PS (one process, no extra JSON round-trip).
+   * On error (e.g. cannot read ACL), returns true to be safe and allow stamping.
+   */
+  async aclsDiffer(sourcePath: string, targetPath: string, workflowId = ''): Promise<boolean> {
+    try {
+      const script = `$srcFile = '${sourcePath.replace(/'/g, "''")}'\n$dstFile = '${targetPath.replace(/'/g, "''")}'\n${psCompareAclsScript}`;
+      const output = await this.winShellService.executeCommand(script, workflowId);
+      if (output.stderr) throw new Error(output.stderr);
+      const result = JSON.parse(output.stdout) as { aclsDiffer?: boolean };
+      return result.aclsDiffer === true;
+    } catch (error) {
+      this.logger.warn(`ACL comparison failed for ${sourcePath} vs ${targetPath}, will stamp: ${error?.message}`);
+      return true;
     }
   }
 

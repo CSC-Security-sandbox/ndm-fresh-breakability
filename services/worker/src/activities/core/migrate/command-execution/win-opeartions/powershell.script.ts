@@ -419,6 +419,45 @@ try {
 }
 `;
 
+/** Single PS invocation: get source + target ACLs, compare (same logic as validateAclOperation), output {"aclsDiffer": true|false}. */
+export const psCompareAclsScript = `
+try {
+    if (!(Test-Path $srcFile)) { throw "Source not found: $srcFile" }
+    if (!(Test-Path $dstFile)) { throw "Target not found: $dstFile" }
+    $srcAclJson = Get-FileSecurityFast $srcFile
+    if ($srcAclJson -match '"error"') { Write-Output '{"aclsDiffer":true}'; exit 0 }
+    $dstAclJson = Get-FileSecurityFast $dstFile
+    if ($dstAclJson -match '"error"') { Write-Output '{"aclsDiffer":true}'; exit 0 }
+    $srcAcl = $srcAclJson | ConvertFrom-Json
+    $dstAcl = $dstAclJson | ConvertFrom-Json
+    $differ = $false
+    if ($srcAcl.Owner -ne $dstAcl.Owner) { $differ = $true }
+    if ($srcAcl.Group -ne $dstAcl.Group) { $differ = $true }
+    if (-not $differ) {
+        $srcAces = @()
+        if ($srcAcl.DaclAces) { $srcAces = @($srcAcl.DaclAces | Where-Object { $_.AceType -eq 0 -or $_.AceType -eq 1 }) }
+        $dstAces = @()
+        if ($dstAcl.DaclAces) { $dstAces = @($dstAcl.DaclAces | Where-Object { $_.AceType -eq 0 -or $_.AceType -eq 1 }) }
+        foreach ($srcAce in $srcAces) {
+            if ($srcAce.Sid -eq 'S-1-3-0') {
+                $found = $dstAces | Where-Object { $_.Sid -eq $srcAce.Sid -and $_.AceType -eq $srcAce.AceType }
+                if (-not $found) { $differ = $true; break }
+            } else {
+                $matching = $dstAces | Where-Object { $_.Sid -eq $srcAce.Sid -and $_.AceType -eq $srcAce.AceType }
+                $found = $false
+                foreach ($t in $matching) {
+                    if (($t.AccessMask -band $srcAce.AccessMask) -eq $srcAce.AccessMask) { $found = $true; break }
+                }
+                if (-not $found) { $differ = $true; break }
+            }
+        }
+    }
+    Write-Output ('{"aclsDiffer":' + $differ.ToString().ToLower() + '}')
+} catch {
+    Write-Output '{"aclsDiffer":true}'
+}
+`;
+
 export const psSetAclScript = `
 try {
     if (!(Test-Path $dstFile)) { throw "File not found: $dstFile" }
@@ -426,6 +465,47 @@ try {
 } catch {
     Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
 }
+`;
+
+export const psGetAclBatchScript = `
+$paths = $pathsJson | ConvertFrom-Json
+$results = @()
+foreach ($p in $paths) {
+    try {
+        if (!(Test-Path $p)) { throw "File not found: $p" }
+        $acl = Get-FileSecurityFast $p
+        $aclObj = $acl | ConvertFrom-Json
+        $results += @{ path = $p; acl = $aclObj }
+    } catch {
+        $results += @{ path = $p; error = $_.Exception.Message }
+    }
+}
+$results | ConvertTo-Json -Compress -Depth 20
+`;
+
+export const psSetAclBatchScript = `
+$entries = $entriesJson | ConvertFrom-Json
+$results = @()
+foreach ($e in $entries) {
+    try {
+        if (!(Test-Path $e.path)) { throw "File not found: $e.path" }
+        $out = Set-FileSecurityFast $e.path $e.aclJson 2>&1 | Out-String
+        $out = $out.Trim()
+        $unresolved_sids = @()
+        if ($out -match '"unresolved_sids":\s*\[(.*?)\]') {
+            $match = $matches[1]
+            if ($match) {
+                try {
+                    $unresolved_sids = @($match | ConvertFrom-Json)
+                } catch { }
+            }
+        }
+        $results += @{ path = $e.path; success = $true; unresolved_sids = $unresolved_sids }
+    } catch {
+        $results += @{ path = $e.path; success = $false; error = $_.Exception.Message }
+    }
+}
+$results | ConvertTo-Json -Compress -Depth 10
 `;
 
 export const psGetLinkInfoScript = `

@@ -1,15 +1,16 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cmd, CmdMeta, CommandStatus, ErrorType, FileInfo, JobManagerContext, OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, isPermissionOrOwnershipMismatch, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists } from "../utils/utils";
 import { FileTypeDetectionService } from "../utils/file-type-detection.service";
 import { FileType } from "src/activities/types/tasks";
+import { WinOperationService } from "../migrate/command-execution/win-opeartions/win-operation.service";
 
 /**
  * Input for processing a single source item
@@ -85,7 +86,8 @@ export class CommandGenerationService {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly fileTypeDetectionService: FileTypeDetectionService
+    private readonly fileTypeDetectionService: FileTypeDetectionService,
+    @Optional() private readonly winOperationService: WinOperationService | null
   ) {
     this.metaUpdatedToleranceMs = this.configService.get('worker.metaUpdatedToleranceMs') || 60000;
     this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -121,6 +123,8 @@ export class CommandGenerationService {
     const isSMB = process.platform === 'win32';
     let lowerCaseSourceData: Set<string> | undefined;
     let lowerCaseTargetData: Set<string> | undefined;
+    const preservePermissions = jobContext.jobConfig?.options?.preservePermissions === true;
+    const identityMappingEnabled = jobContext.jobConfig?.options?.isIdentityMappingAvailable === true;
 
     if (isSMB) {
       lowerCaseSourceData = new Set<string>();
@@ -204,7 +208,7 @@ export class CommandGenerationService {
 
           // Generate command if target doesn't have this directory
           if (!targetContent.has(itemName)) {
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, identityMappingEnabled);
             if (newCommand) result.commands.push(newCommand);
           }
         } else if (sourceStat.isSymbolicLink()) {
@@ -219,19 +223,19 @@ export class CommandGenerationService {
               continue;
             }
             // Target doesn't exist - create symlink
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, identityMappingEnabled);
             if (newCommand) result.commands.push(newCommand);
           } else {
             // Target exists for symlink - compare and potentially update
             const targetFilePath = path.join(targetPath, itemName);
             const targetStatLstat = await fs.promises.lstat(targetFilePath);
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId);
+            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId, identityMappingEnabled);
             if (newCommand) result.commands.push(newCommand);
           }
         } else if (!targetContent.has(itemName)) {
           // Regular file, target doesn't exist
           result.fileCount++;
-          const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+          const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, identityMappingEnabled);
           if (newCommand) result.commands.push(newCommand);
         } else {
           // Target exists - compare stats
@@ -245,7 +249,17 @@ export class CommandGenerationService {
             } else {
               targetStat = await fs.promises.stat(targetFilePath);
             }
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId);
+            let newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId, identityMappingEnabled);
+            // On Windows, when we would skip (no content/ctime/mode change), check if ACLs differ and stamp only then
+            if (!newCommand && process.platform === 'win32' && preservePermissions && this.winOperationService) {
+              try {
+                if (await this.winOperationService.aclsDiffer(sourceContentPath, targetFilePath, jobContext.jobRunId)) {
+                  newCommand = this.buildStampMetaOnlyCommand(sourceStat, fileInfo.path, itemData.originalCommandId);
+                }
+              } catch (err) {
+                this.logger.warn(`ACL diff check failed for ${sourceContentPath}, skipping stamp: ${err?.message}`);
+              }
+            }
             if (newCommand) result.commands.push(newCommand);
           }
         }
@@ -362,8 +376,15 @@ export class CommandGenerationService {
    * Builds a command based on source and optional target stats.
    * Used for both scan and retry operations - compares source vs target.
    * Returns undefined if no update is needed.
+   * @param identityMappingEnabled - When true, permission check ignores uid/gid (only mode); avoids over-stamping when mapping is used.
    */
-  buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats, originalCommandId?: string): Cmd | undefined {
+  buildCommand(
+    sFile: fs.Stats,
+    fPath: string,
+    dFile?: fs.Stats,
+    originalCommandId?: string,
+    identityMappingEnabled?: boolean
+  ): Cmd | undefined {
     const metadata: CmdMeta = {
       size: sFile.size,
       mtime: sFile.mtime,
@@ -410,7 +431,55 @@ export class CommandGenerationService {
       );
     }
 
+    if (isPermissionOrOwnershipMismatch(sFile, dFile, { ignoreOwnership: identityMappingEnabled })) {
+      const isDirectory = sFile.isDirectory();
+      return new Cmd(
+        uuid4(),
+        fPath,
+        CommandStatus.READY,
+        isDirectory,
+        {
+          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: {} },
+          [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+        },
+        metadata,
+        originalCommandId
+      );
+    }
+
     return undefined;
+  }
+
+  /**
+   * Builds a STAMP_META-only command (copy op COMPLETED). Used when ACLs differ on Windows.
+   */
+  private buildStampMetaOnlyCommand(sFile: fs.Stats, fPath: string, originalCommandId?: string): Cmd {
+    const metadata: CmdMeta = {
+      size: sFile.size,
+      mtime: sFile.mtime,
+      mode: sFile.mode,
+      uid: sFile.uid,
+      gid: sFile.gid,
+      atime: sFile.atime,
+      ctime: sFile.ctime,
+      birthtime: sFile.birthtime,
+      sid: undefined,
+      inode: sFile.ino,
+      isSymLink: sFile.isSymbolicLink()
+    };
+    const isDirectory = sFile.isDirectory();
+    return new Cmd(
+      uuid4(),
+      fPath,
+      CommandStatus.READY,
+      isDirectory,
+      {
+        [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: {} },
+        [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+      },
+      metadata,
+      originalCommandId
+    );
   }
 
   /**

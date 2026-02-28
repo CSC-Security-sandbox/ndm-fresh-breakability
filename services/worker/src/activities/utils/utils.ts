@@ -169,6 +169,20 @@ export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || 
 // added  1 second tolerance to avoid false positives due to minor time differences
 export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
 
+/**
+ * True when destination exists but mode/uid/gid differ from source (e.g. file copied but permissions not stamped).
+ * When ignoreOwnership is true (e.g. identity mapping), only mode is compared; uid/gid are expected to differ.
+ */
+export const isPermissionOrOwnershipMismatch = (
+  sFile: fs.Stats,
+  dFile?: fs.Stats,
+  options?: { ignoreOwnership?: boolean }
+): boolean => {
+  if (!dFile) return false;
+  if (options?.ignoreOwnership) return sFile.mode !== dFile.mode;
+  return sFile.mode !== dFile.mode || sFile.uid !== dFile.uid || sFile.gid !== dFile.gid;
+};
+
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(
   "LAST_FILE", // fileName

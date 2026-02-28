@@ -12,6 +12,7 @@ const mockRemovePrefix = jest.fn();
 const mockShouldExcludeOrSkip = jest.fn();
 const mockIsContentUpdate = jest.fn();
 const mockIsMetaUpdated = jest.fn();
+const mockIsPermissionOrOwnershipMismatch = jest.fn();
 const mockDmError = jest.fn();
 
 jest.mock('src/activities/utils/utils', () => ({
@@ -19,6 +20,7 @@ jest.mock('src/activities/utils/utils', () => ({
     getFileInfo: (...args: unknown[]) => mockGetFileInfo(...args),
     isContentUpdate: (...args: unknown[]) => mockIsContentUpdate(...args),
     isMetaUpdated: (...args: unknown[]) => mockIsMetaUpdated(...args),
+    isPermissionOrOwnershipMismatch: (...args: unknown[]) => mockIsPermissionOrOwnershipMismatch(...args),
     removePrefix: (full: string, prefix: string) => mockRemovePrefix(full, prefix),
     shouldExcludeOrSkip: (params: unknown) => mockShouldExcludeOrSkip(params),
 }));
@@ -112,7 +114,7 @@ describe('CommandGenerationService', () => {
             birthtime: new Date(),
             ino: 1,
         });
-        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService);
+        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService, null);
     });
 
     describe('processItems', () => {
@@ -498,6 +500,7 @@ describe('CommandGenerationService', () => {
         it('should return undefined when neither content nor meta update', () => {
             mockIsContentUpdate.mockReturnValue(false);
             mockIsMetaUpdated.mockReturnValue(false);
+            mockIsPermissionOrOwnershipMismatch.mockReturnValue(false);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -512,6 +515,55 @@ describe('CommandGenerationService', () => {
                 ino: 1,
             } as fs.Stats;
             const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            expect(result).toBeUndefined();
+        });
+
+        it('should return command with STAMP_META when isPermissionOrOwnershipMismatch is true and content/meta unchanged', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            mockIsPermissionOrOwnershipMismatch.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = { ...sFile, mode: 0o755 } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_META].status).toBe('READY');
+        });
+
+        it('should return undefined when identityMappingEnabled and only uid/gid differ (mode same)', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            mockIsPermissionOrOwnershipMismatch.mockImplementation((s: fs.Stats, d?: fs.Stats, opts?: { ignoreOwnership?: boolean }) => {
+                if (opts?.ignoreOwnership) return (s.mode !== d!.mode);
+                return s.mode !== d!.mode || s.uid !== d!.uid || s.gid !== d!.gid;
+            });
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = { ...sFile, uid: 2000, gid: 2000 } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, true);
             expect(result).toBeUndefined();
         });
     });

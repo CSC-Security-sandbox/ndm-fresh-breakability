@@ -742,6 +742,46 @@ describe('WinOperationService', () => {
     });
   });
 
+  describe('aclsDiffer', () => {
+    it('should return false when source and target ACLs match', async () => {
+      (mockWinShellService.executeCommand as jest.Mock).mockResolvedValue({
+        stdout: '{"aclsDiffer":false}',
+        stderr: '',
+      });
+      const result = await service.aclsDiffer('/source/path', '/target/path');
+      expect(result).toBe(false);
+      expect(mockWinShellService.executeCommand).toHaveBeenCalledTimes(1);
+      const script = (mockWinShellService.executeCommand as jest.Mock).mock.calls[0][0];
+      expect(script).toContain('$srcFile');
+      expect(script).toContain('$dstFile');
+      expect(script).toContain('Get-FileSecurityFast');
+    });
+
+    it('should return true when source and target ACLs differ', async () => {
+      (mockWinShellService.executeCommand as jest.Mock).mockResolvedValue({
+        stdout: '{"aclsDiffer":true}',
+        stderr: '',
+      });
+      const result = await service.aclsDiffer('/source/path', '/target/path');
+      expect(result).toBe(true);
+    });
+
+    it('should return true when executeCommand returns stderr or throws', async () => {
+      (mockWinShellService.executeCommand as jest.Mock).mockResolvedValue({
+        stdout: '{"aclsDiffer":false}',
+        stderr: 'Access denied',
+      });
+      const result = await service.aclsDiffer('/source/path', '/target/path');
+      expect(result).toBe(true);
+    });
+
+    it('should return true when executeCommand throws', async () => {
+      (mockWinShellService.executeCommand as jest.Mock).mockRejectedValue(new Error('Access denied'));
+      const result = await service.aclsDiffer('/source/path', '/target/path');
+      expect(result).toBe(true);
+    });
+  });
+
   describe('validateAclOperation', () => {
     it('should return no validation errors when ACLs match perfectly', async () => {
       const acl1: SecurityDescriptor = {

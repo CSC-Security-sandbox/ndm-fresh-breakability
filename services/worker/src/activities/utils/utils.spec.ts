@@ -10,6 +10,7 @@ import {
     getFileType,
     isContentUpdate,
     isMetaUpdated,
+    isPermissionOrOwnershipMismatch,
     getErrorCode,
     formatDate,
     basePrefix
@@ -487,7 +488,50 @@ describe('utils', () => {
         });
     });
 
- 
+    describe('isPermissionOrOwnershipMismatch', () => {
+        it('should return false when destination file is missing', () => {
+            const sourceStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats)).toBe(false);
+        });
+
+        it('should return false when mode, uid, and gid match', () => {
+            const sourceStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats)).toBe(false);
+        });
+
+        it('should return true when mode differs', () => {
+            const sourceStats = { mode: 0o755, uid: 1000, gid: 1000 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats)).toBe(true);
+        });
+
+        it('should return true when uid differs', () => {
+            const sourceStats = { mode: 0o644, uid: 1001, gid: 1000 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats)).toBe(true);
+        });
+
+        it('should return true when gid differs', () => {
+            const sourceStats = { mode: 0o644, uid: 1000, gid: 1001 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats)).toBe(true);
+        });
+
+        it('should ignore uid/gid when ignoreOwnership is true (identity mapping)', () => {
+            const sourceStats = { mode: 0o644, uid: 1000, gid: 1000 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 2000, gid: 2000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats)).toBe(true);
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats, { ignoreOwnership: true })).toBe(false);
+        });
+
+        it('should still detect mode mismatch when ignoreOwnership is true', () => {
+            const sourceStats = { mode: 0o755, uid: 1000, gid: 1000 } as fs.Stats;
+            const destStats = { mode: 0o644, uid: 2000, gid: 2000 } as fs.Stats;
+            expect(isPermissionOrOwnershipMismatch(sourceStats, destStats, { ignoreOwnership: true })).toBe(true);
+        });
+    });
+
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {

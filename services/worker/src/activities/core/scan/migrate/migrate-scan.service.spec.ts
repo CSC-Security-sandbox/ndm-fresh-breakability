@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, isPermissionOrOwnershipMismatch, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
@@ -79,6 +79,7 @@ jest.mock('src/activities/utils/utils', () => ({
     shouldExcludeOrSkip: jest.fn(),
     isContentUpdate: jest.fn(),
     isMetaUpdated: jest.fn(),
+    isPermissionOrOwnershipMismatch: jest.fn(),
     shouldExcludeForDelete: jest.fn(),
     checkCaseSensitiveConflict: jest.fn(),
 }));
@@ -566,6 +567,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
             (isMetaUpdated as jest.Mock).mockReturnValue(false);
+            (isPermissionOrOwnershipMismatch as jest.Mock).mockReturnValue(false);
             const result = service.buildCommand(mockSFile as any, 'file/path');
             expect(result).toBeUndefined();
         });
@@ -605,6 +607,28 @@ describe('MigrateScanService', () => {
             (isContentUpdate as jest.Mock).mockReturnValue(false);
             (isMetaUpdated as jest.Mock).mockReturnValue(true);
             const result = service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
+            expect(result).toBeDefined();
+            expect(Object.keys(result!.ops)).toContain(OPS_CMD.STAMP_META);
+        });
+
+        it('should build command with STAMP_META when isPermissionOrOwnershipMismatch true and content/meta unchanged', () => {
+            const mockSFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 1,
+                mtime: new Date(),
+                mode: 0o755,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+            };
+            const mockDFile = { ...mockSFile, mode: 0o644, uid: 1001 };
+            (isContentUpdate as jest.Mock).mockReturnValue(false);
+            (isMetaUpdated as jest.Mock).mockReturnValue(false);
+            (isPermissionOrOwnershipMismatch as jest.Mock).mockReturnValue(true);
+            const result = service.buildCommand(mockSFile as any, 'file/path', mockDFile as any);
             expect(result).toBeDefined();
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.STAMP_META);
         });

@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, CommandStatus, ErrorType, JobManagerContext, OPS_CMD, OPS
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
+import { dmError, isContentUpdate, isMetaUpdated, isPermissionOrOwnershipMismatch, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
@@ -210,6 +210,20 @@ export class MigrateScanService {
       
 
         if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+            const isDirectory = sFile.isDirectory();
+            return new Cmd(
+                uuid4(),
+                fPath,
+                CommandStatus.READY,
+                isDirectory,
+                {
+                    [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED , params: {} },
+                    [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+                },
+                metadata,
+            )
+        }
+        if (isPermissionOrOwnershipMismatch(sFile, dFile)) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),
