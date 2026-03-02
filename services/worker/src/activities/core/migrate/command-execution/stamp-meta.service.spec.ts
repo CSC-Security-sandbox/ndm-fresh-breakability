@@ -556,7 +556,7 @@ describe('StampMetaService', () => {
       expect(winOperationService.stampAclOperation).toHaveBeenCalledWith(input);
     });
 
-    it('should handle ACL stamping errors', async () => {
+    it('should handle ACL stamping errors and propagate to targetErrors', async () => {
       const input = createMockInput({}, { preservePermissions: true });
 
       winOperationService.stampAclOperation.mockResolvedValue({
@@ -568,8 +568,40 @@ describe('StampMetaService', () => {
       const result = await service.stampObjectACL(input);
 
       expect(result.sourceErrors).toEqual([]);
-      expect(result.targetErrors).toEqual([]);
+      expect(result.targetErrors).toEqual(['ACL operation failed']);
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    it('should propagate multiple errors to targetErrors', async () => {
+      const input = createMockInput({}, { preservePermissions: true });
+
+      winOperationService.stampAclOperation.mockResolvedValue({
+        output: null,
+        errors: [
+          'Invalid Owner SID for S-1-5-21-original-owner found in SID mapping',
+          'Unresolved SID S-1-5-21-unresolved found while setting ACL on target',
+        ],
+      });
+      dmError.mockReturnValue({});
+
+      const result = await service.stampObjectACL(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([
+        'Invalid Owner SID for S-1-5-21-original-owner found in SID mapping',
+        'Unresolved SID S-1-5-21-unresolved found while setting ACL on target',
+      ]);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    it('should not stamp ACL or populate targetErrors when preservePermissions is false', async () => {
+      const input = createMockInput({}, { preservePermissions: false });
+
+      const result = await service.stampObjectACL(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
     });
 
     it('should handle ACL stamping exceptions', async () => {

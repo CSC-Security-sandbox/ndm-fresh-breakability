@@ -208,8 +208,9 @@ export class WinOperationService {
       { category: 'stamp_phase', phase: 'acl_validate' },
       () => this.validateAclOperation(acl, targetAcl),
     );
-    if (validation.inValid.length > 0)
+    if (validation.inValid.length > 0){
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
+    }
     command.ops[OPS_CMD.STAMP_META].params.sidMap = {
       targetAcl: validation.targetSID,
       sourceAcl: validation.sourceSID,
