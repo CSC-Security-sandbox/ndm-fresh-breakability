@@ -35,6 +35,7 @@ const WorkerInstallation = ({
               workerSecret={generateSecretAPIResult?.workerSecret}
               projectId={generateSecretAPIResult?.projectId}
               controlPlaneIp={generateSecretAPIResult?.controlPlaneIp}
+              gatewayCACertificate={generateSecretAPIResult?.gatewayCACertificate}
               isLoading={isLoading}
               isError={isError}
             />

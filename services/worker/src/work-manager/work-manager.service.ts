@@ -50,6 +50,7 @@ export class WorkManagerService implements OnModuleDestroy{
   private isRefreshingConnection = false; // Prevent concurrent refresh operations
   private temporalConfig: TemporalConfig = null;
   private readonly jwtRefreshInterval: number;
+  private workerIP: string;
   private workerVersion: string;
 
   constructor(
@@ -71,12 +72,13 @@ export class WorkManagerService implements OnModuleDestroy{
     const jwtRefreshMinutes = parseInt(process.env.JWT_REFRESH_INTERVAL_MINUTES) || 1380;
     this.jwtRefreshInterval = jwtRefreshMinutes * 60 * 1000;
     this.logger = loggerFactory.create(WorkManagerService.name);
+    this.workerIP = getLocalIpAddress();
   }
 
   onModuleDestroy() {
     if(this.schedulerRegistry){
       this.schedulerRegistry.deleteInterval('jwtRefresh');
-    }    
+    }
   }
   async onApplicationBootstrap() {
     this.logger.log('[onApplicationBootstrap] - Starting Worker Service');
@@ -91,27 +93,20 @@ export class WorkManagerService implements OnModuleDestroy{
       // First, register with config service to get updated environment variables (including CA cert for TLS)
       this.logger.log('[onApplicationBootstrap] - Registering with config service');
       const accessToken = await this.authService.getAccessToken();
-      const updatedEnvVariables = await this.registerAndGetEnvironment(accessToken);
-      
-      // Apply critical environment variables to process.env for Temporal config
-      if (updatedEnvVariables.TEMPORAL_TLS_CA_CERT) {
-        process.env.TEMPORAL_TLS_CA_CERT = updatedEnvVariables.TEMPORAL_TLS_CA_CERT;
-        this.logger.log('[onApplicationBootstrap] - Applied TEMPORAL_TLS_CA_CERT from config service');
-      }
-      
+      await this.registerAndGetEnvironment(accessToken);
       // Debug: Log Temporal-related environment variables
       this.logger.log(`[onApplicationBootstrap] - Current Temporal env vars:
         TEMPORAL_ADDRESS=${process.env.TEMPORAL_ADDRESS}
         TEMPORAL_TLS_ENABLED=${process.env.TEMPORAL_TLS_ENABLED}
         TEMPORAL_TLS_SERVER_NAME=${process.env.TEMPORAL_TLS_SERVER_NAME}
-        TEMPORAL_TLS_CA_CERT=${process.env.TEMPORAL_TLS_CA_CERT ? `present (${process.env.TEMPORAL_TLS_CA_CERT.length} chars)` : 'not set'}
+        TEMPORAL_TLS_CERT=${process.env.TLS_CERT ? `present (${process.env.TLS_CERT.length} chars)` : 'not set'}
         TEMPORAL_JWT_ENABLED=${process.env.TEMPORAL_JWT_ENABLED}`);
-      
+
       let config: TemporalConnectionConfig =  {
           address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
           tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
           tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
-          tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+          tlsCaCert: process.env.TLS_CERT,
           jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
           getAccessToken: () => this.authService.getAccessToken(),
         };
@@ -306,20 +301,6 @@ export class WorkManagerService implements OnModuleDestroy{
       const responseData = response.data?.data?.items || {};
       const envVariables = responseData.envVariables || {};
       this.logger.debug(`Received ${Object.keys(envVariables).length} environment variables from config service`);
-      
-      if (envVariables.TEMPORAL_TLS_CA_CERT) {
-        this.logger.debug(`TEMPORAL_TLS_CA_CERT present with ${envVariables.TEMPORAL_TLS_CA_CERT.length} characters`);
-        // Try to decode and verify the certificate
-        try {
-          const decoded = Buffer.from(envVariables.TEMPORAL_TLS_CA_CERT, 'base64').toString('utf8');
-          this.logger.debug(`Certificate decoded, starts with: ${decoded.substring(0, 50)}`);
-        } catch (err) {
-          this.logger.error(`Failed to decode certificate: ${err.message}`);
-        }
-      } else {
-        this.logger.debug('TEMPORAL_TLS_CA_CERT not received from config service');
-      }
-      
       return envVariables;
     } catch (error) {
       this.logger.error(`Error registering worker: ${error.message}`);
@@ -348,7 +329,7 @@ export class WorkManagerService implements OnModuleDestroy{
             headers: {
               Authorization: `Bearer ${accessToken}`,
               'x-client-platform': this.platform,
-              'x-worker-ip': getLocalIpAddress(),
+              'x-worker-ip': this.workerIP,
             },
             timeout: 5000,
           },

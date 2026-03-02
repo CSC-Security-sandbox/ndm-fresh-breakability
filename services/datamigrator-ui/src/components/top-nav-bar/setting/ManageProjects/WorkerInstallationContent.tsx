@@ -16,6 +16,7 @@ const WorkerInstallationContent = ({
   projectId,
   controlPlaneIp,
   workerId,
+  gatewayCACertificate,
   isLoading,
   isError,
 }: {
@@ -23,6 +24,7 @@ const WorkerInstallationContent = ({
   projectId?: string;
   workerId?: string;
   workerSecret?: string;
+  gatewayCACertificate?: string;
   isLoading?: boolean;
   isError?: boolean;
 }) => {
@@ -68,7 +70,7 @@ const WorkerInstallationContent = ({
             <>
               <Text bold>Register Worker VM</Text>
               <Text>
-                For Windows worker, extract the WORKER_ID, WORKER_SECRET, and PROJECT_ID values from the provided commands and enter them when prompted during installation.
+                For Windows worker, extract the WORKER_ID, WORKER_SECRET, PROJECT_ID, and TLS_CERT values from the provided commands and enter them when prompted during installation.
               </Text>
             </>
           </NumberedList>
@@ -101,6 +103,7 @@ const WorkerInstallationContent = ({
 export WORKER_SECRET=${workerSecret}
 export PROJECT_ID=${projectId}
 export CONTROL_PLANE_IP=${controlPlaneIp}
+export TLS_CERT=${gatewayCACertificate}
 sh ${WORKER_SCRIPT_PATH}`}
             />
           </CardContent>
@@ -138,6 +141,13 @@ sh ${WORKER_SCRIPT_PATH}`}
                 <CodeSnippet
                   highLightLanguage={"text"}
                   text={controlPlaneIp || ""}
+                />
+              </Layout.GridItem>
+              <Layout.GridItem lg={12}>
+                <Text className="text-base font-semibold mb-2">TLS_CERT</Text>
+                <CodeSnippet
+                  highLightLanguage={"text"}
+                  text={gatewayCACertificate || ""}
                 />
               </Layout.GridItem>
             </Layout.Grid>

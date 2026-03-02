@@ -31,8 +31,6 @@ import { SendMailService } from 'src/util/send-email';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { generateWorkerName } from 'src/util/utils';
 import { SuccessEmailType } from 'src/util/send-email.type';
-import { readFileSync } from 'fs';
-import { request } from 'https';
 
 @Injectable()
 export class WorkManagerService {
@@ -54,100 +52,6 @@ export class WorkManagerService {
     this.logger = this.loggerFactory.create(WorkManagerService.name);
   }
 
-  /**
-   * Fetch the Gateway TLS CA certificate from Kubernetes secret using in-cluster API
-   * Returns base64-encoded certificate for external workers to trust self-signed certs
-   */
-  private async getGatewayCACertificate(): Promise<string | null> {
-    try {
-      // Get secret name from environment or use default
-      const secretName = process.env.ISTIO_GATEWAY_TLS_SECRET || 'datamigrator-istio-tls';
-      const namespace = process.env.ISTIO_NAMESPACE || 'istio-system';
-      
-      this.logger.debug(`Fetching Gateway TLS certificate from secret: ${secretName} in namespace: ${namespace}`);
-      
-      // Read service account token and CA cert for in-cluster authentication
-      const token = readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8');
-      const ca = readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/ca.crt', 'utf8');
-      
-      // Call Kubernetes API to get the secret
-      const certificate = await this.fetchSecretFromK8sAPI(secretName, namespace, token, ca);
-      
-      if (!certificate) {
-        this.logger.warn(`No certificate data found in secret ${secretName}`);
-        return null;
-      }
-      
-      this.logger.debug(`Successfully fetched Gateway TLS certificate (${certificate.length} bytes)`);
-      return certificate;
-    } catch (error) {
-      this.logger.error(`Failed to fetch Gateway CA certificate: ${error.message}`, error.stack);
-      return null;
-    }
-  }
-
-  /**
-   * Fetch secret from Kubernetes API using in-cluster service account
-   */
-  private fetchSecretFromK8sAPI(
-    secretName: string,
-    namespace: string,
-    token: string,
-    ca: string,
-  ): Promise<string | null> {
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'kubernetes.default.svc',
-        port: 443,
-        path: `/api/v1/namespaces/${namespace}/secrets/${secretName}`,
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        ca: ca,
-      };
-
-      const req = request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          try {
-            if (res.statusCode !== 200) {
-              this.logger.error(`Kubernetes API returned status ${res.statusCode}: ${data}`);
-              resolve(null);
-              return;
-            }
-
-            const secret = JSON.parse(data);
-            const tlsCert = secret?.data?.['tls.crt'];
-            
-            if (!tlsCert) {
-              this.logger.error('Secret does not contain tls.crt field');
-              resolve(null);
-              return;
-            }
-
-            resolve(tlsCert);
-          } catch (error) {
-            this.logger.error(`Error parsing Kubernetes API response: ${error.message}`);
-            resolve(null);
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        this.logger.error(`Error calling Kubernetes API: ${error.message}`);
-        reject(error);
-      });
-
-      req.end();
-    });
-  }
-
   async getConfiguration(
     id: string,
     ip: string,
@@ -158,32 +62,6 @@ export class WorkManagerService {
     workerVersion: string,
   ): Promise<{ metaConfig: WorkerConfiguration[]; envVariables: Record<string, any> }> {
     try {
-      // Debug: Log what we received
-      this.logger.debug(`Worker ${id}: Received envVariables keys: ${Object.keys(envVariables || {}).join(', ')}`);
-      this.logger.debug(`Worker ${id}: TEMPORAL_TLS_ENABLED = ${envVariables?.TEMPORAL_TLS_ENABLED} (type: ${typeof envVariables?.TEMPORAL_TLS_ENABLED})`);
-      
-      // Inject Gateway CA certificate for TLS-enabled external workers
-      const temporalTlsEnabled = envVariables?.TEMPORAL_TLS_ENABLED === 'true';
-      this.logger.debug(`Worker ${id}: temporalTlsEnabled = ${temporalTlsEnabled}`);
-      
-      if (temporalTlsEnabled) {
-        this.logger.log(`Worker ${id}: Inside TLS enabled block`);
-        // Only fetch if not already provided
-        if (!envVariables.TEMPORAL_TLS_CA_CERT) {
-          this.logger.log(`Worker ${id}: TLS enabled, fetching Gateway CA certificate`);
-          const caCert = await this.getGatewayCACertificate();
-          if (caCert) {
-            envVariables.TEMPORAL_TLS_CA_CERT = caCert;
-            this.logger.log(`Worker ${id}: Successfully injected Gateway CA certificate`);
-          } else {
-            this.logger.warn(`Worker ${id}: Failed to fetch Gateway CA certificate - worker may experience TLS validation errors`);
-          }
-        } else {
-          this.logger.debug(`Worker ${id}: CA certificate already present in envVariables`);
-        }
-      } else {
-        this.logger.log(`Worker ${id}: TLS not enabled, skipping certificate injection`);
-      }
 
       const workerMetaConfig = await this.workerEntity.findOne({
         where: { workerId: id },

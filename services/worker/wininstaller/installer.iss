@@ -40,6 +40,7 @@ var
   ConfigWorkerID: String;
   ConfigWorkerSecret: String;
   ConfigProjectID: String;
+  ConfigTLSCert: String;
 
 function InitializeSetup(): Boolean;
 begin
@@ -49,12 +50,13 @@ begin
   ConfigWorkerSecret := ExpandConstant('{param:WORKERSECRET|}');
   ConfigControlPlaneIP := ExpandConstant('{param:CONTROLPLANEIP|}');
   ConfigProjectID := ExpandConstant('{param:PROJECTID|}');
+  ConfigTLSCert := ExpandConstant('{param:TLSCERT|}');
   
   if WizardSilent() then
   begin
-    if (ConfigWorkerID = '') or (ConfigWorkerSecret = '') or (ConfigControlPlaneIP = '') then
+    if (ConfigWorkerID = '') or (ConfigWorkerSecret = '') or (ConfigControlPlaneIP = '') or (ConfigProjectID = '') or (ConfigTLSCert = '') then
     begin
-      Log('Error: Silent installation requires all parameters: WORKERID, WORKERSECRET, CONTROLPLANEIP, PROJECTID');
+      Log('Error: Silent installation requires all parameters: WORKERID, WORKERSECRET, CONTROLPLANEIP, PROJECTID, TLSCERT');
       Result := False;
       Exit;
     end;
@@ -76,10 +78,11 @@ begin
       'These settings are required for the Datamigrator Worker service.');
 
     ConfigPage.Add('Worker ID:', False);
-    ConfigPage.Add('Worker Secret:', True); 
+    ConfigPage.Add('Worker Secret:', True);
     ConfigPage.Add('Control Plane IP:', False);
     ConfigPage.Add('Project Id:', False);
-    
+    ConfigPage.Add('TLS Cert:', True);
+
     if ConfigWorkerID <> '' then
       ConfigPage.Values[0] := ConfigWorkerID;
     if ConfigWorkerSecret <> '' then
@@ -88,6 +91,8 @@ begin
       ConfigPage.Values[2] := ConfigControlPlaneIP;
     if ConfigProjectID <> '' then
       ConfigPage.Values[3] := ConfigProjectID;
+    if ConfigTLSCert <> '' then
+      ConfigPage.Values[4] := ConfigTLSCert;
   end;
 end;
 
@@ -125,10 +130,18 @@ begin
       Exit;
     end;
 
+    if Length(ConfigPage.Values[4]) < 1 then
+    begin
+      MsgBox('TLS Cert cannot be empty.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
     ConfigWorkerID := ConfigPage.Values[0];
     ConfigWorkerSecret := ConfigPage.Values[1];
     ConfigControlPlaneIP := ConfigPage.Values[2];
     ConfigProjectID := ConfigPage.Values[3];
+    ConfigTLSCert := ConfigPage.Values[4];
   end;
 end;
 
@@ -372,6 +385,7 @@ begin
       'TEMPORAL_ADDRESS=' + ConfigControlPlaneIP + ':7233' + #13#10 +
       'TEMPORAL_TLS_ENABLED=true' + #13#10 +
       'TEMPORAL_TLS_SERVER_NAME=datamigrator.local' + #13#10 +
+      'TLS_CERT=' + ConfigTLSCert + #13#10 +
       'TEMPORAL_JWT_ENABLED=true' + #13#10 +
       'JWT_REFRESH_INTERVAL_MINUTES=1380' + #13#10 +
       'NODE_TLS_REJECT_UNAUTHORIZED=0' + #13#10 +

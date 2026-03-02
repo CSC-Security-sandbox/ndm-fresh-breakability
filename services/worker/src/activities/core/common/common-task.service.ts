@@ -53,7 +53,7 @@ export class CommonTaskService {
         address: this.temporalAddress,
         tlsEnabled: process.env.TEMPORAL_TLS_ENABLED === 'true',
         tlsServerName: process.env.TEMPORAL_TLS_SERVER_NAME,
-        tlsCaCert: process.env.TEMPORAL_TLS_CA_CERT,
+        tlsCaCert: process.env.TLS_CERT,
         jwtEnabled: process.env.TEMPORAL_JWT_ENABLED === 'true',
         getAccessToken: () => this.authService.getAccessToken(),
       };

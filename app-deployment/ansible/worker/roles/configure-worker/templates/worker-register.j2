@@ -75,7 +75,7 @@ update_fluentd_config() {
 
 # Check if required environment variables are set
 log_message "Checking required environment variables..."
-if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] || [ -z "$PROJECT_ID" ]; then
+if [ -z "$CONTROL_PLANE_IP" ] || [ -z "$WORKER_ID" ] || [ -z "$WORKER_SECRET" ] || [ -z "$PROJECT_ID" ] || [ -z "$TLS_CERT" ]; then
     handle_failure "One or more required environment variables (CONTROL_PLANE_IP, WORKER_ID, WORKER_SECRET, PROJECT_ID) are missing."
 fi
 log_message "Required environment variables are set."
@@ -103,6 +103,7 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "# JWT provides authentication security"
     echo "TEMPORAL_TLS_ENABLED=true"
     echo "TEMPORAL_TLS_SERVER_NAME={{ temporal_mtls.tls_server_name | default('datamigrator.local') }}"
+    echo "TLS_CERT=${TLS_CERT}"
     echo "# Disable TLS certificate verification for self-signed certificates"
     echo "NODE_TLS_REJECT_UNAUTHORIZED=0"
 {% if temporal_mtls.jwt_auth.enabled | default(false) %}
