@@ -43,6 +43,8 @@ import { WorkerEntity } from "src/entities/worker.entity";
 import { JobConfigService } from "src/jobconfig/jobconfig.service";
 import { MountTrackerService } from "src/jobconfig/mount-tracker.service";
 import { RedisService } from "src/redis/redis.service";
+import { AuthService } from "src/auth/auth.service";
+import { HttpService } from "@nestjs/axios";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { Repository } from "typeorm";
@@ -402,6 +404,19 @@ describe("JobRunService", () => {
           useValue: {
             getJobContext: jest.fn(),
             setJobContext: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: jest.fn().mockResolvedValue('mock-jwt-token'),
+          },
+        },
+        {
+          provide: HttpService,
+          useValue: {
+            get: jest.fn(),
+            post: jest.fn(),
           },
         },
         {

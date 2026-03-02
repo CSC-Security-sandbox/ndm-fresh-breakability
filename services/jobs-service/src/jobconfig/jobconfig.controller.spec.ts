@@ -42,6 +42,8 @@ import {ProjectEntity} from '../entities/project.entity';
 import {VolumeEntity} from '../entities/volume.entity';
 import {WorkflowService} from '../workflow/workflow.service';
 import {RedisService} from '../redis/redis.service';
+import {AuthService} from '../auth/auth.service';
+import {HttpService} from '@nestjs/axios';
 import {ConfigService} from '@nestjs/config';
 import {IdentityMappingEntity} from '../entities/indentity-mapping.entity';
 import {IdentityConfigCrossMappingEntity} from '../entities/indentity-mapping-cross.entity';
@@ -315,6 +317,19 @@ describe("JobConfigController", () => {
           provide: RedisService,
           useValue: {
             getJobContext: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: jest.fn().mockResolvedValue('mock-jwt-token'),
+          },
+        },
+        {
+          provide: HttpService,
+          useValue: {
+            get: jest.fn(),
+            post: jest.fn(),
           },
         },
         {

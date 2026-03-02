@@ -373,12 +373,17 @@ begin
       'TEMPORAL_TLS_ENABLED=true' + #13#10 +
       'TEMPORAL_TLS_SERVER_NAME=datamigrator.local' + #13#10 +
       'TEMPORAL_JWT_ENABLED=true' + #13#10 +
+      'JWT_REFRESH_INTERVAL_MINUTES=1380' + #13#10 +
       'NODE_TLS_REJECT_UNAUTHORIZED=0' + #13#10 +
       'KEYCLOAK_BASE_URL=https://' + ConfigControlPlaneIP + '/keycloak' + #13#10 +
+      'KEYCLOAK_REALM=datamigrator' + #13#10 +
       'WORKER_ID=' + ConfigWorkerID + #13#10 +
       'WORKER_SECRET=' + ConfigWorkerSecret + #13#10 +
       'CONTROL_PLANE_IP=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_HOST=' + ConfigControlPlaneIP + #13#10 +
+      'REDIS_JWT_AUTH_ENABLED=true' + #13#10 +
+      'REDIS_GATEWAY_HOST=' + ConfigControlPlaneIP + #13#10 +
+      'REDIS_GATEWAY_PORT=6379' + #13#10 +
       'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';

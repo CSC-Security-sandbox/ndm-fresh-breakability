@@ -21,13 +21,15 @@ describe('ValidateWorkerConnectionWorkflow', () => {
                 await testEnv.teardown();
             }
         }
-    });
+    }, 30000); // 30 second timeout for Temporal environment setup
 
     afterAll(async () => {
         if (worker && ['RUNNING', 'STARTED'].includes(worker.getState())) {
             await worker?.shutdown();
         }
-        await testEnv.teardown();
+        if (testEnv) {
+            await testEnv.teardown();
+        }
         // workflowCoverage.mergeIntoGlobalCoverage();
     });
 

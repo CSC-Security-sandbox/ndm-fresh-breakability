@@ -310,6 +310,19 @@ jobs:
           chmod +x ./app-deployment/scripts/get_tags.sh
           ./app-deployment/scripts/get_tags.sh ${{steps.build_version.outputs.build_version}} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
 
+      - name: Build Redis JWT Wasm extension
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make
+          echo "Building Redis JWT Wasm extension..."
+          cd app-deployment/wasm/redis-jwt-auth
+          make docker-build
+          mkdir -p ../../ansible/control-plane/roles/datamigrator/helm-chart/package/wasm
+          cp redis-jwt-auth.wasm ../../ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/
+          ls -lh ../../ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/redis-jwt-auth.wasm
+          echo "Wasm extension built and copied to Helm chart"
+
       - name: Run helm package ansible playbook
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
@@ -533,6 +546,13 @@ jobs:
         with:
           name: datamigrator-images
           path: app-deployment/artifacts/*.tar
+
+      - name: Upload Wasm extension artifact
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: redis-jwt-wasm
+          path: app-deployment/ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/redis-jwt-auth.wasm
 
       - name: Upload Worker Binaries as Artifact
         if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}

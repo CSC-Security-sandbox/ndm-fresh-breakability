@@ -20,6 +20,8 @@ export interface RedisCredentials {
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: RedisClientType;
   private readonly logger : LoggerService;
+  private jwtAuthEnabled: boolean;
+  private connectionRefreshInterval: NodeJS.Timeout;
 
   constructor (
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
@@ -28,6 +30,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     @Inject(AuthService) private readonly authService: AuthService,
   ) {
     this.logger = loggerFactory.create(RedisService.name);
+    this.jwtAuthEnabled = this.configService.get<string>('REDIS_JWT_AUTH_ENABLED') === 'true';
   }
 
   private isLocalEnvironment(workerConfigUrl: string): boolean {    
@@ -37,10 +40,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     try {
       this.logger.log('Initializing Redis service...');
+      this.logger.log(`JWT Authentication: ${this.jwtAuthEnabled ? 'ENABLED' : 'DISABLED'}`);
       
       await this.fetchAndUpdateRedisCredentials();
       
-      await this.createClient();
+      // Create client with timeout to prevent hanging NestJS initialization
+      await Promise.race([
+        this.createClient(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Redis connection timeout after 10s')), 10000)
+        )
+      ]);
+      
+      // Setup connection refresh for JWT auth
+      if (this.jwtAuthEnabled) {
+        this.setupConnectionRefresh();
+      }
       
       this.logger.log('Redis service initialized successfully');
     } catch (error) {
@@ -50,6 +65,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    // Clear connection refresh interval
+    if (this.connectionRefreshInterval) {
+      clearInterval(this.connectionRefreshInterval);
+      this.logger.log('Redis connection refresh interval cleared');
+    }
+    
     if (this.client && this.client.isOpen) {
       await this.client.quit();
       this.logger.log('Redis client disconnected');
@@ -146,6 +167,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (this.jwtAuthEnabled) {
+      await this.createJwtAuthClient();
+    } else {
+      await this.createTraditionalClient();
+    }
+  }
+
+  private async createTraditionalClient(): Promise<void> {
     const redisClientOptions: any = {
       url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
     };
@@ -167,6 +196,84 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.client.connect();
+  }
+
+  private async createJwtAuthClient(): Promise<void> {
+    const gatewayHost = this.configService.get<string>('REDIS_GATEWAY_HOST');
+    const gatewayPort = this.configService.get<string>('REDIS_GATEWAY_PORT') || '6379';
+    const username = process.env.REDIS_USERNAME || 'default';
+    
+    // Get fresh JWT token
+    const jwt = await this.authService.getAccessToken();
+    if (!jwt) {
+      throw new Error('Failed to get JWT for Redis authentication');
+    }
+
+    const redisClientOptions: any = {
+      url: `rediss://${gatewayHost}:${gatewayPort}`,
+      username: username,
+      password: jwt, // JWT passed as password in AUTH command
+      socket: {
+        tls: true,
+        rejectUnauthorized: false, // Accept self-signed certs in dev/test
+      },
+    };
+
+    this.logger.log(`Connecting to Redis via Gateway at ${gatewayHost}:${gatewayPort} with JWT auth`);
+    this.client = createClient(redisClientOptions);
+
+    this.client.on('error', (error) => {
+      this.logger.error(`Redis connection error: ${error}`);
+    });
+
+    this.client.on('connect', () => {
+      this.logger.log('Connected to Redis via Gateway with JWT authentication');
+    });
+
+    this.client.on('ready', () => {
+      this.logger.log('Redis client ready - AUTH command succeeded');
+    });
+
+    await this.client.connect();
+    this.logger.log('Redis connect() promise resolved');
+  }
+
+  private setupConnectionRefresh(): void {
+    // Reuse JWT_REFRESH_INTERVAL_MINUTES from Temporal config (default: 1380 minutes = 23 hours)
+    const tokenExpiryMinutes = parseInt(this.configService.get<string>('JWT_REFRESH_INTERVAL_MINUTES') || '1380', 10);
+    
+    // Use the same refresh interval as configured (already accounts for buffer time)
+    const refreshIntervalMs = tokenExpiryMinutes * 60 * 1000;
+    
+    this.logger.log(`Setting up Redis connection refresh every ${tokenExpiryMinutes / 60} hours`);
+    
+    this.connectionRefreshInterval = setInterval(async () => {
+      try {
+        this.logger.log('Proactively refreshing Redis connection with new JWT...');
+        await this.refreshConnection();
+      } catch (error) {
+        this.logger.error(`Failed to refresh Redis connection: ${error.message}`);
+      }
+    }, refreshIntervalMs);
+  }
+
+  private async refreshConnection(): Promise<void> {
+    if (!this.jwtAuthEnabled) {
+      this.logger.warn('Connection refresh called but JWT auth is disabled');
+      return;
+    }
+
+    // Close existing connection
+    if (this.client && this.client.isOpen) {
+      this.logger.log('Closing existing Redis connection for refresh...');
+      await this.client.quit();
+    }
+
+    // Create new connection with fresh JWT
+    this.logger.log('Creating new Redis connection with fresh JWT...');
+    await this.createJwtAuthClient();
+    
+    this.logger.log('Redis connection refreshed successfully');
   }
 
   private async ensureClient(): Promise<void> {

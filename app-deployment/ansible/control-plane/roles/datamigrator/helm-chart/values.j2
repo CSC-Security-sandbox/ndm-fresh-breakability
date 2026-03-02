@@ -126,6 +126,28 @@ global:
       mode: {{ temporal_mtls.mode | default('PERMISSIVE') | quote }}
       jwtAuth:
         enabled: {{ temporal_mtls.jwt_auth.enabled | default(true) | bool | string | lower }}
+    
+    # Redis Worker→Control Plane JWT Authentication
+    # STRICT JWT mode: External workers and Internal mesh services must authenticate via JWT
+    redisAuth:
+      enabled: {{ redis_jwt_auth.enabled | default(false) | bool | string | lower }}
+      introspectionUrl: {{ redis_jwt_auth.introspection_url | default('http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/token/introspect') | quote }}
+      clientId: {{ redis_jwt_auth.client_id | default('admin-cli') | quote }}
+      clientSecret: {{ redis_jwt_auth.client_secret | default('changeme') | quote }}
+      selector:
+{% if redis_jwt_auth.selector is defined %}
+{% for key, value in redis_jwt_auth.selector | dictsort %}
+        {{ key }}: {{ value }}
+{% endfor %}
+{% else %}
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: master
+{% endif %}
+      gateway:
+        enabled: {{ redis_jwt_auth.gateway.enabled | default(true) | bool | string | lower }}
+        port: {{ redis_jwt_auth.gateway.port | default(6379) }}
+        portName: {{ redis_jwt_auth.gateway.port_name | default('redis-tls') | quote }}
+        protocol: {{ redis_jwt_auth.gateway.protocol | default('TLS') | quote }}
   
 admin-service:
   image:

@@ -12,21 +12,21 @@ annotations:
   vault.hashicorp.com/role: "datamigrator-role"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
   vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
+  vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
   vault.hashicorp.com/agent-inject-status: "update"
   vault.hashicorp.com/agent-inject-template-postgres.env: |
     {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
     export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
     export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
     {{- end }}
-  # vault.hashicorp.com/agent-inject-template-redis.env: |
-  #   {{- with secret "secrets/redis-secrets/redis-creds" -}}
-  #   export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
-  #   export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"
-  #   {{- end }}
   vault.hashicorp.com/agent-inject-template-redis.env: |
     {{- with secret "secrets/redis-secrets/redis-creds" -}}
     export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
     export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-keycloak.env: |
+    {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
+    export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa
@@ -69,6 +69,15 @@ env:
 
   - name: REDIS_PORT
     value: "6379"
+
+  - name: KEYCLOAK_BASE_URL
+    value: "http://keycloak.keycloak.svc.cluster.local/keycloak"
+  - name: KEYCLOAK_REALM
+    value: "datamigrator"
+  - name: KEYCLOAK_CLIENT_ID
+    value: "admin-cli"
+  - name: JWT_REFRESH_INTERVAL_MINUTES
+    value: "1380"
 
   - name: REPORT_SERVICE_URL
     value: "http://reports-service-service:3000/api/v1/report"

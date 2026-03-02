@@ -13,13 +13,15 @@ import { defaultDataConverter } from '@temporalio/common';
 import { RedisError, ValidationError, WorkerError, ConfigurationError } from '../errors/custom-errors';
 import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 import { SQL_QUERIES } from '../constants/custom-response-message';
+import { AuthService } from '../auth/auth.service';
+import { createClient, RedisClientType } from 'redis';
 
 @Injectable()
 export class RedisConsumerService implements OnModuleDestroy {
     // Service-scoped cache for jobRunId to projectId mapping
     private jobRunIdToProjectIdMap: Map<string, string> = new Map();
     private readonly logger: LoggerService;
-    private redisClient: any
+    private redisClient: RedisClientType;
     private readonly REDIS_KEY_PREFIX = process.env.REDIS_KEY_PREFIX || 'db-writer';
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
     private accumulatedRecords: any[] = [];
@@ -30,11 +32,13 @@ export class RedisConsumerService implements OnModuleDestroy {
     private lastErrorAndTaskId: string = process.env.LAST_ERROR_AND_TASK_ID || '8840625a-b818-42a8-98c8-5c05aaa19106';
     private readonly ITERATION_LOG_INTERVAL: number = process.env.ITERATION_LOG_INTERVAL ? parseInt(process.env.ITERATION_LOG_INTERVAL) : 50;
     private readonly GC_TRIGGER_INTERVAL: number = process.env.GC_TRIGGER_INTERVAL ? parseInt(process.env.GC_TRIGGER_INTERVAL) : 100;
+    private connectionRefreshInterval: NodeJS.Timeout | null = null;
 
     constructor(
         private readonly inventoryService: InventoryService,
         private readonly dataSource: DataSource,
         private readonly workflowService: WorkflowService,
+        private readonly authService: AuthService,
         @Optional() @Inject(LoggerFactory) private readonly loggerFactory?: LoggerFactory,
     ) {
         if (this.loggerFactory) {
@@ -48,21 +52,49 @@ export class RedisConsumerService implements OnModuleDestroy {
 
 
     /**
-     * Initializes Redis connection with error handling and logging
+     * Initializes Redis connection with JWT authentication
      * Creates a new Redis client if one doesn't exist
      * 
      * @throws {Error} When Redis client initialization fails
      * @returns {Promise<void>}
      */
     async initializeRedisConnection() {
-        this.logger.log('Initializing Redis Consumer Service');
+        this.logger.log('Initializing Redis Consumer Service with JWT authentication');
         try {
             if (!this.isValidRedisClient()) {
-                this.redisClient = await RedisUtils.getClient();
+                // Get JWT token for authentication
+                const jwt = await this.authService.getAccessToken();
+                if (!jwt) {
+                    throw new Error('Failed to obtain JWT token for Redis authentication');
+                }
+
+                const redisClientOptions: any = {
+                    url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
+                    username: process.env.REDIS_USERNAME || 'default',
+                    password: jwt,  // Use JWT as password
+                };
+
+                this.logger.log(`Connecting to Redis at ${redisClientOptions.url} with JWT authentication`);
+                this.redisClient = createClient(redisClientOptions);
+
+                this.redisClient.on('error', (error) => {
+                    this.logger.error(`Redis connection error: ${error.message}`, error?.stack || error);
+                });
+
+                this.redisClient.on('connect', () => {
+                    this.logger.log('Connected to Redis with JWT authentication (TCP established)');
+                });
+
+                this.redisClient.on('ready', () => {
+                    this.logger.log('Redis client ready (JWT AUTH completed)');
+                });
 
                 // Ensure Redis client is connected before proceeding
                 if (!this.redisClient.isOpen) await this.redisClient.connect();
                 this.logger.log('Redis client ready');
+                
+                // Setup automatic connection refresh with new JWT tokens
+                this.setupConnectionRefresh();
             }
         } catch (error) {
             this.logger.error(`Error initializing Redis: ${error.message}`, error?.stack || error);
@@ -72,10 +104,30 @@ export class RedisConsumerService implements OnModuleDestroy {
             while (!this.isValidRedisClient() && attempt <= this.maxRetries) {
                 this.logger.warn(`Retrying Redis connection (attempt ${attempt}/${this.maxRetries})...`);
                 await new Promise(resolve => setTimeout(resolve, 5000));
-                this.redisClient = await RedisUtils.getClient();
-                if (this.isValidRedisClient()) {
-                    this.logger.log('Redis client ready after retry');
-                    break;
+                
+                try {
+                    const jwt = await this.authService.getAccessToken(true); // Force refresh
+                    if (!jwt) {
+                        throw new Error('Failed to obtain JWT token for Redis retry');
+                    }
+
+                    const redisClientOptions: any = {
+                        url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
+                        username: process.env.REDIS_USERNAME || 'default',
+                        password: jwt,
+                    };
+
+                    this.redisClient = createClient(redisClientOptions);
+                    if (!this.redisClient.isOpen) await this.redisClient.connect();
+                    
+                    if (this.isValidRedisClient()) {
+                        this.logger.log('Redis client ready after retry');
+                        // Setup connection refresh after successful retry
+                        this.setupConnectionRefresh();
+                        break;
+                    }
+                } catch (retryError) {
+                    this.logger.error(`Retry ${attempt} failed: ${retryError.message}`);
                 }
                 attempt++;
             }
@@ -83,6 +135,75 @@ export class RedisConsumerService implements OnModuleDestroy {
                 throw error;
             }
         }
+    }
+
+    /**
+     * Setup automatic Redis connection refresh to use fresh JWT tokens
+     * Prevents connection failures when JWT tokens expire
+     * Ensures only ONE refresh interval is active at a time
+     */
+    private setupConnectionRefresh(): void {
+        // Clear any existing refresh interval to prevent duplicates
+        if (this.connectionRefreshInterval) {
+            this.logger.log('Clearing existing connection refresh interval before creating new one');
+            clearInterval(this.connectionRefreshInterval);
+            this.connectionRefreshInterval = null;
+        }
+        
+        // Hardcode 23 hours refresh interval (1 hour before 24-hour token expiry)
+        const tokenRefreshMinutes = 1380; // 23 hours
+        
+        // Refresh Redis connection with same interval as token refresh
+        const refreshIntervalMs = tokenRefreshMinutes * 60 * 1000;
+        
+        this.logger.log(`Setting up Redis connection refresh every ${tokenRefreshMinutes / 60} hours`);
+        
+        this.connectionRefreshInterval = setInterval(async () => {
+            try {
+                this.logger.log('Proactively refreshing Redis connection with new JWT...');
+                await this.refreshConnection();
+            } catch (error) {
+                this.logger.error(`Failed to refresh Redis connection: ${error.message}`);
+            }
+        }, refreshIntervalMs);
+    }
+
+    /**
+     * Refresh Redis connection with a new JWT token
+     * Closes existing connection and creates new one with fresh token
+     */
+    private async refreshConnection(): Promise<void> {
+        // Close existing connection
+        if (this.redisClient && this.redisClient.isOpen) {
+            this.logger.log('Closing existing Redis connection for refresh...');
+            await this.redisClient.quit();
+        }
+
+        // Create new connection with fresh JWT
+        this.logger.log('Creating new Redis connection with fresh JWT...');
+        
+        const jwt = await this.authService.getAccessToken(true); // Force fresh token
+        if (!jwt) {
+            throw new Error('Failed to obtain JWT token for Redis connection refresh');
+        }
+
+        const redisClientOptions: any = {
+            url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
+            username: process.env.REDIS_USERNAME || 'default',
+            password: jwt,
+        };
+
+        this.redisClient = createClient(redisClientOptions);
+        
+        this.redisClient.on('error', (error) => {
+            this.logger.error(`Redis connection error: ${error.message}`, error?.stack || error);
+        });
+
+        if (!this.redisClient.isOpen) {
+            await this.redisClient.connect();
+        }
+        
+        this.logger.log('Redis connection refreshed successfully');
     }
 
     /**
@@ -167,6 +288,14 @@ export class RedisConsumerService implements OnModuleDestroy {
      */
     async onModuleDestroy() {
         this.logger.log('Module destroying, cleaning up resources');
+        
+        // Clear connection refresh interval
+        if (this.connectionRefreshInterval) {
+            clearInterval(this.connectionRefreshInterval);
+            this.connectionRefreshInterval = null;
+            this.logger.log('Redis connection refresh interval cleared');
+        }
+        
         await this.cleanupResources();
     }
 

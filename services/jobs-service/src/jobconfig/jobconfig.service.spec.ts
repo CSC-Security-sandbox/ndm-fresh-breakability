@@ -24,6 +24,8 @@ import { ScheduleStatus } from "src/constants/status";
 import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { RedisService } from "src/redis/redis.service";
+import { AuthService } from "src/auth/auth.service";
+import { HttpService } from "@nestjs/axios";
 import { ParsedMapping } from "src/utils/indentity-mapping.type";
 import { In, Repository, Raw } from "typeorm";
 import * as winston from "winston";
@@ -160,6 +162,19 @@ describe("JobConfigService", () => {
             find: jest.fn(),
             update: jest.fn(),
             createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: jest.fn().mockResolvedValue('mock-jwt-token'),
+          },
+        },
+        {
+          provide: HttpService,
+          useValue: {
+            get: jest.fn(),
+            post: jest.fn(),
           },
         },
         {

@@ -19,6 +19,23 @@
     redis_password: "{{ (redis_password.stdout_lines | select('match', 'REDIS_PASSWORD:.*') | map('regex_replace', 'REDIS_PASSWORD:(.*)', '\\1') | list | first) }}"
     redis_password_base64: "{{ (redis_password.stdout_lines | select('match', 'REDIS_PASSWORD:.*') | map('regex_replace', 'REDIS_PASSWORD:(.*)', '\\1') | list | first) | b64encode }}"
 
+- name: Retrieve admin-cli secret from OpenBao for Redis JWT auth
+  become: yes
+  shell: |
+    export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/keycloak-secrets/keycloak-creds | jq -r .data.KEYCLOAK_CLIENT_SECRET 2>/dev/null || echo "changeme")
+    echo "KEYCLOAK_CLIENT_SECRET:$KEYCLOAK_CLIENT_SECRET"
+  args:
+    executable: /bin/bash
+  register: redis_validator_secret
+  when: enable_istio | default(false) | bool
+
+- name: Set redis_jwt_auth.client_secret from OpenBao
+  set_fact:
+    redis_jwt_auth: "{{ redis_jwt_auth | combine({'client_secret': (redis_validator_secret.stdout_lines | select('match', 'KEYCLOAK_CLIENT_SECRET:.*') | map('regex_replace', 'KEYCLOAK_CLIENT_SECRET:(.*)', '\\1') | list | first)}) }}"
+  when: 
+    - enable_istio | default(false) | bool
+    - redis_validator_secret is defined
+
 - name: redis-namespace template
   become: yes
   template: src=./templates/redis-namespace.j2 dest=$HOME/redis/redis-namespace.yaml
@@ -43,6 +60,61 @@
   become: yes
   template: src=./templates/redis-values.j2 dest=$HOME/redis/redis-values.yaml
 
+- name: istio-redis-jwt-envoyfilter template
+  become: yes
+  template: src=./templates/istio-redis-jwt-envoyfilter.j2 dest=$HOME/redis/istio-redis-jwt-envoyfilter.yaml
+  when: enable_istio | default(false) | bool
+
+- name: Copy Wasm binary from controller to VM (local deployment)
+  become: yes
+  copy:
+    src: ../../../datamigrator/helm-chart/package/wasm/redis-jwt-auth.wasm
+    dest: $HOME/redis/redis-jwt-auth.wasm
+    mode: '0644'
+  when: 
+    - enable_istio | default(false) | bool
+    - local_cluster is defined
+  ignore_errors: yes
+
+- name: Copy Helm chart for Wasm extraction (CI/CD deployment)
+  become: yes
+  copy:
+    src: "../../../artifacts/datamigrator-{{ build_version }}.tgz"
+    dest: "$HOME/helm-chart.tgz"
+    mode: '0644'
+  when: 
+    - enable_istio | default(false) | bool
+    - local_cluster is not defined
+  ignore_errors: no
+
+- name: Extract Wasm from Helm chart (CI/CD deployment)
+  become: yes
+  shell: |
+    if [ -f "$HOME/helm-chart.tgz" ]; then
+      echo "Found Helm chart: $HOME/helm-chart.tgz"
+      echo "Extracting Wasm from Helm chart..."
+      tar -tzf "$HOME/helm-chart.tgz" | grep wasm || echo "No wasm in tarball"
+      tar -xzf "$HOME/helm-chart.tgz" -C /tmp/ 2>/dev/null || true
+      
+      # Find the wasm file in extracted content
+      find /tmp -name "redis-jwt-auth.wasm" -exec cp {} $HOME/redis/redis-jwt-auth.wasm \;
+      
+      if [ -f "$HOME/redis/redis-jwt-auth.wasm" ]; then
+        echo "Extracted Wasm from Helm chart"
+        ls -lh $HOME/redis/redis-jwt-auth.wasm
+      else
+        echo "Wasm file not found after extraction"
+        exit 1
+      fi
+    else
+      echo "Helm chart not found at $HOME/helm-chart.tgz"
+      exit 1
+    fi
+  when: 
+    - enable_istio | default(false) | bool
+    - local_cluster is not defined
+  ignore_errors: no
+
 - name: Cleanup service account
   become: yes
   shell: |
@@ -58,6 +130,9 @@
     kubectl delete -f $HOME/redis/redis-pv.yaml
     kubectl delete -f $HOME/redis/redis-storageclass.yaml
     kubectl delete -f $HOME/redis/redis-secret.yaml
+    {% if enable_istio | default(false) | bool %}
+    kubectl delete configmap redis-jwt-wasm --namespace=redis || true
+    {% endif %}
     kubectl delete -f $HOME/redis/redis-namespace.yaml
   when: redis_uninstall is defined
   args:
@@ -74,10 +149,44 @@
   args:
     chdir: $HOME
 
+- name: Create Wasm ConfigMap in redis namespace
+  become: yes
+  shell: |
+    if [ -f "$HOME/redis/redis-jwt-auth.wasm" ]; then
+      echo "Creating/updating Wasm ConfigMap..."
+      
+      # Check if ConfigMap exists
+      if kubectl get configmap redis-jwt-wasm --namespace=redis >/dev/null 2>&1; then
+        echo "ConfigMap exists, updating..."
+        kubectl create configmap redis-jwt-wasm \
+          --from-file=redis-jwt-auth.wasm=$HOME/redis/redis-jwt-auth.wasm \
+          --namespace=redis \
+          --dry-run=client -o yaml | \
+          kubectl apply -f -
+      else
+        echo "ConfigMap does not exist, creating..."
+        kubectl create configmap redis-jwt-wasm \
+          --from-file=redis-jwt-auth.wasm=$HOME/redis/redis-jwt-auth.wasm \
+          --namespace=redis
+      fi
+      
+      echo "Wasm ConfigMap created/updated successfully"
+    else
+      echo "Wasm binary not found at $HOME/redis/redis-jwt-auth.wasm, skipping ConfigMap creation"
+      exit 1
+    fi
+  when: enable_istio | default(false) | bool
+
 - name: Create service account
   become: yes
   shell: |
     kubectl create serviceaccount -n redis redis-sa
+
+- name: Apply Redis JWT EnvoyFilter before deploying Redis
+  become: yes
+  shell: |
+    kubectl apply -f $HOME/redis/istio-redis-jwt-envoyfilter.yaml
+  when: enable_istio | default(false) | bool
 
 - name: Deploy redis helm chart
   become: yes

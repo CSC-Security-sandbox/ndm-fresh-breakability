@@ -103,3 +103,23 @@
     done
   when: local_cluster is defined and istio_jwt_auth.enabled | default(false)
   ignore_errors: yes
+- name: Update Redis EnvoyFilter with redis-validator secret after admin-entry job
+  become: yes
+  shell: |
+    echo "Retrieving redis-validator secret from OpenBao..."
+    export REDIS_VALIDATOR_SECRET=$(kubectl exec -ti openbao-0 -n openbao -- bao kv get -format=json /secrets/redis-secrets/redis-validator-creds | jq -r .data.REDIS_VALIDATOR_SECRET 2>/dev/null || echo "")
+    
+    if [ -z "$REDIS_VALIDATOR_SECRET" ]; then
+      echo "WARNING: redis-validator secret not found in OpenBao, EnvoyFilter will use default"
+    else
+      echo "Found redis-validator secret, restarting Redis to apply updated EnvoyFilter"
+      kubectl rollout restart statefulset/redis-master -n redis 2>/dev/null || echo "Redis not deployed yet"
+    fi
+  args:
+    executable: /bin/bash
+  when: 
+    - local_cluster is defined
+    - enable_istio | default(false) | bool
+    - job_wait_result is defined
+    - job_wait_result.rc == 0
+  ignore_errors: yes

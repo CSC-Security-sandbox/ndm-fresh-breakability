@@ -120,7 +120,49 @@ case $1 in
         echo "      ansible_user: ubuntu" >> $inventory_file
         echo "      ansible_ssh_private_key_file: ~/.ssh/id_rsa" >> $inventory_file
 
-        ansible-playbook ../../ansible/control-plane/playbooks/master-playbook.yaml -i $inventory_file -e local_cluster=true
+        # Build Wasm extension and package Helm chart
+        echo ""
+        echo "=========================================="
+        echo "Building Wasm extension for Redis JWT..."
+        echo "=========================================="
+        
+        wasm_dir="../../wasm/redis-jwt-auth"
+        if [ -d "$wasm_dir" ]; then
+            echo "Building Wasm binary..."
+            (cd "$wasm_dir" && make docker-build)
+            
+            echo "Copying Wasm binary to Helm chart..."
+            mkdir -p ../../ansible/control-plane/roles/datamigrator/helm-chart/package/wasm
+            cp "$wasm_dir/redis-jwt-auth.wasm" ../../ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/
+            
+            echo "Wasm extension ready"
+        else
+            echo "Wasm directory not found, skipping Wasm build"
+        fi
+        
+        echo ""
+        echo "=========================================="
+        echo "Packaging Helm chart..."
+        echo "=========================================="
+        
+        # Get absolute paths
+        script_dir="$(cd "$(dirname "$0")" && pwd)"
+        ansible_base="$script_dir/../../ansible/control-plane"
+        
+        cd "$ansible_base/playbooks"
+        ansible-playbook package-helm-chart.yaml \
+            -i ../config/local-inventory.yaml \
+            --extra-vars "build_version=0.1.0" \
+            --extra-vars "@../config/group_vars/all.yaml"
+        cd - > /dev/null
+        
+        echo "Helm chart packaged"
+        echo ""
+
+        # Run master playbook from playbooks directory to resolve vars.yaml paths
+        cd "$ansible_base/playbooks"
+        ansible-playbook master-playbook.yaml -i ../config/inventory.yaml -e local_cluster=true
+        cd - > /dev/null
         ;;
     data-plane)
         # Get user input for worker binary path

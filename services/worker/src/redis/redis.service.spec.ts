@@ -766,4 +766,336 @@ describe('RedisService', () => {
       });
     });
   });
+
+  describe('JWT Authentication', () => {
+    beforeEach(() => {
+      // Enable JWT auth for these tests
+      (configService.get as jest.Mock).mockImplementation((key: string) => {
+        const configMap = {
+          'worker.connection.workerConfigUrl': 'http://test-url',
+          'worker.workerId': 'test-worker-123',
+          'REDIS_JWT_AUTH_ENABLED': 'true',
+          'REDIS_GATEWAY_HOST': 'gateway.example.com',
+          'REDIS_GATEWAY_PORT': '6379',
+          'JWT_REFRESH_INTERVAL_MINUTES': '1380',
+        };
+        return configMap[key];
+      });
+    });
+
+    describe('createJwtAuthClient', () => {
+      it('should create JWT authenticated client with correct config', async () => {
+        process.env.REDIS_USERNAME = 'test-user';
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('mock-jwt-token');
+
+        await (service as any).createJwtAuthClient();
+
+        expect(authService.getAccessToken).toHaveBeenCalled();
+        expect(createClient).toHaveBeenCalledWith(
+          expect.objectContaining({
+            url: 'rediss://gateway.example.com:6379',
+            username: 'test-user',
+            password: 'mock-jwt-token',
+            socket: expect.objectContaining({
+              tls: true,
+              rejectUnauthorized: false,
+            }),
+          }),
+        );
+        expect(mockClient.connect).toHaveBeenCalled();
+      });
+
+      it('should throw error when JWT token is not available', async () => {
+        (authService.getAccessToken as jest.Mock).mockResolvedValue(null);
+
+        await expect((service as any).createJwtAuthClient()).rejects.toThrow(
+          'Failed to get JWT for Redis authentication',
+        );
+      });
+
+      it('should use default username when REDIS_USERNAME not set', async () => {
+        delete process.env.REDIS_USERNAME;
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('jwt-token');
+
+        await (service as any).createJwtAuthClient();
+
+        expect(createClient).toHaveBeenCalledWith(
+          expect.objectContaining({
+            username: 'default',
+          }),
+        );
+      });
+
+      it('should set up event handlers for JWT auth client', async () => {
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('jwt-token');
+        
+        await (service as any).createJwtAuthClient();
+
+        expect(mockClient.on).toHaveBeenCalledWith('error', expect.any(Function));
+        expect(mockClient.on).toHaveBeenCalledWith('connect', expect.any(Function));
+        expect(mockClient.on).toHaveBeenCalledWith('ready', expect.any(Function));
+      });
+
+      it('should handle ready event for JWT auth client', async () => {
+        const loggerLogSpy = jest.spyOn((service as any).logger, 'log');
+        let readyHandler: () => void;
+
+        mockClient.on.mockImplementation((event, handler) => {
+          if (event === 'ready') {
+            readyHandler = handler;
+          }
+        });
+
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('jwt-token');
+        await (service as any).createJwtAuthClient();
+
+        // Trigger the ready handler
+        readyHandler!();
+
+        expect(loggerLogSpy).toHaveBeenCalledWith('Redis client ready - AUTH command succeeded');
+      });
+    });
+
+    describe('setupConnectionRefresh', () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      it('should setup refresh interval with correct timing', () => {
+        const refreshSpy = jest.spyOn(service as any, 'refreshConnection').mockResolvedValue(undefined);
+
+        (service as any).setupConnectionRefresh();
+
+        // Verify interval is set (1380 minutes = 82800000ms)
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          'Setting up Redis connection refresh every 23 hours',
+        );
+
+        // Fast-forward time to trigger refresh
+        jest.advanceTimersByTime(82800000);
+
+        expect(refreshSpy).toHaveBeenCalled();
+        expect(mockLogger.log).toHaveBeenCalledWith('Proactively refreshing Redis connection with new JWT...');
+      });
+
+      it('should handle refresh errors gracefully', async () => {
+        const refreshError = new Error('Refresh failed');
+        jest.spyOn(service as any, 'refreshConnection').mockRejectedValue(refreshError);
+
+        (service as any).setupConnectionRefresh();
+
+        // Fast-forward time to trigger refresh
+        await jest.advanceTimersByTimeAsync(82800000);
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Failed to refresh Redis connection: Refresh failed',
+        );
+      });
+
+      it('should use custom refresh interval from env var', () => {
+        (configService.get as jest.Mock).mockImplementation((key: string) => {
+          if (key === 'JWT_REFRESH_INTERVAL_MINUTES') return '60';
+          return undefined;
+        });
+
+        (service as any).setupConnectionRefresh();
+
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          'Setting up Redis connection refresh every 1 hours',
+        );
+      });
+    });
+
+    describe('refreshConnection', () => {
+      it('should close existing connection and create new one', async () => {
+        (service as any).jwtAuthEnabled = true;
+        (service as any).client = mockClient;
+        mockClient.isOpen = true;
+
+        const createJwtClientSpy = jest.spyOn(service as any, 'createJwtAuthClient').mockResolvedValue(undefined);
+
+        await (service as any).refreshConnection();
+
+        expect(mockLogger.log).toHaveBeenCalledWith('Closing existing Redis connection for refresh...');
+        expect(mockClient.quit).toHaveBeenCalled();
+        expect(mockLogger.log).toHaveBeenCalledWith('Creating new Redis connection with fresh JWT...');
+        expect(createJwtClientSpy).toHaveBeenCalled();
+        expect(mockLogger.log).toHaveBeenCalledWith('Redis connection refreshed successfully');
+      });
+
+      it('should warn when called with JWT auth disabled', async () => {
+        (service as any).jwtAuthEnabled = false;
+
+        await (service as any).refreshConnection();
+
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          'Connection refresh called but JWT auth is disabled',
+        );
+        expect(mockClient.quit).not.toHaveBeenCalled();
+      });
+
+      it('should handle case when client is not open', async () => {
+        (service as any).jwtAuthEnabled = true;
+        (service as any).client = mockClient;
+        mockClient.isOpen = false;
+
+        const createJwtClientSpy = jest.spyOn(service as any, 'createJwtAuthClient').mockResolvedValue(undefined);
+
+        await (service as any).refreshConnection();
+
+        expect(mockClient.quit).not.toHaveBeenCalled();
+        expect(createJwtClientSpy).toHaveBeenCalled();
+      });
+
+      it('should handle errors during connection close', async () => {
+        (service as any).jwtAuthEnabled = true;
+        (service as any).client = mockClient;
+        mockClient.isOpen = true;
+        mockClient.quit.mockRejectedValue(new Error('Close failed'));
+
+        const createJwtClientSpy = jest.spyOn(service as any, 'createJwtAuthClient').mockResolvedValue(undefined);
+
+        await expect((service as any).refreshConnection()).rejects.toThrow('Close failed');
+        expect(mockClient.quit).toHaveBeenCalled();
+        expect(createJwtClientSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('onModuleInit with JWT auth', () => {
+      let jwtService: RedisService;
+
+      beforeEach(async () => {
+        (configService.get as jest.Mock).mockImplementation((key: string) => {
+          const configMap = {
+            'worker.connection.workerConfigUrl': 'http://test-url',
+            'worker.workerId': 'test-worker-123',
+            'REDIS_JWT_AUTH_ENABLED': 'true',
+            'REDIS_GATEWAY_HOST': 'gateway.test.com',
+            'REDIS_GATEWAY_PORT': '6379',
+            'JWT_REFRESH_INTERVAL_MINUTES': '1380',
+          };
+          return configMap[key];
+        });
+
+        // Recreate service with JWT auth enabled
+        const module: TestingModule = await Test.createTestingModule({
+          providers: [
+            RedisService,
+            { provide: ConfigService, useValue: configService },
+            { provide: HttpService, useValue: httpService },
+            { provide: AuthService, useValue: authService },
+            { provide: LoggerFactory, useValue: loggerFactory },
+          ],
+        }).compile();
+
+        jwtService = module.get<RedisService>(RedisService);
+      });
+
+      it('should setup connection refresh when JWT auth is enabled', async () => {
+        const mockCredentials = {
+          host: 'redis.test.com',
+          port: '6379',
+          username: 'test-user',
+          password: 'test-pass',
+        };
+
+        const mockResponse = {
+          status: 200,
+          data: { data: { items: mockCredentials } },
+        };
+
+        (httpService.get as jest.Mock).mockReturnValue(of(mockResponse));
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('jwt-token');
+
+        const setupRefreshSpy = jest.spyOn(jwtService as any, 'setupConnectionRefresh').mockImplementation(() => {});
+
+        await jwtService.onModuleInit();
+
+        expect(setupRefreshSpy).toHaveBeenCalled();
+        expect(mockLogger.log).toHaveBeenCalledWith('JWT Authentication: ENABLED');
+      });
+    });
+
+    describe('onModuleDestroy with JWT auth', () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      it('should clear connection refresh interval on destroy', async () => {
+        const mockInterval = setInterval(() => {}, 1000);
+        (service as any).connectionRefreshInterval = mockInterval;
+        (service as any).client = mockClient;
+        mockClient.isOpen = true;
+
+        await service.onModuleDestroy();
+
+        expect(mockLogger.log).toHaveBeenCalledWith('Redis connection refresh interval cleared');
+        expect(mockClient.quit).toHaveBeenCalled();
+      });
+
+      it('should not log interval clear message when interval not set', async () => {
+        (service as any).connectionRefreshInterval = null;
+        (service as any).client = mockClient;
+        mockClient.isOpen = true;
+
+        await service.onModuleDestroy();
+
+        expect(mockLogger.log).not.toHaveBeenCalledWith('Redis connection refresh interval cleared');
+      });
+    });
+
+    describe('createClient with JWT auth enabled', () => {
+      let jwtService: RedisService;
+
+      beforeEach(async () => {
+        (configService.get as jest.Mock).mockImplementation((key: string) => {
+          const configMap = {
+            'REDIS_JWT_AUTH_ENABLED': 'true',
+            'worker.connection.workerConfigUrl': 'http://test-url',
+            'worker.workerId': 'test-worker-123',
+          };
+          return configMap[key];
+        });
+
+        // Recreate service with JWT auth enabled
+        const module: TestingModule = await Test.createTestingModule({
+          providers: [
+            RedisService,
+            { provide: ConfigService, useValue: configService },
+            { provide: HttpService, useValue: httpService },
+            { provide: AuthService, useValue: authService },
+            { provide: LoggerFactory, useValue: loggerFactory },
+          ],
+        }).compile();
+
+        jwtService = module.get<RedisService>(RedisService);
+      });
+
+      it('should call createJwtAuthClient when JWT auth is enabled', async () => {
+        (authService.getAccessToken as jest.Mock).mockResolvedValue('jwt-token');
+        const createJwtClientSpy = jest.spyOn(jwtService as any, 'createJwtAuthClient').mockResolvedValue(undefined);
+
+        await jwtService.createClient();
+
+        expect(createJwtClientSpy).toHaveBeenCalled();
+      });
+
+      it('should call createTraditionalClient when JWT auth is disabled', async () => {
+        (configService.get as jest.Mock).mockReturnValue('false');
+        const createTraditionalClientSpy = jest.spyOn(service as any, 'createTraditionalClient').mockResolvedValue(undefined);
+
+        await service.createClient();
+
+        expect(createTraditionalClientSpy).toHaveBeenCalled();
+      });
+    });
+  });
 });

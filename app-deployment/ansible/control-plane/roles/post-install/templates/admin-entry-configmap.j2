@@ -246,6 +246,10 @@ data:
     --header "Authorization: Bearer ${token}" \
     --data-raw "$CLIENT_PAYLOAD"
 
+    # Store CLIENT_SECRET in OpenBao for Redis JWT authentication
+    echo "Storing CLIENT_SECRET in OpenBao for Redis JWT authentication..."
+    kubectl exec -n openbao openbao-0 -- bao kv put /secrets/keycloak/client-secret KEYCLOAK_CLIENT_SECRET="${CLIENT_SECRET}" 2>&1 || echo "Warning: Failed to store CLIENT_SECRET in OpenBao"
+
     SERVICE_ACCOUNT_ID=`curl -k --silent --show-error --request GET \
     --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/users?username=service-account-admin-cli" \
     --header "Content-Type: application/json" \

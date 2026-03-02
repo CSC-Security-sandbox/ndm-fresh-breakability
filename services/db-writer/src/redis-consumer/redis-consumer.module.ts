@@ -5,9 +5,10 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.entity';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [InventoryModule, WorkflowModule, LoggerModule.forRoot()],
+  imports: [InventoryModule, WorkflowModule, LoggerModule.forRoot(), AuthModule],
   controllers: [RedisConsumerController],
   providers: [RedisConsumerService, SpeedLogEntity, SpeedLogEntryEntity],
   exports: [RedisConsumerService],

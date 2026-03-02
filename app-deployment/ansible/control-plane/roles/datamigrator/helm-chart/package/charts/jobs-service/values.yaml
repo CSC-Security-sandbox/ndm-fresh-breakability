@@ -14,6 +14,7 @@ annotations:
   vault.hashicorp.com/role: "datamigrator-role"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
   vault.hashicorp.com/agent-inject-secret-redis.env: "secrets/redis-secrets/redis-creds"
+  vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
   vault.hashicorp.com/agent-inject-status: "update"
   vault.hashicorp.com/agent-inject-template-postgres.env: |
     {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
@@ -24,6 +25,10 @@ annotations:
     {{- with secret "secrets/redis-secrets/redis-creds" -}}
     export REDIS_USERNAME="{{ .Data.REDIS_USERNAME }}"
     export REDIS_PASSWORD="{{ .Data.REDIS_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-keycloak.env: |
+    {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
+    export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
     {{- end }}
   # vault.hashicorp.com/agent-inject-template-redis.env: |
   #   {{- with secret "secrets/redis-secrets/redis-creds" -}}
@@ -100,6 +105,8 @@ env:
     value: "http://keycloak.keycloak.svc.cluster.local/keycloak"
   - name: KEYCLOAK_REALM
     value: "datamigrator"
+  - name: JWT_REFRESH_INTERVAL_MINUTES
+    value: "1380"
   - name: SEND_EMAIL
     value: "http://admin-service-service:3000"
   - name: HEALTHCHECK_STATUS_TIMEOUT_SEC

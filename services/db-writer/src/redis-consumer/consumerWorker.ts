@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'worker_threads';
-import { Logger } from '@nestjs/common';
+import { INestApplicationContext, Logger, Module } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { InventoryEntity } from '../entities/inventory.entity';
 import { TaskEntity } from '../entities/task.entity';
@@ -10,14 +11,27 @@ import { SpeedLogEntity, SpeedLogEntryEntity } from '../entities/speed-test.enti
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RedisConsumerService } from './redis-consumer.service';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { HttpModule } from '@nestjs/axios';
 import { DatabasePool } from './database-pool';
+import { AuthService } from '../auth/auth.service';
+
+
+@Module({
+    imports: [HttpModule, ConfigModule.forRoot({ isGlobal: true })],
+    providers: [AuthService, WorkflowService],
+})
+class WorkerModule {}
 
 let dataSource: DataSource;
+let workerAppContext: INestApplicationContext | null = null;
 let inventoryService: InventoryService | null = null;
 let workflowService: WorkflowService | null = null;
 let redisConsumerService: RedisConsumerService | null = null;
+let authService: AuthService | null = null;
+// Basic NestJS logger used before NestJS context is initialized
 const logger = new Logger('WorkerService');
+
 const dbPool = DatabasePool.getInstance();
 
 /**
@@ -152,46 +166,45 @@ process.on('unhandledRejection', async (reason, promise) => {
             speedLogEntryRepo
         );
 
-        const configService = new ConfigService();
-        workflowService = new WorkflowService(configService);
-        redisConsumerService = new RedisConsumerService(inventoryService, dataSource, workflowService);
+        // Initialize NestJS context
+        workerAppContext = await NestFactory.createApplicationContext(WorkerModule, { logger: false });
+
+        authService = workerAppContext.get(AuthService);
+        workflowService = workerAppContext.get(WorkflowService);
+
+        redisConsumerService = new RedisConsumerService(inventoryService, dataSource, workflowService, authService);
         
         // Set projectId in the worker's cache if available
         if (projectId && jobRunId) {
             redisConsumerService.setProjectIdInCache(jobRunId, projectId);
         }
         
-        logger.log(`projectId: ${projectId} Services initialized successfully`);
+        logger.log(`Services initialized successfully`);
 
-        logger.log(`projectId: ${projectId} started creating the inventory partition by job run id`);
+        logger.log(`started creating the inventory partition by job run id`);
         await inventoryService.createPartitionInventoryTableByJobRunId(jobRunId);
-        logger.log(`projectId: ${projectId} completed creating the inventory partition by job run id`);
+        logger.log(`completed creating the inventory partition by job run id`);
 
         // Start consumer
-        logger.log(`projectId: ${projectId} Starting Redis consumer for job ${jobRunId}`);
+        logger.log(`Starting Redis consumer for job ${jobRunId}`);
         await redisConsumerService.executeConsumersInParallel(jobRunId);
-        logger.log(`projectId: ${projectId} Redis consumer completed for job ${jobRunId}`);
+        logger.log(`Redis consumer completed for job ${jobRunId}`);
 
         // Clean up RedisConsumerService resources
         await redisConsumerService.cleanupResources();
 
-        // Clear timeout since we completed successfully
-
-        logger.log(`projectId: ${projectId} Worker completed successfully for job ${jobRunId}`);
+        logger.log(`Worker completed successfully for job ${jobRunId}`);
         parentPort?.postMessage({ success: true });
     } catch (error) {
-        logger.error(`projectId: ${projectId} Worker error:`, error);
-        logger.error(`projectId: ${projectId} Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
-        
-        // Clear timeout on error
-        
+        logger.error(`Worker error: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : '');
+
         parentPort?.postMessage({
             success: false,
             error: error instanceof Error ? error.message : String(error),
         });
     } finally {
         await performCleanup(projectId);
-        logger.log(`projectId: ${projectId} Worker thread exiting`);
+        logger.log(`Worker thread exiting`);
         process.exit(0);
     }
 })();

@@ -12,3 +12,5 @@ packer-provisioner-*
 .terraform.lock*
 *.tfstate
 *.tfstate.*
+*.wasm
+*.log

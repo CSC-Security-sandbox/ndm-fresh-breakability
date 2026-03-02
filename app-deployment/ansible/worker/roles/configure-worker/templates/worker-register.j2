@@ -83,7 +83,7 @@ log_message "Required environment variables are set."
 # Check for existing environment variables in the worker.env file
 log_message "Checking for existing variables in $ENV_FILE."
 if [ -f "$ENV_FILE" ]; then
-    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|TEMPORAL_TLS_ENABLED|TEMPORAL_JWT_ENABLED|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
+    if grep -E "^(WORKER_CONFIG_URL|WORKER_JOB_SERVICE_URL|TEMPORAL_ADDRESS|TEMPORAL_TLS_ENABLED|TEMPORAL_JWT_ENABLED|REDIS_JWT_AUTH_ENABLED|WORKER_REPORT_SERVICE_URL|KEYCLOAK_BASE_URL|WORKER_ID|WORKER_SECRET|REDIS_HOST|REDIS_USERNAME|REDIS_PASSWORD|REDIS_GATEWAY_HOST|REDIS_GATEWAY_PORT|CONTROL_PLANE_IP|PROJECT_ID|OTEL_COLLECTOR_ENDPOINT)=" "$ENV_FILE" >/dev/null; then
         log_message "WARNING: Some environment variables already exist in $ENV_FILE."
         handle_failure "Existing variables detected in $ENV_FILE. Manual intervention required."
     fi
@@ -115,6 +115,13 @@ log_message "Creating $ENV_FILE with necessary environment variables."
     echo "CONTROL_PLANE_IP=${CONTROL_PLANE_IP}"
     echo "REDIS_HOST=${CONTROL_PLANE_IP}"
     echo "# Redis credentials will be fetched dynamically by the worker service"
+{% if redis_jwt_auth.enabled | default(false) %}
+    echo "# Redis JWT Authentication Configuration"
+    echo "# External workers connect to Redis via Istio Gateway with JWT"
+    echo "REDIS_JWT_AUTH_ENABLED=true"
+    echo "REDIS_GATEWAY_HOST=${CONTROL_PLANE_IP}"
+    echo "REDIS_GATEWAY_PORT={{ redis_jwt_auth.gateway.port | default(6379) }}"
+{% endif %}
     echo "PROJECT_ID=${PROJECT_ID}"
     echo "OTEL_COLLECTOR_ENDPOINT=${CONTROL_PLANE_IP}:4318"
 } >> "$ENV_FILE"

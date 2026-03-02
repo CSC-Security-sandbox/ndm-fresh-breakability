@@ -45,12 +45,6 @@
   import_playbook: configure-grafana.yaml
   when: local_cluster is not defined
 
-- name: Configure redis
-  import_playbook: configure-redis-standalone.yaml
-
-- name: Configure temporal
-  import_playbook: configure-temporal.yaml
-
 - name: Configure microk8s image registry with datamigrator application images
   import_playbook: configure-microk8s-registry.yaml
   when: local_cluster is defined 
@@ -58,10 +52,16 @@
 - name: Configure keycloak
   import_playbook: configure-keycloak.yaml
 
+- name: Configure redis
+  import_playbook: configure-redis-standalone.yaml
+
+- name: Configure temporal
+  import_playbook: configure-temporal.yaml
+
 - name: Configure datamigrator helm chart and resources
   import_playbook: configure-datamigrator.yaml
 
-- name: Configure keycloak realm
+- name: Configure keycloak realm and admin user
   import_playbook: post-install.yaml
 
 - name: Configure cloud init

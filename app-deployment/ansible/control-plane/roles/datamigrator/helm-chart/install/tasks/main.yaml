@@ -215,6 +215,38 @@
         msg: "Pods did not become ready within the expected time frame."
   when: local_cluster is defined
 
+- name: Patch Istio IngressGateway to expose Redis port 6379
+  become: yes
+  shell: |
+    echo "Checking if port 6379 is exposed on istio-ingressgateway..."
+    if ! kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.spec.ports[*].port}' | grep -q "6379"; then
+      echo "Port 6379 not found, patching service..."
+      kubectl patch svc istio-ingressgateway -n istio-system --type=json -p='[
+        {
+          "op": "add",
+          "path": "/spec/ports/-",
+          "value": {
+            "name": "redis-tls",
+            "port": 6379,
+            "protocol": "TCP",
+            "targetPort": 6379
+          }
+        }
+      ]'
+      echo "Port 6379 added to istio-ingressgateway"
+    else
+      echo "Port 6379 already exposed, skipping"
+    fi
+  register: gateway_patch
+  failed_when: false
+  changed_when: "'added' in gateway_patch.stdout"
+  environment:
+    PATH: "/snap/bin:/usr/local/bin:/usr/bin:{{ ansible_env.PATH | default('') }}"
+    KUBECONFIG: "/var/snap/microk8s/current/credentials/client.config"
+  when: 
+    - enable_istio | default(false) | bool
+    - redis_jwt_auth.enabled | default(false) | bool
+
 - name: debug output
   ansible.builtin.debug:
     msg: "Get pods (datamigrator): {{ kubectl_get_pods.stdout | split('\n') }}"

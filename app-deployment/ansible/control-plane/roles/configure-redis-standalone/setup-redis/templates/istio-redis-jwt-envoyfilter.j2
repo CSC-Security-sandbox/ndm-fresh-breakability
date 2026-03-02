@@ -1,0 +1,65 @@
+---
+# EnvoyFilter for Redis JWT Authentication  
+# Network Wasm filter for intercepting Redis AUTH commands
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: redis-jwt-auth
+  namespace: redis
+spec:
+  workloadSelector:
+    labels:
+      app.kubernetes.io/component: master
+      app.kubernetes.io/name: redis
+  configPatches:
+  # Add Keycloak cluster for HTTP calls to validate tokens
+  - applyTo: CLUSTER
+    match:
+      context: SIDECAR_INBOUND
+    patch:
+      operation: ADD
+      value:
+        name: keycloak_cluster
+        type: STRICT_DNS
+        connect_timeout: 5s
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: keycloak_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: keycloak.keycloak.svc.cluster.local
+                    port_value: 80
+  
+  # Add Wasm network filter for JWT validation
+  - applyTo: NETWORK_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: envoy.filters.network.tcp_proxy
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.network.wasm
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.wasm.v3.Wasm
+          config:
+            name: redis_jwt_auth
+            root_id: redis_jwt_auth
+            vm_config:
+              runtime: envoy.wasm.runtime.v8
+              code:
+                local:
+                  filename: /etc/istio/extensions/redis-jwt-auth.wasm
+            configuration:
+              "@type": type.googleapis.com/google.protobuf.StringValue
+              value: |
+                {
+                  "introspection_url": "{{ redis_jwt_auth.introspection_url }}",
+                  "client_id": "{{ redis_jwt_auth.client_id }}",
+                  "client_secret": "{{ redis_jwt_auth.client_secret }}"
+                }

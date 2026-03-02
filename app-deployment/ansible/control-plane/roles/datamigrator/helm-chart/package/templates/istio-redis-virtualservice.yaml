@@ -1,0 +1,32 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $redisAuth := $istio.redisAuth | default dict -}}
+{{- if and ($istio.enabled) ($redisAuth.enabled | default false) ($redisAuth.gateway | default dict) }}
+---
+# VirtualService for Redis
+# Routes Redis traffic from Gateway to redis-master service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: redis-virtualservice
+  namespace: redis
+spec:
+  hosts:
+{{- if $istio.hosts }}
+{{- range $istio.hosts }}
+  - {{ . | quote }}
+{{- end }}
+{{- else }}
+  - "*"
+{{- end }}
+  gateways:
+  - istio-system/redis-gateway
+  tcp:
+  - match:
+    - port: {{ $redisAuth.gateway.port | default 6379 }}
+    route:
+    - destination:
+        host: redis-master.redis.svc.cluster.local
+        port:
+          number: 6379
+{{- end }}

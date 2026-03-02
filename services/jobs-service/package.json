@@ -24,6 +24,7 @@
     "test:coverage": "jest --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text-summary --outputFile=coverage/unit-test-cases-results.json --json"
   },
   "dependencies": {
+    "@nestjs/axios": "^3.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.0.0",

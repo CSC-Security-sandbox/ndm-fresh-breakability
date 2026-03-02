@@ -29,3 +29,21 @@ temporal_mtls:
   # For local dev: 'datamigrator.local'
   # For deployed env: set to your gateway's hostname (e.g., 'temporal.company.com')
   tls_server_name: "datamigrator.local"
+
+# ============================================================================
+# Redis JWT Authentication Configuration
+# ============================================================================
+# IMPORTANT: This must match the control plane configuration in
+# app-deployment/ansible/control-plane/config/group_vars/all.yaml
+#
+# When redis_jwt_auth.enabled is true:
+# - Worker will use JWT to authenticate to Redis via Istio Gateway
+# - Connection uses rediss:// (TLS) with JWT passed as password
+# - Istio sidecar on Redis pod validates JWT via Keycloak introspection
+#
+# When redis_jwt_auth.enabled is false:
+# - Worker connects to Redis directly with username/password (legacy mode)
+redis_jwt_auth:
+  enabled: true  # Must match control plane setting
+  gateway:
+    port: 6379  # Must match control plane redis_jwt_auth.gateway.port

@@ -172,6 +172,42 @@ temporal_mtls:
   # Defaults to the first host in istio_gateway.hosts (e.g., 'datamigrator.local')
   tls_server_name: "{{ istio_gateway_tls_hosts | default(['datamigrator.local']) | first }}"
 
+# ============================================================================
+# Redis JWT Authentication Configuration
+# ============================================================================
+# External workers authenticate to Redis via JWT (similar to Temporal)
+# Internal mesh services can use direct connection (no JWT needed)
+redis_jwt_auth:
+  enabled: true
+  mode: STRICT  # Wasm filter validates all external connections (no fallback)
+  # Internal mesh services bypass via localhost (not filtered by Wasm)
+  
+  # Keycloak token introspection endpoint for JWT validation
+  # The Redis JWT validation Wasm (proxy-wasm) network filter calls this endpoint to validate each JWT token
+  introspection_url: "http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator/protocol/openid-connect/token/introspect"
+  
+  # Client credentials for calling introspection endpoint
+  # Keycloak requires authentication to call /token/introspect
+  # SECURITY: REDIS_VALIDATOR_SECRET environment variable MUST be set
+  client_id: "admin-cli"
+  client_secret: "{{ lookup('env', 'REDIS_VALIDATOR_SECRET') | default('changeme') }}"
+  
+  # Target Redis master pods with this label selector
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: master
+  
+  # TLS server name for certificate validation (client-side)
+  # Workers use this to verify Gateway's certificate
+  tls_server_name: "{{ istio_gateway_tls_hosts | default(['datamigrator.local']) | first }}"
+  
+  # Gateway configuration for external Redis access
+  gateway:
+    enabled: true
+    port: 6379
+    port_name: redis-tls
+    protocol: TLS
+
 acr_registry: "{{ 'localhost:32000' if local_cluster is defined and local_cluster | bool else '' }}"
 
 azure_client_id: "{{ lookup('env', 'ARM_CLIENT_ID') }}"

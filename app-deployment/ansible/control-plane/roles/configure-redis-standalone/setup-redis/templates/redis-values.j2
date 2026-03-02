@@ -5,9 +5,17 @@ global:
 
 architecture: standalone
 auth:
+{% if enable_istio | default(false) | bool %}
+  # Istio + Wasm filter handles JWT authentication
+  enabled: false
+  # existingSecret: "redis-credentials"
+  # existingSecretPasswordKey: "password"
+{% else %}
+  # Traditional Redis password authentication (Istio disabled)
   enabled: true
   existingSecret: "redis-credentials"
   existingSecretPasswordKey: "password"
+{% endif %}
 
 existingConfigmap: "redis-config"
 
@@ -19,6 +27,12 @@ image:
 
 master:
   count: 1
+{% if enable_istio | default(false) | bool %}
+  podAnnotations:
+    # Mount Wasm extension into istio-proxy sidecar
+    sidecar.istio.io/userVolume: '[{"name":"wasm-extension","configMap":{"name":"redis-jwt-wasm"}}]'
+    sidecar.istio.io/userVolumeMount: '[{"name":"wasm-extension","mountPath":"/etc/istio/extensions","readOnly":true}]'
+{% endif %}
   service:
     type: NodePort
     ports:

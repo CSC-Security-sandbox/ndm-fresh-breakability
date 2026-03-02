@@ -1,0 +1,36 @@
+{{- $global := .Values.global | default dict -}}
+{{- $istio := $global.istio | default dict -}}
+{{- $redisAuth := $istio.redisAuth | default dict -}}
+{{- if and ($istio.enabled) ($redisAuth.enabled | default false) ($redisAuth.gateway | default dict) }}
+---
+# Istio Gateway for Redis (port 6379)
+# Exposes Redis to external workers via TLS
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: redis-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: {{ $redisAuth.gateway.port | default 6379 }}
+      name: redis-tls
+      protocol: {{ $redisAuth.gateway.protocol | default "TLS" }}
+    tls:
+      mode: SIMPLE
+      credentialName: {{ $istio.gateway_tls_secret_name | default "datamigrator-istio-tls" }}
+{{- if $redisAuth.gateway.tls_server_name }}
+      serverCertificate: /etc/istio/ingressgateway-certs/tls.crt
+      privateKey: /etc/istio/ingressgateway-certs/tls.key
+{{- end }}
+    hosts:
+{{- if $istio.hosts }}
+{{- range $istio.hosts }}
+    - {{ . | quote }}
+{{- end }}
+{{- else }}
+    - "*"
+{{- end }}
+{{- end }}
