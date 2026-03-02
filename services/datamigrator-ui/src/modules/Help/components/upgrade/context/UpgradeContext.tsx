@@ -4,6 +4,7 @@ import {
   UploadProgress,
   UpgradeContextType,
   MulticastStatus,
+  BlockingJobs,
 } from "../types/upgrade.types";
 import {
   INITIAL_UPLOAD_STATE,
@@ -18,6 +19,8 @@ import {
   useTriggerUpgradeMutation,
   useSkipUpgradeMutation,
   useLazyGetMulticastStatusQuery,
+  useLazyGetExecutionStatusQuery,
+  ExecutionStatusResponse,
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
 
@@ -102,6 +105,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [skipUpgrade] = useSkipUpgradeMutation();
 
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [blockingJobs, setBlockingJobs] = useState<BlockingJobs>(null);
+  const [upgradeStatus, setUpgradeStatus] = useState<string | null>(null);
 
   // Multicast (worker binary distribution) state
   const [workerUploadStatus, setWorkerUploadStatus] = useState<string | null>(null);
@@ -143,6 +148,64 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     return () => clearInterval(intervalId);
   }, [workerUploadStatus, latestStatus?.bundleId, getMulticastStatus, refetchStatus]);
 
+  // Worker upgrade execution state
+  const [workerUpgradeStatus, setWorkerUpgradeStatus] = useState<string | null>(null);
+  const [isUpgradeExecuting, setIsUpgradeExecuting] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatusResponse | null>(null);
+  const [getExecutionStatus] = useLazyGetExecutionStatusQuery();
+
+  // ═══════════════════════════════════════════════════════════════
+  // POLL EXECUTION STATUS - 10s interval while workerUpgradeStatus=IN_PROGRESS
+  // ═══════════════════════════════════════════════════════════════
+
+  // Restore execution status on page refresh when COMPLETED
+  useEffect(() => {
+    if (workerUpgradeStatus === 'COMPLETED' && !executionStatus && latestStatus?.bundleId) {
+      getExecutionStatus(latestStatus.bundleId).unwrap()
+        .then((result) => setExecutionStatus(result))
+        .catch((error) => {
+          if (error?.status === 404) {
+            setExecutionStatus(null);
+          } else {
+            console.error("Failed to fetch execution status:", error);
+          }
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerUpgradeStatus, latestStatus?.bundleId]);
+
+  // Poll while IN_PROGRESS
+  useEffect(() => {
+    if (workerUpgradeStatus !== 'IN_PROGRESS' || !latestStatus?.bundleId) return;
+
+    setIsUpgradeExecuting(true);
+    const EXECUTION_POLL_INTERVAL_MS = 10000;
+
+    const fetchStatus = async () => {
+      try {
+        const result = await getExecutionStatus(latestStatus.bundleId!).unwrap();
+        setExecutionStatus(result);
+
+        if (result.upgradeCompleted) {
+          setIsUpgradeExecuting(false);
+          setWorkerUpgradeStatus('COMPLETED');
+          const msg = result.upgradeStatus === 'success'
+            ? 'All workers upgraded successfully!'
+            : 'Worker upgrade completed with issues. See details below.';
+          notify[result.upgradeStatus === 'success' ? 'success' : 'warning'](msg);
+        }
+      } catch (error: any) {
+        if (error?.status !== 404) {
+          console.error("Failed to fetch execution status:", error);
+        }
+      }
+    };
+
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, EXECUTION_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [workerUpgradeStatus, latestStatus?.bundleId, getExecutionStatus]);
+
   // ═══════════════════════════════════════════════════════════════
   // RESTORE STATE FROM DB ON MOUNT / POLL UPDATES
   // ═══════════════════════════════════════════════════════════════
@@ -165,6 +228,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
       setIsProcessing(latestStatus.isProcessing || false);
       setIsUploadInProgress(latestStatus.isUploadInProgress || false);
       setWorkerUploadStatus(latestStatus.workerUploadStatus || null);
+      setWorkerUpgradeStatus(latestStatus.workerUpgradeStatus || null);
+      setUpgradeStatus(latestStatus.upgradeStatus || null);
 
       // Fetch final worker list when distribution completes
       if (latestStatus.workerUploadStatus === 'COMPLETED' && latestStatus.bundleId && !multicastStatus?.workers?.length) {
@@ -516,6 +581,10 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     setShowUploadUI(true);
     setShowUpgradeUI(false);
     setIsUploadInProgress(false);
+    setIsUpgradeExecuting(false);
+    setExecutionStatus(null);
+    setWorkerUpgradeStatus(null);
+    setUpgradeStatus(null);
 
     // Refresh status from DB to sync state
     try {
@@ -528,17 +597,9 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   // ═══════════════════════════════════════════════════════════════
   // UPGRADE HANDLER (DRAFT - Ready to activate)
   // Calls triggerUpgrade API endpoint
-  // To activate: Set UPGRADE_ENABLED = true below
   // ═══════════════════════════════════════════════════════════════
-  const UPGRADE_ENABLED = false; // <-- Set to true to activate upgrade functionality
 
   const handleUpgrade = async () => {
-    // Guard: Check if upgrade is enabled
-    if (!UPGRADE_ENABLED) {
-      console.log("Upgrade button clicked - functionality not yet enabled");
-      notify.info("Upgrade functionality is not yet enabled. Please contact support.");
-      return;
-    }
 
     // Guard: Check if file is uploaded and bundleId exists
     if (!isUploaded || !uploadProgress.bundleId) {
@@ -548,25 +609,29 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
 
     try {
       setIsUpgrading(true);
+      setBlockingJobs(null);
 
-      // Call the triggerUpgrade API with bundleId (primary key - fast query)
       const result = await triggerUpgrade({
         bundleId: uploadProgress.bundleId,
       }).unwrap();
 
       if (result.success) {
         notify.success(result.message || "Upgrade initiated successfully!");
-        
-        // Reset UI state after successful upgrade
         setShowUploadUI(true);
         setShowUpgradeUI(false);
         
-        // Refetch status to sync with DB
         try {
           await refetchStatus();
         } catch (refetchError) {
           console.error("Failed to refresh status after upgrade:", refetchError);
         }
+      } else if (result.canUpgrade === false) {
+        setBlockingJobs({
+          runningJobs: result.runningJobs || [],
+          scheduledJobs: result.scheduledJobs || [],
+          activeJobConfigs: result.activeJobConfigs || [],
+        });
+        notify.error(result.message || "Cannot upgrade while jobs are active.");
       } else {
         notify.error(result.message || "Upgrade failed");
       }
@@ -587,17 +652,22 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     isUploaded,
     handleUpload,
     handleCancelUpload,
-    handleUpgrade,            // DRAFT - ready to activate (set UPGRADE_ENABLED = true)
+    handleUpgrade,
     isUpgrading,
+    blockingJobs,
     handleReset,
     showUploadUI,
-    showUpgradeUI,            // true when upload complete, ready for upgrade
+    showUpgradeUI,
     isLoadingStatus,
-    isProcessing,             // true when extracting/validating (should NOT be cancelled)
-    isUploadInProgress,       // true when interrupted upload detected from DB
+    isProcessing,
+    isUploadInProgress,
     inProgressFileName,
     workerUploadStatus,       // IDLE | IN_PROGRESS | COMPLETED
     multicastStatus,          // Per-worker distribution summary (populated while polling)
+    upgradeStatus,
+    workerUpgradeStatus,      // IDLE | IN_PROGRESS | COMPLETED
+    isUpgradeExecuting,
+    executionStatus,
   };
 
   return (

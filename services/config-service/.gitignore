@@ -132,6 +132,5 @@ dist
 # test coverage report xml file
 test/unit/test-results/junit.xml
 
-package-lock.json
 junit.xml
 .npmrc

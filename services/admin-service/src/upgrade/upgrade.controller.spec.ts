@@ -27,6 +27,7 @@ describe('UpgradeController', () => {
     startExecution: jest.fn(),
     acknowledgeExecution: jest.fn(),
     getExecutionStatus: jest.fn(),
+    getUpgradeStatus: jest.fn(),
   };
 
   const mockJwtService = {
@@ -367,14 +368,18 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.startExecution).toHaveBeenCalledWith(dto);
     });
 
-    it('should propagate BadRequestException when no staged workers', async () => {
-      mockUpgradeService.startExecution.mockRejectedValue(
-        new BadRequestException('No workers have completed binary staging'),
-      );
+    it('should return started when no staged workers', async () => {
+      const expected = {
+        workflowId: 'UpgradeExecution-123',
+        status: 'started' as const,
+        message: 'No workers have staged binaries. Execution marked as completed.',
+        triggeredWorkers: [],
+      };
+      mockUpgradeService.startExecution.mockResolvedValue(expected);
 
-      await expect(
-        controller.startExecution({ bundleId: 'bundle-1', version: '1.0.0' }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await controller.startExecution({ bundleId: 'bundle-1', version: '1.0.0' });
+      expect(result.status).toBe('started');
+      expect(result.triggeredWorkers).toEqual([]);
     });
   });
 
@@ -426,6 +431,52 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.getExecutionStatus).toHaveBeenCalledWith(
         '53d5f0cd-bdf8-4e59-86d2-2b4443670586',
       );
+    });
+  });
+
+  // ===========================================================================
+  // GET /upgrade-status
+  // ===========================================================================
+
+  describe('getUpgradeStatus', () => {
+    it('should return upgrade status when upgrade succeeded', async () => {
+      const expected = {
+        status: 'success',
+        version: '2026.02.01',
+        message: 'Upgrade completed successfully',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
+      expect(mockUpgradeService.getUpgradeStatus).toHaveBeenCalled();
+    });
+
+    it('should return upgrade status when upgrade failed', async () => {
+      const expected = {
+        status: 'failed',
+        version: '2026.02.01',
+        message: 'Upgrade failed: pod readiness timeout',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
+      expect(mockUpgradeService.getUpgradeStatus).toHaveBeenCalled();
+    });
+
+    it('should return upgrade status when no upgrade in progress', async () => {
+      const expected = {
+        status: 'none',
+        message: 'No upgrade in progress',
+      };
+      mockUpgradeService.getUpgradeStatus.mockResolvedValue(expected);
+
+      const result = await controller.getUpgradeStatus();
+
+      expect(result).toEqual(expected);
     });
   });
 });

@@ -40,12 +40,48 @@ const AboutNDMContent = () => {
               {aboutNdm?.product?.name} {aboutNdm?.product?.version}
             </Box>
             <Box className="flex flex-row items-center">
-              <Box className="Box-lg font-semibold mr-2">
-                {ABOUT_NDM_CONSTANTS.BUILDER_VERSION}
-              </Box>
-              Worker: {aboutNdm?.build?.worker_version?.version} | Control
-              Plane: {aboutNdm?.build?.controlPlane_version?.version}
+              <Box className="Box-lg font-semibold mr-2">Control Plane:</Box>
+              {aboutNdm?.build?.controlPlane_version?.version}
             </Box>
+
+            {/* Worker Versions — table format: version | worker list */}
+            {aboutNdm?.build?.workersByVersion && Object.keys(aboutNdm.build.workersByVersion).length > 0 ? (
+              <Box className="w-full">
+                <Box className="Box-lg font-semibold mb-2">Worker Versions:</Box>
+                <Box className="border rounded overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-center bg-header-netapp-bg">
+                        <th className="px-4 py-2 font-semibold text-white border-b w-[140px]">Version</th>
+                        <th className="px-4 py-2 font-semibold text-white border-b">Worker List</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(aboutNdm.build.workersByVersion).flatMap(([version, workers]) =>
+                        (workers as any[]).map((w: any, idx: number) => (
+                          <tr key={`${version}-${w.workerName}`} className="border-b last:border-b-0 text-center">
+                            {idx === 0 ? (
+                              <td className="px-4 py-1.5 font-medium text-gray-800 align-middle" rowSpan={(workers as any[]).length}>
+                                {version}
+                              </td>
+                            ) : null}
+                            <td className="px-4 py-1.5 text-gray-700">
+                              {w.workerName} ({w.ipAddress})
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </Box>
+              </Box>
+            ) : (
+              <Box className="flex flex-row items-center">
+                <Box className="Box-lg font-semibold mr-2">Workers:</Box>
+                <span className="text-gray-500">No workers attached</span>
+              </Box>
+            )}
+
             <Box className="flex flex-row items-center">
               <Box className="Box-lg font-semibold mr-2">
                 {ABOUT_NDM_CONSTANTS.CONTACT_US}

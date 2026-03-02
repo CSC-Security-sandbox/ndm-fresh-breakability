@@ -29,6 +29,12 @@ export type WorkerStagingInfo = {
   bundleStatus: string;
 };
 
+export type BlockingJobs = {
+  runningJobs: Array<{ id: string; status: string; jobConfigId?: string; startTime?: string }>;
+  scheduledJobs: Array<{ id: string; status: string; jobType?: string; futureScheduleAt?: string; scheduler?: string }>;
+  activeJobConfigs: Array<{ id: string; jobType: string; status: string; scheduler?: string; futureScheduleAt?: string }>;
+} | null;
+
 export type MulticastStatus = {
   workflowId?: string;
   workflowStatus?: string;
@@ -54,9 +60,10 @@ export type UpgradeContextType = {
   handleUpload: () => Promise<void>;
   handleCancelUpload: () => Promise<void>;
   
-  // Upgrade (DRAFT - ready to activate)
+  // Upgrade
   handleUpgrade: () => Promise<void>;
   isUpgrading: boolean;
+  blockingJobs: BlockingJobs;
   
   // Reset
   handleReset: () => Promise<void>;
@@ -72,5 +79,13 @@ export type UpgradeContextType = {
   // Worker binary distribution (multicast) status
   workerUploadStatus: string | null;  // IDLE | IN_PROGRESS | COMPLETED
   multicastStatus: MulticastStatus | null;
+
+  // Upgrade status from DB
+  upgradeStatus: string | null;  // pending | staged | success | failed | skipped | rolled_back
+
+  // Worker upgrade execution status
+  workerUpgradeStatus: string | null;  // IDLE | IN_PROGRESS | COMPLETED
+  isUpgradeExecuting: boolean;
+  executionStatus: import("@api/upgradeApi").ExecutionStatusResponse | null;
 };
 

@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { spawn } from 'child_process';
+import { exec } from 'child_process';
 import * as path from 'path';
 import * as tar from 'tar';
 import { BaseBinaryHandler } from '../binary-handler.interface';
@@ -64,28 +64,38 @@ export class LinuxBinaryHandler extends BaseBinaryHandler {
       return { status: 'failed', message: `Upgrade script not found: ${scriptPath}` };
     }
 
-    this.logger.log(`[executeUpgrade] Script exists, spawning: ${scriptPath} ${version}`);
+    this.logger.log(`[executeUpgrade] Script exists, launching via systemd-run: ${scriptPath} ${version}`);
 
     try {
       const baseDir = this.configService.get<string>('worker.upgrade.baseDirLinux');
-      const outHandle = await fs.open(path.join(baseDir, 'upgrade-spawn.log'), 'a');
-      const errHandle = await fs.open(path.join(baseDir, 'upgrade-spawn-err.log'), 'a');
+      const logFile = path.join(baseDir, 'upgrade-spawn.log');
 
-      const child = spawn('bash', [scriptPath, version], {
-        detached: true,
-        stdio: ['ignore', outHandle.fd, errHandle.fd],
+      // systemd-run launches upgrade.sh in its own transient systemd unit/cgroup.
+      // The worker runs as datamigrator-worker.service — systemd's default
+      // KillMode=control-group kills ALL processes in the service's cgroup on stop.
+      // upgrade.sh calls "systemctl stop datamigrator-worker", which would kill
+      // itself if it stayed in the worker's cgroup. systemd-run avoids this.
+      // Monitor via: systemctl status ndm-worker-upgrade
+      const cmd =
+        `systemctl reset-failed ndm-worker-upgrade 2>/dev/null; ` +
+        `systemctl stop ndm-worker-upgrade 2>/dev/null; ` +
+        `systemd-run --unit=ndm-worker-upgrade --remain-after-exit ` +
+        `bash -c '${scriptPath} ${version} >> ${logFile} 2>&1'`;
+
+      this.logger.log(`[executeUpgrade] Running: ${cmd}`);
+
+      return new Promise<ExecuteUpgradeOutput>((resolve) => {
+        exec(cmd, (error, stdout, stderr) => {
+          if (error) {
+            const msg = `${error.message} ${stderr}`.trim();
+            this.logger.error(`[executeUpgrade] Failed to spawn: ${msg}`);
+            resolve({ status: 'failed', message: msg });
+          } else {
+            this.logger.log(`[executeUpgrade] Launched as ndm-worker-upgrade.service: ${stdout.trim()}`);
+            resolve({ status: 'triggered', message: 'Upgrade script launched as ndm-worker-upgrade.service' });
+          }
+        });
       });
-
-      child.on('error', (err) => {
-        this.logger.error(`[executeUpgrade] Spawn error: ${err.message}`);
-      });
-
-      child.unref();
-      await outHandle.close();
-      await errHandle.close();
-
-      this.logger.log(`[executeUpgrade] Spawned PID ${child.pid}`);
-      return { status: 'triggered', message: `Upgrade script spawned with PID ${child.pid}` };
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`[executeUpgrade] Failed to spawn: ${msg}`);

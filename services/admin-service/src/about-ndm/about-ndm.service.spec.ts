@@ -1,13 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AboutNdmService } from './about-ndm.service';
 import { PrometheusService } from '../utils/prometheus';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigService } from '@nestjs/config';
+import { WorkerEntity } from '../entities/worker.entity';
 import BUILD_VERSION_QUERIES from './about-ndm.constants';
 
 describe('AboutNdmService', () => {
   let service: AboutNdmService;
   let prometheusService: jest.Mocked<PrometheusService>;
+  let workerRepository: Record<string, jest.Mock>;
 
   const mockLogger = {
     log: jest.fn(),
@@ -34,9 +37,14 @@ describe('AboutNdmService', () => {
       }
     }),
   } as any;
+
   beforeEach(async () => {
     const mockPrometheusService = {
       queryPrometheus: jest.fn(),
+    };
+
+    workerRepository = {
+      find: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -54,13 +62,16 @@ describe('AboutNdmService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: getRepositoryToken(WorkerEntity),
+          useValue: workerRepository,
+        },
       ],
     }).compile();
 
     service = module.get<AboutNdmService>(AboutNdmService);
     prometheusService = module.get(PrometheusService);
 
-    // Clear mocks after service instantiation, except for the create method
     prometheusService.queryPrometheus.mockClear();
     mockLogger.log.mockClear();
     mockLogger.error.mockClear();
@@ -73,12 +84,11 @@ describe('AboutNdmService', () => {
   });
 
   it('should create logger with correct name', () => {
-    // Logger is created in constructor, so it should already be called
     expect(mockLoggerFactory.create).toHaveBeenCalledWith('AboutNdmService');
   });
 
   describe('getAboutNdm', () => {
-    it('should extract label_build_version from successful Prometheus responses', async () => {
+    it('should extract label_build_version from successful Prometheus response and worker version from DB', async () => {
       const mockControlPlaneResponse = {
         data: {
           result: [
@@ -93,31 +103,17 @@ describe('AboutNdmService', () => {
         },
       };
 
-      const mockWorkerResponse = {
-        data: {
-          result: [
-            {
-              metric: {
-                label_build_version: '1.2.4',
-                __name__: 'worker_info',
-              },
-            },
-          ],
-        },
-      };
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockControlPlaneResponse);
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockControlPlaneResponse)
-        .mockResolvedValueOnce(mockWorkerResponse);
+      workerRepository.find.mockResolvedValueOnce([
+        { workerName: 'worker-1', ipAddress: '10.0.0.1', workerVersion: '1.2.4', platform: 'linux' },
+      ]);
 
       const result = await service.getAboutNdm();
 
-      expect(prometheusService.queryPrometheus).toHaveBeenCalledTimes(2);
+      expect(prometheusService.queryPrometheus).toHaveBeenCalledTimes(1);
       expect(prometheusService.queryPrometheus).toHaveBeenCalledWith(
         BUILD_VERSION_QUERIES.CONTROL_PLANE,
-      );
-      expect(prometheusService.queryPrometheus).toHaveBeenCalledWith(
-        BUILD_VERSION_QUERIES.WORKER,
       );
 
       expect(result).toEqual({
@@ -134,6 +130,9 @@ describe('AboutNdmService', () => {
             version: '1.2.3',
             time: null,
           },
+          workersByVersion: {
+            '1.2.4': [{ workerName: 'worker-1', ipAddress: '10.0.0.1', platform: 'linux' }],
+          },
         },
         contact: {
           email: 'niharika@netapp.com',
@@ -145,9 +144,31 @@ describe('AboutNdmService', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Found build version: 1.2.3',
       );
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Found build version: 1.2.4',
-      );
+    });
+
+    it('should return N/A for worker version when no workers exist in DB', async () => {
+      const mockControlPlaneResponse = {
+        data: {
+          result: [
+            {
+              metric: {
+                label_build_version: '1.2.3',
+                __name__: 'kube_pod_labels',
+                namespace: 'datamigrator',
+              },
+            },
+          ],
+        },
+      };
+
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockControlPlaneResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.build.worker_version.version).toBe('N/A');
+      expect(result.build.controlPlane_version.version).toBe('1.2.3');
+      expect(result.build.workersByVersion).toEqual({});
     });
 
     it('should return unknown when label_build_version is not found in response', async () => {
@@ -164,73 +185,33 @@ describe('AboutNdmService', () => {
         },
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockResponseWithoutBuildVersion)
-        .mockResolvedValueOnce(mockResponseWithoutBuildVersion);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockResponseWithoutBuildVersion);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
+      expect(result.build.worker_version.version).toBe('N/A');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'No label_build_version found in Prometheus results',
       );
     });
 
-    it('should return unknown when Prometheus response has empty results', async () => {
+    it('should return N/A when Prometheus response has empty results', async () => {
       const mockEmptyResponse = {
         data: {
           result: [],
         },
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockEmptyResponse)
-        .mockResolvedValueOnce(mockEmptyResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockEmptyResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
+      expect(result.build.worker_version.version).toBe('N/A');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'No label_build_version found in Prometheus results',
@@ -242,33 +223,12 @@ describe('AboutNdmService', () => {
         invalid: 'structure',
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockInvalidResponse)
-        .mockResolvedValueOnce(mockInvalidResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockInvalidResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Invalid Prometheus response structure:',
@@ -276,51 +236,22 @@ describe('AboutNdmService', () => {
       );
     });
 
-    it('should handle Prometheus query rejections gracefully', async () => {
-      const mockWorkerResponse = {
-        data: {
-          result: [
-            {
-              metric: {
-                label_build_version: '1.2.5',
-                __name__: 'worker_info',
-              },
-            },
-          ],
-        },
-      };
+    it('should handle Prometheus query rejection gracefully', async () => {
+      prometheusService.queryPrometheus.mockRejectedValueOnce(
+        new Error('Control plane query failed'),
+      );
 
-      prometheusService.queryPrometheus
-        .mockRejectedValueOnce(new Error('Control plane query failed'))
-        .mockResolvedValueOnce(mockWorkerResponse);
+      workerRepository.find.mockResolvedValueOnce([
+        { workerName: 'worker-1', ipAddress: '10.0.0.1', workerVersion: '1.2.5', platform: 'linux' },
+      ]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: '1.2.5',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
+      expect(result.build.worker_version.version).toBe('1.2.5');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Prometheus query was rejected:',
-        expect.any(Error),
+        expect.stringContaining('Prometheus CP query failed'),
       );
     });
 
@@ -345,51 +276,12 @@ describe('AboutNdmService', () => {
         },
       };
 
-      const mockWorkerResponse = {
-        data: {
-          result: [
-            {
-              metric: {
-                __name__: 'worker_info',
-              },
-            },
-            {
-              metric: {
-                label_build_version: '2.0.0',
-                __name__: 'worker_info',
-              },
-            },
-          ],
-        },
-      };
-
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockControlPlaneResponse)
-        .mockResolvedValueOnce(mockWorkerResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockControlPlaneResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: '2.0.0',
-            time: null,
-          },
-          controlPlane_version: {
-            version: '2.0.0',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('2.0.0');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Found build version: 2.0.0',
@@ -401,33 +293,12 @@ describe('AboutNdmService', () => {
         data: null,
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockNullDataResponse)
-        .mockResolvedValueOnce(mockNullDataResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockNullDataResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Invalid Prometheus response structure:',
@@ -442,33 +313,12 @@ describe('AboutNdmService', () => {
         },
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockUndefinedResultResponse)
-        .mockResolvedValueOnce(mockUndefinedResultResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockUndefinedResultResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Invalid Prometheus response structure:',
@@ -476,7 +326,7 @@ describe('AboutNdmService', () => {
       );
     });
 
-    it('should handle Prometheus response with null metric causing iteration error', async () => {
+    it('should handle Prometheus response with null metric', async () => {
       const mockResponseWithNullMetric = {
         data: {
           result: [
@@ -487,46 +337,15 @@ describe('AboutNdmService', () => {
         },
       };
 
-      const mockWorkerResponse = {
-        data: {
-          result: [
-            {
-              metric: {
-                label_build_version: '1.0.0',
-                __name__: 'worker_info',
-              },
-            },
-          ],
-        },
-      };
-
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockResponseWithNullMetric)
-        .mockResolvedValueOnce(mockWorkerResponse);
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockResponseWithNullMetric);
+      workerRepository.find.mockResolvedValueOnce([
+        { workerName: 'worker-1', ipAddress: '10.0.0.1', workerVersion: '1.0.0', platform: 'linux' },
+      ]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: '1.0.0',
-            time: null,
-          },
-          controlPlane_version: {
-            version: 'N/A',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('N/A');
+      expect(result.build.worker_version.version).toBe('1.0.0');
     });
 
     it('should handle mixed success and failure scenarios', async () => {
@@ -544,41 +363,59 @@ describe('AboutNdmService', () => {
         },
       };
 
-      prometheusService.queryPrometheus
-        .mockResolvedValueOnce(mockControlPlaneResponse)
-        .mockRejectedValueOnce(new Error('Worker query failed'));
+      prometheusService.queryPrometheus.mockResolvedValueOnce(mockControlPlaneResponse);
+      workerRepository.find.mockResolvedValueOnce([]);
 
       const result = await service.getAboutNdm();
 
-      expect(result).toEqual({
-        product: {
-          name: 'NDM',
-          version: 'Preview',
-        },
-        build: {
-          worker_version: {
-            version: 'N/A',
-            time: null,
-          },
-          controlPlane_version: {
-            version: '1.0.0',
-            time: null,
-          },
-        },
-        contact: {
-          email: 'niharika@netapp.com',
-          phone: null,
-          website: null,
-        },
-      });
+      expect(result.build.controlPlane_version.version).toBe('1.0.0');
+      expect(result.build.worker_version.version).toBe('N/A');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Found build version: 1.0.0',
       );
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Prometheus query was rejected:',
-        expect.any(Error),
-      );
+    });
+
+    it('should group multiple workers by version', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.0.0' } }] },
+      });
+
+      workerRepository.find.mockResolvedValueOnce([
+        { workerName: 'worker-1', ipAddress: '10.0.0.1', workerVersion: '1.0.0', platform: 'linux' },
+        { workerName: 'worker-2', ipAddress: '10.0.0.2', workerVersion: '1.0.0', platform: 'windows' },
+        { workerName: 'worker-3', ipAddress: '10.0.0.3', workerVersion: '2.0.0', platform: 'linux' },
+      ]);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.build.workersByVersion).toEqual({
+        '1.0.0': [
+          { workerName: 'worker-1', ipAddress: '10.0.0.1', platform: 'linux' },
+          { workerName: 'worker-2', ipAddress: '10.0.0.2', platform: 'windows' },
+        ],
+        '2.0.0': [
+          { workerName: 'worker-3', ipAddress: '10.0.0.3', platform: 'linux' },
+        ],
+      });
+      expect(result.build.worker_version.version).toBe('1.0.0');
+    });
+
+    it('should treat workers with null workerVersion as unknown', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [] },
+      });
+
+      workerRepository.find.mockResolvedValueOnce([
+        { workerName: 'worker-1', ipAddress: '10.0.0.1', workerVersion: null, platform: 'linux' },
+      ]);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.build.worker_version.version).toBe('N/A');
+      expect(result.build.workersByVersion).toEqual({
+        'unknown': [{ workerName: 'worker-1', ipAddress: '10.0.0.1', platform: 'linux' }],
+      });
     });
   });
 });

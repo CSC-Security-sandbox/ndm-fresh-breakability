@@ -30,7 +30,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
-    "@netapp-cloud-datamigrate/auth-lib": "0.0.88",
+    "@netapp-cloud-datamigrate/auth-lib": "0.1.1",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
     "axios": "^1.7.7",
@@ -81,7 +81,8 @@
   "overrides": {
     "form-data" : "^4.0.4",
     "sha.js": "^2.4.12",
-    "tar": "^7.5.7"
+    "tar": "^7.5.8",
+    "serialize-javascript": "^7.0.3"
   },
   "jest": {
     "moduleFileExtensions": [

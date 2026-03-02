@@ -35,7 +35,7 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
-    "@netapp-cloud-datamigrate/auth-lib": "0.0.3",
+    "@netapp-cloud-datamigrate/auth-lib": "0.1.1",
     "@netapp-cloud-datamigrate/jobs-lib": "0.2.53",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@temporalio/client": "^1.11.7",
@@ -87,6 +87,7 @@
     "jws": "^3.2.3",
     "qs": "^6.14.1",
     "js-yaml": "^4.1.1",
+    "serialize-javascript": "^7.0.3",
     "typeorm": {
       "glob": "^10.5.0"
     },

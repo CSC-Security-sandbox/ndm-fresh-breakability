@@ -182,6 +182,7 @@ describe('WorkManagerService', () => {
         Platform.WINDOWS,
         { TEST_VAR: 'test_value' },
         false,
+        '',
       );
       expect(result.metaConfig).toEqual([{ key: 'value1' }, { key: 'value2' }]);
       expect(result.envVariables).toEqual({ TEST_VAR: 'test_value' });
@@ -221,6 +222,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         {},
         true,
+        '1.0.0',
       );
       expect(result.metaConfig).toEqual(savedWorker.metaConfig);
       expect(result.envVariables).toEqual({});
@@ -254,6 +256,7 @@ describe('WorkManagerService', () => {
           Platform.LINUX,
           {},
           false,
+          '',
         ),
       ).rejects.toThrow('Error while fetching worker configuration');
       expect(logger.error).toHaveBeenCalled();
@@ -303,6 +306,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBe(mockCert);
@@ -333,6 +337,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBe(existingCert);
@@ -386,6 +391,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
@@ -437,6 +443,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
@@ -488,6 +495,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
@@ -538,6 +546,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       // Wait for async error to be handled
@@ -570,6 +579,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
@@ -595,6 +605,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         envVariables,
         false,
+        '',
       );
 
       expect(result.envVariables.TEMPORAL_TLS_CA_CERT).toBeUndefined();
@@ -622,6 +633,7 @@ describe('WorkManagerService', () => {
         Platform.WINDOWS,
         envVariables,
         true,
+        '2.0.0',
       );
 
       expect(workerRepo.update).toHaveBeenCalledWith(
@@ -630,7 +642,7 @@ describe('WorkManagerService', () => {
           workerName: expect.any(String),
           platform: Platform.WINDOWS,
           envVariables,
-          workerVersion: null,
+          workerVersion: '2.0.0',
         },
       );
     });
@@ -657,6 +669,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         {},
         false,
+        '',
       );
 
       expect(result.metaConfig).toEqual([]);
@@ -688,6 +701,7 @@ describe('WorkManagerService', () => {
         Platform.LINUX,
         {},
         false,
+        '',
       );
 
       expect(result.metaConfig).toEqual([{ key: 'value1' }]);
