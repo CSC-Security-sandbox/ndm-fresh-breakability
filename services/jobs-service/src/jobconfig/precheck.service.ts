@@ -61,7 +61,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
                 });
             }
 
-            const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime);
+            const preCheckPayload = this.createInitialPreCheckPayload(data.preserveAccessTime, data.preservePermissions ?? true);
             const pathIds = this.collectAllPathIds(data);
             const pathToWorkerMapping = await this.fetchVolumesWithWorkers(pathIds);
 
@@ -90,10 +90,10 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
         }
     }
 
-    private createInitialPreCheckPayload(preserveAccessTime: boolean): PreCheckWorkflowOPayload {
+    private createInitialPreCheckPayload(preserveAccessTime: boolean, preservePermissions: boolean): PreCheckWorkflowOPayload {
         return {
             preChecks: [],
-            settings: { preserveAccessTime: preserveAccessTime },
+            settings: { preserveAccessTime, preservePermissions },
             serverCredentials: [],
         };
     }

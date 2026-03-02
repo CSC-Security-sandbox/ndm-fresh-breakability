@@ -44,7 +44,8 @@ jest.mock('@temporalio/workflow', () => ({
 
 describe('PreCheckValidationWorkflow', () => {
     const mockSettings = {
-        preserveAccessTime: false
+        preserveAccessTime: false,
+        preservePermissions: true
     };
 
     const mockServerCredentials = [
@@ -279,7 +280,8 @@ describe('PreCheckValidationWorkflow', () => {
           },
           payload: {
             settings: {
-              preserveAccessTime: false
+              preserveAccessTime: false,
+              preservePermissions: true
             },
             serverCredentials: [
               {
@@ -345,7 +347,7 @@ describe('PreCheckValidationWorkflow', () => {
                     }
                 ],
                 preChecks: [],
-                settings: { preserveAccessTime: false }
+                settings: { preserveAccessTime: false, preservePermissions: true }
             },
             traceId: 'trace-1'
         };
@@ -391,7 +393,7 @@ describe('PreCheckValidationWorkflow', () => {
                         ]
                     }
                 ],
-                settings: { preserveAccessTime: false }
+                settings: { preserveAccessTime: false, preservePermissions: true }
             },
             traceId: 'trace-2'
         };
@@ -422,7 +424,7 @@ describe('PreCheckValidationWorkflow', () => {
                         destinations: []
                     }
                 ],
-                settings: { preserveAccessTime: false }
+                settings: { preserveAccessTime: false, preservePermissions: true }
             },
             traceId: 'trace-5'
         };

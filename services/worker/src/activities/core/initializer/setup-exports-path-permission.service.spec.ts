@@ -69,7 +69,7 @@ describe('SetupExportsPathPermissionService', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(`Identity mapping not available for jobRunId: ${jobRunId}`);
     });
 
-    it('should proceed with setup for SMB protocol', async () => {
+    it('should return early if preservePermissions is false', async () => {
       const jobRunId = 'test-job-run-id';
       const jobContext = {
         jobConfig: {
@@ -81,7 +81,33 @@ describe('SetupExportsPathPermissionService', () => {
           sourceFileServer: {
             hostname: 'source-host',
             path: 'source-path'
-          }
+          },
+          options: { preservePermissions: false }
+        }
+      } as any;
+
+      mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+      await service.setupExportPathPermission(jobRunId);
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(`Skipping ACL setup for jobRunId: ${jobRunId} - preservePermissions is disabled`);
+      expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('should proceed with setup for SMB protocol when preservePermissions is true', async () => {
+      const jobRunId = 'test-job-run-id';
+      const jobContext = {
+        jobConfig: {
+          destinationFileServer: {
+            protocols: [{ type: ProtocolTypes.SMB }],
+            hostname: 'test-host',
+            path: 'test-path'
+          },
+          sourceFileServer: {
+            hostname: 'source-host',
+            path: 'source-path'
+          },
+          options: { preservePermissions: true }
         }
       } as any;
 

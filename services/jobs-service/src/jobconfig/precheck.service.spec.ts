@@ -26,6 +26,7 @@ describe('PreCheckService', () => {
 
   const defaultPreCheckData: JobConfigPrecheck = {
     preserveAccessTime: true,
+    preservePermissions: true,
     migrateConfigs: [{ sourcePathId: 'src1', destinationPathId: ['dest1'] }],
     options: {
       workflowExecutionTimeout: '300',
@@ -178,6 +179,7 @@ describe('PreCheckService', () => {
   try {
     await service.initiatePreCheck({
       preserveAccessTime: true,
+      preservePermissions: true,
       migrateConfigs: [{ sourcePathId: 'src1', destinationPathId: ['dest1'] }],
       options: {
         workflowExecutionTimeout: '300',

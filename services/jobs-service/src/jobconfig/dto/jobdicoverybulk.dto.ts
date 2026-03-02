@@ -389,6 +389,11 @@ export class JobConfigPrecheck {
   @IsBoolean()
   preserveAccessTime: boolean;
 
+  @ApiProperty({ description: "Preserve permissions flag", example: true, required: false })
+  @IsBoolean()
+  @IsOptional()
+  preservePermissions?: boolean;
+
   @ApiProperty({
     type: Options,
     description: "Workflow options",

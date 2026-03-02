@@ -105,6 +105,7 @@ export interface PreCheckWorkflowOPayload {
   serverCredentials: ServerCredentials[];
   settings: {
     preserveAccessTime: boolean;
+    preservePermissions: boolean;
   },
   preChecks: PreChecks[]
 }

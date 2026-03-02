@@ -121,6 +121,11 @@ export class SetupExportsPathPermissionService {
             return;
         }
 
+        if (!jobContext.jobConfig?.options?.preservePermissions) {
+            this.logger.debug(`Skipping ACL setup for jobRunId: ${jobRunId} - preservePermissions is disabled`);
+            return;
+        }
+
         this.logger.error(`Starting ACL setup for jobRunId: ${jobRunId}`);
         await this.setup(jobRunId, jobContext);
     }

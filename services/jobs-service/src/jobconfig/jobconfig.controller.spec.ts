@@ -950,6 +950,7 @@ describe("JobConfigController", () => {
       const precheckData: JobConfigPrecheck = {
         migrateConfigs: [{ sourcePathId: "123", destinationPathId: ["456"] }],
         preserveAccessTime: true,
+        preservePermissions: true,
         options: {
           workflowExecutionTimeout: "300",
           workflowTaskTimeout: "60",
