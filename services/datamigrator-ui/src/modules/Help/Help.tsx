@@ -5,9 +5,10 @@ import { HelpIcon } from "@netapp/bxp-style/react-icons/General";
 import Box from "@/components/container/Box";
 import RenderEach from "@components/render-each/RenderEach.tsx";
 import { HelpProvider, HelpContext } from "@modules/Help/context/HelpContext";
-import { HELP_ITEMS } from "@modules/Help/constants/help.constants";
+import { HELP_ITEMS, HELP_ITEMS_ENUM } from "@modules/Help/constants/help.constants";
 import { useHelpContent } from "@modules/Help/hook/useHelpContent";
 import { useDrawerNavigation } from "@hooks/useDrawerNavigation";
+import AsupHelpItem from "@modules/Help/components/asup-metrics/components/AsupHelpItem";
 
 const HelpContent = () => {
   const { isHelpListVisible, setGetItemIndex } = useContext(HelpContext);
@@ -33,8 +34,15 @@ const HelpContent = () => {
           <RenderEach
             renderList={HELP_ITEMS}
             renderItem={(item) => {
+              // Special rendering for ASUP Metrics Sharing with toggle (not clickable)
+              if (item.name === HELP_ITEMS_ENUM.ASUP_METRICS_SHARING) {
+                return <AsupHelpItem key={item.id} />;
+              }
+              
+              // Default rendering for other items
               return (
                 <Box
+                  key={item.id}
                   className="flex flex-row justify-between items-center p-3 border-b cursor-pointer hover:bg-slate-100 hover:text-text-title transition-all duration-100"
                   onClick={() => setGetItemIndex(item?.id)}
                 >
