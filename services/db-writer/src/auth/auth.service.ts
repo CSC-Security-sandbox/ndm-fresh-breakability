@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { lastValueFrom } from 'rxjs';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -19,7 +19,7 @@ export class AuthService implements OnModuleDestroy {
     constructor(
         @Inject(ConfigService) private readonly configService: ConfigService,
         @Inject(HttpService) private readonly httpService: HttpService,
-        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
     ) {
         // Support both KEYCLOAK_URL and KEYCLOAK_BASE_URL for compatibility
         this.keycloakBaseUrl = this.configService.get('KEYCLOAK_BASE_URL') 
@@ -35,7 +35,12 @@ export class AuthService implements OnModuleDestroy {
         tokenData.append('grant_type', 'client_credentials');
         this.tokenRequest = tokenData.toString();
         
-        this.logger = loggerFactory.create(AuthService.name);
+        if (loggerFactory) {
+            this.logger = loggerFactory.create(AuthService.name);
+        } else {
+            // Fallback to basic NestJS Logger for worker thread context (no LoggerModule)
+            this.logger = new Logger(AuthService.name) as any;
+        }
         
         // Log the endpoint being used (helpful for debugging)
         this.logger.log(`[AuthService]: Keycloak endpoint: ${this.keycloakBaseUrl}/realms/${this.realm}/protocol/openid-connect/token`);
