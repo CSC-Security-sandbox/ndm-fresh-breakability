@@ -8,6 +8,7 @@ import {
   Table,
   useForm,
 } from "@netapp/bxp-design-system-react";
+import { Autocomplete, TextField } from "@mui/material";
 import { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import { setModalClose, setModalProps } from "@store/reducer/commonComponentSlice";
@@ -191,12 +192,20 @@ const Mapping = () => {
     return _options;
   }, [sourceFileServerDetails?.fileServers?.length]);
 
-  // Select Source Path dropdown: populated with export paths from the File Server Overview Export Path table
+  // Select Source Path dropdown: same as overview/ExploreModal - show all export paths, fade/disable those with isDisabled
   const sourcePathOptions = useMemo(() => {
     if (!allExportPaths?.length) return [];
+    const pathToDisabled = new Map<string, boolean>();
+    allExportPaths.forEach((v) => {
+      if (v.isDisabled === true) pathToDisabled.set(v.volumePath, true);
+    });
     const paths = allExportPaths.map((v) => v.volumePath);
     const uniquePaths = [...new Set(paths)].sort();
-    return getOptionsFromArray(uniquePaths);
+    return uniquePaths.map((volumePath) => ({
+      label: volumePath,
+      value: volumePath,
+      isDisabled: pathToDisabled.get(volumePath) === true,
+    }));
   }, [allExportPaths]);
 
   // Destination File Server options (same as table: exclude source, active only, matching protocol)
@@ -220,13 +229,17 @@ const Mapping = () => {
     protocolForm.formState.protocol?.value,
   ]);
 
-  // Destination Path options for the selected destination file server (from fileServerWithPathsMap)
+  // Destination Path options: same as overview - show all export paths, fade/disable those that are disabled/invalid/unreachable
   const destinationPathOptions = useMemo(() => {
     const serverId = destinationForm.formState.destinationFileServer?.value ?? "";
     const paths = fileServerWithPathsMap?.get(serverId) ?? [];
     return paths.map((p) => ({
       label: p.pathName,
       value: p.pathId,
+      isDisabled:
+        p.isDisabled === true ||
+        p.isValid === false ||
+        (p.reachableCount !== undefined && p.reachableCount === 0),
     }));
   }, [
     destinationForm.formState.destinationFileServer?.value,
@@ -546,32 +559,78 @@ const Mapping = () => {
               placeholder="Select Destination File Server"
             />
           </Box>
-          {/* Row 2 - all dropdowns same width as Select Destination File Server */}
+          {/* Row 2 - all dropdowns same width as Select Destination File Server; use Autocomplete so disabled export paths are faded (mirrors overview/ExploreModal) */}
           <Box className="flex flex-col gap-2 md:pr-10 w-full">
-            <FormFieldSelect
-              label="Select Source Path"
-              labelClassName="text-sm font-semibold text-gray-900"
-              name="selectedSourcePath"
-              form={sourcePathForm}
+            <Text className="text-sm font-semibold text-gray-900">Select Source Path</Text>
+            <Autocomplete
               options={sourcePathOptions}
+              getOptionLabel={(opt) => opt?.label ?? ""}
+              getOptionDisabled={(opt) => opt?.isDisabled === true}
+              value={
+                sourcePathOptions.find(
+                  (o) => o.value === sourcePathForm.formState.selectedSourcePath?.value
+                ) ?? null
+              }
+              onChange={(_, newValue) => {
+                sourcePathForm.handleFormChange(newValue ?? "", {
+                  name: "selectedSourcePath",
+                });
+              }}
               disabled={!sourceFileServerDetails || !sourcePathOptions.length}
-              className="w-full"
-              placeholder="Select Source Path"
+              size="small"
+              renderInput={(params) => (
+                <TextField {...params} placeholder="Select Source Path" />
+              )}
+              renderOption={(props, option) => (
+                <li
+                  {...props}
+                  key={option.value}
+                  style={{
+                    ...(props as React.HTMLAttributes<HTMLLIElement>).style,
+                    opacity: option.isDisabled ? 0.5 : 1,
+                  }}
+                >
+                  {option.label}
+                </li>
+              )}
             />
           </Box>
           <Box className="flex flex-col gap-2 md:pl-10 w-full">
-            <FormFieldSelect
-              label="Select Destination Path"
-              labelClassName="text-sm font-semibold text-gray-900"
-              name="destinationPath"
-              form={destinationForm}
+            <Text className="text-sm font-semibold text-gray-900">Select Destination Path</Text>
+            <Autocomplete
               options={destinationPathOptions}
+              getOptionLabel={(opt) => opt?.label ?? ""}
+              getOptionDisabled={(opt) => opt?.isDisabled === true}
+              value={
+                destinationPathOptions.find(
+                  (o) => o.value === destinationForm.formState.destinationPath?.value
+                ) ?? null
+              }
+              onChange={(_, newValue) => {
+                destinationForm.handleFormChange(newValue ?? "", {
+                  name: "destinationPath",
+                });
+              }}
               disabled={
                 !destinationForm.formState.destinationFileServer?.value ||
                 !destinationPathOptions.length
               }
-              className="w-full"
-              placeholder="Select Destination Path"
+              size="small"
+              renderInput={(params) => (
+                <TextField {...params} placeholder="Select Destination Path" />
+              )}
+              renderOption={(props, option) => (
+                <li
+                  {...props}
+                  key={option.value}
+                  style={{
+                    ...(props as React.HTMLAttributes<HTMLLIElement>).style,
+                    opacity: option.isDisabled ? 0.5 : 1,
+                  }}
+                >
+                  {option.label}
+                </li>
+              )}
             />
           </Box>
           {/* Row 3 - both Add links at same level; min-w-0 + truncation prevent long paths from overlapping */}
