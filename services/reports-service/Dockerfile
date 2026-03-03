@@ -50,10 +50,17 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Upgrade npm to 11.11.0 for compatibility. npm@11.11.0 bundles minimatch 10.2.2
+# which is vulnerable (CVE-2026-27903, CVE-2026-27904), so we patch it to 10.2.3.
+RUN npm install -g npm@11.11.0 \
+    && npm install --prefix /tmp minimatch@10.2.3 \
+    && rm -rf $(npm root -g)/npm/node_modules/minimatch \
+    && cp -r /tmp/node_modules/minimatch $(npm root -g)/npm/node_modules/minimatch \
+    && rm -rf /tmp/node_modules /tmp/package.json /tmp/package-lock.json
+
 # Install global npm packages
 RUN npm install -g @nestjs/cli pm2@latest
-
-RUN npm install -g npm@11.7.0
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/firefox \
@@ -78,7 +85,7 @@ COPY nest-cli.json .
 COPY entrypoint.sh .
 
 # Build the application
-RUN npm run build
+RUN npm run build && npm uninstall -g @nestjs/cli
 
 # Expose application port
 EXPOSE 3000

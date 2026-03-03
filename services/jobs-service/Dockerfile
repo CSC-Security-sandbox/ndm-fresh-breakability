@@ -9,7 +9,7 @@ RUN apk update && \
 
 WORKDIR /app
 
-COPY ["package.json", "./"]
+COPY ["package.json", "package-lock.json", "./"]
 COPY [".npmrc", "./"]
 
 RUN --mount=type=secret,id=git_token \
@@ -21,7 +21,7 @@ COPY tsconfig.json .
 COPY tsconfig.build.json .
 COPY nest-cli.json .
 
-RUN npm run build
+RUN npm run build && npm uninstall -g @nestjs/cli
 
 EXPOSE 3000
 

@@ -33,7 +33,7 @@
     "@netapp-cloud-datamigrate/auth-lib": "0.1.1",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
-    "axios": "^1.7.7",
+    "axios": "^1.13.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "nodemailer": "^7.0.7",
@@ -81,8 +81,14 @@
   "overrides": {
     "form-data" : "^4.0.4",
     "sha.js": "^2.4.12",
-    "tar": "^7.5.8",
-    "serialize-javascript": "^7.0.3"
+    "tar": "^7.5.7",
+    "fast-xml-parser": "^5.3.4",
+    "glob": "^10.5.0",
+    "jws": "^3.2.3",
+    "qs": "^6.14.1",
+    "serialize-javascript":"^7.0.3",
+    "validator":"13.15.22",
+    "test-exclude": "^8.0.0"
   },
   "jest": {
     "moduleFileExtensions": [
