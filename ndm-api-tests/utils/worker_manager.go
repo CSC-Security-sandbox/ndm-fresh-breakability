@@ -291,9 +291,10 @@ func CreateWorkerScript(resp *http.Response, projectId string) (string, string, 
 		return "", "", err
 	}
 	type WorkerItems struct {
-		WorkerId       string `json:"workerId"`
-		WorkerSecret   string `json:"workerSecret"`
-		ControlPlaneIp string `json:"controlPlaneIp"`
+		WorkerId             string `json:"workerId"`
+		WorkerSecret         string `json:"workerSecret"`
+		ControlPlaneIp       string `json:"controlPlaneIp"`
+		GatewayCACertificate string `json:"gatewayCACertificate"`
 	}
 	type WorkerData struct {
 		Items WorkerItems `json:"items"`
@@ -313,29 +314,40 @@ func CreateWorkerScript(resp *http.Response, projectId string) (string, string, 
 	workerId := workerResp.Data.Items.WorkerId
 	workerSecret := workerResp.Data.Items.WorkerSecret
 	controlPlaneIp := workerResp.Data.Items.ControlPlaneIp
+	gatewayCACertificate := workerResp.Data.Items.GatewayCACertificate
 
 	script := ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolNFS:
+		tlsCertForScript := gatewayCACertificate
+		if gatewayCACertificate != "" {
+			tlsCertForScript = strings.ReplaceAll(gatewayCACertificate, "'", "'\\''")
+		}
 		script = fmt.Sprintf(`
     sudo su -c '
     export WORKER_ID=%s
     export WORKER_SECRET=%s
 	export PROJECT_ID=%s
     export CONTROL_PLANE_IP=%s
+    export TLS_CERT='%s'
     sh /opt/datamigrator/bin/worker_register.sh
     '
-    `, workerId, workerSecret, projectId, controlPlaneIp)
+    `, workerId, workerSecret, projectId, controlPlaneIp, tlsCertForScript)
 
 	case ProtocolSMB:
+		tlsCertArg := gatewayCACertificate
+		if strings.ContainsAny(gatewayCACertificate, " \t\"") {
+			tlsCertArg = `"` + strings.ReplaceAll(gatewayCACertificate, `"`, `\"`) + `"`
+		}
 		script = fmt.Sprintf(
-			`"%s" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s /PROJECTID=%s`,
+			`"%s" /SILENT /WORKERID=%s /WORKERSECRET=%s /CONTROLPLANEIP=%s /PROJECTID=%s /TLSCERT=%s`,
 			SMB_EXECUTABLE_FILENAME,
 			workerId,
 			workerSecret,
 			controlPlaneIp,
 			projectId,
+			tlsCertArg,
 		)
 	}
 
@@ -373,6 +385,7 @@ func GetDetachWorkerScriptForNFS(workerConfig SSHConfig) string {
 	echo "$SUDO_PASS" | sudo -S sed -i '/^KEYCLOAK_BASE_URL=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^WORKER_ID=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^WORKER_SECRET=/d' "$ENV_FILE"
+	echo "$SUDO_PASS" | sudo -S sed -i '/^TLS_CERT=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^CONTROL_PLANE_IP=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_HOST=/d' "$ENV_FILE"
 	echo "$SUDO_PASS" | sudo -S sed -i '/^REDIS_USERNAME=/d' "$ENV_FILE"
