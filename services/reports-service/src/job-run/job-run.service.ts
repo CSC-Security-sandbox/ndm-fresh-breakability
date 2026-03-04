@@ -136,7 +136,7 @@ export class JobRunService {
         isReportReady: true,
         status: true,
         endTime: true,
-        // worker: {workerId: true},
+        jobStats: true,
         jobConfig: {
           id: true,
           jobType: true,
@@ -195,17 +195,22 @@ export class JobRunService {
       worker: jobRun?.worker?.length ?? 0,
     };
     const jobRunStatus = new JobRunStats();
-    this.logger.log(
-      `Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`
-    );
-
-    if (jobStatsSummary) {
+    
+    // For completed jobs, use persisted jobStats from jobRun (accurate at completion time)
+    // For running jobs, fall back to materialized view
+    const terminalStatuses = [JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped];
+    const isTerminal = terminalStatuses.includes(jobRun.status as JobRunStatus);
+    
+    if (isTerminal && jobRun.jobStats) {
+      this.logger.log(`Job Run ${id} using persisted jobStats: ${JSON.stringify(jobRun.jobStats)}`);
+      jobRunStatus.fileCount = jobRun.jobStats.fileCount?.toString() || "0";
+      jobRunStatus.directories = jobRun.jobStats.directories?.toString() || "0";
+      jobRunStatus.totalSize = formatBytes(Number(jobRun.jobStats.totalSize || 0)).toString();
+    } else if (jobStatsSummary) {
+      this.logger.log(`Job Run ${id} using MV stats: ${JSON.stringify(jobStatsSummary)}`);
       jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
       jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
-      jobRunStatus.totalSize = formatBytes(
-        Number(jobStatsSummary.totalSize)
-      ).toString();
-      // Assign lastRefreshed to top-level property for DTO compatibility
+      jobRunStatus.totalSize = formatBytes(Number(jobStatsSummary.totalSize)).toString();
     } else {
       jobRunStatus.fileCount = "0";
       jobRunStatus.directories = "0";

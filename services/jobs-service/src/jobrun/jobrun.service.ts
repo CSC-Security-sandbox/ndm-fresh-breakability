@@ -219,11 +219,7 @@ export class JobRunService {
         startTime: true,
         endTime: true,
         jobConfigId: true,
-        jobStats: {
-          fileCount: true,
-          directories: true,
-          totalSize: true,
-        },
+        jobStats: true,
         tasks: {
           id: true,
           status: true,
@@ -417,7 +413,7 @@ export class JobRunService {
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
         this.logger.debug(
-          `jobRun for id ${jobRun.jobrunid} - with jobjobstats ${JSON.stringify(jobRun.jobjobstats)}`
+          `jobRun for id ${jobRun.jobrunid} - with jobstats ${JSON.stringify(jobRun.jobstats)}`
         );
         const partialJobRunStats = {
           jobRunId: jobRun.jobrunid,
@@ -449,9 +445,25 @@ export class JobRunService {
             : Date.now() - jobRun.starttime.getTime(),
         };
        
-          const jobStats: JobRunStats = await this.calculateJobRunStats(
-            jobRun.jobrunid
-          );
+          const terminalStatuses = [
+            JobRunStatus.Completed,
+            JobRunStatus.Failed,
+            JobRunStatus.Errored,
+            JobRunStatus.Stopped,
+            JobRunStatus.Blocked,
+          ];
+          const isTerminal = terminalStatuses.includes(jobRun.status);
+
+          let jobStats: JobRunStats;
+          if (isTerminal && jobRun.jobstats) {
+            this.logger.log(`Job Run ${jobRun.jobrunid} using persisted jobStats`);
+            jobStats = jobRun.jobstats;
+          } else if (isTerminal) {
+            this.logger.log(`Job Run ${jobRun.jobrunid} terminal but no persisted stats, using live query`);
+            jobStats = await this.calculateLiveInventoryStats(jobRun.jobrunid);
+          } else {
+            jobStats = await this.calculateJobRunStats(jobRun.jobrunid);
+          }
           this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
           this.logger.log(
             `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
@@ -524,7 +536,7 @@ export class JobRunService {
         );
       }
       const jobRunStats: JobRunStats =
-        await this.calculateJobRunStats(jobRunId);
+        await this.calculateLiveInventoryStats(jobRunId);
       if (
         jobConfig &&
         (jobConfig.jobType === JobType.MIGRATE ||
@@ -881,6 +893,36 @@ export class JobRunService {
 
     const response = {
       ...jobRunStatus,
+      errors: await this.getErrorCounts(jobRunId),
+    };
+    return response;
+  }
+
+  async calculateLiveInventoryStats(jobRunId: string): Promise<JobRunStats> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ["jobConfig"],
+    });
+    if (!jobRun)
+      throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    const result = await this.inventoryRepo
+      .createQueryBuilder("inventory")
+      .select("COUNT(*) FILTER (WHERE NOT inventory.is_directory)", "fileCount")
+      .addSelect("COUNT(*) FILTER (WHERE inventory.is_directory)", "directoryCount")
+      .addSelect("COALESCE(SUM(inventory.file_size) FILTER (WHERE NOT inventory.is_directory), 0)", "totalSize")
+      .where("inventory.job_run_id = :jobRunId", { jobRunId })
+      .getRawOne();
+
+    this.logger.debug(
+      `[calculateLiveInventoryStats] Live inventory stats for ${jobRunId}: ${JSON.stringify(result)}`
+    );
+
+    const response: JobRunStats = {
+      fileCount: result?.fileCount?.toString() || "0",
+      directories: result?.directoryCount?.toString() || "0",
+      totalSize: result?.totalSize?.toString() || "0",
+      lastRefreshed: new Date(),
       errors: await this.getErrorCounts(jobRunId),
     };
     return response;
