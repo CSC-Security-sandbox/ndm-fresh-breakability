@@ -432,7 +432,7 @@ describe("CsvService", () => {
 
       await service.getInventoryData("test-id", 100, 1, 'MIGRATE');
 
-      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1);
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1, "MIGRATE");
       migrationSpy.mockRestore();
     });
 
@@ -446,7 +446,7 @@ describe("CsvService", () => {
 
       await service.getInventoryData("test-id", 100, 1);
 
-      expect(migrationSpy).toHaveBeenCalled();
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1, undefined);
       migrationSpy.mockRestore();
     });
 

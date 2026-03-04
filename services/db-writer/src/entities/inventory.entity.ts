@@ -111,4 +111,12 @@ export class InventoryEntity {
     @ApiProperty({ description: 'Checksum generated timestamp' })
     @Column({ name: 'checksum_time', type: 'timestamptz', nullable: true })
     checksumTime: Date | null;
+
+    @ApiProperty({ description: 'COC report: copy content status (success / failed / not_applicable)', nullable: true })
+    @Column({ name: 'copy_content_status', type: 'text', nullable: true })
+    copyContentStatus: string | null;
+
+    @ApiProperty({ description: 'COC report: stamp metadata status (success / failed / not_applicable)', nullable: true })
+    @Column({ name: 'stamp_meta_data_status', type: 'text', nullable: true })
+    stampMetaDataStatus: string | null;
 }

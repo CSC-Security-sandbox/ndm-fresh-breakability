@@ -1,5 +1,5 @@
 
-import { CommandStatus, ItemInfo, ItemMeta, OPS_CMD, OPS_STATUS, JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
+import { CommandStatus, ItemInfo, ItemMeta, OPS_CMD, OPS_STATUS, JobManagerContext, Cmd } from "@netapp-cloud-datamigrate/jobs-lib";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
@@ -70,12 +70,22 @@ export class CommandExecService {
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
        // Stamp Meta if needed
+        let metaResult: { shouldUpdateItemInfo: boolean; targetErrors: string[]; sourceErrors: string[] } | null = null;
         if (baseCmdRes.shouldStampMeta) {
-            const metaResult = await this.stampMetaService.stampMetaData(input);
+            metaResult = await this.stampMetaService.stampMetaData(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
         }
+
+        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo
+        input.copyContentStatus = this.getCopyContentStatus(input.command);
+        input.stampMetaDataStatus = baseCmdRes.shouldStampMeta
+            ? (metaResult && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0))
+                ? 'failed'
+                : 'success'
+            : 'not_applicable';
+
         if( baseCmdRes.shouldUpdateItemInfo ) {
             await this.publishFileInfo(input);
         }
@@ -255,6 +265,19 @@ export class CommandExecService {
         return output
     }
 
+    /**
+     * COC report: derive copyContentStatus from command ops.
+     * - success: COPY_FILE completed successfully (file content copied)
+     * - failed: COPY_FILE was triggered but ended in error or checksum mismatch
+     * - not_applicable: no file content copy (COPY_SYMLINK, COPY_DIR only, or delete only)
+     */
+    private getCopyContentStatus(command: Cmd): 'success' | 'failed' | 'not_applicable' {
+        if (command.ops?.[OPS_CMD.COPY_FILE]) {
+            return command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED ? 'success' : 'failed';
+        }
+        return 'not_applicable';
+    }
+
     private async markDirectoryContentsAsDeleted(directoryPath: string, jobContext: JobManagerContext): Promise<void> {
         try {
             const deletedDirectoryInfo = new ItemInfo(
@@ -278,7 +301,8 @@ export class CommandExecService {
         }
     }
 
-    async publishFileInfo({command , jobContext, targetPath, sourcePath, errorType  }: CommandExecInput): Promise<void> {
+    async publishFileInfo(input: CommandExecInput): Promise<void> {
+        const { command, jobContext, targetPath, sourcePath, errorType } = input;
         const isDeleted = !!(command.ops?.[OPS_CMD.REMOVE_DIR] || command.ops?.[OPS_CMD.REMOVE_FILE]);
         if (isDeleted) {
             let sourceStats = null;
@@ -312,18 +336,20 @@ export class CommandExecService {
             const itemInfo = new ItemInfo(
                 command.fPath,
                 isDirectory,
-                false, 
+                false,
                 command.fPath.split('/').length - 2,
                 path.extname(targetPath),
                 isDirectory ? FileType.DIRECTORY.toLowerCase() : FileType.FILE.toLowerCase(),
                 sourceMeta,
-                sourceMeta, 
-                0, 
+                sourceMeta,
+                0,
                 command.metadata?.inode ?? 0,
-                true, 
+                true,
                 null // checksumTime is null for delete operations
             );
-    
+            (itemInfo as any).copyContentStatus = 'not_applicable';
+            (itemInfo as any).stampMetaDataStatus = input.stampMetaDataStatus ?? 'not_applicable';
+
             await jobContext.publishToFileStream(itemInfo);
             return;
         }
@@ -374,8 +400,10 @@ export class CommandExecService {
             targetStats.size,
             command.metadata.inode,
             false, // isDeleted is false for copy operations
-            checksumTime // checksum generated timestamp
-        )
+            checksumTime
+        );
+        (itemInfo as any).copyContentStatus = input.copyContentStatus ?? 'not_applicable';
+        (itemInfo as any).stampMetaDataStatus = input.stampMetaDataStatus ?? 'not_applicable';
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});
         await jobContext.publishToFileStream(itemInfo);

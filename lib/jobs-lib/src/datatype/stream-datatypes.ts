@@ -2,6 +2,9 @@ import { CommandStatus, OPS_STATUS, TaskStatus, TaskType } from "src/types/enums
 import { Serializable } from "../types/serializable";
 
 
+/** Status for copy-content and stamp-metadata columns in COC report: success, failed, or not_applicable when operation was not triggered */
+export type OperationStatusValue = 'success' | 'failed' | 'not_applicable';
+
 export class ItemInfo implements Serializable {
     fileName: string;
     isDirectory: boolean;
@@ -15,7 +18,10 @@ export class ItemInfo implements Serializable {
     inode: number;
     isDeleted: boolean;
     checksumTime: Date | null;
-    
+    /** COC report: status of file content copy (success / failed / not_applicable) */
+    copyContentStatus?: OperationStatusValue;
+    /** COC report: status of metadata stamping (success / failed / not_applicable) */
+    stampMetaDataStatus?: OperationStatusValue;
 
     constructor(
         fileName: string,
@@ -29,7 +35,9 @@ export class ItemInfo implements Serializable {
         size: number,
         inode: number,
         isDeleted: boolean = false,
-        checksumTime: Date | null = null
+        checksumTime: Date | null = null,
+        copyContentStatus?: OperationStatusValue,
+        stampMetaDataStatus?: OperationStatusValue
     ) {
         this.fileName = fileName;
         this.isDirectory = isDirectory;
@@ -43,6 +51,8 @@ export class ItemInfo implements Serializable {
         this.inode = inode;
         this.isDeleted = isDeleted;
         this.checksumTime = checksumTime;
+        this.copyContentStatus = copyContentStatus;
+        this.stampMetaDataStatus = stampMetaDataStatus;
     }
 
     serialize(): string {

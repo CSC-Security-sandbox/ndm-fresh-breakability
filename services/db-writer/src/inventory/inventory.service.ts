@@ -106,7 +106,9 @@ export class InventoryService {
       targetMeta: file?.targetMeta ?? null,
       inode: file?.inode ?? null,
       isDeleted: file?.isDeleted ?? false,
-      checksumTime: file?.checksumTime ?? null,
+      checksumTime: (file as any)?.checksumTime ?? null,
+      copyContentStatus: (file as any)?.copyContentStatus ?? null,
+      stampMetaDataStatus: (file as any)?.stampMetaDataStatus ?? null,
     };
   }
 
@@ -293,6 +295,8 @@ export class InventoryService {
                 targetMeta: file?.targetMeta ?? null,
                 inode: null,
                 isDeleted: true,
+                copyContentStatus: null,
+                stampMetaDataStatus: null,
               };
             });
       
