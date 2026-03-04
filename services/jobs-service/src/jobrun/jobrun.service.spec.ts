@@ -829,11 +829,12 @@ describe("JobRunService", () => {
 
       const inventoryQueryBuilder: any = {
         select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         getRawOne: jest.fn().mockResolvedValue({
           fileCount: "10",
           directoryCount: "5",
-          totalFileSize: "5000",
+          totalSize: "5000",
         }),
       };
 
@@ -850,12 +851,8 @@ describe("JobRunService", () => {
       };
 
       jest
-        .spyOn(jobStatsSummaryMvRepo, "findOne")
-        .mockResolvedValue({
-          fileCount: 10,
-          directoryCount: 5,
-          totalSize: 5000,
-        } as any);
+        .spyOn(inventoryRepo, "createQueryBuilder")
+        .mockReturnValue(inventoryQueryBuilder);
       jest
         .spyOn(operationErrorRepo, "createQueryBuilder")
         .mockReturnValue(operationErrorQueryBuilder);
@@ -880,9 +877,7 @@ describe("JobRunService", () => {
         where: { id: jobRunId },
       });
 
-      expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalledWith({
-        where: { jobRunId: jobRunId }
-      });
+      expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith("inventory");
 
       expect(operationErrorRepo.createQueryBuilder).toHaveBeenCalledWith("oe");
       expect(operationErrorQueryBuilder.innerJoin).toHaveBeenCalledWith(
@@ -2907,11 +2902,7 @@ describe("JobRunService", () => {
         startTime: true,
         status: true,
         subStatus: true,
-        jobStats: {
-          fileCount: true,
-          directories: true,
-          totalSize: true,
-        },
+        jobStats: true,
         tasks: {
           createdAt: true,
           id: true,
@@ -3376,11 +3367,16 @@ describe("JobRunService", () => {
       it('should return live stats from direct inventory query', async () => {
         const jobRunId = 'jobRunId';
         const mockJobRun = { id: jobRunId, jobConfig: {} };
-        const mockQueryResult = [{ file_count: '15', directory_count: '3', total_size: '204800' }];
         const mockErrorCounts = [{ errorType: 'TypeError', count: 1 }];
 
+        const inventoryQb: any = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce({ fileCount: '15', directoryCount: '3', totalSize: '204800' }),
+        };
         jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
-        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce(mockQueryResult);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce(inventoryQb);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
 
         const result = await service.calculateLiveInventoryStats(jobRunId);
@@ -3389,10 +3385,7 @@ describe("JobRunService", () => {
           where: { id: jobRunId },
           relations: ['jobConfig'],
         });
-        expect(service['inventoryRepo'].query).toHaveBeenCalledWith(
-          expect.stringContaining('FROM datamigrator.inventory'),
-          [jobRunId],
-        );
+        expect(inventoryRepo.createQueryBuilder).toHaveBeenCalledWith('inventory');
         expect(result).toEqual({
           fileCount: '15',
           directories: '3',
@@ -3406,8 +3399,14 @@ describe("JobRunService", () => {
         const jobRunId = 'jobRunId';
         const mockJobRun = { id: jobRunId, jobConfig: {} };
 
+        const inventoryQb: any = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce({ fileCount: '0', directoryCount: '0', totalSize: '0' }),
+        };
         jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
-        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce([{ file_count: '0', directory_count: '0', total_size: '0' }]);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce(inventoryQb);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
 
         const result = await service.calculateLiveInventoryStats(jobRunId);
@@ -3425,8 +3424,14 @@ describe("JobRunService", () => {
         const jobRunId = 'jobRunId';
         const mockJobRun = { id: jobRunId, jobConfig: {} };
 
+        const inventoryQb: any = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          getRawOne: jest.fn().mockResolvedValueOnce(null),
+        };
         jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
-        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce([]);
+        jest.spyOn(inventoryRepo, 'createQueryBuilder').mockReturnValueOnce(inventoryQb);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
 
         const result = await service.calculateLiveInventoryStats(jobRunId);
