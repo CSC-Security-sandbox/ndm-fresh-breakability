@@ -7,6 +7,7 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { SMBProtocol } from '../../protocols/smb/smb.protocol';
 import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
 import { mockLogger } from 'src/auth/auth.service.spec';
+import { WinShellService } from '../common/win-shell.service';
 
 let loggerFactory: LoggerFactory;
 
@@ -31,6 +32,10 @@ const mockRedisService = {
 const mockProtocol = {
     mountPath: jest.fn(),
     unmountPath: jest.fn()
+};
+
+const mockWinShellService = {
+    executeCommand: jest.fn().mockResolvedValue({ stdout: 'True', stderr: '' }),
 };
 
 const mockWorkManagerService = {
@@ -87,6 +92,7 @@ describe('SetupActivityService', () => {
             mockRedisService as any,
             loggerFactory as LoggerFactory,
             protocols as Protocols,
+            mockWinShellService as unknown as WinShellService,
         );
 
     });
@@ -421,6 +427,76 @@ describe('SetupActivityService', () => {
             mockRedisService.getJobManagerContext.mockRejectedValue(new Error('Redis error'));
 
             await expect(service.cleanup('job-redis-error')).rejects.toThrow(RetryableError);
+        });
+    });
+
+    describe('validateDomainJoin (via setup)', () => {
+        const smbContext = {
+            jobConfig: {
+                sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                destinationFileServer: { protocols: [{ type: 'SMB' }] },
+                options: { preservePermissions: true },
+            },
+        };
+
+        beforeEach(() => {
+            Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
+            mockRedisService.getJobManagerContext.mockResolvedValue(smbContext);
+            mockAuthService.getAccessToken.mockResolvedValue('token');
+            (axios.post as jest.Mock).mockResolvedValue({});
+            mockProtocol.mountPath.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+            Object.defineProperty(process, 'platform', { value: process.platform, writable: true });
+        });
+
+        it('should pass when worker is domain-joined', async () => {
+            mockWinShellService.executeCommand.mockResolvedValue({ stdout: 'True', stderr: '' });
+            const result = await service.setup('job-domain-ok');
+            expect(result.status).toBe('success');
+        });
+
+        it('should fail when worker is not domain-joined', async () => {
+            mockWinShellService.executeCommand.mockResolvedValue({ stdout: 'False', stderr: '' });
+            const result = await service.setup('job-not-joined');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('not joined to a domain');
+        });
+
+        it('should fail when executeCommand returns stderr', async () => {
+            mockWinShellService.executeCommand.mockResolvedValue({ stdout: '', stderr: 'Access denied' });
+            const result = await service.setup('job-domain-stderr');
+            expect(result.status).toBe('error');
+            expect(result.message).toContain('Failed to check domain join status');
+        });
+
+        it('should skip validation when preservePermissions is false', async () => {
+            const nopermContext = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                    destinationFileServer: { protocols: [{ type: 'SMB' }] },
+                    options: { preservePermissions: false },
+                },
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(nopermContext);
+            const result = await service.setup('job-no-perms');
+            expect(result.status).toBe('success');
+            expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
+        });
+
+        it('should skip validation for non-SMB destination', async () => {
+            const nfsContext = {
+                jobConfig: {
+                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
+                    destinationFileServer: { protocols: [{ type: 'NFS' }] },
+                    options: { preservePermissions: true },
+                },
+            };
+            mockRedisService.getJobManagerContext.mockResolvedValue(nfsContext);
+            const result = await service.setup('job-nfs-dest');
+            expect(result.status).toBe('success');
+            expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
         });
     });
 });

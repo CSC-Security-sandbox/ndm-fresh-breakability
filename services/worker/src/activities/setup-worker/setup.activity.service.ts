@@ -12,6 +12,7 @@ import { WorkersConfig } from 'src/config/app.config';
 import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WinShellService } from '../common/win-shell.service';
 // import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
 
 @Injectable()
@@ -30,6 +31,7 @@ export class SetupActivityService {
     private readonly redisService: RedisService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly protocols: Protocols,
+    private readonly winShellService: WinShellService,
     // private readonly smbUserSetup: SmbUserSetupService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -173,7 +175,13 @@ export class SetupActivityService {
           protocol,
           jobRunId,
         );
-       
+
+      // validate domain join for SMB migrations
+      await this.validateDomainJoin(
+        context.jobConfig?.destinationFileServer?.protocols[0]?.type,
+        context.jobConfig?.options?.preservePermissions,
+      );
+
         // setup users for SMB 
         // try {
         //   if (process.platform === 'win32' && context.jobConfig?.jobType != JobType.DISCOVERY) {
@@ -215,6 +223,26 @@ export class SetupActivityService {
         message: `Setup failed: ${error.message}`,
       };
     }
+  }
+
+  private async validateDomainJoin(destinationProtocolType: string, preservePermissions: boolean): Promise<void> {
+    if (!destinationProtocolType?.includes(ProtocolTypes.SMB) || !preservePermissions || process.platform !== 'win32') {
+      this.logger.log(`Skipping domain join validation for SMB migration without permission preservation OR non-Windows platform`);
+      return;
+    }
+
+    this.logger.log(`Validating domain join status for worker`);
+    const { stdout, stderr } = await this.winShellService.executeCommand(`(Get-WmiObject Win32_ComputerSystem).PartOfDomain`);
+
+    if (stderr) {
+      throw new Error(`Failed to check domain join status on worker: ${stderr}`);
+    }
+
+    if (stdout.trim().toLowerCase() !== 'true') {
+      throw new Error(`Worker is not joined to a domain. SMB migration with permission preservation requires all workers to be domain-joined.`);
+    }
+
+    this.logger.log(`Worker is domain-joined — validation passed`);
   }
 
   async speedTestCleanup(jobRunId: string, fsDetails:FileServerDetails, protocolType:string): Promise<any> {
