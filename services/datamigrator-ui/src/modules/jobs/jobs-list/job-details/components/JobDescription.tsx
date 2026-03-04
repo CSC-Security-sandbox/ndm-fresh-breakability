@@ -3,6 +3,7 @@ import { JobDescriptionProps, JOBS_TYPE } from "@/types/app.type";
 import {
   Card,
   Text,
+  Button,
   CardHeader,
   CardTitle,
   CardContent,
@@ -10,9 +11,12 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { VolIcon } from "@netapp/bxp-style/react-icons/Storage";
 import JobDescriptionColumn from "@modules/jobs/jobs-list/job-details/components/JobDescriptionColumn";
+import { useNavigate } from "react-router-dom";
 
 const JobDescription = (props: JobDescriptionProps) => {
-  const { source, destination, jobType } = props;
+  const { source, destination, jobType, workerCount, workersUrl } = props;
+  const navigate = useNavigate();
+
   if (!source) {
     return (
       <Card className="h-full flex p-10">
@@ -49,6 +53,20 @@ const JobDescription = (props: JobDescriptionProps) => {
             name="Protocol"
             value={source.protocol}
           />
+          {workerCount !== undefined && (
+            <JobDescriptionColumn
+              name="Workers"
+              value={
+                workersUrl ? (
+                  <Button variant="text" onClick={() => navigate(workersUrl)}>
+                    {workerCount}
+                  </Button>
+                ) : (
+                  workerCount
+                )
+              }
+            />
+          )}
         </Box>
         {destination && destination.serverName && (
           <Box className="flex flex-col gap-4 w-1/2">

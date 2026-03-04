@@ -51,6 +51,7 @@ const JobRunDetails = () => {
   const adhocRun = useAdhocRun();
   const params = useParams<{ jobId: string; jobRunId: string }>();
   const { jobId, jobRunId } = params;
+  const workersUrl = `/workers/${jobRunId}`;
   const { data: jobRunDetails, isLoading } = useGetJobRunDetailsQuery(
     { jobRunId },
     {
@@ -413,13 +414,14 @@ const JobRunDetails = () => {
         </Box>
       </Box>
       <JobRunHeader jobRunDetails={jobRunDetails} />
-      <JobRunTaskCard jobRunDetails={jobRunDetails} jobRunId={jobRunId} />
       <Box className="flex gap-6 items-stretch">
         <Box className="grow basis-1/2">
           <JobDescription
             id={jobRunDetails?.id}
             source={jobRunDetails?.jobConfig.sourceServer}
             destination={jobRunDetails?.jobConfig.destinationServer}
+            workerCount={jobRunDetails?.worker || 0}
+            workersUrl={workersUrl}
           />
         </Box>
         <Box className="grow basis-1/2 items-stretch">

@@ -572,6 +572,8 @@ export type JobDescriptionProps = {
   source?: FileServerApiPropType;
   destination?: FileServerApiPropType;
   jobType?: JOBS_TYPE;
+  workerCount?: number;
+  workersUrl?: string;
 };
 
 export type JobDescriptionColumnPropType = {
