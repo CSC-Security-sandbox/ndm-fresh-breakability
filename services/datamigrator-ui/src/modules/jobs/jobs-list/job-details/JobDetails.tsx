@@ -108,6 +108,7 @@ const JobDetails = () => {
               import.meta.env.VITE_TIME_INTERVAL
           ),
       skipPollingIfUnfocused: true,
+      refetchOnMountOrArgChange: true,
     }
   );
   const [downloadErrorLogs] = useLazyDownloadErrorLogsCSVQuery();
@@ -224,7 +225,10 @@ const JobDetails = () => {
           jobRunType: row.jobRunType,
           handleUpdateStatus,
           isDisabled: isLoading || isUpdating,
-          adhocRun: () => adhocRun(jobId),
+          adhocRun: async () => {
+            await adhocRun(jobId);
+            refetch();
+          },
         })
       : [];
 
@@ -389,9 +393,10 @@ const JobDetails = () => {
               </Button>
               <Button
                 color="primary"
-                onClick={() => {
+                onClick={async () => {
                   dispatch(setModalClose());
-                  adhocRun(jobId, true);
+                  await adhocRun(jobId, true);
+                  refetch();
                 }}
               >
                 Proceed with Ad-Hoc
@@ -1151,7 +1156,10 @@ const JobDetails = () => {
                   : "View / Edit Configuration"}
               </Button>
               <Button
-                onClick={() => adhocRun(jobId, true)}
+                onClick={async () => {
+                  await adhocRun(jobId, true);
+                  refetch();
+                }}
                 disabled={
                   !jobId ||
                   jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE

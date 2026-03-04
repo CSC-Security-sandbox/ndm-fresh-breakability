@@ -48,9 +48,15 @@ const JobRunList = () => {
     isLoading,
     isFetching,
     refetch,
-  } = useGetJobRunsQuery({
-    projectId: selectedProjectId,
-  });
+  } = useGetJobRunsQuery(
+    {
+      projectId: selectedProjectId,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+      skip: !selectedProjectId,
+    }
+  );
   const { latestJobRun } = useLatestJobRun(jobRunList);
 
   const [jobRunListSelectedIds, setJobRunListSelectedIds] = useState<string[]>(

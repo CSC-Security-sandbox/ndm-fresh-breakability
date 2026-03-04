@@ -43,7 +43,13 @@ const JobsList = () => {
     isError,
     isFetching,
     refetch: refetchJobList,
-  } = useGetJobConfigsQuery({ projectId: selectedProjectId });
+  } = useGetJobConfigsQuery(
+    { projectId: selectedProjectId },
+    {
+      refetchOnMountOrArgChange: true,
+      skip: !selectedProjectId,
+    }
+  );
   const [updateStatus] = useUpdateJobStatusMutation();
   const [deleteJobConfig] = useDeleteJobConfigMutation();
   const [getJobConfigDetails] = useLazyGetJobConfigDetailsQuery();
