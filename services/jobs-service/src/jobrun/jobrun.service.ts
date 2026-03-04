@@ -6,7 +6,7 @@ import {
   InternalServerErrorException
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as parser from "cron-parser";
 import {
@@ -33,7 +33,7 @@ import { SendMailService } from "src/utils/send-email";
 import { WorkersService } from "src/workers/workers.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
+import { DataSource, FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
 import { ApprovalRequestDTO } from "./dto/jobrunactions.dto";
@@ -50,6 +50,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
+import { ProjectEntity } from "src/entities/project.entity";
 
 @Injectable()
 export class JobRunService {
@@ -82,7 +83,11 @@ export class JobRunService {
     private readonly workerService: WorkersService,
     private readonly migrationConflictService: MigrationConflictService,
     @InjectRepository(JobStatsSummaryMvEntity)
-    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>
+    private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>,
+    @InjectRepository(ProjectEntity)
+    private projectRepo: Repository<ProjectEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {
     this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
@@ -768,6 +773,8 @@ export class JobRunService {
         updateData.endTime = new Date();
       }
       await this.jobRunRepo.update({ id: jobRunId }, updateData);
+      // Record ASUP stats for completed or stopped job runs (single call; all ASUP logic inside)
+      await this.recordAsupStatsForJobRun(jobRunId, status, projectId, jobRunDetails.jobConfigId, jobRunStats);
     } else {
       if (
         jobConfig &&
@@ -1242,4 +1249,79 @@ export class JobRunService {
     }
   }
 
+  /**
+   * Record ASUP stats for completed/stopped job runs.
+   * Inserts a row into asup_stats; errors are logged but never thrown.
+   */
+  private async recordAsupStatsForJobRun(
+    jobRunId: string,
+    status: JobRunStatus,
+    projectId: string | undefined,
+    jobConfigId: string,
+    jobRunStats: JobRunStats,
+  ): Promise<void> {
+    if (status !== JobRunStatus.Completed && status !== JobRunStatus.Stopped) return;
+
+    const jobConfig = await this.jobConfigRepo.findOne({
+      where: { id: jobConfigId },
+      relations: {
+        sourcePath: { fileServer: { config: true } },
+        targetPath: { fileServer: { config: true } },
+      },
+    });
+    if (!jobConfig) {
+      this.logger.warn(`Cannot record ASUP stats for job run ${jobRunId}: jobConfig not found`);
+      return;
+    }
+
+    const JOB_TYPE_MAP: Partial<Record<JobType, 'discovery' | 'migration' | 'cutover'>> = {
+      [JobType.DISCOVER]: 'discovery',
+      [JobType.MIGRATE]: 'migration',
+      [JobType.CUT_OVER]: 'cutover',
+    };
+    const jobType = JOB_TYPE_MAP[jobConfig.jobType];
+    if (!jobType) return; 
+
+    this.logger.log(`Recording ASUP stats for job run ${jobRunId} (${status})`);
+    try {
+
+      const project = await this.projectRepo.findOne({ where: { id: projectId } });
+      const protocol = jobConfig.sourcePath?.fileServer?.protocol;
+      const sourceServerType = jobConfig.sourcePath?.fileServer?.config?.serverType || 'N/A';
+      const destinationServerType = jobConfig.targetPath?.fileServer?.config?.serverType || 'N/A';
+
+      const dbSchema = process.env.SCHEMA || 'datamigrator';
+
+      await this.dataSource.query(
+        `INSERT INTO ${dbSchema}.asup_stats (
+          job_run_id, job_config_id,
+          project_id, project_name,
+          job_type, protocol, source_server_type, destination_server_type,
+          file_count, size_bytes, transmitted
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,FALSE)
+        ON CONFLICT (job_run_id) DO UPDATE SET
+          file_count = EXCLUDED.file_count,
+          size_bytes = EXCLUDED.size_bytes`,
+        [
+          jobRunId,
+          jobConfigId,
+          projectId,
+          project?.projectName,
+          jobType,
+          protocol,
+          sourceServerType,
+          destinationServerType,
+          parseInt(jobRunStats.fileCount || '0', 10),
+          parseInt(jobRunStats.totalSize || '0', 10),
+        ],
+      );
+
+      this.logger.log(`Recorded ASUP stats for job run: ${jobRunId}`);
+    } catch (asupError) {
+      this.logger.error(
+        `Failed to record ASUP stats for job run ${jobRunId}: ${(asupError as Error).message}`,
+        asupError as Error,
+      );
+    }
+  }
 }

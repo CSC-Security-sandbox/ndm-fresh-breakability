@@ -8,5 +8,8 @@ export default registerAs(
       port: parseInt(process.env.APP_PORT) || 3000,
     },
     baseDir: process.env.REPORT_DOWNLOAD_LOCATION || "/reports",
+    asup: {
+      asupEndpoint: process.env.ASUP_ENDPOINT || "https://eprod.netapp.com/put/AsupPut",
+    },
   }),
 );

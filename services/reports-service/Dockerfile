@@ -80,6 +80,9 @@ COPY entrypoint.sh .
 # Build the application
 RUN npm run build
 
+# Ensure 7zip binary is executable
+RUN chmod +x /app/node_modules/7zip-bin/linux/x64/7za 2>/dev/null || true
+
 # Expose application port
 EXPOSE 3000
 
