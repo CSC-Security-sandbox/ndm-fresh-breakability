@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE MigrationData [
+<!ELEMENT MigrationData (asup:TABLE_INFO,asup:ROW*,asup:ABORT?)>
+<!ATTLIST MigrationData xmlns CDATA #FIXED "http://asup_search.netapp.com/ns/Manifest/1.0">
+<!ATTLIST MigrationData xmlns:asup CDATA #FIXED "http://asup_search.netapp.com/ns/ASUP/1.1">
+<!ATTLIST MigrationData smf_table_name CDATA #REQUIRED>
+<!ATTLIST MigrationData smf_table_desc CDATA #REQUIRED>
+<!ATTLIST MigrationData col_time_us CDATA #REQUIRED>
+<!ATTLIST MigrationData cluster_uuid CDATA "0">
+<!ATTLIST MigrationData node_uuid CDATA #REQUIRED>
+<!ATTLIST MigrationData node_sn CDATA #REQUIRED>
+<!ATTLIST MigrationData node_system_id CDATA #REQUIRED>
+<!ATTLIST MigrationData data_scope (cluster|node) #REQUIRED>
+<!ELEMENT asup:TABLE_INFO (asup:field*,asup:ABORT?)>
+<!ELEMENT asup:field (asup:tag,asup:smf_name,asup:ui_name,asup:type,asup:qualification,asup:remap)>
+<!ELEMENT asup:tag (#PCDATA)>
+<!ELEMENT asup:smf_name (#PCDATA)>
+<!ELEMENT asup:ui_name (#PCDATA)>
+<!ELEMENT asup:type (#PCDATA)>
+<!ELEMENT asup:list (asup:li+)>
+<!ELEMENT asup:li (#PCDATA)>
+<!ATTLIST asup:type is_list (true|false) "false">
+<!ELEMENT asup:qualification (#PCDATA)>
+<!ELEMENT asup:remap (#PCDATA)>
+<!ELEMENT asup:ABORT (#PCDATA)>
+<!ELEMENT asup:ROW (project-id, source, destination, protocol, job-type, discovered-size, migrated-size, discovered-filecount, migrated-filecount, jobrun-count)>
+<!ATTLIST asup:ROW col_time_us CDATA #REQUIRED>
+<!ELEMENT project-id (#PCDATA)><!ELEMENT source (#PCDATA)><!ELEMENT destination (#PCDATA)><!ELEMENT protocol (#PCDATA)><!ELEMENT job-type (#PCDATA)><!ELEMENT discovered-size (#PCDATA)><!ELEMENT migrated-size (#PCDATA)><!ELEMENT discovered-filecount (#PCDATA)><!ELEMENT migrated-filecount (#PCDATA)><!ELEMENT jobrun-count (#PCDATA)>]>
+
+<MigrationData col_time_us="{{COL_TIME_US}}" smf_table_name="nd_autosupport_migrationData" smf_table_desc="AutoSupport MigrationData Table" cluster_uuid="0" node_uuid="0e934e08-f9ef-11ef-847d-6045bd370ca7" node_system_id="2886809348" node_sn="90920140000001163998" data_scope="node" xmlns="http://asup_search.netapp.com/ns/MigrationData/1.0" xmlns:asup="http://asup_search.netapp.com/ns/ASUP/1.1">
+<asup:TABLE_INFO>
+    <asup:field>
+        <asup:tag>project-id</asup:tag>
+        <asup:ui_name>Project-id</asup:ui_name>
+        <asup:type>text</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>source</asup:tag>
+        <asup:ui_name>Source file server</asup:ui_name>
+        <asup:type>text</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>destination</asup:tag>
+        <asup:ui_name>Destination file server</asup:ui_name>
+        <asup:type>text</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>protocol</asup:tag>
+        <asup:ui_name>Protocol</asup:ui_name>
+        <asup:type>text</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>job-type</asup:tag>
+        <asup:ui_name>Job type</asup:ui_name>
+        <asup:type>text</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>discovered-size</asup:tag>
+        <asup:ui_name>Discovered size in bytes</asup:ui_name>
+        <asup:type>size</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>migrated-size</asup:tag>
+        <asup:ui_name>Migrated size in bytes</asup:ui_name>
+        <asup:type>size</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>discovered-filecount</asup:tag>
+        <asup:ui_name>Discovered file count</asup:ui_name>
+        <asup:type>size</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>migrated-filecount</asup:tag>
+        <asup:ui_name>Migrated file count</asup:ui_name>
+        <asup:type>size</asup:type>
+    </asup:field>
+    <asup:field>
+        <asup:tag>jobrun-count</asup:tag>
+        <asup:ui_name>Job run counts</asup:ui_name>
+        <asup:type>number</asup:type>
+    </asup:field>
+{{ROW_TEMPLATE_START}}
+<asup:ROW col_time_us="{{COL_TIME_US}}">
+    <project-id>{{PROJECT_ID}}</project-id>
+    <source>{{SOURCE}}</source>
+    <destination>{{DESTINATION}}</destination>
+    <protocol>{{PROTOCOL}}</protocol>
+    <job-type>{{JOB_TYPE}}</job-type>
+    <discovered-size>{{DISCOVERED_SIZE}}</discovered-size>
+    <migrated-size>{{MIGRATED_SIZE}}</migrated-size>
+    <discovered-filecount>{{DISCOVERED_FILECOUNT}}</discovered-filecount>
+    <migrated-filecount>{{MIGRATED_FILECOUNT}}</migrated-filecount>
+    <jobrun-count>{{JOBRUN_COUNT}}</jobrun-count>
+</asup:ROW>
+{{ROW_TEMPLATE_END}}
+</asup:TABLE_INFO>
+</MigrationData>

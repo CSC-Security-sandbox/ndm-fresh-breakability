@@ -628,4 +628,11 @@
             <sqlFile path="liquibase/20260226_02_add_upgrade_management_permission_rollback.sql"/>
         </rollback>
     </changeSet>
+
+      <changeSet id="20260223_01_create_asup_stats_table.sql" author="jeevitha">
+         <sqlFile path="liquibase/20260223_01_create_asup_stats_table.sql"/>
+         <rollback>
+            <sqlFile path="liquibase/20260223_01_create_asup_stats_table_rollback.sql"/>
+         </rollback>
+      </changeSet>
 </databaseChangeLog>

@@ -60,6 +60,8 @@ env:
     value: "/logs"
   - name: ERROR_LOGS_DOWNLOAD_LOCATION
     value: "/error-logs"
+  - name: ASUP_ENDPOINT
+    value: "https://eprod.netapp.com/put/AsupPut"
 
 service:
   type: ClusterIP

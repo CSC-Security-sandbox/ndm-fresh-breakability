@@ -4063,4 +4063,172 @@ describe("JobRunService", () => {
     });
 
   });
+
+  // ─── recordAsupStatsForJobRun (private, tested via updateJobRunStatus) ─────
+
+  describe("recordAsupStatsForJobRun (via updateJobRunStatus)", () => {
+    const jobRunId = "run-asup-1";
+    const projectId = "project-asup-1";
+
+    const makeJobRun = (overrides?: Partial<JobRunEntity>) => ({
+      id: jobRunId,
+      jobConfigId: "jc-asup-1",
+      ...overrides,
+    });
+
+    const makeJobConfig = (overrides?: any) => ({
+      id: "jc-asup-1",
+      jobType: JobType.DISCOVER,
+      sourcePath: {
+        fileServer: {
+          protocol: Protocol.NFS,
+          config: { serverType: "ONTAP" },
+        },
+      },
+      targetPath: {
+        fileServer: {
+          config: { serverType: "ANF" },
+        },
+      },
+      ...overrides,
+    });
+
+    const mockJobRunStats: JobRunStats = {
+      fileCount: "250",
+      totalSize: "50000",
+    } as any;
+
+    beforeEach(() => {
+      jest.spyOn(service, "calculateJobRunStats").mockResolvedValue(mockJobRunStats as any);
+      jest.spyOn(errorRemedyService, "getDistinctErrorCodes").mockResolvedValue([] as any);
+      jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
+    });
+
+    it("should insert ASUP stats for a completed discover job run", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+      const projectRepo = module.get(getRepositoryToken(ProjectEntity));
+      jest.spyOn(projectRepo, "findOne").mockResolvedValue({ id: projectId, projectName: "Test ASUP Project" } as any);
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining([
+          jobRunId,
+          "jc-asup-1",
+          projectId,
+          "Test ASUP Project",
+          "discovery",
+          Protocol.NFS,
+          "ONTAP",
+          "ANF",
+          250,
+          50000,
+        ]),
+      );
+    });
+
+    it("should insert ASUP stats for a stopped migration job run", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({ jobType: JobType.MIGRATE }) as any,
+      );
+      const projectRepo = module.get(getRepositoryToken(ProjectEntity));
+      jest.spyOn(projectRepo, "findOne").mockResolvedValue({ id: projectId, projectName: "Migration Project" } as any);
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Stopped, projectId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining([
+          jobRunId,
+          "jc-asup-1",
+          projectId,
+          "Migration Project",
+          "migration",
+        ]),
+      );
+    });
+
+    it("should not record ASUP stats for failed job runs", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Failed, projectId);
+
+      // dataSource.query should NOT be called for ASUP insert (only for other queries if any)
+      const asupCalls = (dataSource.query as jest.Mock).mock.calls.filter(
+        (call: any[]) => (call[0] as string).includes("asup_stats"),
+      );
+      expect(asupCalls).toHaveLength(0);
+    });
+
+    it("should not record ASUP stats for running status", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+      jest.spyOn(sendMailService, "sendMail").mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Running, projectId);
+
+      const asupCalls = (dataSource.query as jest.Mock).mock.calls.filter(
+        (call: any[]) => (call[0] as string).includes("asup_stats"),
+      );
+      expect(asupCalls).toHaveLength(0);
+    });
+
+    it("should use N/A for server types when config is missing", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({
+          sourcePath: { fileServer: { protocol: Protocol.NFS, config: null } },
+          targetPath: { fileServer: { config: null } },
+        }) as any,
+      );
+      const projectRepo = module.get(getRepositoryToken(ProjectEntity));
+      jest.spyOn(projectRepo, "findOne").mockResolvedValue({ id: projectId, projectName: "No Config" } as any);
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining(["N/A", "N/A"]),
+      );
+    });
+
+    it("should not throw when ASUP insert fails (logs error instead)", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+      const projectRepo = module.get(getRepositoryToken(ProjectEntity));
+      jest.spyOn(projectRepo, "findOne").mockResolvedValue({ id: projectId, projectName: "Test" } as any);
+      (dataSource.query as jest.Mock).mockRejectedValue(new Error("DB insert failed"));
+
+      // Should not throw — ASUP errors are caught
+      await expect(
+        service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId),
+      ).resolves.not.toThrow();
+    });
+
+    it("should map cutover job type correctly", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({ jobType: JobType.CUT_OVER }) as any,
+      );
+      const projectRepo = module.get(getRepositoryToken(ProjectEntity));
+      jest.spyOn(projectRepo, "findOne").mockResolvedValue({ id: projectId, projectName: "Cutover Project" } as any);
+      (dataSource.query as jest.Mock).mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining(["cutover"]),
+      );
+    });
+  });
 });
