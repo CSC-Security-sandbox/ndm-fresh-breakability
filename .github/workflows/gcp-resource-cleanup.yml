@@ -1,0 +1,788 @@
+name: GCP Resource Cleanup
+
+# This workflow automatically cleans up GCP resources (VMs, disks, snapshots,
+# images, GCNV volumes) based on age and tag criteria. 
+#
+# Required GitHub Secrets:
+#   - PACKER_GCP_CREDENTIALS_JSON: Service account JSON key for GCP authentication
+#   - GCP_PROJECT_ID: GCP Project ID 
+#   - CLEANUP_AGE_DAYS_VMS_DISKS_VOLUMES: Age threshold for VMs/Disks/GCNV Volumes in days
+#   - CLEANUP_AGE_DAYS_IMAGES_SNAPSHOTS: Age threshold for Images/Snapshots in days
+
+on:
+  schedule:
+    # Run on Wednesday and Friday at 11:00 PM IST (17:30 UTC)
+    - cron: '30 17 * * 3,5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview deletions without executing)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions: {}
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}
+  AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES: ${{ secrets.CLEANUP_AGE_DAYS_VMS_DISKS_VOLUMES || '2' }}
+  AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS: ${{ secrets.CLEANUP_AGE_DAYS_IMAGES_SNAPSHOTS || '7' }}
+  EXCLUDE_TAG_KEY: 'donot-delete'
+  EXCLUDE_TAG_VALUE: 'true'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run: ${{ steps.config.outputs.dry_run }}
+      resource_types: ${{ steps.config.outputs.resource_types }}
+      cutoff_date_vms_disks: ${{ steps.config.outputs.cutoff_date_vms_disks }}
+      cutoff_date_images_snapshots: ${{ steps.config.outputs.cutoff_date_images_snapshots }}
+    
+    steps:
+      - name: Configure cleanup parameters
+        id: config
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          if [ -z "$DRY_RUN" ]; then
+            DRY_RUN="false"
+          fi
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          
+          RESOURCE_TYPES="vms,disks,snapshots,images,gcnv-volumes"
+          echo "resource_types=$RESOURCE_TYPES" >> $GITHUB_OUTPUT
+          
+          CUTOFF_DATE_VMS_DISKS=$(date -u -d "${AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_DATE_IMAGES_SNAPSHOTS=$(date -u -d "${AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "cutoff_date_vms_disks=$CUTOFF_DATE_VMS_DISKS" >> $GITHUB_OUTPUT
+          echo "cutoff_date_images_snapshots=$CUTOFF_DATE_IMAGES_SNAPSHOTS" >> $GITHUB_OUTPUT
+          
+          echo "=== Cleanup Configuration ==="
+          echo "Project: $GCP_PROJECT_ID"
+          echo "Age Threshold - VMs/Disks/GCNV Volumes: $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days (cutoff: $CUTOFF_DATE_VMS_DISKS)"
+          echo "Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days (cutoff: $CUTOFF_DATE_IMAGES_SNAPSHOTS)"
+          echo "Dry Run: $DRY_RUN"
+          echo "Resource Types: $RESOURCE_TYPES"
+          echo "Exclude Tag: $EXCLUDE_TAG_KEY=$EXCLUDE_TAG_VALUE"
+
+  cleanup-vms:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_vms: ${{ steps.cleanup.outputs.deleted_vms }}
+      failed_vms: ${{ steps.cleanup.outputs.failed_vms }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
+        with:
+          credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
+        with:
+          version: 'latest'
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Cleanup Compute Engine VMs
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_VMS_DISKS="${{ needs.setup.outputs.cutoff_date_vms_disks }}"
+          
+          AGE_FILTER="creationTimestamp<$CUTOFF_DATE_VMS_DISKS"
+          
+          DELETED_VMS=0
+          FAILED_VMS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Compute Engine VMs (older than $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days) ==="
+          echo "Filter: $AGE_FILTER"
+          
+          VMS_JSON=$(gcloud compute instances list --project="$GCP_PROJECT_ID" --filter="$AGE_FILTER" --format="json" 2>/dev/null || echo "[]")
+          
+          if [ "$VMS_JSON" != "[]" ] && [ -n "$VMS_JSON" ]; then
+            VM_COUNT=$(echo "$VMS_JSON" | jq '. | length')
+            echo -e "\nFound $VM_COUNT VM(s) matching the criteria\n"
+            
+            for i in $(seq 0 $((VM_COUNT - 1))); do
+              VM_NAME=$(echo "$VMS_JSON" | jq -r ".[$i].name")
+              ZONE_URL=$(echo "$VMS_JSON" | jq -r ".[$i].zone")
+              ZONE=$(extract_zone "$ZONE_URL")
+              STATUS=$(echo "$VMS_JSON" | jq -r ".[$i].status")
+              LABELS=$(echo "$VMS_JSON" | jq -c ".[$i].labels // {}")
+              
+              if should_exclude "$LABELS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "VM excluded: $VM_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete VM $VM_NAME"
+                DELETED_VMS=$((DELETED_VMS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VM_NAME ($ZONE)"
+              else
+                if [ "$STATUS" = "RUNNING" ]; then
+                  echo "Stopping VM: $VM_NAME"
+                  gcloud compute instances stop "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$ZONE" --quiet 2>&1 || echo "Warning: Failed to stop VM $VM_NAME"
+                fi
+                
+                if gcloud compute instances delete "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$ZONE" --delete-disks=all --quiet 2>&1; then
+                  echo "Deleted VM: $VM_NAME"
+                  DELETED_VMS=$((DELETED_VMS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VM_NAME"
+                else
+                  echo "Failed to delete VM: $VM_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nVM: $VM_NAME"
+                  FAILED_VMS=$((FAILED_VMS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No VMs found matching criteria"
+          fi
+          
+          echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
+          echo "failed_vms=$FAILED_VMS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_VMS, Failed=$FAILED_VMS"
+          
+          if [ "$FAILED_VMS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_VMS VM(s)"
+            exit 1
+          fi
+
+  cleanup-disks:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_disks: ${{ steps.cleanup.outputs.deleted_disks }}
+      failed_disks: ${{ steps.cleanup.outputs.failed_disks }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
+        with:
+          credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
+        with:
+          version: 'latest'
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Cleanup Disks
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          
+          COMBINED_FILTER="users=null"
+          
+          DELETED_DISKS=0
+          FAILED_DISKS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Disks ==="
+          
+          DISKS_JSON=$(gcloud compute disks list --project="$GCP_PROJECT_ID" --filter="$COMBINED_FILTER" --format="json" 2>/dev/null || echo "[]")
+          
+          if [ "$DISKS_JSON" != "[]" ] && [ -n "$DISKS_JSON" ]; then
+            DISK_COUNT=$(echo "$DISKS_JSON" | jq '. | length')
+            echo -e "\nFound $DISK_COUNT unattached disk(s) \n"
+            
+            for i in $(seq 0 $((DISK_COUNT - 1))); do
+              DISK_NAME=$(echo "$DISKS_JSON" | jq -r ".[$i].name")
+              ZONE_URL=$(echo "$DISKS_JSON" | jq -r ".[$i].zone")
+              ZONE=$(extract_zone "$ZONE_URL")
+              LABELS=$(echo "$DISKS_JSON" | jq -c ".[$i].labels // {}")
+              
+              if should_exclude "$LABELS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded disk: $DISK_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete disk $DISK_NAME"
+                DELETED_DISKS=$((DELETED_DISKS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $DISK_NAME"
+              else
+                if gcloud compute disks delete "$DISK_NAME" --project="$GCP_PROJECT_ID" --zone="$ZONE" --quiet 2>&1; then
+                  echo "Deleted disk: $DISK_NAME"
+                  DELETED_DISKS=$((DELETED_DISKS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $DISK_NAME"
+                else
+                  echo "Failed to delete disk: $DISK_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nDisk: $DISK_NAME"
+                  FAILED_DISKS=$((FAILED_DISKS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No unattached disks found matching criteria"
+          fi
+          
+          echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
+          echo "failed_disks=$FAILED_DISKS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_DISKS, Failed=$FAILED_DISKS"
+          
+          if [ "$FAILED_DISKS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_DISKS disk(s)"
+            exit 1
+          fi
+
+  cleanup-snapshots:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_snapshots: ${{ steps.cleanup.outputs.deleted_snapshots }}
+      failed_snapshots: ${{ steps.cleanup.outputs.failed_snapshots }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
+        with:
+          credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
+        with:
+          version: 'latest'
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Cleanup Disk Snapshots
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_IMAGES_SNAPSHOTS="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+          
+          AGE_FILTER="creationTimestamp<$CUTOFF_DATE_IMAGES_SNAPSHOTS"
+          
+          DELETED_SNAPSHOTS=0
+          FAILED_SNAPSHOTS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Disk Snapshots (older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+          echo "Filter: $AGE_FILTER"
+          
+          SNAPSHOTS_JSON=$(gcloud compute snapshots list --project="$GCP_PROJECT_ID" --filter="$AGE_FILTER" --format="json" 2>/dev/null || echo "[]")
+          
+          if [ "$SNAPSHOTS_JSON" != "[]" ] && [ -n "$SNAPSHOTS_JSON" ]; then
+            SNAPSHOT_COUNT=$(echo "$SNAPSHOTS_JSON" | jq '. | length')
+            echo -e "\nFound $SNAPSHOT_COUNT snapshot(s) matching criteria\n"
+            
+            for i in $(seq 0 $((SNAPSHOT_COUNT - 1))); do
+              SNAPSHOT_NAME=$(echo "$SNAPSHOTS_JSON" | jq -r ".[$i].name")
+              LABELS=$(echo "$SNAPSHOTS_JSON" | jq -c ".[$i].labels // {}")
+              
+              if should_exclude "$LABELS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded snapshot: $SNAPSHOT_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete snapshot $SNAPSHOT_NAME"
+                DELETED_SNAPSHOTS=$((DELETED_SNAPSHOTS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SNAPSHOT_NAME"
+              else
+                if gcloud compute snapshots delete "$SNAPSHOT_NAME" --project="$GCP_PROJECT_ID" --quiet 2>&1; then
+                  echo "Deleted snapshot: $SNAPSHOT_NAME"
+                  DELETED_SNAPSHOTS=$((DELETED_SNAPSHOTS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SNAPSHOT_NAME"
+                else
+                  echo "Failed to delete snapshot: $SNAPSHOT_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nSnapshot: $SNAPSHOT_NAME"
+                  FAILED_SNAPSHOTS=$((FAILED_SNAPSHOTS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No snapshots found matching criteria"
+          fi
+          
+          echo "deleted_snapshots=$DELETED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "failed_snapshots=$FAILED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_SNAPSHOTS, Failed=$FAILED_SNAPSHOTS"
+          
+          if [ "$FAILED_SNAPSHOTS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_SNAPSHOTS snapshot(s)"
+            exit 1
+          fi
+
+  cleanup-images:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_images: ${{ steps.cleanup.outputs.deleted_images }}
+      failed_images: ${{ steps.cleanup.outputs.failed_images }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
+        with:
+          credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
+        with:
+          version: 'latest'
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Cleanup Compute Images
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_IMAGES_SNAPSHOTS="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+          
+          AGE_FILTER="creationTimestamp<$CUTOFF_DATE_IMAGES_SNAPSHOTS"
+          PROJECT_LABEL_FILTER="labels.project=datamigrator"
+          
+          COMBINED_FILTER="$AGE_FILTER AND $PROJECT_LABEL_FILTER"
+          
+          DELETED_IMAGES=0
+          FAILED_IMAGES=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing Compute Images (older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+          echo "Filter: $COMBINED_FILTER"
+          
+          IMAGES_JSON=$(gcloud compute images list --project="$GCP_PROJECT_ID" --filter="$COMBINED_FILTER" --format="json" 2>/dev/null || echo "[]")
+          
+          if [ "$IMAGES_JSON" != "[]" ] && [ -n "$IMAGES_JSON" ]; then
+            IMAGE_COUNT=$(echo "$IMAGES_JSON" | jq '. | length')
+            echo -e "\nFound $IMAGE_COUNT image(s) matching criteria\n"
+            
+            for i in $(seq 0 $((IMAGE_COUNT - 1))); do
+              IMAGE_NAME=$(echo "$IMAGES_JSON" | jq -r ".[$i].name")
+              LABELS=$(echo "$IMAGES_JSON" | jq -c ".[$i].labels // {}")
+              
+              if should_exclude "$LABELS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded image: $IMAGE_NAME"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete image $IMAGE_NAME"
+                DELETED_IMAGES=$((DELETED_IMAGES + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $IMAGE_NAME"
+              else
+                if gcloud compute images delete "$IMAGE_NAME" --project="$GCP_PROJECT_ID" --quiet 2>&1; then
+                  echo "Deleted image: $IMAGE_NAME"
+                  DELETED_IMAGES=$((DELETED_IMAGES + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $IMAGE_NAME"
+                else
+                  echo "Failed to delete image: $IMAGE_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nImage: $IMAGE_NAME"
+                  FAILED_IMAGES=$((FAILED_IMAGES + 1))
+                fi
+              fi
+            done
+          else
+            echo "No images found matching criteria"
+          fi
+          
+          echo "deleted_images=$DELETED_IMAGES" >> $GITHUB_OUTPUT
+          echo "failed_images=$FAILED_IMAGES" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_IMAGES, Failed=$FAILED_IMAGES"
+          
+          if [ "$FAILED_IMAGES" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_IMAGES image(s)"
+            exit 1
+          fi
+
+  cleanup-gcnv:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_gcnv_volumes: ${{ steps.cleanup.outputs.deleted_gcnv_volumes }}
+      failed_gcnv_volumes: ${{ steps.cleanup.outputs.failed_gcnv_volumes }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
+        with:
+          credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
+        with:
+          version: 'latest'
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Cleanup GCNV Volumes
+        id: cleanup
+        run: |
+          set +e
+          
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_VMS_DISKS="${{ needs.setup.outputs.cutoff_date_vms_disks }}"
+          AGE_FILTER="createTime<$CUTOFF_DATE_VMS_DISKS"
+          
+          DELETED_GCNV_VOLUMES=0
+          FAILED_GCNV_VOLUMES=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+          
+          echo "=== Processing GCNV Volumes (older than $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days) ==="
+          echo "Filter: $AGE_FILTER"
+
+          LOCATION_NAME="us-east4"
+          GCNV_VOLUMES_JSON=$(gcloud netapp volumes list --project="$GCP_PROJECT_ID" --location="$LOCATION_NAME" --filter="$AGE_FILTER" --format="json" 2>&1)
+          VOLUMES_EXIT_CODE=$?
+          
+          if [ $VOLUMES_EXIT_CODE -ne 0 ]; then
+            echo "Warning: Failed to list volumes in location $LOCATION_NAME. Error: $GCNV_VOLUMES_JSON"
+            GCNV_VOLUMES_JSON="[]"
+          fi
+          
+          if [ "$GCNV_VOLUMES_JSON" != "[]" ] && [ -n "$GCNV_VOLUMES_JSON" ]; then
+            VOLUME_COUNT=$(echo "$GCNV_VOLUMES_JSON" | jq '. | length')
+            echo -e "\nFound $VOLUME_COUNT GCNV volume(s) matching criteria\n"
+            
+            for i in $(seq 0 $((VOLUME_COUNT - 1))); do
+              VOLUME_NAME=$(echo "$GCNV_VOLUMES_JSON" | jq -r ".[$i].name")
+              VOLUME_NAME_SHORT=$(echo "$VOLUME_NAME" | sed 's|.*/volumes/||')
+              STORAGE_POOL=$(echo "$GCNV_VOLUMES_JSON" | jq -r ".[$i].storagePool // \"\"")
+              POOL_NAME=$(echo "$STORAGE_POOL" | sed 's|.*/storagePools/||')
+              LABELS=$(echo "$GCNV_VOLUMES_JSON" | jq -c ".[$i].labels // {}")
+              
+              if should_exclude "$LABELS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded GCNV volume: $VOLUME_NAME_SHORT"
+                continue
+              fi
+              
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete GCNV volume $VOLUME_NAME_SHORT in pool $POOL_NAME"
+                DELETED_GCNV_VOLUMES=$((DELETED_GCNV_VOLUMES + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME_SHORT ($POOL_NAME)"
+              else
+                if gcloud netapp volumes delete "$VOLUME_NAME_SHORT" --project="$GCP_PROJECT_ID" --location="$LOCATION_NAME" --quiet 2>&1; then
+                  echo "Deleted GCNV volume: $VOLUME_NAME_SHORT"
+                  DELETED_GCNV_VOLUMES=$((DELETED_GCNV_VOLUMES + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME_SHORT ($POOL_NAME)"
+                else
+                  echo "Failed to delete GCNV volume: $VOLUME_NAME_SHORT"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nGCNV Volume: $VOLUME_NAME_SHORT ($POOL_NAME)"
+                  FAILED_GCNV_VOLUMES=$((FAILED_GCNV_VOLUMES + 1))
+                fi
+              fi
+            done
+          else
+            echo "No GCNV volumes found in location $LOCATION_NAME"
+          fi
+          
+          echo "deleted_gcnv_volumes=$DELETED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
+          echo "failed_gcnv_volumes=$FAILED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo -e "\nSummary: Deleted=$DELETED_GCNV_VOLUMES, Failed=$FAILED_GCNV_VOLUMES"
+          
+          if [ "$FAILED_GCNV_VOLUMES" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_GCNV_VOLUMES GCNV volume(s)"
+            exit 1
+          fi
+
+  generate-report:
+    runs-on: ubuntu-latest
+    needs: [cleanup-vms, cleanup-disks, cleanup-snapshots, cleanup-images, cleanup-gcnv]
+    if: always()
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Set up environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Generate cleanup summary
+        id: summary
+        run: |
+          DELETED_VMS="${{ needs.cleanup-vms.outputs.deleted_vms || '0' }}"
+          DELETED_DISKS="${{ needs.cleanup-disks.outputs.deleted_disks || '0' }}"
+          DELETED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.deleted_snapshots || '0' }}"
+          DELETED_IMAGES="${{ needs.cleanup-images.outputs.deleted_images || '0' }}"
+          DELETED_GCNV_VOLUMES="${{ needs.cleanup-gcnv.outputs.deleted_gcnv_volumes || '0' }}"
+          
+          FAILED_VMS="${{ needs.cleanup-vms.outputs.failed_vms || '0' }}"
+          FAILED_DISKS="${{ needs.cleanup-disks.outputs.failed_disks || '0' }}"
+          FAILED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.failed_snapshots || '0' }}"
+          FAILED_IMAGES="${{ needs.cleanup-images.outputs.failed_images || '0' }}"
+          FAILED_GCNV_VOLUMES="${{ needs.cleanup-gcnv.outputs.failed_gcnv_volumes || '0' }}"
+          
+          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_GCNV_VOLUMES))
+          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_GCNV_VOLUMES))
+          
+          echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
+          echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
+          echo "deleted_snapshots=$DELETED_SNAPSHOTS" >> $GITHUB_OUTPUT
+          echo "deleted_images=$DELETED_IMAGES" >> $GITHUB_OUTPUT
+          echo "deleted_gcnv_volumes=$DELETED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
+          echo "total_deleted=$TOTAL_DELETED" >> $GITHUB_OUTPUT
+          echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+          
+          # Combine all failed resources
+          FAILED_RESOURCES=""
+          if [ -n "${{ needs.cleanup-vms.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-vms.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-disks.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-disks.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-snapshots.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-snapshots.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-images.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-images.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-gcnv.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-gcnv.outputs.failed_resources }}"
+          fi
+          
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          DELETED_RESOURCES=""
+          if [ -n "${{ needs.cleanup-vms.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_VMS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\nVMs ($DELETED_VMS):${{ needs.cleanup-vms.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-disks.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_DISKS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nDisks ($DELETED_DISKS):${{ needs.cleanup-disks.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-snapshots.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_SNAPSHOTS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nSnapshots ($DELETED_SNAPSHOTS):${{ needs.cleanup-snapshots.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-images.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_IMAGES" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nImages ($DELETED_IMAGES):${{ needs.cleanup-images.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-gcnv.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_GCNV_VOLUMES" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nGCNV Volumes ($DELETED_GCNV_VOLUMES):${{ needs.cleanup-gcnv.outputs.deleted_resources }}"
+            fi
+          fi
+          
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "=== Overall Cleanup Summary ==="
+          echo "VMs deleted: $DELETED_VMS (failed: $FAILED_VMS)"
+          echo "Disks deleted: $DELETED_DISKS (failed: $FAILED_DISKS)"
+          echo "Snapshots deleted: $DELETED_SNAPSHOTS (failed: $FAILED_SNAPSHOTS)"
+          echo "Images deleted: $DELETED_IMAGES (failed: $FAILED_IMAGES)"
+          echo "GCNV Volumes deleted: $DELETED_GCNV_VOLUMES (failed: $FAILED_GCNV_VOLUMES)"
+          echo "----------------------------------------"
+          echo "Total deleted: $TOTAL_DELETED"
+          echo "Total failed: $TOTAL_FAILED"
+          
+          if [ "$TOTAL_DELETED" -gt 0 ]; then
+            echo ""
+            echo "Deleted resources:"
+            echo -e "$DELETED_RESOURCES"
+          fi
+          
+          if [ "$TOTAL_FAILED" -gt 0 ]; then
+            echo ""
+            echo "Failed resources:"
+            echo -e "$FAILED_RESOURCES"
+          fi
+
+      - name: Generate cleanup report
+        id: report
+        run: |
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          MODE="DRY RUN"
+          if [ "$DRY_RUN" != "true" ]; then
+            MODE="LIVE"
+          fi
+          
+          WORKFLOW_STATUS="Completed"
+          # Check if any required jobs were cancelled or failed
+          if [ "${{ needs.cleanup-vms.result }}" == "cancelled" ] || \
+             [ "${{ needs.cleanup-disks.result }}" == "cancelled" ] || \
+             [ "${{ needs.cleanup-snapshots.result }}" == "cancelled" ] || \
+             [ "${{ needs.cleanup-images.result }}" == "cancelled" ] || \
+             [ "${{ needs.cleanup-gcnv.result }}" == "cancelled" ]; then
+            WORKFLOW_STATUS="Cancelled"
+          elif [ "${{ needs.cleanup-vms.result }}" == "failure" ] || \
+               [ "${{ needs.cleanup-disks.result }}" == "failure" ] || \
+               [ "${{ needs.cleanup-snapshots.result }}" == "failure" ] || \
+               [ "${{ needs.cleanup-images.result }}" == "failure" ] || \
+               [ "${{ needs.cleanup-gcnv.result }}" == "failure" ]; then
+            WORKFLOW_STATUS="Failed"
+          fi
+          
+          REPORT=$(cat <<EOF
+          GCP Resource Cleanup Report
+          ==========================
+          
+          Mode: $MODE
+          Workflow Status: $WORKFLOW_STATUS
+          Project: $GCP_PROJECT_ID
+          Age Threshold - VMs/Disks/GCNV Volumes: $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days
+          Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days
+          Execution Time: $(date -u +"%Y-%m-%dT%H:%M:%S UTC")
+          
+          Results:
+          --------
+          VMs: ${{ steps.summary.outputs.deleted_vms || '0' }}
+          Disks: ${{ steps.summary.outputs.deleted_disks || '0' }}
+          Snapshots: ${{ steps.summary.outputs.deleted_snapshots || '0' }}
+          Images: ${{ steps.summary.outputs.deleted_images || '0' }}
+          GCNV Volumes: ${{ steps.summary.outputs.deleted_gcnv_volumes || '0' }}
+          Total: ${{ steps.summary.outputs.total_deleted || '0' }}
+          Failed: ${{ steps.summary.outputs.total_failed || '0' }}
+          
+          EOF
+          )
+          
+          if [ "${{ steps.summary.outputs.total_deleted || '0' }}" -gt 0 ]; then
+            REPORT="$REPORT
+          Deleted Resources:
+          ${{ steps.summary.outputs.deleted_resources }}
+          "
+          fi
+          
+          if [ "${{ steps.summary.outputs.total_failed || '0' }}" -gt 0 ]; then
+            REPORT="$REPORT
+          Failed Resources:
+          ${{ steps.summary.outputs.failed_resources }}
+          "
+          fi
+          
+          echo "$REPORT" > cleanup-report.txt
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "$REPORT"
+
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
+        with:
+          name: cleanup-report
+          path: cleanup-report.txt
+          retention-days: 30
