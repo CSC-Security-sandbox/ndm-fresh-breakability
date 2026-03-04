@@ -1592,7 +1592,7 @@ describe("JobRunService", () => {
     }
   });
   
-  it("should handle completed job runs with jobstats", async () => {
+  it("should handle completed job runs with persisted jobstats", async () => {
     const filter = { projectId: "project123" };
     const mockJobRuns = [
       {
@@ -1612,6 +1612,7 @@ describe("JobRunService", () => {
           fileCount: "15",
           directories: "3",
           totalSize: "7500",
+          errors: [{ errorType: "INFO", count: 2 }],
         }
       },
     ];
@@ -1624,33 +1625,77 @@ describe("JobRunService", () => {
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
     } as any);
 
-    // Add a spy for calculateJobRunStats
     const calculateJobRunStatsSpy = jest.spyOn(service, "calculateJobRunStats");
-
-    jest
-      .spyOn(service, "getErrorCounts")
-      .mockImplementation()
-      .mockReturnValue([{ errorType: "INFO", count: 2 }] as any);
-
-    jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ ...mockJobRuns[0] } as any);
-    jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce({
-      jobRunId: "run1",
-      fileCount: "15",
-      directoryCount: "3",
-      totalSize: "7500",
-    } as any);
+    const calculateLiveStatsSpy = jest.spyOn(service, "calculateLiveInventoryStats");
 
     const result = await service.getJobAllRuns(filter);
 
-    // Verify that the jobstats values are used directly
+    expect(calculateJobRunStatsSpy).not.toHaveBeenCalled();
+    expect(calculateLiveStatsSpy).not.toHaveBeenCalled();
+
     expect(result[0]).toMatchObject({
       jobRunId: "run1",
       status: JobRunStatus.Completed,
       scannedFilesCount: "15",
       scannedDirectoriesCount: "3",
-      totalScannedSize: "7.32 KiB", // Formatted from 7500
-      totalMigratedSize: "0 B", // For DISCOVER job type
+      totalScannedSize: "7.32 KiB",
+      totalMigratedSize: "0 B",
       errors: [{ errorType: "INFO", count: 2 }],
+    });
+  });
+
+  it("should use live inventory query for completed job runs without persisted jobstats", async () => {
+    const filter = { projectId: "project123" };
+    const mockJobRuns = [
+      {
+        jobrunid: "run2",
+        jobconfigid: "config2",
+        jobtype: "MIGRATE",
+        volumepath: "/source/path",
+        sourcefileserverprotocol: "NFS",
+        sourceconfigname: "SourceServer",
+        targetvolumepath: "/target/path",
+        targetfileserverprotocol: "NFS",
+        targetconfigname: "TargetServer",
+        status: JobRunStatus.Completed,
+        starttime: new Date(Date.now() - 10000),
+        endtime: new Date(),
+        jobstats: null,
+      },
+    ];
+
+    jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
+    } as any);
+
+    const mockLiveStats: JobRunStats = {
+      fileCount: "20",
+      directories: "4",
+      totalSize: "10240",
+      lastRefreshed: new Date(),
+      errors: [],
+    };
+
+    const calculateJobRunStatsSpy = jest.spyOn(service, "calculateJobRunStats");
+    jest.spyOn(service, "calculateLiveInventoryStats").mockResolvedValue(mockLiveStats);
+
+    const result = await service.getJobAllRuns(filter);
+
+    expect(calculateJobRunStatsSpy).not.toHaveBeenCalled();
+    expect(service.calculateLiveInventoryStats).toHaveBeenCalledWith("run2");
+
+    expect(result[0]).toMatchObject({
+      jobRunId: "run2",
+      status: JobRunStatus.Completed,
+      scannedFilesCount: "20",
+      scannedDirectoriesCount: "4",
+      totalScannedSize: "0 B",
+      totalMigratedSize: "10 KiB",
+      errors: [],
     });
   });
   describe("getJobRun", () => {
@@ -2910,15 +2955,15 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
       jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
 
-      // Mocking calculateJobRunStats function
       const mockJobRunStats = {
-        fileCount: 10,
-        directoryCount: 5,
-        totalFileSize: 5000,
-        errorCounts: { FileNotFound: 5, PermissionDenied: 3 },
+        fileCount: "10",
+        directories: "5",
+        totalSize: "5000",
+        lastRefreshed: expect.any(Date),
+        errors: [],
       };
       jest
-        .spyOn(service, "calculateJobRunStats")
+        .spyOn(service, "calculateLiveInventoryStats")
         .mockResolvedValue(mockJobRunStats as any);
       jest
         .spyOn(errorRemedyService, "getDistinctErrorCodes")
@@ -2942,7 +2987,7 @@ describe("JobRunService", () => {
         { firstRunAt: mockDate, scheduler: ScheduleStatus.SCHEDULING }
       );
 
-      expect(service.calculateJobRunStats).toHaveBeenCalledWith(jobRunId);
+      expect(service.calculateLiveInventoryStats).toHaveBeenCalledWith(jobRunId);
       expect(jobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },
         {
@@ -3324,6 +3369,81 @@ describe("JobRunService", () => {
         jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(null);
 
         await expect(service.calculateJobRunStats('missingId')).rejects.toThrow('Job Run with id missingId not found');
+      });
+    });
+
+    describe('calculateLiveInventoryStats', () => {
+      it('should return live stats from direct inventory query', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+        const mockQueryResult = [{ file_count: '15', directory_count: '3', total_size: '204800' }];
+        const mockErrorCounts = [{ errorType: 'TypeError', count: 1 }];
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce(mockQueryResult);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
+
+        const result = await service.calculateLiveInventoryStats(jobRunId);
+
+        expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+          where: { id: jobRunId },
+          relations: ['jobConfig'],
+        });
+        expect(service['inventoryRepo'].query).toHaveBeenCalledWith(
+          expect.stringContaining('FROM datamigrator.inventory'),
+          [jobRunId],
+        );
+        expect(result).toEqual({
+          fileCount: '15',
+          directories: '3',
+          totalSize: '204800',
+          lastRefreshed: expect.any(Date),
+          errors: mockErrorCounts,
+        });
+      });
+
+      it('should default to "0" when inventory query returns empty result', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce([{ file_count: '0', directory_count: '0', total_size: '0' }]);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
+
+        const result = await service.calculateLiveInventoryStats(jobRunId);
+
+        expect(result).toEqual({
+          fileCount: '0',
+          directories: '0',
+          totalSize: '0',
+          lastRefreshed: expect.any(Date),
+          errors: [],
+        });
+      });
+
+      it('should default to "0" when query result row is null', async () => {
+        const jobRunId = 'jobRunId';
+        const mockJobRun = { id: jobRunId, jobConfig: {} };
+
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(mockJobRun as any);
+        service['inventoryRepo'].query = jest.fn().mockResolvedValueOnce([]);
+        jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
+
+        const result = await service.calculateLiveInventoryStats(jobRunId);
+
+        expect(result).toEqual({
+          fileCount: '0',
+          directories: '0',
+          totalSize: '0',
+          lastRefreshed: expect.any(Date),
+          errors: [],
+        });
+      });
+
+      it('should throw NotFoundException if job run not found', async () => {
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce(null);
+
+        await expect(service.calculateLiveInventoryStats('missingId')).rejects.toThrow('Job Run with id missingId not found');
       });
     });
 

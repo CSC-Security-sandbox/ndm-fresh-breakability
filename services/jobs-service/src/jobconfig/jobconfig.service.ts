@@ -1137,6 +1137,9 @@ export class JobConfigService {
     });
 
     if (!jobConfig) throw new Error(`Job with id ${id} not found`);
+    
+    const terminalStatuses = [JobRunStatus.Completed, JobRunStatus.Failed, JobRunStatus.Errored, JobRunStatus.Stopped];
+    
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
         const partialPayload = {
@@ -1151,7 +1154,22 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        
+        const isTerminal = terminalStatuses.includes(jobRun.status as JobRunStatus);
+        let inventoryCounts: JobRunStats;
+        
+        if (isTerminal && jobRun.jobStats) {
+          this.logger.log(`Using persisted jobStats for job run ${jobRun.id}: ${JSON.stringify(jobRun.jobStats)}`);
+          inventoryCounts = {
+            fileCount: jobRun.jobStats.fileCount || "0",
+            directories: jobRun.jobStats.directories || "0",
+            totalSize: jobRun.jobStats.totalSize || "0",
+            errors: await this.getErrorCounts(jobRun.id),
+          };
+        } else {
+          inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        }
+        
         // Fetch lastRefreshed from materialized view
         const mv = await this.jobStatsSummaryMvRepo.findOne({
           where: { jobRunId: jobRun.id },
