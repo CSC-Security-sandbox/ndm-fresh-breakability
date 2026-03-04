@@ -721,6 +721,30 @@ describe('StampMetaService', () => {
         );
       });
 
+      it('should call chmod before utimes on target so chmod does not overwrite atime', async () => {
+        const input = createMockInput(
+          {
+            mode: 0o755,
+            gid: 1000,
+            uid: 1001,
+            atime: new Date('2023-01-02T14:00:00Z'),
+            mtime: new Date('2023-01-02T12:00:00Z'),
+          },
+          { preservePermissions: true }
+        );
+
+        await service.stampMetaData(input);
+
+        // preserveAccessAndModifiedTime calls utimes on source first,
+        // then stampPermission calls chmod on target,
+        // then stampAccessAndModifiedTime calls utimes on target.
+        // chmod must run before the final utimes so it does not overwrite atime.
+        const chmodOrder = (mockFs.promises.chmod as jest.Mock).mock.invocationCallOrder[0];
+        const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.invocationCallOrder;
+        const utimesTargetOrder = utimesCalls[utimesCalls.length - 1]; // last utimes is on target
+        expect(chmodOrder).toBeLessThan(utimesTargetOrder);
+      });
+
       it('should still stamp atime when preservePermissions is false but preserveAccessTime is true', async () => {
         const input = createMockInput(
           { atime: new Date('2023-01-02T14:00:00Z'), mtime: new Date('2023-01-02T12:00:00Z') },
@@ -786,6 +810,29 @@ describe('StampMetaService', () => {
 
         expect(mockFs.promises.chmod).not.toHaveBeenCalled();
         expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
+      });
+
+      it('should not call stampAccessAndModifiedTime when stampObjectACL fails with errors', async () => {
+        const input = createMockInput(
+          {
+            atime: new Date('2023-01-02T14:00:00Z'),
+            mtime: new Date('2023-01-02T12:00:00Z'),
+          },
+          { preservePermissions: true, preserveAccessTime: false }
+        );
+
+        winOperationService.stampAclOperation.mockResolvedValue({
+          output: null,
+          errors: ['ACL operation failed'],
+        });
+        dmError.mockReturnValue({});
+
+        const result = await service.stampMetaData(input);
+
+        expect(result.targetErrors).toContain('ACL operation failed');
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.ERROR);
+        // stampAccessAndModifiedTime must not run when ACL has errors, so utimes (target) is never called
+        expect(mockFs.promises.utimes).not.toHaveBeenCalled();
       });
     });
 

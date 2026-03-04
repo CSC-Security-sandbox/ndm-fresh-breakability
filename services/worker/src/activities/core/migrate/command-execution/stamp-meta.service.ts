@@ -45,11 +45,13 @@ export class StampMetaService {
 
                 output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
-
+                
+                if(aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length ===0) {
                 // Stamp access and modified time
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
+                    const timeOutput = await this.stampAccessAndModifiedTime(input);
+                    output.sourceErrors.push(...timeOutput.sourceErrors);
+                    output.targetErrors.push(...timeOutput.targetErrors);
+                }
             }
             else {
 
@@ -63,15 +65,15 @@ export class StampMetaService {
                 output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...preserveTimeOutput.targetErrors);
 
-                // Stamp access and modified time
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
-
-                // Stamp permissions
+                // Stamp permissions before timestamps so chmod does not overwrite atime
                 const permissionsOutput = await this.stampPermission(input);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
+
+                // Stamp access and modified time last so nothing overwrites atime/mtime
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
+                output.sourceErrors.push(...timeOutput.sourceErrors);
+                output.targetErrors.push(...timeOutput.targetErrors);
             }
         }
 
