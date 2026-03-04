@@ -31,6 +31,101 @@ on:
         required: false
         default: true
         type: boolean
+      control_plane_vm_size:
+        description: 'Control plane VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB)'
+        required: false
+        default: 'Standard_D8s_v4'
+        type: choice
+        options:
+          - Standard_D4s_v4
+          - Standard_D8s_v4
+          - Standard_D16s_v4
+      linux_worker_vm_size:
+        description: 'Linux worker VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB)'
+        required: false
+        default: 'Standard_D4s_v4'
+        type: choice
+        options:
+          - Standard_D4s_v4
+          - Standard_D8s_v4
+          - Standard_D16s_v4
+      windows_worker_vm_size:
+        description: 'Windows worker VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB, D32s_v4: 32vCPU/128GB)'
+        required: false
+        default: 'Standard_D32s_v4'
+        type: choice
+        options:
+          - Standard_D4s_v4
+          - Standard_D8s_v4
+          - Standard_D16s_v4
+      linux_worker_count:
+        description: 'Number of Linux workers'
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '4'
+      windows_worker_count:
+        description: 'Number of Windows workers'
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '4'
+      windows_defender_disable:
+        description: 'Disable Windows Defender real-time monitoring'
+        required: false
+        default: true
+        type: boolean
+      windows_defender_ndm_exclusion:
+        description: 'Add NDM mount path to Windows Defender exclusions'
+        required: false
+        default: false
+        type: boolean
+      smb_source_volumes:
+        description: 'SMB source volumes (comma-separated)'
+        required: false
+        type: string
+      smb_source_host_ip:
+        description: 'SMB source host IP (comma-separated)'
+        required: false
+        type: string
+      smb_destination_volumes:
+        description: 'SMB destination volumes (comma-separated)'
+        required: false
+        type: string
+      smb_destination_host_ip:
+        description: 'SMB destination host IP (comma-separated)'
+        required: false
+        type: string
+      smb_dataset_size:
+        description: 'SMB dataset size (e.g., "28038.02 MiB")'
+        required: false
+        type: string
+      nfs_source_volumes:
+        description: 'NFS source volumes (comma-separated)'
+        required: false
+        type: string
+      nfs_source_host_ip:
+        description: 'NFS source host IP (comma-separated)'
+        required: false
+        type: string
+      nfs_destination_volumes:
+        description: 'NFS destination volumes (comma-separated)'
+        required: false
+        type: string
+      nfs_destination_host_ip:
+        description: 'NFS destination host IP (comma-separated)'
+        required: false
+        type: string
+      nfs_dataset_size:
+        description: 'NFS dataset size (e.g., "28810.77 MiB")'
+        required: false
+        type: string
 
   workflow_call: 
     inputs:
@@ -55,6 +150,81 @@ on:
         required: false
         default: true
         type: boolean
+      control_plane_vm_size:
+        description: 'Control plane VM size'
+        required: false
+        default: 'Standard_D8s_v4'
+        type: string
+      linux_worker_vm_size:
+        description: 'Linux worker VM size'
+        required: false
+        default: 'Standard_D4s_v4'
+        type: string
+      windows_worker_vm_size:
+        description: 'Windows worker VM size'
+        required: false
+        default: 'Standard_D32s_v4'
+        type: string
+      linux_worker_count:
+        description: 'Number of Linux workers'
+        required: false
+        default: 1
+        type: number
+      windows_worker_count:
+        description: 'Number of Windows workers'
+        required: false
+        default: 1
+        type: number
+      windows_defender_disable:
+        description: 'Disable Windows Defender real-time monitoring'
+        required: false
+        default: true
+        type: boolean
+      windows_defender_ndm_exclusion:
+        description: 'Add NDM mount path to Windows Defender exclusions'
+        required: false
+        default: false
+        type: boolean
+      smb_source_volumes:
+        description: 'SMB source volumes'
+        required: false
+        type: string
+      smb_source_host_ip:
+        description: 'SMB source host IP'
+        required: false
+        type: string
+      smb_destination_volumes:
+        description: 'SMB destination volumes'
+        required: false
+        type: string
+      smb_destination_host_ip:
+        description: 'SMB destination host IP'
+        required: false
+        type: string
+      smb_dataset_size:
+        description: 'SMB dataset size'
+        required: false
+        type: string
+      nfs_source_volumes:
+        description: 'NFS source volumes'
+        required: false
+        type: string
+      nfs_source_host_ip:
+        description: 'NFS source host IP'
+        required: false
+        type: string
+      nfs_destination_volumes:
+        description: 'NFS destination volumes'
+        required: false
+        type: string
+      nfs_destination_host_ip:
+        description: 'NFS destination host IP'
+        required: false
+        type: string
+      nfs_dataset_size:
+        description: 'NFS dataset size'
+        required: false
+        type: string
 
 permissions: 
   contents: read
@@ -67,6 +237,11 @@ jobs:
       control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
       linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
       windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
+      control_plane_vm_size: ${{ steps.vm-config.outputs.control_plane_vm_size }}
+      linux_worker_vm_size: ${{ steps.vm-config.outputs.linux_worker_vm_size }}
+      windows_worker_vm_size: ${{ steps.vm-config.outputs.windows_worker_vm_size }}
+      linux_worker_count: ${{ steps.vm-config.outputs.linux_worker_count }}
+      windows_worker_count: ${{ steps.vm-config.outputs.windows_worker_count }}
     steps:
       
       - name: Checkout repository
@@ -130,15 +305,25 @@ jobs:
         run: |
           cd app-deployment/terraform/azure/environments/api
           terraform plan -out=tfplan \
-            -var="linux_worker_count=1" \
-            -var="windows_worker_count=1" \
-            -var="windows_worker_vm_size=Standard_D16s_v4" \
-            -var="control_plane_vm_size=Standard_D16s_v4"
+            -var="linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" \
+            -var="windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" \
+            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" \
+            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" \
+            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}"
 
       - name: Apply Terraform Plan
         run: |
           cd app-deployment/terraform/azure/environments/api
           terraform apply -auto-approve tfplan
+      
+      - name: Save VM Configuration Info
+        id: vm-config
+        run: |
+          echo "control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}" >> $GITHUB_OUTPUT
+          echo "linux_worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" >> $GITHUB_OUTPUT
+          echo "linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" >> $GITHUB_OUTPUT
+          echo "windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" >> $GITHUB_OUTPUT
 
       - name: Upload Terraform State
         if: always()
@@ -226,6 +411,59 @@ jobs:
           
           echo "Completed copying Windows installer to all available Windows VMs"
 
+      - name: Configure Windows Defender
+        if: ${{ inputs.run_smb_perf == true || github.event.inputs.run_smb_perf == 'true' }}
+        run: |
+          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
+          DEFENDER_DISABLE="${{ inputs.windows_defender_disable || github.event.inputs.windows_defender_disable || 'true' }}"
+          DEFENDER_NDM_EXCLUSION="${{ inputs.windows_defender_ndm_exclusion || github.event.inputs.windows_defender_ndm_exclusion || 'false' }}"
+          
+          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
+          
+          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
+            echo "No Windows VM IP addresses found, skipping Windows Defender configuration"
+            exit 0
+          fi
+          
+          echo "Configuring Windows Defender on ${#WINDOWS_IP_ARRAY[@]} Windows VM(s)..."
+          echo "  - Disable Real-Time Monitoring: $DEFENDER_DISABLE"
+          echo "  - Add NDM Path Exclusion: $DEFENDER_NDM_EXCLUSION"
+          
+          for i in "${!WINDOWS_IP_ARRAY[@]}"; do
+            WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
+            VM_INDEX=$((i + 1))
+            
+            echo "Configuring Windows Defender on Windows VM #$VM_INDEX at $WINDOWS_IP"
+            
+            # Build PowerShell command
+            PS_CMD=""
+            
+            if [ "$DEFENDER_DISABLE" = "true" ]; then
+              # Disable Windows Defender Real-Time Monitoring
+              PS_CMD="Set-MpPreference -DisableRealtimeMonitoring \\$true; Write-Host 'Windows Defender Real-Time Monitoring Disabled'"
+            else
+              # Enable Windows Defender Real-Time Monitoring
+              PS_CMD="Set-MpPreference -DisableRealtimeMonitoring \\$false; Write-Host 'Windows Defender Real-Time Monitoring Enabled'"
+            fi
+            
+            if [ "$DEFENDER_NDM_EXCLUSION" = "true" ]; then
+              # Add NDM mount path to exclusions
+              PS_CMD="$PS_CMD; Add-MpPreference -ExclusionPath 'C:\\datamigrator\\mnt'; Write-Host 'Added NDM path to Defender exclusions'"
+            fi
+            
+            DEFENDER_CMD="powershell.exe -Command \"$PS_CMD\""
+            
+            if SSHPASS="$VM_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$VM_USERNAME@$WINDOWS_IP" "$DEFENDER_CMD"; then
+              echo "Windows Defender configured successfully on Windows VM #$VM_INDEX ($WINDOWS_IP)"
+            else
+              echo "Warning: Failed to configure Windows Defender on Windows VM #$VM_INDEX ($WINDOWS_IP)"
+              # Continue with other VMs instead of failing completely
+            fi
+          done
+          
+          echo "Completed Windows Defender configuration on all Windows VMs"
+
       - name: Wait for Service Boot Setup to Complete
         run: |
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
@@ -265,13 +503,19 @@ jobs:
 
       PERF_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
       PERF_SMB_NDM_WORKERS_PORT: ${{ vars.PERF_SMB_NDM_WORKERS_PORT }}
-      PERF_SMB_SOURCE_VOLUMES: ${{ vars.PERF_SMB_SOURCE_VOLUMES }}
-      PERF_SMB_DESTINATION_VOLUMES: ${{ vars.PERF_SMB_DESTINATION_VOLUMES }}
-      PERF_SMB_SOURCE_HOST_IP: ${{ vars.PERF_SMB_SOURCE_HOST_IP }}
-      PERF_SMB_DESTINATION_HOST_IP: ${{ vars.PERF_SMB_DESTINATION_HOST_IP }}
+      PERF_SMB_SOURCE_VOLUMES: ${{ inputs.smb_source_volumes || github.event.inputs.smb_source_volumes || vars.PERF_SMB_SOURCE_VOLUMES }}
+      PERF_SMB_DESTINATION_VOLUMES: ${{ inputs.smb_destination_volumes || github.event.inputs.smb_destination_volumes || vars.PERF_SMB_DESTINATION_VOLUMES }}
+      PERF_SMB_SOURCE_HOST_IP: ${{ inputs.smb_source_host_ip || github.event.inputs.smb_source_host_ip || vars.PERF_SMB_SOURCE_HOST_IP }}
+      PERF_SMB_DESTINATION_HOST_IP: ${{ inputs.smb_destination_host_ip || github.event.inputs.smb_destination_host_ip || vars.PERF_SMB_DESTINATION_HOST_IP }}
       PERF_SMB_PROTOCOL_USERNAME: ${{ secrets.PERF_SMB_PROTOCOL_USERNAME }}
       PERF_SMB_PROTOCOL_PASSWORD: ${{ secrets.PERF_SMB_PROTOCOL_PASSWORD }}
       PERF_SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
+      PERF_SMB_DATASET_SIZE: ${{ inputs.smb_dataset_size || github.event.inputs.smb_dataset_size || '28038.02 MiB' }}
+      
+      # VM Configuration
+      PERF_CONTROL_PLANE_VM_SIZE: ${{ needs.setup-infrastructure.outputs.control_plane_vm_size }}
+      PERF_WORKER_VM_SIZE: ${{ needs.setup-infrastructure.outputs.windows_worker_vm_size }}
+      PERF_WORKER_COUNT: ${{ needs.setup-infrastructure.outputs.windows_worker_count }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -328,11 +572,16 @@ jobs:
 
       PERF_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       PERF_NFS_NDM_WORKERS_PORT: ${{ vars.PERF_NFS_NDM_WORKERS_PORT }}
-      PERF_NFS_SOURCE_VOLUMES: ${{ vars.PERF_NFS_SOURCE_VOLUMES }}
-      PERF_NFS_DESTINATION_VOLUMES: ${{ vars.PERF_NFS_DESTINATION_VOLUMES }}
-      PERF_NFS_SOURCE_HOST_IP: ${{ vars.PERF_NFS_SOURCE_HOST_IP }}
-      PERF_NFS_DESTINATION_HOST_IP: ${{ vars.PERF_NFS_DESTINATION_HOST_IP }}
+      PERF_NFS_SOURCE_VOLUMES: ${{ inputs.nfs_source_volumes || github.event.inputs.nfs_source_volumes || vars.PERF_NFS_SOURCE_VOLUMES }}
+      PERF_NFS_DESTINATION_VOLUMES: ${{ inputs.nfs_destination_volumes || github.event.inputs.nfs_destination_volumes || vars.PERF_NFS_DESTINATION_VOLUMES }}
+      PERF_NFS_SOURCE_HOST_IP: ${{ inputs.nfs_source_host_ip || github.event.inputs.nfs_source_host_ip || vars.PERF_NFS_SOURCE_HOST_IP }}
+      PERF_NFS_DESTINATION_HOST_IP: ${{ inputs.nfs_destination_host_ip || github.event.inputs.nfs_destination_host_ip || vars.PERF_NFS_DESTINATION_HOST_IP }}
       PERF_NFS_PROTOCOL_USERNAME: ${{ vars.PERF_NFS_PROTOCOL_USERNAME }}
+      PERF_NFS_DATASET_SIZE: ${{ inputs.nfs_dataset_size || github.event.inputs.nfs_dataset_size || '28810.77 MiB' }}
+      
+      PERF_CONTROL_PLANE_VM_SIZE: ${{ needs.setup-infrastructure.outputs.control_plane_vm_size }}
+      PERF_WORKER_VM_SIZE: ${{ needs.setup-infrastructure.outputs.linux_worker_vm_size }}
+      PERF_WORKER_COUNT: ${{ needs.setup-infrastructure.outputs.linux_worker_count }}
     steps:
       - name: Waiting
         run: |
@@ -431,10 +680,11 @@ jobs:
         run: |
           cd app-deployment/terraform/azure/environments/api
           terraform destroy -auto-approve \
-            -var="linux_worker_count=1" \
-            -var="windows_worker_count=1" \
-            -var="windows_worker_vm_size=Standard_D16s_v4" \
-            -var="control_plane_vm_size=Standard_D16s_v4"
+            -var="linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" \
+            -var="windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" \
+            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" \
+            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" \
+            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}"
 
       - name: Clean Up Temporary Files
         run: |

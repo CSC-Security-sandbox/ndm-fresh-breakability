@@ -5,13 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"fmt"
-	"math"
 	. "ndm-api-tests/utils"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -23,16 +23,15 @@ import (
 const (
 	NUMBER_OF_PACKS     = 1
 	MIGRATIONS_PER_PACK = 3
-	NFS_DATASET_SIZE    = "28810.77 MiB"
-	SMB_DATASET_SIZE    = "28038.02 MiB"
 )
 
 var csvTime = time.Now().Unix()
 
-var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Host", "Protocol", "Source-FileServer", "Destination-FileServer",
+var CSV_REPORT_HEADERS = []string{"Pack", "Worker-Hosts", "Protocol", "Source-FileServer", "Destination-FileServer",
 	"Source-Path", "Destination-Path", "Job-Run-ID", "Dataset-Size",
 	"MAX_WRITE_CONCURRENCY", "JOB_TASK_ACTIVITY_CONCURRENCY", "MAX_BUFFER_SIZE (MiB)",
-	"Migration-Duration", "Line-Rate", "Worker-Downtime", "Worker-Max-CPU-Usage"}
+	"Migration-Duration-Seconds", "Line-Rate", "Worker-Downtime-Seconds", "Worker-Max-CPU-Usage (Aggregated)",
+	"Control-Plane-VM-Size", "Worker-VM-Size", "Worker-Count"}
 
 var PERF_PACK_CONFIG = map[int]map[string]int{
 	1: {
@@ -167,12 +166,16 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to start CPU monitoring, pack=%d, iteration=%d", packNumb, run))
 
 					isMigrationCompleted := make(chan struct{})
+					var wg sync.WaitGroup
 					workerDownTimeSec := 0
-					go getWorkerDowntime(isMigrationCompleted, &workerDownTimeSec, &maxCPUUsageInPercentage)
+					wg.Add(1)
+					go getWorkerDowntime(isMigrationCompleted, &workerDownTimeSec, &maxCPUUsageInPercentage, jobRunID, &wg)
 
 					err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("migration job did not complete, pack=%d, iteration=%d", packNumb, run))
 					isMigrationCompleted <- struct{}{}
+					// Wait for goroutine to finish to avoid data race
+					wg.Wait()
 					// capture final CPU usage spikes
 					maxCPUUsageInPercentage, err = GetMaxCPUUsageReport(jobRunID)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get max CPU usage report, pack=%d, iteration=%d, err = %v", packNumb, run, err))
@@ -186,9 +189,7 @@ var _ = Describe("TC-PERFORMANCE-TEST", func() {
 					migrationDuration, lineRate, err := getMigrationDurationAndLineRate(jobRunInfo.StartTime, jobRunInfo.EndTime, workerDownTimeSec)
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get migration duration and line rate, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
-					workerDownTimeMin := float64(workerDownTimeSec) / float64(60)
-
-					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, maxCPUUsageInPercentage, workerDownTimeMin)
+					err = appendRowsToPerfCSV(packNumb, jobRunID, migrationDuration, lineRate, maxCPUUsageInPercentage, float64(workerDownTimeSec))
 					Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to write report to perf csv, pack=%d, iteration=%d, err = %v", packNumb, run, err))
 
 					// Stop CPU monitoring after getting the report
@@ -269,9 +270,20 @@ func createFileServer(name, host, volume, projectId, workerId string, headers ma
 }
 
 func parseSize(datasetSize string) (float64, string, error) {
+	datasetSize = strings.TrimSpace(datasetSize)
 	parts := strings.Fields(datasetSize)
+
+	// Handle case where only number is provided (assume MiB)
+	if len(parts) == 1 {
+		value, err := strconv.ParseFloat(parts[0], 64)
+		if err != nil {
+			return 0, "", fmt.Errorf("invalid number: %s", parts[0])
+		}
+		return value, "MiB", nil
+	}
+
 	if len(parts) != 2 {
-		return 0, "", fmt.Errorf("invalid format: %s", datasetSize)
+		return 0, "", fmt.Errorf("invalid format: %s (expected '<number> <unit>' or '<number>')", datasetSize)
 	}
 
 	valueStr := parts[0]
@@ -301,17 +313,8 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 
 	duration := end.Sub(start).Seconds()
 
-	diff := end.Sub(start)
-
-	hours := int(diff.Hours())
-	minutes := int(math.Mod(diff.Minutes(), 60))
-
-	var datasetSize string
-	if string(PROTOCOL_TYPE) == "NFS" {
-		datasetSize = NFS_DATASET_SIZE
-	} else {
-		datasetSize = SMB_DATASET_SIZE
-	}
+	// Get dataset size from environment
+	datasetSize := GetDatasetSize()
 	size, unit, err := parseSize(datasetSize)
 	if err != nil {
 		return "", "", err
@@ -319,10 +322,10 @@ func getMigrationDurationAndLineRate(startTime, endTime string, workerDownTimeSe
 
 	lineRate := size / duration
 
-	return fmt.Sprintf("%dh%02dmin", hours, minutes), fmt.Sprintf("%.4f %s/sec", lineRate, unit), nil
+	return fmt.Sprintf("%.2f", duration), fmt.Sprintf("%.4f %s/sec", lineRate, unit), nil
 }
 
-func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeMin float64, emptyRowsNumb ...int) error {
+func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, maxCPUUsage string, workerDownTimeSec float64, emptyRowsNumb ...int) error {
 	var perf_report_file = fmt.Sprintf("../../%s_perf_report_%d.csv", PROTOCOL_TYPE, csvTime)
 
 	_, err := os.Stat(perf_report_file)
@@ -354,22 +357,27 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, ma
 		return nil
 	}
 
-	var datasetSize string
-	if string(PROTOCOL_TYPE) == "NFS" {
-		datasetSize = NFS_DATASET_SIZE
-	} else {
-		datasetSize = SMB_DATASET_SIZE
-	}
+	// Get dataset size from environment
+	datasetSize := GetDatasetSize()
+
+	// Get VM configuration
+	controlPlaneVMSize := GetControlPlaneVMSize()
+	workerVMSize := GetWorkerVMSize()
+	workerCount := GetWorkerCount()
+
+	// Get aggregated worker hosts (comma-separated)
+	workerHosts := GetAttachedWorkerHosts()
 
 	newRows := [][]string{
 		{
-			strconv.Itoa(packNumb), GetAttachedWorkerDetails().Host, string(PROTOCOL_TYPE), SOURCE_HOST_IPs[0], DESTINATION_HOST_IPs[0],
+			strconv.Itoa(packNumb), workerHosts, string(PROTOCOL_TYPE), SOURCE_HOST_IPs[0], DESTINATION_HOST_IPs[0],
 			SOURCE_VOLUMES[0], DESTINATION_VOLUMES[0], jobRunID, datasetSize,
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["MAX_WRITE_CONCURRENCY"]),
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["JOB_TASK_ACTIVITY_CONCURRENCY"]),
 			strconv.Itoa(PERF_PACK_CONFIG[packNumb]["MAX_BUFFER_SIZE"]),
-			migrationDuration, lineRate, fmt.Sprintf("%.4f mins", workerDownTimeMin),
+			migrationDuration, lineRate, fmt.Sprintf("%.2f", workerDownTimeSec),
 			maxCPUUsage,
+			controlPlaneVMSize, workerVMSize, workerCount,
 		},
 	}
 
@@ -382,8 +390,10 @@ func appendRowsToPerfCSV(packNumb int, jobRunID, migrationDuration, lineRate, ma
 	return nil
 }
 
-func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageInPercentage *string) {
+func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageInPercentage *string, jobRunID string, wg *sync.WaitGroup) {
+	defer wg.Done()
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -393,10 +403,43 @@ func getWorkerDowntime(stop chan struct{}, workerDownTimeSec *int, maxCPUUsageIn
 				*workerDownTimeSec = *workerDownTimeSec + 5
 			}
 
-			// CPU monitoring for SMB
-			currentPercentage, err := GetMaxCPUUsageReport("")
-			if err == nil && currentPercentage > *maxCPUUsageInPercentage {
-				*maxCPUUsageInPercentage = currentPercentage
+			// CPU monitoring - check current usage during job run
+			currentPercentage, err := GetMaxCPUUsageReport(jobRunID)
+			if err == nil {
+				// Parse comma-separated values and find max
+				currentValues := strings.Split(currentPercentage, ",")
+				maxCurrent := 0.0
+				for _, v := range currentValues {
+					v = strings.TrimSpace(v)
+					if v == "N/A" {
+						continue
+					}
+					if val, parseErr := strconv.ParseFloat(v, 64); parseErr == nil {
+						if val > maxCurrent {
+							maxCurrent = val
+						}
+					}
+				}
+
+				// Compare with existing max (also parse if comma-separated)
+				maxExisting := 0.0
+				existingValues := strings.Split(*maxCPUUsageInPercentage, ",")
+				for _, v := range existingValues {
+					v = strings.TrimSpace(v)
+					if v == "N/A" || v == "" {
+						continue
+					}
+					if val, parseErr := strconv.ParseFloat(v, 64); parseErr == nil {
+						if val > maxExisting {
+							maxExisting = val
+						}
+					}
+				}
+
+				// Update if current max is greater than existing max
+				if maxCurrent > maxExisting {
+					*maxCPUUsageInPercentage = currentPercentage
+				}
 			}
 
 		case <-stop:
@@ -421,26 +464,13 @@ func scpCPUMonitoringScript() error {
 		return fmt.Errorf("unsupported protocol type: %s", PROTOCOL_TYPE)
 	}
 
-	// Get SSH configuration
-	config, err := getWorkerSSHConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get SSH config: %v", err)
+	// Get all worker SSH configurations
+	allWorkers := GetAllAttachedWorkerConfigs()
+	if len(allWorkers) == 0 {
+		return fmt.Errorf("no workers attached")
 	}
 
-	client, err := getSSHClient(config)
-	if err != nil {
-		return fmt.Errorf("failed to connect SSH client: %v", err)
-	}
-	defer client.Close()
-
-	// Start SFTP session
-	sftpClient, err := sftp.NewClient(client)
-	if err != nil {
-		return fmt.Errorf("failed to start SFTP: %v", err)
-	}
-	defer sftpClient.Close()
-
-	// Read local script
+	// Read local script once
 	scriptBytes, err := os.ReadFile(localScriptPath)
 	if err != nil {
 		return fmt.Errorf("failed to read local script: %v", err)
@@ -452,29 +482,57 @@ func scpCPUMonitoringScript() error {
 		scriptBytes = bytes.ReplaceAll(scriptBytes, []byte("\r"), []byte("\n"))
 	}
 
-	// Upload script to remote server
-	remoteFile, err := sftpClient.Create(remoteScriptPath)
-	if err != nil {
-		return fmt.Errorf("failed to create remote script: %v", err)
-	}
-	if _, err = remoteFile.Write(scriptBytes); err != nil {
-		remoteFile.Close()
-		return fmt.Errorf("failed to write remote script: %v", err)
-	}
-	remoteFile.Close()
+	// Upload script to all workers
+	for _, config := range allWorkers {
+		LogDebug(fmt.Sprintf("Uploading CPU monitoring script to worker: %s", config.Host))
 
-	// ✅ Make the Linux script executable
-	if PROTOCOL_TYPE == ProtocolNFS {
-		session, err := client.NewSession()
+		client, err := getSSHClient(config)
 		if err != nil {
-			return fmt.Errorf("failed to create SSH session: %v", err)
+			return fmt.Errorf("failed to connect SSH client to %s: %v", config.Host, err)
 		}
-		defer session.Close()
 
-		chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
-		if err := session.Run(chmodCmd); err != nil {
-			return fmt.Errorf("failed to chmod script: %v", err)
+		// Start SFTP session
+		sftpClient, err := sftp.NewClient(client)
+		if err != nil {
+			client.Close()
+			return fmt.Errorf("failed to start SFTP on %s: %v", config.Host, err)
 		}
+
+		// Upload script to remote server
+		remoteFile, err := sftpClient.Create(remoteScriptPath)
+		if err != nil {
+			sftpClient.Close()
+			client.Close()
+			return fmt.Errorf("failed to create remote script on %s: %v", config.Host, err)
+		}
+		if _, err = remoteFile.Write(scriptBytes); err != nil {
+			remoteFile.Close()
+			sftpClient.Close()
+			client.Close()
+			return fmt.Errorf("failed to write remote script on %s: %v", config.Host, err)
+		}
+		remoteFile.Close()
+		sftpClient.Close()
+
+		// ✅ Make the Linux script executable
+		if PROTOCOL_TYPE == ProtocolNFS {
+			session, err := client.NewSession()
+			if err != nil {
+				client.Close()
+				return fmt.Errorf("failed to create SSH session on %s: %v", config.Host, err)
+			}
+
+			chmodCmd := fmt.Sprintf("chmod +x %s", remoteScriptPath)
+			if err := session.Run(chmodCmd); err != nil {
+				session.Close()
+				client.Close()
+				return fmt.Errorf("failed to chmod script on %s: %v", config.Host, err)
+			}
+			session.Close()
+		}
+
+		client.Close()
+		LogDebug(fmt.Sprintf("Successfully uploaded CPU monitoring script to worker: %s", config.Host))
 	}
 
 	return nil
@@ -494,44 +552,55 @@ func startCPUMonitoring(jobID string) error {
 		runScript = fmt.Sprintf("nohup bash %s %s >/dev/null 2>&1 &", remoteScriptPath, jobID)
 	}
 
-	config, err := getWorkerSSHConfig()
-	if err != nil {
-		return fmt.Errorf("jobID %s: failed to get SSH config: %v", jobID, err)
-	}
+	// Start CPU monitoring on all workers
+	allWorkers := GetAllAttachedWorkerConfigs()
+	var errors []string
 
-	client, err := getSSHClient(config)
-	if err != nil {
-		return fmt.Errorf("jobID %s: failed to get SSH client: %v", jobID, err)
-	}
-	defer client.Close()
+	for _, config := range allWorkers {
+		LogDebug(fmt.Sprintf("[CPU Monitor] Starting monitoring on worker: %s", config.Host))
 
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("jobID %s: failed to create SSH session: %v", jobID, err)
-	}
-	defer session.Close()
-
-
-	// For SMB, use session.Start() instead of session.Run() to not wait for completion
-	if PROTOCOL_TYPE == ProtocolSMB {
-		if err := session.Start(runScript); err != nil {
-			return fmt.Errorf("jobID %s: failed to start script: %v", jobID, err)
+		client, err := getSSHClient(config)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Worker %s: failed to get SSH client: %v", config.Host, err))
+			continue
 		}
-		// Don't wait for the command to complete - it's running in background
-	} else {
-		// For NFS, use session.Run() since nohup handles backgrounding
-		if err := session.Run(runScript); err != nil {
-			return fmt.Errorf("jobID %s: failed to run script: %v", jobID, err)
+
+		session, err := client.NewSession()
+		if err != nil {
+			client.Close()
+			errors = append(errors, fmt.Sprintf("Worker %s: failed to create SSH session: %v", config.Host, err))
+			continue
 		}
+
+		// For SMB, use session.Start() instead of session.Run() to not wait for completion
+		if PROTOCOL_TYPE == ProtocolSMB {
+			if err := session.Start(runScript); err != nil {
+				session.Close()
+				client.Close()
+				errors = append(errors, fmt.Sprintf("Worker %s: failed to start script: %v", config.Host, err))
+				continue
+			}
+			// Don't wait for the command to complete - it's running in background
+		} else {
+			// For NFS, use session.Run() since nohup handles backgrounding
+			if err := session.Run(runScript); err != nil {
+				session.Close()
+				client.Close()
+				errors = append(errors, fmt.Sprintf("Worker %s: failed to run script: %v", config.Host, err))
+				continue
+			}
+		}
+
+		session.Close()
+		client.Close()
+		LogDebug(fmt.Sprintf("[CPU Monitor] Successfully started monitoring on worker: %s", config.Host))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("jobID %s: failed to start CPU monitoring on some workers: %s", jobID, strings.Join(errors, "; "))
 	}
 
 	return nil
-}
-
-func getWorkerSSHConfig() (SSHConfig, error) {
-	// Use GetAttachedWorkerDetails() which properly handles the first worker
-	// from the comma-separated NDM_WORKERS_HOST list
-	return GetAttachedWorkerDetails(), nil
 }
 
 // getSSHClient returns an SSH client connected to the VM.

@@ -221,6 +221,24 @@ func GetAttachedWorkerDetails() SSHConfig {
 	return SSHConfig{}
 }
 
+// GetAllAttachedWorkerConfigs returns all attached worker configurations as a slice
+func GetAllAttachedWorkerConfigs() []SSHConfig {
+	configs := []SSHConfig{}
+	for _, cfg := range AttachedWorkersConfig {
+		configs = append(configs, cfg)
+	}
+	return configs
+}
+
+// GetAttachedWorkerHosts returns comma-separated list of all attached worker IPs
+func GetAttachedWorkerHosts() string {
+	hosts := []string{}
+	for _, cfg := range AttachedWorkersConfig {
+		hosts = append(hosts, cfg.Host)
+	}
+	return strings.Join(hosts, ",")
+}
+
 // DetachWorkers detaches all attached workers by running the SSH detach script on each worker.
 // If a count is provided, it detaches that many workers from the start of the attachedWorkers slice.
 func DetachWorkers(workerIdsToDelete []string) error {
@@ -637,34 +655,34 @@ func getRestartWorkerScriptForNFS() string {
 }
 
 func UpdateWorkerEnvAndRestart(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) error {
-	config := GetAttachedWorkerDetails()
-	sshConfig := SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
+	allWorkers := GetAllAttachedWorkerConfigs()
+	if len(allWorkers) == 0 {
+		return fmt.Errorf("no workers attached")
 	}
 
-	var script string
-	switch PROTOCOL_TYPE {
-	case ProtocolNFS:
-		script = WorkerEnvVarsScriptForNFS(sshConfig.Password, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
-	case ProtocolSMB:
-		script = WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+	for _, config := range allWorkers {
+		var script string
+		switch PROTOCOL_TYPE {
+		case ProtocolNFS:
+			script = WorkerEnvVarsScriptForNFS(config.Password, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+		case ProtocolSMB:
+			script = WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize)
+		}
+
+		_, err := sshRunScript(config, script)
+		if err != nil {
+			return fmt.Errorf("failed to update worker config on %s: %w", config.Host, err)
+		}
+
+		LogDebug(fmt.Sprintf("Worker %s config successfully updated, MAX_WRITE_CONCURRENCY=%d, JOB_TASK_ACTIVITY_CONCURRENCY=%d, MAX_BUFFER_SIZE=%d",
+			config.Host, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize))
+
+		_, err = RestartWorker(config)
+		if err != nil {
+			return fmt.Errorf("failed to restart worker %s: %w", config.Host, err)
+		}
 	}
 
-	_, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return fmt.Errorf("failed to update worker config on %s: %w", sshConfig.Host, err)
-	}
-
-	LogDebug(fmt.Sprintf("Worker %s config successfully updated, MAX_WRITE_CONCURRENCY=%d, JOB_TASK_ACTIVITY_CONCURRENCY=%d, MAX_BUFFER_SIZE=%d",
-		sshConfig.Host, maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize))
-
-	_, err = RestartWorker(sshConfig)
-	if err != nil {
-		return fmt.Errorf("failed to restart worker, worker=%s, err=%v", sshConfig.Host, err)
-	}
 	return nil
 }
 
@@ -702,26 +720,23 @@ func IsWorkerRunning() (bool, error) {
 		script = `sc query "DatamigratorWorker" | find "STATE"`
 	}
 
-	config := GetAttachedWorkerDetails()
-	sshConfig := SSHConfig{
-		Username: config.Username,
-		Host:     config.Host,
-		Port:     config.Port,
-		Password: config.Password,
+	// Check all workers - return false if ANY worker is not running
+	allWorkers := GetAllAttachedWorkerConfigs()
+	for _, config := range allWorkers {
+		output, err := sshRunScript(config, script)
+		if err != nil {
+			LogDebug(fmt.Sprintf("Worker %s status check failed: %v", config.Host, err))
+			return false, fmt.Errorf("GetWorkerStatus failed for %s: %w\noutput: %s", config.Host, err, output)
+		}
+
+		if !strings.Contains(strings.ToLower(string(output)), "running") {
+			LogDebug(fmt.Sprintf("Worker %s is NOT running.", config.Host))
+			return false, nil
+		}
 	}
 
-	output, err := sshRunScript(sshConfig, script)
-	if err != nil {
-		return false, fmt.Errorf("GetWorkerStatus failed: %w\noutput: %s", err, output)
-	}
-
-	if strings.Contains(strings.ToLower(string(output)), "running") {
-		LogDebug("Datamigrator Worker service is running.")
-		return true, nil
-	}
-
-	LogDebug("Datamigrator Worker service is NOT running.")
-	return false, nil
+	LogDebug("All Datamigrator Worker services are running.")
+	return true, nil
 }
 
 func GetMaxCPUUsageReport(jobid string) (string, error) {
@@ -736,21 +751,35 @@ func GetMaxCPUUsageReport(jobid string) (string, error) {
 		script = "cat /tmp/" + jobid + "_max_cpu_usage.txt"
 	}
 
-	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
-	config := GetAttachedWorkerDetails()
+	// Collect CPU usage from all workers
+	allWorkers := GetAllAttachedWorkerConfigs()
+	cpuUsages := []string{}
+	
+	for _, config := range allWorkers {
+		output, err := sshRunScript(config, script)
+		if err != nil {
+			LogDebug(fmt.Sprintf("GetMaxCPUUsageReport failed for worker %s: %v", config.Host, err))
+			cpuUsages = append(cpuUsages, "N/A")
+			continue
+		}
 
-	output, err := sshRunScript(config, script)
-	if err != nil {
-		return "", fmt.Errorf("GetMaxCPUUsageReport failed: %w\noutput: %s", err, output)
+		// For both SMB and NFS, parse the output format: timestamp | jobid | cpu_usage%
+		cpuUsageInfo := strings.Split(strings.TrimSpace(string(output)), "|")
+		if len(cpuUsageInfo) < 3 {
+			LogDebug(fmt.Sprintf("Unexpected CPU usage format for worker %s: %s", config.Host, string(output)))
+			cpuUsages = append(cpuUsages, "N/A")
+			continue
+		}
+
+		cpuUsages = append(cpuUsages, strings.TrimSpace(cpuUsageInfo[2]))
 	}
 
-	// For both SMB and NFS, parse the output format: timestamp | jobid | cpu_usage%
-	cpuUsageInfo := strings.Split(strings.TrimSpace(string(output)), "|")
-	if len(cpuUsageInfo) < 3 {
-		return "", fmt.Errorf("unexpected CPU usage format. Expected 'timestamp|jobid|cpu_usage', got: %s", string(output))
+	if len(cpuUsages) == 0 {
+		return "N/A", fmt.Errorf("no CPU usage data collected from any worker")
 	}
 
-	return strings.TrimSpace(cpuUsageInfo[2]), nil
+	// Return comma-separated CPU usage values
+	return strings.Join(cpuUsages, ","), nil
 }
 
 func StopCPUMonitoring() error {
@@ -765,12 +794,20 @@ func StopCPUMonitoring() error {
 		script = "sudo pkill -f nfs_cpu_usage.sh"
 	}
 
-	// Use GetAttachedWorkerDetails() which properly handles comma-separated worker IPs
-	config := GetAttachedWorkerDetails()
+	// Stop CPU monitoring on all workers
+	allWorkers := GetAllAttachedWorkerConfigs()
+	var errors []string
+	
+	for _, config := range allWorkers {
+		output, err := sshRunScript(config, script)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Worker %s: %v", config.Host, err))
+			LogDebug(fmt.Sprintf("StopCPUMonitoring failed for worker %s: %v\noutput: %s", config.Host, err, output))
+		}
+	}
 
-	output, err := sshRunScript(config, script)
-	if err != nil {
-		return fmt.Errorf("StopCPUMonitoring failed: %w\noutput: %s", err, output)
+	if len(errors) > 0 {
+		return fmt.Errorf("StopCPUMonitoring failed on some workers: %s", strings.Join(errors, "; "))
 	}
 
 	return nil
