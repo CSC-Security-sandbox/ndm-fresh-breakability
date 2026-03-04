@@ -384,6 +384,52 @@ describe("CsvService", () => {
       expect(resultEmpty).toContain("Source UID");
       expect(resultEmpty).toContain("Source Unix Permissions");
     });
+
+    it("should include Type column with softlink for SYMBOLIC_LINK file_type", () => {
+      const result = service.getMigrationCoCColumns("NFS");
+
+      expect(result).toContain('"Type"');
+      expect(result).toContain("softlink");
+      expect(result).toContain("SYMBOLIC_LINK");
+      expect(result).toContain("directory");
+      expect(result).toContain("file");
+    });
+
+    it("should include Type column with softlink for SMB protocol", () => {
+      const result = service.getMigrationCoCColumns("SMB");
+
+      expect(result).toContain('"Type"');
+      expect(result).toContain("softlink");
+      expect(result).toContain("SYMBOLIC_LINK");
+    });
+  });
+
+  describe("getCutoverInventoryDataQuery", () => {
+    it("should include Type column in the query", async () => {
+      const jobRunId = "job-123";
+      const limit = 100;
+      const offset = 0;
+      process.env.SCHEMA = "testSchema";
+
+      const result = await service.getCutoverInventoryDataQuery(jobRunId, limit, offset);
+
+      expect(result.query).toContain('"Type"');
+      expect(result.query).toContain("softlink");
+      expect(result.query).toContain("SYMBOLIC_LINK");
+      expect(result.query).toContain("directory");
+      expect(result.query).toContain("file");
+      expect(result.values).toEqual([jobRunId, limit, offset]);
+    });
+
+    it("should include Type in the outer SELECT with other cutover columns", async () => {
+      const result = await service.getCutoverInventoryDataQuery("job-1", 10, 0);
+
+      expect(result.query).toContain('"Source Path"');
+      expect(result.query).toContain('"Destination Path"');
+      expect(result.query).toContain('"Checksum Generated Timestamp (UTC)"');
+      expect(result.query).toContain('"Type"');
+      expect(result.query).toContain("FROM latest_file_versions");
+    });
   });
 
   describe("Cutover CSV - Query Selection Logic", () => {
