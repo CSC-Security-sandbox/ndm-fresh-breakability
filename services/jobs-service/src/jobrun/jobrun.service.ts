@@ -19,6 +19,7 @@ import {
   WorkFlows,
   WorkerStatus,
   USER_VISIBLE_ERROR_TYPES,
+  TERMINAL_JOB_RUN_STATUSES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { InventoryEntity } from "src/entities/inventory.entity";
@@ -575,7 +576,7 @@ export class JobRunService {
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
         this.logger.debug(
-          `jobRun for id ${jobRun.jobrunid} - with jobjobstats ${JSON.stringify(jobRun.jobjobstats)}`
+          `jobRun for id ${jobRun.jobrunid} - with jobstats ${JSON.stringify(jobRun.jobstats)}`
         );
         const partialJobRunStats = {
           jobRunId: jobRun.jobrunid,
@@ -610,9 +611,15 @@ export class JobRunService {
             : Date.now() - jobRun.starttime.getTime(),
         };
        
-          const jobStats: JobRunStats = await this.calculateJobRunStats(
-            jobRun.jobrunid
-          );
+          const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status);
+
+          let jobStats: JobRunStats;
+          if (isTerminal && jobRun.jobstats) {
+            this.logger.log(`Job Run ${jobRun.jobrunid} using persisted jobStats`);
+            jobStats = jobRun.jobstats;
+          } else {
+            jobStats = await this.calculateJobRunStats(jobRun.jobrunid);
+          }
           this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
           this.logger.log(
             `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
@@ -645,7 +652,12 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  async updateJobRunStatus(jobRunId: string, status: JobRunStatus, projectId?: string) {
+  async updateJobRunStatus(
+    jobRunId: string, 
+    status: JobRunStatus, 
+    projectId?: string,
+    passedStats?: { fileCount?: number; dirCount?: number; totalSize?: string }
+  ) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
     });
@@ -684,8 +696,20 @@ export class JobRunService {
           { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
         );
       }
-      const jobRunStats: JobRunStats =
-        await this.calculateJobRunStats(jobRunId);
+      
+      let jobRunStats: JobRunStats;
+      if (passedStats && (passedStats.fileCount !== undefined || passedStats.dirCount !== undefined)) {
+        this.logger.log(`Using stats passed from workflow for job run ${jobRunId}: ${JSON.stringify(passedStats)}`);
+        jobRunStats = {
+          fileCount: passedStats.fileCount?.toString() || "0",
+          directories: passedStats.dirCount?.toString() || "0",
+          totalSize: passedStats.totalSize || "0",
+          errors: await this.getErrorCounts(jobRunId),
+          lastRefreshed: new Date(),
+        };
+      } else {
+        jobRunStats = await this.calculateJobRunStats(jobRunId);
+      }
       if (
         jobConfig &&
         (jobConfig.jobType === JobType.MIGRATE ||
@@ -753,18 +777,11 @@ export class JobRunService {
         }
       }
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
-      const terminalStatuses = [
-        JobRunStatus.Completed,
-        JobRunStatus.Failed,
-        JobRunStatus.Errored,
-        JobRunStatus.Stopped,
-        JobRunStatus.Blocked,
-      ];
       const updateData: Partial<JobRunEntity> = {
         status: status,
         jobStats: jobRunStats,
       };
-      if (terminalStatuses.includes(status)) {
+      if (TERMINAL_JOB_RUN_STATUSES.includes(status)) {
         updateData.endTime = new Date();
       }
       await this.jobRunRepo.update({ id: jobRunId }, updateData);

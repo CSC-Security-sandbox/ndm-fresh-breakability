@@ -73,6 +73,7 @@ export interface ProcessItemsResult {
   commands: Cmd[];
   fileCount: number;
   dirCount: number;
+  totalSize: number;
   subDirs: string[];
 }
 
@@ -115,6 +116,7 @@ export class CommandGenerationService {
       commands: [],
       fileCount: 0,
       dirCount: 0,
+      totalSize: 0,
       subDirs: []
     };
 
@@ -231,6 +233,7 @@ export class CommandGenerationService {
         } else if (!targetContent.has(itemName)) {
           // Regular file, target doesn't exist
           result.fileCount++;
+          result.totalSize += sourceStat.size;
           const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
           if (newCommand) result.commands.push(newCommand);
         } else {
