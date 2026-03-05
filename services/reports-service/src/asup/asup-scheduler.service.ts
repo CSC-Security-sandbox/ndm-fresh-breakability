@@ -88,10 +88,8 @@ export class AsupSchedulerService {
   async updateAsupSettings(enabled: boolean, userId?: string): Promise<AsupSettingsData> {
     try {
       await this.dataSource.query(
-        `INSERT INTO ${this.dbSchema}.global_settings (setting_key, setting_value, description, setting_type, updated_by)
-         VALUES ($1, $2, 'ASUP metrics sharing enabled/disabled', 'boolean', $3::uuid)
-         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP, updated_by = $3::uuid`,
-        [ASUP_ENABLED_KEY, String(enabled), userId ?? null]
+        `UPDATE ${this.dbSchema}.global_settings SET setting_value = $1, updated_at = CURRENT_TIMESTAMP, updated_by = $2::uuid WHERE setting_key = $3`,
+        [String(enabled), userId ?? null, ASUP_ENABLED_KEY]
       );
       this.logger.log(`ASUP settings updated: enabled=${enabled}`);
       return this.getAsupSettings();
@@ -117,19 +115,20 @@ export class AsupSchedulerService {
     this.logger.log('Daily ASUP transmission job triggered');
     
     try {
+
+      const settings = await this.getAsupSettings();
+
+      if (!settings.enabled) {
+        this.logger.log('ASUP is disabled in database, skipping transmission');
+        return;
+      }
+
       // Check how many untransmitted records we have
       const untransmittedCount = await this.asupStatsService.getUntransmittedCount();
       this.logger.log(`Found ${untransmittedCount} untransmitted ASUP stats records`);
       
       if (untransmittedCount === 0) {
         this.logger.log('No untransmitted records to send, skipping transmission');
-        return;
-      }
-
-      const settings = await this.getAsupSettings();
-
-      if (!settings.enabled) {
-        this.logger.log('ASUP is disabled in database, skipping transmission');
         return;
       }
 

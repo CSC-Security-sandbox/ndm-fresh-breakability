@@ -133,33 +133,26 @@ describe('AsupSchedulerService', () => {
   // ─── updateAsupSettings ─────────────────────────────────────
 
   describe('updateAsupSettings', () => {
-    it('should upsert setting and return updated settings', async () => {
-      // First call = upsert, second call = getAsupSettings read-back
-      dataSource.query
-        .mockResolvedValueOnce(undefined) // upsert
-        .mockResolvedValueOnce([
-          { setting_key: 'asup_enabled', setting_value: 'true', updated_at: new Date('2026-03-04') },
-        ]);
+    it('should update setting and return updated settings', async () => {
+      dataSource.query.mockResolvedValueOnce(undefined);
 
       const result = await service.updateAsupSettings(true, 'user-abc');
 
       expect(result.enabled).toBe(true);
-      expect(dataSource.query).toHaveBeenCalledTimes(2);
-      const upsertQuery = dataSource.query.mock.calls[0][0] as string;
-      expect(upsertQuery).toContain('ON CONFLICT');
+      expect(result.lastUpdated).toBeDefined();
+      expect(dataSource.query).toHaveBeenCalledTimes(1);
+      const updateQuery = dataSource.query.mock.calls[0][0] as string;
+      expect(updateQuery).toContain('UPDATE');
+      expect(updateQuery).not.toContain('INSERT');
     });
 
     it('should pass null userId when not provided', async () => {
-      dataSource.query
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce([
-          { setting_key: 'asup_enabled', setting_value: 'false', updated_at: null },
-        ]);
+      dataSource.query.mockResolvedValueOnce(undefined);
 
       await service.updateAsupSettings(false);
 
       const params = dataSource.query.mock.calls[0][1] as any[];
-      expect(params[2]).toBeNull();
+      expect(params[1]).toBeNull();
     });
 
     it('should throw on DB error', async () => {
@@ -175,6 +168,9 @@ describe('AsupSchedulerService', () => {
 
   describe('handleAsupTransmission', () => {
     it('should skip when no untransmitted records', async () => {
+      dataSource.query.mockResolvedValueOnce([
+        { setting_key: 'asup_enabled', setting_value: 'true', updated_at: null },
+      ]);
       asupStatsService.getUntransmittedCount.mockResolvedValue(0);
 
       await service.handleAsupTransmission();
