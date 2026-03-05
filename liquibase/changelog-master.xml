@@ -635,4 +635,19 @@
             <sqlFile path="liquibase/20260226_03_alter_inventory_add_coc_status_columns_rollback.sql"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="20260223_01_create_asup_stats_table.sql" author="jeevitha">
+        <sqlFile path="liquibase/20260223_01_create_asup_stats_table.sql"/>
+        <rollback>
+            <sqlFile path="liquibase/20260223_01_create_asup_stats_table_rollback.sql"/>
+         </rollback>
+      </changeSet>
+
+   <changeSet id="20260304_01_seed_asup_enabled_setting.sql" author="achyutas">
+      <sqlFile path="liquibase/20260304_01_seed_asup_enabled_setting.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260304_01_seed_asup_enabled_setting_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

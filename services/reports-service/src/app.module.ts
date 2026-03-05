@@ -17,6 +17,7 @@ import {
   LoggerModule,
   RequestContextMiddleware,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { AsupModule } from './asup/asup.module';
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import {
     PdfModule,
     JobRunModule,
     WorkerModule,
-    GeneratorModule
+    GeneratorModule,
+    AsupModule
   ],
   controllers: [],
   providers: [],

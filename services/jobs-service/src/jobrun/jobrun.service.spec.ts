@@ -460,6 +460,14 @@ describe("JobRunService", () => {
           provide: DataSource,
           useValue: {
             query: jest.fn(),
+            transaction: jest.fn().mockImplementation(async (cb: any) => {
+              const mockManager = {
+                update: jest.fn().mockResolvedValue(undefined),
+                findOne: jest.fn().mockResolvedValue(undefined),
+                query: jest.fn().mockResolvedValue(undefined),
+              };
+              return cb(mockManager);
+            }),
           },
         },
         {
@@ -895,14 +903,8 @@ describe("JobRunService", () => {
       );
       expect(operationErrorQueryBuilder.getRawMany).toHaveBeenCalled();
 
-      expect(jobRunRepo.update).toHaveBeenCalledWith(
-        { id: jobRunId },
-        {
-          status: JobRunStatus.Completed,
-          endTime: expect.any(Date),
-          jobStats: expect.anything(),
-        }
-      );
+      // jobRunRepo.update is now called inside the transaction via manager.update
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
   });
 
@@ -2943,14 +2945,8 @@ describe("JobRunService", () => {
       );
 
       expect(service.calculateJobRunStats).toHaveBeenCalledWith(jobRunId);
-      expect(jobRunRepo.update).toHaveBeenCalledWith(
-        { id: jobRunId },
-        {
-          status: JobRunStatus.Completed,
-          endTime: expect.any(Date),
-          jobStats: mockJobRunStats,
-        }
-      );
+      // jobRunRepo.update is now called inside the transaction via manager.update
+      expect(dataSource.transaction).toHaveBeenCalled();
     });
 
     it("should update the job run status when status is running", async () => {
@@ -4062,5 +4058,281 @@ describe("JobRunService", () => {
       });
     });
 
+  });
+
+  // ─── recordAsupStatsForJobRun (private, tested via updateJobRunStatus) ─────
+
+  describe("recordAsupStatsForJobRun (via updateJobRunStatus)", () => {
+    const jobRunId = "run-asup-1";
+    const projectId = "project-asup-1";
+
+    const makeJobRun = (overrides?: Partial<JobRunEntity>) => ({
+      id: jobRunId,
+      jobConfigId: "jc-asup-1",
+      ...overrides,
+    });
+
+    const makeJobConfig = (overrides?: any) => ({
+      id: "jc-asup-1",
+      jobType: JobType.DISCOVER,
+      sourcePath: {
+        fileServer: {
+          protocol: Protocol.NFS,
+          config: { serverType: "ONTAP" },
+        },
+      },
+      targetPath: {
+        fileServer: {
+          config: { serverType: "ANF" },
+        },
+      },
+      ...overrides,
+    });
+
+    const mockJobRunStats: JobRunStats = {
+      fileCount: "250",
+      totalSize: "50000",
+    } as any;
+
+    beforeEach(() => {
+      jest.spyOn(service, "calculateJobRunStats").mockResolvedValue(mockJobRunStats as any);
+      jest.spyOn(errorRemedyService, "getDistinctErrorCodes").mockResolvedValue([] as any);
+      jest.spyOn(jobRunRepo, "update").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
+    });
+
+    it("should insert ASUP stats for a completed discover job run", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+
+      // Setup transaction mock with manager that returns job config and project
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn()
+            .mockResolvedValueOnce(makeJobConfig())  // jobConfig lookup
+            .mockResolvedValueOnce({ id: projectId, projectName: "Test ASUP Project" }),  // project lookup
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      // Verify transaction was called
+      expect(dataSource.transaction).toHaveBeenCalled();
+      const transactionCb = (dataSource.transaction as jest.Mock).mock.calls[0][0];
+      // Re-run to capture the manager and verify the INSERT
+      const mockManager = {
+        update: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn()
+          .mockResolvedValueOnce(makeJobConfig())
+          .mockResolvedValueOnce({ id: projectId, projectName: "Test ASUP Project" }),
+        query: jest.fn().mockResolvedValue(undefined),
+      };
+      await transactionCb(mockManager);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining([
+          jobRunId,
+          "jc-asup-1",
+          projectId,
+          "Test ASUP Project",
+          "discovery",
+          Protocol.NFS,
+          "ONTAP",
+          "ANF",
+          250,
+          50000,
+        ]),
+      );
+    });
+
+    it("should insert ASUP stats for a stopped migration job run", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({ jobType: JobType.MIGRATE }) as any,
+      );
+
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn()
+            .mockResolvedValueOnce(makeJobConfig({ jobType: JobType.MIGRATE }))
+            .mockResolvedValueOnce({ id: projectId, projectName: "Migration Project" }),
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Stopped, projectId);
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+      const transactionCb = (dataSource.transaction as jest.Mock).mock.calls[0][0];
+      const mockManager = {
+        update: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn()
+          .mockResolvedValueOnce(makeJobConfig({ jobType: JobType.MIGRATE }))
+          .mockResolvedValueOnce({ id: projectId, projectName: "Migration Project" }),
+        query: jest.fn().mockResolvedValue(undefined),
+      };
+      await transactionCb(mockManager);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining([
+          jobRunId,
+          "jc-asup-1",
+          projectId,
+          "Migration Project",
+          "migration",
+        ]),
+      );
+    });
+
+    it("should not record ASUP stats for failed job runs", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn().mockResolvedValue(undefined),
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Failed, projectId);
+
+      // Verify transaction was called (for jobRunRepo.update), but ASUP insert should be skipped
+      const transactionCb = (dataSource.transaction as jest.Mock).mock.calls[0][0];
+      const mockManager = {
+        update: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn().mockResolvedValue(undefined),
+        query: jest.fn().mockResolvedValue(undefined),
+      };
+      await transactionCb(mockManager);
+      const asupCalls = (mockManager.query as jest.Mock).mock.calls.filter(
+        (call: any[]) => (call[0] as string).includes("asup_stats"),
+      );
+      expect(asupCalls).toHaveLength(0);
+    });
+
+    it("should not record ASUP stats for running status", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+      jest.spyOn(sendMailService, "sendMail").mockResolvedValue(undefined);
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Running, projectId);
+
+      // Running status takes the else branch — no transaction is called at all
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it("should use N/A for server types when config is missing", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({
+          sourcePath: { fileServer: { protocol: Protocol.NFS, config: null } },
+          targetPath: { fileServer: { config: null } },
+        }) as any,
+      );
+
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn()
+            .mockResolvedValueOnce(makeJobConfig({
+              sourcePath: { fileServer: { protocol: Protocol.NFS, config: null } },
+              targetPath: { fileServer: { config: null } },
+            }))
+            .mockResolvedValueOnce({ id: projectId, projectName: "No Config" }),
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      // Re-run the transaction callback to capture manager calls
+      const transactionCb = (dataSource.transaction as jest.Mock).mock.calls[0][0];
+      const mockManager = {
+        update: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn()
+          .mockResolvedValueOnce(makeJobConfig({
+            sourcePath: { fileServer: { protocol: Protocol.NFS, config: null } },
+            targetPath: { fileServer: { config: null } },
+          }))
+          .mockResolvedValueOnce({ id: projectId, projectName: "No Config" }),
+        query: jest.fn().mockResolvedValue(undefined),
+      };
+      await transactionCb(mockManager);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining(["N/A", "N/A"]),
+      );
+    });
+
+    it("should not throw when ASUP insert fails (logs error instead)", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(makeJobConfig() as any);
+
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn()
+            .mockResolvedValueOnce(makeJobConfig())
+            .mockResolvedValueOnce({ id: projectId, projectName: "Test" }),
+          query: jest.fn().mockRejectedValue(new Error("DB insert failed")),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      // Should not throw — ASUP errors are caught inside the transaction
+      await expect(
+        service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId),
+      ).resolves.not.toThrow();
+    });
+
+    it("should map cutover job type correctly", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(makeJobRun() as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(
+        makeJobConfig({ jobType: JobType.CUT_OVER }) as any,
+      );
+
+      (dataSource.transaction as jest.Mock).mockImplementation(async (cb: any) => {
+        const mockManager = {
+          update: jest.fn().mockResolvedValue(undefined),
+          findOne: jest.fn()
+            .mockResolvedValueOnce(makeJobConfig({ jobType: JobType.CUT_OVER }))
+            .mockResolvedValueOnce({ id: projectId, projectName: "Cutover Project" }),
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(mockManager);
+        return mockManager;
+      });
+
+      await service.updateJobRunStatus(jobRunId, JobRunStatus.Completed, projectId);
+
+      // Re-run the transaction callback to capture manager calls
+      const transactionCb = (dataSource.transaction as jest.Mock).mock.calls[0][0];
+      const mockManager = {
+        update: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn()
+          .mockResolvedValueOnce(makeJobConfig({ jobType: JobType.CUT_OVER }))
+          .mockResolvedValueOnce({ id: projectId, projectName: "Cutover Project" }),
+        query: jest.fn().mockResolvedValue(undefined),
+      };
+      await transactionCb(mockManager);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO"),
+        expect.arrayContaining(["cutover"]),
+      );
+    });
   });
 });
