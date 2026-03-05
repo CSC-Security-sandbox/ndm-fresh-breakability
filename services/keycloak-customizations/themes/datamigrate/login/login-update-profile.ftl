@@ -98,6 +98,26 @@
                                     </span>
                                 </#if>
                             </div>
+                            <!-- ASUP Metrics Sharing (Optional) -->
+                            <div class="w-full my-4 text-left">
+                                <div class="flex items-start gap-2">
+                                    <!-- Hidden field to ensure value is always sent (false by default) -->
+                                    <input type="hidden" id="allowMetricsSharingHidden" name="allowMetricsSharing" value="false" />
+                                    <input
+                                        type="checkbox"
+                                        id="allowMetricsSharingCheckbox"
+                                        class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                    <div class="flex flex-col">
+                                        <label for="allowMetricsSharingCheckbox" class="text-sm font-medium text-gray-700 cursor-pointer">
+                                            ${msg("Allow Metrics Sharing")}
+                                            <span class="text-gray-400 font-normal">(Optional)</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            Allow sharing usage metrics with NetApp to help improve NetApp Data Migrator.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                             <!-- Submit Button -->
                             <div class="my-2 w-full">
                                 <button
@@ -114,4 +134,25 @@
                     <!-- Optional footer section -->
         </#if>
     </@layout.registrationLayout>
-    <script type="module" src="${url.resourcesPath}/js/profileVisibility.js"></script>
+    <script>
+        // Sync checkbox state to hidden field so value is always submitted
+        (function() {
+            var checkbox = document.getElementById('allowMetricsSharingCheckbox');
+            var hidden = document.getElementById('allowMetricsSharingHidden');
+            
+            if (checkbox && hidden) {
+                // Update hidden field when checkbox changes
+                checkbox.addEventListener('change', function() {
+                    hidden.value = checkbox.checked ? 'true' : 'false';
+                });
+                
+                // Also update on form submit to ensure latest value
+                var form = document.getElementById('kc-profile-update-form');
+                if (form) {
+                    form.addEventListener('submit', function() {
+                        hidden.value = checkbox.checked ? 'true' : 'false';
+                    });
+                }
+            }
+        })();
+    </script>

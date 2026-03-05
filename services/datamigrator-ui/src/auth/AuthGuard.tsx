@@ -4,7 +4,9 @@ import {useAuth} from 'react-oidc-context';
 import {useDispatch} from 'react-redux';
 import {setUserPermissions} from '@store/reducer/permissionSlice';
 import {setAuthToken, clearAuth} from '@store/reducer/authSlice';
+import {syncAsupSettings} from '@store/reducer/asupSlice';
 import {useLazyGetUserPermissionsQuery} from '@api/permissionApi';
+import {useLazyGetAsupSettingsQuery} from '@api/asupApi';
 import useAccountDetails from '@hooks/useAccountDetails';
 import {useLazyGetAllProjectsQuery} from '@api/projectApi';
 import {setAllProjectList, setProject} from '@store/reducer/appSlice';
@@ -21,6 +23,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const [getAllAccounts] = useLazyGetAllAccountsQuery();
   const [getAllProjects] = useLazyGetAllProjectsQuery();
   const [getUserPermissionsApi] = useLazyGetUserPermissionsQuery();
+  const [getAsupSettings] = useLazyGetAsupSettingsQuery();
   const [showNoProjectsPage, setShowNoProjectsPage] = useState<boolean>(false);
 
   useEffect(() => {
@@ -65,6 +68,24 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       });
   };
 
+  // Fetch ASUP settings from backend
+  // The backend reads from global_settings table which is populated by Keycloak
+  // when the instance creator sets their preference on the profile page
+  const fetchAsupSettings = async () => {
+    try {
+      // Fetch the system-wide ASUP setting from backend
+      const asupSettingsResult = await getAsupSettings().unwrap();
+      if (asupSettingsResult) {
+        dispatch(syncAsupSettings({
+          enabled: asupSettingsResult.enabled,
+          lastTransmission: asupSettingsResult.lastTransmission,
+        }));
+      }
+    } catch (error) {
+      // Non-critical - don't block the app from loading
+    }
+  };
+
   useEffect(() => {
     if (auth.isAuthenticated) {
       (async () => {
@@ -75,6 +96,8 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         );
         if (resp?.roles?.length > 0) {
           await getAccounts();
+          // Fetch ASUP settings in parallel with projects
+          fetchAsupSettings();
           getProjects();
         } else {
           setShowNoProjectsPage(true);
