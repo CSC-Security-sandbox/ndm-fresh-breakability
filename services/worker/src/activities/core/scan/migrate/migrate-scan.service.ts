@@ -66,7 +66,7 @@ export class MigrateScanService {
 
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
 
-        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
+        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
         let commands: Cmd[] = [];
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
@@ -91,11 +91,103 @@ export class MigrateScanService {
             maxCommandsPerBatch: this.maxMigrationCommand
         });
 
-        // Update output with results
-        output.fileCount = processResult.fileCount;
-        output.dirCount = processResult.dirCount;
-        output.subDirs = processResult.subDirs;
-        commands = processResult.commands;
+                if (isSMB){
+                    const hasConflict = await checkCaseSensitiveConflict(
+                        jobContext.jobConfig.jobType,
+                        item,
+                        lowerCaseSourceData,
+                        relativeSourcePath,
+                        sourceContentPath,
+                        command,
+                        jobContext,
+                        lowerCaseTargetData,
+                        targetContent,
+                        sourceStat.isDirectory()
+                    );
+                    if (hasConflict) continue;
+
+                    const hasTrailingSpace = await this.checkAndPublishTrailingSpaceError(
+                        item,
+                        relativeSourcePath,
+                        sourceContentPath,
+                        command,
+                        jobContext,
+                        errorType
+                    );
+                    if (hasTrailingSpace) continue;
+                    // TODO: check if the item has streams or not using detectADsInfo method. 
+                    // buildCOmmand with sourceStat and a new ComamndName - COPY_CONTTENT_STREAMS
+                }
+
+                const fileInfo: FileInfo = await getFileInfo({name: item, fullFilePath: sourceContentPath, relativePath: relativeSourcePath});
+                const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
+                // TODO: change the if/else logic. it is difficult to read and understand.
+                if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {   // only resolving to directory
+                    output.dirCount++;
+                    if ((process.platform === 'win32') && (fileType === FileType.VOLUME_MOUNT_POINT)) {
+                        const transientError = new Error(`Volume mount point detected at ${relativeSourcePath}`);
+                        await jobContext.publishToErrorStream(
+                            dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+                        );
+                        continue;
+                    }
+                    output.subDirs.push(relativeSourcePath);
+                    if(!targetContent.has(item)) {
+                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);
+                        if (newcommand) commands.push(newcommand);
+                    }
+                } 
+                 else if (sourceStat.isSymbolicLink()) {   // not a directory but a sym link                                                                             
+                    if(!targetContent.has(item)) {
+                        if ((process.platform === 'win32') && (fileType === FileType.JUNCTION || fileType === FileType.SYMBOLIC_LINK)) {
+                            const transientError = new Error(`${fileType} detected at ${relativeSourcePath}`);
+                                await jobContext.publishToErrorStream(
+                                    dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+                                );
+                            continue;
+                        }
+                        const newcommand = this.buildCommand(sourceStat, fileInfo.path);
+                        if (newcommand) commands.push(newcommand);
+                    }else{
+                        const targetFilePath = path.join(targetPath, item);
+                        const targetStatLstat = await fs.promises.lstat(targetFilePath);
+                        const command = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat);
+                        if (command) commands.push(command);
+                    }
+                }
+                else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist
+                    output.fileCount++;
+                    output.totalSize += sourceStat.size;
+                    const command = this.buildCommand(sourceStat, fileInfo.path);
+                    if (command) commands.push(command);
+                } else {                                                   // not directory and not symlink and target exist                           
+                    const targetFilePath = path.join(targetPath, item);
+                    const targetFileExists = await isExists(targetFilePath);
+                    if (targetFileExists) {
+                       const targetStatLstat = await fs.promises.lstat(targetFilePath);
+                        let targetStat: fs.Stats;
+                        if (targetStatLstat.isSymbolicLink()) {
+                            targetStat = targetStatLstat;
+                        } else {
+                            targetStat = await fs.promises.stat(targetFilePath);
+                        }
+                        const command = this.buildCommand(sourceStat, fileInfo.path, targetStat);
+                        if (command) commands.push(command);
+                    }
+                }
+                //TODO: this is duplicated many times, need to refactor.
+                if(commands.length >= this.maxMigrationCommand) {
+                    const chunk = commands.splice(0, this.maxMigrationCommand);
+                    await this.publishCommands({ jobContext, commands: chunk });
+                }
+                
+            }catch(error) {
+                this.logger.error(`Error processing item ${item} in directory ${sourcePath}: ${error}`);
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: targetPath});
+                await jobContext.publishToErrorStream(dmErr);
+                throw error; 
+            }
+        }
         
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 

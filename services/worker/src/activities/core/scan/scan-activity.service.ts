@@ -46,6 +46,7 @@ export class ScanService {
         let scanActivityOutput: ScanActivityOutput = {
             dirCount: 0,
             fileCount: 0,
+            totalSize: 0,
             subDirs: [],
             jobRunId: jobRunId,
             batchDirs: []
@@ -97,9 +98,9 @@ export class ScanService {
     }
 
     async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
-        const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
-        const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
-        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
+        const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId);
+        const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId);
+        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, totalSize: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
         let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
         const settings = getScanSettings(jobContext);
@@ -127,6 +128,7 @@ export class ScanService {
                         }
                         output.fileCount += result.fileCount;
                         output.dirCount += result.dirCount;
+                        output.totalSize += result.totalSize;
                         output.subDirs.push(...result.subDirs);
                     }catch(error) {
                         errors.push(error.code ?? '')
