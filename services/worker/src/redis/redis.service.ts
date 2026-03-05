@@ -204,7 +204,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const username = process.env.REDIS_USERNAME || 'default';
     
     // Get fresh JWT token
-    const jwt = await this.authService.getAccessToken();
+    const jwt = await this.authService.getAccessToken(true);
     if (!jwt) {
       throw new Error('Failed to get JWT for Redis authentication');
     }

@@ -63,7 +63,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     if (this.jwtAuthEnabled) {
       // Get JWT token for authentication (production / Istio mode)
-      const jwt = await this.authService.getAccessToken();
+      const jwt = await this.authService.getAccessToken(true);
       if (!jwt) {
         throw new Error('Failed to obtain JWT token for Redis authentication');
       }
