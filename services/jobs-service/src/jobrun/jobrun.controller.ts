@@ -177,10 +177,11 @@ export class JobRunController {
   async updateJobRunStatus(
     @Param("jobRunId") jobRunId: string,
     @Param("status") status: JobRunStatus,
-    @Headers("projectId") projectId?: string
+    @Headers("projectId") projectId?: string,
+    @Body() body?: { stats?: { fileCount?: number; dirCount?: number; totalSize?: string } }
   ) {
-    console.log("updatingStatus" + "jobRunId", jobRunId, "status", status);
-    return await this.jobRunService.updateJobRunStatus(jobRunId, status, projectId);
+    console.log("updatingStatus" + "jobRunId", jobRunId, "status", status, "stats", body?.stats);
+    return await this.jobRunService.updateJobRunStatus(jobRunId, status, projectId, body?.stats);
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })
