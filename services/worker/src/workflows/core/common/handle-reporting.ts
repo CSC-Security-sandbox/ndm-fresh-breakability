@@ -34,9 +34,16 @@ const generateReport = async (jobRunId: string, generator: string) => {
   });
 };
 
+export interface WorkflowStats {
+    fileCount?: number;
+    dirCount?: number;
+    totalSize?: string;
+}
+
 export const handleReporting = async (
     traceId: string,
     status: JobRunStatus,
+    stats?: WorkflowStats,
   ): Promise<string> => {
     let isBlocked = true;
     let reportType : JobReportType | null = null;
@@ -57,7 +64,15 @@ export const handleReporting = async (
     try {
       await wf.condition(() => !isBlocked);
       const jobRunStatus = getMappedJobRunStatus(status, reportType);
-      await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
+      await updateStatusActivity({
+        jobRunId: traceId, 
+        status: jobRunStatus,
+        stats: stats ? {
+          fileCount: stats.fileCount,
+          dirCount: stats.dirCount,
+          totalSize: stats.totalSize,
+        } : undefined
+      })
       switch(reportType) {
         case JobReportType.CUT_OVER: {            
             await generateCOCReportActivity(traceId);

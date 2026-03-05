@@ -496,7 +496,12 @@ export class JobRunService {
     return allJobsRuns;
   }
 
-  async updateJobRunStatus(jobRunId: string, status: JobRunStatus, projectId?: string) {
+  async updateJobRunStatus(
+    jobRunId: string, 
+    status: JobRunStatus, 
+    projectId?: string,
+    passedStats?: { fileCount?: number; dirCount?: number; totalSize?: string }
+  ) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
     });
@@ -535,8 +540,20 @@ export class JobRunService {
           { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
         );
       }
-      const jobRunStats: JobRunStats =
-        await this.calculateLiveInventoryStats(jobRunId);
+      
+      let jobRunStats: JobRunStats;
+      if (passedStats && (passedStats.fileCount !== undefined || passedStats.dirCount !== undefined)) {
+        this.logger.log(`Using stats passed from workflow for job run ${jobRunId}: ${JSON.stringify(passedStats)}`);
+        jobRunStats = {
+          fileCount: passedStats.fileCount?.toString() || "0",
+          directories: passedStats.dirCount?.toString() || "0",
+          totalSize: passedStats.totalSize || "0",
+          errors: await this.getErrorCounts(jobRunId),
+          lastRefreshed: new Date(),
+        };
+      } else {
+        jobRunStats = await this.calculateLiveInventoryStats(jobRunId);
+      }
       if (
         jobConfig &&
         (jobConfig.jobType === JobType.MIGRATE ||

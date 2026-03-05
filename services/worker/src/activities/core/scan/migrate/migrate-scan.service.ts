@@ -86,7 +86,7 @@ export class MigrateScanService {
 
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
 
-        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
+        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
         let commands: Cmd[] = [];
         const isSMB = process.platform === 'win32';
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
@@ -184,6 +184,7 @@ export class MigrateScanService {
                 }
                 else if (!targetContent.has(item)) {                       // not directory and not symlink and target dont exist
                     output.fileCount++;
+                    output.totalSize += sourceStat.size;
                     const command = this.buildCommand(sourceStat, fileInfo.path);
                     if (command) commands.push(command);
                 } else {                                                   // not directory and not symlink and target exist                           

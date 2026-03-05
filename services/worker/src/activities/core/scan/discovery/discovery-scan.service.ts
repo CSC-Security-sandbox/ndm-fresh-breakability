@@ -53,7 +53,7 @@ export class DiscoveryScanService {
     }
 
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
-        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
+        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
         const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         const isSMB = process.platform === 'win32';
         const lowerCaseSourceDirs = new Set<string>();
@@ -97,7 +97,10 @@ export class DiscoveryScanService {
                         if (hasConflict) continue;
                     }
                     output.subDirs.push(relativeSourcePath);
-                } else output.fileCount++;
+                } else {
+                    output.fileCount++;
+                    output.totalSize += sourceStat.size;
+                }
             }
         }catch(error) {
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
