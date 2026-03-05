@@ -33,6 +33,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     private readonly ITERATION_LOG_INTERVAL: number = process.env.ITERATION_LOG_INTERVAL ? parseInt(process.env.ITERATION_LOG_INTERVAL) : 50;
     private readonly GC_TRIGGER_INTERVAL: number = process.env.GC_TRIGGER_INTERVAL ? parseInt(process.env.GC_TRIGGER_INTERVAL) : 100;
     private connectionRefreshInterval: NodeJS.Timeout | null = null;
+    private readonly jwtAuthEnabled: boolean = process.env.REDIS_JWT_AUTH_ENABLED !== 'false';
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -62,19 +63,26 @@ export class RedisConsumerService implements OnModuleDestroy {
         this.logger.log('Initializing Redis Consumer Service with JWT authentication');
         try {
             if (!this.isValidRedisClient()) {
-                // Get JWT token for authentication
-                const jwt = await this.authService.getAccessToken();
-                if (!jwt) {
-                    throw new Error('Failed to obtain JWT token for Redis authentication');
-                }
-
                 const redisClientOptions: any = {
                     url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
                     username: process.env.REDIS_USERNAME || 'default',
-                    password: jwt,  // Use JWT as password
                 };
 
-                this.logger.log(`Connecting to Redis at ${redisClientOptions.url} with JWT authentication`);
+                if (this.jwtAuthEnabled) {
+                    // Get JWT token for authentication (production / Istio mode)
+                    const jwt = await this.authService.getAccessToken();
+                    if (!jwt) {
+                        throw new Error('Failed to obtain JWT token for Redis authentication');
+                    }
+                    redisClientOptions.password = jwt;
+                    this.logger.log(`Connecting to Redis at ${redisClientOptions.url} with JWT authentication`);
+                } else {
+                    // Use static password (local / docker-compose mode)
+                    if (process.env.REDIS_PASSWORD) {
+                        redisClientOptions.password = process.env.REDIS_PASSWORD;
+                    }
+                    this.logger.log(`Connecting to Redis at ${redisClientOptions.url} with password authentication`);
+                }
                 this.redisClient = createClient(redisClientOptions);
 
                 this.redisClient.on('error', (error) => {
@@ -106,18 +114,24 @@ export class RedisConsumerService implements OnModuleDestroy {
                 await new Promise(resolve => setTimeout(resolve, 5000));
                 
                 try {
-                    const jwt = await this.authService.getAccessToken(true); // Force refresh
-                    if (!jwt) {
-                        throw new Error('Failed to obtain JWT token for Redis retry');
-                    }
-
-                    const redisClientOptions: any = {
+                    const retryClientOptions: any = {
                         url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
                         username: process.env.REDIS_USERNAME || 'default',
-                        password: jwt,
                     };
 
-                    this.redisClient = createClient(redisClientOptions);
+                    if (this.jwtAuthEnabled) {
+                        const jwt = await this.authService.getAccessToken(true); // Force refresh
+                        if (!jwt) {
+                            throw new Error('Failed to obtain JWT token for Redis retry');
+                        }
+                        retryClientOptions.password = jwt;
+                    } else {
+                        if (process.env.REDIS_PASSWORD) {
+                            retryClientOptions.password = process.env.REDIS_PASSWORD;
+                        }
+                    }
+
+                    this.redisClient = createClient(retryClientOptions);
                     if (!this.redisClient.isOpen) await this.redisClient.connect();
                     
                     if (this.isValidRedisClient()) {
@@ -143,6 +157,10 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Ensures only ONE refresh interval is active at a time
      */
     private setupConnectionRefresh(): void {
+        if (!this.jwtAuthEnabled) {
+            return; // No-op: static password does not need refreshing
+        }
+
         // Clear any existing refresh interval to prevent duplicates
         if (this.connectionRefreshInterval) {
             this.logger.log('Clearing existing connection refresh interval before creating new one');
@@ -173,6 +191,10 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Closes existing connection and creates new one with fresh token
      */
     private async refreshConnection(): Promise<void> {
+        if (!this.jwtAuthEnabled) {
+            return; // No-op: static password does not need refreshing
+        }
+
         // Close existing connection
         if (this.redisClient && this.redisClient.isOpen) {
             this.logger.log('Closing existing Redis connection for refresh...');
