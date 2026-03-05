@@ -23,7 +23,9 @@ export const workerProviders = [
         // consolidated report activities
         getDiscoveryJobsForFileServer: activitiesService.getDiscoveryJobsForFileServer.bind(activitiesService),
         generatePdfForJobRun: activitiesService.generatePdfForJobRun.bind(activitiesService),
+        generateCsvForJobRun: activitiesService.generateCsvForJobRun.bind(activitiesService),
         mergePdfFilesActivity: activitiesService.mergePdfFilesActivity.bind(activitiesService),
+        mergeCsvFilesActivity: activitiesService.mergeCsvFilesActivity.bind(activitiesService),
         getConsolidatedReportPathActivity: activitiesService.getConsolidatedReportPathActivity.bind(activitiesService),
         cleanupTempFilesActivity: activitiesService.cleanupTempFilesActivity.bind(activitiesService),
         updateConsolidatedReportStatus: activitiesService.updateConsolidatedReportStatus.bind(activitiesService),

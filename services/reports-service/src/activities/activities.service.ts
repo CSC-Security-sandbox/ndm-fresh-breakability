@@ -6,7 +6,9 @@ import {
     ConsolidatedReportService,
     GetDiscoveryJobsInput,
     GeneratePdfForJobRunInput,
+    GenerateCsvForJobRunInput,
     MergePdfFilesInput,
+    MergeCsvFilesInput,
     GetConsolidatedReportPathInput,
     CleanupTempFilesInput,
     UpdateConsolidatedReportStatusInput,
@@ -127,6 +129,32 @@ export class ActivitiesService {
             return result;
         } catch (error) {
             this.logger.error(`Error in mergePdfFilesActivity: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async generateCsvForJobRun(input: GenerateCsvForJobRunInput) {
+        this.logger.log(`Starting generateCsvForJobRun for jobRunId: ${input.jobRunId}`);
+        
+        try {
+            const result = await this.consolidatedReportService.generateCsvForJobRun(input);
+            this.logger.log(`Completed generateCsvForJobRun for jobRunId: ${input.jobRunId}`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in generateCsvForJobRun for jobRunId: ${input.jobRunId}: ${error.message}`, error?.stack || error);
+            throw error;
+        }
+    }
+
+    async mergeCsvFilesActivity(input: MergeCsvFilesInput) {
+        this.logger.log(`Starting mergeCsvFilesActivity with ${input.csvFilePaths.length} files`);
+        
+        try {
+            const result = await this.consolidatedReportService.mergeCsvFiles(input);
+            this.logger.log(`Completed mergeCsvFilesActivity`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Error in mergeCsvFilesActivity: ${error.message}`, error?.stack || error);
             throw error;
         }
     }

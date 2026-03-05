@@ -1,4 +1,5 @@
 import { Controller, BadRequestException, Get, Post, Body, StreamableFile, Logger, Inject, Optional, Param, NotFoundException } from '@nestjs/common';
+import * as path from 'path';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -44,6 +45,11 @@ export class ReportsController {
           type: 'string',
           description: 'Name of the file server config (for filename)'
         },
+        format: {
+          type: 'string',
+          enum: ['pdf', 'csv'],
+          description: 'Report format: pdf or csv (default pdf)'
+        },
       },
       required: ['fileServerId', 'configName'],
     },
@@ -53,6 +59,7 @@ export class ReportsController {
   async startConsolidatedDiscoveryReport(
     @Body('fileServerId') fileServerId: string,
     @Body('configName') configName: string,
+    @Body('format') format?: 'pdf' | 'csv',
   ): Promise<{ workflowId: string; message: string }> {
     if (!fileServerId) {
       throw new BadRequestException('fileServerId is required');
@@ -61,7 +68,8 @@ export class ReportsController {
       throw new BadRequestException('configName is required');
     }
 
-    this.logger.log(`Starting consolidated report workflow for fileServerId: ${fileServerId}`);
+    const reportFormat = format === 'csv' ? 'csv' : 'pdf';
+    this.logger.log(`Starting consolidated report workflow for fileServerId: ${fileServerId}, format: ${reportFormat}`);
 
     const workflowId = `consolidated-report-${fileServerId}-${Date.now()}`;
     
@@ -71,7 +79,7 @@ export class ReportsController {
     await this.temporalClientService.startWorkflow({
       workflowName: WORKFLOWS.CONSOLIDATED_REPORT,
       workflowId,
-      args: [{ fileServerId, configName }],
+      args: [{ fileServerId, configName, format: reportFormat }],
     });
 
     return {
@@ -164,10 +172,15 @@ export class ReportsController {
       const reportBuffer =  await this.consolidatedReportService.readReportFile(reportPath);
  
       await this.consolidatedReportService.clearStatus(fileServerId);
+
+      const ext = path.extname(reportPath).toLowerCase();
+      const isCsv = ext === '.csv';
+      const contentType = isCsv ? 'text/csv' : 'application/pdf';
+      const extension = isCsv ? '.csv' : '.pdf';
       
       return new StreamableFile(reportBuffer, {
-        type: 'application/pdf',
-        disposition: `attachment; filename="consolidated-discovery-report-${fileServerId}.pdf"`,
+        type: contentType,
+        disposition: `attachment; filename="consolidated-discovery-report-${fileServerId}${extension}"`,
       });
     } catch (error) {
       this.logger.error(`Error downloading consolidated report: ${error.message}`);

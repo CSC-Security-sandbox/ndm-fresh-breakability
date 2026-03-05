@@ -97,6 +97,70 @@ describe("ConsolidatedReportService", () => {
     fileServerRepo = module.get(getRepositoryToken(FileServerEntity));
   });
 
+  describe("constructor", () => {
+    it("should create service with LoggerFactory when provided", () => {
+      expect(mockLoggerFactory.create).toHaveBeenCalledWith("ConsolidatedReportService");
+      expect(service).toBeDefined();
+    });
+
+    it("should fallback to NestJS Logger when LoggerFactory not provided", async () => {
+      const moduleNoLogger = await Test.createTestingModule({
+        providers: [
+          ConsolidatedReportService,
+          { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
+          { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
+          { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
+        ],
+      }).compile();
+      const svc = moduleNoLogger.get<ConsolidatedReportService>(ConsolidatedReportService);
+      expect(svc).toBeDefined();
+    });
+
+    it("should use REPORT_DOWNLOAD_LOCATION when set", async () => {
+      const orig = process.env.REPORT_DOWNLOAD_LOCATION;
+      process.env.REPORT_DOWNLOAD_LOCATION = "/custom/reports";
+      const moduleCustom = await Test.createTestingModule({
+        providers: [
+          ConsolidatedReportService,
+          { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
+          { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
+          { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+        ],
+      }).compile();
+      const svc = moduleCustom.get<ConsolidatedReportService>(ConsolidatedReportService);
+      const path = await svc.getConsolidatedReportPath({ fileServerId: "x", configName: "C" });
+      expect(path).toContain("/custom/reports");
+      process.env.REPORT_DOWNLOAD_LOCATION = orig;
+    });
+
+    it("should log error when initializeDirectories fails", async () => {
+      const mockMkdir = jest.fn().mockRejectedValue(new Error("mkdir failed"));
+      const mockFsPromises = {
+        readFile: jest.fn().mockResolvedValue(Buffer.from("mock-pdf")),
+        writeFile: jest.fn().mockResolvedValue(undefined),
+        mkdir: mockMkdir,
+        unlink: jest.fn().mockResolvedValue(undefined),
+        access: jest.fn().mockResolvedValue(undefined),
+      };
+      (fs as any).promises = mockFsPromises;
+      const mockLog = { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+      const mod = await Test.createTestingModule({
+        providers: [
+          ConsolidatedReportService,
+          { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
+          { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
+          { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
+          { provide: LoggerFactory, useValue: { create: () => mockLog } },
+        ],
+      }).compile();
+      const svc = mod.get<ConsolidatedReportService>(ConsolidatedReportService);
+      expect(svc).toBeDefined();
+      await new Promise((r) => setImmediate(r));
+      expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining("Failed to initialize directories"));
+    });
+  });
+
   describe("getDiscoveryJobsForFileServer", () => {
     it("should return discovery jobs for file server", async () => {
       const mockJobs = [
@@ -126,6 +190,201 @@ describe("ConsolidatedReportService", () => {
       });
 
       expect(result).toEqual([]);
+    });
+
+    it("should filter to latest job per volume (rn === 1)", async () => {
+      const mockJobs = [
+        { job_run_id: "job-1", volume_path: "/vol1", rn: "1" },
+        { job_run_id: "job-2", volume_path: "/vol1", rn: "2" },
+      ];
+      inventoryRepo.query.mockResolvedValue(mockJobs);
+
+      const result = await service.getDiscoveryJobsForFileServer({ fileServerId: "fs1" });
+
+      expect(result).toEqual([{ jobRunId: "job-1", volumePath: "/vol1" }]);
+    });
+  });
+
+  describe("generateCsvForJobRun", () => {
+    it("should return null when no report data found", async () => {
+      reportsRepo.find.mockResolvedValue([]);
+
+      const result = await service.generateCsvForJobRun({
+        jobRunId: "test-job",
+        volumePath: "/test/path",
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it("should return null when report has no data", async () => {
+      reportsRepo.find.mockResolvedValue([
+        { jobRunId: "test-job", reportType: "DISCOVER", reportData: null } as any,
+      ]);
+
+      const result = await service.generateCsvForJobRun({
+        jobRunId: "test-job",
+        volumePath: "/test/path",
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it("should generate CSV file path when report data exists", async () => {
+      const mockReportData = [
+        { category: "test", sub_category: "sc1", value: "v1", valueType: "string" },
+      ];
+      reportsRepo.find.mockResolvedValue([
+        {
+          jobRunId: "test-job",
+          reportType: "DISCOVER",
+          reportData: JSON.stringify(mockReportData),
+          createdAt: new Date(),
+        } as any,
+      ]);
+
+      const result = await service.generateCsvForJobRun({
+        jobRunId: "test-job",
+        volumePath: "/test/path",
+      });
+
+      expect(result).toBeTruthy();
+      expect(result).toContain(".csv");
+      expect(fs.promises.writeFile).toHaveBeenCalled();
+    });
+
+    it("should throw and log when CSV generation fails", async () => {
+      reportsRepo.find.mockResolvedValue([
+        {
+          jobRunId: "test-job",
+          reportType: "DISCOVER",
+          reportData: "invalid-json",
+          createdAt: new Date(),
+        } as any,
+      ]);
+
+      await expect(
+        service.generateCsvForJobRun({
+          jobRunId: "test-job",
+          volumePath: "/test/path",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("should handle entry with header in entry and undefined value", async () => {
+      const mockReportData = [
+        { category: "c", sub_category: "sc1", value: "v1", valueType: "string", extraHeader: undefined as any },
+      ];
+      reportsRepo.find.mockResolvedValue([
+        {
+          jobRunId: "test-job",
+          reportType: "DISCOVER",
+          reportData: JSON.stringify(mockReportData),
+          createdAt: new Date(),
+        } as any,
+      ]);
+      const result = await service.generateCsvForJobRun({ jobRunId: "test-job", volumePath: "/path" });
+      expect(result).toBeTruthy();
+      expect(result).toContain(".csv");
+    });
+
+    it("should handle entry with value null (skip for dynamicHeaders)", async () => {
+      const mockReportData = [
+        { category: "c", sub_category: "sc1", value: null, valueType: "string" },
+      ];
+      reportsRepo.find.mockResolvedValue([
+        {
+          jobRunId: "test-job",
+          reportType: "DISCOVER",
+          reportData: JSON.stringify(mockReportData),
+          createdAt: new Date(),
+        } as any,
+      ]);
+      const result = await service.generateCsvForJobRun({ jobRunId: "test-job", volumePath: "/path" });
+      expect(result).toBeTruthy();
+    });
+  });
+
+  describe("mergeCsvFiles", () => {
+    it("should merge multiple CSV files", async () => {
+      const csv1 = "h1,h2\nv1,v2";
+      const csv2 = "h1,h2,h3\nv1,v2,v3";
+      (fs.promises.readFile as jest.Mock)
+        .mockResolvedValueOnce(csv1)
+        .mockResolvedValueOnce(csv2);
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.mergeCsvFiles({
+        csvFilePaths: ["/temp/1.csv", "/temp/2.csv"],
+        outputPath: "/output/merged.csv",
+      });
+
+      expect(result).toBe("/output/merged.csv");
+      expect(fs.promises.unlink).toHaveBeenCalledTimes(2);
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        "/output/merged.csv",
+        expect.any(String)
+      );
+    });
+
+    it("should skip empty files and continue", async () => {
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("\n\n");
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.mergeCsvFiles({
+        csvFilePaths: ["/temp/empty.csv"],
+        outputPath: "/output/merged.csv",
+      });
+
+      expect(result).toBe("/output/merged.csv");
+    });
+
+    it("should handle unlink failure with warning", async () => {
+      (fs.promises.readFile as jest.Mock).mockResolvedValue("h1\nv1");
+      (fs.promises.unlink as jest.Mock).mockRejectedValue(new Error("Unlink failed"));
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.mergeCsvFiles({
+        csvFilePaths: ["/temp/1.csv"],
+        outputPath: "/output/merged.csv",
+      });
+
+      expect(result).toBe("/output/merged.csv");
+    });
+
+    it("should parse quoted CSV with comma and escaped quote (parseCsvLine branches)", async () => {
+      const csvContent = '"a,b","c""d"\n"v1","v2"';
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(csvContent);
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.mergeCsvFiles({
+        csvFilePaths: ["/temp/quoted.csv"],
+        outputPath: "/output/merged.csv",
+      });
+
+      expect(result).toBe("/output/merged.csv");
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        "/output/merged.csv",
+        expect.stringContaining("a,b")
+      );
+    });
+
+    it("should merge CSVs with extra headers not in DISCOVERY_CSV_HEADER_ORDER", async () => {
+      (fs.promises.readFile as jest.Mock)
+        .mockResolvedValueOnce("h1,extra\nv1,v2")
+        .mockResolvedValueOnce("h1\nv3");
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.mergeCsvFiles({
+        csvFilePaths: ["/temp/1.csv", "/temp/2.csv"],
+        outputPath: "/output/merged.csv",
+      });
+
+      expect(result).toBe("/output/merged.csv");
     });
   });
 
@@ -239,6 +498,26 @@ describe("ConsolidatedReportService", () => {
       expect(result).toContain("consolidated-discovery-report");
       expect(result).toContain(".pdf");
     });
+
+    it("should generate CSV path when format is csv", async () => {
+      const result = await service.getConsolidatedReportPath({
+        fileServerId: "test-server",
+        configName: "MyConfig",
+        format: "csv",
+      });
+
+      expect(result).toContain(".csv");
+      expect(result).toContain("MyConfig");
+      expect(result).toContain("consolidated-discovery-report");
+    });
+
+    it("should default to pdf when format is omitted", async () => {
+      const result = await service.getConsolidatedReportPath({
+        fileServerId: "test-server",
+        configName: "MyConfig",
+      });
+      expect(result).toContain(".pdf");
+    });
   });
 
   describe("cleanupTempFiles", () => {
@@ -262,6 +541,17 @@ describe("ConsolidatedReportService", () => {
 
       expect(fs.promises.unlink).not.toHaveBeenCalled();
     });
+
+    it("should log warning when unlink fails for a file", async () => {
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.unlink as jest.Mock).mockRejectedValue(new Error("Unlink failed"));
+
+      await service.cleanupTempFiles({
+        filePaths: ["/temp/file.pdf"],
+      });
+
+      expect(fs.promises.unlink).toHaveBeenCalledWith("/temp/file.pdf");
+    });
   });
 
   describe("updateConsolidatedReportStatus", () => {
@@ -281,6 +571,38 @@ describe("ConsolidatedReportService", () => {
           consolidatedReportPath: "/path/to/report.pdf",
         })
       );
+    });
+
+    it("should update with workflowId when provided", async () => {
+      fileServerRepo.update.mockResolvedValue({ affected: 1 } as any);
+
+      await service.updateConsolidatedReportStatus({
+        fileServerId: "test-server",
+        status: "IN_PROGRESS",
+        workflowId: "wf-123",
+      });
+
+      expect(fileServerRepo.update).toHaveBeenCalledWith(
+        { id: "test-server" },
+        expect.objectContaining({
+          consolidatedReportStatus: "IN_PROGRESS",
+          consolidatedReportWorkflowId: "wf-123",
+        })
+      );
+    });
+
+    it("should pass undefined for optional reportPath and workflowId when not provided", async () => {
+      fileServerRepo.update.mockResolvedValue({ affected: 1 } as any);
+
+      await service.updateConsolidatedReportStatus({
+        fileServerId: "test-server",
+        status: "FAILED",
+        errorMessage: "err",
+      });
+
+      const updateCall = fileServerRepo.update.mock.calls[0][1];
+      expect(updateCall.consolidatedReportPath).toBeUndefined();
+      expect(updateCall.consolidatedReportWorkflowId).toBeUndefined();
     });
   });
 
@@ -357,6 +679,14 @@ describe("ConsolidatedReportService", () => {
 
       expect(result).toBeNull();
     });
+
+    it("should return null if consolidatedReportPath is empty", async () => {
+      fileServerRepo.findOne.mockResolvedValue({ consolidatedReportPath: "" } as any);
+
+      const result = await service.getReportFilePath("test-server");
+
+      expect(result).toBeNull();
+    });
   });
 
   describe("readReportFile", () => {
@@ -366,6 +696,12 @@ describe("ConsolidatedReportService", () => {
       const result = await service.readReportFile("/path/to/report.pdf");
       expect(result).toEqual(mockBuffer);
       expect(fs.promises.readFile).toHaveBeenCalledWith("/path/to/report.pdf");
+    });
+
+    it("should throw when file read fails", async () => {
+      (fs.promises.readFile as jest.Mock).mockRejectedValue(new Error("ENOENT"));
+
+      await expect(service.readReportFile("/missing.pdf")).rejects.toThrow("ENOENT");
     });
   });
 
@@ -400,6 +736,11 @@ describe("ConsolidatedReportService", () => {
       (service as any).browserInstance = {
         close: mockCloseFn,
       };
+      await expect(service.onModuleDestroy()).resolves.not.toThrow();
+    });
+
+    it("should do nothing when browser instance is null", async () => {
+      (service as any).browserInstance = null;
       await expect(service.onModuleDestroy()).resolves.not.toThrow();
     });
   });

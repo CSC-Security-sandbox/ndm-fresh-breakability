@@ -46,7 +46,9 @@ describe('ActivitiesService', () => {
     mockConsolidatedReportService = {
       getDiscoveryJobsForFileServer: jest.fn(),
       generatePdfForJobRun: jest.fn(),
+      generateCsvForJobRun: jest.fn(),
       mergePdfFiles: jest.fn(),
+      mergeCsvFiles: jest.fn(),
       getConsolidatedReportPath: jest.fn(),
       cleanupTempFiles: jest.fn(),
       updateConsolidatedReportStatus: jest.fn(),
@@ -475,6 +477,19 @@ describe('ActivitiesService', () => {
         expect(mockLogger.error).toHaveBeenCalled();
       });
 
+      it('should pass error (no stack) to logger when error has no stack', async () => {
+        const input = { fileServerId: 'test-fs' };
+        const error = new Error('No stack error');
+        delete (error as any).stack;
+        mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockRejectedValue(error);
+
+        await expect(service.getDiscoveryJobsForFileServer(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Error in getDiscoveryJobsForFileServer'),
+          error
+        );
+      });
+
       it('should return empty array when no jobs found', async () => {
         const input = { fileServerId: 'test-fs' };
         mockConsolidatedReportService.getDiscoveryJobsForFileServer.mockResolvedValue([]);
@@ -497,6 +512,51 @@ describe('ActivitiesService', () => {
 
         expect(result).toHaveLength(3);
         expect(result).toEqual(jobs);
+      });
+    });
+
+    describe('generateCsvForJobRun', () => {
+      it('should generate CSV successfully', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const csvPath = '/tmp/report-1.csv';
+        mockConsolidatedReportService.generateCsvForJobRun.mockResolvedValue(csvPath);
+
+        const result = await service.generateCsvForJobRun(input);
+
+        expect(result).toBe(csvPath);
+        expect(mockConsolidatedReportService.generateCsvForJobRun).toHaveBeenCalledWith(input);
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Starting generateCsvForJobRun'));
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Completed generateCsvForJobRun'));
+      });
+
+      it('should return null when CSV generation returns null', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        mockConsolidatedReportService.generateCsvForJobRun.mockResolvedValue(null);
+
+        const result = await service.generateCsvForJobRun(input);
+
+        expect(result).toBeNull();
+      });
+
+      it('should log errors when CSV generation fails', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const error = new Error('CSV generation failed');
+        mockConsolidatedReportService.generateCsvForJobRun.mockRejectedValue(error);
+
+        await expect(service.generateCsvForJobRun(input)).rejects.toThrow('CSV generation failed');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Error in generateCsvForJobRun'),
+          expect.anything()
+        );
+      });
+
+      it('should pass error (no stack) to logger when CSV generation fails', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const error = new Error('CSV fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.generateCsvForJobRun.mockRejectedValue(error);
+        await expect(service.generateCsvForJobRun(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in generateCsvForJobRun'), error);
       });
     });
 
@@ -528,6 +588,15 @@ describe('ActivitiesService', () => {
 
         await expect(service.generatePdfForJobRun(input)).rejects.toThrow();
         expect(mockLogger.error).toHaveBeenCalled();
+      });
+
+      it('should pass error (no stack) to logger when PDF generation fails', async () => {
+        const input = { jobRunId: 'job-1', volumePath: '/vol1' };
+        const error = new Error('PDF fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.generatePdfForJobRun.mockRejectedValue(error);
+        await expect(service.generatePdfForJobRun(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in generatePdfForJobRun'), error);
       });
 
       it('should handle PDF generation for multiple volumes', async () => {
@@ -572,6 +641,15 @@ describe('ActivitiesService', () => {
         await expect(service.mergePdfFilesActivity(input)).rejects.toThrow();
       });
 
+      it('should pass error (no stack) to logger when merge fails', async () => {
+        const input = { pdfFilePaths: ['/tmp/1.pdf'], outputPath: '/out.pdf' };
+        const error = new Error('Merge fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.mergePdfFiles.mockRejectedValue(error);
+        await expect(service.mergePdfFilesActivity(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in mergePdfFilesActivity'), error);
+      });
+
       it('should handle single file merge', async () => {
         const input = {
           pdfFilePaths: ['/tmp/pdf-1.pdf'],
@@ -610,6 +688,44 @@ describe('ActivitiesService', () => {
       });
     });
 
+    describe('mergeCsvFilesActivity', () => {
+      it('should merge CSVs successfully', async () => {
+        const input = {
+          csvFilePaths: ['/tmp/1.csv', '/tmp/2.csv'],
+          outputPath: '/tmp/merged.csv',
+        };
+        mockConsolidatedReportService.mergeCsvFiles.mockResolvedValue('/tmp/merged.csv');
+
+        const result = await service.mergeCsvFilesActivity(input);
+
+        expect(result).toBe('/tmp/merged.csv');
+        expect(mockConsolidatedReportService.mergeCsvFiles).toHaveBeenCalledWith(input);
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Starting mergeCsvFilesActivity with 2 files'));
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('Completed mergeCsvFilesActivity'));
+      });
+
+      it('should handle merge CSV errors', async () => {
+        const input = {
+          csvFilePaths: ['/tmp/1.csv'],
+          outputPath: '/tmp/merged.csv',
+        };
+        const error = new Error('Merge CSV failed');
+        mockConsolidatedReportService.mergeCsvFiles.mockRejectedValue(error);
+
+        await expect(service.mergeCsvFilesActivity(input)).rejects.toThrow('Merge CSV failed');
+        expect(mockLogger.error).toHaveBeenCalled();
+      });
+
+      it('should pass error (no stack) to logger when merge CSV fails', async () => {
+        const input = { csvFilePaths: ['/tmp/1.csv'], outputPath: '/out.csv' };
+        const error = new Error('Merge CSV fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.mergeCsvFiles.mockRejectedValue(error);
+        await expect(service.mergeCsvFilesActivity(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in mergeCsvFilesActivity'), error);
+      });
+    });
+
     describe('getConsolidatedReportPathActivity', () => {
       it('should get report path successfully', async () => {
         const input = { fileServerId: 'test-fs', configName: 'TestConfig' };
@@ -628,6 +744,15 @@ describe('ActivitiesService', () => {
         mockConsolidatedReportService.getConsolidatedReportPath.mockRejectedValue(error);
 
         await expect(service.getConsolidatedReportPathActivity(input)).rejects.toThrow();
+      });
+
+      it('should pass error (no stack) to logger when path generation fails', async () => {
+        const input = { fileServerId: 'test-fs', configName: 'TestConfig' };
+        const error = new Error('Path fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.getConsolidatedReportPath.mockRejectedValue(error);
+        await expect(service.getConsolidatedReportPathActivity(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in getConsolidatedReportPath'), error);
       });
 
       it('should log activity start and completion', async () => {
@@ -670,6 +795,15 @@ describe('ActivitiesService', () => {
         const error = new Error('Cleanup failed');
         mockConsolidatedReportService.cleanupTempFiles.mockRejectedValue(error);
         await expect(service.cleanupTempFilesActivity(input)).rejects.toThrow('Cleanup failed');
+      });
+
+      it('should pass error (no stack) to logger when cleanup fails', async () => {
+        const input = { filePaths: ['/tmp/1.pdf'] };
+        const error = new Error('Cleanup fail');
+        delete (error as any).stack;
+        mockConsolidatedReportService.cleanupTempFiles.mockRejectedValue(error);
+        await expect(service.cleanupTempFilesActivity(input)).rejects.toThrow(error);
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Error in cleanupTempFilesActivity'), error);
       });
 
       it('should handle empty file paths', async () => {

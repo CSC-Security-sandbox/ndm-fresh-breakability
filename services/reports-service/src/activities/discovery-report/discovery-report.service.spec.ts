@@ -213,14 +213,14 @@ describe("DiscoveryReportService", () => {
     describe("generateCsvReport", () => {
         it("should generate CSV and write to file", async () => {
             const fakeData = [
-                { sub_category: "foo", value: "bar" },
-                { sub_category: "baz", value: "qux" },
+                { sub_category: "Config Name", value: "bar" },
+                { sub_category: "Path", value: "qux" },
             ];
             const mockReport = {
                 id: 1,
                 jobRunId: "99",
                 reportType: ReportType.DISCOVERY,
-                reportData: JSON.stringify([{ foo: "bar" }])
+                reportData: JSON.stringify([{ "Config Name": "bar" }])
             };
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
@@ -232,7 +232,7 @@ describe("DiscoveryReportService", () => {
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
                 "/tmp/99-discover-report.csv",
-                expect.stringContaining("foo,baz")
+                expect.stringContaining("Config Name,Path")
             );
             expect(result).toEqual({
                 message: "CSV report generated successfully",
@@ -287,12 +287,12 @@ describe("DiscoveryReportService", () => {
         });
 
         it("should handle undefined values by writing empty string", async () => {
-            const fakeData = [{ sub_category: "foo", value: undefined }];
+            const fakeData = [{ sub_category: "Config Name", value: undefined }];
             const mockReport = {
                 id: 1,
                 jobRunId: "999",
                 reportType: ReportType.DISCOVERY,
-                reportData: JSON.stringify([{ foo: undefined }])
+                reportData: JSON.stringify([{ "Config Name": undefined }])
             };
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
@@ -304,7 +304,7 @@ describe("DiscoveryReportService", () => {
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
                 "/tmp/999-discover-report.csv",
-                expect.stringContaining("foo")
+                expect.stringContaining("Config Name")
             );
             expect(result).toEqual({
                 message: "CSV report generated successfully",
@@ -440,14 +440,14 @@ describe("DiscoveryReportService", () => {
 
         it("should handle case where header exists directly on entry object", async () => {
             const fakeData = [
-                { foo: "bar" },
-                { sub_category: "baz", value: "qux" },
+                { "Config Name": "bar" },
+                { sub_category: "Path", value: "qux" },
             ];
             const mockReport = {
                 id: 1,
                 jobRunId: "101",
                 reportType: ReportType.DISCOVERY,
-                reportData: JSON.stringify([{ foo: "bar" }])
+                reportData: JSON.stringify([{ "Config Name": "bar" }])
             };
             (reportsRepo.findOne as jest.Mock).mockResolvedValue(mockReport);
             (groupAndOrder as jest.Mock).mockReturnValue({ a: fakeData });
@@ -459,7 +459,7 @@ describe("DiscoveryReportService", () => {
 
             expect(fs.promises.writeFile).toHaveBeenCalledWith(
                 "/tmp/101-discover-report.csv",
-                expect.stringContaining("baz")
+                expect.stringContaining("Path")
             );
             expect(result).toEqual({
                 message: "CSV report generated successfully",

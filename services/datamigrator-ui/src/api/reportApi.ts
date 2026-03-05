@@ -92,13 +92,13 @@ export const reportApi = createApi({
     }),
     
     startConsolidatedDiscoveryReport: builder.mutation({
-      query: ({ fileServerId, configName }) => ({
+      query: ({ fileServerId, configName, format }) => ({
         url: `reports/consolidated/start`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: { fileServerId, configName },
+        body: { fileServerId, configName, format },
       }),
       transformResponse: (response) => {
         return response?.data || response;

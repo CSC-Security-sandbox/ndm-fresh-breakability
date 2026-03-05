@@ -87,23 +87,26 @@ const JobsAction = ({
           </PermissionAuth>
         </Box>
       </Box>
-      <Box className="flex justify-end gap-2">
+      <Box className="flex justify-end items-center gap-2 flex-nowrap" style={{ minWidth: 0 }}>
         <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.ManageJob}>
           <Button
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-discover${queryString}`)}
+            style={{ whiteSpace: "nowrap" }}
           >
             Bulk Discover
           </Button>
           <Button
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-migrate${queryString}`)}
+            style={{ whiteSpace: "nowrap" }}
           >
             Bulk Migrate
           </Button>
           <Button
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-cutover${queryString}`)}
+            style={{ whiteSpace: "nowrap" }}
           >
             Bulk Cutover
           </Button>

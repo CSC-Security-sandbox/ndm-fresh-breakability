@@ -116,7 +116,23 @@ describe('ReportsController', () => {
       expect(temporalClientService.startWorkflow).toHaveBeenCalledWith({
         workflowName: 'GenerateConsolidatedReportWorkflow',
         workflowId: expect.any(String),
-        args: [{ fileServerId, configName }],
+        args: [{ fileServerId, configName, format: 'pdf' }],
+      });
+    });
+
+    it('should start consolidated report workflow with format csv when format is passed', async () => {
+      const fileServerId = 'test-file-server-123';
+      const configName = 'TestConfig';
+
+      consolidatedReportService.initializeStatus.mockResolvedValue(undefined);
+      temporalClientService.startWorkflow.mockResolvedValue(undefined);
+
+      await controller.startConsolidatedDiscoveryReport(fileServerId, configName, 'csv');
+
+      expect(temporalClientService.startWorkflow).toHaveBeenCalledWith({
+        workflowName: 'GenerateConsolidatedReportWorkflow',
+        workflowId: expect.any(String),
+        args: [{ fileServerId, configName, format: 'csv' }],
       });
     });
 

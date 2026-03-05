@@ -28,7 +28,9 @@ describe('workerProviders', () => {
       // Consolidated report activities
       getDiscoveryJobsForFileServer: jest.fn(),
       generatePdfForJobRun: jest.fn(),
+      generateCsvForJobRun: jest.fn(),
       mergePdfFilesActivity: jest.fn(),
+      mergeCsvFilesActivity: jest.fn(),
       getConsolidatedReportPathActivity: jest.fn(),
       cleanupTempFilesActivity: jest.fn(),
       updateConsolidatedReportStatus: jest.fn(),

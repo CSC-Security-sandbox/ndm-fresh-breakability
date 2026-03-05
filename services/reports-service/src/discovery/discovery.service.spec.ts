@@ -436,32 +436,32 @@ describe("DiscoveryService", () => {
       const mockData = [
         {
           category: "Category1",
-          sub_category: "SubCat1",
+          sub_category: "Config Name",
           value: "100",
           valueType: "count",
         },
         {
           category: "Category2",
-          sub_category: "SubCat2",
+          sub_category: "Path",
           value: "200",
           valueType: "count",
         },
         {
           category: "Category3",
-          sub_category: "SubCat3",
+          sub_category: "Status",
           value: null,
           valueType: "count",
         },
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure
+      // Mock groupAndOrder to return a specific structure (headers from ReportHeaders enum)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
-          Category1: [{ sub_category: "SubCat1", value: "100" }],
-          Category2: [{ sub_category: "SubCat2", value: "200" }],
-          Category3: [{ sub_category: "SubCat3", value: null }],
+          Category1: [{ sub_category: "Config Name", value: "100" }],
+          Category2: [{ sub_category: "Path", value: "200" }],
+          Category3: [{ sub_category: "Status", value: null }],
         });
 
       const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
@@ -471,7 +471,7 @@ describe("DiscoveryService", () => {
       // Verify that writeFileSync was called with content that includes both headers
       expect(writeFileSpy).toHaveBeenCalledWith(
         mockFilePath,
-        expect.stringContaining("SubCat1,SubCat2")
+        expect.stringContaining("Config Name,Path")
       );
 
       writeFileSpy.mockRestore();
@@ -481,21 +481,21 @@ describe("DiscoveryService", () => {
       const mockData = [
         {
           category: "Category1",
-          sub_category: "SubCat1",
+          sub_category: "Config Name",
           value: "100",
           valueType: "count",
         },
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure
+      // Mock groupAndOrder to return a specific structure (sub_category from ReportHeaders)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
           Category1: [
             {
               category: "Category1",
-              sub_category: "SubCat1",
+              sub_category: "Config Name",
               value: "100",
             },
           ],
@@ -518,24 +518,24 @@ describe("DiscoveryService", () => {
       const mockData = [
         {
           category: "Category1",
-          sub_category: "SubCat1",
+          sub_category: "Config Name",
           value: "100",
-          SubCat2: "200", // Direct property
+          Path: "200", // Direct property (ReportHeaders.PATH)
           valueType: "count",
         },
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure
+      // Mock groupAndOrder to return a specific structure (headers from ReportHeaders)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
           Category1: [
             {
               category: "Category1",
-              sub_category: "SubCat1",
+              sub_category: "Config Name",
               value: "100",
-              SubCat2: "200",
+              Path: "200",
             },
           ],
         });

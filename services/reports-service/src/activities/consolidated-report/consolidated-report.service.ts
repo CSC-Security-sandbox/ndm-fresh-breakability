@@ -12,10 +12,15 @@ import { InventoryEntity } from 'src/entities/inventory.entity';
 import { FileServerEntity, ConsolidatedReportStatus } from 'src/entities/fileserver.entity';
 import { groupAndOrder } from 'src/utils/group-order';
 import { ReportType } from 'src/constants/enums';
+import { escapeCsvValue } from 'src/utils/utils';
+import { ReportHeaders } from 'src/discovery/pattern.enum';
 import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+
+/** Same header order as normal discovery report CSV (ReportHeaders enum) */
+const DISCOVERY_CSV_HEADER_ORDER: string[] = Object.values(ReportHeaders);
 
 export interface ConsolidatedReportJob {
   jobRunId: string;
@@ -36,9 +41,20 @@ export interface MergePdfFilesInput {
   outputPath: string;
 }
 
+export interface GenerateCsvForJobRunInput {
+  jobRunId: string;
+  volumePath: string;
+}
+
+export interface MergeCsvFilesInput {
+  csvFilePaths: string[];
+  outputPath: string;
+}
+
 export interface GetConsolidatedReportPathInput {
   fileServerId: string;
   configName: string;
+  format?: 'pdf' | 'csv';
 }
 
 export interface CleanupTempFilesInput {
@@ -251,12 +267,143 @@ export class ConsolidatedReportService {
   }
 
   async getConsolidatedReportPath(input: GetConsolidatedReportPathInput): Promise<string> {
-    const { configName } = input;
-  
+    const { configName, format = 'pdf' } = input;
+    const ext = format === 'csv' ? '.csv' : '.pdf';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const sanitizedConfigName = configName.replace(/[^a-zA-Z0-9-_]/g, '_');
-    const fileName = `${sanitizedConfigName}-consolidated-discovery-report-${timestamp}.pdf`;
+    const fileName = `${sanitizedConfigName}-consolidated-discovery-report-${timestamp}${ext}`;
     return path.join(this.reportsDirectory, fileName);
+  }
+
+  async generateCsvForJobRun(input: GenerateCsvForJobRunInput): Promise<string | null> {
+    const { jobRunId } = input;
+    this.logger.log(`Generating CSV for jobRunId: ${jobRunId}`);
+
+    try {
+      const latestReport = await this.reportsRepo.find({
+        where: { jobRunId, reportType: 'DISCOVER' },
+        order: { createdAt: 'DESC' },
+        take: 1,
+      });
+
+      if (!latestReport?.length || !latestReport[0]?.reportData) {
+        this.logger.warn(`No report data found in database for jobRunId: ${jobRunId}`);
+        return null;
+      }
+
+      const reportData = JSON.parse(latestReport[0].reportData);
+      const flatData = Object.values(groupAndOrder(reportData, ReportType.DISCOVERY)).flat() as any[];
+
+      const dynamicHeaders = new Set<string>();
+      flatData?.forEach((entry: any) => {
+        if (entry.sub_category && entry.value !== null) {
+          dynamicHeaders.add(entry.sub_category);
+        }
+      });
+      const headers = Array.from(dynamicHeaders);
+
+      const rows: string[] = [];
+      headers.forEach((header) => {
+        for (const entry of flatData) {
+          if (header in entry) {
+            rows.push(entry[header] !== undefined ? entry[header]?.toString() : '');
+            break;
+          } else if (header === entry?.sub_category) {
+            rows.push(entry?.value !== undefined ? entry?.value?.toString() : '');
+            break;
+          }
+        }
+      });
+
+      const csvContent = [headers.join(','), rows.map(escapeCsvValue).join(',')].join('\n');
+      const tempFileName = `temp-${jobRunId}-${Date.now()}.csv`;
+      const tempFilePath = path.join(this.tempDirectory, tempFileName);
+      await fsPromises.writeFile(tempFilePath, csvContent);
+
+      this.logger.log(`CSV written to temp file: ${tempFilePath}`);
+      return tempFilePath;
+    } catch (error) {
+      this.logger.error(`Failed to generate CSV for jobRunId: ${jobRunId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async mergeCsvFiles(input: MergeCsvFilesInput): Promise<string> {
+    const { csvFilePaths, outputPath } = input;
+    this.logger.log(`Merging ${csvFilePaths.length} CSV files into ${outputPath}`);
+
+    const allHeaders: string[] = [];
+    const allRows: Record<string, string>[] = [];
+
+    for (let i = 0; i < csvFilePaths.length; i++) {
+      const content = await fsPromises.readFile(csvFilePaths[i], 'utf8');
+      const lines = content.split(/\r?\n/).filter((line) => line.trim());
+      if (lines.length === 0) continue;
+
+      const headerLine = lines[0];
+      const headers = this.parseCsvLine(headerLine);
+      const fileRows: Record<string, string>[] = [];
+
+      for (let j = 1; j < lines.length; j++) {
+        const values = this.parseCsvLine(lines[j]);
+        const row: Record<string, string> = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] ?? '';
+        });
+        fileRows.push(row);
+      }
+
+      for (const h of headers) {
+        if (!allHeaders.includes(h)) {
+          allHeaders.push(h);
+        }
+      }
+      allRows.push(...fileRows);
+
+      try {
+        await fsPromises.unlink(csvFilePaths[i]);
+      } catch (e) {
+        this.logger.warn(`Failed to unlink temp CSV ${csvFilePaths[i]}: ${e?.message}`);
+      }
+    }
+
+    const orderedHeaders = DISCOVERY_CSV_HEADER_ORDER.filter((h) => allHeaders.includes(h));
+    const extraHeaders = allHeaders.filter((h) => !DISCOVERY_CSV_HEADER_ORDER.includes(h));
+    const allHeadersOrdered = [...orderedHeaders, ...extraHeaders];
+
+    const headerLine = allHeadersOrdered.map((h) => (h.includes(',') || h.includes('"') ? `"${h.replace(/"/g, '""')}"` : h)).join(',');
+    const dataLines = allRows.map((row) =>
+      allHeadersOrdered.map((h) => escapeCsvValue(row[h] ?? '')).join(',')
+    );
+    const outputContent = [headerLine, ...dataLines].join('\n');
+    await fsPromises.writeFile(outputPath, outputContent);
+
+    this.logger.log(`CSV merge complete. Total rows: ${allRows.length}`);
+    return outputPath;
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if ((c === ',' && !inQuotes) || (c === '\n' && !inQuotes)) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += c;
+      }
+    }
+    result.push(current.trim());
+    return result;
   }
 
   async cleanupTempFiles(input: CleanupTempFilesInput): Promise<void> {

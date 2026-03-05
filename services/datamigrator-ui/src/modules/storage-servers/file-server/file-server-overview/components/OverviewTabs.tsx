@@ -1,7 +1,13 @@
 import { formatLength } from "@/utils/common.utils";
 import { Box } from "@components/container/index";
 import { OverviewTabsPropsType } from "@modules/storage-servers/file-server/file-server-overview/overview.interface";
-import { Button, InnerTab } from "@netapp/bxp-design-system-react";
+import {
+  ActionMenu,
+  ActionMenuButtonStyle,
+  Button,
+  DropdownButton,
+  InnerTab,
+} from "@netapp/bxp-design-system-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   useStartConsolidatedDiscoveryReportMutation,
@@ -60,9 +66,10 @@ const OverviewTabs = ({
       const url = window.URL.createObjectURL(new Blob([response]));
       const link = document.createElement("a");
       link.href = url;
+      const extension = statusResponse.reportPath?.toLowerCase().endsWith(".csv") ? ".csv" : ".pdf";
       link.setAttribute(
         "download",
-        `${fileServerDetails.configName}-consolidated-discovery-report.pdf`
+        `${fileServerDetails.configName}-consolidated-discovery-report${extension}`
       );
       document.body.appendChild(link);
       link.click();
@@ -161,14 +168,9 @@ const OverviewTabs = ({
     };
   }, [actualFileServerId, getConsolidatedReportStatus, pollWorkflowStatus]);
 
-  const handleButtonClick = async () => {
+  const handleStartReport = async (format: "pdf" | "csv") => {
     if (!actualFileServerId) {
       notify.error("File server ID is required", 0);
-      return;
-    }
-
-    if (reportReady) {
-      await downloadReport();
       return;
     }
 
@@ -179,6 +181,7 @@ const OverviewTabs = ({
       await startConsolidatedReport({
         fileServerId: actualFileServerId,
         configName: fileServerDetails.configName,
+        format,
       }).unwrap();
 
       notify.info("Generating consolidated discovery report. This may take a few minutes...");
@@ -189,7 +192,6 @@ const OverviewTabs = ({
       }, POLLING_INTERVAL);
 
       pollWorkflowStatus();
-
     } catch (error) {
       console.error("Error starting consolidated report workflow:", error);
       setIsGenerating(false);
@@ -202,14 +204,42 @@ const OverviewTabs = ({
     }
   };
 
-  const getButtonText = () => {
-    if (isGenerating) return "Generating...";
-    if (reportReady) return (
-    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-      <DownloadMonochromeIcon /> Consolidated Discovery Report
-    </span>
+  const getButtonContent = () => {
+    if (isGenerating) {
+      return (
+        <Button disabled style={{ whiteSpace: "nowrap" }}>
+          Generating...
+        </Button>
+      );
+    }
+    if (reportReady) {
+      return (
+        <Button
+          onClick={downloadReport}
+          style={{ whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "8px" }}
+        >
+          <DownloadMonochromeIcon /> Consolidated Discovery Report
+        </Button>
+      );
+    }
+    return (
+      <Box style={{ whiteSpace: "nowrap", minWidth: "max-content", flexShrink: 0 }}>
+        <ActionMenuButtonStyle
+          button={
+            <DropdownButton disabled={!isActive} style={{ whiteSpace: "nowrap" }}>
+              Consolidate All Discovery Reports
+            </DropdownButton>
+          }
+        >
+          <ActionMenu.Button onClick={() => handleStartReport("pdf")}>
+            Generate as PDF
+          </ActionMenu.Button>
+          <ActionMenu.Button onClick={() => handleStartReport("csv")}>
+            Generate as CSV
+          </ActionMenu.Button>
+        </ActionMenuButtonStyle>
+      </Box>
     );
-    return "Consolidate All Discovery Reports";
   };
 
   return (
@@ -234,13 +264,7 @@ const OverviewTabs = ({
       </InnerTab>
 
       <PermissionAuth permissionName={USER_PERMISSION_TYPE_ENUM.Reports}>
-        <Button
-          onClick={handleButtonClick}
-          disabled={!isActive || isGenerating}
-          style={{ whiteSpace: "nowrap" }}
-        >
-          {getButtonText()}
-        </Button>
+        <Box style={{ flexShrink: 0 }}>{getButtonContent()}</Box>
       </PermissionAuth>
     </Box>
   );

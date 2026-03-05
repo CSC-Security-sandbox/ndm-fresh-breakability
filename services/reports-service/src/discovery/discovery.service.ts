@@ -182,7 +182,7 @@ export class DiscoveryService {
         }
       });
     }
-
+    
     const allHeaders = [...Array.from(dynamicHeaders)];
 
     const row: string[] = [];
