@@ -102,7 +102,8 @@
                             <div class="w-full my-4 text-left">
                                 <div class="flex items-start gap-2">
                                     <!-- Hidden field to ensure value is always sent (false by default) -->
-                                    <input type="hidden" id="allowMetricsSharingHidden" name="allowMetricsSharing" value="false" />
+                                    <!-- Use user.attributes.* naming for Keycloak to save as user attribute -->
+                                    <input type="hidden" id="allowMetricsSharingHidden" name="user.attributes.allowMetricsSharing" value="false" />
                                     <input
                                         type="checkbox"
                                         id="allowMetricsSharingCheckbox"

@@ -97,7 +97,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         if (resp?.roles?.length > 0) {
           await getAccounts();
           // Fetch ASUP settings in parallel with projects
-          fetchAsupSettings();
+          void fetchAsupSettings();
           getProjects();
         } else {
           setShowNoProjectsPage(true);

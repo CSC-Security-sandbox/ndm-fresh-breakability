@@ -214,6 +214,37 @@ data:
     --header "Authorization: Bearer ${token}" \
     --data "${REALM_SETTINGS_PAYLOAD}")
 
+    # Configure User Profile with allowMetricsSharing attribute for ASUP
+    echo "Configuring User Profile with allowMetricsSharing attribute..."
+
+    USER_PROFILE_CONFIG=$(curl -k --silent --show-error --request GET \
+    --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/users/profile" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer ${token}")
+
+    # Add allowMetricsSharing attribute to the user profile
+    UPDATED_USER_PROFILE=$(echo "$USER_PROFILE_CONFIG" | jq '.attributes += [{
+      "name": "allowMetricsSharing",
+      "displayName": "Allow Metrics Sharing",
+      "validations": {},
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      },
+      "annotations": {
+        "inputType": "boolean"
+      },
+      "multivalued": false
+    }]')
+
+    curl -k --silent --show-error --request PUT \
+    --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/users/profile" \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer ${token}" \
+    --data "$UPDATED_USER_PROFILE"
+
+    echo "User Profile configured with allowMetricsSharing attribute"
+
     # Setup admin client
     ADMIN_CLI_CLIENT_ID=`curl -k --silent --show-error --request GET \
     --url "${KEYCLOAK_BASEURL}/admin/realms/${REALM_NAME}/clients?clientId=admin-cli" \
