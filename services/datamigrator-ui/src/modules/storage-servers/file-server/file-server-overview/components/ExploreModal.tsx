@@ -476,7 +476,7 @@ const DirectoriesContent = ({
           </Box>
         ) : directoryContents.length === 0 ? (
           <Box className="flex items-center justify-center py-8 text-gray-500">
-            This directory is empty.
+            No sub-directories available at this level.
           </Box>
         ) : (
           /* Directory Items */

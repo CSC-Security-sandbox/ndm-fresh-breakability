@@ -330,6 +330,12 @@ const Mapping = () => {
     destinationForm.formState.destinationPath?.value,
   ]);
 
+  // Check if SMB protocol is selected - directory selection not supported for SMB
+  const isSmbProtocol = useMemo(() => {
+    const protocol = protocolForm.formState.protocol?.value ?? "";
+    return protocol.toUpperCase() === "SMB";
+  }, [protocolForm.formState.protocol?.value]);
+
   // Source path, destination file server, and destination path required for adding a mapping; directory paths optional
   const canAddMapping = useMemo(() => {
     const sp = sourcePathForm.formState.selectedSourcePath?.value ?? "";
@@ -634,6 +640,8 @@ const Mapping = () => {
             />
           </Box>
           {/* Row 3 - both Add links at same level; min-w-0 + truncation prevent long paths from overlapping */}
+          {/* Hide directory selection for SMB protocol */}
+          {protocolForm.formState.protocol?.value !== "SMB" && (
           <Box className="flex min-w-0 flex-col gap-2 md:pr-10 min-h-[2.5rem] overflow-hidden">
             {!sourceDirectoryPath ? (
               <button
@@ -684,6 +692,8 @@ const Mapping = () => {
               </>
             )}
           </Box>
+          )}
+          {protocolForm.formState.protocol?.value !== "SMB" && (
           <Box className="flex min-w-0 flex-col gap-2 min-h-[2.5rem] md:pl-10 w-full overflow-hidden">
             {!destinationDirectoryPath ? (
               <button
@@ -730,6 +740,7 @@ const Mapping = () => {
               </>
             )}
           </Box>
+          )}
         </Box>
 
         <Box className="flex justify-center mt-8">
