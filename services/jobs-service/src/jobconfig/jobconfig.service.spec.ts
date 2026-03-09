@@ -3394,6 +3394,7 @@ describe("JobConfigService", () => {
       jest
         .spyOn(require("src/utils/mapper"), "nextDate")
         .mockReturnValue(new Date());
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: "jobrunid-1" } as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.getAllJobConfig(mockProjectId);
@@ -3492,6 +3493,7 @@ describe("JobConfigService", () => {
           throw new Error("Invalid cron expression");
         });
       
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: "jobrunid-1" } as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       // Spy on logger.error to ensure it's called
@@ -3646,6 +3648,7 @@ describe("JobConfigService", () => {
       .spyOn(require("src/utils/mapper"), "nextDate")
       .mockReturnValue(new Date());
 
+    jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: "jobrunid-1" } as any);
     jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
     const result = await service.getAllJobConfig(mockProjectId);

@@ -14,6 +14,7 @@ import { join } from "path";
 import {
   JobConfigBulkMigrateResStatus,
   JobRunStatus,
+  JobRunType,
   JobStatus,
   JobType,
   Protocol,
@@ -31,7 +32,7 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { DataSource, EntityManager, In, Raw, Repository } from "typeorm";
+import { DataSource, EntityManager, In, Not, Raw, Repository } from "typeorm";
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import {
@@ -1499,14 +1500,23 @@ export class JobConfigService {
         }
       }
 
-      const allErrorCounts = await Promise.all(
-        job.jobRunIds.map((id) => this.getErrorCounts(id))
-      );
-      const errorCount =
-        allErrorCounts
-          .flat()
-          .map((e) => e.count)
-          .reduce((a, b) => Number(a) + Number(b), 0) || 0;
+      // Errors: show only latest non-retry run's error count
+      const latestNonRetryRun = await this.jobRunRepo.findOne({
+        where: {
+          jobConfigId: job.jobconfigid,
+          jobRunType: Not(JobRunType.RETRY),
+        },
+        order: { startTime: "DESC" },
+        select: { id: true },
+      });
+      let errorCount = 0;
+      if (latestNonRetryRun) {
+        const errorCounts = await this.getErrorCounts(latestNonRetryRun.id);
+        errorCount =
+          errorCounts
+            .map((e) => Number(e.count))
+            .reduce((a, b) => a + b, 0) || 0;
+      }
 
       payload.push({
         jobConfigId: job.jobconfigid,
