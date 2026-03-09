@@ -66,7 +66,7 @@ export class MigrateScanService {
 
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
 
-        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
+        const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
         let commands: Cmd[] = [];
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
@@ -91,12 +91,12 @@ export class MigrateScanService {
             maxCommandsPerBatch: this.maxMigrationCommand
         });
 
-        // Update output with results
         output.fileCount = processResult.fileCount;
         output.dirCount = processResult.dirCount;
+        output.totalSize = processResult.totalSize;
         output.subDirs = processResult.subDirs;
         commands = processResult.commands;
-        
+
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 
             await this.processDeletedItems({

@@ -21,6 +21,7 @@ import {
   TemplateType,
   JobConfigurationEnum,
   USER_VISIBLE_ERROR_TYPES,
+  TERMINAL_JOB_RUN_STATUSES,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -1151,7 +1152,22 @@ export class JobConfigService {
             ? jobRun.endTime.getTime() - jobRun.startTime.getTime()
             : Date.now() - jobRun.startTime.getTime(),
         };
-        const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        
+        const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status as JobRunStatus);
+        let inventoryCounts: JobRunStats;
+        
+        if (isTerminal && jobRun.jobStats?.fileCount != null && jobRun.jobStats?.directories != null && jobRun.jobStats?.totalSize != null) {
+          this.logger.log(`Using persisted jobStats for job run ${jobRun.id}: ${JSON.stringify(jobRun.jobStats)}`);
+          inventoryCounts = {
+            fileCount: jobRun.jobStats.fileCount ,
+            directories: jobRun.jobStats.directories ,
+            totalSize: jobRun.jobStats.totalSize ,
+            errors: await this.getErrorCounts(jobRun.id),
+          };
+        } else {
+          inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        }
+        
         // Fetch lastRefreshed from materialized view
         const mv = await this.jobStatsSummaryMvRepo.findOne({
           where: { jobRunId: jobRun.id },

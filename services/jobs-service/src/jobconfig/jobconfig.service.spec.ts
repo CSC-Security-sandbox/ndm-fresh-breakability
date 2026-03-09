@@ -2406,24 +2406,8 @@ describe("JobConfigService", () => {
     
       jest
         .spyOn(service as any, 'getErrorCounts')
-        .mockResolvedValue({
-          fileCount: "10",
-          directories: "5",
-          totalSize: "5000",
-          errors: [],
-        });
+        .mockResolvedValue([]);
     
-      const createQueryBuilderMock = {
-        innerJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-    
-      const operationErrorRepoMock = {
-        createQueryBuilder: jest.fn(() => createQueryBuilderMock),
-      };
       jest
       .spyOn(service, 'calculateJobRunStats')
       .mockImplementation(async (jobRunId: string) => {
@@ -2437,7 +2421,6 @@ describe("JobConfigService", () => {
         }
         throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
       });
-      (service as any).operationErrorRepo = operationErrorRepoMock;
     
       const result = await service.getJobConfigById(mockJobConfigId);
     
@@ -2649,19 +2632,10 @@ describe("JobConfigService", () => {
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
     
-      const createQueryBuilderMock = {
-        innerJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-    
-      const operationErrorRepoMock = {
-        createQueryBuilder: jest.fn(() => createQueryBuilderMock),
-      };
-      
-      (service as any).operationErrorRepo = operationErrorRepoMock;
+      jest
+        .spyOn(service as any, 'getErrorCounts')
+        .mockResolvedValue([]);
+
       jest
       .spyOn(service, 'calculateJobRunStats')
       .mockImplementation(async (jobRunId: string) => {

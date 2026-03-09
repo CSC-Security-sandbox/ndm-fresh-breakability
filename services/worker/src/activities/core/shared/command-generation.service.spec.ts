@@ -124,6 +124,7 @@ describe('CommandGenerationService', () => {
             expect(result.commands).toEqual([]);
             expect(result.fileCount).toBe(0);
             expect(result.dirCount).toBe(0);
+            expect(result.totalSize).toBe(0);
             expect(result.subDirs).toEqual([]);
         });
 
@@ -205,6 +206,7 @@ describe('CommandGenerationService', () => {
                 targetContent: new Set<string>(),
             });
             expect(result.fileCount).toBe(1);
+            expect(result.totalSize).toBe(100); // default lstat mock size
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
         });
 
@@ -451,6 +453,174 @@ describe('CommandGenerationService', () => {
                 targetContent: new Set(['file.txt']),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
+        });
+    });
+
+    describe('totalSize accumulation', () => {
+        function makeFileStat(size: number): fs.Stats {
+            return {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as unknown as fs.Stats;
+        }
+
+        it('should accumulate totalSize for a single new file', async () => {
+            (fs.promises.lstat as jest.Mock).mockResolvedValue(makeFileStat(2048));
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'file.txt' }],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(2048);
+            expect(result.fileCount).toBe(1);
+        });
+
+        it('should accumulate totalSize across multiple new files', async () => {
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(makeFileStat(1000))
+                .mockResolvedValueOnce(makeFileStat(2500))
+                .mockResolvedValueOnce(makeFileStat(500));
+            const result = await service.processItems({
+                ...baseInput,
+                items: [
+                    { name: 'a.txt' },
+                    { name: 'b.txt' },
+                    { name: 'c.txt' },
+                ],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(4000);
+            expect(result.fileCount).toBe(3);
+        });
+
+        it('should NOT add to totalSize for files that already exist in target', async () => {
+            // Target already has the file — goes through the content-update branch, not the new-file branch
+            mockIsContentUpdate.mockReturnValue(true);
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(makeFileStat(3000))  // source lstat
+                .mockResolvedValueOnce(makeFileStat(3000)); // target lstat
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'existing.txt' }],
+                targetContent: new Set(['existing.txt']),
+            });
+            expect(result.totalSize).toBe(0);
+            expect(result.fileCount).toBe(0);
+        });
+
+        it('should NOT add to totalSize for new directories', async () => {
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 4096,
+                mtime: new Date(),
+                mode: 0o755,
+                uid: 0, gid: 0,
+                atime: new Date(), ctime: new Date(), birthtime: new Date(),
+                ino: 2,
+            });
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'rel/newdir' });
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'newdir' }],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(0);
+            expect(result.dirCount).toBe(1);
+        });
+
+        it('should NOT add to totalSize for new symlinks', async () => {
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => true,
+                size: 512,
+                mtime: new Date(),
+                mode: 0o777,
+                uid: 0, gid: 0,
+                atime: new Date(), ctime: new Date(), birthtime: new Date(),
+                ino: 3,
+            });
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.SYMBOLIC_LINK);
+            mockGetFileInfo.mockResolvedValue({ path: 'rel/link' });
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'link' }],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(0);
+        });
+
+        it('should NOT add to totalSize for skipped items', async () => {
+            mockShouldExcludeOrSkip.mockReturnValue(true);
+            (fs.promises.lstat as jest.Mock).mockResolvedValue(makeFileStat(9999));
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'skipped.txt' }],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(0);
+        });
+
+        it('should NOT add to totalSize for items where source does not exist', async () => {
+            mockIsExists.mockResolvedValue(false);
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'missing.txt' }],
+                targetContent: new Set<string>(),
+            });
+            expect(result.totalSize).toBe(0);
+        });
+
+        it('should accumulate totalSize only for new files in a mixed batch', async () => {
+            // Sequence: new file (1000), directory (0), existing file (0), new file (500)
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(makeFileStat(1000))   // new file
+                .mockResolvedValueOnce({                     // directory
+                    isDirectory: () => true,
+                    isSymbolicLink: () => false,
+                    size: 4096,
+                    mtime: new Date(), mode: 0o755, uid: 0, gid: 0,
+                    atime: new Date(), ctime: new Date(), birthtime: new Date(), ino: 2,
+                })
+                .mockResolvedValueOnce(makeFileStat(8000))   // existing file — source
+                .mockResolvedValueOnce(makeFileStat(8000))   // existing file — target
+                .mockResolvedValueOnce(makeFileStat(500));   // new file
+
+            fileTypeDetectionService.detectFileType = jest.fn()
+                .mockResolvedValueOnce(FileType.FILE)        // new file
+                .mockResolvedValueOnce(FileType.DIRECTORY)   // directory
+                .mockResolvedValueOnce(FileType.FILE)        // existing file
+                .mockResolvedValueOnce(FileType.FILE);       // new file
+
+            mockIsContentUpdate
+                .mockReturnValueOnce(true)  // new file — content update (triggers command)
+                .mockReturnValueOnce(true)  // directory — content update
+                .mockReturnValueOnce(true)  // existing file — content update
+                .mockReturnValueOnce(true); // new file — content update
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [
+                    { name: 'new1.txt' },
+                    { name: 'newdir' },
+                    { name: 'existing.txt' },
+                    { name: 'new2.txt' },
+                ],
+                targetContent: new Set(['existing.txt', 'newdir']),
+            });
+            expect(result.totalSize).toBe(1500);  // only new1.txt (1000) + new2.txt (500)
+            expect(result.fileCount).toBe(2);
+            expect(result.dirCount).toBe(1);
         });
     });
 

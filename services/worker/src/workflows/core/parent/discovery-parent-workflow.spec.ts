@@ -30,6 +30,7 @@ describe('DiscoveryWorkflow', () => {
         (childWorkflows.executeDiscoveryChildWorkflows as jest.Mock).mockResolvedValue({
             fileCount: 10,
             dirCount: 2,
+            totalSize: 5000,
             status: JobRunStatus.Completed,
         });
 
@@ -54,7 +55,11 @@ describe('DiscoveryWorkflow', () => {
             jobRunId: traceId,
         });
 
-        expect(reporting.handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
+        expect(reporting.handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed, {
+            fileCount: 10,
+            dirCount: 2,
+            totalSize: '5000',
+        });
 
         expect(cleanupWorkflow.executeCleanup).toHaveBeenCalledWith({
             jobRunId: traceId,
@@ -68,6 +73,7 @@ describe('DiscoveryWorkflow', () => {
             failedWorkers: ['worker2'],
             fileCount: 10,
             dirCount: 2,
+            totalSize: 5000,
             status: JobRunStatus.Completed,
         });
     });

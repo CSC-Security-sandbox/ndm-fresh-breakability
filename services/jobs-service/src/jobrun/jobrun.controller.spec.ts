@@ -239,7 +239,7 @@ describe('JobRunController', () => {
       const result = { updated: true };
       jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
       expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(result);
-      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, undefined);
+      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, undefined, undefined);
     });
   });
 

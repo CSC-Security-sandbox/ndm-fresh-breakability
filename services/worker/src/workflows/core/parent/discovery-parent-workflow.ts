@@ -21,6 +21,7 @@ interface DiscoveryWorkflowOutput {
   failedWorkers:string[];
   fileCount : number;
   dirCount : number;
+  totalSize: number;
   status: JobRunStatus
 }
 
@@ -35,6 +36,7 @@ export const DiscoveryWorkflow = async ({
       setupCompletedWorkers: [],
       dirCount: 0,
       fileCount: 0,
+      totalSize: 0,
       failedWorkers: [],
       status: JobRunStatus.Ready,
     };
@@ -52,11 +54,16 @@ export const DiscoveryWorkflow = async ({
     const discoveryWorkflowExecResult = await executeDiscoveryChildWorkflows({jobRunId: traceId})
     output.fileCount = discoveryWorkflowExecResult.fileCount;
     output.dirCount = discoveryWorkflowExecResult.dirCount;
+    output.totalSize = discoveryWorkflowExecResult.totalSize;
     output.status = discoveryWorkflowExecResult.status;
 
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status);
+    await handleReporting(traceId, output.status, {
+      fileCount: output.fileCount,
+      dirCount: output.dirCount,
+      totalSize: output.totalSize.toString(),
+    });
 
     // Cleanup
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
