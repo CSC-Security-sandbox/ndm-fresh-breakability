@@ -3,7 +3,7 @@ import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-c
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { DataSource } from 'typeorm';
 import * as path from 'path';
-import { Worker } from 'worker_threads';
+import { Worker, isMainThread } from 'worker_threads';
 import { ConsumerType } from '../enum/redis-consumer.enum';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
@@ -34,6 +34,8 @@ export class RedisConsumerService implements OnModuleDestroy {
     private readonly GC_TRIGGER_INTERVAL: number = process.env.GC_TRIGGER_INTERVAL ? parseInt(process.env.GC_TRIGGER_INTERVAL) : 100;
     private connectionRefreshInterval: NodeJS.Timeout | null = null;
     private readonly jwtAuthEnabled: boolean = process.env.REDIS_JWT_AUTH_ENABLED !== 'false';
+    private readonly REDIS_CONNECT_TIMEOUT_MS: number = parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS || '30000');
+    private readonly WORKER_THREAD_TIMEOUT_MS: number = parseInt(process.env.WORKER_THREAD_TIMEOUT_MS || '86400000'); // 24h default
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -66,10 +68,13 @@ export class RedisConsumerService implements OnModuleDestroy {
                 const redisClientOptions: any = {
                     url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
                     username: process.env.REDIS_USERNAME || 'default',
+                    socket: {
+                        connectTimeout: this.REDIS_CONNECT_TIMEOUT_MS,
+                        reconnectStrategy: false,
+                    },
                 };
 
                 if (this.jwtAuthEnabled) {
-                    // Get JWT token for authentication (production / Istio mode)
                     const jwt = await this.authService.getAccessToken();
                     if (!jwt) {
                         throw new Error('Failed to obtain JWT token for Redis authentication');
@@ -77,7 +82,6 @@ export class RedisConsumerService implements OnModuleDestroy {
                     redisClientOptions.password = jwt;
                     this.logger.log(`Connecting to Redis at ${redisClientOptions.url} with JWT authentication`);
                 } else {
-                    // Use static password (local / docker-compose mode)
                     if (process.env.REDIS_PASSWORD) {
                         redisClientOptions.password = process.env.REDIS_PASSWORD;
                     }
@@ -117,10 +121,14 @@ export class RedisConsumerService implements OnModuleDestroy {
                     const retryClientOptions: any = {
                         url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
                         username: process.env.REDIS_USERNAME || 'default',
+                        socket: {
+                            connectTimeout: this.REDIS_CONNECT_TIMEOUT_MS,
+                            reconnectStrategy: false,
+                        },
                     };
 
                     if (this.jwtAuthEnabled) {
-                        const jwt = await this.authService.getAccessToken(true); // Force refresh
+                        const jwt = await this.authService.getAccessToken(true);
                         if (!jwt) {
                             throw new Error('Failed to obtain JWT token for Redis retry');
                         }
@@ -155,23 +163,30 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Setup automatic Redis connection refresh to use fresh JWT tokens
      * Prevents connection failures when JWT tokens expire
      * Ensures only ONE refresh interval is active at a time
+     *
+     * Skipped in worker threads: worker threads are job-scoped (hours, not days)
+     * and the 24h JWT token will not expire within a single job's lifetime.
+     * Running refresh in workers caused a production incident where the refresh
+     * fired 23h after worker start, quit the working client, failed to create
+     * a replacement, and silently killed the consumer loop.
      */
     private setupConnectionRefresh(): void {
         if (!this.jwtAuthEnabled) {
-            return; // No-op: static password does not need refreshing
+            return;
         }
 
-        // Clear any existing refresh interval to prevent duplicates
+        if (!isMainThread) {
+            this.logger.log('Skipping connection refresh setup in worker thread (token outlives job)');
+            return;
+        }
+
         if (this.connectionRefreshInterval) {
             this.logger.log('Clearing existing connection refresh interval before creating new one');
             clearInterval(this.connectionRefreshInterval);
             this.connectionRefreshInterval = null;
         }
         
-        // Hardcode 23 hours refresh interval (1 hour before 24-hour token expiry)
-        const tokenRefreshMinutes = 1380; // 23 hours
-        
-        // Refresh Redis connection with same interval as token refresh
+        const tokenRefreshMinutes = 15; // TEMPORARY: 15 min for testing (revert to 1380 for production)
         const refreshIntervalMs = tokenRefreshMinutes * 60 * 1000;
         
         this.logger.log(`Setting up Redis connection refresh every ${tokenRefreshMinutes / 60} hours`);
@@ -187,24 +202,18 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     /**
-     * Refresh Redis connection with a new JWT token
-     * Closes existing connection and creates new one with fresh token
+     * Refresh Redis connection with a new JWT token.
+     * Creates and validates the new connection BEFORE closing the old one,
+     * so that if the new connection fails, the old one remains usable.
      */
     private async refreshConnection(): Promise<void> {
         if (!this.jwtAuthEnabled) {
-            return; // No-op: static password does not need refreshing
+            return;
         }
 
-        // Close existing connection
-        if (this.redisClient && this.redisClient.isOpen) {
-            this.logger.log('Closing existing Redis connection for refresh...');
-            await this.redisClient.quit();
-        }
-
-        // Create new connection with fresh JWT
         this.logger.log('Creating new Redis connection with fresh JWT...');
         
-        const jwt = await this.authService.getAccessToken(true); // Force fresh token
+        const jwt = await this.authService.getAccessToken(true);
         if (!jwt) {
             throw new Error('Failed to obtain JWT token for Redis connection refresh');
         }
@@ -213,16 +222,31 @@ export class RedisConsumerService implements OnModuleDestroy {
             url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
             username: process.env.REDIS_USERNAME || 'default',
             password: jwt,
+            socket: {
+                connectTimeout: this.REDIS_CONNECT_TIMEOUT_MS,
+                reconnectStrategy: false,
+            },
         };
 
-        this.redisClient = createClient(redisClientOptions);
+        const newClient = createClient(redisClientOptions) as RedisClientType;
         
-        this.redisClient.on('error', (error) => {
+        newClient.on('error', (error) => {
             this.logger.error(`Redis connection error: ${error.message}`, error?.stack || error);
         });
 
-        if (!this.redisClient.isOpen) {
-            await this.redisClient.connect();
+        await newClient.connect();
+
+        // New client is connected and ready -- now safe to swap and close old
+        const oldClient = this.redisClient;
+        this.redisClient = newClient;
+
+        if (oldClient?.isOpen) {
+            this.logger.log('Closing old Redis connection after successful refresh');
+            try {
+                await oldClient.quit();
+            } catch (error) {
+                this.logger.warn(`Error closing old Redis client (non-fatal): ${error.message}`);
+            }
         }
         
         this.logger.log('Redis connection refreshed successfully');
@@ -539,7 +563,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
 
-    private activeWorkers: Map<string, boolean> = new Map(); // Track active workers
+    private activeWorkers: Map<string, number> = new Map(); // jobId -> start timestamp
 
     /**
      * Cron job that monitors Redis for active consumers and manages worker threads
@@ -566,6 +590,16 @@ export class RedisConsumerService implements OnModuleDestroy {
                 }
             }
 
+            // Evict stale workers that have been running longer than the timeout
+            for (const [staleJobId, startTime] of this.activeWorkers.entries()) {
+                const elapsed = Date.now() - startTime;
+                if (elapsed > this.WORKER_THREAD_TIMEOUT_MS) {
+                    const staleProjectId = await this.getProjectIdFromCache(staleJobId);
+                    this.logger.warn(`projectId: ${staleProjectId} Evicting stale worker for job ${staleJobId} (running for ${Math.round(elapsed / 1000 / 60)} minutes)`);
+                    this.activeWorkers.delete(staleJobId);
+                }
+            }
+
             const keys: string[] = await this.redisClient.keys(`${this.REDIS_KEY_PREFIX}:*`);
 
             for (const key of keys) {
@@ -577,11 +611,11 @@ export class RedisConsumerService implements OnModuleDestroy {
                 const consumerStatuses: Record<string, ReaderStatus> = await this.getAllConsumerStatuses(jobId);
 
                 if (Object.values(consumerStatuses).some(status => status === 'active')) {
-                    if (this.activeWorkers.get(jobId)) {
+                    if (this.activeWorkers.has(jobId)) {
                         continue;
                     }
 
-                    this.activeWorkers.set(jobId, true);
+                    this.activeWorkers.set(jobId, Date.now());
 
                     this.createConsumerWorkerThread(jobId)
                         .then(() => {
@@ -629,14 +663,30 @@ export class RedisConsumerService implements OnModuleDestroy {
     async createConsumerWorkerThread(jobRunId: string): Promise<void> {
         const projectId = await this.getProjectIdFromCache(jobRunId);
         this.logger.log(`projectId: ${projectId} Creating worker thread for job ${jobRunId}`);
+
         return new Promise((resolve, reject) => {
             const workerPath = path.join(__dirname, '../../dist/redis-consumer/consumerWorker.js');
+            let settled = false;
 
             const worker = new Worker(workerPath, {
                 workerData: { jobRunId, projectId }
             });
 
+            const timeoutHandle = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    this.logger.error(`projectId: ${projectId} Worker thread timed out after ${this.WORKER_THREAD_TIMEOUT_MS / 1000}s for job ${jobRunId}, terminating`);
+                    worker.terminate().catch(err => {
+                        this.logger.error(`projectId: ${projectId} Failed to terminate timed-out worker for job ${jobRunId}: ${err.message}`);
+                    });
+                    reject(new WorkerError(`Worker thread timed out for job ${jobRunId}`));
+                }
+            }, this.WORKER_THREAD_TIMEOUT_MS);
+
             worker.on('message', (result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutHandle);
 
                 if (result.success) {
                     this.logger.log(`projectId: ${projectId} Worker thread completed successfully for job ${jobRunId}`);
@@ -648,15 +698,21 @@ export class RedisConsumerService implements OnModuleDestroy {
             });
 
             worker.on('error', (error) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutHandle);
                 this.logger.error(`projectId: ${projectId} Worker thread error for job ${jobRunId}:`, error);
                 reject(error);
             });
 
             worker.on('exit', (code) => {
+                clearTimeout(timeoutHandle);
                 worker.removeAllListeners();
 
-                if (code !== 0) {
+                if (code !== 0 && !settled) {
+                    settled = true;
                     this.logger.error(`projectId: ${projectId} Worker stopped unexpectedly with exit code ${code} for job ${jobRunId}`, new WorkerError(`Worker exit code: ${code}`, code));
+                    reject(new WorkerError(`Worker exit code: ${code}`, code));
                 } else {
                     this.logger.log(`projectId: ${projectId} Worker thread exited normally for job ${jobRunId}`);
                 }
@@ -1175,8 +1231,9 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
 
             if (this.activeWorkers.has(jobRunId)) {
+                const startedAt = this.activeWorkers.get(jobRunId);
                 this.activeWorkers.delete(jobRunId);
-                this.logger.log(`projectId: ${projectId} Removed worker tracking for job ${jobRunId}`);
+                this.logger.log(`projectId: ${projectId} Removed worker tracking for job ${jobRunId} (was active for ${startedAt ? Math.round((Date.now() - startedAt) / 1000) : '?'}s)`);
             }
 
             this.accumulatedRecords.length = 0;

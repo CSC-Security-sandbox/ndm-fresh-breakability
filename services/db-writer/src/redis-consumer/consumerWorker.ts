@@ -167,7 +167,12 @@ process.on('unhandledRejection', async (reason, promise) => {
         );
 
         // Initialize NestJS context
-        workerAppContext = await NestFactory.createApplicationContext(WorkerModule, { logger: false });
+        // IMPORTANT: Do NOT pass { logger: false } -- it overrides the global NestJS Logger
+        // singleton via Logger.overrideLogger(false), which silently kills ALL logging in
+        // the worker thread including RedisConsumerService, AuthService, and this file's
+        // own Logger. This caused a production incident where the worker thread silently
+        // failed for 25+ hours with zero log output.
+        workerAppContext = await NestFactory.createApplicationContext(WorkerModule);
 
         authService = workerAppContext.get(AuthService);
         workflowService = workerAppContext.get(WorkflowService);
@@ -178,6 +183,15 @@ process.on('unhandledRejection', async (reason, promise) => {
         if (projectId && jobRunId) {
             redisConsumerService.setProjectIdInCache(jobRunId, projectId);
         }
+
+        // Explicitly await Redis connection before proceeding
+        // The constructor fires initializeRedisConnection() without awaiting it
+        logger.log(`projectId: ${projectId} Waiting for Redis connection in worker thread`);
+        await redisConsumerService.initializeRedisConnection();
+        if (!redisConsumerService.isValidRedisClient()) {
+            throw new Error('Worker thread failed to establish Redis connection');
+        }
+        logger.log(`projectId: ${projectId} Redis connection established in worker thread`);
         
         logger.log(`Services initialized successfully`);
 
