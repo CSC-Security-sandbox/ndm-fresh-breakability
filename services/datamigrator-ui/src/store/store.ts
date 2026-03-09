@@ -19,6 +19,7 @@ import { asupApi } from "@api/asupApi";
 import { workerManagerApi } from "@api/workerManagerApi";
 import { aboutApi } from "@api/aboutApi";
 import { upgradeApi } from "@api/upgradeApi";
+import { uploadSlice } from "@store/reducer/uploadSlice";
 
 const createNoopStorage = () => {
   return {
@@ -52,6 +53,7 @@ const reducer = combineReducers({
   permissionSlice: permissionSlice.reducer,
   commonComponentSlice: commonComponentSlice.reducer,
   asupSlice: asupSlice.reducer,
+  uploadSlice: uploadSlice.reducer,
   [permissionApi.reducerPath]: permissionApi.reducer,
   [accountApi.reducerPath]: accountApi.reducer,
   [projectApi.reducerPath]: projectApi.reducer,

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { useSelector } from "react-redux";
 import { UpgradeContext } from "./context";
 import {
   UploadProgress,
@@ -8,13 +9,9 @@ import {
 } from "../types/upgrade.types";
 import {
   INITIAL_UPLOAD_STATE,
-  CHUNK_SIZE,
 } from "../constants/upgrade.constant";
 import {
   useGetLatestUploadStatusQuery,
-  useInitUploadMutation,
-  useUploadChunkMutation,
-  useProcessUploadMutation,
   useCancelUploadMutation,
   useTriggerUpgradeMutation,
   useSkipUpgradeMutation,
@@ -23,25 +20,21 @@ import {
   ExecutionStatusResponse,
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
-
-// Constants for validation
-const MAX_FILE_SIZE = 20 * 1024 * 1024 * 1024; // 20GB max file size
-const ALLOWED_EXTENSION = '.tar.gz';
-
-// Helper to determine if error is a network error 
-const isNetworkError = (error: any): boolean => {
-  return !error?.status ||                       // request never reached the server
-    error?.status === 'FETCH_ERROR' ||          // Network request failed entirely
-    error?.originalStatus === 0 ||              // CORS blocked, server down, no internet
-    error?.message?.toLowerCase().includes('network') || // network error
-    error?.message?.toLowerCase().includes('failed to fetch'); // Failed to fetch
-};
+import {
+  startBackgroundUpload,
+  cancelBackgroundUpload,
+} from "@/services/backgroundUploadManager";
+import { RootStateType } from "@store/store";
+import { BackgroundUploadState } from "@store/reducer/uploadSlice";
 
 // Helper to get user-friendly error message
 const getErrorMessage = (error: any, defaultMessage: string): string => {
-  if (isNetworkError(error)) {
-    return "Network error. Please check your connection and try again.";
-  }
+  const isNet = !error?.status ||
+    error?.status === 'FETCH_ERROR' ||
+    error?.originalStatus === 0 ||
+    error?.message?.toLowerCase().includes('network') ||
+    error?.message?.toLowerCase().includes('failed to fetch');
+  if (isNet) return "Network error. Please check your connection and try again.";
   return error?.data?.message || error?.message || defaultMessage;
 };
 
@@ -49,7 +42,12 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   // File state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Upload state
+  // Background upload state from Redux (survives navigation)
+  const bgUpload = useSelector(
+    (state: RootStateType) => (state as any).uploadSlice as BackgroundUploadState
+  );
+
+  // Upload state — derived from background upload when active
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>(INITIAL_UPLOAD_STATE);
 
   // UI visibility flags (determined by DB state)
@@ -67,6 +65,28 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     error: statusError, 
     refetch: refetchStatus 
   } = useGetLatestUploadStatusQuery();
+
+  // Sync local uploadProgress from Redux background state
+  useEffect(() => {
+    if (!bgUpload || bgUpload.status === "idle") return;
+    setUploadProgress({
+      status: bgUpload.status,
+      progress: bgUpload.progress,
+      currentChunk: bgUpload.currentChunk,
+      totalChunks: bgUpload.totalChunks,
+      uploadedBytes: bgUpload.uploadedBytes,
+      totalBytes: bgUpload.totalBytes,
+      error: bgUpload.error || undefined,
+      fileName: bgUpload.fileName,
+      uploadId: bgUpload.uploadId,
+      bundleId: bgUpload.bundleId,
+    });
+    if (bgUpload.status === "uploaded") {
+      setShowUploadUI(false);
+      setShowUpgradeUI(true);
+      refetchStatus();
+    }
+  }, [bgUpload, refetchStatus]);
 
   // Handle status fetch error
   useEffect(() => {
@@ -97,9 +117,6 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   }, [isProcessing, refetchStatus]);
 
   // API hooks
-  const [initUpload] = useInitUploadMutation();
-  const [uploadChunk] = useUploadChunkMutation();
-  const [processUpload] = useProcessUploadMutation();
   const [cancelUpload] = useCancelUploadMutation();
   const [triggerUpgrade] = useTriggerUpgradeMutation();
   const [skipUpgrade] = useSkipUpgradeMutation();
@@ -290,255 +307,31 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   }, []);
 
   // ═══════════════════════════════════════════════════════════════
-  // UPLOAD HANDLER - Parallel chunk uploads for faster performance
+  // UPLOAD HANDLER - Runs in background via singleton manager
+  // Survives page navigation — state lives in Redux store
   // ═══════════════════════════════════════════════════════════════
-  const PARALLEL_UPLOADS = 5; // Upload 5 chunks simultaneously
-
-  // Pre-upload validation
-  const validateFile = (file: File): { valid: boolean; error?: string } => {
-    // Validate file type
-    if (!file.name.toLowerCase().endsWith(ALLOWED_EXTENSION)) {
-      return { 
-        valid: false, 
-        error: `Invalid file type. Only ${ALLOWED_EXTENSION} files are supported.` 
-      };
-    }
-
-    // Validate file name format (should be upgrade-{version}.tar.gz)
-    const versionMatch = file.name.match(/^upgrade-.+\.tar\.gz$/i);
-    if (!versionMatch) {
-      return { 
-        valid: false, 
-        error: 'Invalid file name format. Expected: upgrade-{version}.tar.gz (e.g., upgrade-v2.1.0.tar.gz)' 
-      };
-    }
-
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      const maxSizeGB = MAX_FILE_SIZE / (1024 * 1024 * 1024);
-      return { 
-        valid: false, 
-        error: `File too large. Maximum size: ${maxSizeGB}GB` 
-      };
-    }
-
-    if (file.size < 1 * 1024 * 1024) { // 1MB
-      return { 
-        valid: false, 
-        error: 'File is smaller than 1MB. Please select a valid upgrade bundle.' 
-      };
-    }
-
-    return { valid: true };
-  };
-
   const handleUpload = async () => {
     if (!selectedFile) return;
-
-    // Pre-upload validation
-    const validation = validateFile(selectedFile);
-    if (!validation.valid) {
-      notify.error(validation.error!);
-      setUploadProgress((prev) => ({
-        ...prev,
-        status: "error",
-        error: validation.error,
-      }));
-      return;
-    }
-
-    // Store uploadId at function scope so it's available in catch block
-    let currentUploadId: string | undefined;
-
-    try {
-      setUploadProgress((prev) => ({ ...prev, status: "uploading", progress: 0 }));
-      
-      const initResult = await initUpload({
-        fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-      }).unwrap();
-
-      const { uploadId, totalChunks } = initResult;
-      currentUploadId = uploadId; // Store for error handling
-
-      setUploadProgress((prev) => ({
-        ...prev,
-        uploadId,
-        totalChunks,
-      }));
-
-      // Create array of chunk indices
-      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i);
-      let completedChunks = 0;
-      let uploadAborted = false; // Flag to stop new chunk uploads on error
-
-      // Upload function for a single chunk with error handling
-      const uploadSingleChunk = async (chunkIndex: number): Promise<void> => {
-        if (uploadAborted) {
-          throw new Error('Upload aborted due to previous chunk failure');
-        }
-
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
-        const chunkBlob = selectedFile.slice(start, end);
-
-        try {
-          await uploadChunk({
-            uploadId,
-            chunkIndex,
-            chunkData: chunkBlob,
-          }).unwrap();
-
-          completedChunks++;
-          setUploadProgress((prev) => ({
-            ...prev,
-            currentChunk: completedChunks,
-            uploadedBytes: Math.min(completedChunks * CHUNK_SIZE, selectedFile.size),
-            progress: Math.round((completedChunks / totalChunks) * 100),
-          }));
-        } catch (chunkError: any) {
-          // Mark as aborted to stop other chunks from uploading
-          uploadAborted = true;
-          console.error(`Chunk ${chunkIndex} upload failed:`, chunkError);
-          throw chunkError; // Re-throw to fail the parallel upload
-        }
-      };
-
-      // Parallel upload with concurrency limit and error handling
-      const uploadChunksInParallel = async () => {
-        const executing: Promise<void>[] = [];
-
-        for (const chunkIndex of chunkIndices) {
-          // Stop scheduling new chunks if upload was aborted
-          if (uploadAborted) {
-            break;
-          }
-
-          const promise = uploadSingleChunk(chunkIndex).then(() => {
-            // When done, remove from executing array
-            const index = executing.indexOf(promise);
-            if (index > -1) {
-              executing.splice(index, 1);
-            }
-          }).catch((err) => {
-            // Remove from executing and re-throw
-            const index = executing.indexOf(promise);
-            if (index > -1) {
-              executing.splice(index, 1);
-            }
-            throw err;
-          });
-          executing.push(promise);
-
-          // If we've reached the concurrency limit, wait for one to finish
-          if (executing.length >= PARALLEL_UPLOADS) {
-            await Promise.race(executing);
-          }
-        }
-
-        // Wait for remaining uploads to complete
-        if (executing.length > 0) {
-          await Promise.all(executing);
-        }
-      };
-
-      await uploadChunksInParallel();
-
-      setUploadProgress((prev) => ({ ...prev, status: "finalizing" }));
-      const finalResult = await processUpload(uploadId).unwrap();
-
-      // Check if processing (checksum validation, extraction) failed
-      if (finalResult.success === false) {
-        const errorMessages = finalResult.errors || [];
-        const errorSummary = errorMessages.length > 0 
-          ? errorMessages.join('\n') 
-          : finalResult.message || 'Upload processing failed';
-        
-        // Use 'validation_failed' status for checksum/file validation errors
-        const isValidationError = errorMessages.length > 0 || 
-          finalResult.message?.toLowerCase().includes('validation') ||
-          finalResult.message?.toLowerCase().includes('checksum');
-        
-        setUploadProgress((prev) => ({
-          ...prev,
-          status: isValidationError ? "validation_failed" : "error",
-          error: errorSummary,
-        }));
-
-        // Show detailed errors in notification
-        if (errorMessages.length > 0) {
-          notify.error(`Checksum validation failed:\n${errorMessages.slice(0, 5).join('\n')}${errorMessages.length > 5 ? `\n...and ${errorMessages.length - 5} more errors` : ''}`);
-        } else {
-          notify.error(finalResult.message || 'Upload processing failed');
-        }
-        return;
-      }
-
-      setUploadProgress((prev) => ({
-        ...prev,
-        status: "uploaded",
-        progress: 100,
-        bundleId: finalResult.bundleId,
-      }));
-
-      // Update UI flags after successful upload
-      setShowUploadUI(false);
-      setShowUpgradeUI(true);
-
-      // Refetch status to sync with DB
-      try {
-        await refetchStatus();
-      } catch (refetchError) {
-        console.error("Failed to refresh status after upload:", refetchError);
-        // Don't fail the upload, just log the error
-      }
-
-      notify.success(`File uploaded successfully to: ${finalResult.path}`);
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      
-      // Only cancel if error happened during chunk upload phase (not during processing)
-      // During processing, the backend already marks DB as FAILED if something goes wrong
-      const wasUploadingChunks = uploadProgress.status === 'uploading';
-      
-      if (currentUploadId && wasUploadingChunks) {
-        try {
-          await cancelUpload(currentUploadId).unwrap();
-        } catch (cancelError) {
-          console.error("Failed to cancel upload:", cancelError);
-        }
-      }
-      
-      // Differentiate between network and server errors
-      const errorMessage = getErrorMessage(error, "Upload failed");
-      
-      setUploadProgress((prev) => ({
-        ...prev,
-        status: "error",
-        error: errorMessage,
-      }));
-      notify.error(errorMessage);
-    }
+    startBackgroundUpload(selectedFile);
   };
 
-  // Cancel upload with proper error handling
+  // Cancel upload — aborts the background upload and cleans up server-side
   const handleCancelUpload = async () => {
+    cancelBackgroundUpload();
+    
     if (uploadProgress.uploadId) {
       try {
         await cancelUpload(uploadProgress.uploadId).unwrap();
         notify.info("Upload cancelled");
       } catch (error: any) {
         console.error("Cancel error:", error);
-        // Notify user about the failure but still update local state
         const errorMessage = getErrorMessage(error, "Failed to cancel upload on server");
         notify.warning(`${errorMessage}. Local state has been reset.`);
       }
     }
     
-    // Always update local state to cancelled
     setUploadProgress((prev) => ({ ...prev, status: "cancelled" }));
     
-    // Refetch status with error handling
     try {
       await refetchStatus();
     } catch (refetchError) {

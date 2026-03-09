@@ -3,6 +3,7 @@ import {Box} from '@components/container';
 import SideBar from '@components/side-bar/SideBar';
 import TabHeaderWrapper from '@components/tab-header-wrapper/TabHeaderWrapper';
 import TopNavBar from '@components/top-nav-bar/TopNavBar';
+import UpgradeBanner from '@components/upgrade-banner/UpgradeBanner';
 import useAccountDetails from '@hooks/useAccountDetails';
 import CreateFirstProject from '@modules/create-first-project/CreateFirstProject';
 import {Outlet} from 'react-router-dom';
@@ -18,7 +19,6 @@ const Layout = () => {
         <CreateFirstProject />
       </Show.When>
       <Show.Else>
-        {/* 5rem is the height of the header */}
         <TopNavBar />
           <Box className="relative flex overflow-hidden h-[calc(100vh-5rem)]">
             <SideBar />
@@ -27,6 +27,7 @@ const Layout = () => {
               <Outlet />
             </Box>
           </Box>
+        <UpgradeBanner />
       </Show.Else>
     </Show>
   );
