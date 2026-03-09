@@ -105,6 +105,8 @@ describe('MountTrackerService', () => {
             return 600000;
           case 'app.mount.timeoutMs':
             return 120000;
+          case 'app.mount.backupuid':
+            return 0;
           default:
             return undefined;
         }
@@ -399,6 +401,29 @@ describe('MountTrackerService', () => {
 
       expect(result).toHaveLength(2);
       expect(result.map(d => d.name)).toEqual(expect.arrayContaining(['dir1', 'dir2']));
+      expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('Found 2 directories'));
+    });
+
+    it('should list directories after SMB mount when backupuid is 0', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      const mountResult = await service.ensureMounted(smbRequest);
+      expect(mountResult.mountPath).toBe('/mnt/server-456/smb/share');
+      const mountCalls = mockExecAsync.mock.calls.filter((c: unknown[]) => Array.isArray(c[1]) && c[1].some((arg: unknown) => typeof arg === 'string' && arg.includes('backupuid=0')));
+      expect(mountCalls.length).toBeGreaterThan(0);
+
+      const mockEntries = [
+        { name: 'dir1', isDirectory: () => true, parentPath: mountResult.mountPath },
+        { name: 'dir2', isDirectory: () => true, parentPath: mountResult.mountPath },
+      ];
+      (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
+
+      const listResult = await service.listDirectoriesls({
+        mountPath: mountResult.mountPath,
+        path: '.',
+      });
+
+      expect(listResult).toHaveLength(2);
+      expect(listResult.map(d => d.name)).toEqual(expect.arrayContaining(['dir1', 'dir2']));
       expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('Found 2 directories'));
     });
 

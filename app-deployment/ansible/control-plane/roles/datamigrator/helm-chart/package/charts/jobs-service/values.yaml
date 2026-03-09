@@ -83,6 +83,8 @@ env:
     value: "/mnt"
   - name: UNMOUNT_TIMEOUT_MS
     value: "30000"
+  - name: MOUNT_BACKUP_UID
+    value: "0"
   - name: MOUNT_IDLE_TIMEOUT_MS
     value: "600000"
   - name: MOUNT_TIMEOUT_MS

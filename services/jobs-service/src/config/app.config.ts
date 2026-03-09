@@ -32,6 +32,9 @@ export default registerAs(
       timeoutMs: parseInt(process.env.MOUNT_TIMEOUT_MS || "120000", 10),
       unmountTimeoutMs:
         parseInt(process.env.UNMOUNT_TIMEOUT_MS || "30000", 10),
+      backupuid: process.env.MOUNT_BACKUP_UID
+        ? parseInt(process.env.MOUNT_BACKUP_UID, 10)
+        : 0,
     },
   }),
 );

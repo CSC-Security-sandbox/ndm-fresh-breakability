@@ -88,6 +88,8 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private readonly mountTimeoutMs: number;
   private readonly unmountTimeoutMs: number;
   private readonly resolveCifsHostnameToIp: boolean;
+
+  private readonly cifsBackupUid: number;
   private readonly mounts = new Map<string, MountRecord>();
   private readonly inflightMounts = new Map<string, Promise<MountRecord>>();
 
@@ -108,6 +110,8 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<number>("app.mount.unmountTimeoutMs") ?? 30000;
     this.resolveCifsHostnameToIp =
       this.configService.get<boolean>("app.mount.resolveCifsHostnameToIp") ?? true;
+    const configBackupUid = this.configService.get<number>("app.mount.backupuid") ?? 0;
+    this.cifsBackupUid = configBackupUid;
   }
 
   private async resolveHostToIp(host: string, exportPath: string, mountKey: string, fileServerId?: string): Promise<string> {
@@ -419,7 +423,13 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
         smbCredentialsPath != null
           ? `credentials=${smbCredentialsPath}`
           : "guest";
-      const opts = `${credsOpt},vers=${version}`;
+      let opts = `${credsOpt},vers=${version}`;
+      if (this.cifsBackupUid != null) {
+        opts += `,backupuid=${this.cifsBackupUid}`;
+      }
+      this.logger.debug(
+        `CIFS mount opts (cifsBackupUid=${this.cifsBackupUid}): ${opts}`,
+      );
       return [
         "-t",
         "cifs",
