@@ -164,8 +164,10 @@ export class RedisConsumerService implements OnModuleDestroy {
      * Prevents connection failures when JWT tokens expire
      * Ensures only ONE refresh interval is active at a time
      *
-     * Skipped in worker threads: worker threads are job-scoped (hours, not days)
-     * and the 24h JWT token will not expire within a single job's lifetime.
+     * Skipped in worker threads: once a Redis connection is authenticated,
+     * token expiry does not affect it — Redis does not re-validate tokens on
+     * established connections. The worker keeps the connection alive with
+     * constant XREADGROUP polling, so idle timeouts do not apply either.
      * Running refresh in workers caused a production incident where the refresh
      * fired 23h after worker start, quit the working client, failed to create
      * a replacement, and silently killed the consumer loop.
@@ -176,7 +178,7 @@ export class RedisConsumerService implements OnModuleDestroy {
         }
 
         if (!isMainThread) {
-            this.logger.log('Skipping connection refresh setup in worker thread (token outlives job)');
+            this.logger.log('Skipping connection refresh setup in worker thread (established connections do not need re-auth)');
             return;
         }
 
@@ -186,7 +188,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.connectionRefreshInterval = null;
         }
         
-        const tokenRefreshMinutes = 15; // TEMPORARY: 15 min for testing (revert to 1380 for production)
+        const tokenRefreshMinutes = 1380; // 23 hours (1 hour before 24-hour token expiry)
         const refreshIntervalMs = tokenRefreshMinutes * 60 * 1000;
         
         this.logger.log(`Setting up Redis connection refresh every ${tokenRefreshMinutes / 60} hours`);
