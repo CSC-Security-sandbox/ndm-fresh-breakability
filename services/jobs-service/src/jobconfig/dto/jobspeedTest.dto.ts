@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {  Protocol } from 'src/constants/enums';
+import { Protocol } from 'src/constants/enums';
 import { Type } from 'class-transformer';
 import {
   ArrayUnique,
@@ -13,13 +13,10 @@ import {
   IsUUID,
   ValidateNested,
   isString,
-  isUUID
+  isUUID,
 } from 'class-validator';
 
-
-
-
-class speedTests{
+class speedTests {
   @ApiProperty({ description: 'Read test' })
   @IsBoolean()
   readTest: boolean;
@@ -29,10 +26,9 @@ class speedTests{
   @ApiProperty({ description: 'packet loss test' })
   @IsBoolean()
   networkPerformance: boolean;
-
 }
 
-export class speedTestConfigOptions{
+export class speedTestConfigOptions {
   @ApiProperty({ description: 'File serverr name' })
   @IsString()
   fileServer: string;
@@ -52,7 +48,10 @@ export class speedTestConfigOptions{
 }
 
 export class WriteReadResult {
-  @ApiProperty({ description: 'Total time taken for the operation', example: 2.982695291 })
+  @ApiProperty({
+    description: 'Total time taken for the operation',
+    example: 2.982695291,
+  })
   @IsNumber()
   totalTimeTaken: number;
 
@@ -60,7 +59,10 @@ export class WriteReadResult {
   @IsString()
   error: string;
 
-  @ApiProperty({ description: 'Size of the file used in the test', example: 6442450944 })
+  @ApiProperty({
+    description: 'Size of the file used in the test',
+    example: 6442450944,
+  })
   @IsNumber()
   fileSize: number;
 }
@@ -78,7 +80,7 @@ export class RoundTripDelay {
   @IsNumber()
   max: number;
 
-  @ApiProperty({ description: 'Mean deviation of round trip delay'})
+  @ApiProperty({ description: 'Mean deviation of round trip delay' })
   @IsNumber()
   mdev: number;
 }
@@ -97,7 +99,6 @@ export class NetworkPerformanceResult {
   @Type(() => RoundTripDelay)
   roundTripDelay: RoundTripDelay;
 }
-
 
 export class SpeedTestResult {
   @ApiProperty({ description: 'UUID of traceId', required: true })
@@ -129,24 +130,25 @@ export class SpeedTestResult {
 }
 
 export class JobConfigSpeedTest {
-  
-  @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
+  @ApiProperty({
+    description: 'Job schedule configuration',
+    example: new Date().toISOString(),
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   firstRunAt: Date;
 
-  @ApiProperty({ 
-    description: 'List of speedTest Fileserver config and tests to be performed ', 
-    isArray: true, 
-    type: speedTestConfigOptions 
+  @ApiProperty({
+    description:
+      'List of speedTest Fileserver config and tests to be performed ',
+    isArray: true,
+    type: speedTestConfigOptions,
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => speedTestConfigOptions)
   speedTests: speedTestConfigOptions[];
-
-
 
   @ApiProperty({ description: 'UUID of createdBy', required: false })
   @IsOptional()

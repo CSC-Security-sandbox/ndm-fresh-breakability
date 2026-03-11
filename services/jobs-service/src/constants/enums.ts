@@ -1,177 +1,176 @@
 // -------------- worker ------------- //
 export enum WorkerStatus {
-  Online = "Online",
-  Offline = "Offline",
+  Online = 'Online',
+  Offline = 'Offline',
 }
 
 // -------------- Protocol ------------- //
 export enum Protocol {
-  NFS = "NFS",
-  SMB = "SMB",
+  NFS = 'NFS',
+  SMB = 'SMB',
 }
 
 // -------------- Config ------------- //
 export enum ServerType {
-  other = "OtherNAS",
-  dell = "dell",
-  emc = "emc",
+  other = 'OtherNAS',
+  dell = 'dell',
+  emc = 'emc',
 }
 
 export enum ConfigurationType {
-  file = "FILE",
-  objectStorage = "OBJECT_STORAGE",
+  file = 'FILE',
+  objectStorage = 'OBJECT_STORAGE',
 }
 
 // ---------- Job -----------/
 
 export enum JobStatus {
-  Active = "ACTIVE",
-  InActive = "IN_ACTIVE",
+  Active = 'ACTIVE',
+  InActive = 'IN_ACTIVE',
 }
 
 export enum JobConfigBulkMigrateResStatus {
-  CREATED = "CREATED",
-  FAILED = "FAILED",
+  CREATED = 'CREATED',
+  FAILED = 'FAILED',
 }
 
 export enum JobType {
-  DISCOVER = "DISCOVER",
-  SPEED_TEST = "SPEED_TEST",
-  MIGRATE = "MIGRATE",
-  CUT_OVER = "CUT_OVER",
-  PRECHECK = "PRECHECK",
+  DISCOVER = 'DISCOVER',
+  SPEED_TEST = 'SPEED_TEST',
+  MIGRATE = 'MIGRATE',
+  CUT_OVER = 'CUT_OVER',
+  PRECHECK = 'PRECHECK',
 }
 
 export enum JobIdMappingType {
-  Gid = "GID",
-  Uid = "UID",
-  Sid = "SID",
+  Gid = 'GID',
+  Uid = 'UID',
+  Sid = 'SID',
 }
 
 export enum TemplateType {
-  GID = "gid",
-  UID = "uid",
-  SID = "sid",
+  GID = 'gid',
+  UID = 'uid',
+  SID = 'sid',
 }
 
 // ---------- Job Run -----------/
 export enum JobRunStatus {
-  Ready = "READY",
-  Pending = "PENDING",
-  Running = "RUNNING",
-  Paused = "PAUSED",
-  Pausing = "PAUSING",
-  Stopped = "STOPPED",
-  Stopping = "STOPPING",
-  Completed = "COMPLETED",
-  Failed = "FAILED",
-  Errored = "ERRORED",
-  Blocked = "BLOCKED",
+  Ready = 'READY',
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Paused = 'PAUSED',
+  Pausing = 'PAUSING',
+  Stopped = 'STOPPED',
+  Stopping = 'STOPPING',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Errored = 'ERRORED',
+  Blocked = 'BLOCKED',
 }
 
-
 export enum JobRunType {
-  REGULAR = "REGULAR",
-  RETRY = "RETRY",
+  REGULAR = 'REGULAR',
+  RETRY = 'RETRY',
 }
 
 export enum TaskType {
-  Scan = "SCAN",
-  Migrate = "MIGRATE",
-  Copy = "COPY",
+  Scan = 'SCAN',
+  Migrate = 'MIGRATE',
+  Copy = 'COPY',
 }
 
 // -------------- Task ------------- //
 
 export enum TaskStatus {
-  Pending = "PENDING",
-  Running = "RUNNING",
-  Errored = "ERRORED",
-  Completed = "COMPLETED",
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Errored = 'ERRORED',
+  Completed = 'COMPLETED',
 }
 
 export enum TaskOperation {
-  ScanPath = "SCAN_PATH",
-  CopyFile = "COPY_FILE",
-  MetaStamp = "META_STAMP",
+  ScanPath = 'SCAN_PATH',
+  CopyFile = 'COPY_FILE',
+  MetaStamp = 'META_STAMP',
 }
 
 // ---------- Operations -----------/
 export enum OperationStatus {
-  READY = "READY",
-  IN_PROCESS = "IN_PROCESS",
-  ERROR = "ERROR",
-  COMPLETED = "COMPLETED",
+  READY = 'READY',
+  IN_PROCESS = 'IN_PROCESS',
+  ERROR = 'ERROR',
+  COMPLETED = 'COMPLETED',
 }
 
 export enum ErrorStatus {
-  UNRESOLVED = "UNRESOLVED",
-  RESOLVED = "RESOLVED",
+  UNRESOLVED = 'UNRESOLVED',
+  RESOLVED = 'RESOLVED',
 }
 
 export enum OperationType {
-  SCAN = "SCAN",
+  SCAN = 'SCAN',
 }
 
 // -------------- QueueEvent ------------- //
 export enum RabbitMq {
-  ListPaths = "ListPaths",
-  CreateTaskList = "taskList",
+  ListPaths = 'ListPaths',
+  CreateTaskList = 'taskList',
 }
 
 export enum WorkFlowType {
-  PARENT_WORKFLOW = "parent-workflow-tasks",
-  WORKER_SPECIFIC_WORKFLOW = "worker-specific-tasks",
+  PARENT_WORKFLOW = 'parent-workflow-tasks',
+  WORKER_SPECIFIC_WORKFLOW = 'worker-specific-tasks',
 }
 
 export enum WorkFlows {
-  DISCOVERY = "DiscoveryWorkflow",
-  SPEED_TEST = "SpeedTestWorkflow",
-  PRECHECK = "PreCheckValidationWorkflow",
-  MIGRATE = "MigrationWorkflow",
-  RETRY = "RetryMigrationWorkflow",
-  CUT_OVER = "CutOverWorkFlow",
+  DISCOVERY = 'DiscoveryWorkflow',
+  SPEED_TEST = 'SpeedTestWorkflow',
+  PRECHECK = 'PreCheckValidationWorkflow',
+  MIGRATE = 'MigrationWorkflow',
+  RETRY = 'RetryMigrationWorkflow',
+  CUT_OVER = 'CutOverWorkFlow',
 }
 
 export enum ConsumerType {
-  files = "files",
-  directories = "directories",
-  tasks = "tasks",
-  updatedTask = "updatedTask",
-  errors = "errors",
-  migrationTask = "migrationTask",
-  speedtestTask = "speedtestTask",
+  files = 'files',
+  directories = 'directories',
+  tasks = 'tasks',
+  updatedTask = 'updatedTask',
+  errors = 'errors',
+  migrationTask = 'migrationTask',
+  speedtestTask = 'speedtestTask',
 }
 
 export enum CutoverErrors {
-  VALID_JOB_RUN_NOT_FOUND = "VALID_JOB_RUN_NOT_FOUND",
+  VALID_JOB_RUN_NOT_FOUND = 'VALID_JOB_RUN_NOT_FOUND',
 }
 
 export enum ProtocolVersion {
-  NFSv3 = "v3",
-  NFSv4_0 = "v4.0",
-  NFSv4_1 = "v4.1",
-  NFSv4_2 = "v4.2",
-  SMBv2_0 = "v2.0",
-  SMBv3_0 = "v3.0",
-  SMBv3_1_1 = "v3.1.1",
+  NFSv3 = 'v3',
+  NFSv4_0 = 'v4.0',
+  NFSv4_1 = 'v4.1',
+  NFSv4_2 = 'v4.2',
+  SMBv2_0 = 'v2.0',
+  SMBv3_0 = 'v3.0',
+  SMBv3_1_1 = 'v3.1.1',
 }
 
 export enum CutOverStatus {
-  APPROVED = "APPROVED",
-  REJECTED = "REJECTED",
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
 }
 
 export enum PausedReason {
-  USER_PAUSED = "USER_PAUSED",
-  SYSTEM_PAUSED = "SYSTEM_PAUSED",
+  USER_PAUSED = 'USER_PAUSED',
+  SYSTEM_PAUSED = 'SYSTEM_PAUSED',
 }
 
 export enum Platform {
-  LINUX = "LINUX",
-  WINDOWS = "WINDOWS",
-  MACOS = "MACOS",
-  OTHER = "OTHER",
+  LINUX = 'LINUX',
+  WINDOWS = 'WINDOWS',
+  MACOS = 'MACOS',
+  OTHER = 'OTHER',
 }
 
 export const SIZE_UNITS: Record<string, number> = {
@@ -184,21 +183,24 @@ export const SIZE_UNITS: Record<string, number> = {
 };
 
 export enum JobConfigurationEnum {
-  skipFile = "Skip Files modified in last",
-  preserveAccessTime = "Preserve a-time",
-  preservePermissions = "Preserve permissions",
-  excludeFilePatterns = "Excluded Path Patterns",
-  excludeOlderThan = "Exclude file older than (UTC)",
-  futureScheduleAt = "Incremental sync schedule",
-  shouldScanADS = "Scan Alternate Data Streams (ADS)",
-  firstRunAt = "Job Scheduled For",
+  skipFile = 'Skip Files modified in last',
+  preserveAccessTime = 'Preserve a-time',
+  preservePermissions = 'Preserve permissions',
+  excludeFilePatterns = 'Excluded Path Patterns',
+  excludeOlderThan = 'Exclude file older than (UTC)',
+  futureScheduleAt = 'Incremental sync schedule',
+  shouldScanADS = 'Scan Alternate Data Streams (ADS)',
+  firstRunAt = 'Job Scheduled For',
 }
 
 /**
  * Error types that should be displayed to users in UI, reports, and emails.
  * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism.
  */
-export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
+export const USER_VISIBLE_ERROR_TYPES = [
+  'FATAL_ERROR',
+  'TRANSIENT_ERROR',
+] as const;
 
 export const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
   JobRunStatus.Completed,

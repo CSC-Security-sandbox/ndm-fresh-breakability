@@ -9,7 +9,7 @@ import databaseConfig from './database.config';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, temporalConfig, redisConfig,databaseConfig],
+      load: [appConfig, temporalConfig, redisConfig, databaseConfig],
     }),
   ],
 })

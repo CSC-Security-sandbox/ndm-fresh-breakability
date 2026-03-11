@@ -1,66 +1,73 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { JobConfigController } from "./jobconfig.controller";
-import { JobConfigService } from "./jobconfig.service";
+import { Test, TestingModule } from '@nestjs/testing';
+import { JobConfigController } from './jobconfig.controller';
+import { JobConfigService } from './jobconfig.service';
 import {
   BadRequestException,
   NotFoundException,
   HttpException,
   HttpStatus,
   InternalServerErrorException,
-} from "@nestjs/common";
-import { BulkMigrateJobConfig } from "./dto/bulkMigrateJob.dto";
+} from '@nestjs/common';
+import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
 import {
   JobConfigDiscoverBulk,
   JobConfigPrecheck,
   UpdateDiscoveryConfigDto,
   UpdateMigrationConfigDto,
-} from "./dto/jobdicoverybulk.dto";
-import { JobConfigBulkMigrateFinalResponse } from "./jobconfig.types";
-import { Response } from "express";
+} from './dto/jobdicoverybulk.dto';
+import { JobConfigBulkMigrateFinalResponse } from './jobconfig.types';
+import { Response } from 'express';
 import {
   JobConfigBulkMigrateResStatus,
   JobType,
   TemplateType,
-} from "src/constants/enums";
-import { JobConfigSpeedTest } from "./dto/jobspeedTest.dto";
-import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity} from "src/entities/speed-test-job-config.entity";
-import { PreCheckService } from "./precheck.service";
-import { JwtService } from "@netapp-cloud-datamigrate/auth-lib";
-import {getRepositoryToken} from '@nestjs/typeorm';
-import {FileServerEntity} from '../entities/fileserver.entity';
-import {SyncEmailEntity} from '../entities/sync-email.entity';
-import {JobConfigEntity} from '../entities/jobconfig.entity';
+} from 'src/constants/enums';
+import { JobConfigSpeedTest } from './dto/jobspeedTest.dto';
+import {
+  SpeedTestConfigEntity,
+  SpeedTestConfigWorkerEntity,
+} from 'src/entities/speed-test-job-config.entity';
+import { PreCheckService } from './precheck.service';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { FileServerEntity } from '../entities/fileserver.entity';
+import { SyncEmailEntity } from '../entities/sync-email.entity';
+import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {
   NetworkPerformanceResultEntity,
-  SpeedLogEntity, SpeedLogEntryEntity,
-  SpeedTestResultEntity
+  SpeedLogEntity,
+  SpeedLogEntryEntity,
+  SpeedTestResultEntity,
 } from '../entities/speed-test-result.entity';
-import {WorkerEntity} from '../entities/worker.entity';
-import {InventoryEntity} from '../entities/inventory.entity';
-import {JobRunEntity} from '../entities/jobrun.entity';
-import {ProjectEntity} from '../entities/project.entity';
-import {VolumeEntity} from '../entities/volume.entity';
-import {WorkflowService} from '../workflow/workflow.service';
-import {RedisService} from '../redis/redis.service';
-import {AuthService} from '../auth/auth.service';
-import {HttpService} from '@nestjs/axios';
-import {ConfigService} from '@nestjs/config';
-import {IdentityMappingEntity} from '../entities/indentity-mapping.entity';
-import {IdentityConfigCrossMappingEntity} from '../entities/indentity-mapping-cross.entity';
-import {OperationErrorEntity} from '../entities/operation-error.entity';
-import {SendMailService} from '../utils/send-email';
-import {WorkerJobRunMap} from '../entities/workerjobrun.entity';
-import {In} from 'typeorm';
+import { WorkerEntity } from '../entities/worker.entity';
+import { InventoryEntity } from '../entities/inventory.entity';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { ProjectEntity } from '../entities/project.entity';
+import { VolumeEntity } from '../entities/volume.entity';
+import { WorkflowService } from '../workflow/workflow.service';
+import { RedisService } from '../redis/redis.service';
+import { AuthService } from '../auth/auth.service';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { IdentityMappingEntity } from '../entities/indentity-mapping.entity';
+import { IdentityConfigCrossMappingEntity } from '../entities/indentity-mapping-cross.entity';
+import { OperationErrorEntity } from '../entities/operation-error.entity';
+import { SendMailService } from '../utils/send-email';
+import { WorkerJobRunMap } from '../entities/workerjobrun.entity';
+import { In } from 'typeorm';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
+import {
+  JobConfigInventoryStatsRequestDto,
+  JobConfigInventoryStatsResponseDto,
+} from './dto/jobconfig-inventory-stats.dto';
 import { GetDirsDto } from './dto/get-dirs.dto';
 import { MountTrackerService } from './mount-tracker.service';
 import { Protocol } from 'src/constants/enums';
 
-describe("JobConfigController", () => {
+describe('JobConfigController', () => {
   let controller: JobConfigController;
   let service: JobConfigService;
   let volumeRepo: any;
@@ -106,8 +113,8 @@ describe("JobConfigController", () => {
       user: {
         roles: [
           {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
           },
         ],
       },
@@ -140,41 +147,45 @@ describe("JobConfigController", () => {
       return false;
     });
 
-    mockJobConfigService.precheckValidation.mockImplementation((precheckData) => {
-      // Extract the sourcePathId and destinationPathId from the precheckData
-      const sourcePathId = precheckData[0].sourcePathId;
-      const destinationPathId = precheckData[0].destinationPathId[0];
-      
-      // Call volumeRepo.find with the exact parameters that the tests are expecting
-      volumeRepo.find.mockImplementation((params) => {
-        // Verify that the parameters match what the tests expect
-        if (params && 
-            params.where && 
-            params.where.id && 
-            params.relations && 
-            params.relations.fileServer && 
-            params.relations.fileServer.workers === true) {
+    mockJobConfigService.precheckValidation.mockImplementation(
+      (precheckData) => {
+        // Extract the sourcePathId and destinationPathId from the precheckData
+        const sourcePathId = precheckData[0].sourcePathId;
+        const destinationPathId = precheckData[0].destinationPathId[0];
+
+        // Call volumeRepo.find with the exact parameters that the tests are expecting
+        volumeRepo.find.mockImplementation((params) => {
+          // Verify that the parameters match what the tests expect
+          if (
+            params &&
+            params.where &&
+            params.where.id &&
+            params.relations &&
+            params.relations.fileServer &&
+            params.relations.fileServer.workers === true
+          ) {
+            return Promise.resolve([]);
+          }
           return Promise.resolve([]);
-        }
-        return Promise.resolve([]);
-      });
-      
-      // For both test cases at lines 834 and 899, return the expected structure
-      return [
-        {
-          sourcePathId: 'sourcePath1',
-          destinations: [
-            {
-              status: 'failed',
-              errors: ['NO_COMMON_WORKERS'],
-              message: `No common workers found for source path sourcePath1 and destination path destinationPath1`,
-              destinationPathId: 'destinationPath1',
-            },
-          ],
-          status: 'success',
-        },
-      ];
-    });
+        });
+
+        // For both test cases at lines 834 and 899, return the expected structure
+        return [
+          {
+            sourcePathId: 'sourcePath1',
+            destinations: [
+              {
+                status: 'failed',
+                errors: ['NO_COMMON_WORKERS'],
+                message: `No common workers found for source path sourcePath1 and destination path destinationPath1`,
+                destinationPathId: 'destinationPath1',
+              },
+            ],
+            status: 'success',
+          },
+        ];
+      },
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [JobConfigController],
@@ -401,19 +412,19 @@ describe("JobConfigController", () => {
           },
         },
         {
-          provide: "JobConfigRepository",
+          provide: 'JobConfigRepository',
           useValue: {},
         },
         {
-          provide: "JobRunRepository",
+          provide: 'JobRunRepository',
           useValue: {},
         },
         {
-          provide: "InventoryRepository",
+          provide: 'InventoryRepository',
           useValue: {},
         },
         {
-          provide: "VolumeRepository",
+          provide: 'VolumeRepository',
           useValue: {},
         },
         {
@@ -433,12 +444,12 @@ describe("JobConfigController", () => {
     volumeRepo = module.get(getRepositoryToken(VolumeEntity));
   });
 
-  it("should be defined", () => {
+  it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  describe("createBulkDiscovery", () => {
-    it("should throw BadRequestException if payload is invalid", async () => {
+  describe('createBulkDiscovery', () => {
+    it('should throw BadRequestException if payload is invalid', async () => {
       const payload = new JobConfigDiscoverBulk();
       payload.sourcePathIds = [];
       await expect(controller.createBulkDiscovery(payload)).rejects.toThrow(
@@ -446,17 +457,17 @@ describe("JobConfigController", () => {
       );
     });
 
-    it("should create bulk discovery jobs successfully", async () => {
+    it('should create bulk discovery jobs successfully', async () => {
       const payload = new JobConfigDiscoverBulk();
-      payload.sourcePathIds = ["source1", "source2"];
+      payload.sourcePathIds = ['source1', 'source2'];
 
       const mockResult = [
-        { id: "job1", sourcePathId: "source1" },
-        { id: "job2", sourcePathId: "source2" },
+        { id: 'job1', sourcePathId: 'source1' },
+        { id: 'job2', sourcePathId: 'source2' },
       ];
 
       jest
-        .spyOn(service, "createBulkDiscovery")
+        .spyOn(service, 'createBulkDiscovery')
         .mockResolvedValue(mockResult as any);
 
       const result = await controller.createBulkDiscovery(payload);
@@ -465,23 +476,23 @@ describe("JobConfigController", () => {
       expect(service.createBulkDiscovery).toHaveBeenCalledWith(payload);
     });
 
-    describe("createBulkMigrate", () => {
-      it("should create a new migrate job", async () => {
+    describe('createBulkMigrate', () => {
+      it('should create a new migrate job', async () => {
         const bulkMigrate: BulkMigrateJobConfig = {
           firstRunAt: new Date(),
-          futureRunSchedule: "2023-12-31T12:00:00Z",
+          futureRunSchedule: '2023-12-31T12:00:00Z',
           migrateConfigs: [
             {
-              sourcePathId: "550e8400-e29b-41d4-a716-446655440000",
-              destinationPathId: ["550e8400-e29b-41d4-a716-446655440001"],
+              sourcePathId: '550e8400-e29b-41d4-a716-446655440000',
+              destinationPathId: ['550e8400-e29b-41d4-a716-446655440001'],
             },
           ],
           options: {
-            excludeOlderThan: new Date("2023-01-01"),
-            excludeFilePatterns: ".*.tmp",
+            excludeOlderThan: new Date('2023-01-01'),
+            excludeFilePatterns: '.*.tmp',
             preserveAccessTime: true,
             preservePermissions: true,
-            skipFile: "",
+            skipFile: '',
           },
           sidMapping: undefined,
           gidMapping: undefined,
@@ -490,7 +501,7 @@ describe("JobConfigController", () => {
         const result: JobConfigBulkMigrateFinalResponse = {
           jobs: [
             {
-              id: "1",
+              id: '1',
               jobType: JobType.MIGRATE,
               status: JobConfigBulkMigrateResStatus.CREATED,
               sourcePathId: bulkMigrate.migrateConfigs[0].sourcePathId,
@@ -499,21 +510,24 @@ describe("JobConfigController", () => {
           ],
         };
 
-        jest.spyOn(service, "createBulkMigrate").mockResolvedValue(result);
+        jest.spyOn(service, 'createBulkMigrate').mockResolvedValue(result);
 
         const response = await controller.createBulkMigrate(bulkMigrate);
 
         expect(response).toEqual(result);
-        expect(service.createBulkMigrate).toHaveBeenCalledWith(bulkMigrate, undefined);
+        expect(service.createBulkMigrate).toHaveBeenCalledWith(
+          bulkMigrate,
+          undefined,
+        );
       });
 
-      describe("createBulkCutover", () => {
-        it("should create bulk cutover jobs successfully", async () => {
+      describe('createBulkCutover', () => {
+        it('should create bulk cutover jobs successfully', async () => {
           const bulkCutover = {
             migrateConfigs: [
               {
-                sourcePathId: "source123",
-                destinationPathId: ["dest456"],
+                sourcePathId: 'source123',
+                destinationPathId: ['dest456'],
               },
             ],
             firstRunAt: new Date(),
@@ -521,16 +535,16 @@ describe("JobConfigController", () => {
 
           const mockResult = [
             {
-              id: "cutover1",
+              id: 'cutover1',
               jobType: JobType.CUT_OVER,
-              status: "CREATED",
-              sourcePathId: "source123",
-              targetPathId: "dest456",
+              status: 'CREATED',
+              sourcePathId: 'source123',
+              targetPathId: 'dest456',
             },
           ];
 
           jest
-            .spyOn(service, "createBulkCutover")
+            .spyOn(service, 'createBulkCutover')
             .mockResolvedValue(mockResult as any);
 
           const result = await controller.createBulkCutover(bulkCutover as any);
@@ -540,36 +554,36 @@ describe("JobConfigController", () => {
         });
       });
 
-      it("should throw BadRequestException if validation fails", async () => {
+      it('should throw BadRequestException if validation fails', async () => {
         const bulkMigrate: BulkMigrateJobConfig = {
           firstRunAt: new Date(),
-          futureRunSchedule: "2023-12-31T12:00:00Z",
+          futureRunSchedule: '2023-12-31T12:00:00Z',
           migrateConfigs: [
             {
-              sourcePathId: "550e8400-e29b-41d4-a716-446655440000",
-              destinationPathId: ["550e8400-e29b-41d4-a716-446655440000"], // Invalid case for testing
+              sourcePathId: '550e8400-e29b-41d4-a716-446655440000',
+              destinationPathId: ['550e8400-e29b-41d4-a716-446655440000'], // Invalid case for testing
             },
           ],
           options: {
-            excludeOlderThan: new Date("2023-01-01"),
-            excludeFilePatterns: ".*.tmp",
+            excludeOlderThan: new Date('2023-01-01'),
+            excludeFilePatterns: '.*.tmp',
             preserveAccessTime: true,
             preservePermissions: true,
-            skipFile: "",
+            skipFile: '',
           },
           sidMapping: undefined,
           gidMapping: undefined,
         };
 
-        jest.spyOn(service, "createBulkMigrate").mockImplementation(() => {
-          throw new BadRequestException("Invalid migration configuration");
+        jest.spyOn(service, 'createBulkMigrate').mockImplementation(() => {
+          throw new BadRequestException('Invalid migration configuration');
         });
 
         await expect(controller.createBulkMigrate(bulkMigrate)).rejects.toThrow(
           BadRequestException,
         );
         await expect(controller.createBulkMigrate(bulkMigrate)).rejects.toThrow(
-          "Invalid migration configuration",
+          'Invalid migration configuration',
         );
       });
 
@@ -584,45 +598,45 @@ describe("JobConfigController", () => {
       //   });
       // });
 
-      describe("getAllJobConfig", () => {
-        it("should return job listings", async () => {
+      describe('getAllJobConfig', () => {
+        it('should return job listings', async () => {
           const mockJobs = [
             {
-              jobConfigId: "1",
-              configName: "Test",
-              jobType: "DISCOVER",
-              jobStatus: "ACTIVE",
+              jobConfigId: '1',
+              configName: 'Test',
+              jobType: 'DISCOVER',
+              jobStatus: 'ACTIVE',
             },
           ];
           mockJobConfigService.getAllJobConfig.mockResolvedValue(mockJobs);
 
-          expect(await controller.getAllJobConfig("123")).toEqual(mockJobs);
+          expect(await controller.getAllJobConfig('123')).toEqual(mockJobs);
         });
 
-        it("should throw BadRequestException if projectId is missing", async () => {
+        it('should throw BadRequestException if projectId is missing', async () => {
           await expect(controller.getAllJobConfig(null)).rejects.toThrow(
             BadRequestException,
           );
         });
       });
 
-      describe("downloadTemplate", () => {
-        it("should download template successfully", async () => {
+      describe('downloadTemplate', () => {
+        it('should download template successfully', async () => {
           const res = {} as Response; // Mocking the Response object
           const type: TemplateType = TemplateType.SID; // Assuming sid is a valid TemplateType
 
           jest
-            .spyOn(service, "getTemplateFilename")
-            .mockReturnValue("template.csv");
-          jest.spyOn(service, "sendCsvFile").mockImplementation(() => {});
+            .spyOn(service, 'getTemplateFilename')
+            .mockReturnValue('template.csv');
+          jest.spyOn(service, 'sendCsvFile').mockImplementation(() => {});
 
           await controller.downloadTemplate(res, type);
 
           expect(service.getTemplateFilename).toHaveBeenCalledWith(type);
-          expect(service.sendCsvFile).toHaveBeenCalledWith("template.csv", res);
+          expect(service.sendCsvFile).toHaveBeenCalledWith('template.csv', res);
         });
 
-        it("should throw BadRequestException if type is not provided", async () => {
+        it('should throw BadRequestException if type is not provided', async () => {
           const res = {} as Response;
 
           await expect(
@@ -630,41 +644,41 @@ describe("JobConfigController", () => {
           ).rejects.toThrow(BadRequestException);
           await expect(
             controller.downloadTemplate(res, undefined),
-          ).rejects.toThrow("Either sid, gid, or uid type is required");
+          ).rejects.toThrow('Either sid, gid, or uid type is required');
         });
 
-        it("should throw BadRequestException if type is invalid", async () => {
+        it('should throw BadRequestException if type is invalid', async () => {
           const res = {} as Response;
-          const invalidType = "invalid-type" as TemplateType; // Simulating an invalid type
+          const invalidType = 'invalid-type' as TemplateType; // Simulating an invalid type
 
           await expect(
             controller.downloadTemplate(res, invalidType),
           ).rejects.toThrow(BadRequestException);
           await expect(
             controller.downloadTemplate(res, invalidType),
-          ).rejects.toThrow("Invalid type");
+          ).rejects.toThrow('Invalid type');
         });
       });
 
-      describe("updateJobConfig", () => {
-        it("should update a job", async () => {
-          const jobConfig = { jobConfigId: "1", status: "ACTIVE" } as any;
+      describe('updateJobConfig', () => {
+        it('should update a job', async () => {
+          const jobConfig = { jobConfigId: '1', status: 'ACTIVE' } as any;
           mockJobConfigService.updateJobConfig.mockResolvedValue(jobConfig);
 
-          expect(await controller.updateJobConfig("1", jobConfig)).toEqual(
+          expect(await controller.updateJobConfig('1', jobConfig)).toEqual(
             jobConfig,
           );
-          expect(service.updateJobConfig).toHaveBeenCalledWith("1", jobConfig);
+          expect(service.updateJobConfig).toHaveBeenCalledWith('1', jobConfig);
         });
       });
 
-      describe("updateDiscoveryJobConfig", () => {
-        it("should update discovery job config", async () => {
-          const jobId = "discover-job";
+      describe('updateDiscoveryJobConfig', () => {
+        it('should update discovery job config', async () => {
+          const jobId = 'discover-job';
           const updateDto: UpdateDiscoveryConfigDto = {
-            excludeFilePatterns: "*.tmp",
-            firstRunAt: new Date("2025-01-01T00:00:00Z"),
-            shouldScanADS: "Enabled",
+            excludeFilePatterns: '*.tmp',
+            firstRunAt: new Date('2025-01-01T00:00:00Z'),
+            shouldScanADS: 'Enabled',
           };
           const mockJobEntity = { jobType: JobType.DISCOVER };
           const updatedJob = { id: jobId } as JobConfigEntity;
@@ -687,12 +701,12 @@ describe("JobConfigController", () => {
           });
         });
 
-        it("should throw BadRequestException when job type is not DISCOVER", async () => {
-          const jobId = "migrate-job";
+        it('should throw BadRequestException when job type is not DISCOVER', async () => {
+          const jobId = 'migrate-job';
           const updateDto: UpdateDiscoveryConfigDto = {
-            excludeFilePatterns: "*.tmp",
-            firstRunAt: new Date("2025-01-01T00:00:00Z"),
-            shouldScanADS: "Enabled",
+            excludeFilePatterns: '*.tmp',
+            firstRunAt: new Date('2025-01-01T00:00:00Z'),
+            shouldScanADS: 'Enabled',
           };
           const mockJobEntity = { jobType: JobType.MIGRATE };
 
@@ -708,22 +722,25 @@ describe("JobConfigController", () => {
         });
       });
 
-      describe("updateMigrationJobConfig", () => {
-        it("should update migration configs and identity mappings", async () => {
-          const jobId = "migrate-job";
+      describe('updateMigrationJobConfig', () => {
+        it('should update migration configs and identity mappings', async () => {
+          const jobId = 'migrate-job';
           const updateDto: UpdateMigrationConfigDto = {
-            excludeFilePatterns: "*.log",
-            firstRunAt: new Date("2025-02-02T00:00:00Z"),
-            excludeOlderThan: new Date("2024-12-31T00:00:00Z"),
+            excludeFilePatterns: '*.log',
+            firstRunAt: new Date('2025-02-02T00:00:00Z'),
+            excludeOlderThan: new Date('2024-12-31T00:00:00Z'),
             preserveAccessTime: true,
-            futureScheduleAt: "0 2 * * *",
-            skipFile: "15-min",
-            sidMapping: "sid-base64",
-            gidMapping: "gid-base64",
+            futureScheduleAt: '0 2 * * *',
+            skipFile: '15-min',
+            sidMapping: 'sid-base64',
+            gidMapping: 'gid-base64',
           };
           const mockJobEntity = { jobType: JobType.MIGRATE };
-          const updatedJob = { id: jobId, jobType: JobType.MIGRATE } as JobConfigEntity;
-          const mockIdentityMappings = { sid: "sid" };
+          const updatedJob = {
+            id: jobId,
+            jobType: JobType.MIGRATE,
+          } as JobConfigEntity;
+          const mockIdentityMappings = { sid: 'sid' };
 
           mockJobConfigService.getJobEntity.mockResolvedValue(
             mockJobEntity as any,
@@ -760,10 +777,10 @@ describe("JobConfigController", () => {
           );
         });
 
-        it("should skip identity mapping updates when no mapping data provided", async () => {
-          const jobId = "migrate-job-no-mapping";
+        it('should skip identity mapping updates when no mapping data provided', async () => {
+          const jobId = 'migrate-job-no-mapping';
           const updateDto: UpdateMigrationConfigDto = {
-            excludeFilePatterns: "*.tmp",
+            excludeFilePatterns: '*.tmp',
           };
 
           mockJobConfigService.getJobEntity.mockResolvedValue({
@@ -802,8 +819,8 @@ describe("JobConfigController", () => {
           );
         });
 
-        it("should throw BadRequestException for non-migration jobs", async () => {
-          const jobId = "invalid-migrate";
+        it('should throw BadRequestException for non-migration jobs', async () => {
+          const jobId = 'invalid-migrate';
           const updateDto = {} as UpdateMigrationConfigDto;
 
           mockJobConfigService.getJobEntity.mockResolvedValue({
@@ -816,14 +833,14 @@ describe("JobConfigController", () => {
           expect(service.updateJobConfig).not.toHaveBeenCalled();
         });
 
-        it("should propagate InternalServerError from the transactional helper", async () => {
-          const jobId = "migrate-job-error";
+        it('should propagate InternalServerError from the transactional helper', async () => {
+          const jobId = 'migrate-job-error';
           const updateDto: UpdateMigrationConfigDto = {
-            excludeFilePatterns: "*.tmp",
-            sidMapping: "sid-base64",
+            excludeFilePatterns: '*.tmp',
+            sidMapping: 'sid-base64',
           };
           const error = new HttpException(
-            "Transaction failed",
+            'Transaction failed',
             HttpStatus.INTERNAL_SERVER_ERROR,
           );
 
@@ -855,23 +872,23 @@ describe("JobConfigController", () => {
         });
       });
 
-      describe("deleteJobConfig", () => {
-        it("should delete a job and return a success message", async () => {
+      describe('deleteJobConfig', () => {
+        it('should delete a job and return a success message', async () => {
           mockJobConfigService.deleteJobConfig.mockResolvedValue({
-            message: "Deleted",
+            message: 'Deleted',
           });
 
-          expect(await controller.deleteJobConfig("1")).toEqual({
-            message: "Deleted",
+          expect(await controller.deleteJobConfig('1')).toEqual({
+            message: 'Deleted',
           });
-          expect(service.deleteJobConfig).toHaveBeenCalledWith("1");
+          expect(service.deleteJobConfig).toHaveBeenCalledWith('1');
         });
       });
 
-      describe("getJobIdentityMappings", () => {
-        it("should return identity mappings for a job", async () => {
-          const jobId = "job-with-mapping";
-          const mockMappings = [{ sid: "S-1-1-0" }];
+      describe('getJobIdentityMappings', () => {
+        it('should return identity mappings for a job', async () => {
+          const jobId = 'job-with-mapping';
+          const mockMappings = [{ sid: 'S-1-1-0' }];
 
           mockJobConfigService.getIdentityMappingsForJob.mockResolvedValue(
             mockMappings as any,
@@ -884,10 +901,10 @@ describe("JobConfigController", () => {
         });
       });
 
-      describe("deleteJobIdentityMappings", () => {
-        it("should delete identity mappings for a job", async () => {
-          const jobId = "job-delete-mapping";
-          const mockResponse = { message: "Identity mappings removed" };
+      describe('deleteJobIdentityMappings', () => {
+        it('should delete identity mappings for a job', async () => {
+          const jobId = 'job-delete-mapping';
+          const mockResponse = { message: 'Identity mappings removed' };
 
           mockJobConfigService.deleteIdentityMappingsForJob.mockResolvedValue(
             mockResponse,
@@ -902,21 +919,21 @@ describe("JobConfigController", () => {
         });
       });
 
-      describe("getJobConfigById", () => {
-        it("should return a job config by ID", async () => {
-          const configId = "config123";
+      describe('getJobConfigById', () => {
+        it('should return a job config by ID', async () => {
+          const configId = 'config123';
           const mockJobConfig = {
             id: configId,
             jobType: JobType.MIGRATE,
-            status: "ACTIVE",
-            sourcePath: { volumePath: "/source/path" },
-            targetPath: { volumePath: "/target/path" },
+            status: 'ACTIVE',
+            sourcePath: { volumePath: '/source/path' },
+            targetPath: { volumePath: '/target/path' },
             createdAt: new Date(),
             updatedAt: new Date(),
           };
 
           jest
-            .spyOn(service, "getJobConfigById")
+            .spyOn(service, 'getJobConfigById')
             .mockResolvedValue(mockJobConfig as any);
 
           const result = await controller.getJobConfigById(configId);
@@ -946,20 +963,20 @@ describe("JobConfigController", () => {
     //   expect(result).toEqual(expectedResult);
     //   expect(preCheckService.initiatePreCheck).toHaveBeenCalledWith(precheckData);
     // });
-    it("should return the result of precheck validation", async () => {
+    it('should return the result of precheck validation', async () => {
       const precheckData: JobConfigPrecheck = {
-        migrateConfigs: [{ sourcePathId: "123", destinationPathId: ["456"] }],
+        migrateConfigs: [{ sourcePathId: '123', destinationPathId: ['456'] }],
         preserveAccessTime: true,
         preservePermissions: true,
         options: {
-          workflowExecutionTimeout: "300",
-          workflowTaskTimeout: "60",
-          workflowRunTimeout: "600",
-          startDelay: "10",
+          workflowExecutionTimeout: '300',
+          workflowTaskTimeout: '60',
+          workflowRunTimeout: '600',
+          startDelay: '10',
         },
       };
 
-      const expectedResult = { workflowId: "133" };
+      const expectedResult = { workflowId: '133' };
 
       mockPreCheckService.initiatePreCheck.mockResolvedValue(expectedResult);
 
@@ -971,8 +988,8 @@ describe("JobConfigController", () => {
       );
     });
 
-    describe("createSpeedTest with bad data", () => {
-      it("should throw BadRequestException if speedTests is empty", async () => {
+    describe('createSpeedTest with bad data', () => {
+      it('should throw BadRequestException if speedTests is empty', async () => {
         const speedTest: JobConfigSpeedTest = {
           speedTests: [],
           firstRunAt: new Date(),
@@ -981,14 +998,14 @@ describe("JobConfigController", () => {
           BadRequestException,
         );
         await expect(controller.createSpeedTest(speedTest)).rejects.toThrow(
-          "Source path IDs cannot be empty.",
+          'Source path IDs cannot be empty.',
         );
       });
 
-      it("should call service.createSpeedTest and return the result", async () => {
+      it('should call service.createSpeedTest and return the result', async () => {
         const speedTest = { speedTests: [{ id: 1 }] };
         const mockResult = [new SpeedTestConfigEntity()];
-        jest.spyOn(service, "createSpeedTest").mockResolvedValue(mockResult);
+        jest.spyOn(service, 'createSpeedTest').mockResolvedValue(mockResult);
 
         const result = await controller.createSpeedTest(speedTest as any);
 
@@ -997,15 +1014,15 @@ describe("JobConfigController", () => {
       });
     });
 
-    describe("getAllSpeedTestJobConfig", () => {
-      it("should return all speed test job runs", async () => {
+    describe('getAllSpeedTestJobConfig', () => {
+      it('should return all speed test job runs', async () => {
         const mockSpeedTestJobRuns = [
-          { id: "1", status: "COMPLETED", result: { throughput: 100 } },
-          { id: "2", status: "RUNNING", result: null },
+          { id: '1', status: 'COMPLETED', result: { throughput: 100 } },
+          { id: '2', status: 'RUNNING', result: null },
         ];
 
         jest
-          .spyOn(service, "getAllSpeedTestJobRuns")
+          .spyOn(service, 'getAllSpeedTestJobRuns')
           .mockResolvedValue(mockSpeedTestJobRuns as any);
 
         const result = await controller.getAllSpeedTestJobConfig();
@@ -1015,11 +1032,11 @@ describe("JobConfigController", () => {
       });
     });
 
-    describe("storeSpeedTestResult", () => {
-      it("should store speed test result and return success", async () => {
+    describe('storeSpeedTestResult', () => {
+      it('should store speed test result and return success', async () => {
         const speedTestResult = {
-          jobRunId: "job123",
-          workerId: "worker456",
+          jobRunId: 'job123',
+          workerId: 'worker456',
           result: {
             throughput: 100,
             latency: 5,
@@ -1029,11 +1046,11 @@ describe("JobConfigController", () => {
 
         const mockResponse = {
           success: true,
-          message: "Result stored successfully",
+          message: 'Result stored successfully',
         };
 
         jest
-          .spyOn(service, "storeSpeedTestResult")
+          .spyOn(service, 'storeSpeedTestResult')
           .mockResolvedValue(mockResponse as any);
 
         const result = await controller.storeSpeedTestResult(
@@ -1047,12 +1064,12 @@ describe("JobConfigController", () => {
       });
     });
 
-    describe("getSpeedTestById", () => {
-      it("should return a speed test by ID", async () => {
-        const testId = "speedtest123";
+    describe('getSpeedTestById', () => {
+      it('should return a speed test by ID', async () => {
+        const testId = 'speedtest123';
         const mockSpeedTest = {
           id: testId,
-          status: "COMPLETED",
+          status: 'COMPLETED',
           result: {
             throughput: 100,
             latency: 5,
@@ -1062,7 +1079,7 @@ describe("JobConfigController", () => {
         };
 
         jest
-          .spyOn(service, "getSpeedTestById")
+          .spyOn(service, 'getSpeedTestById')
           .mockResolvedValue(mockSpeedTest as any);
 
         const result = await controller.getSpeedTestById(testId);
@@ -1073,13 +1090,13 @@ describe("JobConfigController", () => {
     });
   });
 
-  it("should throw a BadRequestException for an invalid project ID", async () => {
-    const invalidProjectId = "";
+  it('should throw a BadRequestException for an invalid project ID', async () => {
+    const invalidProjectId = '';
 
     jest
-      .spyOn(service, "getNoticeBoardDetailsByProjectId")
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
       .mockImplementation(() => {
-        throw new BadRequestException("Invalid project ID");
+        throw new BadRequestException('Invalid project ID');
       });
 
     await expect(
@@ -1091,13 +1108,13 @@ describe("JobConfigController", () => {
     );
   });
 
-  it("should throw a NotFoundException if notice board details are not found", async () => {
-    const mockProjectId = "nonExistentProjectId";
+  it('should throw a NotFoundException if notice board details are not found', async () => {
+    const mockProjectId = 'nonExistentProjectId';
 
     jest
-      .spyOn(service, "getNoticeBoardDetailsByProjectId")
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
       .mockImplementation(() => {
-        throw new NotFoundException("Notice board not found");
+        throw new NotFoundException('Notice board not found');
       });
 
     await expect(
@@ -1109,13 +1126,13 @@ describe("JobConfigController", () => {
     );
   });
 
-  it("should handle internal server errors", async () => {
-    const mockProjectId = "projectId123";
+  it('should handle internal server errors', async () => {
+    const mockProjectId = 'projectId123';
 
     jest
-      .spyOn(service, "getNoticeBoardDetailsByProjectId")
+      .spyOn(service, 'getNoticeBoardDetailsByProjectId')
       .mockImplementation(() => {
-        throw new Error("Internal server error");
+        throw new Error('Internal server error');
       });
 
     await expect(
@@ -1127,22 +1144,22 @@ describe("JobConfigController", () => {
     );
   });
 
-  describe("getConfigurationsByProjectId", () => {
-    it("should return configurations by project ID", async () => {
-      const projectId = "project123";
+  describe('getConfigurationsByProjectId', () => {
+    it('should return configurations by project ID', async () => {
+      const projectId = 'project123';
       const mockConfigurations = {
         fileServers: [
-          { id: "fs1", name: "FileServer1" },
-          { id: "fs2", name: "FileServer2" },
+          { id: 'fs1', name: 'FileServer1' },
+          { id: 'fs2', name: 'FileServer2' },
         ],
         volumes: [
-          { id: "vol1", path: "/path1" },
-          { id: "vol2", path: "/path2" },
+          { id: 'vol1', path: '/path1' },
+          { id: 'vol2', path: '/path2' },
         ],
       };
 
       jest
-        .spyOn(service, "getConfigsByProjectId")
+        .spyOn(service, 'getConfigsByProjectId')
         .mockResolvedValue(mockConfigurations as any);
 
       const result = await controller.getConfigurationsByProjectId(projectId);
@@ -1248,7 +1265,8 @@ describe("JobConfigController", () => {
         mockInventoryStatsResponse,
       );
 
-      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
+      const result =
+        await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(mockInventoryStatsResponse);
       expect(service.getJobConfigInventoryStats).toHaveBeenCalledWith(
@@ -1366,7 +1384,8 @@ describe("JobConfigController", () => {
         cachedStats,
       );
 
-      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
+      const result =
+        await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(cachedStats);
       expect(result.totalUniqueFiles).toBe(200);
@@ -1390,7 +1409,8 @@ describe("JobConfigController", () => {
         recalculatedStats,
       );
 
-      const result = await controller.getJobConfigInventoryStats(validJobConfigId);
+      const result =
+        await controller.getJobConfigInventoryStats(validJobConfigId);
 
       expect(result).toEqual(recalculatedStats);
       expect(result.totalUniqueFiles).toBe(300);
@@ -1411,7 +1431,9 @@ describe("JobConfigController", () => {
         HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        error202,
+      );
 
       await expect(
         controller.getJobConfigInventoryStats(validJobConfigId),
@@ -1444,7 +1466,9 @@ describe("JobConfigController", () => {
         HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        error202,
+      );
 
       await expect(
         controller.getJobConfigInventoryStats(validJobConfigId, false),
@@ -1501,7 +1525,9 @@ describe("JobConfigController", () => {
         HttpStatus.ACCEPTED,
       );
 
-      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(error202);
+      mockJobConfigService.getJobConfigInventoryStats.mockRejectedValue(
+        error202,
+      );
 
       try {
         await controller.getJobConfigInventoryStats(validJobConfigId);
@@ -1518,39 +1544,48 @@ describe("JobConfigController", () => {
     });
   });
 
-  describe("getDirs", () => {
-    it("should return directories from mount and list listDirectoriesls", async () => {
+  describe('getDirs', () => {
+    it('should return directories from mount and list listDirectoriesls', async () => {
       const request: GetDirsDto = {
-        fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        exportPath: "/export",
-        path: "subdir",
-        dir: "",
+        fileServerId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        exportPath: '/export',
+        path: 'subdir',
+        dir: '',
       };
       const mockFileServer = {
-        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        host: "192.168.1.100",
+        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        host: '192.168.1.100',
         protocol: Protocol.NFS,
         userName: undefined,
         password: undefined,
         protocolVersion: undefined,
       };
-      const mockMountDetails = { key: "a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:", mountPath: "/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export" };
-      const mockDirs = [{ name: "dir1" }, { name: "dir2" }];
+      const mockMountDetails = {
+        key: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:',
+        mountPath: '/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export',
+      };
+      const mockDirs = [{ name: 'dir1' }, { name: 'dir2' }];
 
       mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
-      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
-      (mountTrackerService.listDirectoriesls as jest.Mock).mockResolvedValue(mockDirs);
+      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(
+        mockMountDetails,
+      );
+      (mountTrackerService.listDirectoriesls as jest.Mock).mockResolvedValue(
+        mockDirs,
+      );
       (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
 
       const result = await controller.getDirs(request);
 
       expect(result).toEqual(mockDirs);
-      expect(service.getFileServerById).toHaveBeenCalledWith(request.fileServerId);
+      expect(service.getFileServerById).toHaveBeenCalledWith(
+        request.fileServerId,
+      );
       expect(mountTrackerService.ensureMounted).toHaveBeenCalledWith({
         fileServerId: request.fileServerId,
         hostname: mockFileServer.host,
         exportPath: request.exportPath,
-        dir: request.dir || "",
+        dir: request.dir || '',
         protocol: mockFileServer.protocol,
         username: mockFileServer.userName,
         password: mockFileServer.password,
@@ -1558,51 +1593,64 @@ describe("JobConfigController", () => {
       });
       expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
         mountPath: mockMountDetails.mountPath,
-        path: request.path || "",
+        path: request.path || '',
       });
-      expect(mountTrackerService.touch).toHaveBeenCalledWith(mockMountDetails.key);
+      expect(mountTrackerService.touch).toHaveBeenCalledWith(
+        mockMountDetails.key,
+      );
     });
 
-    it("should throw NotFoundException when file server is not found", async () => {
+    it('should throw NotFoundException when file server is not found', async () => {
       const request: GetDirsDto = {
-        fileServerId: "00000000-0000-0000-0000-000000000000",
-        exportPath: "/export",
+        fileServerId: '00000000-0000-0000-0000-000000000000',
+        exportPath: '/export',
       };
 
       mockJobConfigService.getFileServerById.mockResolvedValue(null);
 
-      await expect(controller.getDirs(request)).rejects.toThrow(NotFoundException);
-      expect(service.getFileServerById).toHaveBeenCalledWith(request.fileServerId);
+      await expect(controller.getDirs(request)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(service.getFileServerById).toHaveBeenCalledWith(
+        request.fileServerId,
+      );
       expect(mountTrackerService.ensureMounted).not.toHaveBeenCalled();
     });
-    it("should propagate error when listDirectoriesls fails with Internal Server Error", async () => {
+    it('should propagate error when listDirectoriesls fails with Internal Server Error', async () => {
       const request: GetDirsDto = {
-        fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        exportPath: "/export",
-        path: "subdir",
-        dir: "",
+        fileServerId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        exportPath: '/export',
+        path: 'subdir',
+        dir: '',
       };
       const mockFileServer = {
-        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        host: "192.168.1.100",
+        id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        host: '192.168.1.100',
         protocol: Protocol.NFS,
         userName: undefined,
         password: undefined,
         protocolVersion: undefined,
       };
-      const mockMountDetails = { key: "a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:", mountPath: "/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export" };
+      const mockMountDetails = {
+        key: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890:/export:',
+        mountPath: '/mnt/a1b2c3d4-e5f6-7890-abcd-ef1234567890/export',
+      };
 
       mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
-      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
+      (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(
+        mockMountDetails,
+      );
       (mountTrackerService.listDirectoriesls as jest.Mock).mockRejectedValue(
-        new InternalServerErrorException("Internal Server Error"),
+        new InternalServerErrorException('Internal Server Error'),
       );
       (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
 
-      await expect(controller.getDirs(request)).rejects.toThrow(InternalServerErrorException);
+      await expect(controller.getDirs(request)).rejects.toThrow(
+        InternalServerErrorException,
+      );
       expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
         mountPath: mockMountDetails.mountPath,
-        path: request.path || "",
+        path: request.path || '',
       });
     });
   });

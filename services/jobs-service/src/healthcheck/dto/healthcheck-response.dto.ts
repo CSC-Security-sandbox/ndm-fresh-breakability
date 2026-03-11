@@ -1,10 +1,10 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 export class HealthCheckResponse {
-  @ApiProperty({ description: "HTTP status code of the response" })
+  @ApiProperty({ description: 'HTTP status code of the response' })
   statusCode: number;
 
   @ApiProperty({
-    description: "Error details (if any)",
+    description: 'Error details (if any)',
     required: false,
     nullable: true,
   })

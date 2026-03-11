@@ -1,78 +1,78 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsUUID,
   IsString,
   IsNumber,
   IsOptional,
   IsDateString,
-} from "class-validator";
-import { JobRunStatus } from "src/constants/enums";
-import { JobRunStats } from "./jobstats";
+} from 'class-validator';
+import { JobRunStatus } from 'src/constants/enums';
+import { JobRunStats } from './jobstats';
 
 export class JobRunDto {
-  @ApiProperty({ description: "UUID of the job run" })
+  @ApiProperty({ description: 'UUID of the job run' })
   @IsUUID()
   id: string;
 
-  @ApiProperty({ description: "Job run status" })
+  @ApiProperty({ description: 'Job run status' })
   @IsString()
   status: JobRunStatus;
 
-  @ApiProperty({ description: "Start time of the job" })
+  @ApiProperty({ description: 'Start time of the job' })
   @IsDateString()
   startTime: Date;
 
-  @ApiPropertyOptional({ description: "End time of the job" })
+  @ApiPropertyOptional({ description: 'End time of the job' })
   @IsDateString()
   @IsOptional()
   endTime: Date;
 
-  @ApiProperty({ description: "Iteration number of the job" })
+  @ApiProperty({ description: 'Iteration number of the job' })
   @IsNumber()
   iterationNumber: number;
 
-  @ApiProperty({ description: "Job Config ID associated with this run" })
+  @ApiProperty({ description: 'Job Config ID associated with this run' })
   @IsUUID()
   jobConfigId: string;
 }
 
 export class JobRunFilterDto {
   @ApiPropertyOptional({
-    description: "Filter by Job Config ID",
-    example: "1234",
+    description: 'Filter by Job Config ID',
+    example: '1234',
   })
   @IsOptional()
   @IsUUID()
   jobConfigId?: string;
 
-  @ApiPropertyOptional({ description: "Filter by Project ID", example: "1234" })
+  @ApiPropertyOptional({ description: 'Filter by Project ID', example: '1234' })
   @IsOptional()
   @IsUUID()
   projectId?: string;
 
-  @ApiPropertyOptional({ description: "Filter by status", example: "running" })
+  @ApiPropertyOptional({ description: 'Filter by status', example: 'running' })
   @IsOptional()
   @IsString()
   status?: JobRunStatus;
 
   @ApiPropertyOptional({
-    description: "Filter by start time",
-    example: "2024-11-13T12:00:00Z",
+    description: 'Filter by start time',
+    example: '2024-11-13T12:00:00Z',
   })
   @IsOptional()
   @IsDateString()
   startTime?: string;
 
   @ApiPropertyOptional({
-    description: "Filter by end time",
-    example: "2024-11-14T12:00:00Z",
+    description: 'Filter by end time',
+    example: '2024-11-14T12:00:00Z',
   })
   @IsOptional()
   @IsDateString()
   endTime?: string;
 
   @ApiPropertyOptional({
-    description: "Filter by iteration number",
+    description: 'Filter by iteration number',
     example: 1,
   })
   @IsOptional()
@@ -98,7 +98,7 @@ export interface JobRunsDTO {
   totalScannedSize: string;
   errors: any[];
   totalMigratedSize: string;
-  isReportReady:boolean;
+  isReportReady: boolean;
 }
 
 export interface ServerDetailsDTO {
@@ -124,7 +124,7 @@ export interface JobRunDetailsDTO {
   totalScannedSize: string;
   errors: any[];
   tasks: TaskDTO[];
-  totalMigratedSize: string
+  totalMigratedSize: string;
 }
 export interface TaskDTO {
   taskId: string;

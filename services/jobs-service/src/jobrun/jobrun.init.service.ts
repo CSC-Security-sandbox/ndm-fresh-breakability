@@ -1,55 +1,53 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   FileServerDetails,
   JobConfig,
   JobContextFactory,
   NFS,
   SMB,
-  SpeedTestJobConfig
-} from "@netapp-cloud-datamigrate/jobs-lib";
+  SpeedTestJobConfig,
+} from '@netapp-cloud-datamigrate/jobs-lib';
 import {
   IdentityTypes,
-  JobStatus as JobContextStatus
-} from "@netapp-cloud-datamigrate/jobs-lib/dist/types/enums";
-import { JobState } from "@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state";
-import axios from "axios";
+  JobStatus as JobContextStatus,
+} from '@netapp-cloud-datamigrate/jobs-lib/dist/types/enums';
+import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
+import axios from 'axios';
 import {
   JobRunStatus,
   JobRunType,
   JobStatus,
   JobType,
   Protocol,
-  WorkFlows
-} from "src/constants/enums";
-import { ScheduleStatus } from "src/constants/status";
-import { Options } from "src/constants/types";
-import { JobConfigEntity } from "src/entities/jobconfig.entity";
-import {
-  SpeedTestConfigEntity
-} from "src/entities/speed-test-job-config.entity";
+  WorkFlows,
+} from 'src/constants/enums';
+import { ScheduleStatus } from 'src/constants/status';
+import { Options } from 'src/constants/types';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { SpeedTestConfigEntity } from 'src/entities/speed-test-job-config.entity';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
-import { FileServerEntity } from "src/entities/fileserver.entity";
-import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping-cross.entity";
-import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
-import { JobOptionsEntity } from "src/entities/joboptions.entity";
-import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
-import { RedisService } from "src/redis/redis.service";
-import { filterUnhealthyWorkers } from "src/utils/worker-filter";
-import { WorkflowService } from "src/workflow/workflow.service";
-import { StartWorkFlowPayload } from "src/workflow/workflow.types";
-import { Readable } from "stream";
-import { In, LessThan, Repository } from "typeorm";
-import { v4 as uuid4 } from "uuid";
-import { JobRunEntity } from "../entities/jobrun.entity";
-import { JobRunConfig } from "./jobrun.types";
-import { getWorkflowId } from "./jobrun.util";
+import { FileServerEntity } from 'src/entities/fileserver.entity';
+import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
+import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { JobOptionsEntity } from 'src/entities/joboptions.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { MigrationConflictService } from 'src/migration-conflict/migration-conflict.service';
+import { RedisService } from 'src/redis/redis.service';
+import { filterUnhealthyWorkers } from 'src/utils/worker-filter';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
+import { Readable } from 'stream';
+import { In, LessThan, Repository } from 'typeorm';
+import { v4 as uuid4 } from 'uuid';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunConfig } from './jobrun.types';
+import { getWorkflowId } from './jobrun.util';
 
 @Injectable()
 export class JobRunInitService {
@@ -82,7 +80,7 @@ export class JobRunInitService {
   ) {
     this.logger = loggerFactory.create(JobRunInitService.name);
     this.mountBasePath = this.configService.get<string>(
-      "app.paths.mountBasePath",
+      'app.paths.mountBasePath',
     );
   }
 
@@ -99,17 +97,17 @@ export class JobRunInitService {
         sourcePath: {
           fileServer: {
             config: {
-              projectId: true
-            }
-          }
-        }
+              projectId: true,
+            },
+          },
+        },
       },
       relations: {
         sourcePath: {
           fileServer: {
-            config: true
-          }
-        }
+            config: true,
+          },
+        },
       },
       where: {
         status: JobStatus.Active,
@@ -119,16 +117,17 @@ export class JobRunInitService {
     });
     const scheduledJobs = [];
     for (const job of jobs) {
-      const alreadyExists = await this.migrationConflictService.checkMigrationConflicts({
-        migrateConfigs: [
-          {
-            sourcePathId: job.sourcePathId,
-            sourceDirectoryPath: job.sourceDirectoryPath ?? undefined,
-            destinationDirectoryPath: job.targetDirectoryPath ?? undefined,
-            destinationPathId: job.targetPathId ? [job.targetPathId] : [],
-          },
-        ],
-      });
+      const alreadyExists =
+        await this.migrationConflictService.checkMigrationConflicts({
+          migrateConfigs: [
+            {
+              sourcePathId: job.sourcePathId,
+              sourceDirectoryPath: job.sourceDirectoryPath ?? undefined,
+              destinationDirectoryPath: job.targetDirectoryPath ?? undefined,
+              destinationPathId: job.targetPathId ? [job.targetPathId] : [],
+            },
+          ],
+        });
       if (alreadyExists.length === 0) {
         const projectId = job.sourcePath?.fileServer?.config?.projectId;
         await this.createJobRun(job.id, currentTime, projectId);
@@ -143,10 +142,15 @@ export class JobRunInitService {
   }
 
   // ------------------ Create job run  -------------------- //
-  async createJobRun(jobConfigId: string, currentTime: Date, projectId?: string, jobRunId?: string) {
+  async createJobRun(
+    jobConfigId: string,
+    currentTime: Date,
+    projectId?: string,
+    jobRunId?: string,
+  ) {
     // TODO: job config is fetched from here
     const details: JobRunConfig = await this.getJobConfig(jobConfigId);
-    
+
     // If this is a retry run, set the jobRunId
     if (jobRunId) {
       details.jobRunId = jobRunId;
@@ -156,11 +160,16 @@ export class JobRunInitService {
     const source = details.connection?.sourceCredential;
     const target = details.connection?.targetCredential;
 
-    const isSourceValid = (source?.isValidPath) && (!source?.isDisabled);
+    const isSourceValid = source?.isValidPath && !source?.isDisabled;
     const isTargetValid = !target || (target.isValidPath && !target.isDisabled);
     if (!isSourceValid || !isTargetValid) {
-      await this.jobConfigRepo.update({ id: jobConfigId }, { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED });
-      throw new NotFoundException(`Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`);
+      await this.jobConfigRepo.update(
+        { id: jobConfigId },
+        { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
+      );
+      throw new NotFoundException(
+        `Job Config ${jobConfigId} has invalid source or target path, skipping job run creation.`,
+      );
     }
 
     if (details.workers.length === 0) {
@@ -184,10 +193,12 @@ export class JobRunInitService {
       );
       let identityMappingId: string | null = null;
       if (details.jobType === JobType.MIGRATE) {
-        const activeMapping = await this.identityConfigCrossMappingRepo.findOne({
-          where: { jobConfigId: details.id, isOrphan: false },
-          order: { createdAt: "DESC" },
-        });
+        const activeMapping = await this.identityConfigCrossMappingRepo.findOne(
+          {
+            where: { jobConfigId: details.id, isOrphan: false },
+            order: { createdAt: 'DESC' },
+          },
+        );
         identityMappingId = activeMapping?.identityMappingId || null;
       }
       const options = this.optionRepo.create({
@@ -215,10 +226,16 @@ export class JobRunInitService {
       });
       await this.buildJobContext(jobRun.id, details);
       await this.initiateWorkflow(jobRun.id, details, projectId);
-      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId);
+      jobRun.workFlowId = getWorkflowId(
+        jobRun.id,
+        details.jobType,
+        !!details.jobRunId,
+      );
       return await this.jobRunRepo.save(jobRun);
     } catch (error) {
-      this.logger.error(`Failed to create job run for ${jobConfigId}: ${error.message}`);
+      this.logger.error(
+        `Failed to create job run for ${jobConfigId}: ${error.message}`,
+      );
       await this.jobConfigRepo.update(
         { id: jobConfigId },
         { scheduler: ScheduleStatus.SCHEDULING },
@@ -257,7 +274,7 @@ export class JobRunInitService {
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
           workingDirectory: this.mountBasePath,
-          protocolVersion: "",
+          protocolVersion: '',
         },
       },
       workers: workers,
@@ -269,7 +286,7 @@ export class JobRunInitService {
   // ------------------ Get list of workers -------------------- //
   async getJobConfig(jobConfigId): Promise<JobRunConfig> {
     const healthStatsTimeout = parseInt(
-      this.configService.get("app.worker.healthCheckStatusTimout"),
+      this.configService.get('app.worker.healthCheckStatusTimout'),
     );
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
@@ -284,7 +301,7 @@ export class JobRunInitService {
     const sourceWorkers = jobConfig?.sourcePath?.fileServer?.workers || [];
     const targetWorkers = jobConfig?.targetPath?.fileServer?.workers || [];
     // We always set 'skip delete' to false, as we want the baseline and incremental migrations to mirror the source exactly.
-    const skipDelete : boolean = false
+    const skipDelete: boolean = false;
     const details: JobRunConfig = {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
@@ -307,7 +324,7 @@ export class JobRunInitService {
           protocolVersion:
             jobConfig?.sourcePath?.fileServer?.protocolVersion?.replace(
               /^v/,
-              "",
+              '',
             ),
         },
       },
@@ -337,7 +354,7 @@ export class JobRunInitService {
           if (workerSet.has(worker.workerId)) workers.push(worker.workerId);
         });
 
-      details.connection["targetCredential"] = {
+      details.connection['targetCredential'] = {
         path: jobConfig?.targetPath?.volumePath,
         directoryPath: jobConfig?.targetDirectoryPath,
         pathId: jobConfig?.targetPath?.id,
@@ -349,9 +366,9 @@ export class JobRunInitService {
         host: jobConfig?.targetPath?.fileServer?.host,
         workingDirectory: this.mountBasePath,
         protocolVersion:
-          jobConfig?.targetPath?.fileServer?.protocolVersion?.replace(/^v/, ""),
+          jobConfig?.targetPath?.fileServer?.protocolVersion?.replace(/^v/, ''),
       };
-      details["workers"] = workers;
+      details['workers'] = workers;
       return details;
     }
     return details;
@@ -360,7 +377,7 @@ export class JobRunInitService {
   async getFileServerDetails(jobRunId): Promise<any> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
-      relations: ["jobConfig"],
+      relations: ['jobConfig'],
     });
     if (!jobRun) {
       throw new Error(`JobRun with id ${jobRunId} not found`);
@@ -369,11 +386,11 @@ export class JobRunInitService {
 
     const speedTestJobConfig = await this.SpeedTestConfigRepo.find({
       where: { jobId: jobConfigId },
-      relations: ["workerEntities", "jobConfig"],
+      relations: ['workerEntities', 'jobConfig'],
     });
 
     const fileServers = await this.fileServerRepo.find({
-      relations: ["config", "volumes", "workingDirectory", "workers"],
+      relations: ['config', 'volumes', 'workingDirectory', 'workers'],
     });
 
     const mergedResults = speedTestJobConfig.map((config) => {
@@ -402,22 +419,28 @@ export class JobRunInitService {
     return mergedResults;
   }
   // ------------------ InitiateWorkflow -------------------- //
-  async initiateWorkflow(jobRunId: string, jobRunConfig: JobRunConfig, projectId?: string) {
-
+  async initiateWorkflow(
+    jobRunId: string,
+    jobRunConfig: JobRunConfig,
+    projectId?: string,
+  ) {
     const options = new Options();
-    options.workflowExecutionTimeout = "120s";
-    options.workflowTaskTimeout = "120s";
-    options.workflowRunTimeout = "120s";
+    options.workflowExecutionTimeout = '120s';
+    options.workflowTaskTimeout = '120s';
+    options.workflowRunTimeout = '120s';
 
     // If jobRunId is set in config, this is a retry run - use RetryMigrationWorkflow
     if (jobRunConfig.jobRunId) {
       const startWorkFlowPayload: StartWorkFlowPayload = {
         workflowId: `${WorkFlows.RETRY}-${jobRunId}`,
-        taskQueue: "ParentWorkflow-TaskQueue",
+        taskQueue: 'ParentWorkflow-TaskQueue',
         args: [{ traceId: jobRunId, payload: jobRunConfig, options }],
         options,
       };
-      await this.workFlowService.startWorkflow(WorkFlows.RETRY, startWorkFlowPayload);
+      await this.workFlowService.startWorkflow(
+        WorkFlows.RETRY,
+        startWorkFlowPayload,
+      );
       await this.startStreamConsumer(jobRunId, projectId);
       return;
     }
@@ -425,8 +448,8 @@ export class JobRunInitService {
     switch (jobRunConfig.jobType) {
       case JobType.DISCOVER: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: WorkFlows.DISCOVERY + "-" + jobRunId,
-          taskQueue: "ParentWorkflow-TaskQueue",
+          workflowId: WorkFlows.DISCOVERY + '-' + jobRunId,
+          taskQueue: 'ParentWorkflow-TaskQueue',
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
           ],
@@ -442,8 +465,8 @@ export class JobRunInitService {
       case JobType.SPEED_TEST: {
         const speedTestJobConfig = await this.getFileServerDetails(jobRunId);
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: WorkFlows.SPEED_TEST + "-" + jobRunId,
-          taskQueue: "ParentWorkflow-TaskQueue",
+          workflowId: WorkFlows.SPEED_TEST + '-' + jobRunId,
+          taskQueue: 'ParentWorkflow-TaskQueue',
           args: [
             {
               traceId: jobRunId,
@@ -463,8 +486,8 @@ export class JobRunInitService {
 
       case JobType.CUT_OVER: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: WorkFlows.CUT_OVER + "-" + jobRunId,
-          taskQueue: "ParentWorkflow-TaskQueue",
+          workflowId: WorkFlows.CUT_OVER + '-' + jobRunId,
+          taskQueue: 'ParentWorkflow-TaskQueue',
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
           ],
@@ -488,7 +511,7 @@ export class JobRunInitService {
       default: {
         const startWorkFlowPayload: StartWorkFlowPayload = {
           workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
-          taskQueue: "ParentWorkflow-TaskQueue",
+          taskQueue: 'ParentWorkflow-TaskQueue',
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
           ],
@@ -508,7 +531,7 @@ export class JobRunInitService {
   async buildSpeedTestJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
-      relations: ["jobConfig"],
+      relations: ['jobConfig'],
     });
     if (!jobRun) {
       throw new Error(`JobRun with id ${jobRunId} not found`);
@@ -523,7 +546,7 @@ export class JobRunInitService {
       [],
     );
     const redisProvider = JobContextFactory.getSpeedTestProvider(
-      "redis",
+      'redis',
       await this.redisService.getClient(),
     );
     const jobContext = await redisProvider.buildContext(
@@ -532,12 +555,11 @@ export class JobRunInitService {
       JobRunStatus.Ready,
       jobState,
     );
-    this.redisService.setJobContext(jobRunId, jobContext);
+    await this.redisService.setJobContext(jobRunId, jobContext);
   }
 
   // ------------------ BuildJobContext -------------------- //
   async buildJobContext(jobRunId: string, jobRunConfig: JobRunConfig) {
-    let sourcefileServerDetails: FileServerDetails;
     let targetfileServerDetails: FileServerDetails;
     const redisClient = await this.redisService.getClient();
     let isIdentityMapping = false;
@@ -568,7 +590,7 @@ export class JobRunInitService {
             credential.protocolVersion,
           );
     };
-    sourcefileServerDetails = createFileServerDetails(sourceCredential);
+    const sourcefileServerDetails = createFileServerDetails(sourceCredential);
 
     if (jobRunConfig.jobType !== JobType.DISCOVER)
       targetfileServerDetails = createFileServerDetails(targetCredential);
@@ -596,28 +618,30 @@ export class JobRunInitService {
             this.push(null);
           },
         });
-        readable.on("data", async (mapping) => {
-          mapping = JSON.parse(mapping);
-          const mapType =
-            mapping.identityType.toLowerCase() === "sid"
-              ? IdentityTypes.SID
-              : mapping.identityType.toLowerCase() === "gid"
-                ? IdentityTypes.GID
-                : IdentityTypes.UID;
+        readable.on('data', (mapping) => {
+          void (async () => {
+            mapping = JSON.parse(mapping);
+            const mapType =
+              mapping.identityType.toLowerCase() === 'sid'
+                ? IdentityTypes.SID
+                : mapping.identityType.toLowerCase() === 'gid'
+                  ? IdentityTypes.GID
+                  : IdentityTypes.UID;
 
-          const redisKey = `${jobRunId}:mapping`;
-          const hashField = `${mapType}:${mapping.sourceMapping}`;
-          const hashValue = mapping.targetMapping;
+            const redisKey = `${jobRunId}:mapping`;
+            const hashField = `${mapType}:${mapping.sourceMapping}`;
+            const hashValue = mapping.targetMapping;
 
-          if (!redisClient.isOpen) await redisClient.connect();
+            if (!redisClient.isOpen) await redisClient.connect();
 
-          await redisClient.hSet(redisKey, hashField, hashValue);
-          this.logger.log(
-            `Stored in Redis: ${redisKey} -> ${hashField}: ${hashValue}`,
-          );
+            await redisClient.hSet(redisKey, hashField, hashValue);
+            this.logger.log(
+              `Stored in Redis: ${redisKey} -> ${hashField}: ${hashValue}`,
+            );
+          })();
         });
-        readable.on("end", () => {
-          this.logger.log("Stream processing completed.");
+        readable.on('end', () => {
+          this.logger.log('Stream processing completed.');
         });
       }
     }
@@ -643,41 +667,43 @@ export class JobRunInitService {
         preservePermissions: jobRunConfig.preservePermissions,
         shouldScanADS: jobRunConfig.shouldScanADS ?? false,
         skipsFilesModifiedInLast: jobRunConfig?.skipFile,
-        excludeOlderThan: !!jobRunConfig.excludeOlderThan
+        excludeOlderThan: jobRunConfig.excludeOlderThan
           ? jobRunConfig.excludeOlderThan.toString()
-          : "",
+          : '',
         isIdentityMappingAvailable: isIdentityMapping,
       },
       jobRunConfig.skipDelete,
-      jobRunConfig.jobRunId,  // Pass retry job run ID if this is a retry
+      jobRunConfig.jobRunId, // Pass retry job run ID if this is a retry
     );
-    const redisProvider = JobContextFactory.getJobManagerProvider("redis", redisClient);
+    const redisProvider = JobContextFactory.getJobManagerProvider(
+      'redis',
+      redisClient,
+    );
     const jobContext = await redisProvider.buildContext(
       jobRunId,
       jobConfig,
       JobRunStatus.Ready,
     );
     await this.redisService.setJobContext(jobRunId, jobContext);
-    this.logger.debug("JobContext Saved to Redis");
+    this.logger.debug('JobContext Saved to Redis');
   }
-
 
   // ------------------ StartStreamConsumer -------------------- //
   async startStreamConsumer(jobRunId: string, projectId?: string) {
-    this.logger.log("Starting Stream Consumer for jobRunId:", jobRunId);
+    this.logger.log('Starting Stream Consumer for jobRunId:', jobRunId);
     try {
       const START_CONSUMER_URL = this.configService.get<string>(
-        "app.paths.startConsumer",
+        'app.paths.startConsumer',
       );
       let response = await axios.post(
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
-        { 
-          headers: { 
-            'projectId': projectId,
-            'trackId': jobRunId,
-          } 
-        }
+        {
+          headers: {
+            projectId: projectId,
+            trackId: jobRunId,
+          },
+        },
       );
 
       let count = 0;
@@ -686,12 +712,12 @@ export class JobRunInitService {
         response = await axios.post(
           `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
           { jobRunId },
-          { 
-            headers: { 
-              'projectId': projectId,
-              'trackId': jobRunId,
-            } 
-          }
+          {
+            headers: {
+              projectId: projectId,
+              trackId: jobRunId,
+            },
+          },
         );
 
         this.logger.log(`Retry attempt ${count + 1} for ${jobRunId}:`, {
@@ -702,14 +728,11 @@ export class JobRunInitService {
 
         count++;
       }
-      this.logger.log(
-          `Redis consumer response for ${jobRunId}:`,
-          {
-            status: response.status,
-            statusText: response.statusText,
-            data: response.data,
-          },
-      );
+      this.logger.log(`Redis consumer response for ${jobRunId}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data,
+      });
       if (response.status !== 200) {
         this.logger.error(
           `Failed to start consumer after retries for ${jobRunId}:`,
@@ -725,12 +748,12 @@ export class JobRunInitService {
       }
 
       const responseData = response.data;
-      
+
       const success = responseData.data?.items?.success || false;
-      
+
       return {
         success: success,
-        message: responseData.message || "Consumer started successfully."
+        message: responseData.message || 'Consumer started successfully.',
       };
     } catch (error) {
       this.logger.error(
@@ -742,5 +765,4 @@ export class JobRunInitService {
       );
     }
   }
-
 }

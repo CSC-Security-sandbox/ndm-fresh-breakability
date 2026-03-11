@@ -31,15 +31,19 @@ export class ErrorRemedyService {
     });
   }
 
-  async getDistinctErrorCodes(jobRunId: string): Promise<{ errorCode: string }[]> {
+  async getDistinctErrorCodes(
+    jobRunId: string,
+  ): Promise<{ errorCode: string }[]> {
     const errorCodes = await this.operationErrorRepository
       .createQueryBuilder('oe')
-      .innerJoin("oe.operation", "o")
-      .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .innerJoin('oe.operation', 'o')
+      .where('o.jobRunId = :jobRunId', { jobRunId })
+      .andWhere('oe.errorType IN (:...errorTypes)', {
+        errorTypes: USER_VISIBLE_ERROR_TYPES,
+      })
       .select('DISTINCT oe.errorCode', 'errorCode')
-      .groupBy("oe.errorType, oe.errorCode")
+      .groupBy('oe.errorType, oe.errorCode')
       .getRawMany();
-    return errorCodes
-  };
+    return errorCodes;
+  }
 }

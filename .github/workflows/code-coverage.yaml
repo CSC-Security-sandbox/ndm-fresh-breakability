@@ -74,6 +74,11 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: npm install
 
+      - name: Lint ${{ matrix.service }}
+        working-directory: services/${{ matrix.service }}
+        if: matrix.service == 'jobs-service'
+        run: npm run lint
+
       - name: Run test cases with code coverage
         working-directory: services/${{ matrix.service }}
         run: npm run test:coverage

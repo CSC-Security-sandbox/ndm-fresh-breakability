@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
 import { MountTrackerService } from './mount-tracker.service';
 import { MountRequest, ListDirsInput } from './jobconfig.types';
 import { FileServerEntity } from '../entities/fileserver.entity';
@@ -43,13 +46,13 @@ jest.mock('dns', () => ({
   ...jest.requireActual('dns'),
   Resolver: jest.fn(),
   promises: {
-    lookup: jest.fn()
-  }
+    lookup: jest.fn(),
+  },
 }));
 
 jest.mock('net', () => ({
   ...jest.requireActual('net'),
-  isIP: jest.fn()
+  isIP: jest.fn(),
 }));
 
 import * as fs from 'fs';
@@ -122,7 +125,10 @@ describe('MountTrackerService', () => {
         MountTrackerService,
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: ConfigService, useValue: configService },
-        { provide: getRepositoryToken(FileServerEntity), useValue: mockFileServerRepository },
+        {
+          provide: getRepositoryToken(FileServerEntity),
+          useValue: mockFileServerRepository,
+        },
       ],
     }).compile();
 
@@ -133,7 +139,7 @@ describe('MountTrackerService', () => {
     (fs.promises.rm as jest.Mock).mockReset().mockResolvedValue(undefined);
     ((global as any).__mockFg as jest.Mock)?.mockReset?.();
     ((global as any).__mockFg as jest.Mock)?.mockResolvedValue?.([]);
-    
+
     // Set up net.isIP mock behavior
     mockIsIP.mockImplementation((input: string) => {
       // Simple IP check for testing
@@ -153,7 +159,8 @@ describe('MountTrackerService', () => {
         '192.168.1.1:/export on /mnt/abc/export type nfs (rw)\n' +
         'other on /var type tmpfs (rw)\n';
       mockExecAsync.mockImplementation((cmd: string) => {
-        if (cmd === 'mount') return Promise.resolve({ stdout: mountStdout, stderr: '' });
+        if (cmd === 'mount')
+          return Promise.resolve({ stdout: mountStdout, stderr: '' });
         return Promise.resolve({ stdout: '', stderr: '' });
       });
 
@@ -181,13 +188,16 @@ describe('MountTrackerService', () => {
       });
       expect(result.mountPath).toBe('/mnt/abc/export');
       expect(result.key).toBe('abc:export:');
-      const mountCalls = mockExecAsync.mock.calls.filter((call: any[]) => call[0] === 'mount');
+      const mountCalls = mockExecAsync.mock.calls.filter(
+        (call: any[]) => call[0] === 'mount',
+      );
       expect(mountCalls).toHaveLength(0);
     });
 
     it('should do nothing when no mounts under /mnt', async () => {
       mockExecAsync.mockResolvedValue({
-        stdout: 'sysfs on /sys type sysfs (rw)\n/dev/sda1 on / type ext4 (rw)\n',
+        stdout:
+          'sysfs on /sys type sysfs (rw)\n/dev/sda1 on / type ext4 (rw)\n',
         stderr: '',
       });
 
@@ -231,7 +241,10 @@ describe('MountTrackerService', () => {
 
     it('should complete when no mounts are tracked', async () => {
       await expect(service.onModuleDestroy()).resolves.toBeUndefined();
-      expect(mockExecAsync).not.toHaveBeenCalledWith('umount', expect.any(Array));
+      expect(mockExecAsync).not.toHaveBeenCalledWith(
+        'umount',
+        expect.any(Array),
+      );
     });
   });
 
@@ -250,7 +263,10 @@ describe('MountTrackerService', () => {
       expect(result.key).toBe('server-123:nfs/share:subdir');
       expect(result.mountedAt).toBeDefined();
       expect(result.lastAccessAt).toBeDefined();
-      expect(fs.promises.mkdir).toHaveBeenCalledWith('/mnt/server-123/nfs/share/subdir', { recursive: true });
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
+        '/mnt/server-123/nfs/share/subdir',
+        { recursive: true },
+      );
     });
 
     it('should mount an SMB share with credentials', async () => {
@@ -271,12 +287,12 @@ describe('MountTrackerService', () => {
           '-o',
           expect.stringMatching(/^credentials=\/.*\.cred,vers=/),
         ]),
-        expect.any(Object)
+        expect.any(Object),
       );
       expect(fs.promises.writeFile).toHaveBeenCalledWith(
         expect.stringMatching(/\.cred$/),
         expect.stringContaining('username=user'),
-        expect.objectContaining({ mode: 0o600 })
+        expect.objectContaining({ mode: 0o600 }),
       );
     });
 
@@ -294,7 +310,7 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('guest')]),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -312,9 +328,11 @@ describe('MountTrackerService', () => {
 
     it('should deduplicate concurrent mount requests for the same key', async () => {
       let resolveMount!: () => void;
-      const mountPromise = new Promise<void>((resolve) => { resolveMount = resolve; });
+      const mountPromise = new Promise<void>((resolve) => {
+        resolveMount = resolve;
+      });
       mockExecAsync.mockImplementation(() =>
-        mountPromise.then(() => ({ stdout: '', stderr: '' }))
+        mountPromise.then(() => ({ stdout: '', stderr: '' })),
       );
 
       const promise1 = service.ensureMounted(nfsRequest);
@@ -328,7 +346,9 @@ describe('MountTrackerService', () => {
     });
 
     it('should throw if mount command fails', async () => {
-      mockExecAsync.mockRejectedValue(new Error('mount.nfs: Connection refused'));
+      mockExecAsync.mockRejectedValue(
+        new Error('mount.nfs: Connection refused'),
+      );
 
       await expect(service.ensureMounted(nfsRequest)).rejects.toThrow(
         'mount.nfs: Connection refused',
@@ -341,7 +361,9 @@ describe('MountTrackerService', () => {
         protocol: 'FTP' as Protocol,
       };
 
-      await expect(service.ensureMounted(badRequest)).rejects.toThrow('Unsupported protocol: FTP');
+      await expect(service.ensureMounted(badRequest)).rejects.toThrow(
+        'Unsupported protocol: FTP',
+      );
     });
 
     it('should throw for invalid path segment (..) in fileServerId', async () => {
@@ -350,7 +372,9 @@ describe('MountTrackerService', () => {
         fileServerId: '..',
       };
 
-      await expect(service.ensureMounted(badRequest)).rejects.toThrow('Invalid path segment');
+      await expect(service.ensureMounted(badRequest)).rejects.toThrow(
+        'Invalid path segment',
+      );
     });
 
     it('should throw for path segment with .. in dir', async () => {
@@ -359,18 +383,26 @@ describe('MountTrackerService', () => {
         dir: '..',
       };
 
-      await expect(service.ensureMounted(badRequest)).rejects.toThrow('Invalid path segment');
+      await expect(service.ensureMounted(badRequest)).rejects.toThrow(
+        'Invalid path segment',
+      );
     });
 
     it('should throw when resolved mount path is outside MOUNT_BASE', async () => {
       const realResolve = path.resolve.bind(path);
-      const pathResolveSpy = jest.spyOn(path, 'resolve').mockImplementation((...args: string[]) => {
-        const arg = args[0];
-        if (typeof arg === 'string' && arg.includes('server-123') && arg.startsWith('/mnt')) {
-          return '/tmp/outside-mount-base';
-        }
-        return realResolve(...args);
-      });
+      const pathResolveSpy = jest
+        .spyOn(path, 'resolve')
+        .mockImplementation((...args: string[]) => {
+          const arg = args[0];
+          if (
+            typeof arg === 'string' &&
+            arg.includes('server-123') &&
+            arg.startsWith('/mnt')
+          ) {
+            return '/tmp/outside-mount-base';
+          }
+          return realResolve(...args);
+        });
       await expect(service.ensureMounted(nfsRequest)).rejects.toThrow(
         'Mount path must stay under /mnt',
       );
@@ -387,33 +419,67 @@ describe('MountTrackerService', () => {
   });
 
   describe('listDirectoriesls (fs.readdir)', () => {
-    const input: ListDirsInput = { mountPath: '/mnt/server-123/nfs/share', path: 'subdir' };
+    const input: ListDirsInput = {
+      mountPath: '/mnt/server-123/nfs/share',
+      path: 'subdir',
+    };
 
     it('should return directory entries', async () => {
       const mockEntries = [
-        { name: 'dir1', isDirectory: () => true, parentPath: '/mnt/server-123/nfs/share/subdir' },
-        { name: 'file1.txt', isDirectory: () => false, parentPath: '/mnt/server-123/nfs/share/subdir' },
-        { name: 'dir2', isDirectory: () => true, parentPath: '/mnt/server-123/nfs/share/subdir' },
+        {
+          name: 'dir1',
+          isDirectory: () => true,
+          parentPath: '/mnt/server-123/nfs/share/subdir',
+        },
+        {
+          name: 'file1.txt',
+          isDirectory: () => false,
+          parentPath: '/mnt/server-123/nfs/share/subdir',
+        },
+        {
+          name: 'dir2',
+          isDirectory: () => true,
+          parentPath: '/mnt/server-123/nfs/share/subdir',
+        },
       ];
       (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
 
       const result = await service.listDirectoriesls(input);
 
       expect(result).toHaveLength(2);
-      expect(result.map(d => d.name)).toEqual(expect.arrayContaining(['dir1', 'dir2']));
-      expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('Found 2 directories'));
+      expect(result.map((d) => d.name)).toEqual(
+        expect.arrayContaining(['dir1', 'dir2']),
+      );
+      expect(loggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('Found 2 directories'),
+      );
     });
 
     it('should list directories after SMB mount when backupuid is 0', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
       const mountResult = await service.ensureMounted(smbRequest);
       expect(mountResult.mountPath).toBe('/mnt/server-456/smb/share');
-      const mountCalls = mockExecAsync.mock.calls.filter((c: unknown[]) => Array.isArray(c[1]) && c[1].some((arg: unknown) => typeof arg === 'string' && arg.includes('backupuid=0')));
+      const mountCalls = mockExecAsync.mock.calls.filter(
+        (c: unknown[]) =>
+          Array.isArray(c[1]) &&
+          c[1].some(
+            (arg: unknown) =>
+              typeof arg === 'string' && arg.includes('backupuid=0'),
+          ),
+      );
       expect(mountCalls.length).toBeGreaterThan(0);
 
       const mockEntries = [
-        { name: 'dir1', isDirectory: () => true, parentPath: mountResult.mountPath },
-        { name: 'dir2', isDirectory: () => true, parentPath: mountResult.mountPath },
+        {
+          name: 'dir1',
+          isDirectory: () => true,
+          parentPath: mountResult.mountPath,
+        },
+        {
+          name: 'dir2',
+          isDirectory: () => true,
+          parentPath: mountResult.mountPath,
+        },
       ];
       (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
 
@@ -423,14 +489,16 @@ describe('MountTrackerService', () => {
       });
 
       expect(listResult).toHaveLength(2);
-      expect(listResult.map(d => d.name)).toEqual(expect.arrayContaining(['dir1', 'dir2']));
-      expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('Found 2 directories'));
+      expect(listResult.map((d) => d.name)).toEqual(
+        expect.arrayContaining(['dir1', 'dir2']),
+      );
+      expect(loggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('Found 2 directories'),
+      );
     });
 
     it('should return empty array when no directories exist', async () => {
-      const mockEntries = [
-        { name: 'file1.txt', isDirectory: () => false },
-      ];
+      const mockEntries = [{ name: 'file1.txt', isDirectory: () => false }];
       (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
 
       const result = await service.listDirectoriesls(input);
@@ -439,16 +507,22 @@ describe('MountTrackerService', () => {
     });
 
     it('should return empty array on ENOENT', async () => {
-      (fs.promises.readdir as jest.Mock).mockRejectedValue(new Error('ENOENT: no such file or directory'));
+      (fs.promises.readdir as jest.Mock).mockRejectedValue(
+        new Error('ENOENT: no such file or directory'),
+      );
 
       const result = await service.listDirectoriesls(input);
 
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith(expect.stringContaining('Directory not found'));
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Directory not found'),
+      );
     });
 
     it('should return empty array on "No such file" error', async () => {
-      (fs.promises.readdir as jest.Mock).mockRejectedValue(new Error('No such file or directory'));
+      (fs.promises.readdir as jest.Mock).mockRejectedValue(
+        new Error('No such file or directory'),
+      );
 
       const result = await service.listDirectoriesls(input);
 
@@ -456,20 +530,29 @@ describe('MountTrackerService', () => {
     });
 
     it('should throw on unexpected errors', async () => {
-      (fs.promises.readdir as jest.Mock).mockRejectedValue(new Error('Permission denied'));
+      (fs.promises.readdir as jest.Mock).mockRejectedValue(
+        new Error('Permission denied'),
+      );
 
-      await expect(service.listDirectoriesls(input)).rejects.toThrow('Permission denied');
-      expect(loggerService.error).toHaveBeenCalledWith(expect.stringContaining('Error listing directories'));
+      await expect(service.listDirectoriesls(input)).rejects.toThrow(
+        'Permission denied',
+      );
+      expect(loggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error listing directories'),
+      );
     });
 
     it('should normalize double slashes in path', async () => {
       (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
 
-      await service.listDirectoriesls({ mountPath: '/mnt/server/', path: '/subdir' });
+      await service.listDirectoriesls({
+        mountPath: '/mnt/server/',
+        path: '/subdir',
+      });
 
       expect(fs.promises.readdir).toHaveBeenCalledWith(
         '/mnt/server/subdir',
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -480,28 +563,32 @@ describe('MountTrackerService', () => {
       });
 
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith('Path traversal rejected in listDirectoriesls');
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        'Path traversal rejected in listDirectoriesls',
+      );
     });
 
     it('should return empty array when normalized path fails second sanitize check', async () => {
       const realNormalize = path.normalize.bind(path);
-      const pathNormalizeSpy = jest.spyOn(path, 'normalize').mockImplementation((p: string) => {
-        if (p === 'x' || p.includes('x')) return '..';
-        return realNormalize(p);
-      });
+      const pathNormalizeSpy = jest
+        .spyOn(path, 'normalize')
+        .mockImplementation((p: string) => {
+          if (p === 'x' || p.includes('x')) return '..';
+          return realNormalize(p);
+        });
       const result = await service.listDirectoriesls({
         mountPath: '/mnt/base',
         path: 'x',
       });
       pathNormalizeSpy.mockRestore();
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith('Path traversal rejected in listDirectoriesls');
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        'Path traversal rejected in listDirectoriesls',
+      );
     });
 
     it('should return directory names from Dirent.name (no parentPath/path)', async () => {
-      const mockEntries = [
-        { name: 'dir1', isDirectory: () => true },
-      ];
+      const mockEntries = [{ name: 'dir1', isDirectory: () => true }];
       (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
 
       const result = await service.listDirectoriesls(input);
@@ -512,20 +599,24 @@ describe('MountTrackerService', () => {
 
     it('should return empty array when resolved path is outside base (in-function guard)', async () => {
       const realResolve = path.resolve.bind(path);
-      const pathResolveSpy = jest.spyOn(path, 'resolve').mockImplementation((...args: string[]) => {
-        const resolved = realResolve(...args);
-        if (resolved.includes('subdir') && args.length === 1) {
-          return '/tmp/outside-path';
-        }
-        return resolved;
-      });
+      const pathResolveSpy = jest
+        .spyOn(path, 'resolve')
+        .mockImplementation((...args: string[]) => {
+          const resolved = realResolve(...args);
+          if (resolved.includes('subdir') && args.length === 1) {
+            return '/tmp/outside-path';
+          }
+          return resolved;
+        });
       const result = await service.listDirectoriesls({
         mountPath: '/mnt/server-123/nfs/share',
         path: 'subdir',
       });
       pathResolveSpy.mockRestore();
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith('Path traversal rejected in listDirectoriesls');
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        'Path traversal rejected in listDirectoriesls',
+      );
     });
   });
 
@@ -539,7 +630,9 @@ describe('MountTrackerService', () => {
       });
 
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith('Path traversal rejected in listDirectoriesFastGlob');
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        'Path traversal rejected in listDirectoriesFastGlob',
+      );
     });
 
     it('should return directory names from fast-glob entries', async () => {
@@ -554,11 +647,13 @@ describe('MountTrackerService', () => {
       });
 
       expect(result).toHaveLength(2);
-      expect(result.map(d => d.name).sort()).toEqual(['d1', 'd2']);
+      expect(result.map((d) => d.name).sort()).toEqual(['d1', 'd2']);
     });
 
     it('should return empty array on ENOENT', async () => {
-      getMockFg().mockRejectedValue(new Error('ENOENT: no such file or directory'));
+      getMockFg().mockRejectedValue(
+        new Error('ENOENT: no such file or directory'),
+      );
 
       const result = await service.listDirectoriesFastGlob({
         mountPath: '/mnt/server-123/nfs/share',
@@ -566,35 +661,46 @@ describe('MountTrackerService', () => {
       });
 
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith(expect.stringContaining('Directory not found'));
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Directory not found'),
+      );
     });
 
     it('should throw on unexpected errors', async () => {
       getMockFg().mockRejectedValue(new Error('Unexpected glob error'));
 
       await expect(
-        service.listDirectoriesFastGlob({ mountPath: '/mnt/server-123/nfs/share', path: 'subdir' }),
+        service.listDirectoriesFastGlob({
+          mountPath: '/mnt/server-123/nfs/share',
+          path: 'subdir',
+        }),
       ).rejects.toThrow('Unexpected glob error');
-      expect(loggerService.error).toHaveBeenCalledWith(expect.stringContaining('Error listing directories'));
+      expect(loggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error listing directories'),
+      );
     });
 
     it('should return empty array when fullPath is outside base (in-function guard)', async () => {
       const realResolve = path.resolve.bind(path);
       let callCount = 0;
-      const pathResolveSpy = jest.spyOn(path, 'resolve').mockImplementation((...args: string[]) => {
-        callCount += 1;
-        if (callCount === 2 && args[0]?.includes('subdir')) {
-          return '/tmp/outside-fastglob';
-        }
-        return realResolve(...args);
-      });
+      const pathResolveSpy = jest
+        .spyOn(path, 'resolve')
+        .mockImplementation((...args: string[]) => {
+          callCount += 1;
+          if (callCount === 2 && args[0]?.includes('subdir')) {
+            return '/tmp/outside-fastglob';
+          }
+          return realResolve(...args);
+        });
       const result = await service.listDirectoriesFastGlob({
         mountPath: '/mnt/server-123/nfs/share',
         path: 'subdir',
       });
       pathResolveSpy.mockRestore();
       expect(result).toEqual([]);
-      expect(loggerService.warn).toHaveBeenCalledWith('Path traversal rejected in listDirectoriesFastGlob');
+      expect(loggerService.warn).toHaveBeenCalledWith(
+        'Path traversal rejected in listDirectoriesFastGlob',
+      );
     });
   });
 
@@ -625,8 +731,15 @@ describe('MountTrackerService', () => {
 
       await service.unmount(mounted.key);
 
-      expect(mockExecAsync).toHaveBeenCalledWith('umount', [mounted.mountPath], expect.objectContaining({ timeout: 30000 }));
-      expect(fs.promises.rm).toHaveBeenCalledWith(mounted.mountPath, { recursive: true, force: true });
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'umount',
+        [mounted.mountPath],
+        expect.objectContaining({ timeout: 30000 }),
+      );
+      expect(fs.promises.rm).toHaveBeenCalledWith(mounted.mountPath, {
+        recursive: true,
+        force: true,
+      });
     });
 
     it('should do nothing for a non-existent key', async () => {
@@ -658,7 +771,7 @@ describe('MountTrackerService', () => {
       await service.unmountAll();
 
       const umountCalls = mockExecAsync.mock.calls.filter(
-        (call: any[]) => call[0] === 'umount' && Array.isArray(call[1])
+        (call: any[]) => call[0] === 'umount' && Array.isArray(call[1]),
       );
       expect(umountCalls).toHaveLength(2);
     });
@@ -684,7 +797,11 @@ describe('MountTrackerService', () => {
       // Wait for the async unmountIfIdle chain to resolve
       await unmountIfIdleSpy.mock.results[0]?.value;
 
-      expect(mockExecAsync).toHaveBeenCalledWith('umount', expect.any(Array), expect.objectContaining({ timeout: 30000 }));
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'umount',
+        expect.any(Array),
+        expect.objectContaining({ timeout: 30000 }),
+      );
 
       unmountIfIdleSpy.mockRestore();
     });
@@ -707,7 +824,7 @@ describe('MountTrackerService', () => {
       await unmountIfIdleSpy.mock.results[0]?.value;
 
       const umountCalls = mockExecAsync.mock.calls.filter(
-        (call: any[]) => call[0] === 'umount' && Array.isArray(call[1])
+        (call: any[]) => call[0] === 'umount' && Array.isArray(call[1]),
       );
       expect(umountCalls).toHaveLength(0);
 
@@ -732,7 +849,9 @@ describe('MountTrackerService', () => {
 
       await unmountIfIdleSpy.mock.results[0]?.value;
 
-      expect(loggerService.error).toHaveBeenCalledWith(expect.stringContaining('Failed to unmount'));
+      expect(loggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to unmount'),
+      );
       unmountIfIdleSpy.mockRestore();
     });
 
@@ -744,13 +863,18 @@ describe('MountTrackerService', () => {
 
       await (service as any).unmountIfIdle(mounted.key);
 
-      expect(mockExecAsync).not.toHaveBeenCalledWith('umount', expect.any(Array));
+      expect(mockExecAsync).not.toHaveBeenCalledWith(
+        'umount',
+        expect.any(Array),
+      );
     });
   });
 
   describe('ensureMounted – mount timeout handling', () => {
     it('should throw HttpException on ETIMEDOUT error', async () => {
-      const etimedoutErr = new Error('connect ETIMEDOUT') as NodeJS.ErrnoException;
+      const etimedoutErr = new Error(
+        'connect ETIMEDOUT',
+      ) as NodeJS.ErrnoException;
       etimedoutErr.code = 'ETIMEDOUT';
       mockExecAsync.mockRejectedValue(etimedoutErr);
 
@@ -780,34 +904,47 @@ describe('MountTrackerService', () => {
     it('should wrap non-Error throw from mount as string', async () => {
       mockExecAsync.mockRejectedValue('raw string error');
 
-      await expect(service.ensureMounted(nfsRequest)).rejects.toThrow(/Mount failed for/);
+      await expect(service.ensureMounted(nfsRequest)).rejects.toThrow(
+        /Mount failed for/,
+      );
     });
 
     it('should wrap null/undefined throw from mount as "Mount failed"', async () => {
       mockExecAsync.mockRejectedValue(null);
 
-      await expect(service.ensureMounted(nfsRequest)).rejects.toThrow('Mount failed');
+      await expect(service.ensureMounted(nfsRequest)).rejects.toThrow(
+        'Mount failed',
+      );
     });
 
     it('should clean up SMB credentials file even when mount fails', async () => {
       mockExecAsync.mockRejectedValue(new Error('mount failed'));
 
-      await expect(service.ensureMounted(smbRequest)).rejects.toThrow(/Mount failed for/);
+      await expect(service.ensureMounted(smbRequest)).rejects.toThrow(
+        /Mount failed for/,
+      );
 
-      expect(fs.promises.unlink).toHaveBeenCalledWith(expect.stringMatching(/\.cred$/));
+      expect(fs.promises.unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/\.cred$/),
+      );
     });
   });
 
   describe('onModuleInit – edge cases', () => {
     it('should initialize map when mount list has one entry (no umount or rm on init)', async () => {
-      const mountStdout = '192.168.1.1:/export on /mnt/abc/export type nfs (rw)\n';
+      const mountStdout =
+        '192.168.1.1:/export on /mnt/abc/export type nfs (rw)\n';
       mockExecAsync.mockImplementation((cmd: string) => {
-        if (cmd === 'mount') return Promise.resolve({ stdout: mountStdout, stderr: '' });
+        if (cmd === 'mount')
+          return Promise.resolve({ stdout: mountStdout, stderr: '' });
         return Promise.resolve({ stdout: '', stderr: '' });
       });
 
       await expect(service.onModuleInit()).resolves.toBeUndefined();
-      expect(mockExecAsync).not.toHaveBeenCalledWith('umount', expect.any(Array));
+      expect(mockExecAsync).not.toHaveBeenCalledWith(
+        'umount',
+        expect.any(Array),
+      );
       expect(fs.promises.rm).not.toHaveBeenCalled();
     });
 
@@ -829,7 +966,9 @@ describe('MountTrackerService', () => {
         exportPath: '/../escape',
       };
 
-      await expect(service.ensureMounted(badRequest)).rejects.toThrow('Invalid path segment');
+      await expect(service.ensureMounted(badRequest)).rejects.toThrow(
+        'Invalid path segment',
+      );
     });
   });
 
@@ -872,7 +1011,10 @@ describe('MountTrackerService', () => {
       getMockFg().mockRejectedValue('string error from fg');
 
       await expect(
-        service.listDirectoriesFastGlob({ mountPath: '/mnt/server-123/nfs/share', path: 'subdir' }),
+        service.listDirectoriesFastGlob({
+          mountPath: '/mnt/server-123/nfs/share',
+          path: 'subdir',
+        }),
       ).rejects.toBe('string error from fg');
     });
   });
@@ -885,8 +1027,15 @@ describe('MountTrackerService', () => {
 
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
-        ['-t', 'nfs', '-o', 'nolock', '192.168.1.100:/nfs/share', '/mnt/server-123/nfs/share/subdir'],
-        expect.any(Object)
+        [
+          '-t',
+          'nfs',
+          '-o',
+          'nolock',
+          '192.168.1.100:/nfs/share',
+          '/mnt/server-123/nfs/share/subdir',
+        ],
+        expect.any(Object),
       );
     });
 
@@ -903,7 +1052,7 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining(['-o', expect.stringContaining('vers=2.1')]),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -920,7 +1069,7 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining(['-o', expect.stringContaining('vers=3.0')]),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -937,8 +1086,10 @@ describe('MountTrackerService', () => {
 
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
-        expect.arrayContaining([expect.stringMatching(/^\/\/192\.168\.1\.200\/smb\/share/)]),
-        expect.any(Object)
+        expect.arrayContaining([
+          expect.stringMatching(/^\/\/192\.168\.1\.200\/smb\/share/),
+        ]),
+        expect.any(Object),
       );
     });
   });
@@ -950,9 +1101,10 @@ describe('MountTrackerService', () => {
       mockFileServerRepository = {
         findOne: jest.fn().mockResolvedValue(null),
       };
-      
+
       // Replace the existing mock with our new one
-      const module = (service as any).fileServerRepository = mockFileServerRepository;
+      const module = ((service as any).fileServerRepository =
+        mockFileServerRepository);
     });
 
     it('should use hostname directly when it is already an IP address', async () => {
@@ -969,17 +1121,19 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.100/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      expect(loggerService.log).toHaveBeenCalledWith(expect.stringContaining('is already an IP address'));
+      expect(loggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('is already an IP address'),
+      );
     });
 
     it('should use custom DNS servers from FileServer configuration', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10,192.168.1.11'
+        dnsServer: '192.168.1.10,192.168.1.11',
       });
 
       // Mock DNS resolution
@@ -987,9 +1141,9 @@ describe('MountTrackerService', () => {
         resolve4: jest.fn((hostname, callback) => {
           callback(null, ['10.0.0.200']);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
@@ -1004,20 +1158,23 @@ describe('MountTrackerService', () => {
 
       expect(mockFileServerRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'test-server' },
-        select: ['dnsServer']
+        select: ['dnsServer'],
       });
-      expect(dnsMock.setServers).toHaveBeenCalledWith(['192.168.1.10', '192.168.1.11']);
-      
+      expect(dnsMock.setServers).toHaveBeenCalledWith([
+        '192.168.1.10',
+        '192.168.1.11',
+      ]);
+
       // Restore original
       require('dns').Resolver = originalResolver;
     });
 
     it('should fallback to system DNS when custom DNS fails', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer : '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       // Mock DNS resolution - custom fails, system succeeds
@@ -1025,16 +1182,18 @@ describe('MountTrackerService', () => {
         resolve4: jest.fn((hostname, callback) => {
           callback(new Error('Custom DNS failed'), null);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
 
       // Mock system DNS to succeed
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.201' });
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockResolvedValue({ address: '10.0.0.201' });
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1047,9 +1206,9 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.201/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore originals
       require('dns').Resolver = originalResolver;
       require('dns').promises.lookup = originalLookup;
@@ -1057,10 +1216,10 @@ describe('MountTrackerService', () => {
 
     it('should try FQDN resolution for short hostnames when custom DNS fails', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       let callCount = 0;
@@ -1070,16 +1229,19 @@ describe('MountTrackerService', () => {
           if (callCount === 1 && hostname === 'shortname') {
             // First call (shortname) fails
             callback(new Error('Not found'), null);
-          } else if (callCount === 2 && hostname === 'shortname.rootdomain.local') {
+          } else if (
+            callCount === 2 &&
+            hostname === 'shortname.rootdomain.local'
+          ) {
             // Second call (FQDN) succeeds
             callback(null, ['10.0.0.202']);
           } else {
             callback(new Error('Unexpected call'), null);
           }
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
@@ -1092,24 +1254,30 @@ describe('MountTrackerService', () => {
 
       await service.ensureMounted(hostnameRequest);
 
-      expect(dnsMock.resolve4).toHaveBeenCalledWith('shortname', expect.any(Function));
-      expect(dnsMock.resolve4).toHaveBeenCalledWith('shortname.rootdomain.local', expect.any(Function));
+      expect(dnsMock.resolve4).toHaveBeenCalledWith(
+        'shortname',
+        expect.any(Function),
+      );
+      expect(dnsMock.resolve4).toHaveBeenCalledWith(
+        'shortname.rootdomain.local',
+        expect.any(Function),
+      );
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.202/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore original
       require('dns').Resolver = originalResolver;
     });
 
     it('should fallback to original hostname when all DNS strategies fail', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       // Mock DNS resolution to always fail
@@ -1117,16 +1285,18 @@ describe('MountTrackerService', () => {
         resolve4: jest.fn((hostname, callback) => {
           callback(new Error('DNS failed'), null);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
 
       // Mock system DNS to also fail
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockRejectedValue(new Error('System DNS failed'));
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1139,12 +1309,14 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//failhost/')]), // Should use original hostname
-        expect.any(Object)
+        expect.any(Object),
       );
       expect(loggerService.warn).toHaveBeenCalledWith(
-        expect.stringContaining('All DNS resolution strategies failed for failhost')
+        expect.stringContaining(
+          'All DNS resolution strategies failed for failhost',
+        ),
       );
-      
+
       // Restore originals
       require('dns').Resolver = originalResolver;
       require('dns').promises.lookup = originalLookup;
@@ -1152,13 +1324,17 @@ describe('MountTrackerService', () => {
 
     it('should handle FileServer repository errors gracefully', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer repository to throw error
-      mockFileServerRepository.findOne.mockRejectedValue(new Error('Database error'));
+      mockFileServerRepository.findOne.mockRejectedValue(
+        new Error('Database error'),
+      );
 
       // Mock system DNS to succeed
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.203' });
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockResolvedValue({ address: '10.0.0.203' });
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1169,29 +1345,33 @@ describe('MountTrackerService', () => {
       await service.ensureMounted(hostnameRequest);
 
       expect(loggerService.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to get DNS servers from FileServer error-server')
+        expect.stringContaining(
+          'Failed to get DNS servers from FileServer error-server',
+        ),
       );
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.203/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore original
       require('dns').promises.lookup = originalLookup;
     });
 
     it('should handle empty DNS servers configuration', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with empty dnsServer
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: ''
+        dnsServer: '',
       });
 
       // Mock system DNS to succeed
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.204' });
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockResolvedValue({ address: '10.0.0.204' });
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1204,19 +1384,19 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.204/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore original
       require('dns').promises.lookup = originalLookup;
     });
 
     it('should use cached resolved IP for subsequent mounts with same key', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with DNS servers to trigger resolution logic
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       // Mock DNS resolution to track how many times it's called
@@ -1224,9 +1404,9 @@ describe('MountTrackerService', () => {
         resolve4: jest.fn((hostname, callback) => {
           callback(null, ['10.0.0.205']);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
@@ -1239,33 +1419,38 @@ describe('MountTrackerService', () => {
 
       // First mount - should resolve DNS and mount
       const result1 = await service.ensureMounted(hostnameRequest);
-      
+
       // Verify DNS resolution happened
       expect(dnsMock.resolve4).toHaveBeenCalledTimes(1);
       expect(result1.key).toBe('cache-test:smb/share:');
-      
+
       // Clear the DNS mock call count but don't unmount
       dnsMock.resolve4.mockClear();
-      
+
       // Call resolveHostToIp directly (simulates what happens during mount creation)
       // This should use the cached IP from the existing mount
-      const resolvedIp = await (service as any).resolveHostToIp('cachetest', '/share', result1.key, 'cache-test');
-      
+      const resolvedIp = await (service as any).resolveHostToIp(
+        'cachetest',
+        '/share',
+        result1.key,
+        'cache-test',
+      );
+
       expect(resolvedIp).toBe('10.0.0.205');
-      
+
       // Should not perform DNS resolution again (IP was cached in the mount record)
       expect(dnsMock.resolve4).not.toHaveBeenCalled();
-      
+
       // Restore original
       require('dns').Resolver = originalResolver;
     });
 
     it('should cache IP in existing mount record during resolution', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       // Mock DNS resolution
@@ -1273,9 +1458,9 @@ describe('MountTrackerService', () => {
         resolve4: jest.fn((hostname, callback) => {
           callback(null, ['10.0.0.206']);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
@@ -1288,26 +1473,26 @@ describe('MountTrackerService', () => {
 
       // First mount - creates mount record with resolved IP
       const result = await service.ensureMounted(hostnameRequest);
-      
+
       // Verify the mount record has the resolved IP stored
       const mountRecord = (service as any).mounts.get(result.key);
       expect(mountRecord.resolvedIp).toBe('10.0.0.206');
-      
+
       // Verify caching log was written
       expect(loggerService.log).toHaveBeenCalledWith(
-        expect.stringContaining('Using IP 10.0.0.206 for CIFS mount')
+        expect.stringContaining('Using IP 10.0.0.206 for CIFS mount'),
       );
-      
+
       // Restore original
       require('dns').Resolver = originalResolver;
     });
 
     it('should try individual DNS servers when custom resolver fails', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with multiple DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10,192.168.1.11,192.168.1.12'
+        dnsServer: '192.168.1.10,192.168.1.11,192.168.1.12',
       });
 
       let resolveCallCount = 0;
@@ -1324,16 +1509,18 @@ describe('MountTrackerService', () => {
             callback(new Error('Unexpected'), null);
           }
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       });
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => createMockResolver());
       require('dns').Resolver = mockResolver;
 
       // Mock system DNS to fail
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockRejectedValue(new Error('System DNS failed'));
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1346,9 +1533,9 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.206/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore originals
       require('dns').Resolver = originalResolver;
       require('dns').promises.lookup = originalLookup;
@@ -1356,10 +1543,12 @@ describe('MountTrackerService', () => {
 
     it('should handle system DNS usage when no fileServerId provided', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock system DNS to succeed
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockResolvedValue({ address: '10.0.0.207' });
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockResolvedValue({ address: '10.0.0.207' });
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1374,9 +1563,9 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//10.0.0.207/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore original
       require('dns').promises.lookup = originalLookup;
     });
@@ -1409,11 +1598,15 @@ describe('MountTrackerService', () => {
           MountTrackerService,
           { provide: LoggerFactory, useValue: loggerFactory },
           { provide: ConfigService, useValue: disabledConfigService },
-          { provide: getRepositoryToken(FileServerEntity), useValue: mockFileServerRepository },
+          {
+            provide: getRepositoryToken(FileServerEntity),
+            useValue: mockFileServerRepository,
+          },
         ],
       }).compile();
 
-      const disabledService = disabledModule.get<MountTrackerService>(MountTrackerService);
+      const disabledService =
+        disabledModule.get<MountTrackerService>(MountTrackerService);
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
 
       const smbHostnameRequest: MountRequest = {
@@ -1428,19 +1621,19 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//smb-hostname/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Should not attempt to query FileServer repository for DNS servers
       expect(mockFileServerRepository.findOne).not.toHaveBeenCalled();
     });
 
     it('should handle FQDN resolution failure gracefully', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       const dnsMock = {
@@ -1448,16 +1641,18 @@ describe('MountTrackerService', () => {
           // All DNS resolution attempts fail
           callback(new Error('DNS resolution failed'), null);
         }),
-        setServers: jest.fn()
+        setServers: jest.fn(),
       };
-      
+
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => dnsMock);
       require('dns').Resolver = mockResolver;
 
       // Mock system DNS to also fail
       const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest.fn().mockRejectedValue(new Error('System DNS failed'));
+      require('dns').promises.lookup = jest
+        .fn()
+        .mockRejectedValue(new Error('System DNS failed'));
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1468,16 +1663,22 @@ describe('MountTrackerService', () => {
       await service.ensureMounted(hostnameRequest);
 
       // Should try both short name and FQDN
-      expect(dnsMock.resolve4).toHaveBeenCalledWith('short', expect.any(Function));
-      expect(dnsMock.resolve4).toHaveBeenCalledWith('short.rootdomain.local', expect.any(Function));
-      
+      expect(dnsMock.resolve4).toHaveBeenCalledWith(
+        'short',
+        expect.any(Function),
+      );
+      expect(dnsMock.resolve4).toHaveBeenCalledWith(
+        'short.rootdomain.local',
+        expect.any(Function),
+      );
+
       // Should fallback to original hostname
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//short/')]),
-        expect.any(Object)
+        expect.any(Object),
       );
-      
+
       // Restore originals
       require('dns').Resolver = originalResolver;
       require('dns').promises.lookup = originalLookup;
@@ -1485,16 +1686,16 @@ describe('MountTrackerService', () => {
 
     it('should handle non-Error objects in DNS resolution', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      
+
       // Mock FileServer with custom DNS servers
       mockFileServerRepository.findOne.mockResolvedValue({
-        dnsServer: '192.168.1.10'
+        dnsServer: '192.168.1.10',
       });
 
       // Mock DNS resolution to throw non-Error object
       const originalResolver = require('dns').Resolver;
       const mockResolver = jest.fn(() => {
-        throw 'string error'; // Non-Error object
+        throw new Error('string error'); // Non-Error object
       });
       require('dns').Resolver = mockResolver;
 
@@ -1509,12 +1710,12 @@ describe('MountTrackerService', () => {
       expect(mockExecAsync).toHaveBeenCalledWith(
         'mount',
         expect.arrayContaining([expect.stringContaining('//errorhost/')]), // Should use original hostname
-        expect.any(Object)
+        expect.any(Object),
       );
       expect(loggerService.warn).toHaveBeenCalledWith(
-        expect.stringContaining('DNS resolution error for errorhost')
+        expect.stringContaining('DNS resolution error for errorhost'),
       );
-      
+
       // Restore original
       require('dns').Resolver = originalResolver;
     });

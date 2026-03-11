@@ -1,10 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { WorkflowService } from './workflow.service';
-import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { Client, Connection, QueryDefinition, SignalDefinition, UpdateDefinition, WorkflowClient, WorkflowExecutionDescription, WorkflowHandleWithFirstExecutionRunId, WorkflowUpdateHandle, WorkflowUpdateOptions } from '@temporalio/client';
+import {
+  LoggerFactory,
+  LoggerService,
+} from '@netapp-cloud-datamigrate/logger-lib';
+import {
+  Client,
+  Connection,
+  QueryDefinition,
+  SignalDefinition,
+  UpdateDefinition,
+  WorkflowClient,
+  WorkflowExecutionDescription,
+  WorkflowHandleWithFirstExecutionRunId,
+  WorkflowUpdateHandle,
+  WorkflowUpdateOptions,
+} from '@temporalio/client';
 import { WorkFlows } from 'src/constants/enums';
-import { SignalWorkFlowPayload, StartWorkFlowPayload, WorkflowExecutionStatus } from './workflow.types';
+import {
+  SignalWorkFlowPayload,
+  StartWorkFlowPayload,
+  WorkflowExecutionStatus,
+} from './workflow.types';
 import { temporal } from '@temporalio/proto';
 
 jest.mock('@temporalio/client');
@@ -38,7 +56,7 @@ describe('WorkflowService', () => {
     mockClient = {
       workflow: {
         start: jest.fn(),
-        getHandle: jest.fn()
+        getHandle: jest.fn(),
       },
     } as unknown as jest.Mocked<Client>;
 
@@ -66,7 +84,9 @@ describe('WorkflowService', () => {
 
       const client = await service['getClient']();
 
-      expect(Connection.connect).toHaveBeenCalledWith({ address: 'localhost:7233' });
+      expect(Connection.connect).toHaveBeenCalledWith({
+        address: 'localhost:7233',
+      });
       expect(client).toBe(mockClient);
     });
 
@@ -85,7 +105,9 @@ describe('WorkflowService', () => {
       (Connection.connect as jest.Mock).mockRejectedValue(error);
 
       await expect(service['getClient']()).rejects.toThrow(error);
-      expect(loggerService.error).toHaveBeenCalledWith(`Failed to connect to Temporal: ${error}`);
+      expect(loggerService.error).toHaveBeenCalledWith(
+        `Failed to connect to Temporal: ${error}`,
+      );
     });
   });
 
@@ -101,11 +123,11 @@ describe('WorkflowService', () => {
         }),
         result: jest.fn().mockResolvedValue(mockResult),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
+
       const result = await service.getWorkFlowRes(workflowId);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
       expect(mockHandle.result).toHaveBeenCalled();
@@ -116,7 +138,7 @@ describe('WorkflowService', () => {
         completed: mockResult,
       });
     });
-  
+
     it('should return pending workflow details if the workflow status is not COMPLETED', async () => {
       const workflowId = 'test-workflow-id';
       const mockPending = [{ childWorkflowId: 'child1' }];
@@ -126,13 +148,13 @@ describe('WorkflowService', () => {
           workflowId,
           raw: { pendingChildren: mockPending },
         }),
-        result: jest.fn()
+        result: jest.fn(),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
+
       const result = await service.getWorkFlowRes(workflowId);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
       expect(mockHandle.result).not.toHaveBeenCalled();
@@ -143,30 +165,32 @@ describe('WorkflowService', () => {
         completed: [],
       });
     });
-  
+
     it('should handle errors gracefully and log them', async () => {
       const workflowId = 'test-workflow-id';
       const error = new Error('Failed to get workflow details');
-  
+
       const mockHandle = {
         describe: jest.fn().mockRejectedValue(error),
         result: jest.fn(),
       };
-  
-      mockClient.workflow.getHandle =  jest.fn().mockReturnValue(mockHandle);
-  
+
+      mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
+
       await expect(service.getWorkFlowRes(workflowId)).rejects.toThrow(error);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
     });
   });
-  
+
   describe('sendSignal', () => {
     it('should call signalWorkflowExecution with correct parameters', async () => {
       const mockClient = {
         workflowService: {
-          signalWorkflowExecution: jest.fn().mockResolvedValue('Signal sent successfully'),
+          signalWorkflowExecution: jest
+            .fn()
+            .mockResolvedValue('Signal sent successfully'),
         },
       };
 
@@ -176,8 +200,9 @@ describe('WorkflowService', () => {
         payload: { key: 'value' },
       };
 
-      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
-
+      jest
+        .spyOn<any, any>(service, 'getClient')
+        .mockResolvedValue(mockClient as any);
 
       const result = await service.sendSignal(mockPayload);
 
@@ -188,7 +213,9 @@ describe('WorkflowService', () => {
     it('should throw an error if signalWorkflowExecution fails', async () => {
       const mockClient = {
         workflowService: {
-          signalWorkflowExecution: jest.fn().mockRejectedValue(new Error('Signal failed')),
+          signalWorkflowExecution: jest
+            .fn()
+            .mockRejectedValue(new Error('Signal failed')),
         },
       };
 
@@ -198,9 +225,13 @@ describe('WorkflowService', () => {
         payload: { key: 'value' },
       };
 
-      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+      jest
+        .spyOn<any, any>(service, 'getClient')
+        .mockResolvedValue(mockClient as any);
 
-      await expect(service.sendSignal(mockPayload)).rejects.toThrow('Signal failed');
+      await expect(service.sendSignal(mockPayload)).rejects.toThrow(
+        'Signal failed',
+      );
       expect(jest.spyOn(service as any, 'getClient')).toHaveBeenCalled();
     });
   });
@@ -213,17 +244,17 @@ describe('WorkflowService', () => {
         }),
         terminate: jest.fn(),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
+
       const result = await service.terminateWorkflow(workflowId);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
       expect(mockHandle.terminate).toHaveBeenCalled();
       expect(result).toBe(true);
     });
-  
+
     it('should not terminate the workflow if it is not running', async () => {
       const workflowId = 'test-workflow-id';
       const mockHandle = {
@@ -232,18 +263,18 @@ describe('WorkflowService', () => {
         }),
         terminate: jest.fn(),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
+
       const result = await service.terminateWorkflow(workflowId);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
       expect(mockHandle.terminate).not.toHaveBeenCalled();
       expect(result).toBe(false);
     });
   });
-  
+
   describe('getWorkflowStatus', () => {
     it('should return the status of the workflow', async () => {
       const workflowId = 'test-workflow-id';
@@ -253,28 +284,30 @@ describe('WorkflowService', () => {
           status: { name: mockStatus },
         }),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
+
       const result = await service.getWorkflowStatus(workflowId);
-  
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
       expect(result).toBe(mockStatus);
     });
-  
+
     it('should handle errors gracefully and log them', async () => {
       const workflowId = 'test-workflow-id';
       const error = new Error('Failed to get workflow status');
-  
+
       const mockHandle = {
         describe: jest.fn().mockRejectedValue(error),
       };
-  
+
       mockClient.workflow.getHandle = jest.fn().mockReturnValue(mockHandle);
-  
-      await expect(service.getWorkflowStatus(workflowId)).rejects.toThrow(error);
-  
+
+      await expect(service.getWorkflowStatus(workflowId)).rejects.toThrow(
+        error,
+      );
+
       expect(mockClient.workflow.getHandle).toHaveBeenCalledWith(workflowId);
       expect(mockHandle.describe).toHaveBeenCalled();
     });
@@ -286,83 +319,125 @@ describe('WorkflowService', () => {
         key: 'value',
         workflowId: '',
         taskQueue: '',
-        args: []
+        args: [],
       };
       const mockHandle: WorkflowHandleWithFirstExecutionRunId = {
         workflowId: 'test-workflow-id',
         firstExecutionRunId: 'test-run-id',
-        executeUpdate: function <Ret, Args extends [any, ...any[]], Name extends string = string>(def: string | UpdateDefinition<Ret, Args, Name>, options: WorkflowUpdateOptions & { args: Args; }): Promise<Ret> {
+        executeUpdate: function <
+          Ret,
+          Args extends [any, ...any[]],
+          Name extends string = string,
+        >(
+          def: string | UpdateDefinition<Ret, Args, Name>,
+          options: WorkflowUpdateOptions & { args: Args },
+        ): Promise<Ret> {
           throw new Error('Function not implemented.');
         },
-        startUpdate: function <Ret, Args extends [any, ...any[]], Name extends string = string>(def: string | UpdateDefinition<Ret, Args, Name>, options: WorkflowUpdateOptions & { args: Args; waitForStage: 'ACCEPTED'; }): Promise<WorkflowUpdateHandle<Ret>> {
+        startUpdate: function <
+          Ret,
+          Args extends [any, ...any[]],
+          Name extends string = string,
+        >(
+          def: string | UpdateDefinition<Ret, Args, Name>,
+          options: WorkflowUpdateOptions & {
+            args: Args;
+            waitForStage: 'ACCEPTED';
+          },
+        ): Promise<WorkflowUpdateHandle<Ret>> {
           throw new Error('Function not implemented.');
         },
-        getUpdateHandle: function <Ret>(updateId: string): WorkflowUpdateHandle<Ret> {
+        getUpdateHandle: function <Ret>(
+          updateId: string,
+        ): WorkflowUpdateHandle<Ret> {
           throw new Error('Function not implemented.');
         },
-        query: function <Ret, Args extends any[] = []>(def: string | QueryDefinition<Ret, Args, string>, ...args: Args): Promise<Ret> {
+        query: function <Ret, Args extends any[] = []>(
+          def: string | QueryDefinition<Ret, Args, string>,
+          ...args: Args
+        ): Promise<Ret> {
           throw new Error('Function not implemented.');
         },
-        terminate: function (reason?: string): Promise<temporal.api.workflowservice.v1.ITerminateWorkflowExecutionResponse> {
+        terminate: function (
+          reason?: string,
+        ): Promise<temporal.api.workflowservice.v1.ITerminateWorkflowExecutionResponse> {
           throw new Error('Function not implemented.');
         },
-        cancel: function (): Promise<temporal.api.workflowservice.v1.IRequestCancelWorkflowExecutionResponse> {
-          throw new Error('Function not implemented.');
-        },
+        cancel:
+          function (): Promise<temporal.api.workflowservice.v1.IRequestCancelWorkflowExecutionResponse> {
+            throw new Error('Function not implemented.');
+          },
         describe: function (): Promise<WorkflowExecutionDescription> {
           throw new Error('Function not implemented.');
         },
         fetchHistory: function (): Promise<temporal.api.history.v1.IHistory> {
           throw new Error('Function not implemented.');
         },
-        client: new WorkflowClient,
+        client: new WorkflowClient(),
         result: function (): Promise<any> {
           throw new Error('Function not implemented.');
         },
-        signal: function <Args extends any[] = [], Name extends string = string>(def: string | SignalDefinition<Args, Name>, ...args: Args): Promise<void> {
+        signal: function <
+          Args extends any[] = [],
+          Name extends string = string,
+        >(
+          def: string | SignalDefinition<Args, Name>,
+          ...args: Args
+        ): Promise<void> {
           throw new Error('Function not implemented.');
-        }
+        },
       };
-  
+
       const mockClient = {
         workflow: {
           start: jest.fn().mockResolvedValue(mockHandle),
         },
       };
-  
-      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
-  
+
+      jest
+        .spyOn<any, any>(service, 'getClient')
+        .mockResolvedValue(mockClient as any);
+
       const result = await service.startWorkflow(workflowName, payload);
-  
+
       expect((service as any).getClient).toHaveBeenCalled();
-      expect(mockClient.workflow.start).toHaveBeenCalledWith(workflowName, payload);
+      expect(mockClient.workflow.start).toHaveBeenCalledWith(
+        workflowName,
+        payload,
+      );
       expect(result).toBe(mockHandle);
     });
-  
+
     it('should log an error if failed to start the workflow', async () => {
       const workflowName = WorkFlows.DISCOVERY;
       const payload: StartWorkFlowPayload = {
         key: 'value',
         workflowId: '',
         taskQueue: '',
-        args: []
+        args: [],
       };
       const error = new Error('Failed to start the workflow');
-  
+
       const mockClient = {
         workflow: {
           start: jest.fn().mockRejectedValue(error),
         },
       };
-  
-      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
-  
+
+      jest
+        .spyOn<any, any>(service, 'getClient')
+        .mockResolvedValue(mockClient as any);
+
       await service.startWorkflow(workflowName, payload);
-  
+
       expect((service as any).getClient).toHaveBeenCalled();
-      expect(mockClient.workflow.start).toHaveBeenCalledWith(workflowName, payload);
-      expect(loggerService.error).toHaveBeenCalledWith(`Failed to start workflow: ${error}`);
+      expect(mockClient.workflow.start).toHaveBeenCalledWith(
+        workflowName,
+        payload,
+      );
+      expect(loggerService.error).toHaveBeenCalledWith(
+        `Failed to start workflow: ${error}`,
+      );
     });
   });
-
 });

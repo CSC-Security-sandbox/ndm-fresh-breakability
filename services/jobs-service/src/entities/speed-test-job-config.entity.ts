@@ -1,10 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne,OneToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import {  Protocol } from 'src/constants/enums';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { Protocol } from 'src/constants/enums';
 import { Exclude } from 'class-transformer';
 import { JobConfigEntity } from './jobconfig.entity';
-
-
 
 @Entity({ name: 'speed_test_config' })
 export class SpeedTestConfigEntity {
@@ -16,7 +22,9 @@ export class SpeedTestConfigEntity {
   @Column({ type: 'uuid', nullable: false, name: 'job_id' })
   jobId: string;
 
-  @ManyToOne(() => JobConfigEntity, jobConfig => jobConfig.speedTestConfigs, { onDelete: 'CASCADE' })
+  @ManyToOne(() => JobConfigEntity, (jobConfig) => jobConfig.speedTestConfigs, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'job_id' })
   jobConfig: JobConfigEntity;
 
@@ -44,11 +52,13 @@ export class SpeedTestConfigEntity {
   @Exclude()
   workers: string[];
 
-  @OneToMany(() => SpeedTestConfigWorkerEntity, worker => worker.speedTestConfig, { cascade: true })
+  @OneToMany(
+    () => SpeedTestConfigWorkerEntity,
+    (worker) => worker.speedTestConfig,
+    { cascade: true },
+  )
   workerEntities: SpeedTestConfigWorkerEntity[];
-  
 }
-
 
 @Entity({ name: 'speed_test_workers' })
 export class SpeedTestConfigWorkerEntity {
@@ -64,7 +74,11 @@ export class SpeedTestConfigWorkerEntity {
   @Column({ type: 'uuid', nullable: false, name: 'workers_id' })
   workersId: string;
 
-  @ManyToOne(() => SpeedTestConfigEntity, speedTestConfig => speedTestConfig.workerEntities, { onDelete: 'CASCADE' })
+  @ManyToOne(
+    () => SpeedTestConfigEntity,
+    (speedTestConfig) => speedTestConfig.workerEntities,
+    { onDelete: 'CASCADE' },
+  )
   @JoinColumn({ name: 'speed_test_config_id' })
   speedTestConfig: SpeedTestConfigEntity;
 }

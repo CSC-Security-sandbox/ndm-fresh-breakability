@@ -1,6 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
-
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 
 export enum SuccessEmailType {
   CREATE_CONFIGURATION = 'create_configuration',
@@ -73,18 +72,22 @@ export type WorkerUsesEmailContent = {
 };
 
 export class SuccessEventEmailDto {
-  @ApiProperty({ enum: SuccessEmailType, enumName: 'SuccessEmailType', description: 'Type of success email' })
+  @ApiProperty({
+    enum: SuccessEmailType,
+    enumName: 'SuccessEmailType',
+    description: 'Type of success email',
+  })
   @IsString({ message: 'successEmailType must be a string' })
   successEmailType: SuccessEmailType;
 
   @ApiProperty({
-    description: 'Project ID associated with the email event'
+    description: 'Project ID associated with the email event',
   })
   @IsString({ message: 'projectId must be a string' })
   projectId?: string;
 
   @ApiProperty({
-    description: 'Trace ID for request tracking'
+    description: 'Trace ID for request tracking',
   })
   @IsString({ message: 'traceId must be a string' })
   traceId?: string;
@@ -124,4 +127,4 @@ export class SuccessEventEmailDto {
     required: false,
   })
   workerUsage?: WorkerUsesEmailContent;
-};
+}

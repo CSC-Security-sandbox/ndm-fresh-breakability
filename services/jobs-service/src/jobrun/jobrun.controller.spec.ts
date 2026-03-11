@@ -26,8 +26,8 @@ describe('JobRunController', () => {
       user: {
         roles: [
           {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
           },
         ],
       },
@@ -130,12 +130,12 @@ describe('JobRunController', () => {
       const jobRunId = 'run1';
       const result = { data: [], nextCursor: null };
       jobRunService.getFailedOperations.mockResolvedValue(result);
-      
+
       expect(await controller.getFailedOperations(jobRunId)).toBe(result);
       expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
         jobRunId,
         null,
-        1000
+        1000,
       );
     });
 
@@ -144,12 +144,14 @@ describe('JobRunController', () => {
       const cursor = 'cursor123';
       const result = { data: [], nextCursor: null };
       jobRunService.getFailedOperations.mockResolvedValue(result);
-      
-      expect(await controller.getFailedOperations(jobRunId, cursor)).toBe(result);
+
+      expect(await controller.getFailedOperations(jobRunId, cursor)).toBe(
+        result,
+      );
       expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
         jobRunId,
         cursor,
-        1000
+        1000,
       );
     });
 
@@ -159,12 +161,14 @@ describe('JobRunController', () => {
       const limit = '500';
       const result = { data: [], nextCursor: null };
       jobRunService.getFailedOperations.mockResolvedValue(result);
-      
-      expect(await controller.getFailedOperations(jobRunId, cursor, limit)).toBe(result);
+
+      expect(
+        await controller.getFailedOperations(jobRunId, cursor, limit),
+      ).toBe(result);
       expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
         jobRunId,
         null,
-        500
+        500,
       );
     });
 
@@ -174,12 +178,14 @@ describe('JobRunController', () => {
       const limit = '250';
       const result = { data: [{ id: '1' }], nextCursor: 'next123' };
       jobRunService.getFailedOperations.mockResolvedValue(result);
-      
-      expect(await controller.getFailedOperations(jobRunId, cursor, limit)).toBe(result);
+
+      expect(
+        await controller.getFailedOperations(jobRunId, cursor, limit),
+      ).toBe(result);
       expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
         jobRunId,
         cursor,
-        250
+        250,
       );
     });
   });
@@ -210,7 +216,9 @@ describe('JobRunController', () => {
       const result = { approved: true };
       jobRunService.approveCutoverRequest.mockResolvedValue(result as any);
       expect(await controller.cutoverApprove(approval)).toBe(result);
-      expect(jobRunService.approveCutoverRequest).toHaveBeenCalledWith(approval);
+      expect(jobRunService.approveCutoverRequest).toHaveBeenCalledWith(
+        approval,
+      );
     });
   });
 
@@ -220,7 +228,11 @@ describe('JobRunController', () => {
       const result = { runId: 'run1' };
       jobRunService.addHocRun.mockResolvedValue(result as any);
       expect(await controller.adhocRun(adhoc)).toBe(result);
-      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined, undefined);
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith(
+        'cfg1',
+        undefined,
+        undefined,
+      );
     });
 
     it('should create ad hoc run with jobRunId for retry', async () => {
@@ -228,7 +240,11 @@ describe('JobRunController', () => {
       const result = { runId: 'run2' };
       jobRunService.addHocRun.mockResolvedValue(result as any);
       expect(await controller.adhocRun(adhoc)).toBe(result);
-      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined, 'run1');
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith(
+        'cfg1',
+        undefined,
+        'run1',
+      );
     });
   });
 
@@ -238,8 +254,15 @@ describe('JobRunController', () => {
       const status = JobRunStatus.Running;
       const result = { updated: true };
       jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
-      expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(result);
-      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, undefined, undefined);
+      expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(
+        result,
+      );
+      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(
+        jobRunId,
+        status,
+        undefined,
+        undefined,
+      );
     });
   });
 
@@ -250,7 +273,10 @@ describe('JobRunController', () => {
       const result = { cutover: true };
       jobRunService.cutOverApproval.mockResolvedValue(result as any);
       expect(await controller.cutoverApproval(jobRunId, status)).toBe(result);
-      expect(jobRunService.cutOverApproval).toHaveBeenCalledWith(jobRunId, status);
+      expect(jobRunService.cutOverApproval).toHaveBeenCalledWith(
+        jobRunId,
+        status,
+      );
     });
   });
 
@@ -287,8 +313,18 @@ describe('JobRunController', () => {
       const workerResponse = { status: 'ok' };
       const result = { updated: true };
       jobRunService.updateWorkerResponse.mockResolvedValue(result as any);
-      expect(await controller.updateWorkerResponse(jobRunId, workerId, workerResponse)).toBe(result);
-      expect(jobRunService.updateWorkerResponse).toHaveBeenCalledWith(jobRunId, workerId, workerResponse);
+      expect(
+        await controller.updateWorkerResponse(
+          jobRunId,
+          workerId,
+          workerResponse,
+        ),
+      ).toBe(result);
+      expect(jobRunService.updateWorkerResponse).toHaveBeenCalledWith(
+        jobRunId,
+        workerId,
+        workerResponse,
+      );
     });
   });
 
@@ -298,7 +334,9 @@ describe('JobRunController', () => {
       const result = { mappings: [{ source: 'user1', target: 'user2' }] };
       jobRunService.getJobRunIdentityMappings.mockResolvedValue(result as any);
       expect(await controller.getJobRunIdentityMappings(jobRunId)).toBe(result);
-      expect(jobRunService.getJobRunIdentityMappings).toHaveBeenCalledWith(jobRunId);
+      expect(jobRunService.getJobRunIdentityMappings).toHaveBeenCalledWith(
+        jobRunId,
+      );
     });
   });
 });

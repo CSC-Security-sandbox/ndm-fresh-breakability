@@ -1,7 +1,7 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import axios from "axios";
-import { SuccessEventEmailDto } from "./send-email.type";
+import { Injectable, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import { SuccessEventEmailDto } from './send-email.type';
 import {
   LoggerFactory,
   LoggerService,
@@ -13,10 +13,10 @@ export class SendMailService {
   readonly sendEmailUrl: string;
   constructor(
     private readonly configService: ConfigService,
-    @Inject(LoggerFactory) loggerFactory: LoggerFactory
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.logger = loggerFactory.create(SendMailService.name);
-    this.sendEmailUrl = this.configService.get("app.email.sendMail");
+    this.sendEmailUrl = this.configService.get('app.email.sendMail');
   }
 
   async sendMail(body: SuccessEventEmailDto) {
@@ -31,7 +31,7 @@ export class SendMailService {
       const response = await axios.post(sendEmailFullUrl, body, { headers });
       if (response.status !== 200)
         throw new Error(
-          `Failed to post the send mail request, ${response.data}`
+          `Failed to post the send mail request, ${response.data}`,
         );
       this.logger.log(`Succesfully sent the mail`, response.data);
       return response.data;

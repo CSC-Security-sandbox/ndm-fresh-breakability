@@ -5,8 +5,8 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { AuthService } from './auth.service';
 
 @Module({
-    imports: [HttpModule, ConfigModule, LoggerModule.forRoot()],
-    providers: [AuthService],
-    exports: [AuthService],
+  imports: [HttpModule, ConfigModule, LoggerModule.forRoot()],
+  providers: [AuthService],
+  exports: [AuthService],
 })
 export class AuthModule {}

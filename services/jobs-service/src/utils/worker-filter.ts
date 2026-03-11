@@ -1,5 +1,5 @@
-import { WorkerEntity } from "src/entities/worker.entity";
-import { HealthStatus } from "src/workers/worker.types";
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { HealthStatus } from 'src/workers/worker.types';
 
 /**
  *

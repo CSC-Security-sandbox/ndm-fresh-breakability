@@ -3,12 +3,12 @@ import {
   Injectable,
   Inject,
   NotFoundException,
-  InternalServerErrorException
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
-import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
-import * as parser from "cron-parser";
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { formatBytes } from '@netapp-cloud-datamigrate/jobs-lib';
+import * as parser from 'cron-parser';
 import {
   CutOverStatus,
   JobRunStatus,
@@ -20,38 +20,45 @@ import {
   WorkerStatus,
   USER_VISIBLE_ERROR_TYPES,
   TERMINAL_JOB_RUN_STATUSES,
-} from "src/constants/enums";
-import { ScheduleStatus } from "src/constants/status";
-import { InventoryEntity } from "src/entities/inventory.entity";
-import { JobConfigEntity } from "src/entities/jobconfig.entity";
-import { OperationErrorEntity } from "src/entities/operation-error.entity";
-import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
-import { OperationsEntity } from "src/entities/operation.entity";
-import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
-import { ErrorRemedyService } from "src/errorremedies/errorremedies.service";
-import { RedisService } from "src/redis/redis.service";
-import { SendMailService } from "src/utils/send-email";
-import { WorkersService } from "src/workers/workers.service";
-import { WorkflowService } from "src/workflow/workflow.service";
-import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { DataSource, EntityManager, FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
-import { JobRunEntity } from "../entities/jobrun.entity";
-import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
-import { ApprovalRequestDTO } from "./dto/jobrunactions.dto";
-import { JobErrorQueryDto } from "./dto/jobRunErrors.dto";
-import { JobRunPageDto } from "./dto/jobrunpage.dto";
-import { JobRunStats } from "./dto/jobstats";
-import { JobRunInitService } from "./jobrun.init.service";
-import { SuccessEmailType } from "src/utils/send-email.type";
-import { getErrorDisplayMessage } from "./jobrun.util";
-import { WorkFlowFailureReason } from "./jobrun.types";
+} from 'src/constants/enums';
+import { ScheduleStatus } from 'src/constants/status';
+import { InventoryEntity } from 'src/entities/inventory.entity';
+import { JobConfigEntity } from 'src/entities/jobconfig.entity';
+import { OperationErrorEntity } from 'src/entities/operation-error.entity';
+import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
+import { OperationsEntity } from 'src/entities/operation.entity';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { ErrorRemedyService } from 'src/errorremedies/errorremedies.service';
+import { RedisService } from 'src/redis/redis.service';
+import { SendMailService } from 'src/utils/send-email';
+import { WorkersService } from 'src/workers/workers.service';
+import { WorkflowService } from 'src/workflow/workflow.service';
+import { SignalWorkFlowPayload } from 'src/workflow/workflow.types';
+import {
+  DataSource,
+  EntityManager,
+  FindManyOptions,
+  Raw,
+  Repository,
+  UpdateResult,
+} from 'typeorm';
+import { JobRunEntity } from '../entities/jobrun.entity';
+import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from './dto/jobrun.dto';
+import { ApprovalRequestDTO } from './dto/jobrunactions.dto';
+import { JobErrorQueryDto } from './dto/jobRunErrors.dto';
+import { JobRunPageDto } from './dto/jobrunpage.dto';
+import { JobRunStats } from './dto/jobstats';
+import { JobRunInitService } from './jobrun.init.service';
+import { SuccessEmailType } from 'src/utils/send-email.type';
+import { getErrorDisplayMessage } from './jobrun.util';
+import { WorkFlowFailureReason } from './jobrun.types';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
-import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
-import { ProjectEntity } from "src/entities/project.entity";
+import { MigrationConflictService } from 'src/migration-conflict/migration-conflict.service';
+import { JobStatsSummaryMvEntity } from 'src/entities/job-stats-summary-mv.entity';
+import { ProjectEntity } from 'src/entities/project.entity';
 
 @Injectable()
 export class JobRunService {
@@ -92,9 +99,12 @@ export class JobRunService {
   ) {
     this.logger = loggerFactory.create(JobRunService.name);
     this.mountBasePath = this.configService.get<string>(
-      "app.paths.mountBasePath"
+      'app.paths.mountBasePath',
     );
-    this.emailEnabled = this.configService.get<boolean>('app.email.enabled', true);
+    this.emailEnabled = this.configService.get<boolean>(
+      'app.email.enabled',
+      true,
+    );
   }
 
   async cutOverApproval(jobRunId: string, status: CutOverStatus) {
@@ -110,7 +120,7 @@ export class JobRunService {
           targetPathId: jobRun.jobConfig.targetPathId,
           jobType: JobType.MIGRATE,
         },
-        { status: JobStatus.Active }
+        { status: JobStatus.Active },
       );
 
       await this.jobConfigRepo.update(
@@ -122,7 +132,7 @@ export class JobRunService {
         {
           scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
           futureScheduleAt: null,
-        }
+        },
       );
     } else {
       await this.jobConfigRepo.update(
@@ -135,12 +145,12 @@ export class JobRunService {
           status: JobStatus.InActive,
           scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
           futureScheduleAt: null,
-        }
+        },
       );
     }
     await this.jobRunRepo.update(
       { id: jobRunId },
-      { status: JobRunStatus.Completed, subStatus: status }
+      { status: JobRunStatus.Completed, subStatus: status },
     );
     // TO-DO: keeping for future use
     // const jobContext = await this.redisService.getJobContext(jobRunId);
@@ -153,7 +163,7 @@ export class JobRunService {
   async approveCutoverRequest(approvalRequest: ApprovalRequestDTO) {
     const signal: SignalWorkFlowPayload = {
       payload: approvalRequest.action,
-      signalName: "approve",
+      signalName: 'approve',
       workflowId: `${WorkFlows.CUT_OVER}-${approvalRequest.jobRunId}`,
     };
     return await this.workFlowService.sendSignal(signal);
@@ -170,13 +180,17 @@ export class JobRunService {
 
     // Route to retry run if jobRunId is provided, otherwise create fresh ad-hoc run
     if (jobRunId) {
-      console.log("Retrying ad-hoc run for jobRunId:", jobRunId);
+      console.log('Retrying ad-hoc run for jobRunId:', jobRunId);
       return this.retryRun(jobConfig, projectId, jobRunId);
     }
 
     // Create fresh ad-hoc job run
     this.logger.log(`Creating ad-hoc job run for job config ${jobConfigId}`);
-    return await this.jobRunInitService.createJobRun(jobConfig.id, new Date(), projectId);
+    return await this.jobRunInitService.createJobRun(
+      jobConfig.id,
+      new Date(),
+      projectId,
+    );
   }
 
   // ------------------ Common Job Config Validation -------------------- //
@@ -184,21 +198,23 @@ export class JobRunService {
    * Validates job config for both ad-hoc and retry runs.
    * Checks: exists, not inactive, no circular dependencies.
    */
-  private async validateJobConfig(jobConfigId: string): Promise<JobConfigEntity> {
+  private async validateJobConfig(
+    jobConfigId: string,
+  ): Promise<JobConfigEntity> {
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
     });
     if (!jobConfig)
       throw new NotFoundException(
-        `Job config id doesn't exist for id ${jobConfigId}`
+        `Job config id doesn't exist for id ${jobConfigId}`,
       );
     if (jobConfig.scheduler === ScheduleStatus.SCHEDULED)
       throw new BadRequestException(
-        `Job run is already created for ${jobConfigId}`
+        `Job run is already created for ${jobConfigId}`,
       );
     if (jobConfig.status === JobStatus.InActive)
       throw new BadRequestException(
-        `Job run can not be created to Inactive Job Config`
+        `Job run can not be created to Inactive Job Config`,
       );
 
     // Check for circular dependencies in MIGRATE/CUT_OVER jobs
@@ -218,16 +234,19 @@ export class JobRunService {
           ],
         });
       if (circularDependencies && circularDependencies.length > 0) {
-        const conflictTypes = [...new Set(circularDependencies.map(c => c.conflictType))];
-        const conflictMessage = conflictTypes.length === 1 
-          ? `${conflictTypes[0].charAt(0).toUpperCase() + conflictTypes[0].slice(1)} conflict detected`
-          : `Migration conflicts detected (${conflictTypes.join(', ')})`;
-        
+        const conflictTypes = [
+          ...new Set(circularDependencies.map((c) => c.conflictType)),
+        ];
+        const conflictMessage =
+          conflictTypes.length === 1
+            ? `${conflictTypes[0].charAt(0).toUpperCase() + conflictTypes[0].slice(1)} conflict detected`
+            : `Migration conflicts detected (${conflictTypes.join(', ')})`;
+
         throw new BadRequestException(
           `${conflictMessage} for job config ${jobConfigId}`,
           {
             cause: circularDependencies,
-          }
+          },
         );
       }
     }
@@ -243,7 +262,7 @@ export class JobRunService {
   private async retryRun(
     jobConfig: JobConfigEntity,
     projectId: string | undefined,
-    jobRunId: string
+    jobRunId: string,
   ) {
     // First, validate the provided jobRunId exists and belongs to this job config
     const requestedJobRun = await this.jobRunRepo.findOne({
@@ -252,23 +271,25 @@ export class JobRunService {
 
     if (!requestedJobRun) {
       throw new NotFoundException(
-        `Job run ${jobRunId} not found or does not belong to job config ${jobConfig.id}`
+        `Job run ${jobRunId} not found or does not belong to job config ${jobConfig.id}`,
       );
     }
 
     // Get the latest non-retry job run for this job config
     const latestJobRun = await this.jobRunRepo
-      .createQueryBuilder("jr")
-      .leftJoinAndSelect("jr.jobConfig", "jc")
-      .where("jr.jobConfigId = :jobConfigId", { jobConfigId: jobConfig.id })
-      .andWhere("jr.jobRunType != :retryRunType", { retryRunType: JobRunType.RETRY })
-      .orderBy("jr.startTime", "DESC")
+      .createQueryBuilder('jr')
+      .leftJoinAndSelect('jr.jobConfig', 'jc')
+      .where('jr.jobConfigId = :jobConfigId', { jobConfigId: jobConfig.id })
+      .andWhere('jr.jobRunType != :retryRunType', {
+        retryRunType: JobRunType.RETRY,
+      })
+      .orderBy('jr.startTime', 'DESC')
       .getOne();
 
     // Validate the provided jobRunId matches the latest non-retry job run
     if (latestJobRun.id !== jobRunId) {
       throw new BadRequestException(
-        `Job run ${jobRunId} is not the latest run for this job config. Latest job run is ${latestJobRun.id}`
+        `Job run ${jobRunId} is not the latest run for this job config. Latest job run is ${latestJobRun.id}`,
       );
     }
 
@@ -276,35 +297,35 @@ export class JobRunService {
     const retryableJobTypes = [JobType.MIGRATE, JobType.CUT_OVER];
     if (!retryableJobTypes.includes(latestJobRun.jobConfig.jobType)) {
       throw new BadRequestException(
-        `Retry is only supported for MIGRATE and CUT_OVER jobs. Current job type: ${latestJobRun.jobConfig.jobType}`
+        `Retry is only supported for MIGRATE and CUT_OVER jobs. Current job type: ${latestJobRun.jobConfig.jobType}`,
       );
     }
 
     const operationErrorCount = await this.operationErrorRepo
-      .createQueryBuilder("oe")
-      .innerJoin("oe.operation", "o")
-      .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
-      .andWhere("oe.errorType IN (:...errorTypes)", {
-        errorTypes: ["TRANSIENT_ERROR", "FATAL_ERROR"],
+      .createQueryBuilder('oe')
+      .innerJoin('oe.operation', 'o')
+      .where('o.jobRunId = :jobRunId', { jobRunId })
+      .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
+      .andWhere('oe.errorType IN (:...errorTypes)', {
+        errorTypes: ['TRANSIENT_ERROR', 'FATAL_ERROR'],
       })
       .getCount();
 
     if (operationErrorCount === 0) {
       throw new BadRequestException(
-        `No failed operations found for job run ${jobRunId}. Nothing to retry.`
+        `No failed operations found for job run ${jobRunId}. Nothing to retry.`,
       );
     }
 
     this.logger.log(
-      `Creating retry job run for original job run ${jobRunId} under job config ${jobConfig.id}`
+      `Creating retry job run for original job run ${jobRunId} under job config ${jobConfig.id}`,
     );
 
     return await this.jobRunInitService.createJobRun(
       jobConfig.id,
       new Date(),
       projectId,
-      jobRunId
+      jobRunId,
     );
   }
 
@@ -312,28 +333,28 @@ export class JobRunService {
   async getFailedOperations(
     jobRunId: string,
     cursor: string | null,
-    limit: number = 4000
+    limit: number = 4000,
   ): Promise<{ data: Record<string, any>[]; nextCursor: string | null }> {
     const qb = this.operationErrorRepo
-      .createQueryBuilder("oe")
-      .innerJoin("oe.operation", "o")
-      .select("oe.id", "operationErrorId")
-      .addSelect("o.fPath", "filePath")
-      .addSelect("oe.operationId", "operationId")
-      .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorStatus = :status", { status: "UNRESOLVED" })
-      .andWhere("oe.errorType IN (:...errorTypes)", {
-        errorTypes: ["TRANSIENT_ERROR", "FATAL_ERROR"],
+      .createQueryBuilder('oe')
+      .innerJoin('oe.operation', 'o')
+      .select('oe.id', 'operationErrorId')
+      .addSelect('o.fPath', 'filePath')
+      .addSelect('oe.operationId', 'operationId')
+      .where('o.jobRunId = :jobRunId', { jobRunId })
+      .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
+      .andWhere('oe.errorType IN (:...errorTypes)', {
+        errorTypes: ['TRANSIENT_ERROR', 'FATAL_ERROR'],
       })
-      .orderBy("o.fPath", "ASC")
-      .addOrderBy("oe.id", "ASC")
+      .orderBy('o.fPath', 'ASC')
+      .addOrderBy('oe.id', 'ASC')
       .take(limit + 1);
 
     if (cursor) {
-      const [cursorFilePath, cursorId] = cursor.split("|");
+      const [cursorFilePath, cursorId] = cursor.split('|');
       qb.andWhere(
-        "(o.fPath > :cursorPath OR (o.fPath = :cursorPath AND oe.id > :cursorId))",
-        { cursorPath: cursorFilePath, cursorId }
+        '(o.fPath > :cursorPath OR (o.fPath = :cursorPath AND oe.id > :cursorId))',
+        { cursorPath: cursorFilePath, cursorId },
       );
     }
 
@@ -342,13 +363,15 @@ export class JobRunService {
     const hasMore = results.length > limit;
     const data = hasMore ? results.slice(0, limit) : results;
     const last = data.at(-1);
-    const nextCursor = hasMore ? `${last!.filePath}|${last!.operationErrorId}` : null;
+    const nextCursor = hasMore
+      ? `${last!.filePath}|${last!.operationErrorId}`
+      : null;
 
     const operations = data.map(
       (row: { operationId: string; filePath: string }) => ({
         id: row.operationId,
         fPath: row.filePath,
-      })
+      }),
     );
 
     return { data: operations, nextCursor };
@@ -397,19 +420,19 @@ export class JobRunService {
         },
       },
       where: { id },
-      relations: ["tasks", "tasks.worker"],
+      relations: ['tasks', 'tasks.worker'],
     });
     if (!jobRun) throw new Error(`Job run with id ${id} not found`);
     const jobConfigDetails = await this.jobConfigRepo.findOne({
       where: { id: jobRun.jobConfigId },
       relations: [
-        "jobRuns",
-        "sourcePath",
-        "sourcePath.fileServer",
-        "sourcePath.fileServer.config",
-        "targetPath",
-        "targetPath.fileServer",
-        "targetPath.fileServer.config",
+        'jobRuns',
+        'sourcePath',
+        'sourcePath.fileServer',
+        'sourcePath.fileServer.config',
+        'targetPath',
+        'targetPath.fileServer',
+        'targetPath.fileServer.config',
       ],
     });
 
@@ -442,21 +465,21 @@ export class JobRunService {
       this.logger.log(`Reading job stats for ${jobRun.id} from stats column`);
       const inventoryStats: JobRunStats = jobRun.jobStats;
       this.logger.log(
-        `Job Run ${jobRun.id} inventory stats ${JSON.stringify(inventoryStats)}`
+        `Job Run ${jobRun.id} inventory stats ${JSON.stringify(inventoryStats)}`,
       );
       const payload = {
-        scannedFilesCount: BigInt(inventoryStats?.fileCount || "0")?.toString(),
+        scannedFilesCount: BigInt(inventoryStats?.fileCount || '0')?.toString(),
         scannedDirectoriesCount: BigInt(
-          inventoryStats?.directories || "0"
+          inventoryStats?.directories || '0',
         )?.toString(),
         totalScannedSize:
           jobConfigDetails.jobType === JobType.DISCOVER
-            ? formatBytes(Number(inventoryStats?.totalSize || "0"))
-            : "0 B",
+            ? formatBytes(Number(inventoryStats?.totalSize || '0'))
+            : '0 B',
         totalMigratedSize:
           jobConfigDetails.jobType === JobType.MIGRATE
-            ? formatBytes(Number(inventoryStats?.totalSize || "0"))
-            : "0 B",
+            ? formatBytes(Number(inventoryStats?.totalSize || '0'))
+            : '0 B',
         errors: await this.getErrorCounts(jobRun.id),
         tasks: jobRun.tasks.map((task) => ({
           taskId: task.id,
@@ -476,23 +499,23 @@ export class JobRunService {
     }
     this.logger.log(`Calculating job stats for ${jobRun.id}`);
     const inventoryCounts: JobRunStats = await this.calculateJobRunStats(
-      jobRun.id
+      jobRun.id,
     );
 
     const jobRunDetails: JobRunDetailsDTO = {
       ...partialPayload,
-      scannedFilesCount: BigInt(inventoryCounts?.fileCount || "0")?.toString(),
+      scannedFilesCount: BigInt(inventoryCounts?.fileCount || '0')?.toString(),
       scannedDirectoriesCount: BigInt(
-        inventoryCounts?.directories || "0"
+        inventoryCounts?.directories || '0',
       )?.toString(),
       totalScannedSize:
         jobConfigDetails.jobType === JobType.DISCOVER
-          ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
-          : "0 B",
+          ? formatBytes(Number(inventoryCounts?.totalSize || '0'))
+          : '0 B',
       totalMigratedSize:
         jobConfigDetails.jobType === JobType.MIGRATE
-          ? formatBytes(Number(inventoryCounts?.totalSize || "0"))
-          : "0 B",
+          ? formatBytes(Number(inventoryCounts?.totalSize || '0'))
+          : '0 B',
       errors: await this.getErrorCounts(id),
       tasks: jobRun.tasks.map((task) => ({
         taskId: task.id,
@@ -511,8 +534,8 @@ export class JobRunService {
     const {
       page,
       limit,
-      sort = "createdAt",
-      order = "ASC",
+      sort = 'createdAt',
+      order = 'ASC',
       ...filter
     } = jobRunPageDto;
 
@@ -537,51 +560,51 @@ export class JobRunService {
 
   async getJobAllRuns(filter: JobRunPageDto) {
     const jobRuns = await this.jobRunRepo
-      .createQueryBuilder("jobRun")
-      .leftJoinAndSelect("jobRun.jobConfig", "jobConfig")
-      .leftJoinAndSelect("jobConfig.sourcePath", "sourceVolume")
-      .leftJoinAndSelect("jobConfig.targetPath", "targetVolume")
-      .leftJoinAndSelect("sourceVolume.fileServer", "sourceFileServer")
-      .leftJoinAndSelect("targetVolume.fileServer", "targetFileServer")
-      .leftJoinAndSelect("sourceFileServer.config", "sourceConfig")
-      .leftJoinAndSelect("targetFileServer.config", "targetConfig")
-      .where("sourceConfig.projectId = :projectId", {
+      .createQueryBuilder('jobRun')
+      .leftJoinAndSelect('jobRun.jobConfig', 'jobConfig')
+      .leftJoinAndSelect('jobConfig.sourcePath', 'sourceVolume')
+      .leftJoinAndSelect('jobConfig.targetPath', 'targetVolume')
+      .leftJoinAndSelect('sourceVolume.fileServer', 'sourceFileServer')
+      .leftJoinAndSelect('targetVolume.fileServer', 'targetFileServer')
+      .leftJoinAndSelect('sourceFileServer.config', 'sourceConfig')
+      .leftJoinAndSelect('targetFileServer.config', 'targetConfig')
+      .where('sourceConfig.projectId = :projectId', {
         projectId: filter.projectId,
       })
-      .orWhere("targetConfig.projectId = :projectId", {
+      .orWhere('targetConfig.projectId = :projectId', {
         projectId: filter.projectId,
       })
       .select([
-        "jobRun.id AS jobRunId",
-        "jobRun.isReportReady AS isReportReady",
-        "jobRun.jobRunType AS jobRunType",
-        "jobConfig.jobType AS jobType",
-        "jobConfig.id AS jobConfigId",
-        "jobConfig.futureScheduleAt AS nextSchedule",
-        "sourceVolume.volumePath AS volumePath",
-        "sourceFileServer.protocol AS sourceFileServerProtocol",
-        "sourceFileServer.fileServerName AS sourceFileServerName",
-        "jobConfig.sourceDirectoryPath AS sourceDirectoryPath",
-        "jobConfig.targetDirectoryPath AS targetDirectoryPath",
-        "sourceConfig.configName AS sourceConfigName",
-        "sourceConfig.serverType AS sourceServerType",
-        "targetVolume.volumePath AS targetVolumePath",
-        "targetFileServer.protocol AS targetFileServerProtocol",
-        "targetFileServer.fileServerName AS targetFileServerName",
-        "targetConfig.serverType AS targetServerType",
-        "targetConfig.configName AS targetConfigName",
-        "jobRun.subStatus AS subStatus",
-        "jobRun.status AS status",
-        "jobRun.startTime AS startTime",
-        "jobRun.endTime AS endTime",
-        "jobRun.jobStats AS jobStats",
+        'jobRun.id AS jobRunId',
+        'jobRun.isReportReady AS isReportReady',
+        'jobRun.jobRunType AS jobRunType',
+        'jobConfig.jobType AS jobType',
+        'jobConfig.id AS jobConfigId',
+        'jobConfig.futureScheduleAt AS nextSchedule',
+        'sourceVolume.volumePath AS volumePath',
+        'sourceFileServer.protocol AS sourceFileServerProtocol',
+        'sourceFileServer.fileServerName AS sourceFileServerName',
+        'jobConfig.sourceDirectoryPath AS sourceDirectoryPath',
+        'jobConfig.targetDirectoryPath AS targetDirectoryPath',
+        'sourceConfig.configName AS sourceConfigName',
+        'sourceConfig.serverType AS sourceServerType',
+        'targetVolume.volumePath AS targetVolumePath',
+        'targetFileServer.protocol AS targetFileServerProtocol',
+        'targetFileServer.fileServerName AS targetFileServerName',
+        'targetConfig.serverType AS targetServerType',
+        'targetConfig.configName AS targetConfigName',
+        'jobRun.subStatus AS subStatus',
+        'jobRun.status AS status',
+        'jobRun.startTime AS startTime',
+        'jobRun.endTime AS endTime',
+        'jobRun.jobStats AS jobStats',
       ])
       .getRawMany();
 
     const allJobsRuns = await Promise.all(
       jobRuns.map(async (jobRun) => {
         this.logger.debug(
-          `jobRun for id ${jobRun.jobrunid} - with jobstats ${JSON.stringify(jobRun.jobstats)}`
+          `jobRun for id ${jobRun.jobrunid} - with jobstats ${JSON.stringify(jobRun.jobstats)}`,
         );
         const partialJobRunStats = {
           jobRunId: jobRun.jobrunid,
@@ -615,53 +638,53 @@ export class JobRunService {
             ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
             : Date.now() - jobRun.starttime.getTime(),
         };
-       
-          const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status);
 
-          let jobStats: JobRunStats;
-          if (isTerminal && jobRun.jobstats) {
-            this.logger.log(`Job Run ${jobRun.jobrunid} using persisted jobStats`);
-            jobStats = jobRun.jobstats;
-          } else {
-            jobStats = await this.calculateJobRunStats(jobRun.jobrunid);
-          }
-          this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+        const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status);
+
+        let jobStats: JobRunStats;
+        if (isTerminal && jobRun.jobstats) {
           this.logger.log(
-            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
-              jobStats
-            )}`
+            `Job Run ${jobRun.jobrunid} using persisted jobStats`,
           );
-          const response: JobRunsDTO = {
-            ...partialJobRunStats,
-            scannedFilesCount: BigInt(
-              jobStats?.fileCount || "0"
-            )?.toString(),
-            scannedDirectoriesCount: BigInt(
-              jobStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize:
-              jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(jobStats?.totalSize || "0"))
-                : "0 B",
-            totalMigratedSize:
-              (jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER)
-                ? formatBytes(Number(jobStats?.totalSize || 0))
-                : "0 B",
-            errors: jobStats?.errors || [],
-            lastRefreshed: jobStats?.lastRefreshed || null,
-          };
-          return response;
-        
-      })
+          jobStats = jobRun.jobstats;
+        } else {
+          jobStats = await this.calculateJobRunStats(jobRun.jobrunid);
+        }
+        this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
+        this.logger.log(
+          `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
+            jobStats,
+          )}`,
+        );
+        const response: JobRunsDTO = {
+          ...partialJobRunStats,
+          scannedFilesCount: BigInt(jobStats?.fileCount || '0')?.toString(),
+          scannedDirectoriesCount: BigInt(
+            jobStats?.directories || '0',
+          )?.toString(),
+          totalScannedSize:
+            jobRun.jobtype === JobType.DISCOVER
+              ? formatBytes(Number(jobStats?.totalSize || '0'))
+              : '0 B',
+          totalMigratedSize:
+            jobRun.jobtype === JobType.MIGRATE ||
+            jobRun.jobtype === JobType.CUT_OVER
+              ? formatBytes(Number(jobStats?.totalSize || 0))
+              : '0 B',
+          errors: jobStats?.errors || [],
+          lastRefreshed: jobStats?.lastRefreshed || null,
+        };
+        return response;
+      }),
     );
     return allJobsRuns;
   }
 
   async updateJobRunStatus(
-    jobRunId: string, 
-    status: JobRunStatus, 
+    jobRunId: string,
+    status: JobRunStatus,
     projectId?: string,
-    passedStats?: { fileCount?: number; dirCount?: number; totalSize?: string }
+    passedStats?: { fileCount?: number; dirCount?: number; totalSize?: string },
   ) {
     const jobRunDetails: JobRunEntity = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
@@ -688,23 +711,30 @@ export class JobRunService {
             .toDate();
           await this.jobConfigRepo.update(
             { id: jobConfig.id },
-            { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING }
+            { firstRunAt: date, scheduler: ScheduleStatus.SCHEDULING },
           );
         } catch (e) {
           throw new Error(
-            `Invalid cron expression in futureScheduleAt: ${e.message}`
+            `Invalid cron expression in futureScheduleAt: ${e.message}`,
           );
         }
       } else {
         await this.jobConfigRepo.update(
           { id: jobRunDetails.jobConfigId },
-          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
+          { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED },
         );
       }
-      
+
       let jobRunStats: JobRunStats;
-      if (passedStats && passedStats.fileCount !== undefined && passedStats.dirCount !== undefined && passedStats.totalSize !== undefined) {
-        this.logger.log(`Using stats passed from workflow for job run ${jobRunId}: ${JSON.stringify(passedStats)}`);
+      if (
+        passedStats &&
+        passedStats.fileCount !== undefined &&
+        passedStats.dirCount !== undefined &&
+        passedStats.totalSize !== undefined
+      ) {
+        this.logger.log(
+          `Using stats passed from workflow for job run ${jobRunId}: ${JSON.stringify(passedStats)}`,
+        );
         jobRunStats = {
           fileCount: passedStats.fileCount.toString(),
           directories: passedStats.dirCount.toString(),
@@ -713,7 +743,9 @@ export class JobRunService {
           lastRefreshed: new Date(),
         };
       } else {
-        this.logger.log(`No complete stats passed for job run ${jobRunId}, computing from materialized view`);
+        this.logger.log(
+          `No complete stats passed for job run ${jobRunId}, computing from materialized view`,
+        );
         jobRunStats = await this.calculateJobRunStats(jobRunId);
       }
       if (
@@ -723,7 +755,7 @@ export class JobRunService {
       ) {
         const errorCodes =
           await this.errorRemedyService.getDistinctErrorCodes(jobRunId);
-        if (!!errorCodes.length) {
+        if (errorCodes.length) {
           // Send error remedy email with error handling
           if (this.emailEnabled) {
             try {
@@ -735,21 +767,25 @@ export class JobRunService {
                 targetHost: jobConfig.targetPath?.fileServer?.host,
                 jobType: jobConfig.jobType,
                 errorCodes,
-                projectId
+                projectId,
               });
-              this.logger.log(`Error remedy email sent successfully for job run ${jobRunId}`);
+              this.logger.log(
+                `Error remedy email sent successfully for job run ${jobRunId}`,
+              );
             } catch (emailError) {
               this.logger.error(
                 `Failed to send error remedy email for job run ${jobRunId}: ${emailError.message}`,
-                emailError
+                emailError,
               );
             }
           } else {
-            this.logger.log(`Email disabled - skipping error remedy email for job run ${jobRunId}`);
+            this.logger.log(
+              `Email disabled - skipping error remedy email for job run ${jobRunId}`,
+            );
           }
         } else {
           this.logger.log(
-            `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`
+            `Job Run ${jobRunId} completed with stats ${JSON.stringify(jobRunStats)}`,
           );
 
           if (this.emailEnabled) {
@@ -759,30 +795,38 @@ export class JobRunService {
                 projectId,
                 jobStatusUpdate: {
                   jobType: jobConfig.jobType,
-                  jobAction: "completed",
+                  jobAction: 'completed',
                   sourcePath: {
                     volumePath: jobConfig.sourcePath?.volumePath,
-                    fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
+                    fileServer: {
+                      host: jobConfig.sourcePath?.fileServer?.host,
+                    },
                   },
                   targetPath: {
                     volumePath: jobConfig.targetPath?.volumePath,
-                    fileServer: { host: jobConfig.targetPath?.fileServer?.host },
+                    fileServer: {
+                      host: jobConfig.targetPath?.fileServer?.host,
+                    },
                   },
                 },
               });
-              this.logger.log(`Job completion email sent successfully for job run ${jobRunId}`);
+              this.logger.log(
+                `Job completion email sent successfully for job run ${jobRunId}`,
+              );
             } catch (emailError) {
               this.logger.error(
                 `Failed to send job completion email for job run ${jobRunId}: ${emailError.message}`,
-                emailError
+                emailError,
               );
             }
           } else {
-            this.logger.log(`Email disabled - skipping job completion email for job run ${jobRunId}`);
+            this.logger.log(
+              `Email disabled - skipping job completion email for job run ${jobRunId}`,
+            );
           }
         }
       }
-      this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
+      this.logger.log('job Run Stats', JSON.stringify(jobRunStats));
       const updateData: Partial<JobRunEntity> = {
         status: status,
         jobStats: jobRunStats,
@@ -793,7 +837,14 @@ export class JobRunService {
       // Update job run status and record ASUP stats in a single transaction
       await this.dataSource.transaction(async (manager) => {
         await manager.update(JobRunEntity, { id: jobRunId }, updateData);
-        await this.recordAsupStatsForJobRun(manager, jobRunId, status, projectId, jobRunDetails.jobConfigId, jobRunStats);
+        await this.recordAsupStatsForJobRun(
+          manager,
+          jobRunId,
+          status,
+          projectId,
+          jobRunDetails.jobConfigId,
+          jobRunStats,
+        );
       });
     } else {
       if (
@@ -808,7 +859,7 @@ export class JobRunService {
               projectId,
               jobStatusUpdate: {
                 jobType: jobConfig.jobType,
-                jobAction: "started",
+                jobAction: 'started',
                 sourcePath: {
                   volumePath: jobConfig.sourcePath?.volumePath,
                   fileServer: { host: jobConfig.sourcePath?.fileServer?.host },
@@ -819,15 +870,19 @@ export class JobRunService {
                 },
               },
             });
-            this.logger.log(`Job started email sent successfully for job run ${jobRunId}`);
+            this.logger.log(
+              `Job started email sent successfully for job run ${jobRunId}`,
+            );
           } catch (emailError) {
             this.logger.error(
               `Failed to send job started email for job run ${jobRunId}: ${emailError.message}`,
-              emailError
+              emailError,
             );
           }
         } else {
-          this.logger.log(`Email disabled - skipping job started email for job run ${jobRunId}`);
+          this.logger.log(
+            `Email disabled - skipping job started email for job run ${jobRunId}`,
+          );
         }
       }
       this.logger.log(`Job Run ${jobRunId} status updated to ${status}`);
@@ -837,31 +892,39 @@ export class JobRunService {
 
   async getJobRunErrors(taskQuery: JobErrorQueryDto) {
     const {
-      page = "1",
-      limit = "10",
-      sort = "createdAt",
-      order = "DESC",
+      page = '1',
+      limit = '10',
+      sort = 'createdAt',
+      order = 'DESC',
       jobRunId,
       errorType,
     } = taskQuery;
-    
+
     // Define allowed sort columns (camelCase from API)
-    const SORTABLE_COLUMNS = ['createdAt', 'errorMessage', 'errorType', 'fileName', 'filePath', 'origin', 'operationType', 'errorCode'];
+    const SORTABLE_COLUMNS = [
+      'createdAt',
+      'errorMessage',
+      'errorType',
+      'fileName',
+      'filePath',
+      'origin',
+      'operationType',
+      'errorCode',
+    ];
 
     // Validate and map to SQL column with table prefix
-    const sortColumn =
-      SORTABLE_COLUMNS.includes(sort)
-        ? {
-            createdAt: 'oe.created_at',
-            errorMessage: 'oe.error_message',
-            errorType: 'oe.error_type',
-            fileName: 'oe.file_name',
-            filePath: 'oe.file_path',
-            origin: 'oe.origin',
-            operationType: 'oe.operation_type',
-            errorCode: 'oe.error_code',
-          }[sort]
-        : 'oe.created_at';
+    const sortColumn = SORTABLE_COLUMNS.includes(sort)
+      ? {
+          createdAt: 'oe.created_at',
+          errorMessage: 'oe.error_message',
+          errorType: 'oe.error_type',
+          fileName: 'oe.file_name',
+          filePath: 'oe.file_path',
+          origin: 'oe.origin',
+          operationType: 'oe.operation_type',
+          errorCode: 'oe.error_code',
+        }[sort]
+      : 'oe.created_at';
 
     const orderClause = order?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
@@ -914,7 +977,7 @@ export class JobRunService {
           const errorRemedy = errorRemedies?.[0];
 
           this.logger.debug(
-            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : "none"}`
+            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : 'none'}`,
           );
 
           return {
@@ -922,7 +985,7 @@ export class JobRunService {
             displayMessage: getErrorDisplayMessage(
               error.errorCode,
               error.errorMessage,
-              errorRemedy?.description
+              errorRemedy?.description,
             ),
             resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
             referenceCommands: errorRemedy
@@ -932,7 +995,7 @@ export class JobRunService {
         } catch (remedyError) {
           this.logger.error(
             `[getJobRunErrors] Error fetching remedy for code ${error.errorCode}:`,
-            remedyError
+            remedyError,
           );
           return {
             ...error,
@@ -941,21 +1004,21 @@ export class JobRunService {
             referenceCommands: null,
           };
         }
-      })
+      }),
     );
 
     const totalResult = await this.operationErrorRepo
-      .createQueryBuilder("oe")
-      .leftJoin("oe.operation", "o")
-      .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorType = :errorType", { errorType })
-      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
-      .select("COUNT(*)", "total")
+      .createQueryBuilder('oe')
+      .leftJoin('oe.operation', 'o')
+      .where('o.jobRunId = :jobRunId', { jobRunId })
+      .andWhere('oe.errorType = :errorType', { errorType })
+      .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
+      .select('COUNT(*)', 'total')
       .getRawOne();
 
-    const total = parseInt(totalResult.total ?? "0", 10);
+    const total = parseInt(totalResult.total ?? '0', 10);
 
-    if (errorType && errorType === "FATAL_ERROR") {
+    if (errorType && errorType === 'FATAL_ERROR') {
       const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
       if (setupFailedErrors.length > 0) {
         const setupFailedError = await Promise.all(
@@ -971,29 +1034,29 @@ export class JobRunService {
               displayMessage: getErrorDisplayMessage(
                 error?.workerResponse?.code,
                 error?.workerResponse?.message,
-                errorRemedy?.description
+                errorRemedy?.description,
               ),
               resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
               referenceCommands: errorRemedy
                 ? errorRemedy.referenceCommands
                 : null,
-              errorType: "FATAL_ERROR",
+              errorType: 'FATAL_ERROR',
               createdAt: error.workerResponse.createdAt,
               operationType: error.workerResponse.operation,
               errorCode: error.workerResponse.code,
               origin: error.workerResponse.origin,
               occurrence: error.workerResponse.occurrence || 1,
             };
-          })
+          }),
         );
         mappedData.push(...setupFailedError);
       }
       mappedData.sort((a, b) => {
-        if (a.errorType === "FATAL_ERROR" && b.errorType !== "FATAL_ERROR") {
+        if (a.errorType === 'FATAL_ERROR' && b.errorType !== 'FATAL_ERROR') {
           return -1;
         } else if (
-          a.errorType !== "FATAL_ERROR" &&
-          b.errorType === "FATAL_ERROR"
+          a.errorType !== 'FATAL_ERROR' &&
+          b.errorType === 'FATAL_ERROR'
         ) {
           return 1;
         }
@@ -1010,36 +1073,35 @@ export class JobRunService {
 
   async getErrorCounts(jobRunId: string) {
     const countQuery = this.operationErrorRepo
-      .createQueryBuilder("oe")
-      .innerJoin("oe.operation", "o")
-      .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
-      .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
-      .select([
-        "oe.errorType AS errorType", 
-        "COUNT(*) AS count"
-      ])
-      .groupBy("oe.errorType");
+      .createQueryBuilder('oe')
+      .innerJoin('oe.operation', 'o')
+      .where('o.jobRunId = :jobRunId', { jobRunId })
+      .andWhere('oe.errorType IN (:...errorTypes)', {
+        errorTypes: USER_VISIBLE_ERROR_TYPES,
+      })
+      .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
+      .select(['oe.errorType AS errorType', 'COUNT(*) AS count'])
+      .groupBy('oe.errorType');
     let errorTypeCounts;
     try {
       errorTypeCounts = await countQuery.getRawMany();
     } catch (error) {
       this.logger.error(
-        "Error occurred while fetching error type counts:",
-        error
+        'Error occurred while fetching error type counts:',
+        error,
       );
       errorTypeCounts = [];
     }
     const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
     if (setupFailedErrors.length > 0) {
       const fatalError = errorTypeCounts.find(
-        (error) => error.errortype === "FATAL_ERROR"
+        (error) => error.errortype === 'FATAL_ERROR',
       );
       if (fatalError) {
         fatalError.count = Number(fatalError.count) + setupFailedErrors.length;
       } else {
         errorTypeCounts.push({
-          errortype: "FATAL_ERROR",
+          errortype: 'FATAL_ERROR',
           count: setupFailedErrors.length,
         });
       }
@@ -1050,23 +1112,25 @@ export class JobRunService {
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
-      relations: ["jobConfig"],
+      relations: ['jobConfig'],
     });
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
-    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
-      where: { jobRunId: jobRunId }});
+    const jobStatsSummary: JobStatsSummaryMvEntity =
+      await this.jobStatsSummaryMvRepo.findOne({
+        where: { jobRunId: jobRunId },
+      });
 
     this.logger.debug(
-      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`,
     );
 
     const jobRunStatus = {
-      fileCount: jobStatsSummary?.fileCount || "0",
-      directories: jobStatsSummary?.directoryCount || "0",
-      totalSize: jobStatsSummary?.totalSize || "0",
-    lastRefreshed: jobStatsSummary?.lastRefreshed || null,
+      fileCount: jobStatsSummary?.fileCount || '0',
+      directories: jobStatsSummary?.directoryCount || '0',
+      totalSize: jobStatsSummary?.totalSize || '0',
+      lastRefreshed: jobStatsSummary?.lastRefreshed || null,
     };
 
     const response = {
@@ -1090,10 +1154,10 @@ export class JobRunService {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
       return;
     }
-    
+
     try {
       const errorRemedies = await this.errorRemedyService.findByErrorCodes(
-        errorCodes.map((error) => error.errorCode)
+        errorCodes.map((error) => error.errorCode),
       );
 
       await this.sendMailService.sendMail({
@@ -1117,7 +1181,7 @@ export class JobRunService {
     } catch (error) {
       this.logger.error(
         `Failed to send error remedy email for job run ${jobRunId}: ${error.message}`,
-        error
+        error,
       );
       // Re-throw to be handled by the caller
       throw error;
@@ -1154,34 +1218,34 @@ export class JobRunService {
         const currentWorkerStatus =
           this.workerService.updateWorkerStatus(workers);
         const inactiveCount = currentWorkerStatus.filter(
-          (worker) => worker.status === WorkerStatus.Offline
+          (worker) => worker.status === WorkerStatus.Offline,
         ).length;
         if (inactiveCount === mappedWorkersCount) {
           this.logger.warn(
-            `All workers are offline for jobRunId: ${jobRunId}, thus pausing the job run`
+            `All workers are offline for jobRunId: ${jobRunId}, thus pausing the job run`,
           );
           await this.jobRunRepo.update(
             { id: jobRunId },
             {
               status: JobRunStatus.Paused,
               pausedReason: PausedReason.SYSTEM_PAUSED,
-            }
+            },
           );
         } else {
           if (jobRun.status === JobRunStatus.Paused) {
             this.logger.log(
-              `Resuming job run ${jobRunId} as some workers are online`
+              `Resuming job run ${jobRunId} as some workers are online`,
             );
             await this.jobRunRepo.update(
               { id: jobRunId },
               {
                 status: JobRunStatus.Running,
                 pausedReason: null,
-              }
+              },
             );
           } else {
             this.logger.log(
-              `Job run ${jobRunId} is running and some workers are online`
+              `Job run ${jobRunId} is running and some workers are online`,
             );
           }
         }
@@ -1189,7 +1253,7 @@ export class JobRunService {
       this.logger.log(`Worker health check completed`);
     } catch (error) {
       this.logger.error(
-        `Error occurred while checking worker health: ${error}`
+        `Error occurred while checking worker health: ${error}`,
       );
     }
   }
@@ -1197,17 +1261,17 @@ export class JobRunService {
   async updateWorkerResponse(
     jobRunId: string,
     workerId: string,
-    workerResponse: Record<string, any>
+    workerResponse: Record<string, any>,
   ): Promise<UpdateResult> {
     try {
       const updateCondition =
-        workerId === "all" ? { jobRunId } : { jobRunId, workerId };
+        workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
       return await this.workerJobRunMapRepo.update(updateCondition, {
         workerResponse,
       });
     } catch (error) {
       this.logger.error(
-        `Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`
+        `Error occurred while updating worker response for jobRunId ${jobRunId} and workerId ${workerId}: ${error}`,
       );
       throw new Error(`Failed to update worker response: ${error}`);
     }
@@ -1216,9 +1280,9 @@ export class JobRunService {
   async getWorkerSetupErrors(jobRunId: string): Promise<WorkerJobRunMap[]> {
     try {
       const result = await this.workerJobRunMapRepo
-        .createQueryBuilder("job")
-        .where("job.jobRunId = :jobRunId", { jobRunId })
-        .andWhere("job.workerResponse IS NOT NULL")
+        .createQueryBuilder('job')
+        .where('job.jobRunId = :jobRunId', { jobRunId })
+        .andWhere('job.workerResponse IS NOT NULL')
         .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
           errorCodes: Object.values(WorkFlowFailureReason),
         })
@@ -1228,7 +1292,7 @@ export class JobRunService {
     } catch (error) {
       this.logger.error(
         `Error fetching worker setup errors for jobRunId ${jobRunId}:`,
-        error
+        error,
       );
       throw error;
     }
@@ -1238,7 +1302,7 @@ export class JobRunService {
     try {
       const jobRun = await this.jobRunRepo.findOne({
         where: { id: jobRunId },
-        relations: ["options"],
+        relations: ['options'],
       });
       if (!jobRun) {
         throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
@@ -1247,7 +1311,7 @@ export class JobRunService {
       if (!identityMappingId) {
         return {
           data: [],
-          message: "No identity mappings found for this job run",
+          message: 'No identity mappings found for this job run',
         };
       }
       const identityMappings = await this.identityMappingRepo.findBy({
@@ -1261,10 +1325,11 @@ export class JobRunService {
         throw error;
       }
       this.logger.error(
-        `Error fetching identity mappings for job run ${jobRunId}:`, error
+        `Error fetching identity mappings for job run ${jobRunId}:`,
+        error,
       );
       throw new InternalServerErrorException(
-        `Failed to fetch identity mappings for job run ${jobRunId}`
+        `Failed to fetch identity mappings for job run ${jobRunId}`,
       );
     }
   }
@@ -1282,7 +1347,8 @@ export class JobRunService {
     jobConfigId: string,
     jobRunStats: JobRunStats,
   ): Promise<void> {
-    if (status !== JobRunStatus.Completed && status !== JobRunStatus.Stopped) return;
+    if (status !== JobRunStatus.Completed && status !== JobRunStatus.Stopped)
+      return;
 
     const jobConfig = await manager.findOne(JobConfigEntity, {
       where: { id: jobConfigId },
@@ -1292,25 +1358,32 @@ export class JobRunService {
       },
     });
     if (!jobConfig) {
-      this.logger.warn(`Cannot record ASUP stats for job run ${jobRunId}: jobConfig not found`);
+      this.logger.warn(
+        `Cannot record ASUP stats for job run ${jobRunId}: jobConfig not found`,
+      );
       return;
     }
 
-    const JOB_TYPE_MAP: Partial<Record<JobType, 'discovery' | 'migration' | 'cutover'>> = {
+    const JOB_TYPE_MAP: Partial<
+      Record<JobType, 'discovery' | 'migration' | 'cutover'>
+    > = {
       [JobType.DISCOVER]: 'discovery',
       [JobType.MIGRATE]: 'migration',
       [JobType.CUT_OVER]: 'cutover',
     };
     const jobType = JOB_TYPE_MAP[jobConfig.jobType];
-    if (!jobType) return; 
+    if (!jobType) return;
 
     this.logger.log(`Recording ASUP stats for job run ${jobRunId} (${status})`);
     try {
-
-      const project = await manager.findOne(ProjectEntity, { where: { id: projectId } });
+      const project = await manager.findOne(ProjectEntity, {
+        where: { id: projectId },
+      });
       const protocol = jobConfig.sourcePath?.fileServer?.protocol;
-      const sourceServerType = jobConfig.sourcePath?.fileServer?.config?.serverType || 'N/A';
-      const destinationServerType = jobConfig.targetPath?.fileServer?.config?.serverType || 'N/A';
+      const sourceServerType =
+        jobConfig.sourcePath?.fileServer?.config?.serverType || 'N/A';
+      const destinationServerType =
+        jobConfig.targetPath?.fileServer?.config?.serverType || 'N/A';
 
       const dbSchema = process.env.SCHEMA || 'datamigrator';
 

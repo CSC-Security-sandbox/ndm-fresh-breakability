@@ -1,20 +1,20 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsJSON, IsString, IsUUID, IsOptional } from "class-validator";
+import { ApiProperty } from '@nestjs/swagger';
+import { IsJSON, IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class SystemStats {
-  @ApiProperty({ description: "CPU Usage in percentage" })
+  @ApiProperty({ description: 'CPU Usage in percentage' })
   @IsOptional()
   cpuUsage: string;
-  @ApiProperty({ description: "Memory Usage in percentage" })
+  @ApiProperty({ description: 'Memory Usage in percentage' })
   @IsOptional()
   memoryUsage: string;
-  @ApiProperty({ description: "Memory Limit in percentage" })
+  @ApiProperty({ description: 'Memory Limit in percentage' })
   @IsOptional()
   memoryLimit: string;
-  @ApiProperty({ description: "Disk Limit in percentage" })
+  @ApiProperty({ description: 'Disk Limit in percentage' })
   @IsOptional()
   diskLimit: string;
-  @ApiProperty({ description: "Disk Usage in percentage" })
+  @ApiProperty({ description: 'Disk Usage in percentage' })
   @IsOptional()
   diskUsage: string;
 }
@@ -23,11 +23,11 @@ export class HealthcheckStats {
   @IsUUID()
   workerId: string;
 
-  @ApiProperty({ description: "Preserve access time flag", example: "HEALTHY" })
+  @ApiProperty({ description: 'Preserve access time flag', example: 'HEALTHY' })
   @IsString()
   healthStatus: string;
 
-  @ApiProperty({ description: "System Stats" })
+  @ApiProperty({ description: 'System Stats' })
   @IsOptional()
   systemStats?: SystemStats;
 }

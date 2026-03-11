@@ -1,4 +1,4 @@
-import appConfig from "./app.config";
+import appConfig from './app.config';
 
 describe('App Config', () => {
   const originalEnv = process.env;

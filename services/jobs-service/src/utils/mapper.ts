@@ -1,14 +1,13 @@
-
 import * as parser from 'cron-parser';
 import { JobType } from 'src/constants/enums';
-import { Logger } from "@nestjs/common";
-const logger = new Logger('nextDate'); 
+import { Logger } from '@nestjs/common';
+const logger = new Logger('nextDate');
 
 export const nextDate = (
   jobType: string,
   runDate: Date | null,
-  cron: string | null
-): Date | null => {    
+  cron: string | null,
+): Date | null => {
   try {
     const now = new Date();
 

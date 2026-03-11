@@ -1,19 +1,19 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { WorkersService } from "./workers.service";
-import { getRepositoryToken } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { WorkerEntity } from "src/entities/worker.entity";
-import { WorkersStatusPageDto } from "./dto/workers.page.dto";
-import { WorkerStatus } from "src/constants/enums";
-import { ConfigService } from "@nestjs/config";
-import { HealthStatus } from "./worker.types";
-import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { Test, TestingModule } from '@nestjs/testing';
+import { WorkersService } from './workers.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { WorkersStatusPageDto } from './dto/workers.page.dto';
+import { WorkerStatus } from 'src/constants/enums';
+import { ConfigService } from '@nestjs/config';
+import { HealthStatus } from './worker.types';
+import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
-describe("WorkersService", () => {
+describe('WorkersService', () => {
   let service: WorkersService;
   let repository: Repository<WorkerEntity>;
   let configService: jest.Mocked<ConfigService>;
@@ -70,33 +70,33 @@ describe("WorkersService", () => {
     );
   });
 
-  it("should be defined", () => {
+  it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe("findAllWorkers", () => {
-    it("should return paginated data with count", async () => {
+  describe('findAllWorkers', () => {
+    it('should return paginated data with count', async () => {
       const workerStatusPageDto: WorkersStatusPageDto = {
-        page: "1",
-        limit: "10",
-        sort: "name",
-        order: "asc",
-        workerId: "345678",
-        workerName: "test",
-        clientId: "asd",
-        ipAddress: "121.12.12.2",
-        projectId: "234",
+        page: '1',
+        limit: '10',
+        sort: 'name',
+        order: 'asc',
+        workerId: '345678',
+        workerName: 'test',
+        clientId: 'asd',
+        ipAddress: '121.12.12.2',
+        projectId: '234',
         status: WorkerStatus.Online,
-        fileServerId: "fs-123",
+        fileServerId: 'fs-123',
       };
       const workers = [
-        { id: "1", name: "Worker1" },
-        { id: "2", name: "Worker2" },
+        { id: '1', name: 'Worker1' },
+        { id: '2', name: 'Worker2' },
       ];
       const total = 2;
 
-      jest.spyOn(repository, "find").mockResolvedValueOnce(workers as any);
-      jest.spyOn(repository, "count").mockResolvedValueOnce(total);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
+      jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
       const result = await service.findAllWorkers(workerStatusPageDto);
 
@@ -104,45 +104,45 @@ describe("WorkersService", () => {
       expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {
-          workerId: "345678",
-          workerName: "test",
-          clientId: "asd",
-          ipAddress: "121.12.12.2",
-          projectId: "234",
+          workerId: '345678',
+          workerName: 'test',
+          clientId: 'asd',
+          ipAddress: '121.12.12.2',
+          projectId: '234',
           status: WorkerStatus.Online,
-          fileServers: { id: "fs-123" },
+          fileServers: { id: 'fs-123' },
         },
-        order: { name: "asc" },
-        relations: ["stats", "fileServers"],
+        order: { name: 'asc' },
+        relations: ['stats', 'fileServers'],
         skip: 0,
         take: 10,
       });
       expect(repository.count).toHaveBeenCalledWith({
         where: {
-          workerId: "345678",
-          workerName: "test",
-          clientId: "asd",
-          ipAddress: "121.12.12.2",
-          projectId: "234",
+          workerId: '345678',
+          workerName: 'test',
+          clientId: 'asd',
+          ipAddress: '121.12.12.2',
+          projectId: '234',
           status: WorkerStatus.Online,
         },
       });
     });
 
-    it("should return data without pagination if no page and limit are provided", async () => {
+    it('should return data without pagination if no page and limit are provided', async () => {
       const workerStatusPageDto: WorkersStatusPageDto = {
-        sort: "name",
-        order: "asc",
+        sort: 'name',
+        order: 'asc',
         // additional filters
       };
       const workers = [
-        { id: "1", name: "Worker1" },
-        { id: "2", name: "Worker2" },
+        { id: '1', name: 'Worker1' },
+        { id: '2', name: 'Worker2' },
       ];
       const total = 2;
 
-      jest.spyOn(repository, "find").mockResolvedValueOnce(workers as any);
-      jest.spyOn(repository, "count").mockResolvedValueOnce(total);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
+      jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
       const result = await service.findAllWorkers(workerStatusPageDto);
 
@@ -150,19 +150,19 @@ describe("WorkersService", () => {
       expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {},
-        order: { name: "asc" },
-        relations: ["stats"],
+        order: { name: 'asc' },
+        relations: ['stats'],
       });
       expect(repository.count).toHaveBeenCalled();
     });
 
-    it("should return an empty result when no workers are found", async () => {
+    it('should return an empty result when no workers are found', async () => {
       const workerStatusPageDto: WorkersStatusPageDto = {
-        page: "1",
-        limit: "10",
+        page: '1',
+        limit: '10',
       };
-      jest.spyOn(repository, "find").mockResolvedValueOnce([]);
-      jest.spyOn(repository, "count").mockResolvedValueOnce(0);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce([]);
+      jest.spyOn(repository, 'count').mockResolvedValueOnce(0);
 
       const result = await service.findAllWorkers(workerStatusPageDto);
 
@@ -172,43 +172,43 @@ describe("WorkersService", () => {
       expect(repository.count).toHaveBeenCalled();
     });
 
-    it("should handle repository errors", async () => {
+    it('should handle repository errors', async () => {
       const workerStatusPageDto: WorkersStatusPageDto = {
-        page: "1",
-        limit: "10",
+        page: '1',
+        limit: '10',
       };
       jest
-        .spyOn(repository, "find")
-        .mockRejectedValueOnce(new Error("Database error"));
+        .spyOn(repository, 'find')
+        .mockRejectedValueOnce(new Error('Database error'));
 
       await expect(service.findAllWorkers(workerStatusPageDto)).rejects.toThrow(
-        "Database error",
+        'Database error',
       );
       expect(repository.find).toHaveBeenCalled();
     });
 
-    it("should return paginated data with count for job run id", async () => {
+    it('should return paginated data with count for job run id', async () => {
       const workerStatusPageDto: WorkersStatusPageDto = {
-        page: "1",
-        limit: "10",
-        sort: "name",
-        order: "asc",
-        workerId: "345678",
-        workerName: "test",
-        clientId: "asd",
-        ipAddress: "121.12.12.2",
-        projectId: "234",
-        jobRunId: "123",
+        page: '1',
+        limit: '10',
+        sort: 'name',
+        order: 'asc',
+        workerId: '345678',
+        workerName: 'test',
+        clientId: 'asd',
+        ipAddress: '121.12.12.2',
+        projectId: '234',
+        jobRunId: '123',
         status: WorkerStatus.Online,
       };
       const workers = [
-        { id: "1", name: "Worker1", stats: { healthStatus: "healthy" } },
-        { id: "2", name: "Worker2", stats: { healthStatus: "healthy" } },
+        { id: '1', name: 'Worker1', stats: { healthStatus: 'healthy' } },
+        { id: '2', name: 'Worker2', stats: { healthStatus: 'healthy' } },
       ];
       const total = 2;
 
-      jest.spyOn(repository, "find").mockResolvedValueOnce(workers as any);
-      jest.spyOn(repository, "count").mockResolvedValueOnce(total);
+      jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
+      jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
       const result = await service.findAllWorkers(workerStatusPageDto);
 
@@ -216,50 +216,50 @@ describe("WorkersService", () => {
       expect(result).toEqual(workers);
       expect(repository.find).toHaveBeenCalledWith({
         where: {
-          workerId: "345678",
-          workerName: "test",
-          clientId: "asd",
-          ipAddress: "121.12.12.2",
-          jobRunMap: { jobRunId: "123" },
-          projectId: "234",
+          workerId: '345678',
+          workerName: 'test',
+          clientId: 'asd',
+          ipAddress: '121.12.12.2',
+          jobRunMap: { jobRunId: '123' },
+          projectId: '234',
           status: WorkerStatus.Online,
         },
-        order: { name: "asc" },
-        relations: ["stats"],
+        order: { name: 'asc' },
+        relations: ['stats'],
         skip: 0,
         take: 10,
       });
       expect(repository.count).toHaveBeenCalledWith({
         where: {
-          workerId: "345678",
-          workerName: "test",
-          clientId: "asd",
-          ipAddress: "121.12.12.2",
-          jobRunMap: { jobRunId: "123" },
-          projectId: "234",
+          workerId: '345678',
+          workerName: 'test',
+          clientId: 'asd',
+          ipAddress: '121.12.12.2',
+          jobRunMap: { jobRunId: '123' },
+          projectId: '234',
           status: WorkerStatus.Online,
         },
       });
     });
   });
 
-  it("should update worker status based on health status", async () => {
+  it('should update worker status based on health status', async () => {
     const workers = [
       {
-        id: "1",
-        name: "Worker1",
+        id: '1',
+        name: 'Worker1',
         stats: { healthStatus: HealthStatus.Healthy, updatedAt: new Date() },
         status: WorkerStatus.Online,
       },
       {
-        id: "2",
-        name: "Worker2",
+        id: '2',
+        name: 'Worker2',
         stats: { healthStatus: HealthStatus.Unhealthy, updatedAt: new Date() },
         status: WorkerStatus.Online,
       },
       {
-        id: "3",
-        name: "Worker3",
+        id: '3',
+        name: 'Worker3',
         stats: {
           healthStatus: HealthStatus.Healthy,
           updatedAt: new Date(new Date().getTime() - 61000),
@@ -269,13 +269,13 @@ describe("WorkersService", () => {
     ];
     const total = 2;
     const workerStatusPageDto: WorkersStatusPageDto = {
-      sort: "name",
-      order: "asc",
+      sort: 'name',
+      order: 'asc',
       // additional filters
     };
-    jest.spyOn(configService, "get").mockReturnValue(60);
-    jest.spyOn(repository, "find").mockResolvedValueOnce(workers as any);
-    jest.spyOn(repository, "count").mockResolvedValueOnce(total);
+    jest.spyOn(configService, 'get').mockReturnValue(60);
+    jest.spyOn(repository, 'find').mockResolvedValueOnce(workers as any);
+    jest.spyOn(repository, 'count').mockResolvedValueOnce(total);
 
     const result = await service.findAllWorkers(workerStatusPageDto);
 
@@ -284,39 +284,49 @@ describe("WorkersService", () => {
     expect(result[2].status).toBe(WorkerStatus.Offline);
   });
 
-  describe("updateWorkerJobRunStatus", () => {
+  describe('updateWorkerJobRunStatus', () => {
     let workerJobRunMapFindOne: jest.SpyInstance;
     let workerJobRunMapSave: jest.SpyInstance;
 
     beforeEach(() => {
       workerJobRunMapFindOne = jest
-        .spyOn(workerJobRunMapRepository, "findOne")
+        .spyOn(workerJobRunMapRepository, 'findOne')
         .mockImplementation();
       workerJobRunMapSave = jest
-        .spyOn(workerJobRunMapRepository, "save")
+        .spyOn(workerJobRunMapRepository, 'save')
         .mockImplementation();
     });
 
-    it("should update isActive and save when mapping exists", async () => {
-      const workerId = "worker-1";
-      const jobRunId = "jobrun-1";
+    it('should update isActive and save when mapping exists', async () => {
+      const workerId = 'worker-1';
+      const jobRunId = 'jobrun-1';
       const active = true;
       const mockMap = { workerId, jobRunId, isActive: false };
       workerJobRunMapFindOne.mockResolvedValueOnce(mockMap as any);
-      workerJobRunMapSave.mockResolvedValueOnce({ ...mockMap, isActive: active });
+      workerJobRunMapSave.mockResolvedValueOnce({
+        ...mockMap,
+        isActive: active,
+      });
 
-      const result = await service.updateWorkerJobRunStatus(workerId, jobRunId, active);
+      const result = await service.updateWorkerJobRunStatus(
+        workerId,
+        jobRunId,
+        active,
+      );
 
       expect(workerJobRunMapFindOne).toHaveBeenCalledWith({
         where: { workerId, jobRunId },
       });
-      expect(workerJobRunMapSave).toHaveBeenCalledWith({ ...mockMap, isActive: active });
+      expect(workerJobRunMapSave).toHaveBeenCalledWith({
+        ...mockMap,
+        isActive: active,
+      });
       expect(result).toEqual({ ...mockMap, isActive: active });
     });
 
-    it("should throw BadRequestException if mapping does not exist", async () => {
-      const workerId = "worker-2";
-      const jobRunId = "jobrun-2";
+    it('should throw BadRequestException if mapping does not exist', async () => {
+      const workerId = 'worker-2';
+      const jobRunId = 'jobrun-2';
       workerJobRunMapFindOne.mockResolvedValueOnce(undefined);
 
       await expect(
@@ -331,34 +341,42 @@ describe("WorkersService", () => {
     });
   });
 
-  describe("updateWorkerStatus", () => {
-    it("should set status to Offline if stats is missing", () => {
-      jest.spyOn(configService, "get").mockReturnValue(60);
+  describe('updateWorkerStatus', () => {
+    it('should set status to Offline if stats is missing', () => {
+      jest.spyOn(configService, 'get').mockReturnValue(60);
       const workers = [
-        { id: "1", name: "Worker1", stats: undefined, status: WorkerStatus.Online },
-        { id: "2", name: "Worker2", stats: null, status: WorkerStatus.Online },
+        {
+          id: '1',
+          name: 'Worker1',
+          stats: undefined,
+          status: WorkerStatus.Online,
+        },
+        { id: '2', name: 'Worker2', stats: null, status: WorkerStatus.Online },
       ];
       const result = service.updateWorkerStatus(workers as any);
       expect(result[0].status).toBe(WorkerStatus.Offline);
       expect(result[1].status).toBe(WorkerStatus.Offline);
     });
 
-    it("should set status to Offline if healthStatus is missing", () => {
-      jest.spyOn(configService, "get").mockReturnValue(60);
+    it('should set status to Offline if healthStatus is missing', () => {
+      jest.spyOn(configService, 'get').mockReturnValue(60);
       const workers = [
-        { id: "1", name: "Worker1", stats: {}, status: WorkerStatus.Online },
+        { id: '1', name: 'Worker1', stats: {}, status: WorkerStatus.Online },
       ];
       const result = service.updateWorkerStatus(workers as any);
       expect(result[0].status).toBe(WorkerStatus.Offline);
     });
 
-    it("should set status to Offline if healthStatus is not Healthy", () => {
-      jest.spyOn(configService, "get").mockReturnValue(60);
+    it('should set status to Offline if healthStatus is not Healthy', () => {
+      jest.spyOn(configService, 'get').mockReturnValue(60);
       const workers = [
         {
-          id: "1",
-          name: "Worker1",
-          stats: { healthStatus: HealthStatus.Unhealthy, updatedAt: new Date() },
+          id: '1',
+          name: 'Worker1',
+          stats: {
+            healthStatus: HealthStatus.Unhealthy,
+            updatedAt: new Date(),
+          },
           status: WorkerStatus.Online,
         },
       ];
@@ -366,12 +384,12 @@ describe("WorkersService", () => {
       expect(result[0].status).toBe(WorkerStatus.Offline);
     });
 
-    it("should set status to Offline if updatedAt is older than timeout", () => {
-      jest.spyOn(configService, "get").mockReturnValue(60);
+    it('should set status to Offline if updatedAt is older than timeout', () => {
+      jest.spyOn(configService, 'get').mockReturnValue(60);
       const workers = [
         {
-          id: "1",
-          name: "Worker1",
+          id: '1',
+          name: 'Worker1',
           stats: {
             healthStatus: HealthStatus.Healthy,
             updatedAt: new Date(Date.now() - 61000),
@@ -383,12 +401,12 @@ describe("WorkersService", () => {
       expect(result[0].status).toBe(WorkerStatus.Offline);
     });
 
-    it("should set status to Online if healthStatus is Healthy and updatedAt is recent", () => {
-      jest.spyOn(configService, "get").mockReturnValue(60);
+    it('should set status to Online if healthStatus is Healthy and updatedAt is recent', () => {
+      jest.spyOn(configService, 'get').mockReturnValue(60);
       const workers = [
         {
-          id: "1",
-          name: "Worker1",
+          id: '1',
+          name: 'Worker1',
           stats: {
             healthStatus: HealthStatus.Healthy,
             updatedAt: new Date(),

@@ -1,9 +1,9 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
-import { WorkerEntity } from "src/entities/worker.entity";
-import { Repository } from "typeorm";
-import { HealthcheckStats, SystemStats } from "./dto/healthcheck.dto";
+import { Injectable, Inject } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
+import { WorkerEntity } from 'src/entities/worker.entity';
+import { Repository } from 'typeorm';
+import { HealthcheckStats, SystemStats } from './dto/healthcheck.dto';
 import {
   LoggerFactory,
   LoggerService,
@@ -13,7 +13,7 @@ import {
 export class HealthcheckService {
   // This service will handle the logic for health checks
   private readonly logger: LoggerService;
-  
+
   constructor(
     @InjectRepository(WorkerStatsEntity)
     private workerStatsEntity: Repository<WorkerStatsEntity>,
@@ -33,7 +33,7 @@ export class HealthcheckService {
       // Check if the worker exists
       const worker = await this.workerEntity.findOne({
         where: { workerId },
-        relations: ["stats"],
+        relations: ['stats'],
       });
       if (!worker) {
         // Handle the case where the worker does not exist
@@ -57,7 +57,7 @@ export class HealthcheckService {
       await this.workerStatsEntity.save(statsEntity);
     } catch (error) {
       this.logger.error(
-        "Error creating or updating health check stats:",
+        'Error creating or updating health check stats:',
         error,
       );
       throw error;

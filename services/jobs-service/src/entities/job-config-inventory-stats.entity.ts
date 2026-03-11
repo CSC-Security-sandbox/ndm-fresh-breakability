@@ -26,6 +26,11 @@ export class JobConfigInventoryStatsEntity extends Base {
   totalSize: number;
 
   @ApiProperty({ description: 'Last updated timestamp' })
-  @Column({ type: 'timestamp', name: 'last_updated_at', nullable: false, default: () => 'now()' })
+  @Column({
+    type: 'timestamp',
+    name: 'last_updated_at',
+    nullable: false,
+    default: () => 'now()',
+  })
   lastUpdatedAt: Date;
 }

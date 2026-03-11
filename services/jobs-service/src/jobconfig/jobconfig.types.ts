@@ -3,7 +3,7 @@ import {
   JobStatus,
   JobType,
   Protocol,
-} from "src/constants/enums";
+} from 'src/constants/enums';
 
 export interface InActivateJobConfigPayload {
   jobConfigId: string;
@@ -19,7 +19,7 @@ export interface JobConfigBulkMigrateRes {
 
 export interface JobConfigBulkMigrateFinalResponse {
   jobs: JobConfigBulkMigrateRes[];
-  warnings?: {}[];
+  warnings?: object[];
 }
 
 export interface JobConfigBulkCutoverRes {
@@ -31,10 +31,10 @@ export interface JobConfigBulkCutoverRes {
   targetPathId: string;
 }
 export type FlattenedCutoverConfig = {
-    sourcePathId: string;
-    sourceDirectoryPath?: string;
-    destinationPathId: string;
-    destinationDirectoryPath?: string;
+  sourcePathId: string;
+  sourceDirectoryPath?: string;
+  destinationPathId: string;
+  destinationDirectoryPath?: string;
 };
 
 export type SpeedTestJobRun = {
@@ -45,7 +45,7 @@ export type SpeedTestJobRun = {
   fileServerCount: number;
   workers: number;
   status: string;
-}
+};
 
 export type SpeedTestEntry = {
   jobRunId: string;
@@ -54,7 +54,7 @@ export type SpeedTestEntry = {
   totalWorkers: number;
   fileServers: any[];
   status: string;
-}
+};
 
 export interface JobConfigPrecheckRes {
   status: string;
@@ -85,29 +85,29 @@ export interface ServerCredentials {
 
 export interface workerWithStatus {
   workerId: string;
-  ishealthy: boolean 
+  ishealthy: boolean;
 }
 export interface PreChecks {
   pathId: string;
   discoveredSize?: number;
   pathName: string;
   sourceDirectoryPath?: string;
-  serverId: string
+  serverId: string;
   destinations: {
     pathId: string;
     pathName: string;
     targetDirectoryPath?: string;
-    serverId: string
-    workers: workerWithStatus[]
-  }[],
+    serverId: string;
+    workers: workerWithStatus[];
+  }[];
 }
 export interface PreCheckWorkflowOPayload {
   serverCredentials: ServerCredentials[];
   settings: {
     preserveAccessTime: boolean;
     preservePermissions: boolean;
-  },
-  preChecks: PreChecks[]
+  };
+  preChecks: PreChecks[];
 }
 
 export interface PreCheckCircularDependency {

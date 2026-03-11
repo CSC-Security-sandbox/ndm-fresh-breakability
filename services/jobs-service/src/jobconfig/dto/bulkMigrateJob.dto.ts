@@ -1,25 +1,29 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-    ArrayUnique,
-    IsArray,
-    IsBoolean,
-    IsDate,
-    IsOptional,
-    IsString,
-    IsUUID,
-    ValidateNested,
-    Validate,
-    ValidatorConstraint, 
-    ValidatorConstraintInterface, 
-    ValidationArguments
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsDate,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 
 @ValidatorConstraint({ name: 'SourceNotInDestination', async: false })
 export class SourceNotInDestinationConstraint implements ValidatorConstraintInterface {
   validate(destinationPathIds: string[], args: ValidationArguments) {
     const migrateConfig = args.object as MigrateConfig;
-    if (!migrateConfig || !migrateConfig.sourcePathId || !Array.isArray(destinationPathIds)) {
+    if (
+      !migrateConfig ||
+      !migrateConfig.sourcePathId ||
+      !Array.isArray(destinationPathIds)
+    ) {
       return false;
     }
     return !destinationPathIds.includes(migrateConfig.sourcePathId);
@@ -31,7 +35,10 @@ export class SourceNotInDestinationConstraint implements ValidatorConstraintInte
 }
 
 export class MigrateJobConfigOptions {
-  @ApiProperty({ description: 'Exclude files older than this date', required: false })
+  @ApiProperty({
+    description: 'Exclude files older than this date',
+    required: false,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
@@ -46,13 +53,13 @@ export class MigrateJobConfigOptions {
   @IsBoolean()
   preserveAccessTime: boolean;
 
-  @ApiProperty({ description: "Preserve permissions flag", example: true })
+  @ApiProperty({ description: 'Preserve permissions flag', example: true })
   @IsBoolean()
   preservePermissions: boolean;
 
   @ApiProperty({ description: 'Skip Files time duration', example: '1h' })
   @IsString()
-  skipFile: string
+  skipFile: string;
 }
 
 export class MigrateConfig {
@@ -60,44 +67,56 @@ export class MigrateConfig {
   @IsUUID()
   sourcePathId: string;
 
-  @ApiProperty({ description: 'UUIDs of the destination file servers' }) 
+  @ApiProperty({ description: 'UUIDs of the destination file servers' })
   @IsArray()
   @ArrayUnique()
-  @IsUUID('all', { each: true }) 
+  @IsUUID('all', { each: true })
   @Validate(SourceNotInDestinationConstraint)
   destinationPathId: string[];
 
-  @ApiProperty({ description: 'Directory path on source volume', required: false })
+  @ApiProperty({
+    description: 'Directory path on source volume',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   sourceDirectoryPath?: string;
 
-  @ApiProperty({ description: 'Directory path on destination volume', required: false })
+  @ApiProperty({
+    description: 'Directory path on destination volume',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   destinationDirectoryPath?: string;
 }
 
 export class BulkMigrateJobConfig {
-  @ApiProperty({ description: 'Timestamp for 1st migrate run', example: new Date().toISOString() })
+  @ApiProperty({
+    description: 'Timestamp for 1st migrate run',
+    example: new Date().toISOString(),
+  })
   @Type(() => Date)
   @IsDate()
   @IsOptional()
   firstRunAt: Date;
 
-  @ApiProperty({ description: 'Future run schedule (incremental sync config)', required: false })
+  @ApiProperty({
+    description: 'Future run schedule (incremental sync config)',
+    required: false,
+  })
   @IsString()
   futureRunSchedule: string;
 
-  @ApiProperty({ 
-    description: 'Details of all the bulk migrate configs', 
-    isArray: true, 
-    type: MigrateConfig 
+  @ApiProperty({
+    description: 'Details of all the bulk migrate configs',
+    isArray: true,
+    type: MigrateConfig,
   })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MigrateConfig)
-  migrateConfigs: MigrateConfig[]
+  migrateConfigs: MigrateConfig[];
 
   @ApiProperty({
     type: 'string',
@@ -117,7 +136,7 @@ export class BulkMigrateJobConfig {
 
   @ApiProperty({
     type: MigrateJobConfigOptions,
-    description: 'Migrate job options'
+    description: 'Migrate job options',
   })
   @ValidateNested({ each: true })
   @Type(() => MigrateJobConfigOptions)

@@ -15,19 +15,13 @@ async function bootstrap() {
   const host: string = configService.get<string>('app.http.host');
   const port: number = configService.get<number>('app.http.port');
 
-  app.useGlobalInterceptors(
-      new ResponseInterceptor(
-        [],
-        [],
-        loggerFactory,
-      ),
-  );
+  app.useGlobalInterceptors(new ResponseInterceptor([], [], loggerFactory));
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  
-  app.setGlobalPrefix('api/v1/')
-  
-  app.useGlobalPipes(new ValidationPipe())
+
+  app.setGlobalPrefix('api/v1/');
+
+  app.useGlobalPipes(new ValidationPipe());
 
   const config = new DocumentBuilder()
     .setTitle('Job service')
@@ -37,13 +31,13 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('/api/v1/jobs-docs', app, document,{
+  SwaggerModule.setup('/api/v1/jobs-docs', app, document, {
     jsonDocumentUrl: 'swagger/json',
   });
-  
+
   app.enableShutdownHooks();
   app.set('trust proxy', true);
-  
+
   app.enableCors();
 
   Logger.log('Service Queue Microservice is listening...');
@@ -51,4 +45,4 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
   Logger.log(`Service started on port ${port}`);
 }
-bootstrap();
+void bootstrap();

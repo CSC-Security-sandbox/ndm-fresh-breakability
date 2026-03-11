@@ -5,7 +5,7 @@ import temporalConfig from 'src/config/temporal.config';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
-  imports:[
+  imports: [
     LoggerModule.forRoot(),
     ConfigModule.forRoot({ load: [temporalConfig] }),
   ],

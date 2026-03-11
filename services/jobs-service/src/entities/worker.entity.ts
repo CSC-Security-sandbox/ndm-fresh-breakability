@@ -9,56 +9,56 @@ import {
   ManyToMany,
   OneToMany,
   OneToOne,
-} from "typeorm";
-import { ApiProperty } from "@nestjs/swagger";
-import { Platform, WorkerStatus } from "src/constants/enums";
-import { Base } from "./base.entity";
-import { ProjectEntity } from "./project.entity";
-import { FileServerEntity } from "./fileserver.entity";
-import { WorkerJobRunMap } from "./workerjobrun.entity";
-import { TaskEntity } from "./task.entity";
-import { WorkerStatsEntity } from "./worker-stats.entity";
+} from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+import { Platform, WorkerStatus } from 'src/constants/enums';
+import { Base } from './base.entity';
+import { ProjectEntity } from './project.entity';
+import { FileServerEntity } from './fileserver.entity';
+import { WorkerJobRunMap } from './workerjobrun.entity';
+import { TaskEntity } from './task.entity';
+import { WorkerStatsEntity } from './worker-stats.entity';
 
-@Entity({ name: "worker" })
+@Entity({ name: 'worker' })
 export class WorkerEntity extends Base {
-  @ApiProperty({ description: "workerId" })
-  @PrimaryColumn({ type: "uuid", name: "id" })
+  @ApiProperty({ description: 'workerId' })
+  @PrimaryColumn({ type: 'uuid', name: 'id' })
   workerId: string;
 
-  @ApiProperty({ description: "projectId" })
-  @Column({ type: "uuid", nullable: false, name: "project_id" })
+  @ApiProperty({ description: 'projectId' })
+  @Column({ type: 'uuid', nullable: false, name: 'project_id' })
   projectId: string;
 
   // @ApiProperty({ description: 'clientId' })
   // @Column({ type: 'varchar', length: 255, nullable: false, name:'client_id' })
   // clientId: string;
 
-  @ApiProperty({ description: "workerName" })
+  @ApiProperty({ description: 'workerName' })
   @Column({
-    type: "varchar",
+    type: 'varchar',
     length: 255,
     nullable: false,
-    name: "worker_name",
+    name: 'worker_name',
   })
   workerName: string;
 
-  @ApiProperty({ description: "ipAddress" })
-  @Column({ type: "varchar", length: 255, nullable: false, name: "ip_address" })
+  @ApiProperty({ description: 'ipAddress' })
+  @Column({ type: 'varchar', length: 255, nullable: false, name: 'ip_address' })
   ipAddress: string;
 
   @ManyToOne(() => ProjectEntity, (project) => project.workers)
-  @JoinColumn({ name: "project_id" })
+  @JoinColumn({ name: 'project_id' })
   project: ProjectEntity;
 
-  @ApiProperty({ description: "status" })
-  @Column({ type: "varchar", name: "status" })
+  @ApiProperty({ description: 'status' })
+  @Column({ type: 'varchar', name: 'status' })
   status: WorkerStatus;
 
   @ManyToMany(() => FileServerEntity, (fileServers) => fileServers.workers, {
     cascade: true,
-    orphanedRowAction: "delete",
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE",
+    orphanedRowAction: 'delete',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
   })
   fileServers: FileServerEntity[];
 
@@ -78,12 +78,17 @@ export class WorkerEntity extends Base {
     cascade: true,
   })
   stats: WorkerStatsEntity;
-  
+
   @ApiProperty({ description: 'platform' })
-  @Column({ type: 'enum', enum:Platform, name:'platform' ,nullable: true })
+  @Column({ type: 'enum', enum: Platform, name: 'platform', nullable: true })
   platform: Platform;
 
   @ApiProperty({ description: 'workerVersion' })
-  @Column({ type: 'varchar', length: 100, name: 'worker_version', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'worker_version',
+    nullable: true,
+  })
   workerVersion: string;
 }

@@ -18,8 +18,8 @@ describe('TasksController', () => {
       user: {
         roles: [
           {
-            permissions: ["permission1", "permission2"],
-            projects: ["project1"],
+            permissions: ['permission1', 'permission2'],
+            projects: ['project1'],
           },
         ],
       },
@@ -34,9 +34,9 @@ describe('TasksController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TasksController],
       providers: [
-        { 
+        {
           provide: TasksService,
-          useValue: mockTasksService 
+          useValue: mockTasksService,
         },
         {
           provide: JwtService,
@@ -60,7 +60,7 @@ describe('TasksController', () => {
     };
 
     it('should call taskService.getTaskList with correct parameters', async () => {
-      mockTasksService.getTaskList.mockResolvedValue(['Task1', 'Task2']); 
+      mockTasksService.getTaskList.mockResolvedValue(['Task1', 'Task2']);
       const result = await tasksController.getTaskList(validQueryParams as any);
       expect(tasksService.getTaskList).toHaveBeenCalledWith(validQueryParams);
       expect(result).toEqual(['Task1', 'Task2']);
@@ -69,17 +69,26 @@ describe('TasksController', () => {
     it('should throw a BadRequestException for invalid query parameters', async () => {
       const invalidQueryParams: any = { page: -1, limit: 0 };
 
-      const validationPipe = new ValidationPipe({ transform: false, whitelist: true });
+      const validationPipe = new ValidationPipe({
+        transform: false,
+        whitelist: true,
+      });
 
-      await expect(validationPipe.transform(invalidQueryParams, {
-        metatype: TaskQueryParamsDto,
-        type: 'query',
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        validationPipe.transform(invalidQueryParams, {
+          metatype: TaskQueryParamsDto,
+          type: 'query',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should handle service errors gracefully', async () => {
-      mockTasksService.getTaskList.mockRejectedValue(new Error('Service Error'));
-      await expect(tasksController.getTaskList(validQueryParams as any)).rejects.toThrow('Service Error');
+      mockTasksService.getTaskList.mockRejectedValue(
+        new Error('Service Error'),
+      );
+      await expect(
+        tasksController.getTaskList(validQueryParams as any),
+      ).rejects.toThrow('Service Error');
     });
   });
 });

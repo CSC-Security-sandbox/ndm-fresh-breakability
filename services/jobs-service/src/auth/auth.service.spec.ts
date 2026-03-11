@@ -82,7 +82,9 @@ describe('AuthService', () => {
       expectedTokenRequest.append('client_secret', 'test-secret');
       expectedTokenRequest.append('grant_type', 'client_credentials');
 
-      expect((authService as any).tokenRequest).toBe(expectedTokenRequest.toString());
+      expect((authService as any).tokenRequest).toBe(
+        expectedTokenRequest.toString(),
+      );
     });
 
     it('should use default values when config not provided', async () => {
@@ -108,7 +110,9 @@ describe('AuthService', () => {
 
       const service = moduleWithDefaults.get<AuthService>(AuthService);
 
-      expect((service as any).keycloakBaseUrl).toBe('http://keycloak.keycloak.svc.cluster.local/keycloak');
+      expect((service as any).keycloakBaseUrl).toBe(
+        'http://keycloak.keycloak.svc.cluster.local/keycloak',
+      );
       expect((service as any).realm).toBe('datamigrator');
       expect((service as any).clientId).toBe('admin-cli');
     });
@@ -228,7 +232,10 @@ describe('AuthService', () => {
       };
 
       (httpService.post as jest.Mock).mockReturnValue(of(mockResponse));
-      const scheduleRefreshSpy = jest.spyOn(authService as any, 'scheduleTokenRefresh');
+      const scheduleRefreshSpy = jest.spyOn(
+        authService as any,
+        'scheduleTokenRefresh',
+      );
 
       await authService.getAccessToken();
 
@@ -290,7 +297,9 @@ describe('AuthService', () => {
       // Fast-forward 23 hours
       await jest.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
 
-      expect(mockLogger.log).toHaveBeenCalledWith('[AuthService]: Auto-refreshing JWT token...');
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        '[AuthService]: Auto-refreshing JWT token...',
+      );
       expect(httpService.post).toHaveBeenCalledTimes(2);
     });
 
@@ -328,7 +337,9 @@ describe('AuthService', () => {
       await jest.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('[AuthService]: Failed to obtain access token: Refresh failed'),
+        expect.stringContaining(
+          '[AuthService]: Failed to obtain access token: Refresh failed',
+        ),
       );
 
       // The current implementation catches errors in getAccessToken and returns null

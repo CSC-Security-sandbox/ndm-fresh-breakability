@@ -5,7 +5,7 @@ import {
   IsDate,
   IsEnum,
   IsOptional,
-  IsString
+  IsString,
 } from 'class-validator';
 import { JobStatus } from 'src/constants/enums';
 
@@ -14,33 +14,43 @@ export class JobConfigDto {
   @IsEnum(JobStatus)
   status?: JobStatus;
 
-  @ApiProperty({ description: 'Exclude files older than this date', required: false, })
+  @ApiProperty({
+    description: 'Exclude files older than this date',
+    required: false,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   excludeOlderThan?: Date;
 
-  @ApiProperty({ description: 'Patterns of files to exclude', required: false , })
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false })
   @IsOptional()
   @IsString()
   excludeFilePatterns?: string;
 
-  @ApiProperty({ description: 'Preserve access time flag', example: false})
+  @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsOptional()
   @IsBoolean()
   preserveAccessTime?: boolean;
 
-  @ApiProperty({ description: 'Preserve permissions flag', example: true})
+  @ApiProperty({ description: 'Preserve permissions flag', example: true })
   @IsOptional()
   @IsBoolean()
   preservePermissions?: boolean;
 
-  @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)', example: false, required: false })
+  @ApiProperty({
+    description: 'Scan Alternate Data Streams flag (Windows/SMB only)',
+    example: false,
+    required: false,
+  })
   @IsOptional()
   @IsBoolean()
   shouldScanADS?: boolean;
 
-  @ApiProperty({ description: 'Job schedule configuration', example: new Date().toISOString() })
+  @ApiProperty({
+    description: 'Job schedule configuration',
+    example: new Date().toISOString(),
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()

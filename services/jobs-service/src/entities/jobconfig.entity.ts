@@ -1,13 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { JobStatus, JobType, Protocol } from 'src/constants/enums';
-import { Column, Entity, JoinColumn, ManyToOne,OneToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Base } from './base.entity';
 
 import { JobRunEntity } from './jobrun.entity';
 import { VolumeEntity } from './volume.entity';
 import { Exclude } from 'class-transformer';
 import { SpeedTestConfigEntity } from './speed-test-job-config.entity';
-
 
 @Entity({ name: 'jobconfig' })
 export class JobConfigEntity extends Base {
@@ -39,12 +46,18 @@ export class JobConfigEntity extends Base {
   @Column({ name: 'preserve_permissions', type: 'boolean', default: true })
   preservePermissions: boolean;
 
-  @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)' })
+  @ApiProperty({
+    description: 'Scan Alternate Data Streams flag (Windows/SMB only)',
+  })
   @Column({ name: 'should_scan_ads', type: 'boolean', default: false })
   shouldScanADS: boolean;
 
   @ApiProperty({ description: 'Job schedule configuration' })
-  @Column({ name: 'first_run_at', type: 'timestamp with time zone' , nullable: true})
+  @Column({
+    name: 'first_run_at',
+    type: 'timestamp with time zone',
+    nullable: true,
+  })
   firstRunAt: Date;
 
   @ApiProperty({ description: 'Incremental job schedule configuration' })
@@ -67,18 +80,29 @@ export class JobConfigEntity extends Base {
   @Column({ type: 'text', nullable: true, name: 'target_directory_path' })
   targetDirectoryPath: string;
 
-  @OneToMany(() => JobRunEntity, jobRun => jobRun.jobConfig, { cascade: true, eager: false })
+  @OneToMany(() => JobRunEntity, (jobRun) => jobRun.jobConfig, {
+    cascade: true,
+    eager: false,
+  })
   jobRuns: JobRunEntity[];
 
-  @ManyToOne(() => VolumeEntity, volume => volume.sourcePath, { onDelete:'CASCADE'})
-  @JoinColumn({ name: 'source_path_id' }) 
+  @ManyToOne(() => VolumeEntity, (volume) => volume.sourcePath, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'source_path_id' })
   sourcePath: VolumeEntity;
 
-  @ManyToOne(() => VolumeEntity, volume => volume.targetPath, { onDelete:'CASCADE'})
-  @JoinColumn({ name: 'target_path_id' }) 
+  @ManyToOne(() => VolumeEntity, (volume) => volume.targetPath, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'target_path_id' })
   targetPath: VolumeEntity;
 
-  @OneToMany(() => SpeedTestConfigEntity, speedTestConfig => speedTestConfig.jobConfig, { cascade: true })
+  @OneToMany(
+    () => SpeedTestConfigEntity,
+    (speedTestConfig) => speedTestConfig.jobConfig,
+    { cascade: true },
+  )
   speedTestConfigs: SpeedTestConfigEntity[];
 
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })

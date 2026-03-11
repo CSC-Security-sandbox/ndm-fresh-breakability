@@ -18,17 +18,18 @@ export class JobRunActionsReq {
   action: JobRunActions;
 
   @ApiProperty({
-    description: 'An array of UUIDs representing job runs to be acted upon (at least one required)',
+    description:
+      'An array of UUIDs representing job runs to be acted upon (at least one required)',
     type: [String],
     example: ['550e8400-e29b-41d4-a716-446655440000'],
   })
-  @ArrayNotEmpty() 
-  @IsUUID(4, { each: true }) 
-  @ArrayUnique() 
+  @ArrayNotEmpty()
+  @IsUUID(4, { each: true })
+  @ArrayUnique()
   jobRuns: string[];
 }
 
-export class ApprovalRequestDTO{
+export class ApprovalRequestDTO {
   @ApiProperty({
     description: 'Job run ID to be approve',
     example: '550e8400-e29b-41d4-a716-446655440000',

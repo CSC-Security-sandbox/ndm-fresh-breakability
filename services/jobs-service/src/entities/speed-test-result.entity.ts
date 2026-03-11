@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, ManyToOne,OneToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity({ name: 'speed_log' })
 export class SpeedLogEntity {
@@ -20,10 +27,13 @@ export class SpeedLogEntity {
   @Column({ name: 'error', type: 'text' })
   error: string;
 
-  @OneToMany(() => SpeedLogEntryEntity, speedLogEntry => speedLogEntry.speedLog, { cascade: true })
+  @OneToMany(
+    () => SpeedLogEntryEntity,
+    (speedLogEntry) => speedLogEntry.speedLog,
+    { cascade: true },
+  )
   speedLogEntries: SpeedLogEntryEntity[];
 }
-
 
 @Entity({ name: 'network_performance_result' })
 export class NetworkPerformanceResultEntity {
@@ -32,7 +42,7 @@ export class NetworkPerformanceResultEntity {
   id: string;
 
   @ApiProperty({ description: 'Packet loss percentage' })
-  @Column({name: 'packet_loss', type: 'float', nullable: false })
+  @Column({ name: 'packet_loss', type: 'float', nullable: false })
   packetLoss: number;
 
   @ApiProperty({ description: 'Minimum round trip delay' })
@@ -51,12 +61,10 @@ export class NetworkPerformanceResultEntity {
   @Column({ name: 'round_trip_delay_mdev', type: 'float', nullable: false })
   roundTripDelayMdev: number;
 
-
   @ApiProperty({ description: 'Error for read/write test' })
   @Column({ name: 'error', type: 'text' })
   error: string;
 }
-
 
 @Entity({ name: 'speed_test_result' })
 export class SpeedTestResultEntity {
@@ -89,7 +97,6 @@ export class SpeedTestResultEntity {
   networkPerformanceResult: NetworkPerformanceResultEntity;
 }
 
-
 @Entity({ name: 'speed_log_entry' })
 export class SpeedLogEntryEntity {
   @ApiProperty({ description: 'UUID of the speed log entry' })
@@ -100,7 +107,9 @@ export class SpeedLogEntryEntity {
   @Column({ type: 'uuid', nullable: false, name: 'speed_log_id' })
   speedLogId: string;
 
-  @ManyToOne(() => SpeedLogEntity, speedLog => speedLog.speedLogEntries, { onDelete: 'CASCADE' })
+  @ManyToOne(() => SpeedLogEntity, (speedLog) => speedLog.speedLogEntries, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'speed_log_id' })
   speedLog: SpeedLogEntity;
 

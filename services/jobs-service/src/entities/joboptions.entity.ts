@@ -1,9 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  OneToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Base } from './base.entity';
 import { JobRunEntity } from './jobrun.entity';
-
-
 
 @Entity({ name: 'job_options' })
 export class JobOptionsEntity extends Base {
@@ -27,7 +31,9 @@ export class JobOptionsEntity extends Base {
   @Column({ name: 'preserve_permissions', type: 'boolean', default: true })
   preservePermissions: boolean;
 
-  @ApiProperty({ description: 'Scan Alternate Data Streams (ADS) flag for SMB sources' })
+  @ApiProperty({
+    description: 'Scan Alternate Data Streams (ADS) flag for SMB sources',
+  })
   @Column({ name: 'should_scan_ads', type: 'boolean', default: false })
   shouldScanADS: boolean;
 
@@ -43,9 +49,12 @@ export class JobOptionsEntity extends Base {
   @Column({ name: 'job_run_id', type: 'uuid', nullable: true })
   jobRunId: string | null;
 
-  @OneToOne(()=> JobRunEntity,jobRun=> jobRun.options, {orphanedRowAction: 'delete', onDelete:'CASCADE'})
-  @JoinColumn({ name: 'job_run_id' }) 
-  jobRun: JobRunEntity
+  @OneToOne(() => JobRunEntity, (jobRun) => jobRun.options, {
+    orphanedRowAction: 'delete',
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'job_run_id' })
+  jobRun: JobRunEntity;
 
   @ApiProperty({ description: 'Skip files modified in a certain time' })
   @Column({ name: 'skip_file', type: 'text', nullable: true })

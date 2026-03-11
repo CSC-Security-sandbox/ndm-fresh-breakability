@@ -7,12 +7,12 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
-  imports:[
+  imports: [
     LoggerModule.forRoot(),
     TypeOrmModule.forFeature([TaskEntity]),
-    AuthKeycloakModule
+    AuthKeycloakModule,
   ],
   controllers: [TasksController],
-  providers: [TasksService]
+  providers: [TasksService],
 })
 export class TasksModule {}

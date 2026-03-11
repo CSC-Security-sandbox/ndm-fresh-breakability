@@ -6,6 +6,6 @@ import { RedisService } from './redis.service';
 @Module({
   imports: [LoggerModule.forRoot(), AuthModule],
   providers: [RedisService],
-  exports:[RedisService]
+  exports: [RedisService],
 })
 export class RedisModule {}

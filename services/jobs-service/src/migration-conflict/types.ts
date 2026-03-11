@@ -2,24 +2,24 @@
  * Configuration for checking migration conflicts in a single migrate config
  */
 export interface MigrationConflictCheckConfig {
-    sourcePathId: string;
-    sourceDirectoryPath?: string;
-    destinationDirectoryPath?: string;
-    destinationPathId: string[];
+  sourcePathId: string;
+  sourceDirectoryPath?: string;
+  destinationDirectoryPath?: string;
+  destinationPathId: string[];
 }
 
 /**
  * Data structure containing multiple migrate configurations to check for migration conflicts
  */
 export interface MigrationConflictCheckData {
-    migrateConfigs: MigrationConflictCheckConfig[];
+  migrateConfigs: MigrationConflictCheckConfig[];
 }
 
 /**
  * Response structure for migration conflict validation
  */
 export interface MigrationConflictValidationResult {
-    hasErrors: boolean;
-    dependencies?: any[];
-    message?: string;
+  hasErrors: boolean;
+  dependencies?: any[];
+  message?: string;
 }

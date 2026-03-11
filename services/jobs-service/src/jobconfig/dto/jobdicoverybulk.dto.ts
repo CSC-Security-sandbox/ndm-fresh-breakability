@@ -1,6 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { Protocol } from "src/constants/enums";
-import { Type } from "class-transformer";
+import { ApiProperty } from '@nestjs/swagger';
+import { Protocol } from 'src/constants/enums';
+import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
@@ -11,49 +11,49 @@ import {
   IsString,
   IsUUID,
   ValidateNested,
-} from "class-validator";
+} from 'class-validator';
 
 export class WorkFlowOptions {
   @ApiProperty({
-    description: "Timeout for workflow execution",
-    default: "60s",
+    description: 'Timeout for workflow execution',
+    default: '60s',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowExecutionTimeout: string = "60s";
+  workflowExecutionTimeout: string = '60s';
 
   @ApiProperty({
-    description: "Timeout for workflow task",
-    default: "30s",
+    description: 'Timeout for workflow task',
+    default: '30s',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowTaskTimeout: string = "30s";
+  workflowTaskTimeout: string = '30s';
 
   @ApiProperty({
-    description: "Timeout for workflow run",
-    default: "30s",
+    description: 'Timeout for workflow run',
+    default: '30s',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowRunTimeout: string = "30s";
+  workflowRunTimeout: string = '30s';
 
   @ApiProperty({
-    description: "Delay before starting the workflow",
-    default: "10s",
+    description: 'Delay before starting the workflow',
+    default: '10s',
     required: false,
   })
   @IsOptional()
   @IsString()
-  startDelay: string = "1s";
+  startDelay: string = '1s';
 }
 
 export class JobConfigDiscoverBulk {
   @ApiProperty({
-    description: "Exclude files older than this date",
+    description: 'Exclude files older than this date',
     required: false,
   })
   @IsOptional()
@@ -61,27 +61,31 @@ export class JobConfigDiscoverBulk {
   @IsDate()
   excludeOlderThan?: Date;
 
-  @ApiProperty({ description: "Patterns of files to exclude", required: false })
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false })
   @IsOptional()
   @IsString()
   excludeFilePatterns?: string;
 
-  @ApiProperty({ description: "Preserve access time flag", example: false })
+  @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
 
-  @ApiProperty({ description: "Preserve permissions flag", example: true })
+  @ApiProperty({ description: 'Preserve permissions flag', example: true })
   @IsBoolean()
   @IsOptional()
   preservePermissions?: boolean;
 
-  @ApiProperty({ description: "Scan Alternate Data Streams flag (Windows/SMB only)", example: false, required: false })
+  @ApiProperty({
+    description: 'Scan Alternate Data Streams flag (Windows/SMB only)',
+    example: false,
+    required: false,
+  })
   @IsOptional()
   @IsBoolean()
   shouldScanADS?: boolean;
 
   @ApiProperty({
-    description: "Job schedule configuration",
+    description: 'Job schedule configuration',
     example: new Date().toISOString(),
   })
   @IsOptional()
@@ -90,21 +94,21 @@ export class JobConfigDiscoverBulk {
   firstRunAt: Date;
 
   @ApiProperty({
-    description: "List of UUIDs of the source path configurations",
+    description: 'List of UUIDs of the source path configurations',
   })
   @IsArray()
   @ArrayUnique()
-  @IsUUID("all", { each: true })
+  @IsUUID('all', { each: true })
   sourcePathIds: string[];
 
-  @ApiProperty({ description: "UUID of createdBy", required: false })
+  @ApiProperty({ description: 'UUID of createdBy', required: false })
   @IsOptional()
   @IsUUID()
   createdBy?: string;
 
   @ApiProperty({
     type: WorkFlowOptions,
-    description: "Workflow options",
+    description: 'Workflow options',
     required: false,
   })
   @IsObject()
@@ -115,29 +119,29 @@ export class JobConfigDiscoverBulk {
 }
 
 export class UpdateDiscoveryConfigDto {
-  @ApiProperty({ 
-    description: 'Patterns of files to exclude', 
+  @ApiProperty({
+    description: 'Patterns of files to exclude',
     required: false,
-    example: '*.log\n*.tmp\n/temp/*'
+    example: '*.log\n*.tmp\n/temp/*',
   })
   @IsOptional()
   @IsString()
   excludeFilePatterns?: string;
 
-  @ApiProperty({ 
-    description: 'Job schedule configuration', 
+  @ApiProperty({
+    description: 'Job schedule configuration',
     example: new Date().toISOString(),
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   firstRunAt?: Date;
 
-  @ApiProperty({ 
-    description: 'Scan Alternate Data Streams flag (Windows/SMB only)', 
+  @ApiProperty({
+    description: 'Scan Alternate Data Streams flag (Windows/SMB only)',
     example: 'Enabled',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -145,89 +149,89 @@ export class UpdateDiscoveryConfigDto {
 }
 
 export class UpdateMigrationConfigDto {
-  @ApiProperty({ 
-    description: 'Patterns of files to exclude', 
+  @ApiProperty({
+    description: 'Patterns of files to exclude',
     required: false,
-    example: '*.log\n*.tmp\n/temp/*'
+    example: '*.log\n*.tmp\n/temp/*',
   })
   @IsOptional()
   @IsString()
   excludeFilePatterns?: string;
 
-  @ApiProperty({ 
-    description: 'Job schedule configuration', 
+  @ApiProperty({
+    description: 'Job schedule configuration',
     example: new Date().toISOString(),
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   firstRunAt?: Date;
 
-  @ApiProperty({ 
-    description: 'Exclude files older than this date', 
-    required: false
+  @ApiProperty({
+    description: 'Exclude files older than this date',
+    required: false,
   })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   excludeOlderThan?: Date;
 
-  @ApiProperty({ 
-    description: 'Preserve access time flag', 
+  @ApiProperty({
+    description: 'Preserve access time flag',
     example: false,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsBoolean()
   preserveAccessTime?: boolean;
 
-  @ApiProperty({ 
-    description: 'Preserve permissions flag', 
+  @ApiProperty({
+    description: 'Preserve permissions flag',
     example: true,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsBoolean()
   preservePermissions?: boolean;
 
-  @ApiProperty({ 
-    description: 'Skip file configuration', 
+  @ApiProperty({
+    description: 'Skip file configuration',
     required: false,
-    example: '15-Mins'
+    example: '15-Mins',
   })
   @IsOptional()
   @IsString()
   skipFile?: string;
 
-  @ApiProperty({ 
-    description: 'Incremental job schedule configuration', 
-    required: false
+  @ApiProperty({
+    description: 'Incremental job schedule configuration',
+    required: false,
   })
   @IsOptional()
   @IsString()
   futureScheduleAt?: string;
 
-  @ApiProperty({ 
-    description: 'Base64 encoded SID mapping file content', 
-    required: false 
+  @ApiProperty({
+    description: 'Base64 encoded SID mapping file content',
+    required: false,
   })
   @IsOptional()
   @IsString()
   sidMapping?: string;
 
-  @ApiProperty({ 
-    description: 'Base64 encoded GID mapping file content', 
-    required: false 
+  @ApiProperty({
+    description: 'Base64 encoded GID mapping file content',
+    required: false,
   })
   @IsOptional()
-  @IsString()  
+  @IsString()
   gidMapping?: string;
 }
 
 export class MigrateJobConfigOptions {
   @ApiProperty({
-    description: "Exclude files older than this date",
+    description: 'Exclude files older than this date',
     required: false,
   })
   @IsOptional()
@@ -235,41 +239,47 @@ export class MigrateJobConfigOptions {
   @IsDate()
   excludeOlderThan?: Date;
 
-  @ApiProperty({ description: "Patterns of files to exclude", required: false })
+  @ApiProperty({ description: 'Patterns of files to exclude', required: false })
   @IsOptional()
   @IsString()
   excludeFilePatterns?: string;
 
-  @ApiProperty({ description: "Preserve access time flag", example: false })
+  @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
 
-  @ApiProperty({ 
-    description: 'Preserve permissions flag', 
+  @ApiProperty({
+    description: 'Preserve permissions flag',
     example: true,
-    required: false
+    required: false,
   })
   @IsBoolean()
   preservePermissions?: boolean;
 }
 
 export class MigrateConfig {
-  @ApiProperty({ description: "UUID of the source path configurations" })
+  @ApiProperty({ description: 'UUID of the source path configurations' })
   @IsUUID()
   sourcePathId: string;
 
-  @ApiProperty({ description: "UUIDs of the destination file servers" })
+  @ApiProperty({ description: 'UUIDs of the destination file servers' })
   @IsArray()
   @ArrayUnique()
-  @IsUUID("all", { each: true })
+  @IsUUID('all', { each: true })
   destinationPathId: string[];
 
-  @ApiProperty({ description: "Source directory path to migrate (optional)", required: false })
+  @ApiProperty({
+    description: 'Source directory path to migrate (optional)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   sourceDirectoryPath?: string;
 
-  @ApiProperty({ description: "Destination directory path to migrate to (optional)", required: false })
+  @ApiProperty({
+    description: 'Destination directory path to migrate to (optional)',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   destinationDirectoryPath?: string;
@@ -277,7 +287,7 @@ export class MigrateConfig {
 
 export class JobConfigMigrateBulk {
   @ApiProperty({
-    description: "Timestamp for 1st migrate run",
+    description: 'Timestamp for 1st migrate run',
     example: new Date().toISOString(),
   })
   @Type(() => Date)
@@ -285,14 +295,14 @@ export class JobConfigMigrateBulk {
   firstRunAt: Date;
 
   @ApiProperty({
-    description: "Future run schedule (incremental sync config)",
+    description: 'Future run schedule (incremental sync config)',
     required: false,
   })
   @IsString()
   futureRunSchedule: string;
 
   @ApiProperty({
-    description: "Details of all the bulk migrate configs",
+    description: 'Details of all the bulk migrate configs',
     isArray: true,
     type: MigrateConfig,
   })
@@ -302,31 +312,31 @@ export class JobConfigMigrateBulk {
   migrateConfigs: MigrateConfig[];
 
   @ApiProperty({
-    type: "string",
-    format: "binary",
-    description: "BLOB data for SID mappings (Excel file content)",
+    type: 'string',
+    format: 'binary',
+    description: 'BLOB data for SID mappings (Excel file content)',
   })
   @IsOptional()
   sidMapping: Buffer;
 
   @ApiProperty({
-    type: "string",
-    format: "binary",
-    description: "BLOB data for GID mappings (Excel file content)",
+    type: 'string',
+    format: 'binary',
+    description: 'BLOB data for GID mappings (Excel file content)',
   })
   @IsOptional()
   gidMapping: Buffer;
 
   @ApiProperty({
     type: MigrateJobConfigOptions,
-    description: "Migrate job options",
+    description: 'Migrate job options',
   })
   options: MigrateJobConfigOptions;
 }
 
 export class JobConfigCutoverBulk {
   @ApiProperty({
-    description: "Details of all the bulk cutover configs",
+    description: 'Details of all the bulk cutover configs',
     isArray: true,
     type: MigrateConfig,
   })
@@ -338,45 +348,45 @@ export class JobConfigCutoverBulk {
 
 export class Options {
   @ApiProperty({
-    description: "Timeout for workflow execution",
-    default: "5m",
+    description: 'Timeout for workflow execution',
+    default: '5m',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowExecutionTimeout: string = "5m";
+  workflowExecutionTimeout: string = '5m';
 
   @ApiProperty({
-    description: "Timeout for workflow task",
-    default: "5m",
+    description: 'Timeout for workflow task',
+    default: '5m',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowTaskTimeout: string = "5m";
+  workflowTaskTimeout: string = '5m';
 
   @ApiProperty({
-    description: "Timeout for workflow run",
-    default: "5m",
+    description: 'Timeout for workflow run',
+    default: '5m',
     required: false,
   })
   @IsOptional()
   @IsString()
-  workflowRunTimeout: string = "5m";
+  workflowRunTimeout: string = '5m';
 
   @ApiProperty({
-    description: "Delay before starting the workflow",
-    default: "1s",
+    description: 'Delay before starting the workflow',
+    default: '1s',
     required: false,
   })
   @IsOptional()
   @IsString()
-  startDelay: string = "1s";
+  startDelay: string = '1s';
 }
 
 export class JobConfigPrecheck {
   @ApiProperty({
-    description: "Details of all the precheck configs",
+    description: 'Details of all the precheck configs',
     isArray: true,
     type: MigrateConfig,
   })
@@ -385,18 +395,22 @@ export class JobConfigPrecheck {
   @Type(() => MigrateConfig)
   migrateConfigs: MigrateConfig[];
 
-  @ApiProperty({ description: "Preserve access time flag", example: false })
+  @ApiProperty({ description: 'Preserve access time flag', example: false })
   @IsBoolean()
   preserveAccessTime: boolean;
 
-  @ApiProperty({ description: "Preserve permissions flag", example: true, required: false })
+  @ApiProperty({
+    description: 'Preserve permissions flag',
+    example: true,
+    required: false,
+  })
   @IsBoolean()
   @IsOptional()
   preservePermissions?: boolean;
 
   @ApiProperty({
     type: Options,
-    description: "Workflow options",
+    description: 'Workflow options',
     required: false,
   })
   @IsObject()
