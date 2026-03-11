@@ -1,0 +1,46 @@
+---
+description: "SQL and Liquibase migration review rules"
+globs: "liquibase/**/*.{sql,xml}"
+alwaysApply: false
+---
+
+# SQL & Liquibase Migration Review Rules
+
+## File Naming Convention
+- Migration files must follow: `YYYYMMDD_NN_description.sql`
+  - `YYYYMMDD` = date of creation
+  - `NN` = sequence number for that date (01, 02, 03...)
+  - `description` = snake_case description of the change
+- Example: `20250603_01_alter_table_fileserver_add_column_exportpathsource.sql`
+
+## Liquibase Changelog
+- Every new SQL file must have a corresponding `<changeSet>` entry in `changelog-master.xml`.
+- Changeset `id` must match the SQL filename.
+- Include `author` attribute with the developer's name.
+- Always provide a `<rollback>` block — even if it requires manual steps, document them in a comment.
+
+## SQL Best Practices
+- Use `IF NOT EXISTS` for `CREATE TABLE` / `CREATE INDEX` to ensure idempotency.
+- Use `IF EXISTS` for `DROP` statements.
+- Always specify column types explicitly — don't rely on implicit conversions.
+- Use parameterized queries — never interpolate variables in SQL strings.
+- Add `NOT NULL` constraints where appropriate with sensible `DEFAULT` values.
+- Prefer `TEXT` over `VARCHAR(n)` in PostgreSQL unless a length constraint is required.
+- Use `TIMESTAMPTZ` (not `TIMESTAMP`) for time columns.
+
+## Schema Changes
+- `ALTER TABLE` should be backward-compatible — avoid dropping columns that existing code depends on.
+- When renaming columns/tables, consider a two-phase migration approach.
+- Add indexes for columns used in `WHERE`, `JOIN`, or `ORDER BY` clauses.
+- Avoid full table locks — prefer `ALTER TABLE ... ADD COLUMN ... DEFAULT` (PostgreSQL 11+ adds without rewrite).
+
+## Security
+- Never store plaintext passwords or secrets in SQL seed data.
+- Use `GRANT` with least-privilege — avoid `GRANT ALL`.
+- Flag `EXECUTE` permissions on stored procedures without proper access control.
+- Ensure role-based access: migrations reference `admin`, `config`, `db_writer`, `jobs`, `reports` schemas.
+
+## Rollback
+- Every migration in `apply/` should have a corresponding rollback in `rollback/`.
+- Rollbacks must reverse the exact changes of the apply script.
+- Test rollbacks to ensure they work without data loss.

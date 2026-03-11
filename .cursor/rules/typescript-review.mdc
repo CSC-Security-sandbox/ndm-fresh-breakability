@@ -1,0 +1,171 @@
+---
+description: "TypeScript code review rules for services and libraries"
+globs: "**/*.ts"
+alwaysApply: false
+---
+
+# TypeScript Code Review Rules
+
+## 1. Type Safety
+- **Never use `any`** — flag all occurrences. Suggest a specific type, `unknown`, or a generic.
+- **No implicit `any`** — all function parameters and return types must be explicitly typed.
+- **Prefer `unknown` over `any`** for truly unknown values; always narrow before use.
+- **Avoid type assertions (`as`)** unless unavoidable. Require an explanatory comment when used.
+- **Enforce strict null checks** — flag patterns that ignore `null` or `undefined`.
+
+```ts
+// ❌ Bad
+function process(data: any) { ... }
+
+// ✅ Good
+function process(data: ProcessInput): ProcessOutput { ... }
+```
+
+## 2. Interfaces & Types
+- Use `interface` for object shapes that may be extended; use `type` for unions, intersections, and aliases.
+- Avoid redundant or overlapping type declarations.
+- All exported types and interfaces must have JSDoc comments.
+- Flag `object`, `Object`, or `{}` as types — require specific, named definitions.
+
+## 3. Null & Undefined Handling
+- Flag unguarded access on values that may be `null` or `undefined`.
+- Suggest optional chaining (`?.`) and nullish coalescing (`??`) where appropriate.
+- Flag non-null assertions (`!`) unless provably safe — require a comment explaining why.
+
+```ts
+// ❌ Bad
+const name = user.profile.name;
+
+// ✅ Good
+const name = user?.profile?.name ?? 'Anonymous';
+```
+
+## 4. Async / Await & Promises
+- All `async` functions must declare an explicit return type (e.g., `Promise<User>`).
+- Prefer `async/await` over `.then()/.catch()` chains.
+- All `await` expressions must be inside a `try/catch` or have upstream error handling.
+- Flag unhandled floating promises (no `await` and no `.catch()`).
+
+## 5. Avoid Synchronous Methods
+Never use synchronous (blocking) API variants when an async alternative exists.
+
+### File System (`fs`)
+Always use `fs/promises` instead of `*Sync` methods:
+- `fs.readFileSync()` → `fs.promises.readFile()`
+- `fs.writeFileSync()` → `fs.promises.writeFile()`
+- `fs.mkdirSync()` → `fs.promises.mkdir()`
+- `fs.existsSync()` → `fs.promises.access()`
+
+### Child Process
+Flag `execSync`, `spawnSync`, `execFileSync`. Use promisified alternatives.
+
+### DNS
+Flag synchronous DNS lookups. Use `dns/promises` instead.
+
+### Acceptable Exceptions
+- Top-level CLI scripts (single-run process)
+- Jest/Vitest `globalSetup` files
+- Build tooling (`scripts/*.ts`)
+Always add a comment explaining why sync is acceptable.
+
+## 6. Generics
+- Encourage generics over duplicated typed functions.
+- Use descriptive generic parameter names (`TItem`, `TResponse`) in complex contexts.
+- Flag unconstrained generics where `extends` would improve safety.
+
+## 7. Enums
+- Prefer `const enum` for compile-time inlining when runtime reflection is not needed.
+- Always use string enums over numeric enums.
+- Flag mixing `enum` and union string types for the same concept.
+
+## 8. Functions & Methods
+- All exported functions must have explicit parameter types and return types.
+- Flag functions longer than ~40 lines — suggest decomposition.
+- Prefer pure functions; flag undocumented side effects.
+
+## 9. Classes
+- Enforce access modifiers (`private`, `protected`, `public`) on all class members.
+- Flag mutable public class properties — prefer `readonly` or accessor methods.
+- Prefer composition over inheritance; flag inheritance chains deeper than 2 levels.
+
+## 10. Readonly & Immutability
+- Use `readonly` on class properties and interface fields that must not change.
+- Prefer `Readonly<T>`, `ReadonlyArray<T>`, or `as const` for immutable data.
+- Flag direct mutation of function arguments.
+
+## 11. Error Handling
+- `catch` blocks must never be empty — at minimum, log the error.
+- Never catch an `Error` and re-throw as a plain string.
+- Use custom error classes that extend `Error` for domain-specific errors.
+- Flag `catch (e: any)` — use `catch (e: unknown)` and narrow the type.
+
+## 12. Imports & Modules
+- Prefer named exports over default exports.
+- Flag unused imports.
+- Use absolute imports via `paths` in `tsconfig.json` — flag deep relative paths (`../../..`).
+- Use `import type` for type-only imports.
+
+## 13. Utility Types
+Encourage built-in TypeScript utility types (`Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, `Record<K, V>`, `ReturnType<T>`, `Readonly<T>`, `NonNullable<T>`). Flag manual re-implementations.
+
+## 14. Naming Conventions
+| Construct          | Convention               | Example                     |
+|-------------------|--------------------------|-----------------------------|
+| Variables          | `camelCase`              | `userCount`                 |
+| Functions          | `camelCase`              | `getUserById`               |
+| Classes            | `PascalCase`             | `UserService`               |
+| Interfaces         | `PascalCase` (no `I` prefix) | `UserProfile`           |
+| Type aliases       | `PascalCase`             | `ApiResponse`               |
+| Enums              | `PascalCase`             | `OrderStatus`               |
+| Constants          | `SCREAMING_SNAKE_CASE`   | `MAX_RETRY_COUNT`           |
+| Test files         | `*.test.ts` / `*.spec.ts`| `userService.test.ts`       |
+
+## 15. Comments & Documentation
+- All exported symbols must have JSDoc comments.
+- Inline comments should explain **why**, not **what**.
+- Flag `TODO`/`FIXME` without a tracked issue number.
+
+## 16. Testing
+- Flag new logic with no corresponding test file or test case.
+- Test files must use `.test.ts` or `.spec.ts` suffix.
+- Use TypeScript-safe mocking (`jest.Mocked<T>`, `vi.mocked()`).
+- Flag `as any` casts in test files.
+
+## 17. Performance
+- Flag synchronous operations inside loops that could use `Promise.all`.
+- Flag unnecessary re-computation in hot paths — suggest memoization.
+- Avoid `delete` operator — prefer `undefined` assignment or `Omit<T, K>`.
+
+## 18. Security
+- Flag string interpolation in SQL queries or shell commands — require parameterized inputs.
+- Flag hardcoded secrets, API keys, tokens, or credentials.
+- Flag missing validation on user-supplied input.
+- Flag `eval()`, `Function()`, or `new Function()`.
+
+## 19. Review Checklist
+### Type Safety
+- [ ] No `any` without justified, commented reason
+- [ ] All exported functions have explicit parameter and return types
+- [ ] No unsafe non-null assertions without explanation
+
+### Async & I/O
+- [ ] No `*Sync` methods in application code
+- [ ] All async code handles errors with `try/catch`
+- [ ] No unhandled floating promises
+
+### Code Quality
+- [ ] No functions longer than ~40 lines without decomposition
+- [ ] Naming conventions followed throughout
+- [ ] No unused imports or variables
+- [ ] Deep relative imports replaced with absolute path aliases
+
+### Documentation & Tests
+- [ ] All exported symbols have JSDoc comments
+- [ ] No `TODO`/`FIXME` without linked issue number
+- [ ] New logic has corresponding test coverage
+- [ ] No `as any` casts in test files
+
+### Security
+- [ ] No hardcoded secrets or credentials
+- [ ] User input is validated before use
+- [ ] No raw string interpolation in SQL or shell commands

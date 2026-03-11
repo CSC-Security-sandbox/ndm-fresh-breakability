@@ -1,0 +1,39 @@
+---
+description: "General project conventions and architecture rules for the NDM monorepo"
+globs: "**/*"
+alwaysApply: true
+---
+
+# NDM Project Conventions
+
+## Repository Structure
+This is a monorepo with the following key areas:
+
+- `services/` — TypeScript microservices (admin, config, db-writer, jobs, reports, support, worker, datamigrator-ui)
+- `lib/` — Shared TypeScript libraries (api-handler-lib, auth-lib, jobs-lib, logger-lib)
+- `liquibase/` — PostgreSQL database migrations (apply + rollback)
+- `ndm-api-tests/` — Go-based API integration tests (Ginkgo/Gomega)
+- `app-deployment/` — Infrastructure (Terraform, Ansible, Packer, scripts)
+- `upgrade/` — Upgrade automation (Ansible playbooks)
+
+## General Rules
+- When modifying a shared library in `lib/`, consider the impact on all consuming services.
+- Follow existing patterns in the codebase — do not introduce new conventions without discussion.
+- Keep services independently deployable; avoid tight coupling between services.
+- All services use TypeScript. Do not introduce JavaScript files.
+- Environment-specific configuration goes in environment variables, not hardcoded values.
+
+## Git & PRs
+- Commit messages should be descriptive and reference issue/ticket numbers.
+- Keep PRs focused — one logical change per PR.
+- Ensure CI passes before requesting review.
+
+## Docker & Deployment
+- Dockerfiles should use multi-stage builds for smaller images.
+- Do not include secrets, tokens, or credentials in Docker images or compose files.
+- Use the `ndm-docker-compose/` directory for local development setup.
+
+## Dependencies
+- Pin dependency versions in `package.json` (exact versions, not ranges).
+- Run security audits (`npm audit`) before adding new dependencies.
+- Prefer well-maintained packages with active security patching.

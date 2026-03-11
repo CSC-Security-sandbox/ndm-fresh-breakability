@@ -1,0 +1,58 @@
+---
+description: "Go code review rules for API test suite using Ginkgo/Gomega"
+globs: "ndm-api-tests/**/*.go"
+alwaysApply: false
+---
+
+# Go API Test Code Review Rules
+
+This project uses **Go 1.24+** with **Ginkgo v2** and **Gomega** as the test framework.
+
+## Test Structure
+- Use `Describe`, `Context`, `It` blocks for BDD-style organization.
+- `Describe` for the feature/component under test.
+- `Context` for specific scenarios or preconditions.
+- `It` for individual test cases with clear descriptions.
+
+## Assertions
+- Use Gomega matchers (`Expect`, `Eventually`, `Consistently`).
+- Prefer specific matchers over generic ones:
+  - `Expect(err).ToNot(HaveOccurred())` instead of `Expect(err).To(BeNil())`
+  - `Expect(slice).To(HaveLen(3))` instead of `Expect(len(slice)).To(Equal(3))`
+  - `Expect(str).To(ContainSubstring("expected"))` for partial string matching.
+
+## Error Handling
+- Always check errors explicitly: `Expect(err).ToNot(HaveOccurred())`.
+- Do not silently ignore errors from API calls or setup operations.
+- Use `GinkgoT().Fatal()` or `Fail()` for unrecoverable setup errors.
+
+## Test Data & Cleanup
+- Use `BeforeEach` / `AfterEach` for test setup and teardown.
+- Use `DeferCleanup` for cleanup that should run even if the test fails.
+- Never leave test resources (volumes, shares, jobs) behind after tests complete.
+- Use unique names for test resources to avoid conflicts with parallel runs.
+
+## API Client Usage
+- Validate HTTP response status codes in assertions.
+- Set reasonable timeouts for API calls; do not use indefinite waits.
+- Use `Eventually` with a timeout and polling interval for async operations.
+
+```go
+// ✅ Good — polling for async job completion
+Eventually(func() string {
+    status, _ := getJobStatus(jobID)
+    return status
+}, "5m", "10s").Should(Equal("completed"))
+```
+
+## Go Conventions
+- Use `camelCase` for unexported identifiers, `PascalCase` for exported.
+- Prefer table-driven test patterns for testing multiple inputs.
+- Use `%v` or `%q` in format strings — avoid `%s` for potentially nil values.
+- Handle all returned errors; flag uses of `_` to discard errors.
+- Prefer `errors.Is()` / `errors.As()` over string comparison for error checking.
+
+## Security in Tests
+- Do not hardcode real credentials, API keys, or tokens in test files.
+- Load sensitive values from environment variables or `.env` files.
+- Do not commit `.env` files — ensure they are in `.gitignore`.
