@@ -22,12 +22,14 @@ check_vm_exists() {
 launch_vm() {
   local vm_name=$1
   local create_files=$2
-  multipass launch -c 1 -m 2g -d 10g -n "$vm_name" --cloud-init - <<-EOF
+  multipass launch -c 1 -m 2g -d 10g -n "$vm_name" --network en0 --cloud-init - <<-EOF
 #cloud-config
 package_update: true
 packages:
   - nfs-kernel-server
 runcmd:
+  # Remove default route added by the bridged network interface
+  - sudo ip route delete 0.0.0.0/0 via 192.168.2.1 || true
   # Create the export directory
   - mkdir -p $EXPORT_DIR
   # Set permissions

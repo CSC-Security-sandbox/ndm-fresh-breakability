@@ -82,13 +82,16 @@ case $1 in
         
         echo "Launching $vm_name vm"
 
-        multipass launch -c 8 -m 8g -d 120g -n $vm_name
+        multipass launch -c 8 -m 8g -d 120g -n $vm_name --network en0
 
         # Wait for the VM to be in the 'Running' state
         while [ "$(multipass info $vm_name | grep 'State' | awk '{print $2}')" != "Running" ]; do
             echo "Waiting for $vm_name vm to be in running state..."
             sleep 5
         done
+
+        # Remove default route added by the bridged network interface
+        multipass exec $vm_name -- sudo ip route delete 0.0.0.0/0 via 192.168.2.1 || true
 
         # Retrieve the IP address of the VM
         ip_address=$(multipass info $vm_name | grep 'IPv4' | awk '{print $2}')
@@ -178,13 +181,16 @@ case $1 in
         fi
 
         echo "Launching $vm_name vm"
-        multipass launch -c 4 -m 4g -d 30g -n $vm_name
+        multipass launch -c 4 -m 4g -d 30g -n $vm_name --network en0
 
         # Wait for the VM to be in the 'Running' state
         while [ "$(multipass info $vm_name | grep 'State' | awk '{print $2}')" != "Running" ]; do
             echo "Waiting for $vm_name vm to be in running state..."
             sleep 5
         done
+
+        # Remove default route added by the bridged network interface
+        multipass exec $vm_name -- sudo ip route delete 0.0.0.0/0 via 192.168.2.1 || true
 
         # Retrieve the IP address of the VM
         ip_address=$(multipass info $vm_name | grep 'IPv4' | awk '{print $2}')
