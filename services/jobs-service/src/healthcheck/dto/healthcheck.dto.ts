@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsJSON, IsString, IsUUID, IsOptional } from 'class-validator';
+import { IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class SystemStats {
   @ApiProperty({ description: 'CPU Usage in percentage' })

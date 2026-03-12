@@ -25,14 +25,13 @@ import {
   TERMINAL_JOB_RUN_STATUSES,
 } from 'src/constants/enums';
 import { ScheduleStatus } from 'src/constants/status';
-import { Options } from 'src/constants/types';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
 import { VolumeEntity } from 'src/entities/volume.entity';
 import { nextDate } from 'src/utils/mapper';
 import { WorkflowService } from 'src/workflow/workflow.service';
-import { DataSource, EntityManager, In, Not, Raw, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import {
@@ -56,7 +55,6 @@ import { JobConfigDto } from './dto/jobconfig.dto';
 import {
   JobConfigCutoverBulk,
   JobConfigDiscoverBulk,
-  JobConfigPrecheck,
   MigrateConfig,
 } from './dto/jobdicoverybulk.dto';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto';
@@ -67,11 +65,8 @@ import {
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateFinalResponse,
   JobConfigBulkMigrateRes,
-  PreChecks,
-  PreCheckWorkflowOPayload,
   SpeedTestEntry,
   SpeedTestJobRun,
-  workerWithStatus,
 } from './jobconfig.types';
 import { FileServerEntity } from 'src/entities/fileserver.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
@@ -347,7 +342,7 @@ export class JobConfigService {
       };
 
       // Save the updated or new speedTestResult
-      const savedResult = await this.speedTestResultRepo.save(speedTestResult);
+      const _savedResult = await this.speedTestResultRepo.save(speedTestResult);
 
       this.logger.log('Speed test result stored successfully');
 

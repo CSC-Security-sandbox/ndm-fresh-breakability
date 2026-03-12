@@ -1,6 +1,8 @@
 /**
  * Configuration for checking migration conflicts in a single migrate config
  */
+import type { PreCheckCircularDependency } from '../jobconfig/jobconfig.types';
+
 export interface MigrationConflictCheckConfig {
   sourcePathId: string;
   sourceDirectoryPath?: string;
@@ -20,6 +22,6 @@ export interface MigrationConflictCheckData {
  */
 export interface MigrationConflictValidationResult {
   hasErrors: boolean;
-  dependencies?: any[];
+  dependencies?: PreCheckCircularDependency[];
   message?: string;
 }

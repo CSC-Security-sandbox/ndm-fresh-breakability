@@ -5,10 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  JobContextFactory,
-  RedisUtils,
-} from '@netapp-cloud-datamigrate/jobs-lib';
+import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { createClient, RedisClientType } from 'redis';
 import {
@@ -16,6 +13,18 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AuthService } from '../auth/auth.service';
+
+/** Options for Redis client connection (url, auth) */
+interface RedisClientOptionsConfig {
+  url: string;
+  username?: string;
+  password?: string;
+}
+
+/** Any context that can be serialized to Redis (JobContext, SpeedTestJobContext, JobManagerContext, etc.) */
+interface SerializableJobContext {
+  serialize(): string;
+}
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -66,7 +75,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const redisClientOptions: any = {
+    const redisClientOptions: RedisClientOptionsConfig = {
       url: `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`,
       username: process.env.REDIS_USERNAME || 'default',
     };
@@ -205,7 +214,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await contextProvider.getJobContext(traceId);
   }
 
-  async setJobContext(traceId: string, jobContext: any) {
+  async setJobContext(traceId: string, jobContext: SerializableJobContext) {
     if (!this.client) {
       this.logger.error(
         '[Job-Service] Redis client is not initialized, trying to reconnect',
@@ -218,21 +227,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
   }
 
-  async getJobState(traceId: string): Promise<any> {
+  async getJobState(traceId: string): Promise<JobState | { message: string }> {
     try {
       const jobContext = await this.getJobContext(traceId);
       return jobContext.getJobState();
-    } catch (error) {
+    } catch {
       return { message: 'Error while getting the job state : ' + traceId };
     }
   }
-  async setJobState(traceId: string, jobState: JobState): Promise<any> {
+  async setJobState(
+    traceId: string,
+    jobState: JobState,
+  ): Promise<JobState | { message: string }> {
     try {
       const jobContext = await this.getJobContext(traceId);
       jobContext.setJobState(jobState);
       const newJobState = jobContext.getJobState();
       return newJobState;
-    } catch (error) {
+    } catch {
       return { message: 'Error while updating the job state : ' + traceId };
     }
   }

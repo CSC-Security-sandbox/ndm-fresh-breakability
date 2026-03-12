@@ -24,7 +24,7 @@ export class SendMailService {
       const sendEmailFullUrl = `${this.sendEmailUrl}/api/v1/email/internal`;
 
       // Only include headers if they exist
-      const headers: any = {};
+      const headers: Record<string, string> = {};
       if (body?.traceId) headers['trackId'] = body.traceId;
       if (body?.projectId) headers['projectId'] = body.projectId;
 

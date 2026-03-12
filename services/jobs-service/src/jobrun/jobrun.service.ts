@@ -38,7 +38,6 @@ import {
   DataSource,
   EntityManager,
   FindManyOptions,
-  Raw,
   Repository,
   UpdateResult,
 } from 'typeorm';
@@ -51,7 +50,7 @@ import { JobRunStats } from './dto/jobstats';
 import { JobRunInitService } from './jobrun.init.service';
 import { SuccessEmailType } from 'src/utils/send-email.type';
 import { getErrorDisplayMessage } from './jobrun.util';
-import { WorkFlowFailureReason } from './jobrun.types';
+import { WorkFlowFailureReason, SetupFailedErrorItem } from './jobrun.types';
 import {
   LoggerFactory,
   LoggerService,
@@ -334,7 +333,7 @@ export class JobRunService {
     jobRunId: string,
     cursor: string | null,
     limit: number = 4000,
-  ): Promise<{ data: Record<string, any>[]; nextCursor: string | null }> {
+  ): Promise<{ data: Record<string, unknown>[]; nextCursor: string | null }> {
     const qb = this.operationErrorRepo
       .createQueryBuilder('oe')
       .innerJoin('oe.operation', 'o')
@@ -1022,32 +1021,36 @@ export class JobRunService {
       const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
       if (setupFailedErrors.length > 0) {
         const setupFailedError = await Promise.all(
-          setupFailedErrors.map(async (error): Promise<any> => {
-            // Also map worker setup errors
-            const errorRemedies =
-              await this.errorRemedyService.findByErrorCodes([
-                error.workerResponse.code,
-              ]);
-            const errorRemedy = errorRemedies?.[0];
-            return {
-              errorMessage: error.workerResponse.message,
-              displayMessage: getErrorDisplayMessage(
-                error?.workerResponse?.code,
-                error?.workerResponse?.message,
-                errorRemedy?.description,
-              ),
-              resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
-              referenceCommands: errorRemedy
-                ? errorRemedy.referenceCommands
-                : null,
-              errorType: 'FATAL_ERROR',
-              createdAt: error.workerResponse.createdAt,
-              operationType: error.workerResponse.operation,
-              errorCode: error.workerResponse.code,
-              origin: error.workerResponse.origin,
-              occurrence: error.workerResponse.occurrence || 1,
-            };
-          }),
+          setupFailedErrors.map(
+            async (error): Promise<SetupFailedErrorItem> => {
+              // Also map worker setup errors
+              const errorRemedies =
+                await this.errorRemedyService.findByErrorCodes([
+                  error.workerResponse.code,
+                ]);
+              const errorRemedy = errorRemedies?.[0];
+              return {
+                errorMessage: error.workerResponse.message,
+                displayMessage: getErrorDisplayMessage(
+                  error?.workerResponse?.code,
+                  error?.workerResponse?.message,
+                  errorRemedy?.description,
+                ),
+                resolutionSteps: errorRemedy
+                  ? errorRemedy.resolutionSteps
+                  : null,
+                referenceCommands: errorRemedy
+                  ? errorRemedy.referenceCommands
+                  : null,
+                errorType: 'FATAL_ERROR',
+                createdAt: error.workerResponse.createdAt,
+                operationType: error.workerResponse.operation,
+                errorCode: error.workerResponse.code,
+                origin: error.workerResponse.origin,
+                occurrence: error.workerResponse.occurrence || 1,
+              };
+            },
+          ),
         );
         mappedData.push(...setupFailedError);
       }
@@ -1156,7 +1159,7 @@ export class JobRunService {
     }
 
     try {
-      const errorRemedies = await this.errorRemedyService.findByErrorCodes(
+      void this.errorRemedyService.findByErrorCodes(
         errorCodes.map((error) => error.errorCode),
       );
 
@@ -1171,7 +1174,7 @@ export class JobRunService {
           targetHost,
           targetPath,
           errorRemedies: errorCodes.map((error) => ({
-            code: error.errorCode,
+            errorCode: error.errorCode,
             description: error.description,
             resolutionSteps: error.resolutionSteps,
             referenceCommands: error.referenceCommands,
@@ -1261,13 +1264,13 @@ export class JobRunService {
   async updateWorkerResponse(
     jobRunId: string,
     workerId: string,
-    workerResponse: Record<string, any>,
+    workerResponse: Record<string, unknown>,
   ): Promise<UpdateResult> {
     try {
       const updateCondition =
         workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
       return await this.workerJobRunMapRepo.update(updateCondition, {
-        workerResponse,
+        workerResponse: workerResponse as Record<string, any>,
       });
     } catch (error) {
       this.logger.error(
@@ -1298,7 +1301,9 @@ export class JobRunService {
     }
   }
 
-  async getJobRunIdentityMappings(jobRunId: string): Promise<any> {
+  async getJobRunIdentityMappings(
+    jobRunId: string,
+  ): Promise<{ data: IdentityMappingEntity[]; message?: string }> {
     try {
       const jobRun = await this.jobRunRepo.findOne({
         where: { id: jobRunId },

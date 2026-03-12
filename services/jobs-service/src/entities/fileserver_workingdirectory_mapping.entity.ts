@@ -7,7 +7,6 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Base } from './base.entity';
-import { ConfigEntity } from './config.entity';
 import { FileServerEntity } from './fileserver.entity';
 @Entity({ name: 'fileserver_workingdirectory_mapping' })
 export class FileServerWorkingDirectoryMappingEntity extends Base {

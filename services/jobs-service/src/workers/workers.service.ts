@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, FindOptionsWhere, Repository } from 'typeorm';
 
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { WorkersStatusPageDto } from './dto/workers.page.dto';
@@ -65,8 +65,8 @@ export class WorkersService {
 
     let relations = ['stats'];
 
-    const whereCondition: any = { ...filter };
-    const updateFilter: any = { ...filter };
+    const whereCondition: FindOptionsWhere<WorkerEntity> = { ...filter };
+    const updateFilter: FindOptionsWhere<WorkerEntity> = { ...filter };
     if (jobRunId) {
       whereCondition.jobRunMap = { jobRunId };
       updateFilter.jobRunMap = { jobRunId };
@@ -87,16 +87,16 @@ export class WorkersService {
       };
     }
 
-    let data = [],
-      total = 0;
+    let data: WorkerEntity[] = [],
+      _total = 0;
     if (page && limit) {
       findOptions.skip = (parseInt(page) - 1) * parseInt(limit);
       findOptions.take = parseInt(limit);
       data = await this.WorkerEntity.find(findOptions);
-      total = await this.WorkerEntity.count({ where: updateFilter });
+      _total = await this.WorkerEntity.count({ where: updateFilter });
     } else {
       data = await this.WorkerEntity.find(findOptions);
-      total = await this.WorkerEntity.count({ where: updateFilter });
+      _total = await this.WorkerEntity.count({ where: updateFilter });
     }
     const workerWithStatusUpdated = this.updateWorkerStatus(data);
     return workerWithStatusUpdated;

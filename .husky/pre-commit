@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep "^services/jobs-service/.*\.ts$" || true)
+if [ -n "$STAGED" ]; then
+  echo "Running lint for jobs-service staged files..."
+  cd services/jobs-service && npm run lint:staged
+  if [ $? -ne 0 ]; then
+    echo "husky - pre-commit hook failed (code 1)"
+    echo "Lint failed. Fix errors before committing (e.g. npm run lint:fix in services/jobs-service)."
+    exit 1
+  fi
+fi

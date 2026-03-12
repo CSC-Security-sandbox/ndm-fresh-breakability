@@ -23,6 +23,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { getErrorMessage } from '../utils/error-message';
 import {
   MountRequest,
   MountDetails,
@@ -200,9 +201,10 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
             `No custom DNS servers configured for FileServer ${fileServerId}, using system DNS`,
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
+        const message = getErrorMessage(error);
         this.logger.warn(
-          `Failed to get DNS servers from FileServer ${fileServerId}: ${error.message}`,
+          `Failed to get DNS servers from FileServer ${fileServerId}: ${message}`,
         );
       }
     }
@@ -229,9 +231,10 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
             );
             resolvedIp = addresses[0];
           }
-        } catch (resolverError) {
+        } catch (resolverError: unknown) {
+          const message = getErrorMessage(resolverError);
           this.logger.debug(
-            `Custom resolver failed for ${hostname}: ${resolverError.message}`,
+            `Custom resolver failed for ${hostname}: ${message}`,
           );
 
           if (!hostname.includes('.')) {
@@ -837,7 +840,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private withoutTimer(record: MountRecord): MountDetails {
-    const { timeoutHandle, ...rest } = record;
+    const { timeoutHandle: _timeoutHandle, ...rest } = record;
     return rest;
   }
 }

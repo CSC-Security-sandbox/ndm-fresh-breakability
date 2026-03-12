@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobRunEntity } from '../entities/jobrun.entity';
-import { JobRunStatus, JobStatus, JobType } from '../constants/enums';
+import { JobStatus, JobType } from '../constants/enums';
 import { PreCheckCircularDependency } from '../jobconfig/jobconfig.types';
 import {
   MigrationConflictCheckConfig,

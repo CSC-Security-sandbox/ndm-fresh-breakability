@@ -2,18 +2,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Protocol } from 'src/constants/enums';
 import { Type } from 'class-transformer';
 import {
-  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDate,
   IsNumber,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   ValidateNested,
-  isString,
-  isUUID,
 } from 'class-validator';
 
 class speedTests {

@@ -29,7 +29,6 @@ import { WorkerEntity } from 'src/entities/worker.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { RedisModule } from 'src/redis/redis.module';
-import { JobRunService } from 'src/jobrun/jobrun.service';
 import { OperationErrorEntity } from 'src/entities/operation-error.entity';
 import { SendMailService } from 'src/utils/send-email';
 import { MigrationConflictModule } from '../migration-conflict/migration-conflict.module';

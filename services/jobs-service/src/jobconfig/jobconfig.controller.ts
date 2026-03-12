@@ -36,7 +36,6 @@ import {
   JobConfigCutoverBulk,
   JobConfigDiscoverBulk,
   JobConfigPrecheck,
-  MigrateConfig,
   UpdateDiscoveryConfigDto,
   UpdateMigrationConfigDto,
 } from './dto/jobdicoverybulk.dto';
@@ -45,8 +44,6 @@ import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto';
 import {
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateFinalResponse,
-  JobConfigBulkMigrateRes,
-  JobConfigPrecheckRes,
   SpeedTestEntry,
   SpeedTestJobRun,
 } from './jobconfig.types';
@@ -58,10 +55,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import {
-  JobConfigInventoryStatsRequestDto,
-  JobConfigInventoryStatsResponseDto,
-} from './dto/jobconfig-inventory-stats.dto';
+import { JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
 import { GetDirsDto } from './dto/get-dirs.dto';
 import { MountTrackerService } from './mount-tracker.service';
 

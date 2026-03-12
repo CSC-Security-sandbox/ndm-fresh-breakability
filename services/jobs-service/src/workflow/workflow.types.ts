@@ -1,8 +1,8 @@
 export interface StartWorkFlowPayload {
   workflowId: string;
   taskQueue: string;
-  args: any[];
-  [key: string]: any;
+  args: unknown[];
+  [key: string]: unknown;
 }
 
 export enum WorkflowExecutionStatus {
@@ -14,5 +14,5 @@ export enum WorkflowExecutionStatus {
 export interface SignalWorkFlowPayload {
   workflowId: string;
   signalName: string;
-  payload: any;
+  payload: unknown;
 }

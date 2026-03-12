@@ -1,13 +1,13 @@
 import {
   Body,
   Controller,
-  HttpCode,
   HttpStatus,
   Inject,
   InternalServerErrorException,
   Post,
   Req,
 } from '@nestjs/common';
+import { getErrorMessage } from '../utils/error-message';
 import { HealthcheckService } from './healthcheck.service';
 import { HealthcheckStats } from './dto/healthcheck.dto';
 import { HealthCheckResponse } from './dto/healthcheck-response.dto';
@@ -17,6 +17,11 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+
+/** Request shape after AuthWorker guard (adds worker_id) */
+export interface HealthCheckRequest {
+  worker_id?: string;
+}
 
 @ApiTags('jobs')
 @Controller('statscheck')
@@ -35,21 +40,22 @@ export class HealthcheckController {
   @ApiBearerAuth()
   async healthCheck(
     @Body() healthStats: HealthcheckStats,
-    @Req() req: any,
+    @Req() req: HealthCheckRequest,
   ): Promise<HealthCheckResponse> {
     try {
       this.logger.log(
-        `Received health check stats from worker: ${req['worker_id']}`,
+        `Received health check stats from worker: ${req.worker_id}`,
       );
       await this.healthcheckService.createOrUpdateHealthCheckStats(healthStats);
       return this.createResponse(HttpStatus.OK);
-    } catch (error) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
       this.logger.error(
         'Error creating or updating health check stats:',
-        error.message,
+        message,
       );
       throw new InternalServerErrorException(
-        `Error creating or updating health check stats: ${error.message}`,
+        `Error creating or updating health check stats: ${message}`,
       );
     }
   }

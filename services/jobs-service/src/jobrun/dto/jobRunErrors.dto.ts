@@ -8,7 +8,6 @@ import {
   IsIn,
   IsNumberString,
   IsOptional,
-  IsString,
   IsUUID,
 } from 'class-validator';
 

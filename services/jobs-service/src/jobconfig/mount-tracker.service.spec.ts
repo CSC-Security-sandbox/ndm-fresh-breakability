@@ -55,8 +55,15 @@ jest.mock('net', () => ({
   isIP: jest.fn(),
 }));
 
+import * as dns from 'dns';
 import * as fs from 'fs';
 import * as net from 'net';
+
+// Mutable ref for test stubbing (dns.Resolver and dns.promises.lookup are replaced in tests)
+const dnsForTests = dns as unknown as {
+  Resolver: jest.Mock;
+  promises: { lookup: jest.Mock };
+};
 
 const mockExecAsync: jest.Mock = (global as any).__mockExecAsync;
 const mockIsIP = net.isIP as jest.MockedFunction<typeof net.isIP>;
@@ -1144,9 +1151,9 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1166,7 +1173,7 @@ describe('MountTrackerService', () => {
       ]);
 
       // Restore original
-      require('dns').Resolver = originalResolver;
+      dnsForTests.Resolver = originalResolver;
     });
 
     it('should fallback to system DNS when custom DNS fails', async () => {
@@ -1185,13 +1192,13 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       // Mock system DNS to succeed
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockResolvedValue({ address: '10.0.0.201' });
 
@@ -1210,8 +1217,8 @@ describe('MountTrackerService', () => {
       );
 
       // Restore originals
-      require('dns').Resolver = originalResolver;
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.Resolver = originalResolver;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should try FQDN resolution for short hostnames when custom DNS fails', async () => {
@@ -1242,9 +1249,9 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1269,7 +1276,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').Resolver = originalResolver;
+      dnsForTests.Resolver = originalResolver;
     });
 
     it('should fallback to original hostname when all DNS strategies fail', async () => {
@@ -1288,13 +1295,13 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       // Mock system DNS to also fail
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockRejectedValue(new Error('System DNS failed'));
 
@@ -1318,8 +1325,8 @@ describe('MountTrackerService', () => {
       );
 
       // Restore originals
-      require('dns').Resolver = originalResolver;
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.Resolver = originalResolver;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should handle FileServer repository errors gracefully', async () => {
@@ -1331,8 +1338,8 @@ describe('MountTrackerService', () => {
       );
 
       // Mock system DNS to succeed
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockResolvedValue({ address: '10.0.0.203' });
 
@@ -1356,7 +1363,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should handle empty DNS servers configuration', async () => {
@@ -1368,8 +1375,8 @@ describe('MountTrackerService', () => {
       });
 
       // Mock system DNS to succeed
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockResolvedValue({ address: '10.0.0.204' });
 
@@ -1388,7 +1395,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should use cached resolved IP for subsequent mounts with same key', async () => {
@@ -1407,9 +1414,9 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1442,7 +1449,7 @@ describe('MountTrackerService', () => {
       expect(dnsMock.resolve4).not.toHaveBeenCalled();
 
       // Restore original
-      require('dns').Resolver = originalResolver;
+      dnsForTests.Resolver = originalResolver;
     });
 
     it('should cache IP in existing mount record during resolution', async () => {
@@ -1461,9 +1468,9 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1484,7 +1491,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').Resolver = originalResolver;
+      dnsForTests.Resolver = originalResolver;
     });
 
     it('should try individual DNS servers when custom resolver fails', async () => {
@@ -1512,13 +1519,13 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       });
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => createMockResolver());
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       // Mock system DNS to fail
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockRejectedValue(new Error('System DNS failed'));
 
@@ -1537,16 +1544,16 @@ describe('MountTrackerService', () => {
       );
 
       // Restore originals
-      require('dns').Resolver = originalResolver;
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.Resolver = originalResolver;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should handle system DNS usage when no fileServerId provided', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
 
       // Mock system DNS to succeed
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockResolvedValue({ address: '10.0.0.207' });
 
@@ -1567,7 +1574,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should disable DNS resolution for SMB mounts when config is false', async () => {
@@ -1644,13 +1651,13 @@ describe('MountTrackerService', () => {
         setServers: jest.fn(),
       };
 
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => dnsMock);
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       // Mock system DNS to also fail
-      const originalLookup = require('dns').promises.lookup;
-      require('dns').promises.lookup = jest
+      const originalLookup = dnsForTests.promises.lookup;
+      dnsForTests.promises.lookup = jest
         .fn()
         .mockRejectedValue(new Error('System DNS failed'));
 
@@ -1680,8 +1687,8 @@ describe('MountTrackerService', () => {
       );
 
       // Restore originals
-      require('dns').Resolver = originalResolver;
-      require('dns').promises.lookup = originalLookup;
+      dnsForTests.Resolver = originalResolver;
+      dnsForTests.promises.lookup = originalLookup;
     });
 
     it('should handle non-Error objects in DNS resolution', async () => {
@@ -1693,11 +1700,11 @@ describe('MountTrackerService', () => {
       });
 
       // Mock DNS resolution to throw non-Error object
-      const originalResolver = require('dns').Resolver;
+      const originalResolver = dnsForTests.Resolver;
       const mockResolver = jest.fn(() => {
         throw new Error('string error'); // Non-Error object
       });
-      require('dns').Resolver = mockResolver;
+      dnsForTests.Resolver = mockResolver;
 
       const hostnameRequest: MountRequest = {
         ...smbRequest,
@@ -1717,7 +1724,7 @@ describe('MountTrackerService', () => {
       );
 
       // Restore original
-      require('dns').Resolver = originalResolver;
+      dnsForTests.Resolver = originalResolver;
     });
   });
 });

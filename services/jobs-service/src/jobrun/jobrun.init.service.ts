@@ -40,6 +40,7 @@ import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { MigrationConflictService } from 'src/migration-conflict/migration-conflict.service';
 import { RedisService } from 'src/redis/redis.service';
 import { filterUnhealthyWorkers } from 'src/utils/worker-filter';
+import { getErrorMessage } from 'src/utils/error-message';
 import { WorkflowService } from 'src/workflow/workflow.service';
 import { StartWorkFlowPayload } from 'src/workflow/workflow.types';
 import { Readable } from 'stream';
@@ -115,7 +116,7 @@ export class JobRunInitService {
         firstRunAt: LessThan(currentTime),
       },
     });
-    const scheduledJobs = [];
+    const scheduledJobs: JobConfigEntity[] = [];
     for (const job of jobs) {
       const alreadyExists =
         await this.migrationConflictService.checkMigrationConflicts({
@@ -232,9 +233,10 @@ export class JobRunInitService {
         !!details.jobRunId,
       );
       return await this.jobRunRepo.save(jobRun);
-    } catch (error) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
       this.logger.error(
-        `Failed to create job run for ${jobConfigId}: ${error.message}`,
+        `Failed to create job run for ${jobConfigId}: ${message}`,
       );
       await this.jobConfigRepo.update(
         { id: jobConfigId },

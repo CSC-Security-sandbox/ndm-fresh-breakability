@@ -16,6 +16,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "lint:changed": "eslint $(git diff --name-only --cached --diff-filter=ACM | grep '^services/jobs-service/.*\\.ts$' | sed 's|^services/jobs-service/||') --fix",
+    "lint:staged": "eslint $(git diff --name-only --cached --diff-filter=ACM | grep '^services/jobs-service/.*\\.ts$' | sed 's|^services/jobs-service/||') --max-warnings 500",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage --verbose --reporters=default --reporters=jest-junit --coverage --coverageDirectory=coverage --coverageReporters=lcov",

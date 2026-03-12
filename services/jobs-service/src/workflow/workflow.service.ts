@@ -36,7 +36,7 @@ export class WorkflowService {
 
     try {
       this.connection = await Connection.connect(
-        this.configService.get<any>('temporal'),
+        this.configService.get('temporal'),
       );
       this.client = new Client({ connection: this.connection });
       return this.client;

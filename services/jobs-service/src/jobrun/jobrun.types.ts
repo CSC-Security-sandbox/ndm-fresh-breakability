@@ -50,3 +50,17 @@ export enum WorkFlowFailureReason {
   TASK_FETCH_FAILURE = 'TASK_FETCH_FAILURE',
   SCAN_ACTIVITY_FAILURE = 'SCAN_ACTIVITY_FAILURE',
 }
+
+/** Single worker setup error item as returned in getFailedOperations */
+export interface SetupFailedErrorItem {
+  errorMessage: string;
+  displayMessage: string;
+  resolutionSteps: string | null;
+  referenceCommands: string | null;
+  errorType: 'FATAL_ERROR';
+  createdAt: string;
+  operationType: string;
+  errorCode: string;
+  origin: string;
+  occurrence: number;
+}

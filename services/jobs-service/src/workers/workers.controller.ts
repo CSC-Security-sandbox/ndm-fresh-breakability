@@ -5,7 +5,6 @@ import {
   Param,
   Post,
   Query,
-  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import {
@@ -21,12 +20,6 @@ import {
   WorkerStatusPageResponseDto,
 } from './dto/workers.page.dto';
 import { WorkersService } from './workers.service';
-import {
-  Ctx,
-  MessagePattern,
-  Payload,
-  RmqContext,
-} from '@nestjs/microservices';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { WorkerJobRunActivationParamsDto } from './dto/woker-jobrun-activation.dto';
 @ApiTags('Workers')

@@ -5,10 +5,9 @@ import {
   IsNumber,
   IsNumberString,
   IsOptional,
-  IsString,
   IsUUID,
 } from 'class-validator';
-import { JobRunStatus, WorkerStatus } from 'src/constants/enums';
+import { JobRunStatus } from 'src/constants/enums';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 

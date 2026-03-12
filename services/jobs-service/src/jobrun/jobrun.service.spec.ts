@@ -4045,7 +4045,7 @@ describe('JobRunService', () => {
             errorRemedy: {
               errorRemedies: [
                 {
-                  code: 'ERR001',
+                  errorCode: 'ERR001',
                   description: undefined,
                   referenceCommands: undefined,
                   resolutionSteps: undefined,
@@ -4207,13 +4207,13 @@ describe('JobRunService', () => {
           errorRemedy: {
             errorRemedies: [
               {
-                code: 'ERR001',
+                errorCode: 'ERR001',
                 description: undefined,
                 referenceCommands: undefined,
                 resolutionSteps: undefined,
               },
               {
-                code: 'ERR002',
+                errorCode: 'ERR002',
                 description: undefined,
                 referenceCommands: undefined,
                 resolutionSteps: undefined,

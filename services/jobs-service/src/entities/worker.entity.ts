@@ -2,8 +2,6 @@ import {
   Entity,
   Column,
   PrimaryColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
   ManyToMany,

@@ -5,13 +5,11 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Base } from './base.entity';
 import { FileServerEntity } from './fileserver.entity';
 import { ProjectEntity } from './project.entity';
-import { FileServerWorkingDirectoryMappingEntity } from './fileserver_workingdirectory_mapping.entity';
 
 @Entity({ name: 'config' })
 export class ConfigEntity extends Base {

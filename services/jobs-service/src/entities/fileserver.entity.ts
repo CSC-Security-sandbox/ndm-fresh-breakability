@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Protocol, ProtocolVersion, ServerType } from 'src/constants/enums';
+import { Protocol, ProtocolVersion } from 'src/constants/enums';
 import {
   Column,
   Entity,

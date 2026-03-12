@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { WorkerStatsEntity } from 'src/entities/worker-stats.entity';
 import { WorkerEntity } from 'src/entities/worker.entity';
 import { Repository } from 'typeorm';
-import { HealthcheckStats, SystemStats } from './dto/healthcheck.dto';
+import { HealthcheckStats } from './dto/healthcheck.dto';
 import {
   LoggerFactory,
   LoggerService,

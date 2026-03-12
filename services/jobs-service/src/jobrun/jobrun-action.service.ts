@@ -7,6 +7,7 @@ import { SignalWorkFlowPayload } from 'src/workflow/workflow.types';
 import { In, Repository } from 'typeorm';
 import { JobRunActions, JobRunActionsReq } from './dto/jobrunactions.dto';
 import { SignalJobRunsInput } from './jobrun-action.type';
+import { getErrorMessage } from '../utils/error-message';
 import {
   LoggerFactory,
   LoggerService,
@@ -123,9 +124,10 @@ export class JobRunActionService {
             details: 'Operation Successful for jobRun: ' + jobRun.id,
             status: 'fulfilled',
           };
-        } catch (error) {
+        } catch (error: unknown) {
+          const message = getErrorMessage(error);
           this.logger.error(
-            `Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`,
+            `Failed to send signal to workflow ${jobRun.workFlowId}: ${message}`,
           );
           return {
             details: 'Operation Failed for jobRun: ' + jobRun.id,
@@ -157,9 +159,10 @@ export class JobRunActionService {
             details: 'Operation Successful for jobRun: ' + jobRun.id,
             status: 'fulfilled',
           };
-        } catch (error) {
+        } catch (error: unknown) {
+          const message = getErrorMessage(error);
           this.logger.error(
-            `Failed to send signal to workflow ${jobRun.workFlowId}: ${error.message}`,
+            `Failed to send signal to workflow ${jobRun.workFlowId}: ${message}`,
           );
           return {
             details: 'Operation Failed for jobRun: ' + jobRun.id,

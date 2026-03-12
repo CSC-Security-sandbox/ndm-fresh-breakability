@@ -1,12 +1,4 @@
-import { name } from './../../node_modules/ci-info/index.d';
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  OneToOne,
-  PrimaryColumn,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { WorkerEntity } from './worker.entity';
 import { ApiProperty } from '@nestjs/swagger';

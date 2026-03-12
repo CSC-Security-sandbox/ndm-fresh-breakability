@@ -1,11 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { JobStatus, JobType, Protocol } from 'src/constants/enums';
+import { JobStatus, JobType } from 'src/constants/enums';
 import {
   Column,
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToOne,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';

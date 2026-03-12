@@ -103,7 +103,7 @@ export class AuthService implements OnModuleDestroy {
    * Schedule automatic token refresh before expiration
    * Refresh at 23 hours (before 24-hour Keycloak token expiry)
    */
-  private scheduleTokenRefresh(expiresIn: number): void {
+  private scheduleTokenRefresh(_expiresIn: number): void {
     // Clear existing refresh timer
     if (this.tokenRefreshInterval) {
       clearTimeout(this.tokenRefreshInterval);

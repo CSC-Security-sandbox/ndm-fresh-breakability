@@ -7,7 +7,6 @@ import {
   IsDateString,
 } from 'class-validator';
 import { JobRunStatus } from 'src/constants/enums';
-import { JobRunStats } from './jobstats';
 
 export class JobRunDto {
   @ApiProperty({ description: 'UUID of the job run' })

@@ -1,4 +1,3 @@
-import { config } from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { In, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -9,12 +8,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { Options } from '../constants/types';
-import {
-  JobRunStatus,
-  JobStatus,
-  JobType,
-  WorkFlows,
-} from '../constants/enums';
+import { JobRunStatus, JobType, WorkFlows } from '../constants/enums';
 import { VolumeEntity } from '../entities/volume.entity';
 import { JobConfigPrecheck as JobConfigPreCheck } from './dto/jobdicoverybulk.dto';
 import { WorkflowService } from '../workflow/workflow.service';
