@@ -717,8 +717,9 @@ func WorkerEnvVarsScriptForNFS(passwd string, maxWriteConcurrency, jobTaskActivi
 }
 
 // WorkerEnvVarsScriptForSMB generates a PowerShell script to update specific env vars in worker.env for SMB workers.
+// Note: Requires SSH user to have write permissions to C:\datamigrator\binary\.env
 func WorkerEnvVarsScriptForSMB(maxWriteConcurrency, jobTaskActivityConcurrency, maxBufferSize int) string {
-	script := fmt.Sprintf(`powershell.exe -Command "(Get-Content %s) -replace 'MAX_BUFFER_SIZE=\d+', 'MAX_BUFFER_SIZE=%d' -replace 'MAX_WRITE_CONCURRENCY=\d+', 'MAX_WRITE_CONCURRENCY=%d' -replace 'JOB_TASK_ACTIVITY_CONCURRENCY=\d+', 'JOB_TASK_ACTIVITY_CONCURRENCY=%d' | Set-Content %s"`, SMBWorkerEnvPath, maxBufferSize, maxWriteConcurrency, jobTaskActivityConcurrency, SMBWorkerEnvPath)
+	script := fmt.Sprintf(`powershell.exe -Command "try { (Get-Content %s -ErrorAction Stop) -replace 'MAX_BUFFER_SIZE=\d+', 'MAX_BUFFER_SIZE=%d' -replace 'MAX_WRITE_CONCURRENCY=\d+', 'MAX_WRITE_CONCURRENCY=%d' -replace 'JOB_TASK_ACTIVITY_CONCURRENCY=\d+', 'JOB_TASK_ACTIVITY_CONCURRENCY=%d' | Set-Content %s -ErrorAction Stop; Write-Host 'Updated worker env variables' } catch { Write-Error \"Failed to update worker env file: $_\"; exit 1 }"`, SMBWorkerEnvPath, maxBufferSize, maxWriteConcurrency, jobTaskActivityConcurrency, SMBWorkerEnvPath)
 	return script
 }
 
@@ -875,17 +876,24 @@ fi
 }
 
 // Helper: Script for SMB workers
+// Note: Requires SSH user to have write permissions to C:\datamigrator\binary\.env
+// If permission denied errors occur, run this command as Administrator on the worker:
+//   icacls "C:\datamigrator\binary\.env" /grant "Users:(M)"
 func updateJWTRefreshIntervalScriptForSMB(refreshIntervalMinutes int) string {
 	script := fmt.Sprintf(`powershell.exe -Command "
 $envFile = '%s'
-$content = Get-Content $envFile
-if ($content -match 'JWT_REFRESH_INTERVAL_MINUTES=') {
-    $content -replace 'JWT_REFRESH_INTERVAL_MINUTES=\\d+', 'JWT_REFRESH_INTERVAL_MINUTES=%d' | Set-Content $envFile
+try {
+    $content = Get-Content $envFile -ErrorAction Stop
+    # Remove all existing JWT_REFRESH_INTERVAL_MINUTES lines (with or without leading spaces)
+    $filtered = $content | Where-Object { $_ -notmatch '^\s*JWT_REFRESH_INTERVAL_MINUTES=' }
+    # Add the new value
+    $filtered += 'JWT_REFRESH_INTERVAL_MINUTES=%d'
+    $filtered | Set-Content $envFile -ErrorAction Stop
     Write-Host 'Updated JWT_REFRESH_INTERVAL_MINUTES=%d'
-} else {
-    Add-Content -Path $envFile -Value 'JWT_REFRESH_INTERVAL_MINUTES=%d'
-    Write-Host 'Added JWT_REFRESH_INTERVAL_MINUTES=%d'
+} catch {
+    Write-Error \"Failed to update worker env file: $_\"
+    exit 1
 }
-"`, SMBWorkerEnvPath, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes, refreshIntervalMinutes)
+"`, SMBWorkerEnvPath, refreshIntervalMinutes, refreshIntervalMinutes)
 	return script
 }
