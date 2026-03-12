@@ -33,6 +33,38 @@
     - net.ipv4.conf.all.secure_redirects
     - net.ipv4.conf.default.secure_redirects
 
+# TCP and NFS performance tuning for cross-region migrations
+- name: Tune TCP socket buffer sizes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+    sysctl_set: yes
+  loop:
+    # Max socket receive/send buffer sizes (256MB)
+    - { key: net.core.rmem_max, value: "268435456" }
+    - { key: net.core.wmem_max, value: "268435456" }
+    # TCP auto-tuning buffer range: min / default / max
+    - { key: net.ipv4.tcp_rmem, value: "4096 87380 268435456" }
+    - { key: net.ipv4.tcp_wmem, value: "4096 65536 268435456" }
+    # Enable TCP window scaling for large bandwidth-delay product links
+    - { key: net.ipv4.tcp_window_scaling, value: "1" }
+    # Increase backlog for bursty NFS traffic
+    - { key: net.core.netdev_max_backlog, value: "30000" }
+
+- name: Tune NFS sunrpc slot table for concurrent RPC operations
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+    sysctl_set: yes
+  loop:
+    # Max concurrent NFS RPCs per mount (default is 2, severely limits throughput)
+    - { key: sunrpc.tcp_max_slot_table_entries, value: "128" }
+    - { key: sunrpc.tcp_slot_table_entries, value: "128" }
+
 - name: 2.3. Copy systemd service file for boot script
   become: yes
   template:

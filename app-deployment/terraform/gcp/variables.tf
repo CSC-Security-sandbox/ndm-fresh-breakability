@@ -40,3 +40,21 @@ variable "instance_names" {
   type = list(string)
 }
 
+variable "network" {
+  description = "VPC network name"
+  type        = string
+  default     = "appmicro-vpc1"
+}
+
+variable "subnetwork" {
+  description = "VPC subnetwork name"
+  type        = string
+  default     = "appmicro-vpc-subnet-01"
+}
+
+variable "enable_gvnic" {
+  description = "Enable gVNIC for higher network throughput and lower latency"
+  type        = bool
+  default     = true
+}
+

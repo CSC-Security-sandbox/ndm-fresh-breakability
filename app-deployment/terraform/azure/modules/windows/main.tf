@@ -19,9 +19,10 @@ resource "azurerm_public_ip" "public_ip" {
 
 # Create network interface
 resource "azurerm_network_interface" "nic" {
-  name                = "${var.vm_name}-nic"
-  location            = var.location
-  resource_group_name = var.resource_group
+  name                          = "${var.vm_name}-nic"
+  location                      = var.location
+  resource_group_name           = var.resource_group
+  accelerated_networking_enabled = var.accelerated_networking
 
   ip_configuration {
     name                          = "internal"
@@ -62,6 +63,34 @@ resource "azurerm_windows_virtual_machine" "vm" {
     sku       = var.windows_image_sku
     version   = var.windows_image_version
   }
+
+  tags = var.tags
+}
+
+# Tune SMB and TCP settings for cross-region migration throughput
+resource "azurerm_virtual_machine_extension" "smb_tcp_tuning" {
+  name                 = "${var.vm_name}-smb-tcp-tuning"
+  virtual_machine_id   = azurerm_windows_virtual_machine.vm.id
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.9"
+
+  protected_settings = jsonencode({
+    commandToExecute = join(" && ", [
+      # SMB client: increase outstanding commands, enable multichannel, disable bandwidth throttling, enable large MTU
+      "powershell -Command \"Set-SmbClientConfiguration -MaxCmds 128 -ConnectionCountPerRssNetworkInterface 4 -DirectoryCacheLifetime 30 -FileInfoCacheLifetime 30 -FileNotFoundCacheLifetime 30 -EnableMultiChannel $true -EnableBandwidthThrottling $false -EnableLargeMtu $true -Force\"",
+      # TCP: increase window size to 4MB, enable window scaling + timestamps (Tcp1323Opts=3)
+      "powershell -Command \"Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name TcpWindowSize -Value 4194304 -Type DWord; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name GlobalMaxTcpWindowSize -Value 4194304 -Type DWord; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name Tcp1323Opts -Value 3 -Type DWord\"",
+      # LanmanWorkstation: increase max commands, write coalescing, disable SMB signing for throughput
+      "powershell -Command \"Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters' -Name MaxCmds -Value 128 -Type DWord; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters' -Name MaxCollectionCount -Value 32 -Type DWord; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters' -Name RequireSecuritySignature -Value 0 -Type DWord\"",
+      # Log success
+      "powershell -Command \"'SMB and TCP tuning applied' | Out-File -FilePath C:\\smb-tcp-tuning-success.txt -Force\""
+    ])
+  })
+
+  depends_on = [
+    azurerm_windows_virtual_machine.vm
+  ]
 
   tags = var.tags
 }

@@ -90,3 +90,9 @@ variable "location" {
   description = "The Azure region where resources will be created"
   type        = string
 }
+
+variable "accelerated_networking" {
+  description = "Enable accelerated networking (SR-IOV) for higher throughput and lower latency"
+  type        = bool
+  default     = true
+}

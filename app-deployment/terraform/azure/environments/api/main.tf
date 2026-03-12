@@ -1,4 +1,4 @@
-# Control Plane (Linux)
+# Control Plane (Linux) — no accelerated networking needed, not on the data path
 module "control_plane" {
   source                          = "../../modules/linux"
   vm_name                         = "${var.vm_owner}-cp-api"
@@ -15,6 +15,7 @@ module "control_plane" {
   location                        = var.location
   disable_password_authentication = false
   assign_public_ip                = false
+  accelerated_networking          = false
 
   tags = {
     environment = "dev"
@@ -23,7 +24,7 @@ module "control_plane" {
   }
 }
 
-# # Linux Workers
+# Linux Workers — accelerated networking enabled (default) for data transfer throughput
 module "linux_workers" {
   count                           = var.linux_worker_count
   source                          = "../../modules/linux"
@@ -41,6 +42,7 @@ module "linux_workers" {
   location                        = var.location
   disable_password_authentication = false
   assign_public_ip                = false
+  accelerated_networking          = true
 
   tags = {
     environment = "dev"
@@ -51,7 +53,7 @@ module "linux_workers" {
   }
 }
 
-# Windows Workers
+# Windows Workers — accelerated networking enabled for data transfer throughput
 module "windows_workers" {
   count                    = var.deploy_windows_workers ? var.windows_worker_count : 0
   source                   = "../../modules/windows"
@@ -73,6 +75,7 @@ module "windows_workers" {
   timezone                 = "UTC"
   enable_automatic_updates = true
   enable_openssh           = true
+  accelerated_networking   = true
 
   tags = {
     environment = "dev"
