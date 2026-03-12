@@ -871,11 +871,12 @@ func UpdateKeycloakTokenLifespan(lifespanSeconds int) error {
     }
     defer session.Close()
 
-    // Build the command based on your shell script
+    // Build the command to update Keycloak token lifespan
     script := fmt.Sprintf(`
 KEYCLOAK_POD="keycloak-0"
 KEYCLOAK_NS="keycloak"
 REALM_NAME="datamigrator"
+LIFESPAN=%d
 
 ADMIN_PASS=$(kubectl get secret -n $KEYCLOAK_NS keycloak-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
 
@@ -884,7 +885,7 @@ TOKEN=\$(curl -sk http://localhost:8080/keycloak/realms/master/protocol/openid-c
   -d 'username=kcadmin' -d 'password=$ADMIN_PASS' -d 'grant_type=password' -d 'client_id=admin-cli')
 ACCESS=\$(echo \"\$TOKEN\" | sed -n 's/.*\"access_token\":\"\([^\"]*\)\".*/\1/p')
 CONFIG=\$(curl -sk http://localhost:8080/keycloak/admin/realms/$REALM_NAME -H \"Authorization: Bearer \$ACCESS\")
-UPDATED=\$(echo \"\$CONFIG\" | sed 's/\"accessTokenLifespan\":[0-9]*/\"accessTokenLifespan\":%d/')
+UPDATED=\$(echo \"\$CONFIG\" | sed 's/\"accessTokenLifespan\":[0-9]*/\"accessTokenLifespan\":$LIFESPAN/')
 curl -sk -X PUT http://localhost:8080/keycloak/admin/realms/$REALM_NAME \
   -H \"Authorization: Bearer \$ACCESS\" -H 'Content-Type: application/json' -d \"\$UPDATED\"
 "
