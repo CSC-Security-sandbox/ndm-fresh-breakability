@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CommandStatus, ErrorType, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, ErrorType, ItemInfo, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ApplicationFailure, Context } from '@temporalio/activity';
 import { basePrefix, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
 import { FatalError, RetryExceededError } from "src/errors/errors.types";
@@ -14,146 +14,157 @@ import { handleSyncTaskUpdateInput, SyncTaskInput, SyncTaskOutput } from "./sync
 
 @Injectable()
 export class SyncService {
-    readonly workerId: string;
-    readonly CHUNK_SIZE: number;
-    readonly maxRetryCount: number;
-    readonly maxConcurrency: number;
-    readonly maxWriteConcurrency: number;
-    private readonly logger: LoggerService;
+  readonly workerId: string;
+  readonly CHUNK_SIZE: number;
+  readonly maxRetryCount: number;
+  readonly maxConcurrency: number;
+  readonly maxWriteConcurrency: number;
+  private readonly logger: LoggerService;
 
-    constructor(
-        @Inject(ConfigService) private readonly configService: ConfigService,
-        @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-        private readonly redisService: RedisService,
-        private readonly commonTaskService: CommonTaskService,
-        readonly commandExecService: CommandExecService
-        
-    ) {
-        this.workerId = this.configService.get('worker.workerId');
-        this.logger = loggerFactory.create(SyncService.name);
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
-        this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 1;
-    }
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly redisService: RedisService,
+    private readonly commonTaskService: CommonTaskService,
+    readonly commandExecService: CommandExecService
+
+  ) {
+    this.workerId = this.configService.get('worker.workerId');
+    this.logger = loggerFactory.create(SyncService.name);
+    this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+    this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+    this.maxWriteConcurrency = this.configService.get('worker.maxWriteConcurrency') || 1;
+  }
 
 
-     async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
-        const syncActivityCtx = Context.current();
-        const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({});}, 2000);
-        let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
-        const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
-        let task = undefined;
-        try {
-          task = await jobContext.getTask(taskId);
-          if (!task) {
-            this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
-            return syncOutput;
-          }
-          this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
-          task = await this.commonTaskService.ensureTaskValid({ task, jobContext });
-          task.status = TaskStatus.RUNNING;
-          task.workerId = this.workerId;
-          await jobContext.publishToTaskStream(task);
-          syncOutput = await this.executeSyncTask(taskId, task, jobContext);
-          await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
-          syncOutput.status = TaskStatus.COMPLETED;
-        } catch (error) {            
-            this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);        
-            throw error;
-        } finally {
-          clearInterval(heartBeatInterval);
-        }
+  async syncTaskActivity({ jobRunId, taskId }: SyncTaskInput): Promise<SyncTaskOutput> {
+    const syncActivityCtx = Context.current();
+    const heartBeatInterval = setInterval(() => { syncActivityCtx.heartbeat({}); }, 2000);
+    let syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0 };
+    const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
+    let task = undefined;
+    try {
+      task = await jobContext.getTask(taskId);
+      if (!task) {
+        this.logger.warn(`[${jobRunId}] No Task Found for taskId: ${taskId}`);
         return syncOutput;
+      }
+      this.logger.debug(`[${jobRunId}] Found Task => ${task?.id} | status : ${task?.status} | command : ${task?.commands?.length}`);
+      task = await this.commonTaskService.ensureTaskValid({ task, jobContext });
+      task.status = TaskStatus.RUNNING;
+      task.workerId = this.workerId;
+      await jobContext.publishToTaskStream(task);
+      syncOutput = await this.executeSyncTask(taskId, task, jobContext);
+      await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
+      syncOutput.status = TaskStatus.COMPLETED;
+    } catch (error) {
+      this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);
+      throw error;
+    } finally {
+      clearInterval(heartBeatInterval);
+    }
+    return syncOutput;
+  }
+
+
+  executeSyncTask = async (taskHashId: string, task: TaskInfo, jobContext: JobManagerContext): Promise<SyncTaskOutput> => {
+    const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0 };
+    const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
+    const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
+    const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+
+    let offset = 0;
+    while (offset < task.commands.length) {
+      let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
+      offset += this.maxWriteConcurrency;
+      const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
+      const results = await Promise.allSettled(filteredCommands.map(command => {
+        const scanInput: CommandExecInput = {
+          sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+          targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+          command,
+          jobContext,
+          errorType
+        };
+        return this.commandExecService.executeCommand(scanInput);
+      }));
+
+      // Collect ItemInfo objects and errors from batch results
+      const batchItemInfos: ItemInfo[] = [];
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          syncOutput.errors.source.push(...result.value.sourceErrors);
+          syncOutput.errors.target.push(...result.value.targetErrors);
+          if (result.value.itemInfo) {
+            batchItemInfos.push(result.value.itemInfo);
+          }
+        } else {
+          // Handle rejected promises - treat them as errors (push array of strings)
+          const messages: string[] = Array.isArray(result.reason)
+            ? result.reason.map((err: any) =>
+              typeof err === 'string'
+                ? err
+                : err?.message || JSON.stringify(err) || 'Unknown error'
+            )
+            : [result.reason?.message || String(result.reason) || 'Unknown error'];
+          syncOutput.errors.source.push(...messages);
+        }
+      });
+
+      // Bulk publish all ItemInfo objects from this batch in a single Redis call
+      if (batchItemInfos.length > 0) {
+        await jobContext.publishToFileStreamBulk(batchItemInfos);
+      }
+    }
+    await jobContext.setTask(taskHashId, task);
+    return syncOutput
+  }
+
+  async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
+    const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
+
+    if (allCompleted) {
+      task.status = TaskStatus.COMPLETED;
+      await jobContext.publishToTaskStream(task);
+      await jobContext.deleteTask(taskHashId);
+      return;
     }
 
+    const hasFatalSourceError = errors.source.some(isSourceFatalError);
+    const hasFatalTargetError = errors.target.some(isFatalError);
+    const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
 
-    executeSyncTask = async (taskHashId:string, task: TaskInfo, jobContext: JobManagerContext ): Promise<SyncTaskOutput> => {
-        const syncOutput: SyncTaskOutput = { errors: { source: [], target: [] }, status: TaskStatus.PENDING, error: 0};
-        const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
-        const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
-        const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+    // Check for transient errors (non-retryable but don't cancel activity)
+    const hasTransientSourceError = errors.source.some(isTransientError);
+    const hasTransientTargetError = errors.target.some(isTransientError);
+    const hasTransientError = hasTransientSourceError || hasTransientTargetError;
 
-        let offset = 0;
-        while (offset < task.commands.length) {
-            let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
-            offset += this.maxWriteConcurrency;
-            const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
-            const results = await Promise.allSettled(filteredCommands.map(command => {
-                const scanInput: CommandExecInput = {
-                  sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-                  targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-                  command,
-                  jobContext,
-                  errorType
-                };
-                return this.commandExecService.executeCommand(scanInput);
-            }));
-            results.forEach((result) => {
-                if (result.status === 'fulfilled') {
-                    syncOutput.errors.source.push(...result.value.sourceErrors);
-                    syncOutput.errors.target.push(...result.value.targetErrors);
-                } else {
-                    // Handle rejected promises - treat them as errors (push array of strings)
-                    const messages: string[] = Array.isArray(result.reason)
-                        ? result.reason.map((err: any) =>
-                            typeof err === 'string'
-                              ? err
-                              : err?.message || JSON.stringify(err) || 'Unknown error'
-                        )
-                        : [result.reason?.message || String(result.reason) || 'Unknown error'];
-                    syncOutput.errors.source.push(...messages);                    
-                }
-            });
-        }
-        await jobContext.setTask(taskHashId, task);
-        return syncOutput
+    task.status = TaskStatus.ERRORED;
+    await jobContext.publishToTaskStream(task);
+    if (isFatalErrored) {
+      await jobContext.deleteTask(taskHashId);
+      throw new FatalError(
+        `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount} `
+      );
     }
 
-    async updateAndReportTaskStatus({ errors, jobContext, taskHashId, task }: handleSyncTaskUpdateInput): Promise<void> {
-        const allCompleted = task.commands.every(cmd => cmd.status === CommandStatus.COMPLETED);
-    
-        if (allCompleted) {
-          task.status = TaskStatus.COMPLETED;
-          await jobContext.publishToTaskStream(task);
-          await jobContext.deleteTask(taskHashId);
-          return;
-        }
-    
-        const hasFatalSourceError = errors.source.some(isSourceFatalError);
-        const hasFatalTargetError = errors.target.some(isFatalError);
-        const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
-        
-        // Check for transient errors (non-retryable but don't cancel activity)
-        const hasTransientSourceError = errors.source.some(isTransientError);
-        const hasTransientTargetError = errors.target.some(isTransientError);
-        const hasTransientError = hasTransientSourceError || hasTransientTargetError;
-
-        task.status = TaskStatus.ERRORED;
-        await jobContext.publishToTaskStream(task);
-        if (isFatalErrored) {
-          await jobContext.deleteTask(taskHashId);
-            throw new FatalError(
-            `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount} `
-            );
-        }
-        
-        if (hasTransientError) {
-          await jobContext.deleteTask(taskHashId);
-          throw new RetryExceededError(
-            `Task ${task.id} contains transient errors that cannot be retried: ${[...new Set([...errors.source, ...errors.target])].join(", ")}`
-          );
-        }        
-        if (task.retryCount >= this.maxRetryCount) {
-          await jobContext.deleteTask(taskHashId);
-          throw new RetryExceededError(
-            `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`
-          );
-        }
-    
-        throw ApplicationFailure.retryable(
-          `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount}`, 
-          'RetryableError'
-        );
+    if (hasTransientError) {
+      await jobContext.deleteTask(taskHashId);
+      throw new RetryExceededError(
+        `Task ${task.id} contains transient errors that cannot be retried: ${[...new Set([...errors.source, ...errors.target])].join(", ")}`
+      );
     }
+    if (task.retryCount >= this.maxRetryCount) {
+      await jobContext.deleteTask(taskHashId);
+      throw new RetryExceededError(
+        `Task ${task.id} has exceeded maximum retry count of ${this.maxRetryCount}`
+      );
+    }
+
+    throw ApplicationFailure.retryable(
+      `Sync Task Update Failed: ${[...new Set(errors.source)].length} source errors: ${[...new Set(errors.source)].join(", ")} and ${[...new Set(errors.target)].length} target errors: ${[...new Set(errors.target)].join(", ")} with retry count ${task.retryCount}`,
+      'RetryableError'
+    );
+  }
 
 }

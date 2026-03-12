@@ -75,27 +75,37 @@ export class CommonTaskService {
       try{
         const jobContext = await this.redisService.getJobManagerContext(jobRunId);
         let commands:Cmd[] = [], streamIds = [];
+        const pendingTasks: { hashKey: string; task: TaskInfo }[] = [];
+
         for await (const {data, id} of jobContext.groupReadCommandStream(jobRunId, this.groupSize, GroupReaderType.WORKER)) {
           commands.push(data);
           streamIds.push(id);
           if (commands.length >= this.commandsInTask) {
             const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-            const hashKey = calculateCommandHash(commands); 
+            const hashKey = calculateCommandHash(commands);
             taskIds.push(hashKey);
             this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
-            await jobContext.setTaskIfNotExists(hashKey, task);   
+            pendingTasks.push({ hashKey, task });
             commands = [];
           }
         }
         if (commands.length > 0) {
           const task = buildTask(TaskType.MIGRATE, jobRunId, jobContext, commands);
-          const hashKey = calculateCommandHash(commands); 
+          const hashKey = calculateCommandHash(commands);
           taskIds.push(hashKey);
           this.logger.debug(`Task created with ID: ${task.id} and hash: ${hashKey}`);
-          await jobContext.setTaskIfNotExists(hashKey, task);   
+          pendingTasks.push({ hashKey, task });
           commands = [];
         }
-        if(streamIds.length > 0) 
+
+        // Batch write all tasks to Redis in parallel instead of sequential awaits
+        if (pendingTasks.length > 0) {
+          await Promise.all(
+            pendingTasks.map(({ hashKey, task }) => jobContext.setTaskIfNotExists(hashKey, task))
+          );
+        }
+
+        if(streamIds.length > 0)
           await jobContext.groupAckCommandStream(streamIds, GroupReaderType.WORKER);
       }catch (error) {
         this.logger.error(`Error in getGroupOfTasksActivity: ${error.message}`, error.stack);

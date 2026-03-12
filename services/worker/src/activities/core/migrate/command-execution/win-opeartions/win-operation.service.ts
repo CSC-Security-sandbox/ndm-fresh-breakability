@@ -242,10 +242,13 @@ export class WinOperationService {
   ): Promise<SecurityDescriptor> {
     acl.originalOwner = acl.Owner;
     acl.originalGroup = acl.Group;
-    const owner = await this.getSIDMapping(acl.Owner, jobRunId);
-    if (owner) acl.Owner = owner;
 
-    const group = await this.getSIDMapping(acl.Group, jobRunId);
+    // Parallelize owner, group, and all ACE SID lookups in a single batch
+    const [owner, group] = await Promise.all([
+      this.getSIDMapping(acl.Owner, jobRunId),
+      this.getSIDMapping(acl.Group, jobRunId),
+    ]);
+    if (owner) acl.Owner = owner;
     if (group) acl.Group = group;
 
     acl.DaclAces = await Promise.all(

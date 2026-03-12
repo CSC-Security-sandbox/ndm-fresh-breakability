@@ -834,6 +834,31 @@ describe('StampMetaService', () => {
         // stampAccessAndModifiedTime must not run when ACL has errors, so utimes (target) is never called
         expect(mockFs.promises.utimes).not.toHaveBeenCalled();
       });
+
+      it('should call stampAccessAndModifiedTime on target when ACL stamping succeeds with no errors', async () => {
+        const input = createMockInput(
+          {
+            atime: new Date('2023-01-02T14:00:00Z'),
+            mtime: new Date('2023-01-02T12:00:00Z'),
+          },
+          { preservePermissions: true, preserveAccessTime: false }
+        );
+
+        winOperationService.stampAclOperation.mockResolvedValue({
+          output: null,
+          errors: [],
+        });
+        (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+        await service.stampMetaData(input);
+
+        expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+        expect(mockFs.promises.utimes).toHaveBeenCalledWith(
+          '/target/test-file.txt',
+          new Date('2023-01-02T14:00:00Z'),
+          new Date('2023-01-02T12:00:00Z'),
+        );
+      });
     });
 
     describe('Edge cases', () => {

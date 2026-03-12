@@ -519,13 +519,155 @@ describe('CommandExecService', () => {
                 targetErrors: [],
                 shouldUpdateItemInfo: false,
             });
-            jest.spyOn(service, 'publishFileInfo').mockResolvedValue();
+            jest.spyOn(service, 'buildFileInfo').mockResolvedValue();
 
             const result = await service.executeCommand(input);
 
             expect(result.cmd.status).toBe(CommandStatus.COMPLETED);
             expect(result.sourceErrors).toEqual([]);
             expect(result.targetErrors).toEqual([]);
+        });
+
+        describe('copyContentStatus and stampMetaDataStatus (COC report)', () => {
+            it('should pass copyContentStatus not_applicable and stampMetaDataStatus to buildFileInfo for COPY_DIR only', async () => {
+                const createMockCommand = () => ({
+                    id: 'cmd-dir',
+                    fPath: '/testdir',
+                    status: CommandStatus.READY,
+                    isDir: true,
+                    ops: {
+                        [OPS_CMD.COPY_DIR]: { status: OPS_STATUS.READY, params: {} },
+                    },
+                    metadata: {
+                        size: 0,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 755,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456,
+                    },
+                    serialize: jest.fn(),
+                });
+                mockCreateDirectory.mockResolvedValue(undefined);
+                stampMetaService.stampMetaData.mockResolvedValue({
+                    shouldStampMeta: false,
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldUpdateItemInfo: true,
+                });
+
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+                const input = {
+                    sourcePath: '/source/testdir',
+                    targetPath: '/target/testdir',
+                    jobContext: mockJobContext,
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                await service.executeCommand(input);
+
+                expect(buildFileInfoSpy).toHaveBeenCalled();
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.copyContentStatus).toBe('not_applicable');
+                expect(callInput.stampMetaDataStatus).toBe('success');
+            });
+
+            it('should set copyContentStatus success and stampMetaDataStatus when COPY_FILE completed and stamp succeeds', async () => {
+                const createMockCommand = () => ({
+                    id: 'cmd-file',
+                    fPath: '/test.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {
+                        [OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: { checksums: { sourceChecksum: 'a', targetChecksum: 'a' } } },
+                    },
+                    metadata: {
+                        size: 1024,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456,
+                    },
+                    serialize: jest.fn(),
+                });
+                stampMetaService.stampMetaData.mockResolvedValue({
+                    shouldStampMeta: false,
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldUpdateItemInfo: true,
+                });
+                const mockItemInfo = { fileName: '/test.txt', copyContentStatus: 'success', stampMetaDataStatus: 'success' } as any;
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue(mockItemInfo);
+                const input = {
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                await service.executeCommand(input);
+
+                expect(buildFileInfoSpy).toHaveBeenCalled();
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.copyContentStatus).toBe('success');
+                expect(callInput.stampMetaDataStatus).toBe('success');
+            });
+
+            it('should set copyContentStatus failed when stampMeta has errors', async () => {
+                const createMockCommand = () => ({
+                    id: 'cmd-file-fail',
+                    fPath: '/test.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {
+                        [OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
+                        [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} },
+                    },
+                    metadata: {
+                        size: 1024,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456,
+                    },
+                    serialize: jest.fn(),
+                });
+                stampMetaService.stampMetaData.mockResolvedValue({
+                    shouldStampMeta: false,
+                    sourceErrors: [],
+                    targetErrors: ['EACCES'],
+                    shouldUpdateItemInfo: true,
+                });
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+                const input = {
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                await service.executeCommand(input);
+
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.stampMetaDataStatus).toBe('failed');
+            });
         });
 
         it('should execute delete file operation', async () => {
@@ -616,7 +758,7 @@ describe('CommandExecService', () => {
             expect(result.targetErrors).toEqual([]);
         });
 
-        describe('publishFileInfo', () => {
+        describe('buildFileInfo', () => {
             const createMockCommand = () => ({
             id: 'cmd-1',
             fPath: '/test.txt',
@@ -684,7 +826,7 @@ describe('CommandExecService', () => {
             (path.extname as jest.Mock).mockReturnValue('.txt');
             });
 
-            it('should publish file info and validate command', async () => {
+            it('should build file info and validate command', async () => {
             const command = createMockCommand();
             const input = {
                 command,
@@ -695,18 +837,18 @@ describe('CommandExecService', () => {
             };
             jest.spyOn(service, 'validateCommand').mockResolvedValue();
 
-            await service.publishFileInfo(input as any);
+            const result = await service.buildFileInfo(input as any);
 
+            expect(result).toBeDefined();
             expect(fs.promises.lstat).toHaveBeenCalledWith('/source/test.txt');
             expect(fs.promises.lstat).toHaveBeenCalledWith('/target/test.txt');
             expect(getFilePermissions).toHaveBeenCalledTimes(2);
             expect(getFileType).toHaveBeenCalledWith(mockTargetStats, false);
             expect(path.extname).toHaveBeenCalledWith('/target/test.txt');
             expect(service.validateCommand).toHaveBeenCalled();
-            expect(mockJobContext.publishToFileStream).toHaveBeenCalledWith(expect.any(Object));
             });
 
-            it('should include checksumTime in published ItemInfo when present in command params', async () => {
+            it('should include checksumTime in built ItemInfo when present in command params', async () => {
             const checksumTimestamp = new Date('2026-02-04T10:30:00.000Z');
             const command = {
                 ...createMockCommand(),
@@ -740,11 +882,9 @@ describe('CommandExecService', () => {
             };
             jest.spyOn(service, 'validateCommand').mockResolvedValue();
 
-            await service.publishFileInfo(input as any);
+            const result = await service.buildFileInfo(input as any);
 
-            // Assert: checksumTime should be present and match the timestamp from command params
-            const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
-            expect(publishedItemInfo.checksumTime).toEqual(checksumTimestamp);
+            expect(result.checksumTime).toEqual(checksumTimestamp);
             });
 
             it('should set checksumTime to null when not present in command params', async () => {
@@ -780,11 +920,9 @@ describe('CommandExecService', () => {
             };
             jest.spyOn(service, 'validateCommand').mockResolvedValue();
 
-            await service.publishFileInfo(input as any);
+            const result = await service.buildFileInfo(input as any);
 
-            // Assert: checksumTime should be null when not present in command params
-            const publishedItemInfo = mockJobContext.publishToFileStream.mock.calls[0][0];
-            expect(publishedItemInfo.checksumTime).toBeNull();
+            expect(result.checksumTime).toBeNull();
             });
         });
 
