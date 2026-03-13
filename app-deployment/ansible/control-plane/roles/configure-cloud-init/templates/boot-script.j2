@@ -3,7 +3,7 @@
 # Configuration
 MAX_RETRIES=3
 RETRY_DELAY=5
-WAIT_TIMEOUT=600
+WAIT_TIMEOUT=900
 MICROK8S_INIT_DELAY=80
 IP_WAIT_RETRIES=30
 IP_WAIT_DELAY=2
@@ -123,6 +123,8 @@ BUILD_VERSION=$(grep '^initial_version=' /opt/datamigrator/conf/versions.conf | 
 echo "Current build version: $BUILD_VERSION"
 
 load_docker_images() {
+    log "Waiting for containerd to be ready..."
+    retry $MAX_RETRIES "microk8s ctr version" || handle_failure "containerd not ready"
     log "Loading Docker images into MicroK8s registry..."
     retry $MAX_RETRIES "microk8s images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load Docker images"
 }
