@@ -15,6 +15,11 @@ import java.sql.SQLException;
 import java.util.logging.Logger;
 import java.util.List;
 import java.util.ArrayList;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
+import java.time.Duration;
  
 /**
 * An implementation of the Keycloak `EventListenerProvider` interface to handle user events.
@@ -136,40 +141,63 @@ public class UserProfileEventListener implements EventListenerProvider {
     }
     
     /**
-     * Updates the ASUP settings in the global_settings table.
+     * Updates the ASUP settings via API call to reports-service (same as Help toggle).
      * This is a system-wide setting - the instance creator's choice applies to all users.
      *
      * @param enabled whether ASUP metrics sharing is enabled
      * @param userId the user ID who made the change
      */
     private void updateAsupSettingsInDatabase(boolean enabled, String userId) {
-        // Use UPSERT to insert or update the ASUP setting
-        String query = """
-            INSERT INTO datamigrator.global_settings (setting_key, setting_value, description, setting_type, updated_by)
-            VALUES (?, ?, 'ASUP metrics sharing consent set by instance creator', 'boolean', ?::uuid)
-            ON CONFLICT (setting_key)
-            DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?::uuid
-        """;
+        // Call the same API endpoint used by the Help toggle: PUT /api/v1/report/asup/settings
+        String reportsServiceUrl = System.getenv("REPORTS_SERVICE_URL");
+        if (reportsServiceUrl == null || reportsServiceUrl.isEmpty()) {
+            reportsServiceUrl = "http://reports-service-service:3000";
+        }
         
-        try (Connection connection = DatabaseConnectionUtil.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
+        String apiUrl = reportsServiceUrl.endsWith("/") 
+            ? reportsServiceUrl + "api/v1/report/asup/settings"
+            : reportsServiceUrl + "/api/v1/report/asup/settings";
+        
+        String internalSecret = System.getenv("KEYCLOAK_INTERNAL_SECRET");
+        
+        try {
+            String jsonBody = String.format("{\"enabled\":%s}", enabled);
             
-            String enabledValue = String.valueOf(enabled);
-            statement.setString(1, ASUP_SETTING_KEY);
-            statement.setString(2, enabledValue);
-            statement.setString(3, userId);
-            statement.setString(4, enabledValue);
-            statement.setString(5, userId);
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
             
-            int rowsAffected = statement.executeUpdate();
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json");
             
-            if (rowsAffected > 0) {
-                logger.info(String.format("ASUP settings updated successfully: enabled=%s", enabled));
-            } else {
-                logger.warning("Failed to update ASUP settings in database");
+            // Add internal service secret header for authentication (if configured)
+            if (internalSecret != null && !internalSecret.isEmpty()) {
+                requestBuilder.header("X-Internal-Service-Secret", internalSecret);
             }
-        } catch (SQLException e) {
-            logger.severe(String.format("Database connection error while updating ASUP settings: %s", e.getMessage()));
+            
+            // Add user ID header if provided
+            if (userId != null && !userId.isEmpty()) {
+                requestBuilder.header("X-User-Id", userId);
+            }
+            
+            HttpRequest request = requestBuilder
+                    .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+            
+            logger.info(String.format("Calling reports-service API to update ASUP settings: enabled=%s, userId=%s", enabled, userId));
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            int statusCode = response.statusCode();
+            if (statusCode >= 200 && statusCode < 300) {
+                logger.info(String.format("ASUP settings updated successfully via API: enabled=%s, statusCode=%d", enabled, statusCode));
+            } else {
+                logger.warning(String.format("Failed to update ASUP settings via API: statusCode=%d, response=%s", statusCode, response.body()));
+            }
+        } catch (Exception e) {
+            logger.severe(String.format("Error calling reports-service API to update ASUP settings: %s", e.getMessage()));
             // Don't throw - ASUP is non-critical, don't break the login flow
         }
     }
