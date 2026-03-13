@@ -47,7 +47,7 @@ import { Readable } from 'stream';
 import { In, LessThan, Repository } from 'typeorm';
 import { v4 as uuid4 } from 'uuid';
 import { JobRunEntity } from '../entities/jobrun.entity';
-import { JobRunConfig } from './jobrun.types';
+import { Credential, JobRunConfig } from './jobrun.types';
 import { getWorkflowId } from './jobrun.util';
 
 @Injectable()
@@ -245,8 +245,8 @@ export class JobRunInitService {
     }
   }
 
-  async getJobConfigSpeedTest(jobConfigId): Promise<JobRunConfig> {
-    const jobConfig = await this.jobConfigRepo.findOne({
+  async getJobConfigSpeedTest(jobConfigId: string): Promise<JobRunConfig> {
+    const jobConfig: JobConfigEntity | null = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
       relations: {
         speedTestConfigs: {
@@ -286,11 +286,11 @@ export class JobRunInitService {
   }
 
   // ------------------ Get list of workers -------------------- //
-  async getJobConfig(jobConfigId): Promise<JobRunConfig> {
+  async getJobConfig(jobConfigId: string): Promise<JobRunConfig> {
     const healthStatsTimeout = parseInt(
       this.configService.get('app.worker.healthCheckStatusTimout'),
     );
-    const jobConfig = await this.jobConfigRepo.findOne({
+    const jobConfig: JobConfigEntity | null = await this.jobConfigRepo.findOne({
       where: { id: jobConfigId },
       relations: {
         sourcePath: { fileServer: { config: true, workers: { stats: true } } },
@@ -376,13 +376,13 @@ export class JobRunInitService {
     return details;
   }
 
-  async getFileServerDetails(jobRunId): Promise<any> {
+  async getFileServerDetails(jobRunId: string): Promise<unknown> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       relations: ['jobConfig'],
     });
     if (!jobRun) {
-      throw new Error(`JobRun with id ${jobRunId} not found`);
+      throw new NotFoundException(`JobRun with id ${jobRunId} not found`);
     }
     const jobConfigId = jobRun.jobConfigId;
 
@@ -536,7 +536,7 @@ export class JobRunInitService {
       relations: ['jobConfig'],
     });
     if (!jobRun) {
-      throw new Error(`JobRun with id ${jobRunId} not found`);
+      throw new NotFoundException(`JobRun with id ${jobRunId} not found`);
     }
     const jobConfig = new SpeedTestJobConfig(jobRunId, jobRunConfig.jobType);
     const jobState: JobState = new JobState(
@@ -569,7 +569,7 @@ export class JobRunInitService {
     const sourceCredential = jobRunConfig.connection.sourceCredential;
     const targetCredential = jobRunConfig.connection.targetCredential;
 
-    const createFileServerDetails = (credential: any) => {
+    const createFileServerDetails = (credential: Credential) => {
       return credential.protocol === Protocol.NFS
         ? new FileServerDetails(
             credential.host,
@@ -620,9 +620,13 @@ export class JobRunInitService {
             this.push(null);
           },
         });
-        readable.on('data', (mapping) => {
+        readable.on('data', (rawMapping) => {
           void (async () => {
-            mapping = JSON.parse(mapping);
+            const mapping = JSON.parse(rawMapping as string) as {
+              identityType: string;
+              sourceMapping: string;
+              targetMapping: string;
+            };
             const mapType =
               mapping.identityType.toLowerCase() === 'sid'
                 ? IdentityTypes.SID
@@ -697,7 +701,10 @@ export class JobRunInitService {
       const START_CONSUMER_URL = this.configService.get<string>(
         'app.paths.startConsumer',
       );
-      let response = await axios.post(
+      let response = await axios.post<{
+        message?: string;
+        data?: { items?: { success?: boolean } };
+      }>(
         `${START_CONSUMER_URL}/api/v1/redis-consumer/start`,
         { jobRunId },
         {
@@ -759,11 +766,10 @@ export class JobRunInitService {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to start consumer for ${jobRunId}:`,
-        error.message,
+        `Failed to start consumer for ${jobRunId}: ${(error as Error).message}`,
       );
       throw new Error(
-        `Failed to start consumer for ${jobRunId}: ${error.message}`,
+        `Failed to start consumer for ${jobRunId}: ${(error as Error).message}`,
       );
     }
   }

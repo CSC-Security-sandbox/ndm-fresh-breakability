@@ -548,7 +548,7 @@ describe('JobConfigService', () => {
     jest.spyOn(speedTestResultRepo, 'find').mockResolvedValue([]);
     jest
       .spyOn(service, 'getSpeedTestDetails')
-      .mockResolvedValue('speedTestDetails');
+      .mockResolvedValue('speedTestDetails' as any);
 
     const result = await service.getSpeedTestById(mockId);
 
@@ -2626,11 +2626,14 @@ describe('JobConfigService', () => {
         getMany: jest.fn().mockResolvedValue([]),
       } as any);
 
-      const result = await service.getJobConfigById('job1');
+      const result = (await service.getJobConfigById('job1')) as Record<
+        string,
+        any
+      >;
 
-      expect(result.jobRuns[0].scannedFilesCount).toBe('0');
-      expect(result.jobRuns[0].scannedDirectoriesCount).toBe('0');
-      expect(result.jobRuns[0].totalScannedSize).toBe('0 B');
+      expect(result['jobRuns'][0].scannedFilesCount).toBe('0');
+      expect(result['jobRuns'][0].scannedDirectoriesCount).toBe('0');
+      expect(result['jobRuns'][0].totalScannedSize).toBe('0 B');
     });
 
     it('should throw an error if job config is not found', async () => {
@@ -2723,9 +2726,12 @@ describe('JobConfigService', () => {
           throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
         });
 
-      const result = await service.getJobConfigById('jobConfigId');
+      const result = (await service.getJobConfigById('jobConfigId')) as Record<
+        string,
+        any
+      >;
 
-      expect(result.aggregateData).toEqual({
+      expect(result['aggregateData']).toEqual({
         timeElapsed: 2000,
         scannedFilesCount: '30',
         scannedDirectoriesCount: '15',
@@ -6295,7 +6301,6 @@ describe('JobConfigService', () => {
 
       expect(loggerService.error).toHaveBeenCalledWith(
         expect.stringContaining('Error getting inventory stats'),
-        dbError,
       );
     });
 

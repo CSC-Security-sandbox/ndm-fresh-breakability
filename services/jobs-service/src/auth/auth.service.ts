@@ -74,7 +74,7 @@ export class AuthService implements OnModuleDestroy {
 
     try {
       const response = await lastValueFrom(
-        this.httpService.post(
+        this.httpService.post<{ access_token: string; expires_in: number }>(
           `${this.keycloakBaseUrl}/realms/${this.realm}/protocol/openid-connect/token`,
           this.tokenRequest,
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
@@ -93,7 +93,7 @@ export class AuthService implements OnModuleDestroy {
       return this.accessToken;
     } catch (error) {
       this.logger.error(
-        `[AuthService]: Failed to obtain access token: ${error.message}, stack: ${error.stack}`,
+        `[AuthService]: Failed to obtain access token: ${(error as Error).message}, stack: ${(error as Error).stack}`,
       );
       return null;
     }

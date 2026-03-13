@@ -1833,7 +1833,10 @@ describe('JobRunInitService', () => {
           .spyOn(fileServerRepo, 'find')
           .mockResolvedValue(fileServers as any);
 
-        const result = await service.getFileServerDetails(jobRunId);
+        const result = (await service.getFileServerDetails(jobRunId)) as Record<
+          string,
+          any
+        >[];
 
         expect(result.length).toBe(2);
         expect(result[0].fileServerDetails.fileServerId).toBe('fs1');

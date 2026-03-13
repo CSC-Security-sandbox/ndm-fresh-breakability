@@ -135,7 +135,7 @@ export class JobConfigController {
   @Post('/speed-test/store-result')
   async storeSpeedTestResult(
     @Body() speedTestResult: SpeedTestResult,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.jobConfigService.storeSpeedTestResult(speedTestResult);
   }
 
@@ -210,7 +210,7 @@ export class JobConfigController {
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
   @Post('/precheck')
-  async precheck(@Body() precheckData: JobConfigPrecheck) {
+  async precheck(@Body() precheckData: JobConfigPrecheck): Promise<unknown> {
     return await this.preCheckService.initiatePreCheck(precheckData);
   }
 
@@ -244,7 +244,7 @@ export class JobConfigController {
   @Get(':id')
   @Auth(Permission.ViewJob)
   @ApiBearerAuth()
-  async getJobConfigById(@Param('id') id: string): Promise<any> {
+  async getJobConfigById(@Param('id') id: string): Promise<unknown> {
     return await this.jobConfigService.getJobConfigById(id);
   }
 
@@ -372,7 +372,7 @@ export class JobConfigController {
   async updateMigrationJobConfig(
     @Param('id') id: string,
     @Body() updateData: UpdateMigrationConfigDto,
-  ): Promise<any> {
+  ): Promise<unknown> {
     const jobEntity = await this.jobConfigService.getJobEntity(id);
     if (jobEntity.jobType !== JobType.MIGRATE) {
       throw new BadRequestException(
@@ -430,7 +430,7 @@ export class JobConfigController {
     description: 'Internal Server Error - failed to get identity mappings.',
   })
   @ApiBearerAuth()
-  async getJobIdentityMappings(@Param('id') id: string): Promise<any> {
+  async getJobIdentityMappings(@Param('id') id: string): Promise<unknown> {
     return await this.jobConfigService.getIdentityMappingsForJob(id);
   }
 
@@ -446,7 +446,7 @@ export class JobConfigController {
     description: 'Internal Server Error - failed to delete identity mappings.',
   })
   @ApiBearerAuth()
-  async deleteJobIdentityMappings(@Param('id') id: string): Promise<any> {
+  async deleteJobIdentityMappings(@Param('id') id: string): Promise<unknown> {
     return await this.jobConfigService.deleteIdentityMappingsForJob(id);
   }
 

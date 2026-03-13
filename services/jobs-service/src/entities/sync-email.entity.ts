@@ -12,7 +12,7 @@ export class SyncEmailEntity extends Base {
   id: string;
 
   @Column({ type: 'jsonb', name: 'mail_content', nullable: false })
-  mailContent: Record<string, any>;
+  mailContent: object;
 
   @Column({
     type: 'enum',

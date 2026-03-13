@@ -57,8 +57,7 @@ export class HealthcheckService {
       await this.workerStatsEntity.save(statsEntity);
     } catch (error) {
       this.logger.error(
-        'Error creating or updating health check stats:',
-        error,
+        `Error creating or updating health check stats: ${(error as Error).message}`,
       );
       throw error;
     }

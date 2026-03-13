@@ -284,7 +284,7 @@ describe('JobRunController', () => {
     it('should get error overview', async () => {
       const jobRunId = 'run1';
       const result = { overview: true };
-      jobRunService.getErrorOverview.mockResolvedValue(result);
+      jobRunService.getErrorOverview.mockResolvedValue(result as any);
       expect(await controller.getErrorOverview(jobRunId)).toBe(result);
       expect(jobRunService.getErrorOverview).toHaveBeenCalledWith(jobRunId);
     });

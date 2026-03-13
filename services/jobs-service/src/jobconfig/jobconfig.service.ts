@@ -23,6 +23,7 @@ import {
   JobConfigurationEnum,
   USER_VISIBLE_ERROR_TYPES,
   TERMINAL_JOB_RUN_STATUSES,
+  WorkerStatus,
 } from 'src/constants/enums';
 import { ScheduleStatus } from 'src/constants/status';
 import { InventoryEntity } from 'src/entities/inventory.entity';
@@ -65,6 +66,9 @@ import {
   JobConfigBulkCutoverRes,
   JobConfigBulkMigrateFinalResponse,
   JobConfigBulkMigrateRes,
+  JobConfigErrorTypeCount,
+  JobListingRawRow,
+  PrecheckSourceResult,
   SpeedTestEntry,
   SpeedTestJobRun,
 } from './jobconfig.types';
@@ -261,11 +265,15 @@ export class JobConfigService {
       this.logger.log('Fetched all speed test job runs successfully');
       return result;
     } catch (error) {
-      this.logger.error('Failed to fetch speed test job runs', error.stack);
+      this.logger.error(
+        'Failed to fetch speed test job runs',
+        (error as Error).stack,
+      );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to fetch speed test job runs',
+          message:
+            (error as Error).message || 'Failed to fetch speed test job runs',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -273,9 +281,9 @@ export class JobConfigService {
   }
 
   async storeSpeedTestResult(speedTest: SpeedTestResult): Promise<{
-    writeResultId?: number;
-    readResultId?: number;
-    networkResultId?: number;
+    writeResultId?: string;
+    readResultId?: string;
+    networkResultId?: string;
   }> {
     try {
       this.logger.log('Storing speed test result', JSON.stringify(speedTest));
@@ -290,7 +298,8 @@ export class JobConfigService {
         relations: ['writeResult', 'readResult', 'networkPerformanceResult'],
       });
 
-      let writeLog, readLog, networkPerformanceResult;
+      let writeLog: SpeedLogEntity;
+      let readLog: SpeedLogEntity;
 
       // Update or create writeResult
       writeLog = existingResult?.writeResult || new SpeedLogEntity();
@@ -311,7 +320,7 @@ export class JobConfigService {
       readLog = await this.speedLogRepo.save(readLog);
 
       // Update or create networkPerformanceResult
-      networkPerformanceResult = {
+      const networkPerformanceData: Partial<NetworkPerformanceResultEntity> = {
         ...existingResult?.networkPerformanceResult, // Use existing data if available
         packetLoss: speedTest.networkPerformanceResult?.packetLoss ?? -1,
         roundTripDelayMin:
@@ -326,9 +335,8 @@ export class JobConfigService {
       };
 
       // Save the updated or new networkPerformanceResult
-      networkPerformanceResult = await this.networkPerformanceResultRepo.save(
-        networkPerformanceResult,
-      );
+      const networkPerformanceResult =
+        await this.networkPerformanceResultRepo.save(networkPerformanceData);
 
       // Update or create SpeedTestResultEntity
       const speedTestResult = {
@@ -342,7 +350,7 @@ export class JobConfigService {
       };
 
       // Save the updated or new speedTestResult
-      const _savedResult = await this.speedTestResultRepo.save(speedTestResult);
+      await this.speedTestResultRepo.save(speedTestResult);
 
       this.logger.log('Speed test result stored successfully');
 
@@ -353,18 +361,22 @@ export class JobConfigService {
         networkResultId: networkPerformanceResult?.id,
       };
     } catch (error) {
-      this.logger.error('Failed to store speed test result', error.stack);
+      this.logger.error(
+        'Failed to store speed test result',
+        (error as Error).stack,
+      );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to store speed test result',
+          message:
+            (error as Error).message || 'Failed to store speed test result',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async getSpeedTestDetails(jobRunId: string): Promise<any> {
+  async getSpeedTestDetails(jobRunId: string): Promise<SpeedTestEntry> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       relations: ['jobConfig'],
@@ -388,7 +400,15 @@ export class JobConfigService {
     );
     const workers = await this.workeRepo.findByIds(workerIds);
 
-    const fileServersMap = new Map();
+    const fileServersMap = new Map<
+      string,
+      {
+        fileServerId: string;
+        fileServerName: string;
+        fileServerProtocol: string;
+        workers: { workerName: string; workerId: string }[];
+      }
+    >();
 
     speedTestJobConfig.forEach((config) => {
       const fileServer = fileServers.find(
@@ -417,7 +437,9 @@ export class JobConfigService {
       }
     });
 
-    const fileServersArray = Array.from(fileServersMap.values());
+    const fileServersArray = Array.from(fileServersMap.values()) as {
+      workers: unknown[];
+    }[];
 
     const response = {
       jobRunId: jobRunId,
@@ -451,7 +473,15 @@ export class JobConfigService {
         return this.getSpeedTestDetails(id);
       }
 
-      const fileServersMap = new Map();
+      const fileServersMap = new Map<
+        string,
+        {
+          fileServerId: string;
+          fileServerName: string;
+          fileServerProtocol: string;
+          workers: unknown[];
+        }
+      >();
 
       const fileServerIds = speedTestResults.map(
         (result) => result.fileServerId,
@@ -508,7 +538,9 @@ export class JobConfigService {
         });
       }
 
-      const fileServersArray = Array.from(fileServersMap.values());
+      const fileServersArray = Array.from(fileServersMap.values()) as {
+        workers: unknown[];
+      }[];
       const jobRunDetails = await this.jobRunRepo.findOne({ where: { id } });
 
       if (!jobRunDetails) {
@@ -535,11 +567,15 @@ export class JobConfigService {
 
       return response;
     } catch (error) {
-      this.logger.error('Failed to fetch speed test results', error.stack);
+      this.logger.error(
+        'Failed to fetch speed test results',
+        (error as Error).stack,
+      );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to fetch speed test results',
+          message:
+            (error as Error).message || 'Failed to fetch speed test results',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -592,11 +628,15 @@ export class JobConfigService {
       this.logger.log('Speed Test job created successfully');
       return entries;
     } catch (error) {
-      this.logger.error('Failed to create Speed Test job', error.stack);
+      this.logger.error(
+        'Failed to create Speed Test job',
+        (error as Error).stack,
+      );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to create Speed Test job',
+          message:
+            (error as Error).message || 'Failed to create Speed Test job',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -610,9 +650,9 @@ export class JobConfigService {
     const firstRunAt = bulkMigrate?.firstRunAt ?? new Date();
     const jobConfigs: Partial<JobConfigEntity>[] = [];
     let parsedMappings: ParsedMapping[] = [];
-    let templateType;
+    let templateType: TemplateType | undefined;
     const identityMap = uuidv4();
-    const jobConfigIdsToUpdate: any[] = [];
+    const jobConfigIdsToUpdate: string[] = [];
     const inactiveJobWarnings: object[] = [];
     let savedJobConfigsmapData: JobConfigBulkMigrateRes[] = [];
 
@@ -663,17 +703,17 @@ export class JobConfigService {
           existingJobConfigs.some((job) => job.status === JobStatus.InActive)
         ) {
           for (const jobConfig of existingJobConfigs) {
-            if (jobConfig.status == JobStatus.InActive) {
+            if (jobConfig.status === JobStatus.InActive) {
               const sourcePath = await this.volumeRepo.findOne({
                 where: { id: jobConfig.sourcePathId },
                 select: { volumePath: true },
               });
-              console.log('sourcePath', sourcePath);
+              this.logger.debug(`sourcePath ${JSON.stringify(sourcePath)}`);
               const targetPath = await this.volumeRepo.findOne({
                 where: { id: jobConfig.targetPathId },
                 select: { volumePath: true },
               });
-              console.log('targetPath', targetPath);
+              this.logger.debug(`targetPath ${JSON.stringify(targetPath)}`);
               inactiveJobWarnings.push({
                 sourcePathId: jobConfig.sourcePathId,
                 targetPathId: jobConfig.targetPathId,
@@ -730,7 +770,7 @@ export class JobConfigService {
           const jobConfigIds = existingJobConfigs.map(
             (jobConfig) => jobConfig.id,
           );
-          this.logger.log('id pushed', ...jobConfigIds);
+          this.logger.log(`id pushed: ${jobConfigIds.join(', ')}`);
 
           if (!bulkMigrate?.sidMapping && !bulkMigrate?.gidMapping) {
             for (const jobConfigId of jobConfigIds) {
@@ -987,7 +1027,7 @@ export class JobConfigService {
         {
           status: 'failed',
           message:
-            error.message ||
+            (error as Error).message ||
             'An error occurred while creating bulk cutover job',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -1042,10 +1082,19 @@ export class JobConfigService {
     jobConfigId: string,
     jobConfigData: Partial<JobConfigDto>,
     mappingData?: { sidMapping?: string; gidMapping?: string },
-  ): Promise<{ jobConfig: JobConfigEntity; identityMappings?: any }> {
+  ): Promise<{
+    jobConfig: JobConfigEntity;
+    identityMappings?: {
+      data: IdentityMappingEntity[];
+      crossMappings?: IdentityConfigCrossMappingEntity[];
+      message?: string;
+    };
+  }> {
     try {
       return await this.jobConfigRepo.manager.transaction(async (manager) => {
-        let identityMappings;
+        let identityMappings:
+          | Awaited<ReturnType<typeof this.updateJobIdentityMappings>>
+          | undefined;
         if (mappingData?.sidMapping || mappingData?.gidMapping) {
           identityMappings = await this.updateJobIdentityMappings(
             jobConfigId,
@@ -1064,13 +1113,13 @@ export class JobConfigService {
       });
     } catch (error) {
       this.logger.error(
-        `Failed to update job config ${jobConfigId} with identity mappings`,
-        error,
+        `Failed to update job config ${jobConfigId} with identity mappings: ${(error as Error).message}`,
       );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to update job configuration',
+          message:
+            (error as Error).message || 'Failed to update job configuration',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -1120,14 +1169,18 @@ export class JobConfigService {
       this.logger.log(`Job with id ${id} has been deleted successfully`);
       return { message: `Job with id ${id} has been deleted` };
     } catch (error) {
-      this.logger.error(`Failed to delete job with id ${id}`, error.stack);
+      this.logger.error(
+        `Failed to delete job with id ${id}`,
+        (error as Error).stack,
+      );
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to delete job configuration',
+          message:
+            (error as Error).message || 'Failed to delete job configuration',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -1135,7 +1188,7 @@ export class JobConfigService {
   }
 
   // ------------ Job Config By Id ---------------- //
-  async getJobConfigById(id: string): Promise<any> {
+  async getJobConfigById(id: string): Promise<unknown> {
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id },
       relations: [
@@ -1149,7 +1202,7 @@ export class JobConfigService {
       ],
     });
 
-    if (!jobConfig) throw new Error(`Job with id ${id} not found`);
+    if (!jobConfig) throw new NotFoundException(`Job with id ${id} not found`);
     const runStats = await Promise.all(
       jobConfig.jobRuns.map(async (jobRun) => {
         const partialPayload = {
@@ -1421,7 +1474,7 @@ export class JobConfigService {
       .andWhere('syncEmail.description IS NOT NULL')
       .groupBy('syncEmail.description')
       .orderBy('created_at', 'DESC')
-      .getRawMany();
+      .getRawMany<{ description: string; created_at: string }>();
 
     // Map to desired format (already sorted by database)
     const severityMessagesWithTimestamps = severityMessages.map((row) => ({
@@ -1505,13 +1558,13 @@ export class JobConfigService {
       .addGroupBy('sourceConfig.configName')
       .addGroupBy('targetConfig.configName')
       .addGroupBy('jobconfig.createdAt')
-      .getRawMany();
+      .getRawMany<JobListingRawRow>();
 
     const payload: JobListingDTO[] = [];
     for (const job of allJobsDetails) {
       let nextScheduleDate: Date | null = null;
 
-      if (job.jobconfigstatus === JobStatus.Active) {
+      if ((job.jobconfigstatus as JobStatus) === JobStatus.Active) {
         try {
           nextScheduleDate = nextDate(
             job.jobtype,
@@ -1564,7 +1617,7 @@ export class JobConfigService {
             }
           : {},
         errors: errorCount,
-        totalRuns: job.totalRuns,
+        totalRuns: parseInt(job.totalRuns, 10),
         configName: job.configname,
         createdAt: job.createdAt,
         updatedAt: job.updated_at,
@@ -1601,7 +1654,9 @@ export class JobConfigService {
     fileStream.pipe(res);
   }
 
-  hasCommonWorkers(data: any): boolean {
+  hasCommonWorkers(
+    data: { fileServer: { workers: { id: string; status: string }[] } }[],
+  ): boolean {
     const workerIds = new Set<string>();
     for (const volume of data) {
       if (volume.fileServer.workers.length === 0) {
@@ -1647,7 +1702,7 @@ export class JobConfigService {
             : `jobConfig.targetDirectoryPath = :${targetDirParam}`;
 
         const whereClause = `(jobConfig.sourcePathId = :${sourceParam} AND ${sourceDirCondition} AND jobConfig.targetPathId = :${targetParam} AND ${targetDirCondition})`;
-        const params: any = {
+        const params: Record<string, string> = {
           [sourceParam]: sourcePathId,
           [targetParam]: destinationPathId,
         };
@@ -1673,7 +1728,7 @@ export class JobConfigService {
 
   async precheckValidation(precheckData: MigrateConfig[]) {
     this.logger.log('precheckData', JSON.stringify(precheckData));
-    const results = new Map<string, any>();
+    const results = new Map<string, PrecheckSourceResult>();
     for (const config of precheckData) {
       if (!results.has(config.sourcePathId)) {
         const payload = {
@@ -1710,7 +1765,9 @@ export class JobConfigService {
 
       const sourceFileServer = sourceVolume.fileServer;
       const sourceWorkers =
-        sourceFileServer?.workers?.filter((w) => w.status === 'Online') || [];
+        sourceFileServer?.workers?.filter(
+          (w) => w.status === WorkerStatus.Online,
+        ) || [];
 
       for (const destinationPathId of destinationPathIds) {
         const destinationVolume = pathToWorkerMapping.find(
@@ -1732,7 +1789,7 @@ export class JobConfigService {
         const destinationFileServer = destinationVolume.fileServer;
         const destinationWorkers =
           destinationFileServer?.workers?.filter(
-            (w) => w.status === 'Online',
+            (w) => w.status === WorkerStatus.Online,
           ) || [];
 
         if (
@@ -1795,7 +1852,7 @@ export class JobConfigService {
       }
       return Buffer.from(base64Data, 'base64').toString('utf-8');
     } catch (error) {
-      this.logger.error('Error decoding Base64:', error);
+      this.logger.error(`Error decoding Base64: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -1916,7 +1973,7 @@ export class JobConfigService {
   }
 
   async updateMappingsWithMap(
-    jobConfigIds: any[],
+    jobConfigIds: string[],
     parsedData: ParsedMapping[],
     identityMap: string,
     templateType: TemplateType,
@@ -1984,12 +2041,13 @@ export class JobConfigService {
     }
 
     for (const jobConfigId of jobConfigIds) {
-      const existingCrossMapping = await identityCrossMappingRepo.findOne({
-        where: {
-          jobConfigId: jobConfigId,
-          isOrphan: false,
-        },
-      });
+      const existingCrossMapping: IdentityConfigCrossMappingEntity | null =
+        await identityCrossMappingRepo.findOne({
+          where: {
+            jobConfigId: jobConfigId,
+            isOrphan: false,
+          },
+        });
 
       if (existingCrossMapping) {
         existingCrossMapping.identityMappingId = identityMap;
@@ -1998,7 +2056,7 @@ export class JobConfigService {
           `Identity config cross mapping updated for JobConfig ID: ${jobConfigId}`,
         );
       } else {
-        const identityConfigCrossMappingEntity =
+        const identityConfigCrossMappingEntity: IdentityConfigCrossMappingEntity =
           identityCrossMappingRepo.create({
             identityMappingId: identityMap,
             jobConfigId: jobConfigId,
@@ -2045,7 +2103,7 @@ export class JobConfigService {
     return response;
   }
 
-  async getErrorCounts(jobRunId: string) {
+  async getErrorCounts(jobRunId: string): Promise<JobConfigErrorTypeCount[]> {
     const countQuery = this.operationErrorRepo
       .createQueryBuilder('oe')
       .innerJoin('oe.operation', 'o')
@@ -2056,13 +2114,12 @@ export class JobConfigService {
       .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
       .select(['oe.errorType AS errorType', 'COUNT(*) AS count'])
       .groupBy('oe.errorType');
-    let errorTypeCounts;
+    let errorTypeCounts: JobConfigErrorTypeCount[];
     try {
-      errorTypeCounts = await countQuery.getRawMany();
+      errorTypeCounts = await countQuery.getRawMany<JobConfigErrorTypeCount>();
     } catch (error) {
       this.logger.error(
-        'Error occurred while fetching error type counts:',
-        error,
+        `Error occurred while fetching error type counts: ${(error as Error).message}`,
       );
       errorTypeCounts = [];
     }
@@ -2096,7 +2153,11 @@ export class JobConfigService {
   async getIdentityMappingsForJob(
     jobConfigId: string,
     manager?: EntityManager,
-  ): Promise<any> {
+  ): Promise<{
+    data: IdentityMappingEntity[];
+    crossMappings?: IdentityConfigCrossMappingEntity[];
+    message?: string;
+  }> {
     this.logger.log(
       `Fetching identity mappings for job config: ${jobConfigId}`,
     );
@@ -2129,13 +2190,13 @@ export class JobConfigService {
       };
     } catch (error) {
       this.logger.error(
-        `Error fetching identity mappings for job ${jobConfigId}:`,
-        error,
+        `Error fetching identity mappings for job ${jobConfigId}: ${(error as Error).message}`,
       );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to fetch identity mappings',
+          message:
+            (error as Error).message || 'Failed to fetch identity mappings',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -2146,13 +2207,17 @@ export class JobConfigService {
     jobConfigId: string,
     mappingData: { sidMapping?: string; gidMapping?: string },
     manager?: EntityManager,
-  ): Promise<any> {
+  ): Promise<{
+    data: IdentityMappingEntity[];
+    crossMappings?: IdentityConfigCrossMappingEntity[];
+    message?: string;
+  }> {
     this.logger.log(
       `Updating identity mappings for job config: ${jobConfigId}`,
     );
     try {
-      let parsedMappings = [];
-      let templateType;
+      let parsedMappings: ParsedMapping[] = [];
+      let templateType: TemplateType | undefined;
       const identityMap = uuidv4();
       const identityCrossMappingRepo = manager
         ? manager.getRepository(IdentityConfigCrossMappingEntity)
@@ -2197,20 +2262,20 @@ export class JobConfigService {
       return await this.getIdentityMappingsForJob(jobConfigId, manager);
     } catch (error) {
       this.logger.error(
-        `Error updating identity mappings for job ${jobConfigId}:`,
-        error,
+        `Error updating identity mappings for job ${jobConfigId}: ${(error as Error).message}`,
       );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to update identity mappings',
+          message:
+            (error as Error).message || 'Failed to update identity mappings',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async deleteIdentityMappingsForJob(jobConfigId: string): Promise<any> {
+  async deleteIdentityMappingsForJob(jobConfigId: string): Promise<unknown> {
     this.logger.log(
       `Deleting identity mappings for job config: ${jobConfigId}`,
     );
@@ -2238,13 +2303,13 @@ export class JobConfigService {
       };
     } catch (error) {
       this.logger.error(
-        `Error deleting identity mappings for job ${jobConfigId}:`,
-        error,
+        `Error deleting identity mappings for job ${jobConfigId}: ${(error as Error).message}`,
       );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to delete identity mappings',
+          message:
+            (error as Error).message || 'Failed to delete identity mappings',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -2372,7 +2437,14 @@ export class JobConfigService {
     `;
 
     try {
-      const result = await this.dataSource.query(query, [jobConfigID]);
+      const rawResult: unknown = await this.dataSource.query(query, [
+        jobConfigID,
+      ]);
+      const result = rawResult as {
+        total_unique_files: string;
+        total_unique_directories: string;
+        total_size: string;
+      }[];
 
       const totalUniqueFiles = parseInt(
         result[0]?.total_unique_files || '0',
@@ -2411,13 +2483,12 @@ export class JobConfigService {
       };
     } catch (error) {
       this.logger.error(
-        `Error getting inventory stats for jobConfigID ${jobConfigID}:`,
-        error,
+        `Error getting inventory stats for jobConfigID ${jobConfigID}: ${(error as Error).message}`,
       );
       throw new HttpException(
         {
           status: 'failed',
-          message: error.message || 'Failed to get inventory stats',
+          message: (error as Error).message || 'Failed to get inventory stats',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );

@@ -75,12 +75,15 @@ export class WorkflowService {
     const client = await this.getClient();
     const handle = client.workflow.getHandle(id);
     const details: WorkflowExecutionDescription = await handle.describe();
-    if (details.status.name === WorkflowExecutionStatus.COMPLETED)
+    if (
+      (details.status.name as WorkflowExecutionStatus) ===
+      WorkflowExecutionStatus.COMPLETED
+    )
       return {
         status: details.status.name,
         id: details.workflowId,
         pending: [],
-        completed: await handle.result(),
+        completed: (await handle.result()) as unknown,
       };
     return {
       status: details.status.name,
@@ -110,7 +113,10 @@ export class WorkflowService {
     const client = await this.getClient();
     const handle = client.workflow.getHandle(workflowId);
     const details: WorkflowExecutionDescription = await handle.describe();
-    if (details.status.name === WorkflowExecutionStatus.RUNNING) {
+    if (
+      (details.status.name as WorkflowExecutionStatus) ===
+      WorkflowExecutionStatus.RUNNING
+    ) {
       await handle.terminate();
       return true;
     }

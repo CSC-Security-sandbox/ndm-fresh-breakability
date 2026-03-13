@@ -183,12 +183,15 @@ describe('PreCheckService', () => {
     workflowService.startWorkflow.mockRejectedValue(new Error('fail'));
 
     // Act
-    const res = await service.initiatePreCheck(defaultPreCheckData);
+    const res = (await service.initiatePreCheck(defaultPreCheckData)) as Record<
+      string,
+      unknown
+    >;
 
     // Assert
     expect(res).toHaveProperty('status', 'error');
-    expect(res.erros).toEqual(['PRECHECK_FAILED']);
-    expect(res.message).toContain('Failed to perform the pre check');
+    expect(res['errors']).toEqual(['PRECHECK_FAILED']);
+    expect(res['message']).toContain('Failed to perform the pre check');
   });
 
   it('should return error object when no volume mapping', async () => {

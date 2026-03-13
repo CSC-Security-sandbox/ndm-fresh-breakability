@@ -50,7 +50,13 @@ import { JobRunStats } from './dto/jobstats';
 import { JobRunInitService } from './jobrun.init.service';
 import { SuccessEmailType } from 'src/utils/send-email.type';
 import { getErrorDisplayMessage } from './jobrun.util';
-import { WorkFlowFailureReason, SetupFailedErrorItem } from './jobrun.types';
+import {
+  WorkFlowFailureReason,
+  SetupFailedErrorItem,
+  ErrorTypeCount,
+  JobRunRawRow,
+  WorkerResponsePayload,
+} from './jobrun.types';
 import {
   LoggerFactory,
   LoggerService,
@@ -179,7 +185,7 @@ export class JobRunService {
 
     // Route to retry run if jobRunId is provided, otherwise create fresh ad-hoc run
     if (jobRunId) {
-      console.log('Retrying ad-hoc run for jobRunId:', jobRunId);
+      this.logger.log(`Retrying ad-hoc run for jobRunId: ${jobRunId}`);
       return this.retryRun(jobConfig, projectId, jobRunId);
     }
 
@@ -207,7 +213,7 @@ export class JobRunService {
       throw new NotFoundException(
         `Job config id doesn't exist for id ${jobConfigId}`,
       );
-    if (jobConfig.scheduler === ScheduleStatus.SCHEDULED)
+    if ((jobConfig.scheduler as ScheduleStatus) === ScheduleStatus.SCHEDULED)
       throw new BadRequestException(
         `Job run is already created for ${jobConfigId}`,
       );
@@ -286,6 +292,11 @@ export class JobRunService {
       .getOne();
 
     // Validate the provided jobRunId matches the latest non-retry job run
+    if (!latestJobRun) {
+      throw new BadRequestException(
+        `No non-retry job run found for job config of job run ${jobRunId}`,
+      );
+    }
     if (latestJobRun.id !== jobRunId) {
       throw new BadRequestException(
         `Job run ${jobRunId} is not the latest run for this job config. Latest job run is ${latestJobRun.id}`,
@@ -357,13 +368,17 @@ export class JobRunService {
       );
     }
 
-    const results = await qb.getRawMany();
+    const results = await qb.getRawMany<{
+      filePath: string;
+      operationErrorId: string;
+      operationId: string;
+    }>();
 
     const hasMore = results.length > limit;
     const data = hasMore ? results.slice(0, limit) : results;
     const last = data.at(-1);
     const nextCursor = hasMore
-      ? `${last!.filePath}|${last!.operationErrorId}`
+      ? `${last.filePath}|${last.operationErrorId}`
       : null;
 
     const operations = data.map(
@@ -385,7 +400,7 @@ export class JobRunService {
    */
   async updateJobRun(id: string, data: Partial<JobRunDto>): Promise<JobRunDto> {
     const jobRun = await this.jobRunRepo.findOne({ where: { id } });
-    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
+    if (!jobRun) throw new NotFoundException(`Job run with id ${id} not found`);
     Object.assign(jobRun, data);
     return this.jobRunRepo.save(jobRun);
   }
@@ -421,7 +436,7 @@ export class JobRunService {
       where: { id },
       relations: ['tasks', 'tasks.worker'],
     });
-    if (!jobRun) throw new Error(`Job run with id ${id} not found`);
+    if (!jobRun) throw new NotFoundException(`Job run with id ${id} not found`);
     const jobConfigDetails = await this.jobConfigRepo.findOne({
       where: { id: jobRun.jobConfigId },
       relations: [
@@ -598,10 +613,10 @@ export class JobRunService {
         'jobRun.endTime AS endTime',
         'jobRun.jobStats AS jobStats',
       ])
-      .getRawMany();
+      .getRawMany<JobRunRawRow>();
 
     const allJobsRuns = await Promise.all(
-      jobRuns.map(async (jobRun) => {
+      jobRuns.map(async (jobRun: JobRunRawRow) => {
         this.logger.debug(
           `jobRun for id ${jobRun.jobrunid} - with jobstats ${JSON.stringify(jobRun.jobstats)}`,
         );
@@ -638,7 +653,9 @@ export class JobRunService {
             : Date.now() - jobRun.starttime.getTime(),
         };
 
-        const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status);
+        const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(
+          jobRun.status as JobRunStatus,
+        );
 
         let jobStats: JobRunStats;
         if (isTerminal && jobRun.jobstats) {
@@ -662,12 +679,12 @@ export class JobRunService {
             jobStats?.directories || '0',
           )?.toString(),
           totalScannedSize:
-            jobRun.jobtype === JobType.DISCOVER
+            (jobRun.jobtype as JobType) === JobType.DISCOVER
               ? formatBytes(Number(jobStats?.totalSize || '0'))
               : '0 B',
           totalMigratedSize:
-            jobRun.jobtype === JobType.MIGRATE ||
-            jobRun.jobtype === JobType.CUT_OVER
+            (jobRun.jobtype as JobType) === JobType.MIGRATE ||
+            (jobRun.jobtype as JobType) === JobType.CUT_OVER
               ? formatBytes(Number(jobStats?.totalSize || 0))
               : '0 B',
           errors: jobStats?.errors || [],
@@ -689,7 +706,7 @@ export class JobRunService {
       where: { id: jobRunId },
     });
     if (!jobRunDetails)
-      throw new Error(`Job run with id ${jobRunId} not found`);
+      throw new NotFoundException(`Job run with id ${jobRunId} not found`);
     const jobConfig = await this.jobConfigRepo.findOne({
       where: { id: jobRunDetails.jobConfigId },
       relations: {
@@ -714,7 +731,7 @@ export class JobRunService {
           );
         } catch (e) {
           throw new Error(
-            `Invalid cron expression in futureScheduleAt: ${e.message}`,
+            `Invalid cron expression in futureScheduleAt: ${(e as Error).message}`,
           );
         }
       } else {
@@ -773,8 +790,8 @@ export class JobRunService {
               );
             } catch (emailError) {
               this.logger.error(
-                `Failed to send error remedy email for job run ${jobRunId}: ${emailError.message}`,
-                emailError,
+                `Failed to send error remedy email for job run ${jobRunId}: ${(emailError as Error).message}`,
+                (emailError as Error).stack,
               );
             }
           } else {
@@ -814,8 +831,8 @@ export class JobRunService {
               );
             } catch (emailError) {
               this.logger.error(
-                `Failed to send job completion email for job run ${jobRunId}: ${emailError.message}`,
-                emailError,
+                `Failed to send job completion email for job run ${jobRunId}: ${(emailError as Error).message}`,
+                (emailError as Error).stack,
               );
             }
           } else {
@@ -874,8 +891,8 @@ export class JobRunService {
             );
           } catch (emailError) {
             this.logger.error(
-              `Failed to send job started email for job run ${jobRunId}: ${emailError.message}`,
-              emailError,
+              `Failed to send job started email for job run ${jobRunId}: ${(emailError as Error).message}`,
+              (emailError as Error).stack,
             );
           }
         } else {
@@ -889,7 +906,9 @@ export class JobRunService {
     }
   }
 
-  async getJobRunErrors(taskQuery: JobErrorQueryDto) {
+  async getJobRunErrors(
+    taskQuery: JobErrorQueryDto,
+  ): Promise<{ data: SetupFailedErrorItem[]; total: number }> {
     const {
       page = '1',
       limit = '10',
@@ -964,46 +983,48 @@ export class JobRunService {
       (parseInt(page, 10) - 1) * parseInt(limit, 10),
     ];
 
-    const data = await this.operationErrorRepo.query(query, params);
+    const rawData: unknown = await this.operationErrorRepo.query(query, params);
+    const data = rawData as SetupFailedErrorItem[];
 
     // Map errors to include error remedy descriptions
-    const mappedData = await Promise.all(
-      data.map(async (error) => {
-        try {
-          const errorRemedies = await this.errorRemedyService.findByErrorCodes([
-            error.errorCode,
-          ]);
-          const errorRemedy = errorRemedies?.[0];
+    const mappedData: SetupFailedErrorItem[] = await Promise.all(
+      data.map(
+        async (error: SetupFailedErrorItem): Promise<SetupFailedErrorItem> => {
+          try {
+            const errorRemedies =
+              await this.errorRemedyService.findByErrorCodes([error.errorCode]);
+            const errorRemedy = errorRemedies?.[0];
 
-          this.logger.debug(
-            `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : 'none'}`,
-          );
+            this.logger.debug(
+              `[getJobRunErrors] Mapped errorCode: ${error.errorCode} to remedy: ${errorRemedy ? errorRemedy.description : 'none'}`,
+            );
 
-          return {
-            ...error,
-            displayMessage: getErrorDisplayMessage(
-              error.errorCode,
-              error.errorMessage,
-              errorRemedy?.description,
-            ),
-            resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
-            referenceCommands: errorRemedy
-              ? errorRemedy.referenceCommands
-              : null,
-          };
-        } catch (remedyError) {
-          this.logger.error(
-            `[getJobRunErrors] Error fetching remedy for code ${error.errorCode}:`,
-            remedyError,
-          );
-          return {
-            ...error,
-            displayMessage: error.errorMessage, // Fallback to original message
-            resolutionSteps: null,
-            referenceCommands: null,
-          };
-        }
-      }),
+            return {
+              ...error,
+              displayMessage: getErrorDisplayMessage(
+                error.errorCode,
+                error.errorMessage,
+                errorRemedy?.description,
+              ),
+              resolutionSteps: errorRemedy ? errorRemedy.resolutionSteps : null,
+              referenceCommands: errorRemedy
+                ? errorRemedy.referenceCommands
+                : null,
+            };
+          } catch (remedyError) {
+            this.logger.error(
+              `[getJobRunErrors] Error fetching remedy for code ${error.errorCode}:`,
+              (remedyError as Error).message,
+            );
+            return {
+              ...error,
+              displayMessage: error.errorMessage, // Fallback to original message
+              resolutionSteps: null,
+              referenceCommands: null,
+            };
+          }
+        },
+      ),
     );
 
     const totalResult = await this.operationErrorRepo
@@ -1013,27 +1034,26 @@ export class JobRunService {
       .andWhere('oe.errorType = :errorType', { errorType })
       .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
       .select('COUNT(*)', 'total')
-      .getRawOne();
+      .getRawOne<{ total: string }>();
 
-    const total = parseInt(totalResult.total ?? '0', 10);
+    const total = parseInt(totalResult?.total ?? '0', 10);
 
-    if (errorType && errorType === 'FATAL_ERROR') {
+    if (errorType && (errorType as string) === 'FATAL_ERROR') {
       const setupFailedErrors = await this.getWorkerSetupErrors(jobRunId);
       if (setupFailedErrors.length > 0) {
         const setupFailedError = await Promise.all(
           setupFailedErrors.map(
             async (error): Promise<SetupFailedErrorItem> => {
+              const wr = error.workerResponse;
               // Also map worker setup errors
               const errorRemedies =
-                await this.errorRemedyService.findByErrorCodes([
-                  error.workerResponse.code,
-                ]);
+                await this.errorRemedyService.findByErrorCodes([wr.code]);
               const errorRemedy = errorRemedies?.[0];
               return {
-                errorMessage: error.workerResponse.message,
+                errorMessage: wr.message,
                 displayMessage: getErrorDisplayMessage(
-                  error?.workerResponse?.code,
-                  error?.workerResponse?.message,
+                  wr.code,
+                  wr.message,
                   errorRemedy?.description,
                 ),
                 resolutionSteps: errorRemedy
@@ -1043,11 +1063,11 @@ export class JobRunService {
                   ? errorRemedy.referenceCommands
                   : null,
                 errorType: 'FATAL_ERROR',
-                createdAt: error.workerResponse.createdAt,
-                operationType: error.workerResponse.operation,
-                errorCode: error.workerResponse.code,
-                origin: error.workerResponse.origin,
-                occurrence: error.workerResponse.occurrence || 1,
+                createdAt: wr.createdAt ?? '',
+                operationType: wr.operation ?? '',
+                errorCode: wr.code,
+                origin: wr.origin ?? '',
+                occurrence: wr.occurrence ?? 1,
               };
             },
           ),
@@ -1070,11 +1090,11 @@ export class JobRunService {
     return { data: mappedData, total: total };
   }
 
-  async getErrorOverview(jobRunId: string) {
+  async getErrorOverview(jobRunId: string): Promise<ErrorTypeCount[]> {
     return this.getErrorCounts(jobRunId);
   }
 
-  async getErrorCounts(jobRunId: string) {
+  async getErrorCounts(jobRunId: string): Promise<ErrorTypeCount[]> {
     const countQuery = this.operationErrorRepo
       .createQueryBuilder('oe')
       .innerJoin('oe.operation', 'o')
@@ -1083,15 +1103,14 @@ export class JobRunService {
         errorTypes: USER_VISIBLE_ERROR_TYPES,
       })
       .andWhere('oe.errorStatus = :status', { status: 'UNRESOLVED' })
-      .select(['oe.errorType AS errorType', 'COUNT(*) AS count'])
+      .select(['oe.errorType AS errortype', 'COUNT(*) AS count'])
       .groupBy('oe.errorType');
-    let errorTypeCounts;
+    let errorTypeCounts: ErrorTypeCount[];
     try {
-      errorTypeCounts = await countQuery.getRawMany();
+      errorTypeCounts = await countQuery.getRawMany<ErrorTypeCount>();
     } catch (error) {
       this.logger.error(
-        'Error occurred while fetching error type counts:',
-        error,
+        `Error occurred while fetching error type counts: ${(error as Error).message}`,
       );
       errorTypeCounts = [];
     }
@@ -1152,6 +1171,20 @@ export class JobRunService {
     jobType,
     errorCodes,
     projectId,
+  }: {
+    jobRunId: string;
+    sourcePath: string;
+    targetPath: string;
+    sourceHost: string;
+    targetHost: string;
+    jobType: string;
+    errorCodes: {
+      errorCode: string;
+      description?: string;
+      resolutionSteps?: string;
+      referenceCommands?: string;
+    }[];
+    projectId: string;
   }): Promise<void> {
     if (!errorCodes || errorCodes.length === 0) {
       this.logger.log(`No error codes found for job run ${jobRunId}`);
@@ -1159,10 +1192,6 @@ export class JobRunService {
     }
 
     try {
-      void this.errorRemedyService.findByErrorCodes(
-        errorCodes.map((error) => error.errorCode),
-      );
-
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.ERROR_REMEDY,
         projectId,
@@ -1183,8 +1212,8 @@ export class JobRunService {
       });
     } catch (error) {
       this.logger.error(
-        `Failed to send error remedy email for job run ${jobRunId}: ${error.message}`,
-        error,
+        `Failed to send error remedy email for job run ${jobRunId}: ${(error as Error).message}`,
+        (error as Error).stack,
       );
       // Re-throw to be handled by the caller
       throw error;
@@ -1264,13 +1293,13 @@ export class JobRunService {
   async updateWorkerResponse(
     jobRunId: string,
     workerId: string,
-    workerResponse: Record<string, unknown>,
+    workerResponse: WorkerResponsePayload,
   ): Promise<UpdateResult> {
     try {
       const updateCondition =
         workerId === 'all' ? { jobRunId } : { jobRunId, workerId };
       return await this.workerJobRunMapRepo.update(updateCondition, {
-        workerResponse: workerResponse as Record<string, any>,
+        workerResponse: workerResponse,
       });
     } catch (error) {
       this.logger.error(
@@ -1294,8 +1323,7 @@ export class JobRunService {
       return result;
     } catch (error) {
       this.logger.error(
-        `Error fetching worker setup errors for jobRunId ${jobRunId}:`,
-        error,
+        `Error fetching worker setup errors for jobRunId ${jobRunId}: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -1330,8 +1358,7 @@ export class JobRunService {
         throw error;
       }
       this.logger.error(
-        `Error fetching identity mappings for job run ${jobRunId}:`,
-        error,
+        `Error fetching identity mappings for job run ${jobRunId}: ${(error as Error).message}`,
       );
       throw new InternalServerErrorException(
         `Failed to fetch identity mappings for job run ${jobRunId}`,

@@ -31,9 +31,14 @@ export class ErrorRemedyService {
     });
   }
 
-  async getDistinctErrorCodes(
-    jobRunId: string,
-  ): Promise<{ errorCode: string }[]> {
+  async getDistinctErrorCodes(jobRunId: string): Promise<
+    {
+      errorCode: string;
+      description?: string;
+      resolutionSteps?: string;
+      referenceCommands?: string;
+    }[]
+  > {
     const errorCodes = await this.operationErrorRepository
       .createQueryBuilder('oe')
       .innerJoin('oe.operation', 'o')
@@ -44,6 +49,11 @@ export class ErrorRemedyService {
       .select('DISTINCT oe.errorCode', 'errorCode')
       .groupBy('oe.errorType, oe.errorCode')
       .getRawMany();
-    return errorCodes;
+    return errorCodes as {
+      errorCode: string;
+      description?: string;
+      resolutionSteps?: string;
+      referenceCommands?: string;
+    }[];
   }
 }

@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 import { Base } from './base.entity';
 import { WorkerEntity } from './worker.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { SystemStats } from '../healthcheck/dto/healthcheck.dto';
 
 @Entity({ name: 'worker_stats' })
 export class WorkerStatsEntity extends Base {
@@ -19,7 +20,7 @@ export class WorkerStatsEntity extends Base {
 
   @ApiProperty({ description: 'System Stats in JSON format' })
   @Column({ name: 'system_stats', type: 'jsonb', nullable: true })
-  systemStats: Record<string, any>;
+  systemStats: SystemStats | null;
 
   @Column({ type: 'uuid', nullable: false, name: 'worker_id' })
   workerId: string;

@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { WorkerEntity } from './worker.entity';
 import { JobRunEntity } from './jobrun.entity';
+import { WorkerResponsePayload } from '../jobrun/jobrun.types';
 
 @Entity({ name: 'worker_jobrun_mapping' })
 export class WorkerJobRunMap {
@@ -22,7 +23,7 @@ export class WorkerJobRunMap {
   @Column({ name: 'job_run_id', type: 'uuid' })
   jobRunId: string;
 
-  @Column({ name: 'is_path_mounted', type: 'boolean', default: 'false' })
+  @Column({ name: 'is_path_mounted', type: 'boolean', default: false })
   isPathMounted: boolean = false;
 
   @ManyToOne(() => WorkerEntity, (worker) => worker.jobRunMap, {
@@ -45,5 +46,5 @@ export class WorkerJobRunMap {
     nullable: true,
     default: null,
   })
-  workerResponse?: Record<string, any>;
+  workerResponse?: WorkerResponsePayload;
 }

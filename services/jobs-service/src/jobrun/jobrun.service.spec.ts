@@ -1382,7 +1382,7 @@ describe('JobRunService', () => {
 
     jest
       .spyOn(service, 'getErrorCounts')
-      .mockResolvedValue([{ errorType: 'FileNotFound', count: 5 }]);
+      .mockResolvedValue([{ errortype: 'FileNotFound', count: 5 }]);
 
     const result = await service.getJobAllRuns(filter);
 
@@ -1406,7 +1406,7 @@ describe('JobRunService', () => {
         scannedDirectoriesCount: '2',
         totalScannedSize: '2 KiB',
         totalMigratedSize: '0 B',
-        errors: [{ errorType: 'FileNotFound', count: 5 }],
+        errors: [{ errortype: 'FileNotFound', count: 5 }],
       },
     ]);
 
@@ -1908,7 +1908,7 @@ describe('JobRunService', () => {
         },
       };
 
-      jest.spyOn(service, 'getErrorCounts').mockResolvedValue({});
+      jest.spyOn(service, 'getErrorCounts').mockResolvedValue([] as any);
       jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockJobRun as any);
       jest
         .spyOn(jobConfigRepo, 'findOne')
@@ -2134,11 +2134,13 @@ describe('JobRunService', () => {
     it('should return error counts for the given job run ID', async () => {
       const mockJobRunId = 'jobRunId';
       const mockErrorCounts = [
-        { errorType: 'TypeError', count: '5' },
-        { errorType: 'ValidationError', count: '3' },
+        { errortype: 'TypeError', count: '5' },
+        { errortype: 'ValidationError', count: '3' },
       ];
 
-      jest.spyOn(service, 'getErrorCounts').mockResolvedValue(mockErrorCounts);
+      jest
+        .spyOn(service, 'getErrorCounts')
+        .mockResolvedValue(mockErrorCounts as any);
 
       const result = await service.getErrorOverview(mockJobRunId);
 
@@ -2188,7 +2190,7 @@ describe('JobRunService', () => {
         { jobRunId: mockJobRunId },
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        'oe.errorType AS errorType',
+        'oe.errorType AS errortype',
         'COUNT(*) AS count',
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith('oe.errorType');
@@ -2234,14 +2236,13 @@ describe('JobRunService', () => {
         { jobRunId: mockJobRunId },
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        'oe.errorType AS errorType',
+        'oe.errorType AS errortype',
         'COUNT(*) AS count',
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith('oe.errorType');
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
       expect(loggerSpy).toHaveBeenCalledWith(
-        'Error occurred while fetching error type counts:',
-        mockError,
+        `Error occurred while fetching error type counts: ${mockError.message}`,
       );
     });
 
@@ -2290,14 +2291,13 @@ describe('JobRunService', () => {
         { jobRunId: mockJobRunId },
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        'oe.errorType AS errorType',
+        'oe.errorType AS errortype',
         'COUNT(*) AS count',
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith('oe.errorType');
       expect(mockQueryBuilder.getRawMany).toHaveBeenCalled();
       expect(loggerSpy).toHaveBeenCalledWith(
-        'Error occurred while fetching error type counts:',
-        mockError,
+        `Error occurred while fetching error type counts: ${mockError.message}`,
       );
       expect(result).toEqual([{ errortype: 'FATAL_ERROR', count: 1 }]);
     });
@@ -3256,7 +3256,7 @@ describe('JobRunService', () => {
   describe('sendErrorRemedyEmail', () => {
     it('should send email with correct parameters', async () => {
       const jobRunId = '1234';
-      const errorCodes = ['ERROR_CODE'];
+      const errorCodes = [{ errorCode: 'ERROR_CODE' }];
       jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
       jest.spyOn(errorRemedyService, 'findByErrorCodes').mockResolvedValue([
         {
@@ -3281,7 +3281,7 @@ describe('JobRunService', () => {
 
     it('should throw error if sendMail fails', async () => {
       const jobRunId = '1234';
-      const errorCodes = ['ERROR_CODE'];
+      const errorCodes = [{ errorCode: 'ERROR_CODE' }];
       jest
         .spyOn(sendMailService, 'sendMail')
         .mockRejectedValue(new Error('Email sending failed'));
@@ -3309,7 +3309,7 @@ describe('JobRunService', () => {
 
     it('should not call sendMail if errorCodes is empty', async () => {
       const jobRunId = '1234';
-      const errorCodes: string[] = [];
+      const errorCodes: { errorCode: string }[] = [];
       jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
       await service.sendErrorRemedyEmail({
         jobRunId,
@@ -3430,7 +3430,7 @@ describe('JobRunService', () => {
           directoryCount: '2',
           totalSize: '10240',
         };
-        const mockErrorCounts = [{ errorType: 'TypeError', count: 2 }];
+        const mockErrorCounts = [{ errortype: 'TypeError', count: 2 }];
 
         jest
           .spyOn(jobRunRepo, 'findOne')
@@ -4030,16 +4030,9 @@ describe('JobRunService', () => {
           },
         ];
 
-        jest
-          .spyOn(errorRemedyService, 'findByErrorCodes')
-          .mockResolvedValue(mockErrorRemedies as any);
         jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
 
         await service.sendErrorRemedyEmail(mockParams);
-
-        expect(errorRemedyService.findByErrorCodes).toHaveBeenCalledWith([
-          'ERR001',
-        ]);
         expect(sendMailService.sendMail).toHaveBeenCalledWith(
           expect.objectContaining({
             errorRemedy: {
@@ -4191,17 +4184,9 @@ describe('JobRunService', () => {
           },
         ];
 
-        jest
-          .spyOn(errorRemedyService, 'findByErrorCodes')
-          .mockResolvedValue(mockErrorRemedies as any);
         jest.spyOn(sendMailService, 'sendMail').mockResolvedValue(undefined);
 
         await service.sendErrorRemedyEmail(mockParams);
-
-        expect(errorRemedyService.findByErrorCodes).toHaveBeenCalledWith([
-          'ERR001',
-          'ERR002',
-        ]);
         expect(sendMailService.sendMail).toHaveBeenCalledWith({
           successEmailType: SuccessEmailType.ERROR_REMEDY,
           errorRemedy: {

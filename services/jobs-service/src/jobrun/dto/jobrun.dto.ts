@@ -80,22 +80,22 @@ export class JobRunFilterDto {
 }
 
 export interface JobRunsDTO {
-  lastRefreshed?: Date;
+  lastRefreshed?: Date | null;
   jobRunId: string;
   status: string;
   startTime: Date;
-  endTime?: Date;
+  endTime?: Date | null;
   jobConfigId?: string;
   jobType: string;
   jobRunType: string;
   sourceServer: ServerDetailsDTO;
-  destinationServer?: ServerDetailsDTO;
-  nextSchedule?: Date;
+  destinationServer?: ServerDetailsDTO | Record<string, never>;
+  nextSchedule?: Date | string | null;
   timeElapsed: number;
   scannedFilesCount: string;
   scannedDirectoriesCount: string;
   totalScannedSize: string;
-  errors: any[];
+  errors: { errorType?: string; errortype?: string; count: number }[];
   totalMigratedSize: string;
   isReportReady: boolean;
 }
@@ -121,7 +121,7 @@ export interface JobRunDetailsDTO {
   scannedFilesCount: string;
   scannedDirectoriesCount: string;
   totalScannedSize: string;
-  errors: any[];
+  errors: unknown[];
   tasks: TaskDTO[];
   totalMigratedSize: string;
 }

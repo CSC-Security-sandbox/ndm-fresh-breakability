@@ -15,7 +15,7 @@ export function filterUnhealthyWorkers(
     Math.abs(new Date().getTime() - worker.stats?.updatedAt.getTime()) / 1000,
   );
   return (
-    worker.stats?.healthStatus === HealthStatus.Healthy &&
+    (worker.stats?.healthStatus as HealthStatus) === HealthStatus.Healthy &&
     timeDiffInSec < timeout
   );
 }

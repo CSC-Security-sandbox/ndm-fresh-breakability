@@ -55,7 +55,7 @@ export class PreCheckService {
   ): Promise<PreCheckCircularDependency[]> {
     return this.migrationConflictService.checkMigrationConflicts(data);
   }
-  async initiatePreCheck(data: JobConfigPreCheck): Promise<any> {
+  async initiatePreCheck(data: JobConfigPreCheck): Promise<unknown> {
     const healthCheckTimeout = parseInt(
       this.configService.get('app.worker.healthCheckStatusTimout'),
     );
@@ -101,22 +101,24 @@ export class PreCheckService {
       return { workflowId: workflow.workflowId };
     } catch (error) {
       this.logger.error(
-        `${traceId}] Failed to perform the pre check: ${error}`,
+        `[${traceId}] Failed to perform the pre check: ${error}`,
       );
       if (error instanceof BadRequestException) {
         const response = error.getResponse();
         if (
           typeof response === 'object' &&
           response !== null &&
-          Array.isArray((response as any).errors) &&
-          (response as any).errors.includes('MIGRATION_CONFLICTS_FOUND')
+          Array.isArray((response as { errors?: string[] }).errors) &&
+          (response as { errors?: string[] }).errors?.includes(
+            'MIGRATION_CONFLICTS_FOUND',
+          )
         ) {
           throw error;
         }
       }
       return {
         status: 'error',
-        erros: ['PRECHECK_FAILED'],
+        errors: ['PRECHECK_FAILED'],
         message: `Failed to perform the pre check: ${error}`,
       };
     }
@@ -240,7 +242,7 @@ export class PreCheckService {
   private prepareWorkflowPayload(
     preCheckPayload: PreCheckWorkflowOPayload,
     traceId: string,
-    options: any,
+    options: Options,
   ): StartWorkFlowPayload {
     return {
       workflowId: WorkFlows.PRECHECK + '-' + traceId,
@@ -276,7 +278,7 @@ export class PreCheckService {
       })
       .andWhere('inventory.is_directory = :isDirectory', { isDirectory: false })
       .select('SUM(inventory.file_size)', 'totalSize')
-      .getRawOne();
+      .getRawOne<{ totalSize: string }>();
     if (!inventorySize || !inventorySize.totalSize) return 0;
     return parseInt(inventorySize.totalSize);
   }

@@ -33,7 +33,10 @@ export class TasksService {
     let where = { jobRunId };
 
     Object.keys(filter).forEach((k) => {
-      where = { ...where, [k]: In(filter[k]) };
+      where = {
+        ...where,
+        [k]: In(filter[k as keyof typeof filter] as string[]),
+      };
     });
 
     const findOptions: FindManyOptions<TaskEntity> = {

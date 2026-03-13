@@ -57,7 +57,9 @@ export class JobErrorQueryDto {
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: string | string[] }): string[] =>
+    Array.isArray(value) ? value : [value],
+  )
   @ArrayMinSize(1)
   operationId?: string[];
 

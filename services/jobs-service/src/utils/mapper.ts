@@ -15,7 +15,7 @@ export const nextDate = (
       return runDate;
     }
 
-    if (jobType === JobType.MIGRATE && cron) {
+    if ((jobType as JobType) === JobType.MIGRATE && cron) {
       const interval = parser.parseExpression(cron, { currentDate: now });
       return interval.next().toDate();
     }

@@ -28,7 +28,7 @@ export class WorkersService {
   }
 
   updateWorkerStatus(workers: WorkerEntity[]) {
-    const timeout = this.configService.get(
+    const timeout = this.configService.get<number>(
       'app.worker.healthCheckStatusTimout',
     );
     return workers.map((worker) => {
@@ -41,7 +41,7 @@ export class WorkersService {
         const diffInSeconds = Math.floor(timeDiff / 1000);
         if (
           diffInSeconds >= timeout ||
-          worker.stats.healthStatus !== HealthStatus.Healthy
+          (worker.stats.healthStatus as HealthStatus) !== HealthStatus.Healthy
         ) {
           worker.status = WorkerStatus.Offline;
         } else {
@@ -87,16 +87,15 @@ export class WorkersService {
       };
     }
 
-    let data: WorkerEntity[] = [],
-      _total = 0;
+    let data: WorkerEntity[] = [];
     if (page && limit) {
       findOptions.skip = (parseInt(page) - 1) * parseInt(limit);
       findOptions.take = parseInt(limit);
       data = await this.WorkerEntity.find(findOptions);
-      _total = await this.WorkerEntity.count({ where: updateFilter });
+      await this.WorkerEntity.count({ where: updateFilter });
     } else {
       data = await this.WorkerEntity.find(findOptions);
-      _total = await this.WorkerEntity.count({ where: updateFilter });
+      await this.WorkerEntity.count({ where: updateFilter });
     }
     const workerWithStatusUpdated = this.updateWorkerStatus(data);
     return workerWithStatusUpdated;

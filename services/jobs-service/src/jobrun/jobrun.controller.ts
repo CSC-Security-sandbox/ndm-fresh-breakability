@@ -26,6 +26,7 @@ import { JobRunDetailsDTO } from './dto/jobrun.dto';
 import { ApprovalRequestDTO, JobRunActionsReq } from './dto/jobrunactions.dto';
 import { JobRunPageDto, JobRunPageResponseDto } from './dto/jobrunpage.dto';
 import { JobRunService } from './jobrun.service';
+import { ErrorTypeCount, WorkerResponsePayload } from './jobrun.types';
 import { AdHocRunDTO } from './dto/adhockjobrun.dto';
 import { CutOverStatus, JobRunStatus } from 'src/constants/enums';
 import { JobRunInitService } from './jobrun.init.service';
@@ -229,7 +230,9 @@ export class JobRunController {
   @ApiBearerAuth()
   @Auth(Permission.Reports)
   @Get('/:jobRunId/errors/overview')
-  async getErrorOverview(@Param('jobRunId') jobRunId: string) {
+  async getErrorOverview(
+    @Param('jobRunId') jobRunId: string,
+  ): Promise<ErrorTypeCount[]> {
     return this.jobRunService.getErrorOverview(jobRunId);
   }
 
@@ -253,7 +256,7 @@ export class JobRunController {
   async updateWorkerResponse(
     @Param('jobRunId') jobRunId: string,
     @Param('workerId') workerId: string,
-    @Body() workerResponse: Record<string, any>,
+    @Body() workerResponse: WorkerResponsePayload,
   ) {
     return this.jobRunService.updateWorkerResponse(
       jobRunId,

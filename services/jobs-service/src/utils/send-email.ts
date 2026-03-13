@@ -19,7 +19,7 @@ export class SendMailService {
     this.sendEmailUrl = this.configService.get('app.email.sendMail');
   }
 
-  async sendMail(body: SuccessEventEmailDto) {
+  async sendMail(body: SuccessEventEmailDto): Promise<unknown> {
     try {
       const sendEmailFullUrl = `${this.sendEmailUrl}/api/v1/email/internal`;
 
@@ -33,10 +33,10 @@ export class SendMailService {
         throw new Error(
           `Failed to post the send mail request, ${response.data}`,
         );
-      this.logger.log(`Succesfully sent the mail`, response.data);
+      this.logger.log(`Succesfully sent the mail`, response.data as object);
       return response.data;
     } catch (error) {
-      this.logger.error(`Failed to send the mail:`, error);
+      this.logger.error(`Failed to send the mail: ${(error as Error).message}`);
     }
   }
 }

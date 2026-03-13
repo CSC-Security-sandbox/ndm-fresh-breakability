@@ -6,7 +6,7 @@ export interface UpdateJobRunMappingPayload {
   isMounted?: true;
 }
 
-interface Credential {
+export interface Credential {
   protocol: Protocol;
   password?: string;
   pathId: string;
@@ -49,6 +49,51 @@ export enum WorkFlowFailureReason {
   WORKER_FAILURE = 'WORKER_FAILURE',
   TASK_FETCH_FAILURE = 'TASK_FETCH_FAILURE',
   SCAN_ACTIVITY_FAILURE = 'SCAN_ACTIVITY_FAILURE',
+}
+
+/** Shape of a single row returned by getErrorCounts raw query */
+export interface ErrorTypeCount {
+  errortype: string;
+  count: number;
+}
+
+/** Shape of the workerResponse JSON column on WorkerJobRunMap entity */
+export interface WorkerResponsePayload {
+  code?: string;
+  message?: string;
+  status?: string;
+  operation?: string;
+  origin?: string;
+  occurrence?: number;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+/** Raw SQL row returned by the getJobRunList query (PostgreSQL column names are lowercase) */
+export interface JobRunRawRow {
+  jobrunid: string;
+  jobstats: import('./dto/jobstats').JobRunStats | null;
+  substatus: string | null;
+  status: string;
+  starttime: Date;
+  endtime: Date | null;
+  jobtype: string;
+  jobruntype: string | null;
+  isreportready: boolean;
+  jobconfigid: string;
+  nextschedule: string | null;
+  sourceconfigname: string;
+  sourcefileservername: string;
+  volumepath: string;
+  sourcefileserverprotocol: string;
+  sourceservertype: string;
+  sourcedirectorypath: string;
+  targetvolumepath: string | null;
+  targetconfigname: string | null;
+  targetfileservername: string | null;
+  targetfileserverprotocol: string | null;
+  targetservertype: string | null;
+  targetdirectorypath: string | null;
 }
 
 /** Single worker setup error item as returned in getFailedOperations */

@@ -22,6 +22,51 @@ export interface JobConfigBulkMigrateFinalResponse {
   warnings?: object[];
 }
 
+/** Shape of a destination entry in precheckValidation results map */
+export interface PrecheckDestinationResult {
+  status: string;
+  errors?: string[];
+  message?: string;
+  destinationPathId: string;
+  commonWorkers?: { workerId: string }[];
+}
+
+/** Shape of a source entry in precheckValidation results map */
+export interface PrecheckSourceResult {
+  sourcePathId: string;
+  destinations: PrecheckDestinationResult[];
+  status?: string;
+  error?: string[];
+  message?: string;
+}
+
+/** Raw SQL row returned by the getJobListing query */
+export interface JobListingRawRow {
+  jobconfigid: string;
+  jobtype: string;
+  jobconfigstatus: string;
+  firstrunat: Date;
+  futureschedule: string | null;
+  sourceservername: string;
+  sourcepath: string;
+  sourcedirectorypath: string;
+  sourceprotocol: string;
+  targetservername: string | null;
+  targetpath: string | null;
+  targetdirectorypath: string | null;
+  targetprotocol: string | null;
+  totalRuns: string;
+  configname: string;
+  createdAt: Date;
+  updated_at: Date;
+}
+
+/** Shape of a single row returned by getErrorCounts raw query in jobconfig service */
+export interface JobConfigErrorTypeCount {
+  errorType: string;
+  count: number;
+}
+
 export interface JobConfigBulkCutoverRes {
   id: string;
   jobType: JobType;
@@ -52,7 +97,7 @@ export type SpeedTestEntry = {
   startTime: Date;
   endTime: Date;
   totalWorkers: number;
-  fileServers: any[];
+  fileServers: unknown[];
   status: string;
 };
 

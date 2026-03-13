@@ -28,10 +28,10 @@ export class WorkerJobRunActivationParamsDto {
     example: 'true',
   })
   @Expose()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: string | boolean }): boolean => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return value as boolean;
   })
   @IsBoolean({ message: 'activationStatus must be a boolean value' })
   @IsNotEmpty()

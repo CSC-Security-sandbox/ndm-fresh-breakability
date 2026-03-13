@@ -55,7 +55,9 @@ export class TaskQueryParamsDto {
   @IsOptional()
   @IsArray()
   @IsEnum(TaskType, { each: true })
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: TaskType | TaskType[] }): TaskType[] =>
+    Array.isArray(value) ? value : [value],
+  )
   @ArrayMinSize(1)
   taskType?: TaskType[];
 
@@ -70,7 +72,9 @@ export class TaskQueryParamsDto {
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: string | string[] }): string[] =>
+    Array.isArray(value) ? value : [value],
+  )
   @ArrayMinSize(1)
   id?: string[];
 
@@ -84,7 +88,9 @@ export class TaskQueryParamsDto {
   })
   @IsOptional()
   @IsArray()
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: string | string[] }): string[] =>
+    Array.isArray(value) ? value : [value],
+  )
   @IsUUID('4', { each: true })
   workerId?: string[];
 
@@ -97,7 +103,9 @@ export class TaskQueryParamsDto {
   @IsOptional()
   @IsArray()
   @IsEnum(TaskStatus, { each: true })
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: TaskStatus | TaskStatus[] }): TaskStatus[] =>
+    Array.isArray(value) ? value : [value],
+  )
   status?: TaskStatus[];
 
   @ApiProperty({

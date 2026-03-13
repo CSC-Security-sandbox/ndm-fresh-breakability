@@ -41,7 +41,7 @@ export class OperationsEntity extends Base {
   operationType: OperationType;
 
   @Column({ name: 'request', type: 'jsonb', nullable: false })
-  request: Record<string, any>;
+  request: object;
 
   @Column({ name: 'error_details', type: 'text', nullable: true })
   errorDetails: string;

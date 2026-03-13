@@ -259,7 +259,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
               }
             } catch (fqdnError) {
               this.logger.debug(
-                `FQDN resolution failed for ${fqdn}: ${fqdnError.message}`,
+                `FQDN resolution failed for ${fqdn}: ${(fqdnError as Error).message}`,
               );
             }
           }
@@ -276,7 +276,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
           resolvedIp = address;
         } catch (systemError) {
           this.logger.debug(
-            `System DNS failed for ${hostname}: ${systemError.message}`,
+            `System DNS failed for ${hostname}: ${(systemError as Error).message}`,
           );
         }
       }
@@ -294,7 +294,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
           resolvedIp = address;
         } catch (systemError) {
           this.logger.debug(
-            `System DNS fallback failed for ${hostname}: ${systemError.message}`,
+            `System DNS fallback failed for ${hostname}: ${(systemError as Error).message}`,
           );
         }
       }
@@ -321,7 +321,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
             }
           } catch (serverError) {
             this.logger.debug(
-              `DNS server ${dnsServer} failed for ${hostname}: ${serverError.message}`,
+              `DNS server ${dnsServer} failed for ${hostname}: ${(serverError as Error).message}`,
             );
           }
         }
@@ -840,7 +840,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private withoutTimer(record: MountRecord): MountDetails {
-    const { timeoutHandle: _timeoutHandle, ...rest } = record;
+    const { timeoutHandle: _, ...rest } = record;
     return rest;
   }
 }
