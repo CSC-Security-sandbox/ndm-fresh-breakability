@@ -216,7 +216,7 @@ case $1 in
         echo "      ansible_user: ubuntu" >> $worker_inventory_file
         echo "      ansible_ssh_private_key_file: ~/.ssh/id_rsa" >> $worker_inventory_file
 
-        ansible-playbook ../../ansible/worker/playbooks/master-playbook.yaml -i $worker_inventory_file -e local_binary_path=$worker_binary_path -e local_cluster=true
+        ANSIBLE_CONFIG=../../ansible/worker/config/ansible.cfg ansible-playbook ../../ansible/worker/playbooks/master-playbook.yaml -i $worker_inventory_file -e local_binary_path=$worker_binary_path -e local_cluster=true
         ;;
 
     *)
