@@ -7,7 +7,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from 'src/activities/common/win-shell.service';
 import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './acl-operation.error';
-import { psGetAclScript, psSetAclScript, psGetLinkInfoScript } from './powershell.script';
+import { psGetAclScript, psSetAclScript, psGetLinkInfoScript, psGetAclBatchScript, psSetAclBatchScript } from './powershell.script';
 import { RedisService } from 'src/redis/redis.service';
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { Cmd, ErrorType, JobManagerContext, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -261,6 +261,270 @@ export class WinOperationService {
       }),
     );
     return acl;
+  }
+
+  /**
+   * Batch get ACLs for multiple paths in a single PowerShell call.
+   * Eliminates per-file shell round-trip overhead.
+   * Per-file failures are collected in the errors map — they do NOT abort the entire batch.
+   */
+  async getAclBatch(
+    paths: string[],
+    isSource: boolean,
+    workflowId = '',
+  ): Promise<{ acls: Map<string, SecurityDescriptor>; errors: Map<string, string> }> {
+    const BATCH_CHUNK = 50;
+    const acls = new Map<string, SecurityDescriptor>();
+    const errors = new Map<string, string>();
+
+    for (let i = 0; i < paths.length; i += BATCH_CHUNK) {
+      const chunk = paths.slice(i, i + BATCH_CHUNK);
+      const pathsJson = JSON.stringify(chunk);
+      const script = psGetAclBatchScript.replace('__PATHS_JSON__', pathsJson);
+
+      try {
+        const output = await this.winShellService.executeCommand(script, workflowId);
+        if (output.stderr) {
+          // Shell-level error — mark all paths in this chunk as failed
+          for (const p of chunk) {
+            errors.set(p, `Shell error: ${output.stderr}`);
+          }
+          this.logger.error(`Batch getAcl shell error for chunk starting at ${chunk[0]}: ${output.stderr}`);
+          continue;
+        }
+
+        const parsed = JSON.parse(output.stdout);
+        if (parsed.error) {
+          // PS-level error — mark all paths in this chunk as failed
+          for (const p of chunk) {
+            errors.set(p, `PS error: ${parsed.error}`);
+          }
+          this.logger.error(`Batch getAcl PS error for chunk starting at ${chunk[0]}: ${parsed.error}`);
+          continue;
+        }
+
+        for (const entry of parsed) {
+          if (entry.success) {
+            acls.set(entry.path, entry.acl as SecurityDescriptor);
+          } else {
+            // Per-file failure — log and collect, don't abort batch
+            this.logger.error(`Batch getAcl failed for ${entry.path}: ${entry.error}`);
+            errors.set(entry.path, entry.error);
+          }
+        }
+      } catch (error) {
+        // Unexpected error (JSON parse, timeout, etc.) — mark entire chunk as failed
+        for (const p of chunk) {
+          errors.set(p, `Unexpected error: ${error.message}`);
+        }
+        this.logger.error(`Batch getAcl unexpected error for chunk starting at ${chunk[0]}: ${error.message}`, error.stack);
+      }
+    }
+    return { acls, errors };
+  }
+
+  /**
+   * Batch set ACLs for multiple path+acl entries in a single PowerShell call.
+   */
+  async setAclBatch(
+    entries: { path: string; acl: SecurityDescriptor }[],
+    workflowId = '',
+  ): Promise<Map<string, { success: boolean; unresolved_sids: string[]; error?: string }>> {
+    const BATCH_CHUNK = 50;
+    const results = new Map<string, { success: boolean; unresolved_sids: string[]; error?: string }>();
+
+    for (let i = 0; i < entries.length; i += BATCH_CHUNK) {
+      const chunk = entries.slice(i, i + BATCH_CHUNK);
+      const entriesJson = JSON.stringify(chunk.map(e => ({ path: e.path, acl: e.acl })));
+      const script = psSetAclBatchScript.replace('__ENTRIES_JSON__', entriesJson);
+      const output = await this.winShellService.executeCommand(script, workflowId);
+      if (output.stderr) throw new Error(output.stderr);
+
+      const parsed = JSON.parse(output.stdout);
+      if (parsed.error) throw new Error(parsed.error);
+
+      for (const entry of parsed) {
+        if (entry.success && entry.result) {
+          results.set(entry.path, {
+            success: true,
+            unresolved_sids: entry.result.unresolved_sids || [],
+          });
+        } else {
+          results.set(entry.path, {
+            success: false,
+            unresolved_sids: [],
+            error: entry.error || 'Unknown set ACL error',
+          });
+        }
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Batch stamp ACL for multiple files: batch-get-source → SID-map → batch-set-target → batch-get-target → validate.
+   * Replaces N sequential stampAclOperation calls with 3 bulk PS calls + in-memory SID mapping.
+   * Per-file errors are isolated — one file failing does NOT prevent other files from being stamped.
+   */
+  async stampAclBatch(
+    inputs: CommandExecInput[],
+  ): Promise<Map<string, { output: StampMetaOutput; errors: string[] }>> {
+    const results = new Map<string, { output: StampMetaOutput; errors: string[] }>();
+    if (inputs.length === 0) return results;
+
+    const workflowId = inputs[0].jobContext?.jobRunId ?? '';
+    const jobContext = inputs[0].jobContext;
+
+    // 1. Batch get source ACLs (per-file errors are collected, not thrown)
+    const sourcePaths = inputs.map(inp => inp.sourcePath);
+    const sourceResult = await this.metricsService.runWithTiming(
+      workflowId,
+      { category: 'stamp_phase', phase: 'acl_get_source_batch' },
+      () => this.getAclBatch(sourcePaths, true, workflowId),
+    );
+
+    // 2. SID mapping (in-memory, per file) — skip files that failed in step 1
+    const mappedAcls = new Map<string, { acl: SecurityDescriptor; errors: string[] }>();
+    for (const input of inputs) {
+      // Check if source ACL read failed for this file
+      const sourceError = sourceResult.errors.get(input.sourcePath);
+      if (sourceError) {
+        this.logger.error(`Skipping stamp for ${input.sourcePath}: source ACL read failed: ${sourceError}`);
+        results.set(input.sourcePath, {
+          output: { sourceErrors: [`Failed to get source ACL for ${input.sourcePath}: ${sourceError}`], targetErrors: [] },
+          errors: [`Failed to get source ACL for ${input.sourcePath}: ${sourceError}`],
+        });
+        continue;
+      }
+
+      let acl = sourceResult.acls.get(input.sourcePath);
+      if (!acl) {
+        results.set(input.sourcePath, {
+          output: { sourceErrors: [`No ACL returned for ${input.sourcePath}`], targetErrors: [] },
+          errors: [`No ACL returned for ${input.sourcePath}`],
+        });
+        continue;
+      }
+
+      const errors: string[] = [];
+      if (jobContext.jobConfig?.options?.isIdentityMappingAvailable) {
+        acl = await this.mapSIDToTarget(acl, jobContext.jobRunId);
+      }
+
+      if (acl.Owner === 'Invalid') {
+        errors.push(`Invalid Owner SID for ${acl.originalOwner} found in SID mapping`);
+        acl.Owner = acl.originalOwner;
+        delete acl.originalOwner;
+      }
+      if (acl.Group === 'Invalid') {
+        errors.push(`Invalid Group SID for ${acl.originalGroup} found in SID mapping`);
+        acl.Group = acl.originalGroup;
+        delete acl.originalGroup;
+      }
+      if (acl.DaclAces) {
+        acl.DaclAces = acl.DaclAces.filter((ace) => {
+          if (ace.Sid === 'Invalid') {
+            errors.push(`Invalid ACL SID for ${ace.originalSid} found in SID mapping`);
+            return false;
+          }
+          return true;
+        });
+      }
+      mappedAcls.set(input.sourcePath, { acl, errors });
+    }
+
+    // 3. Batch set target ACLs — only for files that passed step 1+2
+    const setEntries: { path: string; acl: SecurityDescriptor; sourcePath: string }[] = [];
+    for (const input of inputs) {
+      const mapped = mappedAcls.get(input.sourcePath);
+      if (mapped) {
+        setEntries.push({ path: input.targetPath, acl: mapped.acl, sourcePath: input.sourcePath });
+      }
+    }
+
+    if (setEntries.length > 0) {
+      const setResults = await this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_set_target_batch' },
+        () => this.setAclBatch(
+          setEntries.map(e => ({ path: e.path, acl: e.acl })),
+          workflowId,
+        ),
+      );
+
+      // Collect unresolved SIDs and set-failures into per-file errors
+      for (const entry of setEntries) {
+        const setResult = setResults.get(entry.path);
+        const mapped = mappedAcls.get(entry.sourcePath);
+        if (setResult && !setResult.success) {
+          mapped.errors.push(`Failed to set ACL on ${entry.path}: ${setResult.error}`);
+        } else if (setResult?.unresolved_sids?.length > 0) {
+          setResult.unresolved_sids.forEach(sid => {
+            mapped.errors.push(`Unresolved SID ${sid} found while setting ACL on target`);
+          });
+        }
+      }
+    }
+
+    // 4. Batch get target ACLs for validation — only for files that had successful set
+    const validatePaths: string[] = [];
+    const validateSourceMap = new Map<string, string>(); // targetPath → sourcePath
+    for (const entry of setEntries) {
+      const mapped = mappedAcls.get(entry.sourcePath);
+      // Only validate files where set didn't have hard failures
+      if (mapped && !mapped.errors.some(e => e.startsWith('Failed to set ACL'))) {
+        validatePaths.push(entry.path);
+        validateSourceMap.set(entry.path, entry.sourcePath);
+      }
+    }
+
+    let targetAcls = new Map<string, SecurityDescriptor>();
+    let targetAclErrors = new Map<string, string>();
+    if (validatePaths.length > 0) {
+      const targetResult = await this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_get_target_batch' },
+        () => this.getAclBatch(validatePaths, false, workflowId),
+      );
+      targetAcls = targetResult.acls;
+      targetAclErrors = targetResult.errors;
+    }
+
+    // 5. Validate each file and build final results
+    for (const input of inputs) {
+      // Skip files that already have error results from step 1
+      if (results.has(input.sourcePath)) continue;
+
+      const mapped = mappedAcls.get(input.sourcePath);
+      if (!mapped) continue;
+
+      const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+
+      // Check if target ACL read failed for validation
+      const targetAclError = targetAclErrors.get(input.targetPath);
+      if (targetAclError) {
+        mapped.errors.push(`Failed to read target ACL for validation of ${input.targetPath}: ${targetAclError}`);
+      }
+
+      const targetAcl = targetAcls.get(input.targetPath);
+      if (targetAcl) {
+        const validation = await this.validateAclOperation(mapped.acl, targetAcl);
+        if (validation.inValid.length > 0) {
+          input.command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
+        }
+        input.command.ops[OPS_CMD.STAMP_META].params.sidMap = {
+          targetAcl: validation.targetSID,
+          sourceAcl: validation.sourceSID,
+          validationError: validation.inValid,
+        };
+      } else if (!targetAclError) {
+        mapped.errors.push(`No target ACL returned for validation of ${input.targetPath}`);
+      }
+
+      results.set(input.sourcePath, { output, errors: mapped.errors });
+    }
+
+    return results;
   }
 
   async resetFileAttributes(path: string): Promise<boolean> {

@@ -344,6 +344,37 @@ function SidToName {
         return $false
     }
 }
+function Get-FileSecurityFastBatch([string]$pathsJson) {
+    $paths = $pathsJson | ConvertFrom-Json
+    $results = New-Object System.Collections.Generic.List[object]
+    foreach ($p in $paths) {
+        try {
+            $jsonStr = Get-FileSecurityFast $p
+            $aclObj = $jsonStr | ConvertFrom-Json
+            $results.Add([PSCustomObject]@{ path = $p; success = $true; acl = $aclObj; error = $null })
+        } catch {
+            $results.Add([PSCustomObject]@{ path = $p; success = $false; acl = $null; error = $_.Exception.Message })
+        }
+    }
+    ConvertTo-Json -InputObject @($results) -Compress -Depth 10
+}
+
+function Set-FileSecurityFastBatch([string]$entriesJson) {
+    $entries = $entriesJson | ConvertFrom-Json
+    $results = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in $entries) {
+        try {
+            $aclStr = $entry.acl | ConvertTo-Json -Compress -Depth 10
+            $setOutput = Set-FileSecurityFast $entry.path $aclStr
+            $parsed = $setOutput | ConvertFrom-Json
+            $results.Add([PSCustomObject]@{ path = $entry.path; success = $true; result = $parsed; error = $null })
+        } catch {
+            $results.Add([PSCustomObject]@{ path = $entry.path; success = $false; result = $null; error = $_.Exception.Message })
+        }
+    }
+    ConvertTo-Json -InputObject @($results) -Compress -Depth 10
+}
+
 function Get-NTFSLinkInfo {
     param([string]$path)
 
@@ -423,6 +454,28 @@ export const psSetAclScript = `
 try {
     if (!(Test-Path $dstFile)) { throw "File not found: $dstFile" }
     Set-FileSecurityFast $dstFile $aclJson
+} catch {
+    Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
+}
+`;
+
+export const psGetAclBatchScript = `
+try {
+    $pathsList = @'
+__PATHS_JSON__
+'@
+    Get-FileSecurityFastBatch $pathsList
+} catch {
+    Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
+}
+`;
+
+export const psSetAclBatchScript = `
+try {
+    $entriesList = @'
+__ENTRIES_JSON__
+'@
+    Set-FileSecurityFastBatch $entriesList
 } catch {
     Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
 }

@@ -69,9 +69,9 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-       // Stamp Meta if needed
+       // Stamp Meta if needed (skip if deferStamp is set — batch stamping will handle it)
         let metaResult: { shouldUpdateItemInfo: boolean; targetErrors: string[]; sourceErrors: string[] } | null = null;
-        if (baseCmdRes.shouldStampMeta) {
+        if (baseCmdRes.shouldStampMeta && !input.deferStamp) {
             metaResult = await this.stampMetaService.stampMetaData(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
@@ -86,13 +86,31 @@ export class CommandExecService {
                 : 'success'
             : 'not_applicable';
 
+        // When stamp is deferred to batch phase:
+        // - Don't build ItemInfo yet (batch phase will build it with correct SID map data)
+        // - Don't mark command COMPLETED (stamp hasn't run yet)
+        // - Set stampMetaDataStatus to pending so batch phase can override it
+        if (input.deferStamp && baseCmdRes.shouldStampMeta) {
+            baseCmdRes.shouldUpdateItemInfo = false;
+            input.stampMetaDataStatus = 'not_applicable';
+        }
+
         if( baseCmdRes.shouldUpdateItemInfo ) {
             output.itemInfo = await this.buildFileInfo(input);
         }
-        if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
-            input.command.status = CommandStatus.ERROR
-        else 
+
+        if (input.deferStamp && baseCmdRes.shouldStampMeta) {
+            // Copy succeeded but stamp is deferred — don't set final command status yet.
+            // Batch stamp phase in executeSyncTask will set the final status.
+            // Only mark ERROR if copy itself had errors.
+            if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) {
+                input.command.status = CommandStatus.ERROR;
+            }
+        } else if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) {
+            input.command.status = CommandStatus.ERROR;
+        } else {
             input.command.status = CommandStatus.COMPLETED;
+        }
 
         return output
     }

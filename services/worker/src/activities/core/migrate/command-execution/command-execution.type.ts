@@ -14,6 +14,8 @@ export interface CommandExecInput {
     copyContentStatus?: CocOperationStatus;
     /** COC report: stamp metadata status (set by executeCommand before publishFileInfo) */
     stampMetaDataStatus?: CocOperationStatus;
+    /** When true, skip stamp phase in executeCommand — stamping will be done in batch later */
+    deferStamp?: boolean;
 }
 
 export interface CommandExecOutput {

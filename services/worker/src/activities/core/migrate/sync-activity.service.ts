@@ -1,13 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CommandStatus, ErrorType, ItemInfo, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, ErrorType, ItemInfo, JobManagerContext, OPS_CMD, OPS_STATUS, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ApplicationFailure, Context } from '@temporalio/activity';
-import { basePrefix, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
+import { basePrefix, dmError, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
+import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { CommandExecService } from "./command-execution/command-execution.service";
-import { CommandExecInput, CommandExecOutput } from "./command-execution/command-execution.type";
+import { CommandExecInput } from "./command-execution/command-execution.type";
+import { StampMetaService } from "./command-execution/stamp-meta.service";
+import { SourceAclError } from "./command-execution/win-opeartions/acl-operation.error";
 
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { handleSyncTaskUpdateInput, SyncTaskInput, SyncTaskOutput } from "./sync-activity.type";
@@ -26,7 +29,8 @@ export class SyncService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
     private readonly commonTaskService: CommonTaskService,
-    readonly commandExecService: CommandExecService
+    readonly commandExecService: CommandExecService,
+    private readonly stampMetaService: StampMetaService,
 
   ) {
     this.workerId = this.configService.get('worker.workerId');
@@ -72,34 +76,54 @@ export class SyncService {
     const baseSourcePrefixPath = basePrefix(task.jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
     const baseTargetPrefixPath = basePrefix(task.jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
     const errorType = ++task.retryCount >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR
+    const isWindows = process.platform === 'win32';
 
     let offset = 0;
     while (offset < task.commands.length) {
       let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
       offset += this.maxWriteConcurrency;
       const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
-      const results = await Promise.allSettled(filteredCommands.map(command => {
-        const scanInput: CommandExecInput = {
-          sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
-          targetPath: `${baseTargetPrefixPath}${command.fPath}`,
-          command,
-          jobContext,
-          errorType
-        };
-        return this.commandExecService.executeCommand(scanInput);
+
+      // Build inputs for this batch
+      const batchInputs: CommandExecInput[] = filteredCommands.map(command => ({
+        sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
+        targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+        command,
+        jobContext,
+        errorType,
+        deferStamp: isWindows, // On Windows, defer stamp to batch phase
       }));
 
-      // Collect ItemInfo objects and errors from batch results
+      // Phase 1: Execute copy operations (stamp deferred on Windows)
+      const results = await Promise.allSettled(
+        batchInputs.map(input => this.commandExecService.executeCommand(input))
+      );
+
+      // Collect outputs and track which inputs need batch stamping
       const batchItemInfos: ItemInfo[] = [];
-      results.forEach((result) => {
+      const needsBatchStamp: CommandExecInput[] = [];
+
+      results.forEach((result, idx) => {
         if (result.status === 'fulfilled') {
           syncOutput.errors.source.push(...result.value.sourceErrors);
           syncOutput.errors.target.push(...result.value.targetErrors);
+
+          // On Windows with deferStamp: collect inputs that need batch stamping.
+          // When deferStamp=true, executeCommand does NOT build ItemInfo or set COMPLETED status,
+          // so we only collect non-error results that have STAMP_META pending.
+          if (isWindows && result.value.sourceErrors.length === 0 && result.value.targetErrors.length === 0) {
+            const input = batchInputs[idx];
+            if (input.command.ops && input.command.ops[OPS_CMD.STAMP_META] &&
+                input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED) {
+              needsBatchStamp.push(input);
+            }
+          }
+
+          // Collect ItemInfo from non-deferred commands (deletes, non-Windows, etc.)
           if (result.value.itemInfo) {
             batchItemInfos.push(result.value.itemInfo);
           }
         } else {
-          // Handle rejected promises - treat them as errors (push array of strings)
           const messages: string[] = Array.isArray(result.reason)
             ? result.reason.map((err: any) =>
               typeof err === 'string'
@@ -110,6 +134,67 @@ export class SyncService {
           syncOutput.errors.source.push(...messages);
         }
       });
+
+      // Phase 2: Batch stamp on Windows (3 PS calls instead of 4N)
+      if (isWindows && needsBatchStamp.length > 0) {
+        try {
+          const batchStampResults = await this.stampMetaService.stampMetaDataBatch(needsBatchStamp);
+
+          for (const input of needsBatchStamp) {
+            const stampResult = batchStampResults.get(input.sourcePath);
+            if (stampResult) {
+              syncOutput.errors.source.push(...stampResult.sourceErrors);
+              syncOutput.errors.target.push(...stampResult.targetErrors);
+
+              const hasStampErrors = stampResult.sourceErrors.length > 0 || stampResult.targetErrors.length > 0;
+
+              // Update command status — this is the final status since copy succeeded in Phase 1
+              if (hasStampErrors) {
+                input.command.status = CommandStatus.ERROR;
+              } else {
+                input.command.status = CommandStatus.COMPLETED;
+              }
+
+              // Build ItemInfo now that stamping is complete (with correct SID map + status)
+              if (stampResult.shouldUpdateItemInfo) {
+                input.stampMetaDataStatus = hasStampErrors ? 'failed' : 'success';
+                input.copyContentStatus = input.copyContentStatus ?? 'not_applicable';
+                try {
+                  const itemInfo = await this.commandExecService.buildFileInfo(input);
+                  batchItemInfos.push(itemInfo);
+                } catch (buildError) {
+                  this.logger.error(`Failed to build ItemInfo for ${input.sourcePath}: ${buildError.message}`, buildError.stack);
+                }
+              }
+            } else {
+              // No stamp result returned for this input — unexpected, mark as error
+              this.logger.error(`No batch stamp result returned for ${input.sourcePath}`);
+              input.command.status = CommandStatus.ERROR;
+
+              const err = new Error(`Batch stamp produced no result for ${input.sourcePath}`);
+              const dm = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, input.command.id, err, { name: input.command.fPath, path: input.targetPath });
+              await jobContext.publishToErrorStream(dm);
+              syncOutput.errors.target.push(err.message);
+            }
+          }
+        } catch (error) {
+          // Catastrophic batch stamp failure — report per-file errors to UI
+          this.logger.error(`Batch stamp failed: ${error.message}`, error.stack);
+
+          for (const input of needsBatchStamp) {
+            const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
+            const dm = dmError("OPERATION", origin, Operation.STAMP_META, errorType, input.command.id, error, { name: input.command.fPath, path: input.targetPath });
+            await jobContext.publishToErrorStream(dm);
+
+            // Mark each command as ERROR so retry picks them up
+            input.command.status = CommandStatus.ERROR;
+            if (input.command.ops[OPS_CMD.STAMP_META]) {
+              input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
+            }
+          }
+          syncOutput.errors.target.push(error.message);
+        }
+      }
 
       // Bulk publish all ItemInfo objects from this batch in a single Redis call
       if (batchItemInfos.length > 0) {

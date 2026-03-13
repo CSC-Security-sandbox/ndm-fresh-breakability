@@ -85,6 +85,106 @@ export class StampMetaService {
         return output;
     }
 
+    /**
+     * Batch stamp metadata for multiple files on Windows.
+     * Uses batch PowerShell ACL operations (3 PS calls instead of 4N calls).
+     * Falls back to sequential stamping on non-Windows platforms.
+     * Per-file errors are isolated, reported to the error stream, and don't abort the batch.
+     */
+    async stampMetaDataBatch(inputs: CommandExecInput[]): Promise<Map<string, CommandOutput>> {
+        const results = new Map<string, CommandOutput>();
+
+        if (process.platform !== 'win32' || inputs.length === 0) {
+            // Fallback: sequential stamping for non-Windows
+            for (const input of inputs) {
+                const output = await this.stampMetaData(input);
+                results.set(input.sourcePath, output);
+            }
+            return results;
+        }
+
+        // Filter inputs that actually need stamping
+        const needsStamp = inputs.filter(
+            inp => inp.command.ops[OPS_CMD.STAMP_META] &&
+                   inp.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
+        );
+        const noStamp = inputs.filter(
+            inp => !inp.command.ops[OPS_CMD.STAMP_META] ||
+                   inp.command.ops[OPS_CMD.STAMP_META].status === OPS_STATUS.COMPLETED
+        );
+
+        // For inputs that don't need stamping, return empty output
+        for (const input of noStamp) {
+            results.set(input.sourcePath, {
+                shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true,
+            });
+        }
+
+        if (needsStamp.length === 0) return results;
+
+        // Batch ACL stamp + parallel time preservation
+        const [batchAclResults, timeResults] = await Promise.all([
+            this.winOperationService.stampAclBatch(needsStamp),
+            Promise.allSettled(needsStamp.map(inp => this.preserveAccessAndModifiedTime(inp))),
+        ]);
+
+        for (let i = 0; i < needsStamp.length; i++) {
+            const input = needsStamp[i];
+            const { command, jobContext, sourcePath, targetPath, errorType } = input;
+            const output: CommandOutput = {
+                shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true,
+            };
+
+            // Merge ACL errors
+            const aclResult = batchAclResults.get(sourcePath);
+            if (aclResult) {
+                output.sourceErrors.push(...aclResult.output.sourceErrors);
+                output.targetErrors.push(...aclResult.output.targetErrors);
+                if (aclResult.errors.length > 0) {
+                    output.targetErrors.push(...aclResult.errors);
+                }
+            }
+
+            // Merge time preservation errors
+            const timeResult = timeResults[i];
+            if (timeResult.status === 'fulfilled') {
+                output.sourceErrors.push(...timeResult.value.sourceErrors);
+                output.targetErrors.push(...timeResult.value.targetErrors);
+            } else {
+                output.sourceErrors.push(timeResult.reason?.message || 'preserveTime failed');
+            }
+
+            // Stamp access+modified time on target (only if ACL had no errors)
+            if (output.targetErrors.length === 0 && output.sourceErrors.length === 0) {
+                const stampTimeOutput = await this.stampAccessAndModifiedTime(input);
+                output.sourceErrors.push(...stampTimeOutput.sourceErrors);
+                output.targetErrors.push(...stampTimeOutput.targetErrors);
+            }
+
+            // Update status
+            if (command.ops[OPS_CMD.STAMP_META]) {
+                if (output.sourceErrors.length > 0 || output.targetErrors.length > 0)
+                    command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
+                else
+                    command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
+            }
+
+            // Publish per-file errors to the error stream for UI visibility
+            // (matches the pattern from stampObjectACL which publishes dmError per file)
+            if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) {
+                const allErrors = [...output.sourceErrors, ...output.targetErrors];
+                const origin = output.sourceErrors.length > 0 ? Origin.SOURCE : Origin.DESTINATION;
+                this.logger.error(`Batch stamp errors for ${sourcePath} -> ${targetPath}: ${allErrors.join(', ')}`);
+                const dm = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, new Error(allErrors.join(",\n")), { name: command.fPath, path: targetPath });
+                await jobContext.publishToErrorStream(dm);
+            }
+
+            results.set(sourcePath, output);
+        }
+
+        return results;
+    }
+
     @Timed({ category: 'stamp_phase', phase: 'permissions' })
     async stampPermission({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
