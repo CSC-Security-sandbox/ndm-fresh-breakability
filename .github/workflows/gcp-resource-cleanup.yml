@@ -515,23 +515,20 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y jq
 
-      - name: Cleanup GCNV Volumes
+      - name: List GCNV Volumes for Deletion
         id: cleanup
         run: |
           set +e
           
           source app-deployment/scripts/cloud-cleanup-utils.sh
           
-          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
           CUTOFF_DATE_VMS_DISKS="${{ needs.setup.outputs.cutoff_date_vms_disks }}"
           AGE_FILTER="createTime<$CUTOFF_DATE_VMS_DISKS"
           
-          DELETED_GCNV_VOLUMES=0
-          FAILED_GCNV_VOLUMES=0
-          FAILED_RESOURCES=""
-          DELETED_RESOURCES=""
+          LISTED_GCNV_VOLUMES=0
+          LISTED_RESOURCES=""
           
-          echo "=== Processing GCNV Volumes (older than $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days) ==="
+          echo "=== Listing GCNV Volumes for deletion (older than $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days) ==="
           echo "Filter: $AGE_FILTER"
 
           LOCATION_NAME="us-east4"
@@ -559,41 +556,24 @@ jobs:
                 continue
               fi
               
-              if [ "$DRY_RUN" = "true" ]; then
-                echo "DRY RUN: Would delete GCNV volume $VOLUME_NAME_SHORT in pool $POOL_NAME"
-                DELETED_GCNV_VOLUMES=$((DELETED_GCNV_VOLUMES + 1))
-                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME_SHORT ($POOL_NAME)"
-              else
-                if gcloud netapp volumes delete "$VOLUME_NAME_SHORT" --project="$GCP_PROJECT_ID" --location="$LOCATION_NAME" --quiet 2>&1; then
-                  echo "Deleted GCNV volume: $VOLUME_NAME_SHORT"
-                  DELETED_GCNV_VOLUMES=$((DELETED_GCNV_VOLUMES + 1))
-                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $VOLUME_NAME_SHORT ($POOL_NAME)"
-                else
-                  echo "Failed to delete GCNV volume: $VOLUME_NAME_SHORT"
-                  FAILED_RESOURCES="$FAILED_RESOURCES\nGCNV Volume: $VOLUME_NAME_SHORT ($POOL_NAME)"
-                  FAILED_GCNV_VOLUMES=$((FAILED_GCNV_VOLUMES + 1))
-                fi
-              fi
+              echo "Volume $VOLUME_NAME_SHORT in pool $POOL_NAME"
+              LISTED_GCNV_VOLUMES=$((LISTED_GCNV_VOLUMES + 1))
+              LISTED_RESOURCES="$LISTED_RESOURCES\n  - $VOLUME_NAME_SHORT ($POOL_NAME)"
             done
           else
             echo "No GCNV volumes found in location $LOCATION_NAME"
           fi
           
-          echo "deleted_gcnv_volumes=$DELETED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
-          echo "failed_gcnv_volumes=$FAILED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
+          echo "deleted_gcnv_volumes=$LISTED_GCNV_VOLUMES" >> $GITHUB_OUTPUT
+          echo "failed_gcnv_volumes=0" >> $GITHUB_OUTPUT
           echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo -e "$LISTED_RESOURCES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          echo -e "\nSummary: Deleted=$DELETED_GCNV_VOLUMES, Failed=$FAILED_GCNV_VOLUMES"
-          
-          if [ "$FAILED_GCNV_VOLUMES" -gt 0 ]; then
-            echo "ERROR: Failed to delete $FAILED_GCNV_VOLUMES GCNV volume(s)"
-            exit 1
-          fi
+          echo -e "\nSummary: Pending manual deletion=$LISTED_GCNV_VOLUMES"
 
   generate-report:
     runs-on: ubuntu-latest
@@ -679,7 +659,7 @@ jobs:
           fi
           if [ -n "${{ needs.cleanup-gcnv.outputs.deleted_resources }}" ]; then
             if [ "$DELETED_GCNV_VOLUMES" -gt 0 ]; then
-              DELETED_RESOURCES="$DELETED_RESOURCES\n\nGCNV Volumes ($DELETED_GCNV_VOLUMES):${{ needs.cleanup-gcnv.outputs.deleted_resources }}"
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nGCNV Volumes - ($DELETED_GCNV_VOLUMES):${{ needs.cleanup-gcnv.outputs.deleted_resources }}"
             fi
           fi
           
@@ -693,7 +673,7 @@ jobs:
           echo "Disks deleted: $DELETED_DISKS (failed: $FAILED_DISKS)"
           echo "Snapshots deleted: $DELETED_SNAPSHOTS (failed: $FAILED_SNAPSHOTS)"
           echo "Images deleted: $DELETED_IMAGES (failed: $FAILED_IMAGES)"
-          echo "GCNV Volumes deleted: $DELETED_GCNV_VOLUMES (failed: $FAILED_GCNV_VOLUMES)"
+          echo "GCNV Volumes: $DELETED_GCNV_VOLUMES"
           echo "----------------------------------------"
           echo "Total deleted: $TOTAL_DELETED"
           echo "Total failed: $TOTAL_FAILED"
