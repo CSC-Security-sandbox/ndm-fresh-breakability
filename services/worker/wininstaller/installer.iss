@@ -415,6 +415,31 @@ begin
 
     CreateVersionsConfig();
 
+    // Apply SMB and TCP performance tuning for cross-region migration throughput
+    Log('Applying SMB and TCP performance tuning...');
+    Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Set-SmbClientConfiguration -MaxCmds 128 -ConnectionCountPerRssNetworkInterface 4 -DirectoryCacheLifetime 30 -FileInfoCacheLifetime 30 -FileNotFoundCacheLifetime 30 -EnableMultiChannel $true -EnableBandwidthThrottling $false -EnableLargeMtu $true -Force"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode = 0 then
+      Log('SMB client configuration applied successfully')
+    else
+      Log('SMB client configuration failed with code: ' + IntToStr(ResultCode));
+
+    Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'' -Name TcpWindowSize -Value 4194304 -Type DWord; Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'' -Name GlobalMaxTcpWindowSize -Value 4194304 -Type DWord; Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'' -Name Tcp1323Opts -Value 3 -Type DWord"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode = 0 then
+      Log('TCP window tuning applied successfully')
+    else
+      Log('TCP window tuning failed with code: ' + IntToStr(ResultCode));
+
+    Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'' -Name MaxCmds -Value 128 -Type DWord; Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'' -Name MaxCollectionCount -Value 32 -Type DWord; Set-ItemProperty -Path ''HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'' -Name RequireSecuritySignature -Value 0 -Type DWord"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if ResultCode = 0 then
+      Log('LanmanWorkstation tuning applied successfully')
+    else
+      Log('LanmanWorkstation tuning failed with code: ' + IntToStr(ResultCode));
+
+    Log('SMB and TCP performance tuning completed');
+
     // Install prerequisites and fluent-package
     Log('Installing VC++ Redistributable...');
     InstallVCRedist();

@@ -257,6 +257,39 @@ Write-Log "versions.conf: $previousVersion -> $Version"
 Set-Content -Path $UpgradedFlag -Value "true"
 Write-Log "UPGRADED flag set to true"
 
+# == Apply SMB and TCP Performance Tuning ======================================
+
+Write-Log "Applying SMB and TCP performance tuning..."
+
+try {
+  Set-SmbClientConfiguration -MaxCmds 128 -ConnectionCountPerRssNetworkInterface 4 `
+    -DirectoryCacheLifetime 30 -FileInfoCacheLifetime 30 -FileNotFoundCacheLifetime 30 `
+    -EnableMultiChannel $true -EnableBandwidthThrottling $false -EnableLargeMtu $true -Force
+  Write-Log "SMB client configuration applied"
+} catch {
+  Write-Log "WARNING: SMB client configuration failed: $($_.Exception.Message)"
+}
+
+try {
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name TcpWindowSize -Value 4194304 -Type DWord
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name GlobalMaxTcpWindowSize -Value 4194304 -Type DWord
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name Tcp1323Opts -Value 3 -Type DWord
+  Write-Log "TCP window tuning applied"
+} catch {
+  Write-Log "WARNING: TCP window tuning failed: $($_.Exception.Message)"
+}
+
+try {
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name MaxCmds -Value 128 -Type DWord
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name MaxCollectionCount -Value 32 -Type DWord
+  Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name RequireSecuritySignature -Value 0 -Type DWord
+  Write-Log "LanmanWorkstation tuning applied"
+} catch {
+  Write-Log "WARNING: LanmanWorkstation tuning failed: $($_.Exception.Message)"
+}
+
+Write-Log "SMB and TCP performance tuning completed"
+
 # == Start Service =============================================================
 
 Write-Log "Starting service..."

@@ -186,7 +186,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
             $qualifier,
             [int]$ace.AccessMask,
             $sid,
-            $ace.IsInherited,
+            [bool]$false,
             $null
         )
         
@@ -346,33 +346,35 @@ function SidToName {
 }
 function Get-FileSecurityFastBatch([string]$pathsJson) {
     $paths = $pathsJson | ConvertFrom-Json
-    $results = New-Object System.Collections.Generic.List[object]
+    $jsonParts = New-Object System.Collections.Generic.List[string]
     foreach ($p in $paths) {
+        $escapedPath = $p | ConvertTo-Json -Compress
         try {
-            $jsonStr = Get-FileSecurityFast $p
-            $aclObj = $jsonStr | ConvertFrom-Json
-            $results.Add([PSCustomObject]@{ path = $p; success = $true; acl = $aclObj; error = $null })
+            $aclJson = Get-FileSecurityFast $p
+            $jsonParts.Add('{"path":' + $escapedPath + ',"success":true,"acl":' + $aclJson + ',"error":null}')
         } catch {
-            $results.Add([PSCustomObject]@{ path = $p; success = $false; acl = $null; error = $_.Exception.Message })
+            $escapedError = $_.Exception.Message | ConvertTo-Json -Compress
+            $jsonParts.Add('{"path":' + $escapedPath + ',"success":false,"acl":null,"error":' + $escapedError + '}')
         }
     }
-    ConvertTo-Json -InputObject @($results) -Compress -Depth 10
+    '[' + ($jsonParts -join ',') + ']'
 }
 
 function Set-FileSecurityFastBatch([string]$entriesJson) {
     $entries = $entriesJson | ConvertFrom-Json
-    $results = New-Object System.Collections.Generic.List[object]
+    $jsonParts = New-Object System.Collections.Generic.List[string]
     foreach ($entry in $entries) {
+        $escapedPath = $entry.path | ConvertTo-Json -Compress
         try {
             $aclStr = $entry.acl | ConvertTo-Json -Compress -Depth 10
-            $setOutput = Set-FileSecurityFast $entry.path $aclStr
-            $parsed = $setOutput | ConvertFrom-Json
-            $results.Add([PSCustomObject]@{ path = $entry.path; success = $true; result = $parsed; error = $null })
+            $resultJson = Set-FileSecurityFast $entry.path $aclStr
+            $jsonParts.Add('{"path":' + $escapedPath + ',"success":true,"result":' + $resultJson + ',"error":null}')
         } catch {
-            $results.Add([PSCustomObject]@{ path = $entry.path; success = $false; result = $null; error = $_.Exception.Message })
+            $escapedError = $_.Exception.Message | ConvertTo-Json -Compress
+            $jsonParts.Add('{"path":' + $escapedPath + ',"success":false,"result":null,"error":' + $escapedError + '}')
         }
     }
-    ConvertTo-Json -InputObject @($results) -Compress -Depth 10
+    '[' + ($jsonParts -join ',') + ']'
 }
 
 function Get-NTFSLinkInfo {
