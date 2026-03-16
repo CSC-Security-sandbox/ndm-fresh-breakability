@@ -30,11 +30,13 @@ export class ValidateConnectionActivity {
       workerId: this.workerId,
       paths: [],
       protocolVersions: [],
+      warnings: [],
       message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
     try {
       const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
-      await protocol.validateConnection(traceId, payload);
+      const validateResult = await protocol.validateConnection(traceId, payload);  // ← capture
+      response.warnings = validateResult?.warnings ?? [];    
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);
       }

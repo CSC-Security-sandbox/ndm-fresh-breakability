@@ -131,6 +131,7 @@ export type ErroredWorkersDetailsType = {
   workerId: string;
   workerName: string;
   errorMessage: string;
+  warnings?: string[];
 };
 
 export type WorkerIdWithNameType = {

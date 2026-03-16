@@ -10,6 +10,48 @@ export class WindowsPrivilegeService {
     private readonly logger = new Logger(WindowsPrivilegeService.name);
     private privilegesEnabled = false;
 
+    async checkBackupOperatorMembership(
+        traceId: string,
+        checkCommand: string,
+        username: string
+    ): Promise<'IS_MEMBER' | 'NOT_MEMBER' | 'SKIPPED'> {
+        if (process.platform !== 'win32') {
+            return 'SKIPPED';
+        }
+    
+        this.logger.log(`[${traceId}] Checking Backup Operators group membership for user: ${username}`);
+    
+        try {
+            const command = checkCommand.replaceAll('${USERNAME}', username);
+            const { stdout, stderr } = await execAsync(command, { windowsHide: true, timeout: 15000 });
+    
+            if (stderr) {
+                this.logger.warn(`[${traceId}] stderr during group check: ${stderr}`);
+            }
+    
+            const result = stdout.trim();
+            this.logger.log(`[${traceId}] Backup Operators check output: ${result}`);
+    
+            if (result.includes('SKIPPED')) {
+                this.logger.log(`[${traceId}] Worker is not domain-joined. Skipping Backup Operators check.`);
+                return 'SKIPPED';
+            }
+    
+            if (result.includes('IS_MEMBER')) {
+                this.logger.log(`[${traceId}] Backup Operators membership confirmed.`);
+                return 'IS_MEMBER';
+            }
+    
+            this.logger.warn(`[${traceId}] User is NOT a member of Backup Operators.`);
+            return 'NOT_MEMBER';
+    
+        } catch (error) {
+            this.logger.error(`[${traceId}] Error checking Backup Operators membership: ${error.message}`);
+            // Best-effort — never block validation on a check failure
+            return 'SKIPPED';
+        }
+    }
+
     /**
      * Enable Windows SeBackupPrivilege and SeRestorePrivilege for the current process
      * This allows bypassing file permissions when accessing SMB shares

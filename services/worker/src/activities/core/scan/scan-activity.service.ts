@@ -157,6 +157,14 @@ export class ScanService {
         task.status = TaskStatus.ERRORED
         await jobContext.publishToTaskStream(task);
        
+        if (errors.some(e => e === 'EPERM')) {
+            await jobContext.deleteTask(taskHashId);
+            throw new FatalError(
+                'Access denied scanning directory (EPERM). ' +
+                'Ensure the SMB credential is a member of the Backup Operators group in Active Directory.'
+            );
+        }
+
         if (errors.some(isSourceFatalError)) {
             await jobContext.deleteTask(taskHashId);
             throw new FatalError(`Sync Task Update Failed: ${errors.length} source errors with retry count ${retryCount} With Fatal Error`);

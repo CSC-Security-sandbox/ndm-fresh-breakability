@@ -389,6 +389,15 @@ export const useFileServerForm = () => {
           nfsValidatedWorkers.push(row?.workerId);
         else if (row?.protocolType === ProtocolType.SMB)
           smbValidatedWorkers.push(row?.workerId);
+
+        if (row?.warnings?.length > 0) {
+          newErrorMessageList.push({
+            errorMessage: '',
+            warnings: row.warnings,
+            workerId: row?.workerId,
+            workerName: workerIdWithName?.[row?.workerId] || 'workerName',
+          });
+        }
       } else if (row.status === WorkerConnectionStatus.ERROR) {
         newErrorMessageList.push({
           errorMessage: row?.message || "Unknown-Error",

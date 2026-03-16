@@ -90,6 +90,7 @@ interface CompletedConnection {
   paths: string[];
   protocolVersions: string[];
   message: string;
+  warnings?: string[];
 }
 
 export interface ValidateConnectionApiType {
