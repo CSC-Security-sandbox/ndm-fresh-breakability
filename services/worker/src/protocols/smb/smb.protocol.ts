@@ -31,9 +31,8 @@ export class SMBProtocol extends Protocol {
 
     if (this.platform === 'win32' && this.windowsPrivilegeService) {
         this.logger.log(`[${traceId}] Checking Backup Operators group membership for user: ${payload.username}`);
-        const checkCommand = this.getCommandPattern(CommandPattern.CHECK_BACKUP_OPERATORS);
         const result = await this.windowsPrivilegeService.checkBackupOperatorMembership(
-            traceId, checkCommand, payload.username
+            traceId, payload.username, payload.password
         );
 
         if (result === 'SKIPPED') {

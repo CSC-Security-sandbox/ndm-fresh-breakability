@@ -12,43 +12,78 @@ export class WindowsPrivilegeService {
 
     async checkBackupOperatorMembership(
         traceId: string,
-        checkCommand: string,
-        username: string
+        username: string,
+        password: string
     ): Promise<'IS_MEMBER' | 'NOT_MEMBER' | 'SKIPPED'> {
         if (process.platform !== 'win32') {
             return 'SKIPPED';
         }
-    
+
         this.logger.log(`[${traceId}] Checking Backup Operators group membership for user: ${username}`);
-    
+
+        // Escape single quotes in credentials to avoid breaking the PS script string literals
+        const safeUsername = username.replace(/'/g, "''");
+        const safePassword = password.replace(/'/g, "''");
+
+        const psScript = `
+$cs = Get-WmiObject Win32_ComputerSystem
+if ($cs.PartOfDomain -eq $false) {
+    Write-Output 'SKIPPED'
+    exit
+}
+try {
+    $domain = $cs.Domain
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher
+    $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domain", "$domain\\${safeUsername}", '${safePassword}')
+    $searcher.Filter = "(&(objectClass=group)(cn=Backup Operators))"
+    $searcher.PropertiesToLoad.Add("member") | Out-Null
+    $result = $searcher.FindOne()
+    $members = $result.Properties["member"]
+    $isMember = $members | Where-Object { $_ -imatch "CN=${safeUsername}," }
+    if ($isMember) { Write-Output 'IS_MEMBER' } else { Write-Output 'NOT_MEMBER' }
+} catch {
+    Write-Output 'SKIPPED'
+}
+`;
+
+        const scriptPath = path.join(os.tmpdir(), `check_backup_ops_${traceId}.ps1`);
+
         try {
-            const command = checkCommand.replaceAll('${USERNAME}', username);
-            const { stdout, stderr } = await execAsync(command, { windowsHide: true, timeout: 15000 });
-    
+            await fs.promises.writeFile(scriptPath, psScript, 'utf8');
+            const { stdout, stderr } = await execAsync(
+                `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+                { windowsHide: true, timeout: 15000 }
+            );
+
             if (stderr) {
                 this.logger.warn(`[${traceId}] stderr during group check: ${stderr}`);
             }
-    
+
             const result = stdout.trim();
             this.logger.log(`[${traceId}] Backup Operators check output: ${result}`);
-    
+
             if (result.includes('SKIPPED')) {
                 this.logger.log(`[${traceId}] Worker is not domain-joined. Skipping Backup Operators check.`);
                 return 'SKIPPED';
             }
-    
+
             if (result.includes('IS_MEMBER')) {
                 this.logger.log(`[${traceId}] Backup Operators membership confirmed.`);
                 return 'IS_MEMBER';
             }
-    
+
             this.logger.warn(`[${traceId}] User is NOT a member of Backup Operators.`);
             return 'NOT_MEMBER';
-    
+
         } catch (error) {
             this.logger.error(`[${traceId}] Error checking Backup Operators membership: ${error.message}`);
-            // Best-effort — never block validation on a check failure
             return 'SKIPPED';
+        } finally {
+            try {
+                await fs.promises.unlink(scriptPath);
+            } catch {
+                // ignore cleanup errors
+            }
         }
     }
 

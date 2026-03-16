@@ -18,8 +18,7 @@ export enum CommandPattern{
     MOUNTED_FOLDER_SIZE='mountedFolderSize',
     AVAILABLE_DISK_SPACE='availableDiskSpace',
     FSTAB_PATH='fstabPath',
-    SAVE_CREDS='saveCreds',
-    CHECK_BACKUP_OPERATORS='checkBackupOperators'
+    SAVE_CREDS='saveCreds'
 }
 
 // @types 
@@ -51,7 +50,6 @@ export interface BaseCommands {
     availableDiskSpace? : string | undefined
     fstabPath? : string | undefined
     saveCreds? : string | undefined
-    checkBackupOperators?: string | undefined
 }
 
 export default registerAs(
@@ -101,8 +99,7 @@ export default registerAs(
                 setSIDforDirObject: process.env.SMB_WIN_SET_SID_FOR_DIR_OBJECT_CMD,
                 mountedFolderSize: process.env.WIN_USED_DISK_SPACE,
                 availableDiskSpace: process.env.WIN_AVAILABLE_DISK_SPACE_CMD,
-                saveCreds: process.env.SMB_WIN_SAVE_CREDS,
-                checkBackupOperators: process.env.SMB_WIN_CHECK_BACKUP_OPERATORS_CMD
+                saveCreds: process.env.SMB_WIN_SAVE_CREDS
             },
             linux: {
                 listPath: process.env.SMB_LINUX_LIST_PATH_CMD,
