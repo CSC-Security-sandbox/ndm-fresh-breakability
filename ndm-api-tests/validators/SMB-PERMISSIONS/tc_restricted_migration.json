@@ -1,0 +1,38 @@
+[
+  {
+    "Source Path": "auto_smb_restrictedVol\\full_inherited_access",
+    "Destination Checksum": ""
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\full_inherited_access\\full_access.txt",
+    "Destination Checksum": "fe7426d6513e31afcaced9bc524748605e8006538b6d03ab51e85fc2a9e9e47a"
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\local_users_groups",
+    "Destination Checksum": ""
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\local_users_groups\\local_group.txt",
+    "Destination Checksum": "4a85234eda9d59457a9801e0669907880ba494943287f16b756a48113b37beb8"
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\local_users_groups\\local_user.txt",
+    "Destination Checksum": "f5050acdab9db5cf64d1bc8da7b39bf999a4470c4c3d5192418ce34970711877"
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\restricted_access",
+    "Destination Checksum": ""
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\restricted_access\\restricted_file.txt",
+    "Destination Checksum": "0544ed9580e24bf9da9d5f1828bfcb1805c0221850be3f1d0808cbada83991f8"
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\single_access",
+    "Destination Checksum": ""
+  },
+  {
+    "Source Path": "auto_smb_restrictedVol\\single_access\\single_file.txt",
+    "Destination Checksum": "dee7ccf4216defd8cbb7e7dd39aaf8fa571e836193b62856305145af2340e0fd"
+  }
+]
