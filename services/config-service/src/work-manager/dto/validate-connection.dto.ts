@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsString, IsArray, IsObject, IsOptional, ValidateNested, IsUUID } from 'class-validator';
 import { Trim } from '../../utils/transformers';
 import { ExportPathSource } from 'src/constants/enums';
+import { WORKFLOW_EXECUTION_TIMEOUT_SECONDS } from 'src/constants/constants';
 
 class Protocol {
   @ApiProperty({ enum: ['NFS', 'SMB'], description: 'The type of protocol (NFS or SMB)' })
@@ -42,10 +43,10 @@ class FileServer {
 }
 
 export class Options {
-  @ApiProperty({ description: 'Timeout for workflow execution', default: '60s', required: false })
+  @ApiProperty({ description: 'Timeout for workflow execution', default: `${WORKFLOW_EXECUTION_TIMEOUT_SECONDS}s`, required: false })
   @IsOptional()
   @IsString()
-  workflowExecutionTimeout: string = '60s';
+  workflowExecutionTimeout: string = `${WORKFLOW_EXECUTION_TIMEOUT_SECONDS}s`;
 
   @ApiProperty({ description: 'Timeout for workflow task', default: '30s', required: false })
   @IsOptional()

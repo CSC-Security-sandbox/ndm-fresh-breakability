@@ -45,6 +45,7 @@ import {
   CreateRequestDto,
   Options,
 } from 'src/work-manager/dto/validate-connection.dto';
+import { WORKFLOW_EXECUTION_TIMEOUT_SECONDS } from 'src/constants/constants';
 import { ListPathDTO } from 'src/work-manager/dto/validate-export-path.dto';
 import {
   StartWorkFlowPayload,
@@ -1916,43 +1917,45 @@ export class ConfigurationService {
   }
 
   async updateResult(id: string, configId: string) {
-    try {
-      setTimeout(async () => {
-        try {
-          const details: ListPathWorkflowStatus =
-            (await this.workFlowService.getWorkFlowRes(
-              id,
-            )) as ListPathWorkflowStatus;
-
-          if (!details) {
-            this.logger.warn(`No workflow details found for workflowId: ${id}`);
-            return;
-          }
-
-          if (details.status === WorkflowExecutionStatus.COMPLETED) {
-            await this.updatePaths(configId, details);
-          } else {
-            this.logger.warn(
-              `Workflow ${id} did not complete. Status: ${details.status}`,
-            );
-          }
-        } catch (error) {
-          this.logger.error(`Error fetching workflow result: ${error.message}`);
-        }
-      }, 2000);
-    } catch (error) {
-      this.logger.error(`Unexpected error in updateResult: ${error.message}`);
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
+    const pollIntervalMs = 2000;
+    const maxAttempts = Math.floor((WORKFLOW_EXECUTION_TIMEOUT_SECONDS * 1000) / pollIntervalMs); // 30 attempts for 60s
+    let attemptCount = 0;
+    const interval = setInterval(async () => {
+      if (attemptCount >= maxAttempts) {
+        this.logger.warn(`Workflow ${id}, timed out after ${maxAttempts} attempts.`);
+        clearInterval(interval);
+        return;
       }
-      throw new InternalServerErrorException(
-        `Failed to update workflow result. ${error.message}`,
-      );
-    }
+      attemptCount++;
+      try {
+        const details: ListPathWorkflowStatus =
+          (await this.workFlowService.getWorkFlowRes(
+            id,
+          )) as ListPathWorkflowStatus;
+        if (!details) {
+          this.logger.warn(`No workflow details found for workflowId: ${id}`);
+          clearInterval(interval);
+          return;
+        }
+        if (details.status === WorkflowExecutionStatus.COMPLETED) {
+          clearInterval(interval);
+          await this.updatePaths(configId, details);
+          return;
+        } else if (details.status !== WorkflowExecutionStatus.RUNNING) {
+          this.logger.warn(
+            `Workflow ${id} did not complete. Status: ${details.status}`,
+          );
+          clearInterval(interval);
+          return;
+        }
+      } catch (error) {
+        this.logger.error(`Error fetching workflow result: ${error.message}`);
+        clearInterval(interval);
+        return;
+      }
+    }, pollIntervalMs);
   }
+  
 
   /**
    * Updates volumes after Other NAS workflow (ListPathsWorkflow) completes.

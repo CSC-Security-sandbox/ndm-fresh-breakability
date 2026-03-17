@@ -6,3 +6,5 @@ export const WORKFLOW_TIMEOUTS = {
     CHILD_WORKFLOW_RUN_TIMEOUT: '19h',
     ACTIVITY_TIMEOUT: '6h',
 } as const;
+
+export const WORKFLOW_EXECUTION_TIMEOUT_SECONDS = 60;

@@ -1320,19 +1320,14 @@ describe('ConfigurationService', () => {
     });
 
     it('should handle and wrap errors from getWorkFlowRes', async () => {
-      // Mock workflowService.getWorkFlowRes to throw an error
-      jest.spyOn(workflowService, 'getWorkFlowRes').mockImplementation(() => {
-        throw new Error('Workflow service error');
-      });
+      jest.spyOn(workflowService, 'getWorkFlowRes').mockRejectedValue(
+        new Error('Workflow service error'),
+      );
 
-      // Call updateResult
       service.updateResult('workflow-id', 'config-id');
 
-      // Fast-forward timers
-      jest.runAllTimers();
-      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(2000);
 
-      // Verify that the error is logged
       expect(service['logger'].error).toHaveBeenCalled();
     });
   });
@@ -3439,15 +3434,18 @@ describe('ConfigurationService', () => {
   });
 
   describe('updateResult', () => {
+    const POLL_INTERVAL_MS = 2000;
+
     beforeEach(() => {
       jest.useFakeTimers();
+      jest.clearAllMocks();
     });
 
     afterEach(() => {
       jest.useRealTimers();
     });
 
-    it('should handle workflow completion and update paths', async () => {
+    it('should stop polling and call updatePaths on COMPLETED', async () => {
       const workflowId = 'workflow-1';
       const configId = 'config-1';
       const mockWorkflowResult = {
@@ -3460,59 +3458,134 @@ describe('ConfigurationService', () => {
         ],
       };
 
-      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
+      getWorkFlowResMock.mockResolvedValue(mockWorkflowResult);
       jest.spyOn(service, 'updatePaths').mockResolvedValue(undefined);
-      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
 
       service.updateResult(workflowId, configId);
 
-      jest.runAllTimers();
-      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
 
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
       expect(getWorkFlowResMock).toHaveBeenCalledWith(workflowId);
       expect(service.updatePaths).toHaveBeenCalledWith(
         configId,
         mockWorkflowResult,
       );
+
+      // No further polls after COMPLETED
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
     }, 10000);
 
-    it('should handle missing workflow details', async () => {
-      getWorkFlowResMock.mockResolvedValueOnce(null);
-
-      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
-      service.updateResult('workflow-1', 'config-1');
-
-      jest.runAllTimers();
-      await Promise.resolve();
-
-      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
-    });
-
-    it('should handle non-completed workflow status', async () => {
-      const mockWorkflowResult = {
-        status: WorkflowExecutionStatus.RUNNING,
-        completed: [],
+    it('should keep polling while status is RUNNING and stop on COMPLETED', async () => {
+      const runningResult = { status: WorkflowExecutionStatus.RUNNING, completed: [] };
+      const completedResult = {
+        status: WorkflowExecutionStatus.COMPLETED,
+        completed: [{ protocolType: 'NFS', paths: ['/path1'] }],
       };
 
-      getWorkFlowResMock.mockResolvedValueOnce(mockWorkflowResult);
-      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+      getWorkFlowResMock
+        .mockResolvedValueOnce(runningResult)
+        .mockResolvedValueOnce(runningResult)
+        .mockResolvedValueOnce(completedResult);
+      jest.spyOn(service, 'updatePaths').mockResolvedValue(undefined);
 
       service.updateResult('workflow-1', 'config-1');
 
-      jest.runAllTimers();
-      await Promise.resolve();
+      // Tick 1: RUNNING – keeps polling
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
+      expect(service.updatePaths).not.toHaveBeenCalled();
 
-      expect(loggerFactoryMock.create().warn).toHaveBeenCalled();
-    });
+      // Tick 2: RUNNING – keeps polling
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(2);
+      expect(service.updatePaths).not.toHaveBeenCalled();
 
-    it('should handle workflow fetch error', async () => {
-      getWorkFlowResMock.mockRejectedValueOnce(new Error('Fetch error'));
-      jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
+      // Tick 3: COMPLETED – stops
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(3);
+      expect(service.updatePaths).toHaveBeenCalledTimes(1);
+
+      // No further polls
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(3);
+    }, 10000);
+
+    it('should stop polling and warn on terminal (non-RUNNING, non-COMPLETED) status', async () => {
+      const timedOutResult = { status: WorkflowExecutionStatus.TIMED_OUT, completed: [] };
+
+      getWorkFlowResMock.mockResolvedValue(timedOutResult);
+
       service.updateResult('workflow-1', 'config-1');
-      jest.runAllTimers();
-      await Promise.resolve();
-      expect(loggerFactoryMock.create().error).toHaveBeenCalled();
+
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalledWith(
+        expect.stringContaining('did not complete'),
+      );
+
+      // No further polls after terminal status
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
     });
+
+    it('should stop polling and warn when workflow details are null', async () => {
+      getWorkFlowResMock.mockResolvedValue(null);
+
+      service.updateResult('workflow-1', 'config-1');
+
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalledWith(
+        expect.stringContaining('No workflow details found'),
+      );
+
+      // No further polls
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop polling and log error on fetch failure', async () => {
+      getWorkFlowResMock.mockRejectedValue(new Error('Fetch error'));
+
+      service.updateResult('workflow-1', 'config-1');
+
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(loggerFactoryMock.create().error).toHaveBeenCalledWith(
+        expect.stringContaining('Fetch error'),
+      );
+
+      // No further polls after error
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop polling and warn when max attempts are reached', async () => {
+      const runningResult = { status: WorkflowExecutionStatus.RUNNING, completed: [] };
+      getWorkFlowResMock.mockResolvedValue(runningResult);
+
+      service.updateResult('workflow-1', 'config-1');
+
+      // WORKFLOW_EXECUTION_TIMEOUT_SECONDS = 60, pollInterval = 2000ms → maxAttempts = 30
+      // attemptCount is checked before increment, so tick 31 is where attemptCount (30) >= maxAttempts (30)
+      // Ticks 1-30: attemptCount goes 0→30, each tick calls getWorkFlowRes (RUNNING)
+      // Tick 31: attemptCount is 30, >= 30 → logs "timed out" and clears interval
+      for (let i = 0; i < 31; i++) {
+        await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      }
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalledWith(
+        expect.stringContaining('timed out'),
+      );
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(30);
+
+      // No further polls after timeout
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(30);
+    }, 15000);
   });
 
   describe('updatePaths', () => {
@@ -5668,6 +5741,11 @@ describe('ConfigurationService', () => {
   describe('updateResult - error handling', () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
     it('should handle workflow with no details gracefully', async () => {
@@ -5675,10 +5753,18 @@ describe('ConfigurationService', () => {
       const configId = uuidv4();
       mockWorkflowService.getWorkFlowRes.mockResolvedValue(null);
 
-      // updateResult uses setTimeout internally, so it won't throw immediately
-      // Just verify it doesn't throw
-      await service.updateResult(workflowId, configId);
-      expect(true).toBe(true);
+      service.updateResult(workflowId, configId);
+
+      await jest.advanceTimersByTimeAsync(2000);
+
+      expect(loggerFactoryMock.create().warn).toHaveBeenCalledWith(
+        expect.stringContaining('No workflow details found'),
+      );
+
+      // Verify polling stopped
+      mockWorkflowService.getWorkFlowRes.mockClear();
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(mockWorkflowService.getWorkFlowRes).not.toHaveBeenCalled();
     });
   });
 
