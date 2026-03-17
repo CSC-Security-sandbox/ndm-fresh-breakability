@@ -130,29 +130,33 @@ func fetchReport(
 	fmtType Format,
 	reportType string,
 ) ([]byte, error) {
-	// 1) pick endpoint and payload
 	var (
-		url     string
-		payload interface{}
+		url        string
+		httpMethod string
+		bodyBytes  []byte
 	)
 	switch fmtType {
 	case FormatCSV:
-		url = ADMIN_SERVICE_URL + "/api/v1/report/inventory/download"
-		jobRun := []string{jobRunID}
 		reportTypeVal := "COC"
 		if reportType == string(JobTypeDiscovery) {
 			reportTypeVal = reportType
 		}
-		payload = map[string]interface{}{
-			"jobRunId":    jobRun,
-			"report-type": reportTypeVal,
-		}
+		url = fmt.Sprintf("%s/api/v1/report/inventory/download?jobRunId=%s&report-type=%s",
+			ADMIN_SERVICE_URL, jobRunID, reportTypeVal)
+		httpMethod = http.MethodGet
+		bodyBytes = nil
 
 	case FormatPDF:
 		url = ADMIN_SERVICE_URL + "/api/v1/report/pdf/generate"
-		payload = map[string]interface{}{
+		httpMethod = http.MethodPost
+		payload := map[string]interface{}{
 			"jobRunId":    jobRunID,
 			"report-type": reportType,
+		}
+		var err error
+		bodyBytes, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request JSON: %w", err)
 		}
 
 	default:
@@ -160,24 +164,16 @@ func fetchReport(
 	}
 	Wait(20)
 
-	// 2) marshal JSON body
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request JSON: %w", err)
-	}
-
-	// 3) get token from env and prepare headers
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
 	const maxRetries = MaxPollRetries
-	const retryDelay = DefaultPollInterval // adjust as needed
+	const retryDelay = DefaultPollInterval
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// 4) send POST
 		LogDebug(fmt.Sprintf("Getting %s reports for %s ID %s, attempt %d", fmtType, reportType, jobRunID, attempt))
-		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
+		resp, err := SendAPIRequest(httpMethod, url, bodyBytes, headers)
 		if err != nil {
-			return nil, fmt.Errorf("POST %s: %w", url, err)
+			return nil, fmt.Errorf("%s %s: %w", httpMethod, url, err)
 		}
 		defer resp.Body.Close()
 

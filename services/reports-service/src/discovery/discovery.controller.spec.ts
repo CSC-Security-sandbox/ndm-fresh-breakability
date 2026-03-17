@@ -123,30 +123,42 @@ describe('DiscoveryController', () => {
 
   describe('downloadReports', () => {
     it('should download reports successfully', async () => {
-      const jobRunIds = ['job1', 'job2'];
+      const jobRunIdParam = 'job1,job2';
       const reportType = ReportType.DISCOVERY;
       const mockBuffer = Buffer.from('test');
       mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
 
-      const result = await controller.downloadReports(jobRunIds, reportType);
+      const result = await controller.downloadReports(jobRunIdParam, reportType);
 
       expect(result).toBeInstanceOf(StreamableFile);
-      expect(service.getReportsAsZip).toHaveBeenCalledWith(jobRunIds, reportType);
+      expect(service.getReportsAsZip).toHaveBeenCalledWith(['job1', 'job2'], reportType);
     });
 
-    it('should throw BadRequestException when jobRunIds is empty', async () => {
-      await expect(controller.downloadReports([], ReportType.DISCOVERY)).rejects.toThrow(
+    it('should download reports for a single jobRunId', async () => {
+      const jobRunIdParam = 'job1';
+      const reportType = ReportType.COC;
+      const mockBuffer = Buffer.from('test');
+      mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
+
+      const result = await controller.downloadReports(jobRunIdParam, reportType);
+
+      expect(result).toBeInstanceOf(StreamableFile);
+      expect(service.getReportsAsZip).toHaveBeenCalledWith(['job1'], reportType);
+    });
+
+    it('should throw BadRequestException when jobRunIdParam is empty', async () => {
+      await expect(controller.downloadReports('', ReportType.DISCOVERY)).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );
     });
 
     it('should throw BadRequestException when reportType is invalid', async () => {
-      await expect(controller.downloadReports(['job1'], 'INVALID' as any)).rejects.toThrow(
+      await expect(controller.downloadReports('job1', 'INVALID' as any)).rejects.toThrow(
         new BadRequestException('Invalid report type. Allowed values are COC or discovery')
       );
     });
 
-    it('should throw BadRequestException when jobRunIds is null', async () => {
+    it('should throw BadRequestException when jobRunIdParam is null', async () => {
       await expect(controller.downloadReports(null, ReportType.DISCOVERY)).rejects.toThrow(
         new BadRequestException('jobRunId array must not be empty')
       );

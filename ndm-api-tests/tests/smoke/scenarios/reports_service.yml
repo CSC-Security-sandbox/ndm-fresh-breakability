@@ -14,18 +14,14 @@ Get-JobRunId-by-job-config-id:
 
  
 download-report-by-jobrunid-and-report-type-discovery :
-  url: /api/v1/report/inventory/download
-  method : post
+  url: /api/v1/report/inventory/download?jobRunId=$SourceDiscoveryJobRunId,$DestinationDiscoveryJobRunId&report-type=DISCOVER
+  method : GET
   service_name : reports_service
-  data :
-    jobRunId:
-      - "$SourceDiscoveryJobRunId"
-      - "$DestinationDiscoveryJobRunId"
-    report-type: "DISCOVER"
+  data : {}
 
   response :
     - text : text
-    - status_code: 201
+    - status_code: 200
   parse : {}
 
 

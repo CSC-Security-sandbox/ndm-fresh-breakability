@@ -81,37 +81,33 @@ export class DiscoveryController {
 
   @Auth(Permission.Reports)
   @ApiBearerAuth()
-  @SkipResponseTransform() // Skip response transformation for binary downloads
-  @Post('/download')
+  @SkipResponseTransform()
+  @Get('/download')
   @ApiOperation({ summary: 'Download reports based on jobRunId and report type' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        jobRunId: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of jobRunIds',
-        },
-        'report-type': {
-          type: 'string',
-          enum: Object.values(ReportType),
-          description: 'Type of the report to download',
-        },
-      },
-      required: ['jobRunId', 'report-type'],
-    },
+  @ApiQuery({
+    name: 'jobRunId',
+    type: String,
+    required: true,
+    description: 'Comma-separated list of jobRunIds',
   })
-
+  @ApiQuery({
+    name: 'report-type',
+    type: String,
+    enum: Object.values(ReportType),
+    required: true,
+    description: 'Type of the report to download',
+  })
   @ApiResponse({ status: 200, description: 'Files downloaded successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
   @Header('Content-Type', 'application/zip') 
   @Header('Content-Disposition', 'attachment; filename=reports.zip') 
   async downloadReports(
-    @Body('jobRunId') jobRunIds: string[],
-    @Body('report-type') reportType: ReportType,
+    @Query('jobRunId') jobRunIdParam: string,
+    @Query('report-type') reportType: ReportType,
   ): Promise<StreamableFile> {
-    if (!jobRunIds || jobRunIds.length === 0) {
+    const jobRunIds = jobRunIdParam ? jobRunIdParam.split(',').map(id => id.trim()).filter(Boolean) : [];
+
+    if (jobRunIds.length === 0) {
       throw new BadRequestException('jobRunId array must not be empty');
     }
 

@@ -30,13 +30,9 @@ export const reportApi = createApi({
       }
     }),
     downloadReports: builder.mutation({
-      query: (body) => ({
-        url: "inventory/download",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body,
+      query: ({ jobRunId, "report-type": reportType }) => ({
+        url: `inventory/download?jobRunId=${Array.isArray(jobRunId) ? jobRunId.join(',') : jobRunId}&report-type=${reportType}`,
+        method: "GET",
         responseHandler: (response) => response.blob(),
       }),
     }),
