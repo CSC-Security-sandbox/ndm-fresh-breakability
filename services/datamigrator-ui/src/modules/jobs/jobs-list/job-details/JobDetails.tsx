@@ -586,7 +586,7 @@ const JobDetails = () => {
           futureScheduleValue = null;
       }
       const updateData: any = {
-        excludeFilePatterns: formData.exclude_file_patterns || "",
+        excludeFilePatterns: formData.exclude_file_patterns?.replaceAll("\n",",") || "",
         firstRunAt: mappingData.scheduleTime === "schedule_date" ? mappingData.scheduledDateTime?.toISOString() : null,
         excludeOlderThan: formData.migrate_file_option === "excludeFilesOlderThan" ? formData.migrate_file_option_exclude?.toISOString() : null,
         preserveAccessTime: formData.preserve_a_time,
@@ -953,7 +953,7 @@ const JobDetails = () => {
       }
       
       const updateData = {
-        excludeFilePatterns: formData.excludeFilePatterns || "",
+        excludeFilePatterns: formData.excludeFilePatterns?.replaceAll("\n", ",") || "",
         firstRunAt: formData.scheduleTime === "schedule_date" ? formData.firstRunAt : null,
         shouldScanADS: formData.shouldScanADS === "yes" ? "Enabled" : "Disabled",
       };
