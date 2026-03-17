@@ -7,12 +7,13 @@ import * as path from "path";
 import { dmError, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
-import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
+import { PublishCommandInput } from "./migrate-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from "../../utils/utils";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
-import { CommandGenerationService } from "../../shared/command-generation.service";
+import { CommandGenerationService, RedisSetLookup } from "../../shared/command-generation.service";
+import { DirStreamingService } from "../../shared/dir-streaming.service";
 
 
 @Injectable()
@@ -25,15 +26,16 @@ export class MigrateScanService {
     private readonly logger: LoggerService;
 
     constructor(
-        @Inject(ConfigService) 
+        @Inject(ConfigService)
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly fileTypeDetectionService: FileTypeDetectionService,
-        private readonly commandGenerationService: CommandGenerationService
+        private readonly commandGenerationService: CommandGenerationService,
+        private readonly dirStreamingService: DirStreamingService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
-        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
+        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
         this.metaUpdatedToleranceMs = this.configService.get('worker.metaUpdatedToleranceMs') || 60000;
         this.logger = loggerFactory.create(MigrateScanService.name);
@@ -44,83 +46,110 @@ export class MigrateScanService {
         await jobContext.publishBulkToCommandStream(commands);
     }
 
-    async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
-        let content = new Set<string>();
-        try{
-            const pathExists = await isPathExists(path);
-            if (!pathExists) {
-                if (origin === Origin.SOURCE)  
-                    throw new FatalError(`Source directory does not exist: ${path}`);
-                return content; 
-            }
-            content = new Set<string>( await fs.promises.readdir(path)); 
-        }catch(error){
-            if(error instanceof FatalError) 
-                errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
-            await jobContext.publishToErrorStream(ndmError);
-            throw error; 
-        }
-        return content;
-    }
-
-    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath , command, settings , targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
-
+    async scanDirectory({ jobContext, sourcePath, sourcePrefix, targetPath, command, settings, targetPrefix, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
         let commands: Cmd[] = [];
-        const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
-        const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
 
-        const items = Array.from(sourceContent, name => ({ name }));
+        const isSMB = process.platform === 'win32';
+        const targetRedisKey = this.dirStreamingService.getDirContentKey(targetPath);
+        const sourceRedisKey = this.dirStreamingService.getDirContentKey(sourcePath);
 
-        // Process items using shared service
-        const processResult = await this.commandGenerationService.processItems({
-            items,
-            sourcePath,
-            targetPath,
-            sourcePrefix,
-            targetPrefix,
-            jobContext,
-            command,
-            settings: {
-                skipFile: settings.skipFile,
-                excludePatterns: settings.excludePatterns
-            },
-            errorType: errorType || ErrorType.RECOVERABLE_ERROR,
-            targetContent,
-            maxCommandsPerBatch: this.maxMigrationCommand
-        });
-
-        output.fileCount = processResult.fileCount;
-        output.dirCount = processResult.dirCount;
-        output.totalSize = processResult.totalSize;
-        output.subDirs = processResult.subDirs;
-        commands = processResult.commands;
-
-        if (jobContext?.jobConfig?.skipDelete === false) {
-            //TODO: remove command as it is not required. 
-            await this.processDeletedItems({
-                sourceContent,
-                targetContent,
-                targetPath,
-                targetPrefix,
+        try {
+            // Stream target directory entries into a Redis Set (bulk SADD calls)
+            await this.dirStreamingService.streamDirToRedisSet({
+                dirPath: targetPath,
+                redisKey: targetRedisKey,
                 jobContext,
-                errorType,
+                origin: Origin.DESTINATION,
+                errorType: errorType || ErrorType.RECOVERABLE_ERROR,
                 command,
-                commands,
-                settings
+                buildLowercaseSet: isSMB,
             });
+
+            const targetLookup = new RedisSetLookup(jobContext, targetRedisKey);
+            const targetLcLookup = isSMB ? new RedisSetLookup(jobContext, `${targetRedisKey}:lc`) : undefined;
+
+            // Track whether we need source Redis Set for delete detection
+            const needsDeleteDetection = jobContext?.jobConfig?.skipDelete === false;
+
+            // Stream source directory entries in batches via opendir()
+            for await (const batch of this.dirStreamingService.streamDirEntries(sourcePath)) {
+                // If delete detection is needed, also store source entries in a Redis Set
+                if (needsDeleteDetection) {
+                    await jobContext.addToDirContentSet(sourceRedisKey, batch);
+                }
+
+                const items = batch.map(name => ({ name }));
+
+                const processResult = await this.commandGenerationService.processItems({
+                    items,
+                    sourcePath,
+                    targetPath,
+                    sourcePrefix,
+                    targetPrefix,
+                    jobContext,
+                    command,
+                    settings: {
+                        skipFile: settings.skipFile,
+                        excludePatterns: settings.excludePatterns
+                    },
+                    errorType: errorType || ErrorType.RECOVERABLE_ERROR,
+                    targetContent: targetLookup,
+                    targetLcLookup,
+                    maxCommandsPerBatch: this.maxMigrationCommand
+                });
+
+                output.fileCount += processResult.fileCount;
+                output.dirCount += processResult.dirCount;
+                output.totalSize += processResult.totalSize;
+                output.subDirs.push(...processResult.subDirs);
+                commands.push(...processResult.commands);
+
+                // Flush accumulated commands
+                if (commands.length >= this.maxMigrationCommand) {
+                    const chunk = commands.splice(0, this.maxMigrationCommand);
+                    await this.publishCommands({ jobContext, commands: chunk });
+                }
+            }
+
+            // Delete detection: find target entries not present in source
+            if (needsDeleteDetection) {
+                await this.processDeletedItems({
+                    sourceRedisKey,
+                    targetRedisKey,
+                    targetPath,
+                    targetPrefix,
+                    jobContext,
+                    errorType,
+                    command,
+                    commands,
+                    settings
+                });
+            }
+
+            if (commands.length > 0) {
+                await this.publishCommands({ jobContext, commands });
+                commands = [];
+            }
+
+            return output;
+        } finally {
+            // Cleanup temporary Redis Sets
+            await jobContext.deleteDirContentSet(targetRedisKey).catch(() => {});
+            await jobContext.deleteDirContentSet(sourceRedisKey).catch(() => {});
+            if (isSMB) {
+                await jobContext.deleteDirContentSet(`${targetRedisKey}:lc`).catch(() => {});
+            }
         }
-        if (commands.length > 0) {
-            await this.publishCommands({ jobContext, commands: commands });
-            commands = [];
-        }
-        return output
     }
 
-    async processDeletedItems({ sourceContent, targetContent, targetPath, targetPrefix, jobContext, errorType, command, commands ,settings}: {
-        sourceContent: Set<string>,
-        targetContent: Set<string>,
+    /**
+     * Delete detection using Redis SSCAN + SMISMEMBER.
+     * Iterates target entries in batches, checks each batch against source Redis Set.
+     */
+    async processDeletedItems({ sourceRedisKey, targetRedisKey, targetPath, targetPrefix, jobContext, errorType, command, commands, settings}: {
+        sourceRedisKey: string,
+        targetRedisKey: string,
         targetPath: string,
         targetPrefix: string,
         jobContext: JobManagerContext,
@@ -129,13 +158,13 @@ export class MigrateScanService {
         commands: Cmd[],
         settings: ScanDirectorySettings
     }) {
-        for (const targetItem of targetContent) {
-            if (!sourceContent.has(targetItem)) {
+        for await (const nonMembers of this.dirStreamingService.scanForNonMembers(jobContext, targetRedisKey, sourceRedisKey)) {
+            for (const targetItem of nonMembers) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
                     const targetContentExists = await isPathExists(targetContentPath);
                     if (targetContentExists) {
-                        const targetStat = await fs.promises.lstat(targetContentPath);  
+                        const targetStat = await fs.promises.lstat(targetContentPath);
 
                         if (shouldExcludeForDelete({
                             fullPath: targetContentPath,
@@ -207,7 +236,7 @@ export class MigrateScanService {
                 metadata,
             )
         }
-      
+
 
         if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
             const isDirectory = sFile.isDirectory();
@@ -227,7 +256,7 @@ export class MigrateScanService {
     }
 
 
-    getOpsCommand(isDirectory: boolean, isSymLink: boolean): string {        
+    getOpsCommand(isDirectory: boolean, isSymLink: boolean): string {
         if(isSymLink){
             return OPS_CMD.COPY_SYMLINK;
         }else{

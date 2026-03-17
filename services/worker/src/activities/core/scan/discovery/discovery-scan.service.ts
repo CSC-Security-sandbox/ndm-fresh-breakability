@@ -6,7 +6,7 @@ import * as path from 'path';
 import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
-import { DirContentsInput, PublishItemInfoInput } from "./discovery-scan.type";
+import { PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
@@ -35,34 +35,23 @@ export class DiscoveryScanService {
     }
 
 
-    async getDirContents({path, jobContext, errorType, command}: DirContentsInput): Promise<fs.Dirent[]>{
-        let content:fs.Dirent[] = [];
-        try{
-            const pathExists = await isPathExists(path);
-            if (!pathExists) 
-                    throw new FatalError(`Source directory does not exist: ${path}`);
-            content = await fs.promises.readdir(path,{ withFileTypes: true }); 
-        }catch(error){
-            if(error instanceof FatalError) 
-                errorType = ErrorType.FATAL_ERROR;
-            const ndmError = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: path});
-            await jobContext.publishToErrorStream(ndmError);
-            throw error; 
-        }
-        return content;
-    }
-
     async scanDirectory({ jobContext, sourcePath, sourcePrefix, command, settings, errorType}: ScanDirectoryInput): Promise<ScanDirectoryOutput> {
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, totalSize: 0, subDirs: []}
-        const sourceContent = await this.getDirContents({path: sourcePath, jobContext, errorType, command});
         const isSMB = process.platform === 'win32';
         const lowerCaseSourceDirs = new Set<string>();
         const shouldScanADS:boolean = jobContext.jobConfig?.options?.shouldScanADS;
         try {
-            for (const item of sourceContent) {
+            const pathExists = await isPathExists(sourcePath);
+            if (!pathExists) {
+                throw new FatalError(`Source directory does not exist: ${sourcePath}`);
+            }
+
+            // Stream directory entries using opendir() — O(1) memory per entry
+            const dir = await fs.promises.opendir(sourcePath);
+            for await (const item of dir) {
                 const sourceContentPath = path.join(sourcePath, item.name);
                 const sourceStat: fs.Stats = await fs.promises.lstat(sourceContentPath);
-                
+
                 if (shouldExcludeOrSkip({
                     fullPath: sourceContentPath,
                     stats: sourceStat,
@@ -78,7 +67,7 @@ export class DiscoveryScanService {
 
                 await this.publishFileInfo({
                     stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
-                });              
+                });
 
                 if (sourceStat.isDirectory()) {
                     if(sourceStat.isSymbolicLink() ) continue;
@@ -103,9 +92,11 @@ export class DiscoveryScanService {
                 }
             }
         }catch(error) {
+            if(error instanceof FatalError)
+                errorType = ErrorType.FATAL_ERROR;
             const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, errorType, command.id, error, {name: command.fPath, path: sourcePath});
             await jobContext.publishToErrorStream(dmErr);
-            throw error; 
+            throw error;
         }
         return output;
     }
