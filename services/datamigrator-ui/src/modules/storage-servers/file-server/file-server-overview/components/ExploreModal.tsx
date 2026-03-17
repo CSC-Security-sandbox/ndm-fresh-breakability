@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useSelector } from "react-redux";
 import { Box } from "@components/container/index";
 import {
@@ -41,6 +41,15 @@ interface DirectoryItem {
   type: "directory";
 }
 
+// Helper function to find matching directory item using 3-tier matching:
+// 1. Exact match
+// 2. Case-insensitive match
+// 3. Trimmed whitespace match
+const findMatchingItem = (items: DirectoryItem[], target: string): DirectoryItem | undefined =>
+  items.find((i) => i.name === target) ??
+  items.find((i) => i.name.toLowerCase() === target.toLowerCase()) ??
+  items.find((i) => i.name.trim() === target.trim());
+
 // Fetch directory contents from backend API
 const fetchDirectoryContents = async (
   fileServerId: string,
@@ -61,7 +70,7 @@ const fetchDirectoryContents = async (
   const baseUrl = JOBS_SERVICE_URL?.endsWith('/api/v1') 
     ? JOBS_SERVICE_URL 
     : `${JOBS_SERVICE_URL}/api/v1`;
-
+  
   const response = await fetch(`${baseUrl}/jobs/get-dirs`, {
     method: "POST",
     headers: {
@@ -77,11 +86,11 @@ const fetchDirectoryContents = async (
   }
 
   const result = await response.json();
-
+  
   // Handle the API response structure: { data: { items: [...] } }
   // The items array contains objects with { name: string }
   let items: DirectoryEntryResponse[] = [];
-
+  
   if (result?.data?.items && Array.isArray(result.data.items)) {
     items = result.data.items;
   } else if (result?.items && Array.isArray(result.items)) {
@@ -93,7 +102,6 @@ const fetchDirectoryContents = async (
   }
 
   if (!Array.isArray(items)) {
-    console.error("Unexpected API response structure:", result);
     throw new Error("Unexpected response format from server");
   }
 
@@ -105,7 +113,7 @@ const fetchDirectoryContents = async (
     const relativePath = currentPath === "/" || currentPath === "" 
       ? `/${name}` 
       : `${currentPath}/${name}`;
-
+    
     // Generate unique ID by including the path to avoid collisions across directories
     const pathForId = relativePath.replace(/\//g, '-').replace(/^-/, '');
     return {
@@ -236,6 +244,8 @@ interface DirectoriesContentProps {
   onItemToggle: (item: DirectoryItem) => void;
   onNavigateToFolder: (folderPath: string) => void;
   onPathChange: (path: string) => void;
+  /** Navigate to parent path and auto-select the target folder */
+  onNavigateAndSelect: (parentPath: string, targetFolderName: string) => void;
   onBackToExportPaths: () => void;
   fileServerId: string;
   /** Auth token for API calls */
@@ -254,6 +264,7 @@ const DirectoriesContent = ({
   onItemToggle,
   onNavigateToFolder,
   onPathChange,
+  onNavigateAndSelect,
   onBackToExportPaths,
   fileServerId,
   token,
@@ -290,7 +301,7 @@ const DirectoriesContent = ({
     }
   };
 
-  // Handle search/jump to path
+  // Handle search/jump to path - navigates to parent directory and auto-selects the target folder
   const handleJumpToPath = async () => {
     if (!searchPath.trim() || !exportPath || !fileServerId) {
       return;
@@ -309,55 +320,42 @@ const DirectoriesContent = ({
     setIsValidating(true);
     setSearchError(null);
 
+    // Extract parent path and target folder name
+    const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) || "/";
+    const targetFolderName = normalizedPath.substring(normalizedPath.lastIndexOf("/") + 1);
+
+    // If user entered just "/" or empty, navigate to root
+    if (!targetFolderName) {
+      onPathChange("/");
+      setSearchError(null);
+      setIsValidating(false);
+      return;
+    }
+
     try {
-      // Validate the path by trying to fetch its contents
-      const contents = await fetchDirectoryContents(
+      // Fetch the parent directory contents to verify the target folder exists
+      const parentContents = await fetchDirectoryContents(
         fileServerId,
         exportPath.volumePath,
-        normalizedPath,
+        parentPath,
         token
       );
 
-      // Check if the path exists - if it returns empty and it's not root, 
-      // we should verify by trying to fetch the parent directory
-      if (contents.length === 0 && normalizedPath !== "/") {
-        // Try to fetch the parent to see if the target folder exists as a child
-        const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) || "/";
-        const folderName = normalizedPath.substring(normalizedPath.lastIndexOf("/") + 1);
+      // Check if the target folder exists in parent directory
+      // Use the same matching logic as auto-select (exact → case-insensitive → trim)
+      const folderExists = findMatchingItem(parentContents, targetFolderName) !== undefined;
 
-        try {
-          const parentContents = await fetchDirectoryContents(
-            fileServerId,
-            exportPath.volumePath,
-            parentPath,
-            token
-          );
-
-          // Check if the folder exists in parent directory
-          const folderExists = parentContents.some(
-            (item) => item.name === folderName
-          );
-
-          if (!folderExists) {
-            setSearchError(`Path not found: "${normalizedPath}" does not exist`);
-            return;
-          }
-          // Folder exists but is empty - this is valid, proceed
-        } catch {
-          // Parent doesn't exist either
-          setSearchError(`Path not found: "${normalizedPath}" does not exist`);
-          return;
-        }
+      if (!folderExists) {
+        setSearchError(`Path not found: "${normalizedPath}" does not exist`);
+        return;
       }
 
-      // If successful, navigate to that path
-      onPathChange(normalizedPath);
-      // searchPath will be updated by useEffect when currentPath changes
+      // Navigate to parent directory and auto-select the target folder
+      onNavigateAndSelect(parentPath, targetFolderName);
       setSearchError(null);
     } catch (err) {
-      console.error("Path validation failed:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-
+      
       // Provide user-friendly error messages
       if (errorMessage.includes("404") || errorMessage.includes("not found")) {
         setSearchError(`Path not found: "${normalizedPath}" does not exist`);
@@ -426,14 +424,14 @@ const DirectoriesContent = ({
           </Box>
         )}
         <Box className="mt-2 text-xs text-gray-500">
-          Shows your current directory path. Enter a path to navigate directly.
+          Enter a full path (e.g., /A/B/C) to navigate to the parent directory and auto-select the target folder.
         </Box>
       </Box>
 
       {/* Parent Directory Link */}
       <Box className="mb-4">
-        <Button 
-          variant="secondary" 
+        <Button
+          variant="secondary"
           onClick={handleParentClick}
           disabled={currentPath === "/"}
           className={`text-sm font-semibold ${currentPath === "/" ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -509,9 +507,9 @@ const DirectoriesContent = ({
                       className="w-4 h-4 cursor-pointer"
                     />
                   </Box>
-                  
+
                   {/* Name - clickable for directories */}
-                  <Box 
+                  <Box
                     className={`col-span-11 flex items-center gap-2 ${
                       isDirectory ? "cursor-pointer" : ""
                     }`}
@@ -590,10 +588,10 @@ const ExploreModal = ({
   const [directoryContents, setDirectoryContents] = useState<DirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-
+  
   // Store the selected directory item (persists across navigation)
   const [selectedDirectoryItem, setSelectedDirectoryItem] = useState<DirectoryItem | null>(null);
-
+  
   // Track if initial selection has been applied (to avoid re-applying on every render)
   const [initialSelectionApplied, setInitialSelectionApplied] = useState<boolean>(false);
 
@@ -626,12 +624,15 @@ const ExploreModal = ({
         setCurrentView("export-paths");
         setCurrentPath("/");
       }
-
+      
       // Reset other state
       setDirectoryContents([]);
       setSelectedDirectoryItem(null);
       setError(null);
       setInitialSelectionApplied(false);
+      // Clear pending auto-select to avoid stale selections from previous modal session
+      setPendingAutoSelect(null);
+      pendingAutoSelectRef.current = null;
     }
   }, [isOpen, skipExportPathsView, preSelectedExportPathId, initialSelectedPath]);
 
@@ -645,6 +646,9 @@ const ExploreModal = ({
       setSelectedDirectoryItem(null);
       setError(null);
       setInitialSelectionApplied(false);
+      // Clear pending auto-select to avoid stale selections when modal reopens
+      setPendingAutoSelect(null);
+      pendingAutoSelectRef.current = null;
     }
   }, [isOpen]);
 
@@ -675,8 +679,22 @@ const ExploreModal = ({
             }
             setInitialSelectionApplied(true);
           }
+          
+          // Auto-select pending folder from search/jump to path
+          // This handles the case when user searches for a path like /A/B/C
+          // We navigate to /A/B and auto-select C
+          // Use ref to avoid closure issues
+          const currentPendingAutoSelect = pendingAutoSelectRef.current;
+          if (currentPendingAutoSelect) {
+            const matchingItem = findMatchingItem(contents, currentPendingAutoSelect);
+            
+            if (matchingItem) {
+              setSelectedDirectoryItem(matchingItem);
+              // Clear pending auto-select after successful selection
+              setPendingAutoSelect(null);
+            }
+          }
         } catch (err) {
-          console.error("Error loading directory contents:", err);
           setError(err instanceof Error ? err.message : "Failed to load directories");
           setDirectoryContents([]);
         } finally {
@@ -712,6 +730,44 @@ const ExploreModal = ({
     setCurrentPath(folderPath);
   }, []);
 
+  // State to track pending auto-selection after navigation
+  const [pendingAutoSelect, setPendingAutoSelect] = useState<string | null>(null);
+  // Ref to track pending auto-select to avoid closure issues in async functions
+  const pendingAutoSelectRef = useRef<string | null>(null);
+  
+  // Sync ref with state
+  useEffect(() => {
+    pendingAutoSelectRef.current = pendingAutoSelect;
+  }, [pendingAutoSelect]);
+
+  // Handle navigate to parent path and auto-select target folder
+  const handleNavigateAndSelect = useCallback((parentPath: string, targetFolderName: string) => {
+    // Set the pending auto-select target
+    setPendingAutoSelect(targetFolderName);
+    // Navigate to parent path - the useEffect below will handle auto-selection
+    setCurrentPath(parentPath);
+  }, []);
+
+  // Auto-select the pending folder when directory contents load
+  useEffect(() => {
+    if (pendingAutoSelect && directoryContents.length > 0) {
+      const matchingItem = findMatchingItem(directoryContents, pendingAutoSelect);
+      
+      if (matchingItem) {
+        setSelectedDirectoryItem(matchingItem);
+        // Clear pending auto-select only after successful selection
+        setPendingAutoSelect(null);
+      } else {
+        // Clear pending auto-select after a delay to allow for retry if contents update
+        const timer = setTimeout(() => {
+          setPendingAutoSelect(null);
+        }, 1000);
+        // Cleanup timeout if component unmounts or effect re-runs
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [pendingAutoSelect, directoryContents]);
+
   // Handle explore export path (switch to directories view)
   const handleExploreExportPath = useCallback(() => {
     if (selectedExportPath) {
@@ -737,6 +793,9 @@ const ExploreModal = ({
     setDirectoryContents([]);
     setSelectedDirectoryItem(null);
     setError(null);
+    // Clear pending auto-select when modal closes
+    setPendingAutoSelect(null);
+    pendingAutoSelectRef.current = null;
     onClose();
   }, [onClose]);
 
@@ -790,6 +849,7 @@ const ExploreModal = ({
             onItemToggle={handleItemToggle}
             onNavigateToFolder={handleNavigateToFolder}
             onPathChange={handlePathChange}
+            onNavigateAndSelect={handleNavigateAndSelect}
             onBackToExportPaths={handleBackToExportPaths}
             fileServerId={fileServerId}
             token={token}
