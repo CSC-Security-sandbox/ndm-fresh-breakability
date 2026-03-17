@@ -141,14 +141,8 @@
                         </div>
                         
                         <!-- Modal Content - Scrollable EULA -->
-                        <div class="flex-1 overflow-hidden border-b border-gray-300">
-                            <iframe
-                                id="eula-iframe"
-                                src="${url.resourcesPath}/eula.html"
-                                class="w-full h-full border-0"
-                                style="min-height: 400px; max-height: 60vh;"
-                                title="End User License Agreement">
-                            </iframe>
+                        <div class="flex-1 overflow-y-auto border-b border-gray-300 p-6" style="min-height: 400px; max-height: 60vh;">
+                            <#include "eula.ftl">
                         </div>
                         
                         <!-- Modal Footer -->
