@@ -69,6 +69,7 @@ describe('SyncService', () => {
             publishToTaskStream: jest.fn(),
             setTask: jest.fn(),
             deleteTask: jest.fn(),
+            publishToFileStreamBulk: jest.fn().mockResolvedValue(undefined),
             jobConfig: {
                 sourceDirectoryPath: '/source-dir',
                 destinationDirectoryPath: '/target-dir',
@@ -333,6 +334,85 @@ describe('SyncService', () => {
 
             expect(result.errors.source).toEqual(['source-error-1']);
             expect(result.errors.target).toEqual(['target-error-1']);
+        });
+
+        it('should collect itemInfo from fulfilled results and call publishToFileStreamBulk with batch', async () => {
+            const itemInfo1 = { fileName: '/file1.txt', isDirectory: false } as any;
+            const itemInfo2 = { fileName: '/file2.txt', isDirectory: false } as any;
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [
+                    { id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt' } as any,
+                    { id: 'cmd-2', status: CommandStatus.READY, fPath: '/file2.txt' } as any,
+                ],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+
+            commandExecService.executeCommand
+                .mockResolvedValueOnce({ sourceErrors: [], targetErrors: [], cmd: {} as any, itemInfo: itemInfo1 })
+                .mockResolvedValueOnce({ sourceErrors: [], targetErrors: [], cmd: {} as any, itemInfo: itemInfo2 });
+
+            await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalled();
+            const bulkCalls = mockJobContext.publishToFileStreamBulk.mock.calls;
+            const allItemInfos = bulkCalls.flatMap((call) => call[0]);
+            expect(allItemInfos).toContainEqual(itemInfo1);
+            expect(allItemInfos).toContainEqual(itemInfo2);
+        });
+
+        it('should push rejected promise reason to errors.source and still publish fulfilled itemInfos', async () => {
+            const itemInfo1 = { fileName: '/file1.txt' } as any;
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [
+                    { id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt' } as any,
+                    { id: 'cmd-2', status: CommandStatus.READY, fPath: '/file2.txt' } as any,
+                ],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+
+            commandExecService.executeCommand
+                .mockResolvedValueOnce({ sourceErrors: [], targetErrors: [], cmd: {} as any, itemInfo: itemInfo1 })
+                .mockRejectedValueOnce(new Error('Command execution failed'));
+
+            const result = await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(result.errors.source).toContain('Command execution failed');
+            expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledWith([itemInfo1]);
+        });
+
+        it('should handle rejected promise with array reason as multiple error messages', async () => {
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt' } as any],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+
+            commandExecService.executeCommand.mockRejectedValue(['error-one', 'error-two']);
+
+            const result = await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(result.errors.source).toContain('error-one');
+            expect(result.errors.source).toContain('error-two');
         });
     });
 

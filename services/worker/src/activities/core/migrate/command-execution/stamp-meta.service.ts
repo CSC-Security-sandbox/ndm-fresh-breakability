@@ -55,22 +55,20 @@ export class StampMetaService {
             }
             else {
 
-                // Stamp GID and UID
-                const gidUidOutput = await this.stampGIDandUID(input);
-                output.sourceErrors.push(...gidUidOutput.sourceErrors);
-                output.targetErrors.push(...gidUidOutput.targetErrors);
+                // Step 1: chown (targetPath) and preserve source time (sourcePath) are independent — run in parallel
+                const [gidUidOutput, preserveTimeOutput] = await Promise.all([
+                    this.stampGIDandUID(input),
+                    this.preserveAccessAndModifiedTime(input),
+                ]);
+                output.sourceErrors.push(...gidUidOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...gidUidOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
-                // Preserve access and modified time
-                const preserveTimeOutput = await this.preserveAccessAndModifiedTime(input);
-                output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...preserveTimeOutput.targetErrors);
-
-                // Stamp permissions before timestamps so chmod does not overwrite atime
+                // Step 2: chmod must run after chown (changing owner can reset setuid/setgid bits)
                 const permissionsOutput = await this.stampPermission(input);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
 
-                // Stamp access and modified time last so nothing overwrites atime/mtime
+                // Step 3: utimes must run last so chmod does not overwrite atime/mtime
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
                 output.sourceErrors.push(...timeOutput.sourceErrors);
                 output.targetErrors.push(...timeOutput.targetErrors);

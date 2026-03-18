@@ -87,7 +87,7 @@ export class CommandExecService {
             : 'not_applicable';
 
         if( baseCmdRes.shouldUpdateItemInfo ) {
-            await this.publishFileInfo(input);
+            output.itemInfo = await this.buildFileInfo(input);
         }
         if (output.sourceErrors.length > 0 || output.targetErrors.length > 0) 
             input.command.status = CommandStatus.ERROR
@@ -301,7 +301,7 @@ export class CommandExecService {
         }
     }
 
-    async publishFileInfo(input: CommandExecInput): Promise<void> {
+    async buildFileInfo(input: CommandExecInput): Promise<ItemInfo> {
         const { command, jobContext, targetPath, sourcePath, errorType } = input;
         const isDeleted = !!(command.ops?.[OPS_CMD.REMOVE_DIR] || command.ops?.[OPS_CMD.REMOVE_FILE]);
         if (isDeleted) {
@@ -311,7 +311,7 @@ export class CommandExecService {
             } catch (error) {
                 this.logger.log(`[DELETE] Source path ${sourcePath} doesn't exist, using metadata from command`);
             }
-            
+
             const sourceMeta: ItemMeta = sourceStats ? {
                 accessTime: sourceStats.atime,
                 birthTime: sourceStats.birthtime,
@@ -350,8 +350,7 @@ export class CommandExecService {
             (itemInfo as any).copyContentStatus = 'not_applicable';
             (itemInfo as any).stampMetaDataStatus = input.stampMetaDataStatus ?? 'not_applicable';
 
-            await jobContext.publishToFileStream(itemInfo);
-            return;
+            return itemInfo;
         }
 
         // For copy operations, get both source and target stats
@@ -361,8 +360,8 @@ export class CommandExecService {
         ]);
 
         // Capture checksum timestamp - when the checksum was generated during file copy
-        const checksumTime = command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksumTime 
-            ? new Date(command.ops[OPS_CMD.COPY_FILE].params.checksumTime) 
+        const checksumTime = command.ops?.[OPS_CMD.COPY_FILE]?.params?.checksumTime
+            ? new Date(command.ops[OPS_CMD.COPY_FILE].params.checksumTime)
             : null;
 
         const sourceMeta: ItemMeta = {
@@ -406,7 +405,7 @@ export class CommandExecService {
         (itemInfo as any).stampMetaDataStatus = input.stampMetaDataStatus ?? 'not_applicable';
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});
-        await jobContext.publishToFileStream(itemInfo);
+        return itemInfo;
     }
 
     async validateCommand({ cmd, item, jobContext, errorType, targetPath}:ValidateCommandInput): Promise<void> {

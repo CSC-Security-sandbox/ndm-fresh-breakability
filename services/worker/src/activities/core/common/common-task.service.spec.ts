@@ -56,6 +56,7 @@ describe('CommonTaskService', () => {
                 if (key === 'worker.workerId') return 'worker-1';
                 if (key === 'worker.maxRetryCount') return 2;
                 if (key === 'temporal.address') return 'localhost:7233';
+                if (key === 'worker.maxCmdStreamLen') return 5000;
                 return undefined;
             }),
         };
@@ -300,6 +301,37 @@ describe('CommonTaskService', () => {
         it('should handle error and clear interval', async () => {
             redisService.getJobManagerContext.mockRejectedValueOnce(new Error('fail'));
             await expect(service.getGroupOfTasksActivity('jobRunId')).rejects.toThrow('Failed to get group of tasks activity: fail');
+        });
+    });
+
+    describe('isCmdStreamLenValid', () => {
+        it('should return true when current stream length is within max', async () => {
+            const jobContext = { getCmdStreamLen: jest.fn().mockResolvedValue(100) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            const result = await service.isCmdStreamLenValid('job-123');
+
+            expect(result).toBe(true);
+            expect(jobContext.getCmdStreamLen).toHaveBeenCalled();
+        });
+
+        it('should return false when current stream length exceeds max', async () => {
+            const jobContext = { getCmdStreamLen: jest.fn().mockResolvedValue(10000) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            const result = await service.isCmdStreamLenValid('job-456');
+
+            expect(result).toBe(false);
+            expect(jobContext.getCmdStreamLen).toHaveBeenCalled();
+        });
+
+        it('should return true when current stream length equals max', async () => {
+            const jobContext = { getCmdStreamLen: jest.fn().mockResolvedValue(5000) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            const result = await service.isCmdStreamLenValid('job-eq');
+
+            expect(result).toBe(true);
         });
     });
 });

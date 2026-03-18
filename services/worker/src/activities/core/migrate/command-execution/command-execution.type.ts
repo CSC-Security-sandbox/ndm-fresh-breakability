@@ -20,6 +20,8 @@ export interface CommandExecOutput {
     sourceErrors: string[];
     targetErrors: string[];
     cmd: Cmd;
+    /** Collected ItemInfo for bulk publishing — populated when shouldUpdateItemInfo is true */
+    itemInfo?: ItemInfo;
 }
 
 export interface CommandOutput {
