@@ -36,7 +36,7 @@ export class ValidateConnectionActivity {
     try {
       const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       const validateResult = await protocol.validateConnection(traceId, payload);  // ← capture
-      response.warnings = validateResult?.warnings ?? [];    
+      response.warnings = validateResult?.warnings ?? [];
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);
       }
@@ -48,6 +48,15 @@ export class ValidateConnectionActivity {
       //   const disconnectResponse = await protocol.disconnectSession(traceId, payload);
       //   this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
       // }
+      if (protocolType === ProtocolTypes.SMB) {
+        try {
+          this.logger.log(`[${traceId}] disconnecting session for SMB`);
+          const disconnectResponse = await protocol.disconnectSession(traceId, payload);
+          this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
+        } catch (disconnectError) {
+          this.logger.warn(`[${traceId}] Failed to disconnect SMB session (non-fatal): ${disconnectError.message}`);
+        }
+      }
       this.logger.log(`[${traceId}] Paths: ${response.paths}`);
       return response;
     } catch (error) {

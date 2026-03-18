@@ -328,7 +328,7 @@ export const basePrefix = (jobRunId: string, pathId: string, directoryPath?: str
   return dirPath ? `${basePath}/${dirPath.replace(/^\/+/, '')}` : basePath;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED', 'EPERM'])
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // Transient errors that should not be retried

@@ -45,13 +45,10 @@ try {
     Write-Output 'SKIPPED'
 }
 `;
-
-        const scriptPath = path.join(os.tmpdir(), `check_backup_ops_${traceId}.ps1`);
-
         try {
-            await fs.promises.writeFile(scriptPath, psScript, 'utf8');
+            const encodedCommand = Buffer.from(psScript, 'utf16le').toString('base64');
             const { stdout, stderr } = await execAsync(
-                `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+                `powershell -NoProfile -NonInteractive -EncodedCommand ${encodedCommand}`,
                 { windowsHide: true, timeout: 15000 }
             );
 
@@ -78,12 +75,6 @@ try {
         } catch (error) {
             this.logger.error(`[${traceId}] Error checking Backup Operators membership: ${error.message}`);
             return 'SKIPPED';
-        } finally {
-            try {
-                await fs.promises.unlink(scriptPath);
-            } catch {
-                // ignore cleanup errors
-            }
         }
     }
 
