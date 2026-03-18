@@ -42,7 +42,7 @@ import { JobRunPageDto } from "./dto/jobrunpage.dto";
 import { JobRunStats } from "./dto/jobstats";
 import { JobRunInitService } from "./jobrun.init.service";
 import { SuccessEmailType } from "src/utils/send-email.type";
-import { getErrorDisplayMessage } from "./jobrun.util";
+import { getErrorDisplayMessage, TERMINAL_JOB_RUN_STATUSES } from "./jobrun.util";
 import { WorkFlowFailureReason } from "./jobrun.types";
 import {
   LoggerFactory,
@@ -535,7 +535,26 @@ export class JobRunService {
   }
 
   async getJobAllRuns(filter: JobRunPageDto) {
-    const jobRuns = await this.jobRunRepo
+    const jobRuns = await this.fetchJobRunsWithDetails(filter.projectId);
+    if (jobRuns.length === 0) return [];
+
+    const allJobRunIds = jobRuns.map((r) => r.jobrunid);
+    const runningJobRunIds = jobRuns
+      .filter((r) => !TERMINAL_JOB_RUN_STATUSES.includes(r.status))
+      .map((r) => r.jobrunid);
+
+    const [mvStatsMap, errorCountsMap] = await Promise.all([
+      this.fetchBatchMvStats(runningJobRunIds),
+      this.fetchBatchErrorCounts(allJobRunIds),
+    ]);
+
+    return jobRuns.map((jobRun) =>
+      this.buildJobRunDTO(jobRun, mvStatsMap, errorCountsMap),
+    );
+  }
+
+  private async fetchJobRunsWithDetails(projectId: string): Promise<any[]> {
+    return this.jobRunRepo
       .createQueryBuilder("jobRun")
       .leftJoinAndSelect("jobRun.jobConfig", "jobConfig")
       .leftJoinAndSelect("jobConfig.sourcePath", "sourceVolume")
@@ -544,12 +563,8 @@ export class JobRunService {
       .leftJoinAndSelect("targetVolume.fileServer", "targetFileServer")
       .leftJoinAndSelect("sourceFileServer.config", "sourceConfig")
       .leftJoinAndSelect("targetFileServer.config", "targetConfig")
-      .where("sourceConfig.projectId = :projectId", {
-        projectId: filter.projectId,
-      })
-      .orWhere("targetConfig.projectId = :projectId", {
-        projectId: filter.projectId,
-      })
+      .where("sourceConfig.projectId = :projectId", { projectId })
+      .orWhere("targetConfig.projectId = :projectId", { projectId })
       .select([
         "jobRun.id AS jobRunId",
         "jobRun.isReportReady AS isReportReady",
@@ -576,78 +591,164 @@ export class JobRunService {
         "jobRun.jobStats AS jobStats",
       ])
       .getRawMany();
+  }
 
-    const allJobsRuns = await Promise.all(
-      jobRuns.map(async (jobRun) => {
-        this.logger.debug(
-          `jobRun for id ${jobRun.jobrunid} - with jobjobstats ${JSON.stringify(jobRun.jobjobstats)}`
-        );
-        const partialJobRunStats = {
-          jobRunId: jobRun.jobrunid,
-          status: jobRun.substatus || jobRun.status,
-          startTime: jobRun.starttime,
-          endTime: jobRun.endtime,
-          jobType: jobRun.jobtype,
-          jobRunType: jobRun.jobruntype || JobRunType.REGULAR,
-          isReportReady: jobRun.isreportready,
-          jobConfigId: jobRun?.jobconfigid,
-          nextSchedule: jobRun?.nextschedule,
-          sourceServer: {
+  private async fetchBatchMvStats(
+    jobRunIds: string[],
+  ): Promise<Record<string, JobStatsSummaryMvEntity>> {
+    if (jobRunIds.length === 0) return {};
+    const mvStats = await this.jobStatsSummaryMvRepo
+      .createQueryBuilder("mv")
+      .where("mv.jobRunId IN (:...ids)", { ids: jobRunIds })
+      .getMany();
+    return Object.fromEntries(mvStats.map((s) => [s.jobRunId, s]));
+  }
+
+  private async fetchBatchErrorCounts(
+    jobRunIds: string[],
+  ): Promise<Record<string, { errortype: string; count: number }[]>> {
+    if (jobRunIds.length === 0) return {};
+    const errorCountsMap: Record<string, { errortype: string; count: number }[]> = {};
+
+    let errorRows: { jobrunid: string; errortype: string; count: string | number }[] = [];
+    try {
+      errorRows = await this.operationErrorRepo
+        .createQueryBuilder("oe")
+        .innerJoin("oe.operation", "o")
+        .where("o.jobRunId IN (:...ids)", { ids: jobRunIds })
+        .andWhere("oe.errorType IN (:...errorTypes)", {
+          errorTypes: USER_VISIBLE_ERROR_TYPES,
+        })
+        .andWhere("oe.errorStatus = :status", { status: "UNRESOLVED" })
+        .select([
+          "o.jobRunId AS jobRunId",
+          "oe.errorType AS errortype",
+          "COUNT(*) AS count",
+        ])
+        .groupBy("o.jobRunId, oe.errorType")
+        .getRawMany();
+    } catch (error) {
+      this.logger.error(
+        "Error occurred while batch-fetching error type counts:",
+        error,
+      );
+    }
+
+    for (const row of errorRows) {
+      const runId = row.jobrunid;
+      if (!errorCountsMap[runId]) errorCountsMap[runId] = [];
+      errorCountsMap[runId].push({
+        errortype: row.errortype,
+        count: Number(row.count),
+      });
+    }
+
+    const workerSetupErrors = await this.workerJobRunMapRepo
+      .createQueryBuilder("job")
+      .where("job.jobRunId IN (:...ids)", { ids: jobRunIds })
+      .andWhere("job.workerResponse IS NOT NULL")
+      .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+        errorCodes: Object.values(WorkFlowFailureReason),
+      })
+      .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+      .select(["job.jobRunId AS jobRunId"])
+      .getRawMany();
+
+    for (const row of workerSetupErrors) {
+      const runId = row.jobrunid;
+      if (!errorCountsMap[runId]) errorCountsMap[runId] = [];
+      const fatalEntry = errorCountsMap[runId].find(
+        (e) => e.errortype === "FATAL_ERROR",
+      );
+      if (fatalEntry) {
+        fatalEntry.count += 1;
+      } else {
+        errorCountsMap[runId].push({ errortype: "FATAL_ERROR", count: 1 });
+      }
+    }
+
+    return errorCountsMap;
+  }
+
+  private buildJobRunDTO(
+    jobRun: any,
+    mvStatsMap: Record<string, JobStatsSummaryMvEntity>,
+    errorCountsMap: Record<string, { errortype: string; count: number }[]>,
+  ): JobRunsDTO {
+    const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status);
+
+    const rawStored = jobRun.jobjobstats || jobRun.jobstats || null;
+    const stored: JobRunStats | null =
+      rawStored && typeof rawStored === "string"
+        ? JSON.parse(rawStored)
+        : rawStored;
+    const mvStats = mvStatsMap[jobRun.jobrunid];
+
+    const fileCount = isTerminal ? stored?.fileCount : mvStats?.fileCount;
+    const directories = isTerminal
+      ? stored?.directories
+      : mvStats?.directoryCount;
+    const totalSize = isTerminal ? stored?.totalSize : mvStats?.totalSize;
+    const lastRefreshed = isTerminal
+      ? stored?.lastRefreshed
+      : mvStats?.lastRefreshed;
+    const errors = errorCountsMap[jobRun.jobrunid] || [];
+
+    const sourceServer =
+      isTerminal && stored?.sourceServer
+        ? stored.sourceServer
+        : {
             serverName: jobRun.sourceconfigname,
             fileServerName: jobRun.sourcefileservername,
             path: jobRun.volumepath,
             protocol: jobRun.sourcefileserverprotocol,
             serverType: jobRun.sourceservertype,
             directoryPath: jobRun.sourcedirectorypath,
-          },
-          destinationServer: jobRun.targetvolumepath
-            ? {
-                serverName: jobRun.targetconfigname,
-                fileServerName: jobRun.targetfileservername,
-                path: jobRun.targetvolumepath,
-                protocol: jobRun.targetfileserverprotocol,
-                serverType: jobRun.targetservertype,
-                directoryPath: jobRun.targetdirectorypath,
-              }
-            : undefined,
-          timeElapsed: jobRun.endtime
-            ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
-            : Date.now() - jobRun.starttime.getTime(),
-        };
-       
-          const jobStats: JobRunStats = await this.calculateJobRunStats(
-            jobRun.jobrunid
-          );
-          this.logger.log(`Job Run ${jobRun.jobrunid} status ${jobRun.status}`);
-          this.logger.log(
-            `Job Run ${jobRun.jobrunid} inventory stats ${JSON.stringify(
-              jobStats
-            )}`
-          );
-          const response: JobRunsDTO = {
-            ...partialJobRunStats,
-            scannedFilesCount: BigInt(
-              jobStats?.fileCount || "0"
-            )?.toString(),
-            scannedDirectoriesCount: BigInt(
-              jobStats?.directories || "0"
-            )?.toString(),
-            totalScannedSize:
-              jobRun.jobtype === JobType.DISCOVER
-                ? formatBytes(Number(jobStats?.totalSize || "0"))
-                : "0 B",
-            totalMigratedSize:
-              (jobRun.jobtype === JobType.MIGRATE || jobRun.jobtype === JobType.CUT_OVER)
-                ? formatBytes(Number(jobStats?.totalSize || 0))
-                : "0 B",
-            errors: jobStats?.errors || [],
-            lastRefreshed: jobStats?.lastRefreshed || null,
           };
-          return response;
-        
-      })
-    );
-    return allJobsRuns;
+
+    const destinationServer =
+      isTerminal && stored?.destinationServer
+        ? stored.destinationServer
+        : jobRun.targetvolumepath
+          ? {
+              serverName: jobRun.targetconfigname,
+              fileServerName: jobRun.targetfileservername,
+              path: jobRun.targetvolumepath,
+              protocol: jobRun.targetfileserverprotocol,
+              serverType: jobRun.targetservertype,
+              directoryPath: jobRun.targetdirectorypath,
+            }
+          : undefined;
+
+    return {
+      jobRunId: jobRun.jobrunid,
+      status: jobRun.substatus || jobRun.status,
+      startTime: jobRun.starttime,
+      endTime: jobRun.endtime,
+      jobType: jobRun.jobtype,
+      jobRunType: jobRun.jobruntype || JobRunType.REGULAR,
+      isReportReady: jobRun.isreportready,
+      jobConfigId: jobRun?.jobconfigid,
+      nextSchedule: jobRun?.nextschedule,
+      sourceServer,
+      destinationServer,
+      timeElapsed: jobRun.endtime
+        ? jobRun.endtime.getTime() - jobRun.starttime.getTime()
+        : Date.now() - jobRun.starttime.getTime(),
+      scannedFilesCount: BigInt(fileCount || "0").toString(),
+      scannedDirectoriesCount: BigInt(directories || "0").toString(),
+      totalScannedSize:
+        jobRun.jobtype === JobType.DISCOVER
+          ? formatBytes(Number(totalSize || "0"))
+          : "0 B",
+      totalMigratedSize:
+        jobRun.jobtype === JobType.MIGRATE ||
+        jobRun.jobtype === JobType.CUT_OVER
+          ? formatBytes(Number(totalSize || "0"))
+          : "0 B",
+      errors,
+      lastRefreshed: lastRefreshed || null,
+    };
   }
 
   async updateJobRunStatus(jobRunId: string, status: JobRunStatus, projectId?: string) {
@@ -1037,18 +1138,24 @@ export class JobRunService {
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
-    const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
-      where: { jobRunId: jobRunId }});
+    const inventoryStats = await this.inventoryRepo
+      .createQueryBuilder("inv")
+      .select("COUNT(*) FILTER (WHERE inv.isDirectory = false)", "fileCount")
+      .addSelect("COUNT(*) FILTER (WHERE inv.isDirectory = true)", "directoryCount")
+      .addSelect("COALESCE(SUM(inv.fileSize) FILTER (WHERE inv.isDirectory = false), 0)", "totalSize")
+      .addSelect("NOW()", "lastRefreshed")
+      .where("inv.jobRunId = :jobRunId", { jobRunId })
+      .getRawOne();
 
     this.logger.debug(
-      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId} from inventory table: ${JSON.stringify(inventoryStats)}`
     );
 
     const jobRunStatus = {
-      fileCount: jobStatsSummary?.fileCount || "0",
-      directories: jobStatsSummary?.directoryCount || "0",
-      totalSize: jobStatsSummary?.totalSize || "0",
-    lastRefreshed: jobStatsSummary?.lastRefreshed || null,
+      fileCount: inventoryStats?.fileCount || "0",
+      directories: inventoryStats?.directoryCount || "0",
+      totalSize: inventoryStats?.totalSize || "0",
+      lastRefreshed: inventoryStats?.lastRefreshed || null,
     };
 
     const response = {
