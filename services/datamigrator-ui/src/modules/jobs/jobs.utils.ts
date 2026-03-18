@@ -1,5 +1,6 @@
 import { notify } from "@components/notification/NotificationWrapper";
 import { REPORT_TYPES_ENUM } from "@/types/app.type";
+import { store } from "@/store/store";
 
 export const handleDownloadReport = async (
   downloadReports: (arg: any) => any,
@@ -8,14 +9,39 @@ export const handleDownloadReport = async (
   fileType: string
 ) => {
   const isFileTypePdf = fileType.toLowerCase() === "pdf";
+
+  if (!isFileTypePdf) {
+    try {
+      const state = store.getState();
+      const token = (state as any).authSlice?.accessToken;
+      const projectId = localStorage.getItem("selected_project_id");
+      const baseUrl =
+        window?.env?.VITE_REPORTS_SERVICE_URL ||
+        import.meta.env.VITE_REPORTS_SERVICE_URL;
+
+      const url = `${baseUrl}/inventory/download?jobRunId=${jobRunId}&report-type=${reportType}&token=${token}&projectId=${projectId}`;
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${jobRunId}-${reportType}-report.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Failed to download the report:", error);
+      notify.error("Report not generated yet, please try again after some time.");
+    }
+    return;
+  }
+
   try {
     const response = await downloadReports({
-      jobRunId: isFileTypePdf ? jobRunId : [jobRunId],
+      jobRunId: jobRunId,
       "report-type": reportType,
     }).unwrap();
 
-    const mimeType = isFileTypePdf ? getMimeType(fileType) : getMimeType("ZIP");
-    const extension = isFileTypePdf ? fileType.toLowerCase() : "zip";
+    const mimeType = getMimeType(fileType);
+    const extension = fileType.toLowerCase();
 
     createAndDownloadBlob(
       response,
@@ -54,23 +80,26 @@ export const handleDownloadErrorsLogs = async (
 };
 
 export const handleDownloadCocReport = async (
-  downloadReports: (arg: any) => any,
+  _downloadReports: (arg: any) => any,
   jobRunId: string,
   reportType: string = REPORT_TYPES_ENUM.COC
 ) => {
   try {
-    const response = await downloadReports({
-      jobRunId: [jobRunId],
-      "report-type": reportType,
-    }).unwrap();
-    const mimeType = getMimeType("ZIP");
-    const extension = "zip";
+    const state = store.getState();
+    const token = (state as any).authSlice?.accessToken;
+    const projectId = localStorage.getItem("selected_project_id");
+    const baseUrl =
+      window?.env?.VITE_REPORTS_SERVICE_URL ||
+      import.meta.env.VITE_REPORTS_SERVICE_URL;
 
-    createAndDownloadBlob(
-      response,
-      mimeType,
-      `coc-report-${jobRunId}.${extension}`
-    );
+    const url = `${baseUrl}/inventory/download?jobRunId=${jobRunId}&report-type=${reportType}&token=${token}&projectId=${projectId}`;
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `coc-report-${jobRunId}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   } catch (error) {
     console.error("Failed to download CoC report:", error);
     notify.error(
