@@ -10,11 +10,16 @@ annotations:
   vault.hashicorp.com/agent-init-first: "true"
   vault.hashicorp.com/role: "datamigrator-role"
   vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+  vault.hashicorp.com/agent-inject-secret-keycloak.env: "secrets/keycloak-secrets/keycloak-creds"
   vault.hashicorp.com/agent-inject-status: "update"
   vault.hashicorp.com/agent-inject-template-postgres.env: |
     {{- with secret "secrets/postgres-secrets/postgres-creds" -}}
     export DB_USER="{{ .Data.POSTGRES_DMADMIN_USER }}"
     export DB_PASSWORD="{{ .Data.POSTGRES_DMADMIN_PASSWORD }}"
+    {{- end }}
+  vault.hashicorp.com/agent-inject-template-keycloak.env: |
+    {{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
+    export KEYCLOAK_INTERNAL_SECRET="{{ .Data.KEYCLOAK_INTERNAL_SECRET }}"
     {{- end }}
 
 serviceAccountName: datamigrator-openbao-sa

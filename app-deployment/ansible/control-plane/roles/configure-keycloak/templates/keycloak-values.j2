@@ -60,6 +60,7 @@ podAnnotations:
     {{`{{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
     export KEYCLOAK_ADMIN="{{ .Data.KEYCLOAK_ADMIN_USER }}"
     export KEYCLOAK_ADMIN_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
+    export KEYCLOAK_INTERNAL_SECRET="{{ .Data.KEYCLOAK_INTERNAL_SECRET }}"
     {{- end -}}`}}
     {% endraw %}
       
@@ -177,6 +178,10 @@ extraEnvVars:
       value: xforwarded
     - name: JAVA_OPTS
       value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -Xms512m -Xmx2048m" 
+    # ASUP settings API call configuration
+    - name: REPORTS_SERVICE_URL
+      value: "http://reports-service-service.datamigrator.svc.cluster.local:3000"
+    # Note: KEYCLOAK_INTERNAL_SECRET is injected via Vault annotations (see podAnnotations)
 
 podSecurityContext:
   fsGroup: {{ vm_gid }}

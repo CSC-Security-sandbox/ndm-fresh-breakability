@@ -136,10 +136,12 @@
   shell: |
     export KEYCLOAK_CLIENT_SECRET=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/keycloak/generate | jq -r '.data.password')
     export KEYCLOAK_ADMIN_PASSWORD=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
+    export KEYCLOAK_INTERNAL_SECRET=$(kubectl exec -i openbao-0 -n openbao -- bao read -format=json sys/policies/password/datamigrator/generate | jq -r '.data.password')
     kubectl exec openbao-0 -n openbao -- bao kv put secrets/keycloak-secrets/keycloak-creds \
       KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET}" \
       KEYCLOAK_ADMIN_USER="kcadmin" \
-      KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
+      KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}" \
+      KEYCLOAK_INTERNAL_SECRET="${KEYCLOAK_INTERNAL_SECRET}"
 
 - name: Generate Redis secrets
   become: yes
