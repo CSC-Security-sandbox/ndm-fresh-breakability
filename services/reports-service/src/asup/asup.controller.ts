@@ -7,6 +7,9 @@ import {
   Req,
   Headers,
   InternalServerErrorException,
+  UnauthorizedException,
+  ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -83,22 +86,23 @@ export class AsupController {
         // Regular UI calls require JWT authentication (same as Help toggle)
         const authHeader = req.headers.authorization;
         if (!authHeader) {
-          throw new Error('Authorization required');
+          throw new UnauthorizedException('Authorization header required');
         }
         const token = authHeader.split(' ')?.[1];
         if (!token) {
-          throw new Error('JWT token missing');
+          throw new UnauthorizedException('JWT token missing');
         }
         try {
           const decoded = await this.jwtService.verifyToken(token);
           if (!decoded.user) {
-            throw new Error('Invalid token');
+            throw new UnauthorizedException('Invalid token');
           }
           // Check for Reports permission
-          const project = req.headers.projectid as string;
+          const project = req.headers.projectid as string | undefined;
           let hasPermission = false;
           for (const role of decoded.user.roles) {
-            if (role.projects.length === 0 || role.projects?.includes(project)) {
+            const projects = role.projects ?? [];
+            if (projects.length === 0 || (project != null && projects.includes(project))) {
               const permMap = new Set<string>(role.permissions);
               if (permMap.has(Permission.Reports)) {
                 hasPermission = true;
@@ -107,12 +111,16 @@ export class AsupController {
             }
           }
           if (!hasPermission) {
-            throw new Error('Insufficient permissions');
+            throw new ForbiddenException('Insufficient permissions');
           }
           // Get user ID from token - use sub (subject) or id if available
           userId = (decoded.user as any).id || decoded.sub || null;
         } catch (error) {
-          throw new Error(`JWT validation failed: ${(error as Error).message}`);
+          // Re-throw HttpExceptions (UnauthorizedException, ForbiddenException)
+          if (error instanceof HttpException) {
+            throw error;
+          }
+          throw new UnauthorizedException(`JWT validation failed: ${(error as Error).message}`);
         }
       }
       
@@ -126,6 +134,14 @@ export class AsupController {
         ...(updated.lastUpdated != null && { lastUpdated: updated.lastUpdated }),
       };
     } catch (error) {
+      // Re-throw HttpExceptions (401, 403) without converting to 500
+      if (error instanceof HttpException) {
+        this.logger.error(
+          `updateAsupSettings failed: ${error.message}`,
+          error.stack,
+        );
+        throw error;
+      }
       this.logger.error(
         `updateAsupSettings failed: ${(error as Error).message}`,
         (error as Error).stack,
