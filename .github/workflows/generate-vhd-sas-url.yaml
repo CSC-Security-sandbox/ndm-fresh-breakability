@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       control_plane_blob_name:
-        description: 'Control Plane VHD blob name (Ex: controlplane_2025.12.0.vhd)'
+        description: 'Control Plane VHD/OVA blob name (Ex: controlplane_2025.12.0.vhd or controlplane_2025.12.0.ova)'
         required: true
       linux_worker_blob_name:
-        description: 'Linux Worker VHD blob name (Ex: worker_2025.12.0.vhd)'
+        description: 'Linux Worker VHD/OVA blob name (Ex: worker_2025.12.0.vhd or worker_2025.12.0.ova)'
         required: true
       windows_worker_blob_name:
         description: 'Windows Worker installer blob name (Ex: windows-worker-installer-2025.12.0.exe)'

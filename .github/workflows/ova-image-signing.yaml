@@ -27,6 +27,8 @@ env:
   PRIVATE_KEY: ${{ vars.OVA_PRIVATE_KEY || 'NDM-OVA-private.key' }}
   CERTIFICATE: ${{ vars.OVA_CERTIFICATE || 'NDM-OVA.cer' }}
   SCRATCH_SPACE: ${{ vars.SCRATCH_SPACE || '/mnt/scratch_space' }}
+  AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT || 'netappvhdexports' }}
+  AZURE_CONTAINER_NAME: ${{ vars.AZURE_CONTAINER_NAME || 'ndm-releases-vhd' }}
 
 permissions:
   contents: read
@@ -294,3 +296,106 @@ jobs:
           echo "1. Files are now in scratch space (/mnt/scratch_space)"
           echo "2. Files are accessible at /x/eng/NDM on cyclortp7.rtp.openeng.netapp.com"
           echo "3. Coordinate with team for NSS upload"
+          echo "4. Azure Blob Storage upload will follow in the next step"
+
+      - name: Upload Signed OVAs to Azure Blob Storage
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          RUNNER_HOST: ${{ vars.RUNNER_GITHUB_IP_66 }}
+          INPUT_STORAGE_ACCOUNT_KEY: ${{ secrets.SAS_AZURE_STORAGE_ACCOUNT_KEY }}
+          INPUT_STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          INPUT_CONTAINER_NAME: ${{ env.AZURE_CONTAINER_NAME }}
+          INPUT_WORKER_SIGNED_OVA: ${{ steps.set-outputs.outputs.worker_signed_ova }}
+          INPUT_CP_SIGNED_OVA: ${{ steps.set-outputs.outputs.controlplane_signed_ova }}
+          INPUT_CHECKSUM_FILE: ${{ steps.set-outputs.outputs.checksum_file }}
+          INPUT_RELEASE_FOLDER: ${{ steps.set-outputs.outputs.release_folder }}
+          INPUT_SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}
+        run: |
+          echo "Uploading signed OVAs to Azure Blob Storage..."
+          
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@"$RUNNER_HOST" << ENDSSH
+          set -e
+          
+          # Install Azure CLI if not present
+          if ! command -v az &> /dev/null; then
+            echo "Installing Azure CLI..."
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          echo "Azure CLI version: \$(az --version | head -1)"
+          
+          SCRATCH_DEST="${INPUT_SCRATCH_SPACE}/${INPUT_RELEASE_FOLDER}/ova"
+          
+          echo "Uploading from: \${SCRATCH_DEST}"
+          echo "To: ${INPUT_STORAGE_ACCOUNT}/${INPUT_CONTAINER_NAME}"
+          
+          # Verify files exist before uploading
+          for FILE in "${INPUT_WORKER_SIGNED_OVA}" "${INPUT_CP_SIGNED_OVA}" "${INPUT_CHECKSUM_FILE}"; do
+            if [ ! -f "\${SCRATCH_DEST}/\${FILE}" ]; then
+              echo "ERROR: File not found: \${SCRATCH_DEST}/\${FILE}"
+              exit 1
+            fi
+          done
+          echo "All files verified in scratch space"
+          
+          # Upload Worker Signed OVA
+          echo "Uploading Worker Signed OVA: ${INPUT_WORKER_SIGNED_OVA}..."
+          az storage blob upload \
+            --account-name "${INPUT_STORAGE_ACCOUNT}" \
+            --account-key "${INPUT_STORAGE_ACCOUNT_KEY}" \
+            --container-name "${INPUT_CONTAINER_NAME}" \
+            --name "${INPUT_WORKER_SIGNED_OVA}" \
+            --file "\${SCRATCH_DEST}/${INPUT_WORKER_SIGNED_OVA}" \
+            --overwrite \
+            --output none
+          echo "Worker OVA uploaded successfully"
+          
+          # Upload Control Plane Signed OVA
+          echo "Uploading Control Plane Signed OVA: ${INPUT_CP_SIGNED_OVA}..."
+          az storage blob upload \
+            --account-name "${INPUT_STORAGE_ACCOUNT}" \
+            --account-key "${INPUT_STORAGE_ACCOUNT_KEY}" \
+            --container-name "${INPUT_CONTAINER_NAME}" \
+            --name "${INPUT_CP_SIGNED_OVA}" \
+            --file "\${SCRATCH_DEST}/${INPUT_CP_SIGNED_OVA}" \
+            --overwrite \
+            --output none
+          echo "Control Plane OVA uploaded successfully"
+          
+          # Upload Checksum File
+          echo "Uploading Checksum File: ${INPUT_CHECKSUM_FILE}..."
+          az storage blob upload \
+            --account-name "${INPUT_STORAGE_ACCOUNT}" \
+            --account-key "${INPUT_STORAGE_ACCOUNT_KEY}" \
+            --container-name "${INPUT_CONTAINER_NAME}" \
+            --name "${INPUT_CHECKSUM_FILE}" \
+            --file "\${SCRATCH_DEST}/${INPUT_CHECKSUM_FILE}" \
+            --overwrite \
+            --output none
+          echo "Checksum file uploaded successfully"
+          
+          echo "All files uploaded to Azure Blob Storage successfully"
+          
+          ENDSSH
+          
+          echo "Azure Blob Storage upload completed"
+
+      - name: Display Azure Upload Summary
+        run: |
+          echo "### OVA Azure Blob Storage Upload Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Storage Account:** ${{ env.AZURE_STORAGE_ACCOUNT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Container:** ${{ env.AZURE_CONTAINER_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Uploaded Blobs:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Worker OVA: \`${{ steps.set-outputs.outputs.worker_signed_ova }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Control Plane OVA: \`${{ steps.set-outputs.outputs.controlplane_signed_ova }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Checksum: \`${{ steps.set-outputs.outputs.checksum_file }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Step:** Run the **Generate Azure SAS URLs** workflow with these blob names:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| control_plane_blob_name | \`${{ steps.set-outputs.outputs.controlplane_signed_ova }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| linux_worker_blob_name | \`${{ steps.set-outputs.outputs.worker_signed_ova }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| storage_account_name | \`${{ env.AZURE_STORAGE_ACCOUNT }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| container_name | \`${{ env.AZURE_CONTAINER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
