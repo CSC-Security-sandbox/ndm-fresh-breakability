@@ -20,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.URI;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
  
 /**
 * An implementation of the Keycloak `EventListenerProvider` interface to handle user events.
@@ -164,12 +165,12 @@ public class UserProfileEventListener implements EventListenerProvider {
             String jsonBody = String.format("{\"enabled\":%s}", enabled);
             
             HttpClient httpClient = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(10))
+                    .connectTimeout(Duration.ofSeconds(5))
                     .build();
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(5))
                     .header("Content-Type", "application/json");
             
             // Add internal service secret header for authentication (if configured)
@@ -186,18 +187,33 @@ public class UserProfileEventListener implements EventListenerProvider {
                     .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
             
-            logger.info(String.format("Calling reports-service API to update ASUP settings: enabled=%s, userId=%s", enabled, userId));
+            logger.info(String.format("Calling reports-service API to update ASUP settings (async): enabled=%s, userId=%s", enabled, userId));
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            int statusCode = response.statusCode();
-            if (statusCode >= 200 && statusCode < 300) {
-                logger.info(String.format("ASUP settings updated successfully via API: enabled=%s, statusCode=%d", enabled, statusCode));
-            } else {
-                logger.warning(String.format("Failed to update ASUP settings via API: statusCode=%d, response=%s", statusCode, response.body()));
-            }
+            // Use async HTTP call to avoid blocking the event-processing thread
+            // ASUP consent is non-critical, so fire-and-forget is acceptable
+            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .orTimeout(5, TimeUnit.SECONDS)
+                    .whenComplete((response, throwable) -> {
+                        if (throwable != null) {
+                            logger.severe(String.format(
+                                    "Error calling reports-service API to update ASUP settings (async): %s",
+                                    throwable.getMessage()));
+                            return;
+                        }
+                        
+                        int statusCode = response.statusCode();
+                        if (statusCode >= 200 && statusCode < 300) {
+                            logger.info(String.format(
+                                    "ASUP settings updated successfully via API (async): enabled=%s, statusCode=%d",
+                                    enabled, statusCode));
+                        } else {
+                            logger.warning(String.format(
+                                    "Failed to update ASUP settings via API (async): statusCode=%d, response=%s",
+                                    statusCode, response.body()));
+                        }
+                    });
         } catch (Exception e) {
-            logger.severe(String.format("Error calling reports-service API to update ASUP settings: %s", e.getMessage()));
+            logger.severe(String.format("Error preparing reports-service API request to update ASUP settings: %s", e.getMessage()));
             // Don't throw - ASUP is non-critical, don't break the login flow
         }
     }

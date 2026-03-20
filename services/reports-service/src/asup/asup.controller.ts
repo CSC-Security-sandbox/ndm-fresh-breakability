@@ -25,6 +25,22 @@ import {
   UpdateAsupSettingsDto,
 } from './dto/asup.dto';
 
+// Type definitions for decoded JWT token
+interface DecodedUserRole {
+  readonly projects?: ReadonlyArray<string>;
+  readonly permissions: ReadonlyArray<string>;
+}
+
+interface DecodedUser {
+  readonly id?: string;
+  readonly roles: ReadonlyArray<DecodedUserRole>;
+}
+
+interface DecodedTokenPayload {
+  readonly user?: DecodedUser;
+  readonly sub?: string;
+}
+
 @ApiTags("asup")
 @Controller("asup")
 export class AsupController {
@@ -93,7 +109,7 @@ export class AsupController {
           throw new UnauthorizedException('JWT token missing');
         }
         try {
-          const decoded = await this.jwtService.verifyToken(token);
+          const decoded = await this.jwtService.verifyToken(token) as DecodedTokenPayload;
           if (!decoded.user) {
             throw new UnauthorizedException('Invalid token');
           }
@@ -113,14 +129,22 @@ export class AsupController {
           if (!hasPermission) {
             throw new ForbiddenException('Insufficient permissions');
           }
-          // Get user ID from token - use sub (subject) or id if available
-          userId = (decoded.user as any).id || decoded.sub || null;
-        } catch (error) {
+          // Get user ID from token - use id or sub (subject)
+          const userIdFromToken = decoded.user.id;
+          if (typeof userIdFromToken === 'string' && userIdFromToken.length > 0) {
+            userId = userIdFromToken;
+          } else if (typeof decoded.sub === 'string' && decoded.sub.length > 0) {
+            userId = decoded.sub;
+          } else {
+            userId = null;
+          }
+        } catch (error: unknown) {
           // Re-throw HttpExceptions (UnauthorizedException, ForbiddenException)
           if (error instanceof HttpException) {
             throw error;
           }
-          throw new UnauthorizedException(`JWT validation failed: ${(error as Error).message}`);
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          throw new UnauthorizedException(`JWT validation failed: ${message}`);
         }
       }
       
@@ -133,7 +157,7 @@ export class AsupController {
         enabled: updated.enabled,
         ...(updated.lastUpdated != null && { lastUpdated: updated.lastUpdated }),
       };
-    } catch (error) {
+    } catch (error: unknown) {
       // Re-throw HttpExceptions (401, 403) without converting to 500
       if (error instanceof HttpException) {
         this.logger.error(
@@ -142,9 +166,11 @@ export class AsupController {
         );
         throw error;
       }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
-        `updateAsupSettings failed: ${(error as Error).message}`,
-        (error as Error).stack,
+        `updateAsupSettings failed: ${message}`,
+        stack,
       );
       throw new InternalServerErrorException(
         'Something went wrong, please try again.',
