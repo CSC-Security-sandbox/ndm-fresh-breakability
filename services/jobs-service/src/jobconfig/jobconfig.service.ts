@@ -1464,6 +1464,13 @@ export class JobConfigService {
       .addGroupBy("jobconfig.createdAt")
       .getRawMany();
 
+    if (allJobsDetails.length === 0) return [];
+
+    const jobConfigIds = allJobsDetails.map((j) => j.jobconfigid);
+    const latestRunMap = await this.fetchLatestRunPerJobConfig(jobConfigIds);
+    const latestRunIds = Object.values(latestRunMap);
+    const errorCountMap = await this.fetchBatchErrorCountsForRuns(latestRunIds);
+
     const payload: JobListingDTO[] = [];
     for (const job of allJobsDetails) {
       let nextScheduleDate: Date | null = null;
@@ -1484,23 +1491,8 @@ export class JobConfigService {
         }
       }
 
-      // Errors: show only latest non-retry run's error count
-      const latestNonRetryRun = await this.jobRunRepo.findOne({
-        where: {
-          jobConfigId: job.jobconfigid,
-          jobRunType: Not(JobRunType.RETRY),
-        },
-        order: { startTime: "DESC" },
-        select: { id: true },
-      });
-      let errorCount = 0;
-      if (latestNonRetryRun) {
-        const errorCounts = await this.getErrorCounts(latestNonRetryRun.id);
-        errorCount =
-          errorCounts
-            .map((e) => Number(e.count))
-            .reduce((a, b) => a + b, 0) || 0;
-      }
+      const latestRunId = latestRunMap[job.jobconfigid];
+      const errorCount = latestRunId ? (errorCountMap[latestRunId] || 0) : 0;
 
       payload.push({
         jobConfigId: job.jobconfigid,
@@ -1977,6 +1969,63 @@ export class JobConfigService {
     };
     this.logger.log("formatted response", JSON.stringify(response));
     return response;
+  }
+
+  private async fetchLatestRunPerJobConfig(
+    jobConfigIds: string[],
+  ): Promise<Record<string, string>> {
+    if (jobConfigIds.length === 0) return {};
+    const rows = await this.jobRunRepo
+      .createQueryBuilder("jr")
+      .select("DISTINCT ON (jr.jobConfigId) jr.id AS id, jr.jobConfigId AS jobconfigid")
+      .where("jr.jobConfigId IN (:...ids)", { ids: jobConfigIds })
+      .andWhere("jr.jobRunType != :retryType", { retryType: JobRunType.RETRY })
+      .orderBy("jr.jobConfigId")
+      .addOrderBy("jr.startTime", "DESC")
+      .getRawMany();
+    const map: Record<string, string> = {};
+    for (const row of rows) {
+      map[row.jobconfigid] = row.id;
+    }
+    return map;
+  }
+
+  private async fetchBatchErrorCountsForRuns(
+    jobRunIds: string[],
+  ): Promise<Record<string, number>> {
+    if (jobRunIds.length === 0) return {};
+    const errorCountMap: Record<string, number> = {};
+
+    const errorRows = await this.operationErrorRepo
+      .createQueryBuilder("oe")
+      .innerJoin("oe.operation", "o")
+      .where("o.jobRunId IN (:...ids)", { ids: jobRunIds })
+      .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
+      .andWhere("oe.errorStatus = :status", { status: "UNRESOLVED" })
+      .select(["o.jobRunId AS jobRunId", "COUNT(*) AS count"])
+      .groupBy("o.jobRunId")
+      .getRawMany();
+
+    for (const row of errorRows) {
+      errorCountMap[row.jobrunid] = Number(row.count);
+    }
+
+    const workerErrors = await this.workerJobRunMapRepo
+      .createQueryBuilder("job")
+      .where("job.jobRunId IN (:...ids)", { ids: jobRunIds })
+      .andWhere("job.workerResponse IS NOT NULL")
+      .andWhere("job.workerResponse ->> 'code' = ANY(:errorCodes)", {
+        errorCodes: Object.values(WorkFlowFailureReason),
+      })
+      .andWhere("job.workerResponse ->> 'status' = 'FAILED'")
+      .select(["job.jobRunId AS jobRunId"])
+      .getRawMany();
+
+    for (const row of workerErrors) {
+      errorCountMap[row.jobrunid] = (errorCountMap[row.jobrunid] || 0) + 1;
+    }
+
+    return errorCountMap;
   }
 
   async getErrorCounts(jobRunId: string) {

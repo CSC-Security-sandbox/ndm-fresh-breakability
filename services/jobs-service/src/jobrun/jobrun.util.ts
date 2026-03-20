@@ -1,5 +1,13 @@
 
-import { JobType, WorkFlows } from "src/constants/enums";
+import { JobRunStatus, JobType, WorkFlows } from "src/constants/enums";
+
+export const TERMINAL_JOB_RUN_STATUSES = [
+  JobRunStatus.Completed,
+  JobRunStatus.Failed,
+  JobRunStatus.Errored,
+  JobRunStatus.Stopped,
+  JobRunStatus.Blocked,
+];
 
 const jobTypeWorkflowMap = {
     [JobType.MIGRATE]: WorkFlows.MIGRATE,
