@@ -5,12 +5,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { join } from 'path';
 import { promises as fsPromises } from 'fs';
+import { promisify } from 'util';
+import { exec } from 'child_process';
 import { AuthService } from 'src/auth/auth.service';
 import { ProtocolTypes, Protocols } from 'src/protocols/protocols';
 import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-directory.type';
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ClientConfig, StorageClientFactory } from 'src/storage-clients/storage-client.factory';
+
+const execAsync = promisify(exec);
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -147,6 +151,11 @@ export class ValidateWorkingDirectoryActivity {
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
+        // Configure AD DNS before mount so authentication can resolve the AD server
+        if (fileServer.type === ProtocolTypes.SMB && fileServer.dnsServer) {
+          await this.configureSmbAdDns(traceId, fileServer.dnsServer);
+        }
+
         // For storage-aware types, get the export path from exportsMap for this specific host
         // This was discovered via storage API and stored in VolumeEntity
         let exportPath = payload.fetchedPath;
@@ -219,6 +228,11 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
+        // Configure AD DNS before mount so authentication can resolve the AD server
+        if (fileServer.type === ProtocolTypes.SMB && fileServer.dnsServer) {
+          await this.configureSmbAdDns(traceId, fileServer.dnsServer);
+        }
+
         if (isStorageAware){
           let clientConfig = new ClientConfig(payload.serverType);
           const storageClient = this.storageClientFactory.getClient(clientConfig);
@@ -285,6 +299,22 @@ export class ValidateWorkingDirectoryActivity {
     } catch (error) {
       this.logger.error(`Error: No write permission for directory ${directoryPath} - ${error.message}`);
       return false;
+    }
+  }
+
+  private async configureSmbAdDns(traceId: string, dnsServerIp: string): Promise<void> {
+    if (process.platform !== 'win32') return;
+  
+    try {
+      const { stdout } = await execAsync(`netsh interface ip show dns name="Ethernet"`);
+      if (stdout.includes(dnsServerIp)) {
+        this.logger.log(`[${traceId}] AD DNS ${dnsServerIp} already configured, skipping`);
+        return;
+      }
+      await execAsync(`netsh interface ip add dns name="Ethernet" addr=${dnsServerIp} validate=no`);
+      this.logger.log(`[${traceId}] AD DNS ${dnsServerIp} appended to adapter DNS list`);
+    } catch (error) {
+      this.logger.warn(`[${traceId}] Failed to configure AD DNS ${dnsServerIp}: ${error.message}`);
     }
   }
 
