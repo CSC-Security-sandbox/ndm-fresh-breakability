@@ -175,6 +175,8 @@ extraEnvVars:
       value: 'keycloak'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded
+    - name: JAVA_OPTS
+      value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -Xms512m -Xmx2048m" 
 
 podSecurityContext:
   fsGroup: {{ vm_gid }}
