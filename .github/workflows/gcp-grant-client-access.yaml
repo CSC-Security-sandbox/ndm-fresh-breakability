@@ -1,0 +1,214 @@
+name: GCP GCS Grant/Revoke Client Access
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      client_email:
+        description: "Client's GCP service account or Google account email (e.g. sa@their-project.iam.gserviceaccount.com)"
+        required: true
+      release_folder:
+        description: "Release folder prefix in GCS bucket (e.g. release-2026.03.0)"
+        required: true
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - grant
+          - revoke
+      gcs_bucket:
+        description: "GCS bucket name (default: ndm-vmdk-files)"
+        required: false
+        default: "ndm-vmdk-files"
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+
+jobs:
+  manage-client-access:
+    runs-on: openlab
+    steps:
+      - name: Install SSH Tools
+        run: |
+          sudo apt-get install -y sshpass openssh-client
+
+      - name: Add VM SSH Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ vars.RUNNER_GITHUB_IP_66 }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Transfer GCP Key to Remote VM
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          GCP_KEY: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
+        run: |
+          if [ -z "$GCP_KEY" ]; then
+            echo "ERROR: PACKER_GCP_CREDENTIALS_JSON secret is empty or not set"
+            exit 1
+          fi
+
+          TEMP_KEY_FILE=$(mktemp)
+          echo "$GCP_KEY" | base64 --decode > "$TEMP_KEY_FILE"
+
+          REMOTE_KEY_FILE="/tmp/gcp-key-${{ github.run_id }}.json"
+
+          sshpass -p "$RUNNER_PASSWORD" scp "$TEMP_KEY_FILE" ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }}:"${REMOTE_KEY_FILE}"
+
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} "chmod 600 ${REMOTE_KEY_FILE}"
+
+          rm -f "$TEMP_KEY_FILE"
+
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} \
+            "test -f ${REMOTE_KEY_FILE} && python3 -c 'import json; json.load(open(\"${REMOTE_KEY_FILE}\"))' && echo 'GCP key file exists and is valid JSON' || (echo 'ERROR: GCP key file was not created or is invalid JSON' && exit 1)"
+
+      - name: Manage Client Access
+        id: manage-access
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
+          CLIENT_EMAIL: ${{ github.event.inputs.client_email }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          ACTION: ${{ github.event.inputs.action }}
+          GCS_BUCKET: ${{ github.event.inputs.gcs_bucket }}
+        run: |
+          SSH_OUTPUT_FILE=$(mktemp)
+
+          sshpass -p "$RUNNER_PASSWORD" ssh ubuntu@${{ vars.RUNNER_GITHUB_IP_66 }} << ENDSSH | tee "$SSH_OUTPUT_FILE"
+          set -e
+
+          # Authenticate to GCP
+          REMOTE_KEY_FILE="/tmp/gcp-key-${{ github.run_id }}.json"
+          gcloud auth activate-service-account --key-file="\${REMOTE_KEY_FILE}"
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+          # Clean up key file after auth
+          rm -f "\${REMOTE_KEY_FILE}"
+
+          CLIENT_EMAIL="${CLIENT_EMAIL}"
+          RELEASE_FOLDER="${RELEASE_FOLDER}"
+          ACTION="${ACTION}"
+          GCS_BUCKET="${GCS_BUCKET}"
+          GCS_PATH="gs://\${GCS_BUCKET}/\${RELEASE_FOLDER}/"
+
+          echo "============================================"
+          echo "Action: \${ACTION}"
+          echo "Client: \${CLIENT_EMAIL}"
+          echo "Bucket: \${GCS_BUCKET}"
+          echo "Folder: \${RELEASE_FOLDER}"
+          echo "Path:   \${GCS_PATH}"
+          echo "============================================"
+
+          # Verify the folder exists and list objects
+          echo ""
+          echo "Objects in \${GCS_PATH}:"
+          OBJECT_COUNT=\$(gsutil ls "\${GCS_PATH}" 2>/dev/null | wc -l || echo "0")
+
+          if [ "\${OBJECT_COUNT}" -eq 0 ]; then
+            echo "ERROR: No objects found at \${GCS_PATH}"
+            echo "Please verify the release folder name."
+            exit 1
+          fi
+
+          gsutil ls -l "\${GCS_PATH}"
+          echo ""
+          echo "Found \${OBJECT_COUNT} object(s)"
+          echo ""
+
+          if [ "\${ACTION}" = "grant" ]; then
+            echo "Granting read access to \${CLIENT_EMAIL}..."
+            gsutil -m acl ch -r -u "\${CLIENT_EMAIL}:R" "\${GCS_PATH}"
+            echo ""
+            echo "Access granted successfully."
+            echo ""
+            echo "============================================"
+            echo "SHARE THE FOLLOWING WITH THE CLIENT:"
+            echo "============================================"
+            echo ""
+            echo "GCS paths:"
+            gsutil ls "\${GCS_PATH}" | while read -r obj; do
+              echo "  \${obj}"
+            done
+            echo ""
+            echo "Quick copy command:"
+            echo "  gsutil -m cp -r \${GCS_PATH} gs://<YOUR-BUCKET>/imports/"
+            echo ""
+            echo "Or direct image import:"
+            gsutil ls "\${GCS_PATH}" | grep "\.tar\.gz\$" | while read -r obj; do
+              BASENAME=\$(basename "\${obj}" .tar.gz)
+              echo "  gcloud compute images import \${BASENAME} --source-file=\${obj} --project=<YOUR-PROJECT>"
+            done
+            echo ""
+            echo "============================================"
+
+          elif [ "\${ACTION}" = "revoke" ]; then
+            echo "Revoking access from \${CLIENT_EMAIL}..."
+            gsutil -m acl ch -r -d "\${CLIENT_EMAIL}" "\${GCS_PATH}"
+            echo ""
+            echo "Access revoked successfully."
+          fi
+
+          echo ""
+          echo "Verifying ACLs on first object..."
+          FIRST_OBJ=\$(gsutil ls "\${GCS_PATH}" | head -1)
+          gsutil acl get "\${FIRST_OBJ}"
+
+          echo ""
+          echo "RESULT:SUCCESS|\${ACTION}|\${CLIENT_EMAIL}|\${RELEASE_FOLDER}"
+
+          ENDSSH
+
+          echo "ssh_output<<EOFMARKER" >> $GITHUB_OUTPUT
+          cat "$SSH_OUTPUT_FILE" >> $GITHUB_OUTPUT
+          echo "EOFMARKER" >> $GITHUB_OUTPUT
+          rm -f "$SSH_OUTPUT_FILE"
+
+      - name: Display Summary
+        env:
+          ACTION: ${{ github.event.inputs.action }}
+          CLIENT_EMAIL: ${{ github.event.inputs.client_email }}
+          RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
+          GCS_BUCKET: ${{ github.event.inputs.gcs_bucket }}
+          SSH_OUTPUT: ${{ steps.manage-access.outputs.ssh_output }}
+        run: |
+          RUN_DATE=$(date -u +"%d/%m/%Y %H:%M UTC")
+
+          echo "### GCS Client Access — ${ACTION^}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** ${RUN_DATE}" >> $GITHUB_STEP_SUMMARY
+          echo "**Action:** ${ACTION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Client:** ${CLIENT_EMAIL}" >> $GITHUB_STEP_SUMMARY
+          echo "**Bucket:** ${GCS_BUCKET}" >> $GITHUB_STEP_SUMMARY
+          echo "**Folder:** ${RELEASE_FOLDER}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${ACTION}" = "grant" ]; then
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## Available Files" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The following files are now accessible to the client:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract file list from SSH output (between "GCS paths:" and "Quick copy command:")
+            echo "$SSH_OUTPUT" | sed -n '/^GCS paths:/,/^Quick copy command:/p' | grep "^  gs://" | while read -r line; do
+              echo "- \`${line}\`"
+            done >> $GITHUB_STEP_SUMMARY
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## Copy Commands" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            # Extract file list and generate individual copy commands
+            echo "$SSH_OUTPUT" | sed -n '/^GCS paths:/,/^Quick copy command:/p' | grep "^  gs://" | while read -r obj; do
+              echo "gsutil cp ${obj} gs://<YOUR-BUCKET>/imports/"
+            done >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Access has been revoked." >> $GITHUB_STEP_SUMMARY
+          fi
