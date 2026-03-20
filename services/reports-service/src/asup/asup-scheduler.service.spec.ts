@@ -51,7 +51,7 @@ describe('AsupSchedulerService', () => {
     } as any;
 
     configService = {
-      get: jest.fn().mockReturnValue('https://eprod.netapp.com/put/AsupPut'),
+      get: jest.fn().mockReturnValue('https://support.netapp.com/put/AsupPut'),
     } as any;
 
     asupStatsService = {

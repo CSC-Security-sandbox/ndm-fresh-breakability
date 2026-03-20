@@ -100,8 +100,8 @@ export class AsupSchedulerService {
   }
 
   /**
-   * Daily cron job to transmit ASUP metrics
-   * Runs every day at midnight (00:00)
+   * Cron job to transmit ASUP metrics
+   * Runs every 5 minutes
    * 
    * This job:
    * 1. Checks if ASUP is enabled in the database
@@ -110,7 +110,7 @@ export class AsupSchedulerService {
    * 4. Marks transmitted records as 'transmitted = TRUE'
    * 5. Updates last transmission timestamp
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async handleAsupTransmission() {
     this.logger.log('Daily ASUP transmission job triggered');
     

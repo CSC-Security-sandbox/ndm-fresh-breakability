@@ -9,7 +9,7 @@ export default registerAs(
     },
     baseDir: process.env.REPORT_DOWNLOAD_LOCATION || "/reports",
     asup: {
-      asupEndpoint: process.env.ASUP_ENDPOINT || "https://eprod.netapp.com/put/AsupPut",
+      asupEndpoint: process.env.ASUP_ENDPOINT || "https://support.netapp.com/put/AsupPut",
     },
   }),
 );
