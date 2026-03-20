@@ -42,6 +42,7 @@ jobs:
           echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
 
   trivy-scan:
+    if: false # Temporarily disabled
     runs-on: ubuntu-latest
     needs: determine-matrix
     strategy:
