@@ -1,10 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
-import { psEnableBackupPrivilegeScript } from '../../activities/core/migrate/command-execution/win-opeartions/powershell.script';
+import { psEnableBackupPrivilegeScriptMinified } from '../../activities/core/migrate/command-execution/win-opeartions/powershell.script';
 import { promisify } from 'util';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 
 const execAsync = promisify(exec);
 
@@ -35,17 +32,13 @@ export class WindowsPrivilegeService {
         function getNodeProcessPrivilegeScript(targetPid: number): string {
             return `
 Add-Type -TypeDefinition @"
-${psEnableBackupPrivilegeScript}
+${psEnableBackupPrivilegeScriptMinified}
 "@
-
 $targetPid = ${targetPid}
-
 $backupResult = [TokenManipulator]::EnablePrivilegeForPid($targetPid, "SeBackupPrivilege")
 $restoreResult = [TokenManipulator]::EnablePrivilegeForPid($targetPid, "SeRestorePrivilege")
-
 Write-Output "SeBackupPrivilege: $backupResult"
 Write-Output "SeRestorePrivilege: $restoreResult"
-
 if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
     Write-Output "OVERALL: SUCCESS"
 } else {
@@ -54,14 +47,13 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
 `;
         }
         
-        const privilegeScriptPath = path.join(os.tmpdir(), `enable_privs_${jobRunId}.ps1`);
         const psScript = getNodeProcessPrivilegeScript(process.pid);
         
         try {
-            await fs.promises.writeFile(privilegeScriptPath, psScript, 'utf8');
+            const encodedCommand = Buffer.from(psScript, 'utf16le').toString('base64');
 
             const { stdout, stderr } = await execAsync(
-                `powershell -NoProfile -ExecutionPolicy Bypass -File "${privilegeScriptPath}"`,
+                `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${encodedCommand}`,
                 { windowsHide: true }
             );
 
@@ -85,24 +77,11 @@ if ($backupResult -like "*SUCCESS*" -and $restoreResult -like "*SUCCESS*") {
             if (error.message?.includes('Failed to enable backup privileges')) {
                 throw error;
             }
-            
             this.logger.error(`Error executing privilege enablement script: ${error.message}`);
             if (error.stderr) {
                 this.logger.error(`PowerShell error details: ${error.stderr}`);
             }
             throw new Error(`Failed to enable Windows backup privileges: ${error.message}`);
-        } finally {
-            // Only attempt to delete the file if it exists
-            try {
-                await fs.promises.unlink(privilegeScriptPath);
-                this.logger.debug(`Successfully deleted PowerShell script: ${privilegeScriptPath}`);
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    this.logger.debug(`PowerShell script file does not exist, skipping cleanup: ${privilegeScriptPath}`);
-                } else {
-                    this.logger.error(`Error deleting PowerShell script file: ${error.message}`);
-                }
-            }
         }
     }
 }

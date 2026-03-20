@@ -436,6 +436,28 @@ try {
 }
 `;
 
+export const psEnableBackupPrivilegeScriptMinified = `using System;using System.Runtime.InteropServices;using System.ComponentModel;
+public class TokenManipulator{
+[DllImport("advapi32.dll",SetLastError=true)]static extern bool AdjustTokenPrivileges(IntPtr h,bool d,ref P n,int l,IntPtr p,IntPtr r);
+[DllImport("advapi32.dll",SetLastError=true)]static extern bool OpenProcessToken(IntPtr h,int a,ref IntPtr t);
+[DllImport("advapi32.dll",SetLastError=true,CharSet=CharSet.Unicode)]static extern bool LookupPrivilegeValue(string h,string n,ref long l);
+[DllImport("kernel32.dll",SetLastError=true)]static extern bool CloseHandle(IntPtr h);
+[StructLayout(LayoutKind.Sequential,Pack=1)]struct P{public int C;public long L;public int A;}
+const int E=2,Q=8,J=32;
+public static string EnablePrivilegeForPid(int pid,string priv){
+IntPtr t=IntPtr.Zero;
+try{
+var p=System.Diagnostics.Process.GetProcessById(pid);
+if(!OpenProcessToken(p.Handle,J|Q,ref t))return "FAILED:"+new Win32Exception(Marshal.GetLastWin32Error()).Message;
+long l=0;
+if(!LookupPrivilegeValue(null,priv,ref l))return "FAILED:"+priv;
+P tp=new P();tp.C=1;tp.L=l;tp.A=E;
+if(!AdjustTokenPrivileges(t,false,ref tp,0,IntPtr.Zero,IntPtr.Zero))return "FAILED:ATP";
+return Marshal.GetLastWin32Error()==1300?"FAILED:NotAssigned":"SUCCESS";
+}catch(Exception ex){return "FAILED:"+ex.Message;}
+finally{if(t!=IntPtr.Zero)CloseHandle(t);}
+}}`;
+
 export const psEnableBackupPrivilegeScript = `
 using System;
 using System.Runtime.InteropServices;

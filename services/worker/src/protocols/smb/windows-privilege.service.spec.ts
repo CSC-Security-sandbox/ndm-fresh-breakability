@@ -9,28 +9,9 @@ jest.mock('util', () => ({
 }));
 
 jest.mock('child_process');
-jest.mock('fs', () => ({
-    promises: {
-        writeFile: jest.fn(),
-        unlink: jest.fn(),
-        access: jest.fn(),
-        mkdir: jest.fn(),
-    },
-}));
-jest.mock('os', () => ({
-    tmpdir: jest.fn().mockReturnValue('C:\\temp'),
-}));
-jest.mock('path', () => ({
-    join: jest.fn((...args: string[]) => args.join('\\')),
-}));
 
 // Now import the service after ALL mocks are set up
 import { WindowsPrivilegeService } from './windows-privilege.service';
-
-// Get references to the mocked modules
-const mockFs = require('fs');
-const mockOs = require('os');
-const mockPath = require('path');
 
 describe('WindowsPrivilegeService', () => {
     let service: WindowsPrivilegeService;
@@ -42,10 +23,6 @@ describe('WindowsPrivilegeService', () => {
 
         // Reset mocks
         jest.clearAllMocks();
-        
-        // Reset fs.promises mocks to default resolved values
-        mockFs.promises.writeFile.mockResolvedValue(undefined);
-        mockFs.promises.unlink.mockResolvedValue(undefined);
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [WindowsPrivilegeService],
@@ -84,16 +61,10 @@ describe('WindowsPrivilegeService', () => {
 
             await expect(service.enableBackupPrivileges('test-job-123')).resolves.toBeUndefined();
 
-            expect(mockFs.promises.writeFile).toHaveBeenCalledWith(
-                expect.stringContaining('enable_privs_'),
-                expect.stringContaining('EnablePrivilegeForPid'),
-                'utf8'
-            );
             expect(mockExecAsync).toHaveBeenCalledWith(
-                expect.stringContaining('powershell -NoProfile -ExecutionPolicy Bypass -File'),
-                expect.any(Object)
+                expect.stringContaining('-EncodedCommand'),
+                expect.objectContaining({ windowsHide: true })
             );
-            expect(mockFs.promises.unlink).toHaveBeenCalled();
         });
 
         it('should throw error when privilege enablement fails', async () => {
@@ -139,14 +110,6 @@ describe('WindowsPrivilegeService', () => {
             await expect(service.enableBackupPrivileges('test-job-123')).resolves.toBeUndefined();
         });
 
-        it('should clean up temp file even on error', async () => {
-            mockExecAsync.mockRejectedValue(new Error('Execution failed'));
-
-            await expect(service.enableBackupPrivileges('test-job-123')).rejects.toThrow();
-
-            expect(mockFs.promises.unlink).toHaveBeenCalled();
-        });
-
         it('should skip privilege enablement on non-Windows platforms', async () => {
             Object.defineProperty(process, 'platform', {
                 value: 'linux',
@@ -169,7 +132,7 @@ describe('WindowsPrivilegeService', () => {
             );
         });
 
-        it('should pass correct process ID to PowerShell script', async () => {
+        it('should pass correct process ID in encoded command', async () => {
             mockExecAsync.mockResolvedValue({
                 stdout: 'SeBackupPrivilege: SUCCESS\nSeRestorePrivilege: SUCCESS\nOVERALL: SUCCESS',
                 stderr: '',
@@ -177,11 +140,10 @@ describe('WindowsPrivilegeService', () => {
 
             await service.enableBackupPrivileges('test-job-123');
 
-            expect(mockFs.promises.writeFile).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.stringContaining(`$targetPid = ${process.pid}`),
-                'utf8'
-            );
+            const calledWith = mockExecAsync.mock.calls[0][0] as string;
+            const encodedPart = calledWith.split('-EncodedCommand ')[1];
+            const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
+            expect(decoded).toContain(`$targetPid = ${process.pid}`);
         });
 
         it('should use correct PowerShell execution flags', async () => {
@@ -193,7 +155,7 @@ describe('WindowsPrivilegeService', () => {
             await service.enableBackupPrivileges('test-job-123');
 
             expect(mockExecAsync).toHaveBeenCalledWith(
-                expect.stringContaining('-NoProfile -ExecutionPolicy Bypass'),
+                expect.stringContaining('-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand'),
                 expect.objectContaining({ windowsHide: true })
             );
         });
@@ -209,16 +171,15 @@ describe('WindowsPrivilegeService', () => {
             );
         });
 
-        it('should throw error on file write errors', async () => {
-            mockFs.promises.writeFile.mockRejectedValue(new Error('Disk full'));
+        it('should throw error on PowerShell exec failure', async () => {
+            mockExecAsync.mockRejectedValue(new Error('Execution failed'));
 
             await expect(service.enableBackupPrivileges('test-job-123')).rejects.toThrow(
                 'Failed to enable Windows backup privileges'
             );
-            expect(mockExecAsync).not.toHaveBeenCalled();
         });
 
-        it('should create temp file with job run ID in filename', async () => {
+        it('should invoke execAsync exactly once with no file I/O', async () => {
             mockExecAsync.mockResolvedValue({
                 stdout: 'SeBackupPrivilege: SUCCESS\nSeRestorePrivilege: SUCCESS\nOVERALL: SUCCESS',
                 stderr: '',
@@ -226,30 +187,11 @@ describe('WindowsPrivilegeService', () => {
 
             await service.enableBackupPrivileges('test-job-123');
 
-            expect(mockPath.join).toHaveBeenCalledWith(
-                'C:\\temp',
-                'enable_privs_test-job-123.ps1'
-            );
-            expect(mockFs.promises.writeFile).toHaveBeenCalledWith(
-                'C:\\temp\\enable_privs_test-job-123.ps1',
-                expect.any(String),
-                'utf8'
-            );
-        });
-
-        it('should handle cleanup errors gracefully', async () => {
-            mockExecAsync.mockResolvedValue({
-                stdout: 'SeBackupPrivilege: SUCCESS\nSeRestorePrivilege: SUCCESS\nOVERALL: SUCCESS',
-                stderr: '',
-            });
-            mockFs.promises.unlink.mockRejectedValue(new Error('File locked'));
-
-            // Should still succeed even if cleanup fails
-            await expect(service.enableBackupPrivileges('test-job-123')).resolves.toBeUndefined();
-            
-            expect(service['logger'].error).toHaveBeenCalledWith(
-                expect.stringContaining('Error deleting PowerShell script file')
-            );
+            // Only one execAsync call — no separate file write or cleanup calls
+            expect(mockExecAsync).toHaveBeenCalledTimes(1);
+            const calledWith = mockExecAsync.mock.calls[0][0] as string;
+            expect(calledWith).toContain('-EncodedCommand');
+            expect(calledWith).not.toContain('-File');
         });
     });
 });
