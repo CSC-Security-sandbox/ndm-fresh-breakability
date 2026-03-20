@@ -12,7 +12,7 @@ import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from "../../utils/utils";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
-import { CommandGenerationService } from "../../shared/command-generation.service";
+import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
 
 
 @Injectable()
@@ -87,7 +87,7 @@ export class MigrateScanService {
                 excludePatterns: settings.excludePatterns
             },
             errorType: errorType || ErrorType.RECOVERABLE_ERROR,
-            targetContent,
+            targetContent: new LocalSetLookup(targetContent),
             maxCommandsPerBatch: this.maxMigrationCommand
         });
 

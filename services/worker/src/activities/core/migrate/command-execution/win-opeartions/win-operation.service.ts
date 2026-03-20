@@ -358,7 +358,7 @@ export class WinOperationService {
       if (output.stderr) throw new Error(output.stderr);
       const result = JSON.parse(output.stdout);
 
-      this.logger.log(`Parsed link detection result for path ${path} is : ${JSON.stringify(result, null, 2)}`);
+      this.logger.debug(`Parsed link detection result for path ${path} is : ${JSON.stringify(result, null, 2)}`);
 
       if (result.IsJunction) return FileType.JUNCTION;
       if (result.IsSymbolicLink) return FileType.SYMBOLIC_LINK;

@@ -12,6 +12,40 @@ import { FileTypeDetectionService } from "../utils/file-type-detection.service";
 import { FileType } from "src/activities/types/tasks";
 
 /**
+ * Interface for target content membership lookups.
+ * Supports both in-memory Set<string> (via LocalSetLookup) and Redis-backed (via RedisSetLookup).
+ */
+export interface TargetContentLookup {
+  hasMany(names: string[]): Promise<boolean[]>;
+}
+
+/**
+ * Wraps an in-memory Set<string> as a TargetContentLookup.
+ * Used for small directories or backward compatibility.
+ */
+export class LocalSetLookup implements TargetContentLookup {
+  constructor(private readonly set: Set<string>) {}
+  async hasMany(names: string[]): Promise<boolean[]> {
+    return names.map(n => this.set.has(n));
+  }
+}
+
+/**
+ * Wraps a Redis Set as a TargetContentLookup using bulk SMISMEMBER.
+ * Used for large directories to avoid loading all entries into memory.
+ */
+export class RedisSetLookup implements TargetContentLookup {
+  constructor(
+    private readonly jobContext: JobManagerContext,
+    private readonly redisKey: string,
+  ) {}
+  async hasMany(names: string[]): Promise<boolean[]> {
+    if (names.length === 0) return [];
+    return this.jobContext.areDirContentMembers(this.redisKey, names);
+  }
+}
+
+/**
  * Input for processing a single source item
  */
 export interface ProcessItemInput {
@@ -65,14 +99,17 @@ export interface ProcessItemsInput {
   command?: Cmd;                         // Required for scan, optional for retry (uses originalCommandId)
   settings: ProcessItemSettings;
   errorType: ErrorType;
-  targetContent: Set<string>;
+  targetContent: TargetContentLookup;
   maxCommandsPerBatch?: number;
+  /** Pre-resolved target membership for SMB lowercase conflict detection */
+  targetLcLookup?: TargetContentLookup;
 }
 
 export interface ProcessItemsResult {
   commands: Cmd[];
   fileCount: number;
   dirCount: number;
+  totalSize: number;
   subDirs: string[];
 }
 
@@ -115,28 +152,43 @@ export class CommandGenerationService {
       commands: [],
       fileCount: 0,
       dirCount: 0,
+      totalSize: 0,
       subDirs: []
     };
 
     const isSMB = process.platform === 'win32';
     let lowerCaseSourceData: Set<string> | undefined;
-    let lowerCaseTargetData: Set<string> | undefined;
 
     if (isSMB) {
       lowerCaseSourceData = new Set<string>();
-      lowerCaseTargetData = new Set<string>();
-      for (const item of targetContent) {
-        lowerCaseTargetData.add(item.toLowerCase());
+    }
+
+    // Bulk pre-resolve target membership for all items in this batch (single Redis call)
+    const allItemNames = items.map(item => item.fPath ? path.basename(item.fPath) : item.name);
+    const targetMembershipResults = await targetContent.hasMany(allItemNames);
+    const targetHasItem = new Map<string, boolean>();
+    for (let i = 0; i < allItemNames.length; i++) {
+      targetHasItem.set(allItemNames[i], targetMembershipResults[i]);
+    }
+
+    // Pre-resolve SMB lowercase target membership in bulk
+    let targetLcHasItem: Map<string, boolean> | undefined;
+    if (isSMB && input.targetLcLookup) {
+      const lcNames = allItemNames.map(n => n.toLowerCase());
+      const lcResults = await input.targetLcLookup.hasMany(lcNames);
+      targetLcHasItem = new Map<string, boolean>();
+      for (let i = 0; i < lcNames.length; i++) {
+        targetLcHasItem.set(lcNames[i], lcResults[i]);
       }
     }
 
     for (const itemData of items) {
       const itemName = itemData.fPath ? path.basename(itemData.fPath) : itemData.name;
       const relativePath = itemData.fPath || itemData.name;
-      const sourceContentPath = itemData.fPath 
+      const sourceContentPath = itemData.fPath
         ? path.join(sourcePrefix, itemData.fPath)
         : path.join(sourcePath, itemData.name);
-      
+
       try {
         // Check if source exists
         const sourceContentExists = await isExists(sourceContentPath);
@@ -160,8 +212,8 @@ export class CommandGenerationService {
           stats: sourceStat,
           excludePatterns: settings.excludePatterns,
           skipTime: settings.skipFile,
-          olderThan: jobContext.jobConfig.options?.excludeOlderThan 
-            ? new Date(jobContext.jobConfig.options.excludeOlderThan) 
+          olderThan: jobContext.jobConfig.options?.excludeOlderThan
+            ? new Date(jobContext.jobConfig.options.excludeOlderThan)
             : undefined,
           jobType: jobContext.jobConfig.jobType
         })) {
@@ -175,7 +227,7 @@ export class CommandGenerationService {
 
         // SMB-specific validations
         if (isSMB) {
-           const hasSMBError:boolean =  await this.SMBSpecificChecks(jobContext, command, itemName, lowerCaseSourceData!, relativeSourcePath, sourceContentPath, lowerCaseTargetData, targetContent, sourceStat.isDirectory(), errorType);
+           const hasSMBError: boolean = await this.SMBSpecificChecks(jobContext, command, itemName, lowerCaseSourceData!, relativeSourcePath, sourceContentPath, targetLcHasItem, targetHasItem, sourceStat.isDirectory(), errorType);
           if (hasSMBError) continue;
         }
 
@@ -186,6 +238,8 @@ export class CommandGenerationService {
           relativePath: relativeSourcePath
         });
         const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
+
+        const itemInTarget = targetHasItem.get(itemName) || false;
 
         // Process based on file type
         if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()) {
@@ -200,16 +254,15 @@ export class CommandGenerationService {
             continue;
           }
           result.subDirs.push(relativeSourcePath);
-      
 
           // Generate command if target doesn't have this directory
-          if (!targetContent.has(itemName)) {
+          if (!itemInTarget) {
             const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
             if (newCommand) result.commands.push(newCommand);
           }
         } else if (sourceStat.isSymbolicLink()) {
           // Handle symbolic links
-          if (!targetContent.has(itemName)) {
+          if (!itemInTarget) {
             // Check for junctions and symbolic links (Windows only)
             if (isSMB && (fileType === FileType.JUNCTION || fileType === FileType.SYMBOLIC_LINK)) {
               const transientError = new Error(`${fileType} detected at ${relativeSourcePath}`);
@@ -228,9 +281,10 @@ export class CommandGenerationService {
             const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId);
             if (newCommand) result.commands.push(newCommand);
           }
-        } else if (!targetContent.has(itemName)) {
+        } else if (!itemInTarget) {
           // Regular file, target doesn't exist
           result.fileCount++;
+          result.totalSize += sourceStat.size;
           const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
           if (newCommand) result.commands.push(newCommand);
         } else {
@@ -267,7 +321,7 @@ export class CommandGenerationService {
     return result;
   }
 
-  private async SMBSpecificChecks(jobContext: JobManagerContext, command: Cmd, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, lowerCaseTargetData ,  targetContent ,  isDirectory: boolean, errorType: ErrorType): Promise<boolean> {
+  private async SMBSpecificChecks(jobContext: JobManagerContext, command: Cmd, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, targetLcHasItem: Map<string, boolean> | undefined, targetHasItem: Map<string, boolean>, isDirectory: boolean, errorType: ErrorType): Promise<boolean> {
     const errorOpId = command?.id || '';
     const hasConflict = await this.checkAndPublishCaseConflictError(
       jobContext.jobConfig.jobType,
@@ -277,8 +331,8 @@ export class CommandGenerationService {
       sourceContentPath,
       errorOpId,
       jobContext,
-      lowerCaseTargetData,
-      targetContent,
+      targetLcHasItem,
+      targetHasItem,
       isDirectory
     );
     if (hasConflict) return true;
@@ -335,12 +389,12 @@ export class CommandGenerationService {
     sourceContentPath: string,
     operationId: string,
     jobContext: JobManagerContext,
-    lowerCaseTargetData?: Set<string>,
-    targetContent?: Set<string>,
+    targetLcHasItem?: Map<string, boolean>,
+    targetHasItem?: Map<string, boolean>,
     isDirectory?: boolean
   ): Promise<boolean> {
     const lowerCaseFileName = itemName.toLowerCase();
-    if (lowerCaseSourceData.has(lowerCaseFileName) || (lowerCaseTargetData?.has(lowerCaseFileName) && !targetContent?.has(itemName))) {
+    if (lowerCaseSourceData.has(lowerCaseFileName) || (targetLcHasItem?.get(lowerCaseFileName) && !targetHasItem?.get(itemName))) {
       const isDiscovery = jobType === "DISCOVER";
       const itemType = isDirectory ? 'Directory' : 'File';
       const errorMessage = isDiscovery 
