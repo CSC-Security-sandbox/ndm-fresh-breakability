@@ -24,6 +24,11 @@ class Protocol {
   @IsOptional()
   @IsString()
   exportPathSource: ExportPathSource
+
+  @ApiProperty({ description: 'AD Server IP (SMB only)', required: false })
+  @IsOptional()
+  @IsString()
+  adServerIp?: string; 
 }
 
 class FileServer {

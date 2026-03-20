@@ -311,8 +311,8 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log(`[${traceId}] AD DNS ${dnsServerIp} already configured, skipping`);
         return;
       }
-      await execAsync(`netsh interface ip add dns name="Ethernet" addr=${dnsServerIp} validate=no`);
-      this.logger.log(`[${traceId}] AD DNS ${dnsServerIp} appended to adapter DNS list`);
+      await execAsync(`netsh interface ip add dns name="Ethernet" addr=${dnsServerIp} index=1 validate=no`);
+      this.logger.log(`[${traceId}] AD DNS ${dnsServerIp} inserted at index=1 in adapter DNS list`);
     } catch (error) {
       this.logger.warn(`[${traceId}] Failed to configure AD DNS ${dnsServerIp}: ${error.message}`);
     }
