@@ -35,7 +35,6 @@ export class RedisConsumerService implements OnModuleDestroy {
     private connectionRefreshInterval: NodeJS.Timeout | null = null;
     private readonly jwtAuthEnabled: boolean = process.env.REDIS_JWT_AUTH_ENABLED !== 'false';
     private readonly REDIS_CONNECT_TIMEOUT_MS: number = parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS || '30000');
-    private readonly WORKER_THREAD_TIMEOUT_MS: number = parseInt(process.env.WORKER_THREAD_TIMEOUT_MS || '86400000'); // 24h default
 
     constructor(
         private readonly inventoryService: InventoryService,
@@ -592,16 +591,6 @@ export class RedisConsumerService implements OnModuleDestroy {
                 }
             }
 
-            // Evict stale workers that have been running longer than the timeout
-            for (const [staleJobId, startTime] of this.activeWorkers.entries()) {
-                const elapsed = Date.now() - startTime;
-                if (elapsed > this.WORKER_THREAD_TIMEOUT_MS) {
-                    const staleProjectId = await this.getProjectIdFromCache(staleJobId);
-                    this.logger.warn(`projectId: ${staleProjectId} Evicting stale worker for job ${staleJobId} (running for ${Math.round(elapsed / 1000 / 60)} minutes)`);
-                    this.activeWorkers.delete(staleJobId);
-                }
-            }
-
             const keys: string[] = await this.redisClient.keys(`${this.REDIS_KEY_PREFIX}:*`);
 
             for (const key of keys) {
@@ -674,21 +663,9 @@ export class RedisConsumerService implements OnModuleDestroy {
                 workerData: { jobRunId, projectId }
             });
 
-            const timeoutHandle = setTimeout(() => {
-                if (!settled) {
-                    settled = true;
-                    this.logger.error(`projectId: ${projectId} Worker thread timed out after ${this.WORKER_THREAD_TIMEOUT_MS / 1000}s for job ${jobRunId}, terminating`);
-                    worker.terminate().catch(err => {
-                        this.logger.error(`projectId: ${projectId} Failed to terminate timed-out worker for job ${jobRunId}: ${err.message}`);
-                    });
-                    reject(new WorkerError(`Worker thread timed out for job ${jobRunId}`));
-                }
-            }, this.WORKER_THREAD_TIMEOUT_MS);
-
             worker.on('message', (result) => {
                 if (settled) return;
                 settled = true;
-                clearTimeout(timeoutHandle);
 
                 if (result.success) {
                     this.logger.log(`projectId: ${projectId} Worker thread completed successfully for job ${jobRunId}`);
@@ -702,13 +679,11 @@ export class RedisConsumerService implements OnModuleDestroy {
             worker.on('error', (error) => {
                 if (settled) return;
                 settled = true;
-                clearTimeout(timeoutHandle);
                 this.logger.error(`projectId: ${projectId} Worker thread error for job ${jobRunId}:`, error);
                 reject(error);
             });
 
             worker.on('exit', (code) => {
-                clearTimeout(timeoutHandle);
                 worker.removeAllListeners();
 
                 if (code !== 0 && !settled) {
