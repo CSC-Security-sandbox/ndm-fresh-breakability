@@ -181,6 +181,16 @@ export  class JobManagerContext {
         return JSON.parse(json);
     }
 
+    // Directory Content Set Methods (for streaming large directories)
+    async addToDirContentSet(key: string, members: string[]): Promise<void> {
+        throw new Error(
+            "DirContentSet operations are not supported on base JobManagerContext. Override addToDirContentSet in a subclass.",
+        );
+    }
+    async areDirContentMembers(key: string, members: string[]): Promise<boolean[]> { return members.map(() => false); }
+    async scanDirContentSet(key: string, cursor: number, count: number): Promise<{cursor: number, members: string[]}> { return {cursor: 0, members: []}; }
+    async deleteDirContentSet(key: string): Promise<void> {}
+
     async initializeInstance(): Promise<void>{ }
 
     async cleanup(): Promise<void> {}

@@ -4,6 +4,7 @@ import { GroupReaderType } from "../enums";
 // Mocks for dependencies
 const mockFileStream = {
     append: jest.fn(),
+    appendBulk: jest.fn(),
     groupReadWithoutAck: jest.fn(),
     ackAndPurge: jest.fn(),
 };
@@ -14,8 +15,10 @@ const mockErrorStream = {
 };
 const mockCommandStream = {
     append: jest.fn(),
+    appendBulk: jest.fn(),
     groupReadWithoutAck: jest.fn(),
     ackAndPurge: jest.fn(),
+    getLength: jest.fn(),
 };
 const mockTaskStream = {
     append: jest.fn(),
@@ -69,6 +72,13 @@ describe("JobManagerContext", () => {
         expect(ctx.jobRunId).toBe(jobRunId);
         expect(ctx.jobConfig).toBe(jobConfig);
         expect(ctx.jobRunStatus).toBe(jobRunStatus);
+    });
+
+    it("should initialize with only jobRunId when optional params are omitted", () => {
+        const minimal = new JobManagerContext("minimal-id");
+        expect(minimal.jobRunId).toBe("minimal-id");
+        expect(minimal.jobConfig).toBeUndefined();
+        expect(minimal.jobRunStatus).toBeUndefined();
     });
 
     it("should get jobRunId, jobRunStatus, jobConfig", () => {
@@ -336,6 +346,83 @@ describe("JobManagerContext", () => {
             
             expect(error.operation.originalJobRunId).toBeUndefined();
             expect(mockErrorStream.append).toHaveBeenCalledWith(error);
+        });
+    });
+
+    describe("Bulk File Stream Methods", () => {
+        it("publishToFileStreamBulk should call appendBulk", async () => {
+            mockFileStream.appendBulk.mockResolvedValue(["id-1", "id-2"]);
+            const files = [{ name: "a.txt" }, { name: "b.txt" }] as any[];
+            const res = await ctx.publishToFileStreamBulk(files);
+            expect(mockFileStream.appendBulk).toHaveBeenCalledWith(files);
+            expect(res).toEqual(["id-1", "id-2"]);
+        });
+
+        it("publishToFileStreamBulk should return empty array for empty input", async () => {
+            mockFileStream.appendBulk.mockResolvedValue([]);
+            const res = await ctx.publishToFileStreamBulk([]);
+            expect(mockFileStream.appendBulk).toHaveBeenCalledWith([]);
+            expect(res).toEqual([]);
+        });
+    });
+
+    describe("Bulk Command Stream Methods", () => {
+        it("publishBulkToCommandStream should call appendBulk", async () => {
+            mockCommandStream.appendBulk.mockResolvedValue(["cmd-1", "cmd-2"]);
+            const commands = [{ cmd: "a" }, { cmd: "b" }] as any[];
+            const res = await ctx.publishBulkToCommandStream(commands);
+            expect(mockCommandStream.appendBulk).toHaveBeenCalledWith(commands);
+            expect(res).toEqual(["cmd-1", "cmd-2"]);
+        });
+
+        it("getCmdStreamLen should return stream length", async () => {
+            mockCommandStream.getLength.mockResolvedValue(42);
+            const res = await ctx.getCmdStreamLen();
+            expect(mockCommandStream.getLength).toHaveBeenCalled();
+            expect(res).toBe(42);
+        });
+
+        it("getCmdStreamLen should return 0 for empty stream", async () => {
+            mockCommandStream.getLength.mockResolvedValue(0);
+            const res = await ctx.getCmdStreamLen();
+            expect(res).toBe(0);
+        });
+    });
+
+    describe("Directory Content Set stub methods", () => {
+        it("addToDirContentSet should throw on base class", async () => {
+            await expect(ctx.addToDirContentSet("key", ["a", "b"])).rejects.toThrow(
+                "DirContentSet operations are not supported on base JobManagerContext"
+            );
+        });
+
+        it("areDirContentMembers should return all false", async () => {
+            const res = await ctx.areDirContentMembers("key", ["a", "b", "c"]);
+            expect(res).toEqual([false, false, false]);
+        });
+
+        it("areDirContentMembers should return empty array for empty input", async () => {
+            const res = await ctx.areDirContentMembers("key", []);
+            expect(res).toEqual([]);
+        });
+
+        it("scanDirContentSet should return empty result", async () => {
+            const res = await ctx.scanDirContentSet("key", 0, 100);
+            expect(res).toEqual({ cursor: 0, members: [] });
+        });
+
+        it("deleteDirContentSet should be a no-op", async () => {
+            await expect(ctx.deleteDirContentSet("key")).resolves.toBeUndefined();
+        });
+    });
+
+    describe("initializeInstance and cleanup stubs", () => {
+        it("initializeInstance should be a no-op", async () => {
+            await expect(ctx.initializeInstance()).resolves.toBeUndefined();
+        });
+
+        it("cleanup should be a no-op", async () => {
+            await expect(ctx.cleanup()).resolves.toBeUndefined();
         });
     });
 });

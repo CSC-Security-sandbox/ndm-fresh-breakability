@@ -1,5 +1,6 @@
 export * from './types/metadata-types';
 export * from './types/job-config';
+export * from './types/options';
 export * from './types/speed-test-job-config';
 export * from './types/enums';
 export * from './types/file-server';
