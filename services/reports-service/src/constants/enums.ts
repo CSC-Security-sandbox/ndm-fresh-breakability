@@ -32,16 +32,7 @@ export enum JobRunStatus {
   Completed = "COMPLETED",
   Failed = "FAILED",
   Errored = "ERRORED",
-  Blocked = "BLOCKED",
 }
-
-export const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
-  JobRunStatus.Completed,
-  JobRunStatus.Failed,
-  JobRunStatus.Errored,
-  JobRunStatus.Stopped,
-  JobRunStatus.Blocked,
-];
 
 export enum JobStatus {
   Active = "ACTIVE",

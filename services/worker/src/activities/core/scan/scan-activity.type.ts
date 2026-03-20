@@ -12,7 +12,6 @@ export interface ScanActivityOutput {
     jobRunId: string;
     fileCount: number;
     dirCount: number;
-    totalSize: number;
     subDirs: string[];
     batchDirs: string[];
 }
@@ -36,7 +35,6 @@ export interface ScanDirectorySettings  {
 export interface ScanDirectoryOutput {
     fileCount: number;
     dirCount: number;
-    totalSize: number;
     subDirs: string[];
 }
 

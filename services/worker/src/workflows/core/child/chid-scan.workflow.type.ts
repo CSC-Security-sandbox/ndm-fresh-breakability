@@ -8,7 +8,6 @@ export interface ChildScanWorkflowInput {
     batchSize: number;
     fileCount: number;
     dirCount: number;
-    totalSize: number;
     isMigration: boolean;
     actionState: JobRunStatus;
     isInitialScan?: boolean;  
@@ -20,7 +19,6 @@ export interface ChildScanWorkflowOutput {
   status: JobRunStatus;
   fileCount : number;
   dirCount : number;
-  totalSize: number;
   error?: string;
 }
 
@@ -36,7 +34,6 @@ export interface ScanWorkflowOutput{
   status: JobRunStatus;
   fileCount : number;
   dirCount : number;
-  totalSize: number;
   error?: string;
 }
 
@@ -51,7 +48,6 @@ export interface SyncWorkflowOutput{
 export interface ExecuteBatchScansOutput{
   fileCount: number;
   dirCount: number;
-  totalSize: number;
   batchDirs: string[];
   error?: string;
 }

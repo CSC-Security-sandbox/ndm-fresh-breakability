@@ -199,11 +199,3 @@ export enum JobConfigurationEnum {
  * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism.
  */
 export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
-
-export const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
-  JobRunStatus.Completed,
-  JobRunStatus.Failed,
-  JobRunStatus.Errored,
-  JobRunStatus.Stopped,
-  JobRunStatus.Blocked,
-];

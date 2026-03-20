@@ -41,12 +41,7 @@ export interface UpdateStatusOutput{
 
 export interface UpdateStatusInput{
     jobRunId: string;
-    status: JobRunStatus;
-    stats?: {
-        fileCount?: number;
-        dirCount?: number;
-        totalSize?: string;
-    };
+    status: JobRunStatus
 }
 
 export enum ServerType {

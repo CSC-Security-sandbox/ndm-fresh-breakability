@@ -21,7 +21,6 @@ interface CutOverWorkflowOutput {
   failedWorkers:string[];
   fileCount : number;
   dirCount : number;
-  totalSize: number;
   status: JobRunStatus
 }
 
@@ -36,7 +35,6 @@ export const CutOverWorkFlow = async ({
       setupCompletedWorkers: [],
       dirCount: 0,
       fileCount: 0,
-      totalSize: 0,
       failedWorkers: [],
       status: JobRunStatus.Ready,
     };
@@ -54,16 +52,11 @@ export const CutOverWorkFlow = async ({
     const discoveryWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
     output.fileCount = discoveryWorkflowExecResult.fileCount;
     output.dirCount = discoveryWorkflowExecResult.dirCount;
-    output.totalSize = discoveryWorkflowExecResult.totalSize;
     output.status = discoveryWorkflowExecResult.status;
 
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status, {
-      fileCount: output.fileCount,
-      dirCount: output.dirCount,
-      totalSize: output.totalSize.toString(),
-    });
+    await handleReporting(traceId, output.status);
 
 
     // Waiting for approval  

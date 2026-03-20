@@ -20,7 +20,6 @@ interface MigrationWorkflowOutput {
   failedWorkers:string[];
   fileCount : number;
   dirCount : number;
-  totalSize: number;
   status: JobRunStatus
 }
 
@@ -35,7 +34,6 @@ export const MigrationWorkflow = async ({
       setupCompletedWorkers: [],
       dirCount: 0,
       fileCount: 0,
-      totalSize: 0,
       failedWorkers: [],
       status: JobRunStatus.Ready,
     };
@@ -53,16 +51,11 @@ export const MigrationWorkflow = async ({
     const migrationWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
     output.fileCount = migrationWorkflowExecResult.fileCount;
     output.dirCount = migrationWorkflowExecResult.dirCount;
-    output.totalSize = migrationWorkflowExecResult.totalSize;
     output.status = migrationWorkflowExecResult.status;
 
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status, {
-      fileCount: output.fileCount,
-      dirCount: output.dirCount,
-      totalSize: output.totalSize.toString(),
-    });
+    await handleReporting(traceId, output.status);
 
     // Cleanup
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });

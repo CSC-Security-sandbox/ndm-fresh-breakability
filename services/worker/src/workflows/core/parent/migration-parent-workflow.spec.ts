@@ -37,7 +37,6 @@ describe('MigrationWorkflow', () => {
         (executeMigrationChildWorkflows as jest.Mock).mockResolvedValue({
             fileCount: 10,
             dirCount: 2,
-            totalSize: 5000,
             status: JobRunStatus.Completed,
         });
     });
@@ -58,11 +57,7 @@ describe('MigrationWorkflow', () => {
         expect(executeMigrationChildWorkflows).toHaveBeenCalledWith({
             jobRunId: traceId,
         });
-        expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed, {
-            fileCount: 10,
-            dirCount: 2,
-            totalSize: '5000',
-        });
+        expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
         expect(executeCleanup).toHaveBeenCalledWith({
             jobRunId: traceId,
             workerIds: ['worker1'],
@@ -75,7 +70,6 @@ describe('MigrationWorkflow', () => {
             failedWorkers: ['worker2'],
             fileCount: 10,
             dirCount: 2,
-            totalSize: 5000,
             status: JobRunStatus.Completed,
         });
     });
@@ -88,7 +82,6 @@ describe('MigrationWorkflow', () => {
         (executeMigrationChildWorkflows as jest.Mock).mockResolvedValue({
             fileCount: 0,
             dirCount: 0,
-            totalSize: 0,
             status: JobRunStatus.Ready,
         });
 
@@ -103,7 +96,6 @@ describe('MigrationWorkflow', () => {
             failedWorkers: [],
             fileCount: 0,
             dirCount: 0,
-            totalSize: 0,
             status: JobRunStatus.Ready,
         });
     });

@@ -66,16 +66,15 @@ export class CommonActivityService{
     }
   }
 
-  async updateStatus({jobRunId, status, stats}: UpdateStatusInput): Promise<UpdateStatusOutput> {
+  async updateStatus({jobRunId, status}: UpdateStatusInput): Promise<UpdateStatusOutput> {
     try {
       this.logger.log(`[${jobRunId}] Updating status to URL ${this.workerJobServiceUrl}/api/v1/job-run`);
-      this.logger.log(`[${jobRunId}] Updating status to ${status} with stats: ${JSON.stringify(stats)}`);
+      this.logger.log(`[${jobRunId}] Updating status to ${status}`);
       const accessToken = await this.authService.getAccessToken();
       if (!accessToken) {
         throw new Error('Failed to get access token');
       }
-      const body = stats ? { stats } : {};
-      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`, body, {
+      await axios.patch(`${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/${status}`, {}, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           projectId: this.projectId

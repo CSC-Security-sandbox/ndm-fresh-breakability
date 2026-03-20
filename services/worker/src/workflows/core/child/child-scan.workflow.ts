@@ -55,7 +55,7 @@ const {
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, totalSize = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
 
@@ -73,7 +73,6 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     jobRunId,
     fileCount: fileCount,
     dirCount: dirCount,
-    totalSize: totalSize,
     status: JobRunStatus.Running,
     error: undefined,
   };
@@ -106,7 +105,6 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;
     scanWorkflowOutput.dirCount += batchExecResults.dirCount;
-    scanWorkflowOutput.totalSize += batchExecResults.totalSize;
     dirBatchIds = batchExecResults.batchDirs;
 
     if(batchExecResults.error){
@@ -116,7 +114,7 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     if(iterations > ITERATIONS_LIMIT ){
       console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
       await wf.continueAsNew({ 
-        jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, totalSize:scanWorkflowOutput.totalSize, isMigration, actionState, isInitialScan: false, workerConcurrency 
+        jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
       });      
     }
   }
@@ -135,7 +133,6 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
   const output: ExecuteBatchScansOutput = {
     fileCount: 0,
     dirCount: 0,
-    totalSize: 0,
     batchDirs: [],
     error: undefined,
   };
@@ -159,8 +156,7 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
 
     for(const result of batchResults){
       output.fileCount += result.fileCount;
-      output.dirCount += result.dirCount;
-      output.totalSize += result.totalSize;
+      output.dirCount += result.dirCount; 
       output.batchDirs.push(...result.batchDirs);
     }  
   }

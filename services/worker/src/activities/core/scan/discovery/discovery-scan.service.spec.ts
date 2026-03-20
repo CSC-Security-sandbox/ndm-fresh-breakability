@@ -217,7 +217,6 @@ describe('DiscoveryScanService', () => {
     const mockStat = {
       isDirectory: () => false,
       isSymbolicLink: () => false,
-      size: 512,
     };
 
     beforeEach(() => {
@@ -244,13 +243,11 @@ describe('DiscoveryScanService', () => {
           return Promise.resolve({
             isDirectory: () => true,
             isSymbolicLink: () => false,
-            size: 0,
           });
         }
         return Promise.resolve({
           isDirectory: () => false,
           isSymbolicLink: () => false,
-          size: 512,
         });
       });
 
@@ -267,7 +264,6 @@ describe('DiscoveryScanService', () => {
 
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(1);
-      expect(result.totalSize).toBe(512); // file1.txt contributes, subdir does not
       expect(result.subDirs).toEqual(['subdir']);
       expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(2);
     });
@@ -288,7 +284,6 @@ describe('DiscoveryScanService', () => {
 
       expect(result.fileCount).toBe(0);
       expect(result.dirCount).toBe(0);
-      expect(result.totalSize).toBe(0);
       expect(result.subDirs).toEqual([]);
       expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
     });
@@ -319,13 +314,11 @@ describe('DiscoveryScanService', () => {
         return Promise.resolve({
         isDirectory: () => true,
         isSymbolicLink: () => true,
-        size: 0,
         });
       }
       return Promise.resolve({
         isDirectory: () => false,
         isSymbolicLink: () => false,
-        size: 512,
       });
       });
 
@@ -342,7 +335,6 @@ describe('DiscoveryScanService', () => {
 
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(0);
-      expect(result.totalSize).toBe(512); // file1.txt contributes; symlink-dir is skipped, not counted
       expect(result.subDirs).toEqual([]);
       expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(2);
     });
@@ -401,126 +393,8 @@ describe('DiscoveryScanService', () => {
 
       expect(result.fileCount).toBe(0);
       expect(result.dirCount).toBe(0);
-      expect(result.totalSize).toBe(0);
       expect(result.subDirs).toEqual([]);
       expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
-    });
-
-    describe('totalSize accumulation', () => {
-      it('should initialise totalSize to 0 for an empty directory', async () => {
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(0);
-      });
-
-      it('should accumulate totalSize for a single new file', async () => {
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([{ name: 'file.txt' }]);
-        (fs.promises.lstat as jest.Mock).mockResolvedValue({
-          isDirectory: () => false,
-          isSymbolicLink: () => false,
-          size: 2048,
-        });
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(2048);
-        expect(result.fileCount).toBe(1);
-      });
-
-      it('should accumulate totalSize across multiple files', async () => {
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([
-          { name: 'a.txt' },
-          { name: 'b.txt' },
-          { name: 'c.txt' },
-        ]);
-        (fs.promises.lstat as jest.Mock)
-          .mockResolvedValueOnce({ isDirectory: () => false, isSymbolicLink: () => false, size: 1000 })
-          .mockResolvedValueOnce({ isDirectory: () => false, isSymbolicLink: () => false, size: 2500 })
-          .mockResolvedValueOnce({ isDirectory: () => false, isSymbolicLink: () => false, size: 500 });
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(4000);
-        expect(result.fileCount).toBe(3);
-      });
-
-      it('should NOT add directory size to totalSize', async () => {
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([{ name: 'subdir' }]);
-        (fs.promises.lstat as jest.Mock).mockResolvedValue({
-          isDirectory: () => true,
-          isSymbolicLink: () => false,
-          size: 4096,
-        });
-        detectFileTypeMock.mockResolvedValue(FileType.DIRECTORY);
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(0);
-        expect(result.dirCount).toBe(1);
-      });
-
-      it('should NOT add size of excluded/skipped items to totalSize', async () => {
-        (shouldExcludeOrSkip as jest.Mock).mockReturnValue(true);
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([{ name: 'skip.txt' }]);
-        (fs.promises.lstat as jest.Mock).mockResolvedValue({
-          isDirectory: () => false,
-          isSymbolicLink: () => false,
-          size: 9999,
-        });
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(0);
-      });
-
-      it('should accumulate totalSize only from files in a mixed batch', async () => {
-        // batch: file (1000), directory (4096), file (500)
-        (fs.promises.readdir as jest.Mock).mockResolvedValue([
-          { name: 'file1.txt' },
-          { name: 'subdir' },
-          { name: 'file2.txt' },
-        ]);
-        (fs.promises.lstat as jest.Mock)
-          .mockResolvedValueOnce({ isDirectory: () => false, isSymbolicLink: () => false, size: 1000 })
-          .mockResolvedValueOnce({ isDirectory: () => true,  isSymbolicLink: () => false, size: 4096 })
-          .mockResolvedValueOnce({ isDirectory: () => false, isSymbolicLink: () => false, size: 500 });
-        detectFileTypeMock
-          .mockResolvedValueOnce(FileType.FILE)
-          .mockResolvedValueOnce(FileType.DIRECTORY)
-          .mockResolvedValueOnce(FileType.FILE);
-        const result = await service.scanDirectory({
-          jobContext: mockJobContext,
-          sourcePath: '/mock',
-          sourcePrefix: '/mock',
-          command: mockCommand,
-          settings: { excludePatterns: [], skipFile: 0 },
-        } as any);
-        expect(result.totalSize).toBe(1500); // only file1 + file2
-        expect(result.fileCount).toBe(2);
-        expect(result.dirCount).toBe(1);
-      });
     });
 
     it('should skip duplicate directories with same name and different case for SMB', async () => {

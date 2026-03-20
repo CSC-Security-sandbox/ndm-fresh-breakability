@@ -32,7 +32,6 @@ interface MigrationWorkflowExecutorOutput {
     status: JobRunStatus,
     fileCount : number;
     dirCount : number;
-    totalSize: number;
     scanJobStatus: JobRunStatus;
     syncJobStatus: JobRunStatus;
 }
@@ -45,7 +44,6 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         status: JobRunStatus.Running,
         fileCount: 0,
         dirCount: 0,
-        totalSize: 0,
         scanJobStatus: JobRunStatus.Running,
         syncJobStatus: JobRunStatus.Running,
     };
@@ -86,7 +84,6 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             const scanWorkflowOutput = await scanWorkflow.result(); 
             output.fileCount = scanWorkflowOutput.fileCount;
             output.dirCount = scanWorkflowOutput.dirCount;
-            output.totalSize = scanWorkflowOutput.totalSize;
             output.scanJobStatus = scanWorkflowOutput.status;    
         }catch(error){  
             if (wf.isCancellation(error.cause)) {

@@ -32,7 +32,6 @@ beforeEach(() => {
     (executeMigrationChildWorkflows as jest.Mock).mockResolvedValue({
         fileCount: 10,
         dirCount: 2,
-        totalSize: 5000,
         status: JobRunStatus.Completed,
     });
 
@@ -55,11 +54,7 @@ it('should execute the workflow and return expected output', async () => {
     });
     expect(waitUntilRedisMemoryOk).toHaveBeenCalledWith(traceId);
     expect(executeMigrationChildWorkflows).toHaveBeenCalledWith({ jobRunId: traceId });
-    expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed, {
-        fileCount: 10,
-        dirCount: 2,
-        totalSize: '5000',
-    });
+    expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
     expect(waitForApproval).toHaveBeenCalledWith(traceId);
     expect(executeCleanup).toHaveBeenCalledWith({
         jobRunId: traceId,
@@ -73,7 +68,6 @@ it('should execute the workflow and return expected output', async () => {
         failedWorkers: ['worker2'],
         fileCount: 10,
         dirCount: 2,
-        totalSize: 5000,
         status: JobRunStatus.Completed,
     });
 });
