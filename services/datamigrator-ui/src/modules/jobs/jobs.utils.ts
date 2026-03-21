@@ -54,23 +54,25 @@ export const handleDownloadErrorsLogs = async (
 };
 
 export const handleDownloadCocReport = async (
-  downloadReports: (arg: any) => any,
+  prepareDownloadApi: (arg: any) => any,
   jobRunId: string,
   reportType: string = REPORT_TYPES_ENUM.COC
 ) => {
   try {
-    const response = await downloadReports({
-      jobRunId: [jobRunId],
+    const result = await prepareDownloadApi({
+      jobRunId,
       "report-type": reportType,
     }).unwrap();
-    const mimeType = getMimeType("ZIP");
-    const extension = "zip";
 
-    createAndDownloadBlob(
-      response,
-      mimeType,
-      `coc-report-${jobRunId}.${extension}`
-    );
+    const token = result?.data?.items?.token ?? result?.data?.token ?? result?.token;
+    if (!token) {
+      throw new Error("No download token received from server");
+    }
+
+    const baseUrl =
+      window?.env?.VITE_REPORTS_SERVICE_URL ||
+      import.meta.env.VITE_REPORTS_SERVICE_URL;
+    window.location.href = `${baseUrl}/inventory/download/${token}`;
   } catch (error) {
     console.error("Failed to download CoC report:", error);
     notify.error(

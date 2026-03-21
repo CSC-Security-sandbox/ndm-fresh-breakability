@@ -5,6 +5,7 @@ import { InventoryEntity } from "../entities/inventory.entity";
 import { ReportsEntity } from "../entities/reports.entity";
 import * as fs from "fs";
 import {
+  BadRequestException,
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
@@ -564,6 +565,241 @@ describe("DiscoveryService", () => {
       expect(mockInventoryRepo.find).toHaveBeenCalledWith({
         where: { fileServerPathId: "server1", parentPath: "/root" },
       });
+    });
+  });
+
+  describe("getZipFilePath", () => {
+    it("should return a valid zip file path", () => {
+      const result = service.getZipFilePath(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "discovery"
+      );
+      expect(result).toContain("550e8400-e29b-41d4-a716-446655440000");
+      expect(result).toContain("discovery-report.zip");
+    });
+
+    it("should strip invalid characters from jobRunId and reportType", () => {
+      const result = service.getZipFilePath("abc../123!!", "disc../overy!@#");
+      expect(result).not.toContain("..");
+      expect(result).not.toContain("!");
+      expect(result).not.toContain("@");
+    });
+  });
+
+  describe("prepareDownload", () => {
+    it("should throw BadRequestException for invalid UUID", async () => {
+      await expect(
+        service.prepareDownload("not-a-valid-uuid", "discovery")
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should throw NotFoundException when zip file does not exist", async () => {
+      jest
+        .spyOn(service, "getZipFilePath")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-discovery-report.zip");
+      jest
+        .spyOn(fs.promises, "access")
+        .mockRejectedValue(new Error("not found"));
+      await expect(
+        service.prepareDownload(
+          "550e8400-e29b-41d4-a716-446655440000",
+          "discovery"
+        )
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should return a token string when zip file exists", async () => {
+      jest
+        .spyOn(service, "getZipFilePath")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-discovery-report.zip");
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      const token = await service.prepareDownload(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "discovery"
+      );
+      expect(typeof token).toBe("string");
+      expect(token.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("getAndConsumeDownloadToken", () => {
+    it("should throw NotFoundException when token does not exist", async () => {
+      await expect(
+        service.getAndConsumeDownloadToken("nonexistent-token")
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should throw NotFoundException when token is expired", async () => {
+      (service as any).downloadTokens.set("expired-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() - 1000,
+      });
+      await expect(
+        service.getAndConsumeDownloadToken("expired-token")
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should return filePath and fileName for a valid non-expired token", async () => {
+      (service as any).downloadTokens.set("valid-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+      const result = await service.getAndConsumeDownloadToken("valid-token");
+      expect(result.filePath).toBe("./reports/test.zip");
+      expect(result.fileName).toBe("test.zip");
+    });
+
+    it("should delete the token after consuming it", async () => {
+      (service as any).downloadTokens.set("one-time-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+      await service.getAndConsumeDownloadToken("one-time-token");
+      expect((service as any).downloadTokens.has("one-time-token")).toBe(false);
+    });
+  });
+
+  describe("streamZipToResponse", () => {
+    it("should stream zip file and set response headers", async () => {
+      const mockStat = { size: 1024 };
+      const mockStream = {
+        on: jest.fn().mockReturnThis(),
+        pipe: jest.fn(),
+        destroyed: false,
+        destroy: jest.fn(),
+      };
+      const mockRes: any = {
+        set: jest.fn(),
+        on: jest.fn(),
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs.promises, "stat").mockResolvedValue(mockStat as any);
+      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
+
+      (service as any).downloadTokens.set("stream-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60_000,
+      });
+
+      await service.streamZipToResponse("stream-token", mockRes);
+
+      expect(mockRes.set).toHaveBeenCalledWith(
+        expect.objectContaining({ "Content-Type": "application/zip" })
+      );
+      expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
+    });
+
+    it("should call res.status(500) on stream error when headers not sent", async () => {
+      const mockStat = { size: 1024 };
+      let errorHandler: (err: Error) => void;
+      const mockStream = {
+        on: jest.fn((event: string, cb: any) => {
+          if (event === "error") errorHandler = cb;
+          return mockStream;
+        }),
+        pipe: jest.fn(),
+        destroyed: false,
+        destroy: jest.fn(),
+      };
+      const mockRes: any = {
+        set: jest.fn(),
+        on: jest.fn(),
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs.promises, "stat").mockResolvedValue(mockStat as any);
+      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
+
+      (service as any).downloadTokens.set("error-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+
+      await service.streamZipToResponse("error-token", mockRes);
+      errorHandler!(new Error("disk read error"));
+
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.end).toHaveBeenCalledWith("Failed to download file.");
+    });
+
+    it("should call res.end() on stream error when headers already sent", async () => {
+      const mockStat = { size: 1024 };
+      let errorHandler: (err: Error) => void;
+      const mockStream = {
+        on: jest.fn((event: string, cb: any) => {
+          if (event === "error") errorHandler = cb;
+          return mockStream;
+        }),
+        pipe: jest.fn(),
+        destroyed: false,
+        destroy: jest.fn(),
+      };
+      const mockRes: any = {
+        set: jest.fn(),
+        on: jest.fn(),
+        headersSent: true,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs.promises, "stat").mockResolvedValue(mockStat as any);
+      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
+
+      (service as any).downloadTokens.set("headers-sent-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+
+      await service.streamZipToResponse("headers-sent-token", mockRes);
+      errorHandler!(new Error("disk read error"));
+
+      expect(mockRes.status).not.toHaveBeenCalled();
+      expect(mockRes.end).toHaveBeenCalledWith();
+    });
+
+    it("should destroy stream when response closes", async () => {
+      const mockStat = { size: 1024 };
+      let closeHandler: () => void;
+      const mockStream = {
+        on: jest.fn().mockReturnThis(),
+        pipe: jest.fn(),
+        destroyed: false,
+        destroy: jest.fn(),
+      };
+      const mockRes: any = {
+        set: jest.fn(),
+        on: jest.fn((event: string, cb: any) => {
+          if (event === "close") closeHandler = cb;
+        }),
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs.promises, "stat").mockResolvedValue(mockStat as any);
+      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
+
+      (service as any).downloadTokens.set("close-token", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+
+      await service.streamZipToResponse("close-token", mockRes);
+      closeHandler!();
+
+      expect(mockStream.destroy).toHaveBeenCalled();
     });
   });
 

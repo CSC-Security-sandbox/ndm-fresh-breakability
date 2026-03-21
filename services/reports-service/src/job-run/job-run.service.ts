@@ -17,6 +17,7 @@ import { ProjectIdCacheService } from "../utils/project-id-cache.service";
 import { Repository } from "typeorm";
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto, } from "./dto/job-rundetails.dto";
 import * as fs from "fs";
+import * as archiver from "archiver";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
@@ -277,20 +278,75 @@ export class JobRunService {
         throw new NotAcceptableException(`Invalid file path: ${filePath}`);
       }
 
-      if (fs.existsSync(filePath)) return filePath;
-      
+      const sanitizedZipFileName = sanitizedFileName.replace('.csv', '.zip');
+      const zipFilePath = path.join(this.getReportsDirectory, sanitizedZipFileName);
+      if (!zipFilePath.startsWith(this.getReportsDirectory)) {
+        throw new NotAcceptableException(`Invalid file path: ${zipFilePath}`);
+      }
+
+      let csvExists = false;
+      try {
+        await fs.promises.access(filePath);
+        csvExists = true;
+      } catch {
+        this.logger.log(`projectId: ${projectId} CSV not yet present at: ${filePath}, will generate`);
+      }
+
+      if (csvExists) {
+        let zipExists = false;
+        try {
+          await fs.promises.access(zipFilePath);
+          zipExists = true;
+        } catch {
+          this.logger.log(`projectId: ${projectId} ZIP not yet present at: ${zipFilePath}, creating backfill ZIP`);
+        }
+
+        if (!zipExists) {
+          try {
+            await this.createZipFile([filePath], zipFilePath);
+            this.logger.log(`projectId: ${projectId} COC ZIP (backfill) created at: ${zipFilePath}`);
+          } catch (zipError) {
+            this.logger.error(`projectId: ${projectId} Failed to create backfill ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
+            throw zipError;
+          }
+        }
+        return filePath;
+      }
+
       const jobType = jobRun.jobConfig.jobType;
-      await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
+      try {
+        await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
+      } catch (csvError) {
+        this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
+        throw csvError;
+      }
+
+      try {
+        await this.createZipFile([filePath], zipFilePath);
+        this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
+      } catch (zipError) {
+        this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
+        throw zipError;
+      }
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
         this.logger.log("Updating report status for job other than cutover");
         await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
       }
 
-      if (!fs.existsSync(filePath))
-        throw new Error(`File not found: ${filePath}`);
+      try {
+        await fs.promises.access(filePath);
+      } catch {
+        throw new Error(`File not found after generation: ${filePath}`);
+      }
 
-      const fileBuffer = fs.readFileSync(filePath);
+      let fileBuffer: Buffer;
+      try {
+        fileBuffer = await fs.promises.readFile(filePath);
+      } catch (readError) {
+        this.logger.error(`projectId: ${projectId} Failed to read file at: ${filePath}`, readError?.stack || readError);
+        throw readError;
+      }
       const reportData = {
         filePath,
         size: fileBuffer.length,
@@ -314,6 +370,40 @@ export class JobRunService {
     return await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       select: ["subStatus"],
+    });
+  }
+
+  private createZipFile(filePaths: string[], outputPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Resolve and validate all paths at the point of use so CodeQL (and any
+      // runtime check) can see that tainted input never reaches fs calls raw.
+      const baseDir = path.resolve(this.getReportsDirectory);
+      const resolvedOutput = path.resolve(outputPath);
+      if (!resolvedOutput.startsWith(baseDir + path.sep)) {
+        return reject(new Error(`Output path escapes the reports directory: ${outputPath}`));
+      }
+
+      const resolvedSources: string[] = [];
+      for (const filePath of filePaths) {
+        const resolved = path.resolve(filePath);
+        if (!resolved.startsWith(baseDir + path.sep)) {
+          return reject(new Error(`Source path escapes the reports directory: ${filePath}`));
+        }
+        resolvedSources.push(resolved);
+      }
+
+      const output = fs.createWriteStream(resolvedOutput);
+      const archive = archiver("zip", { zlib: { level: 9 } });
+
+      output.on("close", () => resolve());
+      output.on("error", (err) => reject(err));
+      archive.on("error", (err) => reject(err));
+
+      archive.pipe(output);
+      for (const resolved of resolvedSources) {
+        archive.file(resolved, { name: path.basename(resolved) });
+      }
+      archive.finalize().catch(reject);
     });
   }
 }

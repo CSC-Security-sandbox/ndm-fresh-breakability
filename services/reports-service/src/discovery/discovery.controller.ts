@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile,Logger, Inject, Optional } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile, Logger, Inject, Optional, Param, Res } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
@@ -124,6 +124,55 @@ export class DiscoveryController {
     const stream = new StreamableFile(zipBuffer);
 
     return stream;
+  }
+
+  @Auth(Permission.Reports)
+  @ApiBearerAuth()
+  @Post('/prepare-download')
+  @ApiOperation({ summary: 'Prepare a download and return a one-time token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        jobRunId: {
+          type: 'string',
+          description: 'jobRunId',
+        },
+        'report-type': {
+          type: 'string',
+          enum: Object.values(ReportType),
+          description: 'Type of the report to download',
+        },
+      },
+      required: ['jobRunId', 'report-type'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Download prepared, token returned' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
+  async prepareDownload(
+    @Body('jobRunId') jobRunId: string,
+    @Body('report-type') reportType: ReportType,
+  ): Promise<{ token: string }> {
+    if (!jobRunId) {
+      throw new BadRequestException('jobRunId is required');
+    }
+    if (!Object.values(ReportType).includes(reportType)) {
+      throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
+    }
+    const token = await this.discoveryService.prepareDownload(jobRunId, reportType);
+    return { token };
+  }
+
+  @SkipResponseTransform()
+  @Get('/download/:token')
+  @ApiOperation({ summary: 'Download a prepared report using a one-time token' })
+  @ApiResponse({ status: 200, description: 'File downloaded successfully' })
+  @ApiResponse({ status: 404, description: 'Token not found, expired, or already used' })
+  async downloadByToken(
+    @Param('token') token: string,
+    @Res() res: import('express').Response,
+  ): Promise<void> {
+    await this.discoveryService.streamZipToResponse(token, res);
   }
 
   @ApiBearerAuth()

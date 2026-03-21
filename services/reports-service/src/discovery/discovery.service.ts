@@ -1,4 +1,7 @@
+import { randomUUID } from "crypto";
+import { isUUID } from "class-validator";
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -28,9 +31,14 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 
+const DOWNLOAD_TOKEN_TTL_MS = 60_000;
+
 @Injectable()
 export class DiscoveryService {
   private readonly logger: LoggerService | Logger;
+
+  private readonly downloadTokens = new Map<string, { filePath: string; fileName: string; expiresAt: number }>();
+
   constructor(
     @InjectRepository(InventoryEntity)
     private readonly inventoryRepo: Repository<InventoryEntity>,
@@ -240,6 +248,99 @@ export class DiscoveryService {
     const zipBuffer = await this.createZipArchive(filesToZip);
 
     return zipBuffer;
+  }
+
+  async prepareDownload(
+    jobRunId: string,
+    reportType: string,
+  ): Promise<string> {
+    if (!isUUID(jobRunId)) {
+      throw new BadRequestException('Invalid jobRunId format');
+    }
+
+    const zipFilePath = this.getZipFilePath(jobRunId, reportType);
+
+    if (!zipFilePath.startsWith(this.reportsDirectory)) {
+      throw new BadRequestException('Invalid file path');
+    }
+
+    const zipExists = await fs.promises.access(zipFilePath).then(() => true).catch(() => false);
+    if (!zipExists) {
+      throw new NotFoundException(
+        `Report not found for jobRunId: ${jobRunId}. Report may not be generated yet.`,
+      );
+    }
+
+    const token = randomUUID();
+    // Derive the filename from the already-sanitized path to avoid using raw
+    // user input a second time.
+    const fileName = path.basename(zipFilePath);
+    this.downloadTokens.set(token, {
+      filePath: zipFilePath,
+      fileName,
+      expiresAt: Date.now() + DOWNLOAD_TOKEN_TTL_MS,
+    });
+    this.cleanupExpiredTokens();
+    this.logger.log(
+      `Prepared download token ${token} for jobRunId: ${jobRunId} (stored in memory, expires in ${DOWNLOAD_TOKEN_TTL_MS / 1000}s)`,
+    );
+    return token;
+  }
+
+  async streamZipToResponse(token: string, res: import('express').Response): Promise<void> {
+    const { filePath, fileName } = await this.getAndConsumeDownloadToken(token);
+    const stat = await fs.promises.stat(filePath);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'Content-Length': stat.size.toString(),
+    });
+    const stream = fs.createReadStream(filePath);
+
+    stream.on('error', (err) => {
+      this.logger.error(`Stream error while downloading ${fileName}: ${err.message}`, err.stack);
+      if (!res.headersSent) {
+        res.status(500).end('Failed to download file.');
+      } else {
+        res.end();
+      }
+    });
+
+    res.on('close', () => {
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    });
+
+    stream.pipe(res);
+  }
+
+  async getAndConsumeDownloadToken(token: string): Promise<{ filePath: string; fileName: string }> {
+    const entry = this.downloadTokens.get(token);
+    if (!entry) {
+      throw new NotFoundException("Download token not found, expired, or already used");
+    }
+    this.downloadTokens.delete(token);
+    if (Date.now() > entry.expiresAt) {
+      throw new NotFoundException("Download token has expired");
+    }
+    return { filePath: entry.filePath, fileName: entry.fileName };
+  }
+
+  private cleanupExpiredTokens(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.downloadTokens) {
+      if (now > entry.expiresAt) this.downloadTokens.delete(key);
+    }
+  }
+
+  getZipFilePath(jobRunId: string, reportType: string): string {
+    // Strip to known-safe character sets before using either value in a path
+    // expression. UUIDs are hex digits and hyphens; report types are letters only.
+    const safeJobRunId = jobRunId.replace(/[^a-zA-Z0-9-]/g, '');
+    const safeReportType = reportType.replace(/[^a-zA-Z]/g, '');
+    const fileName = `${safeJobRunId}-${safeReportType.toLowerCase()}-report.zip`;
+    return path.join(this.reportsDirectory, fileName);
   }
 
   async createZipArchive(filePaths: string[]): Promise<Buffer> {

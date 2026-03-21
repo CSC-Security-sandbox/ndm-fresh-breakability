@@ -40,6 +40,16 @@ export const reportApi = createApi({
         responseHandler: (response) => response.blob(),
       }),
     }),
+    prepareDownload: builder.mutation({
+      query: (body) => ({
+        url: "inventory/prepare-download",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body,
+      }),
+    }),
     getPdfReport: builder.mutation({
       query: (body) => ({
         url: "pdf/generate",
@@ -137,6 +147,7 @@ export const {
   useLazyGetFileOverviewQuery,
   useLazyGetProjectOverviewQuery,
   useDownloadReportsMutation,
+  usePrepareDownloadMutation,
   useGetJobRunDetailsQuery,
   useLazyGetJobRunDetailsQuery,
   useLazyDownloadErrorLogsCSVQuery,

@@ -11,7 +11,7 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
     imports: [
         TypeOrmModule.forFeature([InventoryEntity, ReportsEntity]),
         AuthKeycloakModule,
-        LoggerModule.forRoot()
+        LoggerModule.forRoot(),
     ],
     providers: [DiscoveryService],
     controllers: [DiscoveryController],

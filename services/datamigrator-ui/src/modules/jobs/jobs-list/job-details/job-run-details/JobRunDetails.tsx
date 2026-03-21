@@ -14,6 +14,7 @@ import {
   useDownloadReportsMutation,
   useGetJobRunDetailsQuery,
   useGetPdfReportMutation,
+  usePrepareDownloadMutation,
 } from "@api/reportApi";
 import { hasPermission } from "@auth/auth.utils";
 import { USER_PERMISSION_TYPE_ENUM } from "@auth/permissionAuth.constant";
@@ -116,6 +117,7 @@ const JobRunDetails = () => {
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
+  const [prepareDownloadApi] = usePrepareDownloadMutation();
 
   const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
   const reportActionButtons =
@@ -130,6 +132,7 @@ const JobRunDetails = () => {
           handleDownloadCocReport,
           downloadReportApi,
           getPdfReportApi,
+          prepareDownloadApi,
           "button"
         )
       : [];

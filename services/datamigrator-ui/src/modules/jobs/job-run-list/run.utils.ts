@@ -78,12 +78,13 @@ export const getReportActions = (
     fileType: string
   ) => void,
   handleDownloadCocReport: (
-    downloadReports: (arg: any) => void,
+    prepareDownloadApi: (arg: any) => void,
     jobRunId: string,
     reportType?: string
   ) => void,
   downloadReportApi: (arg: any) => void,
   getPdfReportApi: (arg: any) => void,
+  prepareDownloadApi: (arg: any) => void,
   type: "rowMenu" | "button" = "rowMenu"
 ) => {
   const isReportReady =
@@ -135,7 +136,7 @@ export const getReportActions = (
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
           onClick: () => {
-            handleDownloadCocReport(downloadReportApi, row?.jobRunId);
+            handleDownloadCocReport(prepareDownloadApi, row?.jobRunId);
           },
           disabled: !isReportReady,
         },
@@ -145,7 +146,7 @@ export const getReportActions = (
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
           onClick: () => {
-            handleDownloadCocReport(downloadReportApi, row?.jobRunId);
+            handleDownloadCocReport(prepareDownloadApi, row?.jobRunId);
           },
           disabled: !isReportReady,
         },
