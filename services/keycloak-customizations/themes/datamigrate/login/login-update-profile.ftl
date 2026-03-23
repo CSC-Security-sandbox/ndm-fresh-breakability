@@ -1,5 +1,11 @@
 <head>
     <link href="${url.resourcesPath}/css/vendor/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Prevent body scroll when modal is open */
+        body.modal-open {
+            overflow: hidden;
+        }
+    </style>
 </head>
 <#import "template.ftl" as layout>
     <@layout.registrationLayout displayMessage=false; section>
@@ -183,147 +189,76 @@
                         </div>
                     </div>
                 </div>
+
+                <script>
+                    // EULA Modal and Form Control
+                    (function() {
+                        var eulaModal = document.getElementById('eula-modal-overlay');
+                        var eulaLink = document.getElementById('eula-link');
+                        var closeButton = document.getElementById('eula-close-button');
+                        var closeFooterButton = document.getElementById('eula-close-footer-button');
+                        var eulaCheckbox = document.getElementById('eulaAcceptCheckbox');
+                        var submitButton = document.getElementById('kc-update-profile');
+                        var metricsCheckbox = document.getElementById('allowMetricsSharingCheckbox');
+                        var metricsHidden = document.getElementById('allowMetricsSharingHidden');
+
+                        // Update submit button state based on EULA acceptance
+                        function updateSubmitButton() {
+                            if (eulaCheckbox.checked) {
+                                submitButton.disabled = false;
+                                submitButton.style.backgroundColor = '#2563eb';
+                                submitButton.style.cursor = 'pointer';
+                            } else {
+                                submitButton.disabled = true;
+                                submitButton.style.backgroundColor = '#9ca3af';
+                                submitButton.style.cursor = 'not-allowed';
+                            }
+                        }
+
+                        // Modal show/hide functions
+                        function showModal() {
+                            eulaModal.style.display = 'flex';
+                            document.body.classList.add('modal-open');
+                        }
+
+                        function hideModal() {
+                            eulaModal.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+                        }
+
+                        // EULA checkbox change handler
+                        eulaCheckbox.addEventListener('change', updateSubmitButton);
+
+                        // Modal open/close handlers
+                        eulaLink.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            showModal();
+                        });
+
+                        closeButton.addEventListener('click', hideModal);
+                        closeFooterButton.addEventListener('click', hideModal);
+
+                        // Close modal on overlay click
+                        eulaModal.addEventListener('click', function(e) {
+                            if (e.target === eulaModal) {
+                                hideModal();
+                            }
+                        });
+
+                        // Close modal on Escape key
+                        document.addEventListener('keydown', function(e) {
+                            if (e.key === 'Escape' && eulaModal.style.display === 'flex') {
+                                hideModal();
+                            }
+                        });
+
+                        // Sync metrics checkbox to hidden field
+                        metricsCheckbox.addEventListener('change', function() {
+                            metricsHidden.value = metricsCheckbox.checked ? 'true' : 'false';
+                        });
+                    })();
+                </script>
                 <#elseif section="footer">
                     <!-- Optional footer section -->
         </#if>
     </@layout.registrationLayout>
-    <style>
-        /* Prevent body scroll when modal is open */
-        body.modal-open {
-            overflow: hidden;
-        }
-        
-        /* Smooth modal transitions */
-        #eula-modal-overlay {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-        
-    </style>
-    <script>
-        // EULA Modal Control
-        (function() {
-            var eulaModal = document.getElementById('eula-modal-overlay');
-            var eulaLink = document.getElementById('eula-link');
-            var closeButton = document.getElementById('eula-close-button');
-            var closeFooterButton = document.getElementById('eula-close-footer-button');
-            var eulaAcceptCheckbox = document.getElementById('eulaAcceptCheckbox');
-            var form = document.getElementById('kc-profile-update-form');
-            var submitButton = document.getElementById('kc-update-profile');
-            var body = document.body;
-            
-            // Function to update submit button state and style based on EULA acceptance
-            function updateSubmitButtonState() {
-                if (submitButton && eulaAcceptCheckbox) {
-                    if (eulaAcceptCheckbox.checked) {
-                        // EULA accepted - enable button with blue color
-                        submitButton.disabled = false;
-                        submitButton.style.backgroundColor = '#2563eb'; // blue-600
-                        submitButton.style.cursor = 'pointer';
-                    } else {
-                        // EULA not accepted - disable button with gray color
-                        submitButton.disabled = true;
-                        submitButton.style.backgroundColor = '#9ca3af'; // gray-400
-                        submitButton.style.cursor = 'not-allowed';
-                    }
-                }
-            }
-            
-            // Listen for EULA checkbox changes
-            if (eulaAcceptCheckbox) {
-                eulaAcceptCheckbox.addEventListener('change', updateSubmitButtonState);
-            }
-            
-            function showModal() {
-                if (eulaModal) {
-                    eulaModal.style.display = 'flex';
-                }
-                if (body) {
-                    body.classList.add('modal-open');
-                }
-            }
-            
-            function hideModal() {
-                if (eulaModal) {
-                    eulaModal.style.display = 'none';
-                }
-                if (body) {
-                    body.classList.remove('modal-open');
-                }
-            }
-            
-            if (eulaLink) {
-                eulaLink.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    showModal();
-                });
-            }
-            
-            if (closeButton) {
-                closeButton.addEventListener('click', function() {
-                    hideModal();
-                });
-            }
-            
-            if (closeFooterButton) {
-                closeFooterButton.addEventListener('click', function() {
-                    hideModal();
-                });
-            }
-            
-            if (eulaModal) {
-                eulaModal.addEventListener('click', function(e) {
-                    if (e.target === eulaModal) {
-                        hideModal();
-                    }
-                });
-            }
-            
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && eulaModal && eulaModal.style.display === 'flex') {
-                    hideModal();
-                }
-            });
-            
-            // Prevent form submission if EULA not accepted (safety check)
-            if (form) {
-                form.addEventListener('submit', function(e) {
-                    if (eulaAcceptCheckbox && !eulaAcceptCheckbox.checked) {
-                        e.preventDefault();
-                        alert('Please accept the End User License Agreement to continue.');
-                        eulaAcceptCheckbox.focus();
-                        return false;
-                    }
-                });
-            }
-        })();
-        
-        // Sync checkbox state to hidden field so value is always submitted
-        (function() {
-            var checkbox = document.getElementById('allowMetricsSharingCheckbox');
-            var hidden = document.getElementById('allowMetricsSharingHidden');
-            
-            if (checkbox && hidden) {
-                // Update hidden field when checkbox changes
-                checkbox.addEventListener('change', function() {
-                    hidden.value = checkbox.checked ? 'true' : 'false';
-                });
-                
-                // Also update on form submit to ensure latest value
-                var form = document.getElementById('kc-profile-update-form');
-                if (form) {
-                    form.addEventListener('submit', function() {
-                        hidden.value = checkbox.checked ? 'true' : 'false';
-                    });
-                }
-            }
-        })();
-    </script>
