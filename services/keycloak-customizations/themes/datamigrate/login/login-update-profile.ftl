@@ -119,6 +119,28 @@
                                     </div>
                                 </div>
                             </div>
+                            <!-- EULA Acceptance (Required) -->
+                            <div class="w-full my-4 text-left">
+                                <div class="flex items-start gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="eulaAcceptCheckbox"
+                                        class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        required />
+                                    <div class="flex flex-col">
+                                        <label for="eulaAcceptCheckbox" class="text-sm font-medium text-gray-700 cursor-pointer">
+                                            I accept the
+                                            <a href="#" id="eula-link" class="text-blue-600 hover:text-blue-800 underline">
+                                                Terms and Conditions (EULA)
+                                            </a>
+                                            <span class="text-red-500">*</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            You must review and accept the EULA to proceed.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                             <!-- Submit Button -->
                             <div class="my-2 w-full">
                                 <button
@@ -133,11 +155,16 @@
                 </div>
                 
                 <!-- EULA Modal Overlay -->
-                <div id="eula-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" style="display: flex;">
+                <div id="eula-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" style="display: none;">
                     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col" style="max-width: 900px;">
                         <!-- Modal Header -->
-                        <div class="bg-gray-200 px-6 py-4 rounded-t-lg border-b border-gray-300">
+                        <div class="bg-gray-200 px-6 py-4 rounded-t-lg border-b border-gray-300 flex justify-between items-center">
                             <h2 class="text-lg font-semibold text-gray-800">End User License Agreement</h2>
+                            <button id="eula-close-button" type="button" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
                         </div>
                         
                         <!-- Modal Content - Scrollable EULA -->
@@ -147,22 +174,12 @@
                         
                         <!-- Modal Footer -->
                         <div class="px-6 py-4 bg-gray-50 rounded-b-lg">
-                            <div class="flex items-start gap-3 mb-4">
-                                <input
-                                    type="checkbox"
-                                    id="eulaAcceptedCheckbox"
-                                    class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0" />
-                                <label for="eulaAcceptedCheckbox" class="text-sm font-medium text-gray-700 cursor-pointer">
-                                    I have read and agree to the End User License Agreement
-                                </label>
-                            </div>
                             <div class="flex justify-end">
                                 <button
-                                    id="eula-accept-button"
+                                    id="eula-close-footer-button"
                                     type="button"
-                                    disabled
-                                    class="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                                    Accept & Continue
+                                    class="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                                    Close
                                 </button>
                             </div>
                         </div>
@@ -192,92 +209,76 @@
             }
         }
         
-        /* Ensure form is disabled when modal is shown */
-        #kc-profile-update-form.modal-blocked {
-            pointer-events: none;
-            opacity: 0.5;
-        }
     </style>
     <script>
         // EULA Modal Control
         (function() {
             var eulaModal = document.getElementById('eula-modal-overlay');
-            var eulaCheckbox = document.getElementById('eulaAcceptedCheckbox');
-            var acceptButton = document.getElementById('eula-accept-button');
+            var eulaLink = document.getElementById('eula-link');
+            var closeButton = document.getElementById('eula-close-button');
+            var closeFooterButton = document.getElementById('eula-close-footer-button');
+            var eulaAcceptCheckbox = document.getElementById('eulaAcceptCheckbox');
             var form = document.getElementById('kc-profile-update-form');
             var body = document.body;
             
-            // Disable form interaction when modal is shown
-            if (form) {
-                form.classList.add('modal-blocked');
-            }
-            if (body) {
-                body.classList.add('modal-open');
-            }
-            
-            // Enable/disable accept button based on checkbox
-            function updateAcceptButton() {
-                if (eulaCheckbox && acceptButton) {
-                    acceptButton.disabled = !eulaCheckbox.checked;
+            function showModal() {
+                if (eulaModal) {
+                    eulaModal.style.display = 'flex';
+                }
+                if (body) {
+                    body.classList.add('modal-open');
                 }
             }
             
-            if (eulaCheckbox) {
-                eulaCheckbox.addEventListener('change', updateAcceptButton);
-            }
-            
-            // Handle Accept button click
-            if (acceptButton) {
-                acceptButton.addEventListener('click', function() {
-                    if (eulaCheckbox && eulaCheckbox.checked) {
-                        // Hide modal
-                        if (eulaModal) {
-                            eulaModal.style.display = 'none';
-                        }
-                        
-                        // Enable form interaction
-                        if (form) {
-                            form.classList.remove('modal-blocked');
-                        }
-                        if (body) {
-                            body.classList.remove('modal-open');
-                        }
-                        
-                        // Store acceptance in sessionStorage to prevent showing again on page refresh
-                        sessionStorage.setItem('eulaAccepted', 'true');
-                    }
-                });
-            }
-            
-            // Check if EULA was already accepted (on page load/refresh)
-            if (sessionStorage.getItem('eulaAccepted') === 'true') {
+            function hideModal() {
                 if (eulaModal) {
                     eulaModal.style.display = 'none';
-                }
-                if (form) {
-                    form.classList.remove('modal-blocked');
                 }
                 if (body) {
                     body.classList.remove('modal-open');
                 }
             }
             
+            if (eulaLink) {
+                eulaLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    showModal();
+                });
+            }
+            
+            if (closeButton) {
+                closeButton.addEventListener('click', function() {
+                    hideModal();
+                });
+            }
+            
+            if (closeFooterButton) {
+                closeFooterButton.addEventListener('click', function() {
+                    hideModal();
+                });
+            }
+            
+            if (eulaModal) {
+                eulaModal.addEventListener('click', function(e) {
+                    if (e.target === eulaModal) {
+                        hideModal();
+                    }
+                });
+            }
+            
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && eulaModal && eulaModal.style.display === 'flex') {
+                    hideModal();
+                }
+            });
+            
             // Prevent form submission if EULA not accepted (safety check)
             if (form) {
                 form.addEventListener('submit', function(e) {
-                    if (sessionStorage.getItem('eulaAccepted') !== 'true') {
+                    if (eulaAcceptCheckbox && !eulaAcceptCheckbox.checked) {
                         e.preventDefault();
-                        alert('Please read and accept the End User License Agreement to continue.');
-                        // Show modal again
-                        if (eulaModal) {
-                            eulaModal.style.display = 'flex';
-                            if (form) {
-                                form.classList.add('modal-blocked');
-                            }
-                            if (body) {
-                                body.classList.add('modal-open');
-                            }
-                        }
+                        alert('Please accept the End User License Agreement to continue.');
+                        eulaAcceptCheckbox.focus();
                         return false;
                     }
                 });
