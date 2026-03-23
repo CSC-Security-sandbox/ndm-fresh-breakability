@@ -56,6 +56,11 @@ jobs:
   display-configuration:
     runs-on: ubuntu-latest
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
     - name: Display Selection
       run: |
         echo "🌩️ ===== MULTI-CLOUD DEPLOYMENT ===== 🌩️"
@@ -86,6 +91,11 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -119,12 +129,12 @@ jobs:
 
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
       with:
         terraform_version: 1.5.0
 
     - name: Azure Login
-      uses: azure/login@v1
+      uses: azure/login@cb79c773a3cfa27f31f25eb3f677781210c9ce3d # v1.6.1
       with:
         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
 
@@ -222,7 +232,7 @@ jobs:
         echo "Azure Deployment completed successfully!"
 
     - name: Upload Azure Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       if: always()
       with:
         name: azure-deployment-logs
@@ -239,6 +249,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -255,17 +270,17 @@ jobs:
         echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}" >> $GITHUB_ENV
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
       with:
         terraform_version: latest
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+      uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
       with:
         version: 'latest'
 
@@ -392,7 +407,7 @@ jobs:
         fi
 
     - name: Upload GCP Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       if: always()
       with:
         name: gcp-deployment-logs
@@ -416,6 +431,11 @@ jobs:
       CONTENT_LIBRARY_ID: ${{ secrets.VSPHERE_CONTENT_LIBRARY_ID }}
 
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -458,12 +478,12 @@ jobs:
         echo "SSH_PASSWORD=$SSH_PASSWORD" >> $GITHUB_ENV
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: '18'
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
       with:
         terraform_version: 1.5.0
     
@@ -572,7 +592,7 @@ jobs:
         echo "📋 Control Plane: ${{ env.CONTROL_PLANE_NAME }} (${{ env.CONTROL_PLANE_IP }})"
         echo "👥 Workers: ${{ env.WORKER_NAMES_LINE }} (${{ env.WORKER_IPS_LINE }})"
     - name: Upload vSphere Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       if: always()
       with:
         name: vsphere-deployment-logs
@@ -589,6 +609,11 @@ jobs:
     if: always()
     
     steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
     - name: Final Summary
       run: |
         echo "🎉 ===== MULTI-CLOUD DEPLOYMENT COMPLETE ===== 🎉"

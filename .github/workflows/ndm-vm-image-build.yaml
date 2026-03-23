@@ -132,6 +132,11 @@ jobs:
       windows_binary_name: ${{ steps.worker-binary.outputs.windows_binary_name }}
       binary_path: ${{ steps.worker-binary.outputs.binary_path }}
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -566,6 +571,11 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - id: set-matrix
         run: |
           # Set components based on input
@@ -594,6 +604,11 @@ jobs:
       GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
       BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
     steps:
+        - name: Harden the runner (Audit all outbound calls)
+          uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+          with:
+            egress-policy: audit
+
         - name: Checkout code
           uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -696,6 +711,11 @@ jobs:
     outputs:
       windows_worker_installer_url: ${{ steps.upload-installer.outputs.windows_worker_installer_url }}
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Download Windows Installer Artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -818,6 +838,11 @@ jobs:
       REPO: "openlab-generic"
       BASE_PATH: "cicd/ndm/releases"
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -966,6 +991,11 @@ jobs:
       control_plane_image_version: ${{ steps.set-template-azure.outputs.control_plane_image_version }}
       worker_image_version: ${{ steps.set-template-azure.outputs.worker_image_version }}
     steps:  
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -1521,6 +1551,11 @@ jobs:
     needs: [package-artifacts, packer, upload-windows-installer]
     runs-on: openlab
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Download Image Info Artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
