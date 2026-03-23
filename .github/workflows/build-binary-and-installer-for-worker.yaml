@@ -11,7 +11,7 @@ on:
     inputs:
       build:
         description: 'Build to release'
-        required: true
+        required: false
         type: string
 
 permissions: 

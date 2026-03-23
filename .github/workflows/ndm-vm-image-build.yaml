@@ -94,8 +94,27 @@ on:
     inputs:
       build:
         description: 'Build to release'
-        required: true
+        required: false
         type: string
+      component:
+        description: 'Component to build (control-plane, worker, or all)'
+        required: false
+        type: string
+        default: 'all'
+      provider:
+        description: 'Cloud provider (azure, vsphere, gcp, aws, or all)'
+        required: false
+        type: string
+        default: 'all'
+      services_config:
+        description: 'JSON configuration for service tags and branches'
+        required: false
+        type: string
+      run_e2e:
+        description: 'Run E2E tests after build'
+        required: false
+        type: string
+        default: 'true'
 
 permissions: 
   contents: read
@@ -156,7 +175,8 @@ jobs:
         id: parse-config
         run: |
           # Parse the JSON configuration or use defaults
-          SERVICES_CONFIG='${{ github.event.inputs.services_config }}'
+          # Support both workflow_dispatch and workflow_call inputs
+          SERVICES_CONFIG='${{ inputs.services_config || github.event.inputs.services_config }}'
           
           if [ -z "$SERVICES_CONFIG" ] || [ "$SERVICES_CONFIG" = "null" ]; then
             echo "No services configuration provided, using defaults"
@@ -232,6 +252,10 @@ jobs:
             BUILD_VERSION="${VERSION_BASE}-nightly"
           elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             BUILD_VERSION="${{ inputs.build }}"
+          elif [[ -n "${{ inputs.build }}" ]]; then
+            BUILD_VERSION="${{ inputs.build }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            BUILD_VERSION="${VERSION_BASE}-mq-${GITHUB_SHA::7}"
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             BUILD_VERSION="${VERSION_BASE}-adhoc"
           else
@@ -289,7 +313,7 @@ jobs:
           echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Fetch and Replace tags and bundle docker images
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         env:
           WORKER_TAG: ${{ steps.parse-config.outputs.worker_tag }}
           ADMIN_SERVICE_TAG: ${{ steps.parse-config.outputs.admin_service_tag }}
@@ -316,7 +340,7 @@ jobs:
           ./app-deployment/scripts/get_tags.sh ${{steps.build_version.outputs.build_version}} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
 
       - name: Build Redis JWT Wasm extension
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y make
@@ -329,12 +353,12 @@ jobs:
           echo "Wasm extension built and copied to Helm chart"
 
       - name: Run helm package ansible playbook
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         run: |
           ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 
       - name: Upload Docker tar and Helm chart tgz to artifactory
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         run: |
           BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -378,7 +402,7 @@ jobs:
           fi
 
       - name: Download Worker Binary from Artifactory
-        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'worker' || (inputs.component || github.event.inputs.component) == 'windows-installer' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         id: worker-binary
         run: |
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -523,7 +547,7 @@ jobs:
           fi
       
       - name: Download Docker images tarball
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         run: | 
           cd app-deployment/artifacts
           TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
@@ -532,35 +556,35 @@ jobs:
               $TARGET_URL
 
       - name: Upload Ansible vars.yaml
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ansible-vars
           path: app-deployment/ansible/control-plane/config/group_vars/vars.yaml
 
       - name: Upload Helm chart artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: helm-chart
           path: app-deployment/artifacts/datamigrator-*.tgz
 
       - name: Upload Docker image tar artifacts
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: datamigrator-images
           path: app-deployment/artifacts/*.tar
 
       - name: Upload Wasm extension artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'control-plane' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: redis-jwt-wasm
           path: app-deployment/ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/redis-jwt-auth.wasm
 
       - name: Upload Worker Binaries as Artifact
-        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ (inputs.component || github.event.inputs.component) == 'worker' || (inputs.component || github.event.inputs.component) == 'windows-installer' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: worker-binary
@@ -578,25 +602,29 @@ jobs:
 
       - id: set-matrix
         run: |
+          # Support both workflow_dispatch and workflow_call inputs
+          COMPONENT_INPUT="${{ inputs.component || github.event.inputs.component }}"
+          PROVIDER_INPUT="${{ inputs.provider || github.event.inputs.provider }}"
+
           # Set components based on input
-          if [[ "${{ github.event.inputs.component }}" == "all" || "${{ github.event.inputs.component }}" == "" ]]; then
+          if [[ "$COMPONENT_INPUT" == "all" || "$COMPONENT_INPUT" == "" ]]; then
             COMPONENTS='["control-plane", "worker"]'
           else
-            COMPONENTS='["${{ github.event.inputs.component }}"]'
+            COMPONENTS='["'"$COMPONENT_INPUT"'"]'
           fi
 
           # Set providers based on input
-          if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
+          if [[ "$PROVIDER_INPUT" == "all" || "$PROVIDER_INPUT" == "" ]]; then
             PROVIDERS='["azure", "vsphere", "gcp", "aws"]'
           else
-            PROVIDERS='["${{ github.event.inputs.provider }}"]'
+            PROVIDERS='["'"$PROVIDER_INPUT"'"]'
           fi
 
           # Create the matrix JSON
           echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
 
   build-windows-installer:
-    if: ${{ github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+    if: ${{ (inputs.component || github.event.inputs.component) == 'windows-installer' || (inputs.component || github.event.inputs.component) == 'all' || (inputs.component || github.event.inputs.component) == '' }}
     runs-on: windows-latest
     needs: package-artifacts
     env:
@@ -949,7 +977,7 @@ jobs:
           path: upgrade-${{ env.BUILD_VERSION }}.tar.gz
           
   packer:
-    if: ${{ github.event.inputs.component != 'windows-installer' }}
+    if: ${{ (inputs.component || github.event.inputs.component) != 'windows-installer' }}
     needs: [package-artifacts, determine-matrix]
     env:
       ref_name: ${{ needs.package-artifacts.outputs.ref_name }}
@@ -1717,7 +1745,7 @@ jobs:
           echo "Build notification sent successfully"
 
   run-azure-ndm-api-tests:
-    if: ${{ ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call') && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
+    if: ${{ ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (inputs.run_e2e || github.event.inputs.run_e2e) == 'true' || github.event_name == 'merge_group') && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
     needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:

@@ -1,0 +1,83 @@
+name: Merge Queue Validation
+
+on:
+  merge_group:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  id-token: write
+  actions: read
+
+jobs:
+  build-docker-images:
+    uses: ./.github/workflows/build-push-service-images.yaml
+    secrets: inherit
+
+  build-worker-binary:
+    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
+    secrets: inherit
+
+  prepare-services-config:
+    runs-on: ubuntu-latest
+    needs: [build-docker-images, build-worker-binary]
+    outputs:
+      services_json: ${{ steps.merge-config.outputs.services_json }}
+    steps:
+      - name: Merge Docker and Worker configs
+        id: merge-config
+        run: |
+          DOCKER_JSON='${{ needs.build-docker-images.outputs.docker_json }}'
+          WORKER_TAG='${{ github.sha }}'
+          BRANCH_NAME='${{ github.ref_name }}'
+          
+          echo "Docker JSON:"
+          echo "$DOCKER_JSON" | jq '.'
+          echo ""
+          echo "Worker tag: $WORKER_TAG"
+          echo "Branch: $BRANCH_NAME"
+          
+          MERGED_JSON=$(echo "$DOCKER_JSON" | jq --arg tag "$WORKER_TAG" --arg branch "$BRANCH_NAME" '. + {"worker": {"tag": $tag, "branch": $branch}}')
+          
+          echo ""
+          echo "Merged services JSON:"
+          echo "$MERGED_JSON" | jq '.'
+          
+          echo "services_json=$(echo "$MERGED_JSON" | jq -c '.')" >> $GITHUB_OUTPUT
+
+  build-vm-images:
+    needs: [prepare-services-config]
+    uses: ./.github/workflows/ndm-vm-image-build.yaml
+    with:
+      component: 'all'
+      provider: 'azure'
+      services_config: ${{ needs.prepare-services-config.outputs.services_json }}
+      run_e2e: 'true'
+    secrets: inherit
+
+  validation-summary:
+    runs-on: ubuntu-latest
+    needs: [build-docker-images, build-worker-binary, build-vm-images]
+    if: always()
+    steps:
+      - name: Check validation results
+        run: |
+          echo "=== Merge Queue Validation Summary ==="
+          echo ""
+          echo "Job Results:"
+          echo "  - Docker Images Build: ${{ needs.build-docker-images.result }}"
+          echo "  - Worker Binary Build: ${{ needs.build-worker-binary.result }}"
+          echo "  - VM Images Build (with E2E): ${{ needs.build-vm-images.result }}"
+          echo ""
+          
+          if [ "${{ needs.build-docker-images.result }}" != "success" ] || \
+             [ "${{ needs.build-worker-binary.result }}" != "success" ] || \
+             [ "${{ needs.build-vm-images.result }}" != "success" ]; then
+            echo "::error::Merge queue validation failed. PR will not be merged."
+            exit 1
+          fi
+          
+          echo "All validations passed. PR is ready to merge."

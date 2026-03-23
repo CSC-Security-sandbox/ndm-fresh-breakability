@@ -532,7 +532,6 @@ jobs:
   send-workflow-card:
     name: Parse Test Results & Send Notifications
     runs-on: openlab
-    if: ${{ github.event_name == 'schedule' }}
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
     outputs:
       test_status: ${{ steps.workflow_outputs.outputs.test_status }}
@@ -674,7 +673,7 @@ jobs:
         echo "${{ steps.parser.outputs.json_results }}"
 
     - name: Send Teams Notification Card
-      if: always()
+      if: ${{ always() && github.event_name == 'schedule' }}
       run: |
         # Determine test status for title and color
         TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
@@ -1014,7 +1013,13 @@ jobs:
         
         echo " GitHub Actions Job Summary created!"
 
-        
+    - name: Fail workflow if tests failed
+      if: ${{ steps.parser.outputs.test_status == 'failure' || steps.parser.outputs.total_failed != '0' }}
+      run: |
+        echo "::error::E2E tests failed. Total failed: ${{ steps.parser.outputs.total_failed }}"
+        echo "Test Status: ${{ steps.parser.outputs.test_status }}"
+        exit 1
+
   upload-support-bundle:
     name: Upload Support Bundles
     runs-on: openlab
