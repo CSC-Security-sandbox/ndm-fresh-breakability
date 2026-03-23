@@ -14,7 +14,7 @@ import {
 import { ApiOperation, ApiResponse, ApiTags, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { JwtService, Permission } from '@netapp-cloud-datamigrate/auth-lib';
+import { Auth, JwtService, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import {
   LoggerFactory,
   LoggerService,
@@ -84,68 +84,44 @@ export class AsupController {
   @ApiResponse({ status: 200, description: "Returns updated ASUP settings" })
   @ApiBody({ type: UpdateAsupSettingsDto })
   @ApiBearerAuth()
+  @Auth(Permission.Reports)
   @Put("settings")
   async updateAsupSettings(
     @Body() updateDto: UpdateAsupSettingsDto,
     @Req() req: Request,
-    @Headers('x-internal-service-secret') internalSecret?: string,
-    @Headers('x-user-id') userIdHeader?: string,
   ): Promise<AsupSettingsDto> {
     try {
       let userId: string | null = null;
-      
-      // Allow internal calls from Keycloak with shared secret (bypasses JWT auth)
-      if (internalSecret && this.internalSecret && internalSecret === this.internalSecret) {
-        userId = userIdHeader || null;
-        this.logger.log(`ASUP settings update via internal service call: enabled=${updateDto.enabled}`);
-      } else {
-        // Regular UI calls require JWT authentication (same as Help toggle)
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-          throw new UnauthorizedException('Authorization header required');
+
+      // Rely on shared auth guard for permission checks; only extract userId here
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        throw new UnauthorizedException('Authorization header required');
+      }
+      const token = authHeader.split(' ')?.[1];
+      if (!token) {
+        throw new UnauthorizedException('JWT token missing');
+      }
+      try {
+        const decoded = await this.jwtService.verifyToken(token) as DecodedTokenPayload;
+        if (!decoded || !decoded.user) {
+          throw new UnauthorizedException('Invalid token');
         }
-        const token = authHeader.split(' ')?.[1];
-        if (!token) {
-          throw new UnauthorizedException('JWT token missing');
+        // Prefer user.id; fallback to sub
+        const candidate =
+          (typeof decoded.user.id === 'string' && decoded.user.id) ||
+          (typeof decoded.sub === 'string' && decoded.sub) ||
+          null;
+        // Basic UUID v4-ish guard (keep null if not a UUID to avoid 500s downstream)
+        const uuidRegex =
+          /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+        userId = candidate && uuidRegex.test(candidate) ? candidate : null;
+      } catch (error: unknown) {
+        if (error instanceof HttpException) {
+          throw error;
         }
-        try {
-          const decoded = await this.jwtService.verifyToken(token) as DecodedTokenPayload;
-          if (!decoded.user) {
-            throw new UnauthorizedException('Invalid token');
-          }
-          // Check for Reports permission
-          const project = req.headers.projectid as string | undefined;
-          let hasPermission = false;
-          for (const role of decoded.user.roles) {
-            const projects = role.projects ?? [];
-            if (projects.length === 0 || (project != null && projects.includes(project))) {
-              const permMap = new Set<string>(role.permissions);
-              if (permMap.has(Permission.Reports)) {
-                hasPermission = true;
-                break;
-              }
-            }
-          }
-          if (!hasPermission) {
-            throw new ForbiddenException('Insufficient permissions');
-          }
-          // Get user ID from token - use id or sub (subject)
-          const userIdFromToken = decoded.user.id;
-          if (typeof userIdFromToken === 'string' && userIdFromToken.length > 0) {
-            userId = userIdFromToken;
-          } else if (typeof decoded.sub === 'string' && decoded.sub.length > 0) {
-            userId = decoded.sub;
-          } else {
-            userId = null;
-          }
-        } catch (error: unknown) {
-          // Re-throw HttpExceptions (UnauthorizedException, ForbiddenException)
-          if (error instanceof HttpException) {
-            throw error;
-          }
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          throw new UnauthorizedException(`JWT validation failed: ${message}`);
-        }
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new UnauthorizedException(`JWT validation failed: ${message}`);
       }
       
       const enabled = updateDto.enabled === true;
@@ -170,6 +146,59 @@ export class AsupController {
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `updateAsupSettings failed: ${message}`,
+        stack,
+      );
+      throw new InternalServerErrorException(
+        'Something went wrong, please try again.',
+      );
+    }
+  }
+
+  // Internal-only endpoint for Keycloak listener (shared secret bypass)
+  @ApiOperation({ summary: "Update ASUP settings (internal)" })
+  @ApiResponse({ status: 200, description: "Returns updated ASUP settings" })
+  @ApiBody({ type: UpdateAsupSettingsDto })
+  @Put("settings/internal")
+  async updateAsupSettingsInternal(
+    @Body() updateDto: UpdateAsupSettingsDto,
+    @Headers('x-internal-service-secret') internalSecret?: string,
+    @Headers('x-user-id') userIdHeader?: string,
+  ): Promise<AsupSettingsDto> {
+    try {
+      if (!this.internalSecret || internalSecret !== this.internalSecret) {
+        throw new UnauthorizedException('Invalid internal service secret');
+      }
+      const enabled = updateDto.enabled === true;
+      // Accept userId only if it looks like a UUID; otherwise use null
+      const uuidRegex =
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+      const userId =
+        typeof userIdHeader === 'string' && uuidRegex.test(userIdHeader)
+          ? userIdHeader
+          : null;
+      this.logger.log(
+        `ASUP settings update via internal call: enabled=${enabled}, userId=${userId ?? 'null'}`,
+      );
+      const updated = await this.asupSchedulerService.updateAsupSettings(
+        enabled,
+        userId,
+      );
+      return {
+        enabled: updated.enabled,
+        ...(updated.lastUpdated != null && { lastUpdated: updated.lastUpdated }),
+      };
+    } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        this.logger.error(
+          `updateAsupSettingsInternal failed: ${error.message}`,
+          error.stack,
+        );
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `updateAsupSettingsInternal failed: ${message}`,
         stack,
       );
       throw new InternalServerErrorException(
