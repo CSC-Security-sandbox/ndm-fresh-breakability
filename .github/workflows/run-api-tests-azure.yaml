@@ -534,12 +534,12 @@ jobs:
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
     outputs:
-      test_status: ${{ steps.workflow_outputs.outputs.test_status }}
-      total_tests: ${{ steps.workflow_outputs.outputs.total_tests }}
-      total_failed: ${{ steps.workflow_outputs.outputs.total_failed }}
-      pipeline_url: ${{ steps.workflow_outputs.outputs.pipeline_url }}
-      badge_color: ${{ steps.workflow_outputs.outputs.badge_color }}
-      badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
+      test_status: ${{ steps.parser.outputs.test_status }}
+      total_tests: ${{ steps.parser.outputs.total_tests }}
+      total_failed: ${{ steps.parser.outputs.total_failed }}
+      pipeline_url: ${{ steps.parser.outputs.pipeline_url }}
+      badge_color: ${{ steps.parser.outputs.badge_color }}
+      badge_message: ${{ steps.parser.outputs.badge_message }}
 
     steps:
     - name: Harden the runner (Audit all outbound calls)
