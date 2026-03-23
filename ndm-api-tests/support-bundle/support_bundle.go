@@ -27,8 +27,8 @@ func main() {
 			return
 		}
 
-		// Initialize the setup without worker attach setup
-		InitTestEnv()
+		// Initialize the setup without worker attach setup. Reuse the environment created by the test jobs
+		InitTestEnvWithoutWorkers()
 
 		// Step 1: Fetch project IDs
 		headers := GetHeaders(AuthToken, ContentTypeJSON)
