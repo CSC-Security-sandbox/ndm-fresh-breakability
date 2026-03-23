@@ -131,13 +131,9 @@
                                         <label for="eulaAcceptCheckbox" class="text-sm font-medium text-gray-700 cursor-pointer">
                                             I accept the
                                             <a href="#" id="eula-link" class="text-blue-600 hover:text-blue-800 underline">
-                                                Terms and Conditions (EULA)
-                                            </a>
-                                            <span class="text-red-500">*</span>
+                                                End User License Agreement
+                                            </a><span class="text-red-500">*</span>
                                         </label>
-                                        <p class="text-xs text-gray-500 mt-1">
-                                            You must review and accept the EULA to proceed.
-                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -146,7 +142,9 @@
                                 <button
                                     id="kc-update-profile"
                                     type="submit"
-                                    class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}">
+                                    disabled
+                                    style="background-color: #9ca3af; cursor: not-allowed;"
+                                    class="${properties.kcButtonClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!} text-white">
                                     ${msg("Proceed")}
                                 </button>
                             </div>
@@ -219,7 +217,30 @@
             var closeFooterButton = document.getElementById('eula-close-footer-button');
             var eulaAcceptCheckbox = document.getElementById('eulaAcceptCheckbox');
             var form = document.getElementById('kc-profile-update-form');
+            var submitButton = document.getElementById('kc-update-profile');
             var body = document.body;
+            
+            // Function to update submit button state and style based on EULA acceptance
+            function updateSubmitButtonState() {
+                if (submitButton && eulaAcceptCheckbox) {
+                    if (eulaAcceptCheckbox.checked) {
+                        // EULA accepted - enable button with blue color
+                        submitButton.disabled = false;
+                        submitButton.style.backgroundColor = '#2563eb'; // blue-600
+                        submitButton.style.cursor = 'pointer';
+                    } else {
+                        // EULA not accepted - disable button with gray color
+                        submitButton.disabled = true;
+                        submitButton.style.backgroundColor = '#9ca3af'; // gray-400
+                        submitButton.style.cursor = 'not-allowed';
+                    }
+                }
+            }
+            
+            // Listen for EULA checkbox changes
+            if (eulaAcceptCheckbox) {
+                eulaAcceptCheckbox.addEventListener('change', updateSubmitButtonState);
+            }
             
             function showModal() {
                 if (eulaModal) {

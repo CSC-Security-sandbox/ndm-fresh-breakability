@@ -126,38 +126,14 @@
         the Software and agree to comply with all applicable data privacy laws. NetApp is only responsible for personal
         information it explicitly requests in order to provide services in support of the Software. In such cases, NetApp agrees
         to protect personal information from unauthorized access and use, and from accidental loss or destruction in
-        accordance with applicable data privacy laws.
+        accordance with applicable data privacy laws. To the extent you provide NetApp with personal information in connection
+        with NetApp's support of the Software, NetApp will handle such personal information in accordance with the NetApp
+        Customer Data Processing Agreement available on NetApp's "How To Buy" website
+        (<a href="https://www.netapp.com/how-to-buy/" class="text-blue-600 hover:underline">https://www.netapp.com/how-to-buy/</a>), incorporated herein by reference.
     </p>
 
     <p class="mb-4">
-        The Software may enable You to generate support bundles or similar diagnostic packages that may include logs,
-        configuration information, and other technical data useful for troubleshooting. Any such support bundles are
-        generated and transmitted only when initiated by You or Your personnel, and are not automatically transmitted by
-        NetApp. You remain responsible for reviewing any such support bundles prior to transmission and for ensuring they
-        do not contain information You do not wish to disclose.
-    </p>
-
-    <p class="mb-4">
-        To the extent you provide NetApp with personal information in connection with NetApp's support of the Software,
-        NetApp will handle such personal information in accordance with the NetApp Customer Data Processing Agreement
-        available on NetApp's "How To Buy" website (<a href="https://www.netapp.com/how-to-buy/" class="text-blue-600 hover:underline">https://www.netapp.com/how-to-buy/</a>), incorporated herein by reference.
-    </p>
-
-    <p class="mb-4">
-        <strong>12. Telemetry Data.</strong> The Software may collect and transmit certain system operational and migration-related usage
-        information ("Telemetry Data") to NetApp for purposes of providing technical support and service improvement. You
-        may choose to disable Telemetry Data collection settings as described in the Documentation. Disabling Telemetry
-        Data collection may affect the availability or quality of certain support, diagnostic, or advanced features.
-    </p>
-
-    <p class="mb-4">
-        You are responsible for determining whether Telemetry Data transmission is permitted within Your environment,
-        including regulated, air-gapped, or restricted networks. Telemetry Data is retained only as necessary to support
-        operational and support purposes and may be periodically refreshed or replaced by updated system state data.
-    </p>
-
-    <p class="mb-4">
-        <strong>13. U.S. Federal Government End Users.</strong> This Section 13 applies to You only if You are a U.S. Federal
+        <strong>12. U.S. Federal Government End Users.</strong> This Section 12 applies to You only if You are a U.S. Federal
         Government end user. The Software and Documentation is "commercial" computer software and documentation and
         is licensed to You in accordance with the rights articulated in applicable U.S. government acquisition regulations (e.g.
         FAR, DFARs) pertaining to commercial computer software and documentation. You shall not be subject to applicable
@@ -167,7 +143,7 @@
     </p>
 
     <p class="mb-4">
-        <strong>14. General.</strong> This EULA will be construed pursuant to the laws of i) the State of California, United States, excluding
+        <strong>13. General.</strong> This EULA will be construed pursuant to the laws of i) the State of California, United States, excluding
         its conflicts of law provisions, if You are located in the United States or in a country in which NetApp has no local
         sales subsidiary, or ii) the country in which You are located if NetApp has a local sales subsidiary in that country.
         NetApp reserves the right to control all aspects of any lawsuit or claim that arises from Your use of the Software or
