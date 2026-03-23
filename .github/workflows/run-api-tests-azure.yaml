@@ -166,7 +166,6 @@ jobs:
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
 
       - name: Initialize Terraform
         run: |
@@ -1116,7 +1115,6 @@ jobs:
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
 
       - name: Download Terraform State
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

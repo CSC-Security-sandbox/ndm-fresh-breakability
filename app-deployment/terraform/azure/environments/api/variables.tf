@@ -135,4 +135,5 @@ variable "location" {
 variable "dns_servers" {
   description = "List of DNS servers to use for the NIC."
   type        = list(string)
+  default = []
 }
