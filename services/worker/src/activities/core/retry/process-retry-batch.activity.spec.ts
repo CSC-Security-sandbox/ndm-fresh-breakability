@@ -2,7 +2,6 @@ import { ProcessRetryBatchActivity } from './process-retry-batch.activity';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 import { CommandGenerationService } from '../shared/command-generation.service';
-import { DirStreamingService } from '../shared/dir-streaming.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FatalError, RetryableError } from 'src/errors/errors.types';
 import { Context } from '@temporalio/activity';
@@ -19,7 +18,6 @@ jest.mock('@temporalio/activity', () => ({
 jest.mock('fs', () => ({
     promises: {
         readdir: jest.fn(),
-        opendir: jest.fn(),
     },
 }));
 
@@ -32,7 +30,6 @@ describe('ProcessRetryBatchActivity', () => {
     let configService: jest.Mocked<ConfigService>;
     let redisService: jest.Mocked<RedisService>;
     let commandGenerationService: jest.Mocked<CommandGenerationService>;
-    let dirStreamingService: jest.Mocked<DirStreamingService>;
     let loggerFactory: jest.Mocked<LoggerFactory>;
     let mockLogger: jest.Mocked<LoggerService>;
 
@@ -64,10 +61,6 @@ describe('ProcessRetryBatchActivity', () => {
         publishBulkToCommandStream: jest.fn(),
         publishToTaskStream: jest.fn(),
         publishToErrorStream: jest.fn(),
-        addToDirContentSet: jest.fn().mockResolvedValue(undefined),
-        deleteDirContentSet: jest.fn().mockResolvedValue(undefined),
-        areDirContentMembers: jest.fn().mockResolvedValue([]),
-        scanDirContentSet: jest.fn().mockResolvedValue({ cursor: 0, members: [] }),
     };
 
     const mockOperationsBatch = {
@@ -112,16 +105,6 @@ describe('ProcessRetryBatchActivity', () => {
             }),
         } as any;
 
-        dirStreamingService = {
-            getDirContentKey: jest.fn().mockReturnValue('mock-redis-key'),
-            streamDirToRedisSet: jest.fn().mockResolvedValue({ totalCount: 2, redisKey: 'mock-redis-key' }),
-            streamDirEntries: jest.fn().mockImplementation(async function* () {
-                yield ['file1.txt', 'file2.txt'];
-            }),
-            streamDirEntriesWithFileTypes: jest.fn(),
-            scanForNonMembers: jest.fn(),
-        } as any;
-
         (Context.current as jest.Mock).mockReturnValue({
             info: { activityId: 'activity-1' },
             heartbeat: jest.fn(),
@@ -133,8 +116,7 @@ describe('ProcessRetryBatchActivity', () => {
             configService,
             loggerFactory,
             redisService,
-            commandGenerationService,
-            dirStreamingService,
+            commandGenerationService
         );
     });
 
@@ -305,7 +287,7 @@ describe('ProcessRetryBatchActivity', () => {
                 settings: mockSettings,
             });
 
-            expect(dirStreamingService.streamDirEntries).toHaveBeenCalled();
+            expect(fs.promises.readdir).toHaveBeenCalled();
         });
 
         it('should delete batch directory from Redis after processing', async () => {

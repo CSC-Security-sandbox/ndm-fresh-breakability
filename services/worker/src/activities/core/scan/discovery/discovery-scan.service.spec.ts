@@ -19,24 +19,10 @@ jest.mock('fs', () => {
     promises: {
       access: jest.fn(),
       readdir: jest.fn(),
-      opendir: jest.fn(),
       lstat: jest.fn(),
     },
   };
 });
-
-async function* asyncDirIterator(items: Array<{ name: string }>): AsyncGenerator<{ name: string }> {
-  for (const item of items) {
-    yield item;
-  }
-}
-
-function mockOpendir(dirents: Array<{ name: string }>) {
-  (fs.promises.opendir as jest.Mock).mockResolvedValue({
-    [Symbol.asyncIterator]: () => asyncDirIterator(dirents),
-    close: jest.fn().mockResolvedValue(undefined),
-  });
-}
 
 jest.mock('path', () => {
   const actualPath = jest.requireActual('path');
@@ -178,6 +164,55 @@ describe('DiscoveryScanService', () => {
     jest.clearAllMocks();
   });
 
+  describe('getDirContents', () => {
+    it('should return directory contents successfully', async () => {
+      const dirents = [{ name: 'file1.txt' }] as unknown as fs.Dirent[];
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.readdir as jest.Mock).mockResolvedValue(dirents);
+
+      const result = await service.getDirContents({
+        path: '/mock/path',
+        jobContext: mockJobContext,
+        errorType: ErrorType.RECOVERABLE_ERROR,
+        command: mockCommand,
+      });
+
+      expect(result).toEqual(dirents);
+    });
+
+    it('should throw FatalError and publish to error stream', async () => {
+      (fs.promises.access as jest.Mock).mockRejectedValue({ code: 'ENOENT' });
+
+      await expect(
+        service.getDirContents({
+          path: '/bad/path',
+          jobContext: mockJobContext,
+          errorType: ErrorType.RECOVERABLE_ERROR,
+          command: mockCommand,
+        }),
+      ).rejects.toThrow(FatalError);
+
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    it('should catch unexpected error from readdir and publish error', async () => {
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
+      const err = new Error('readdir failed');
+      (fs.promises.readdir as jest.Mock).mockRejectedValue(err);
+
+      await expect(
+        service.getDirContents({
+          path: '/mock/path',
+          jobContext: mockJobContext,
+          errorType: ErrorType.RECOVERABLE_ERROR,
+          command: mockCommand,
+        }),
+      ).rejects.toThrow(err);
+
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+  });
+
   describe('scanDirectory', () => {
     const mockStat = {
       isDirectory: () => false,
@@ -186,7 +221,7 @@ describe('DiscoveryScanService', () => {
 
     beforeEach(() => {
       (fs.promises.lstat as jest.Mock).mockResolvedValue(mockStat);
-      mockOpendir([
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
         { name: 'file1.txt' },
         { name: 'subdir' },
       ]);
@@ -310,7 +345,7 @@ describe('DiscoveryScanService', () => {
       isDirectory: () => false,
       isSymbolicLink: () => false,
       });
-      mockOpendir([
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
       { name: 'file1.txt' },
       ]);
       (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
@@ -327,7 +362,6 @@ describe('DiscoveryScanService', () => {
       } as any);
 
       // The errorType is only used if an error occurs, so let's force an error
-      mockOpendir([{ name: 'file1.txt' }]);
       (fs.promises.lstat as jest.Mock).mockRejectedValueOnce(new Error('fail'));
       await expect(
       service.scanDirectory({
@@ -345,7 +379,7 @@ describe('DiscoveryScanService', () => {
     });
 
     it('should handle empty directory', async () => {
-      mockOpendir([]);
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([]);
       const result = await service.scanDirectory({
       jobContext: mockJobContext,
       sourcePath: '/mock',
@@ -366,7 +400,7 @@ describe('DiscoveryScanService', () => {
     it('should skip duplicate directories with same name and different case for SMB', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32'});
-      mockOpendir([
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
         { name: 'Folder' },
         { name: 'folder' },
         { name: 'FOLder' },
@@ -418,7 +452,7 @@ describe('DiscoveryScanService', () => {
     it('should include directories with same name and different case for NFS', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'linux' });
-      mockOpendir([
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
         { name: 'Folder' },
         { name: 'folder' },
         { name: 'FOLder' },
@@ -475,7 +509,7 @@ describe('DiscoveryScanService', () => {
 
       it('should set TRANSIENT_ERROR type when WindowsAPINotAvailableError is caught in scanDirectory', async () => {
         // Arrange: Setup file system mocks
-        mockOpendir([
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
           { name: 'file1.txt' },
         ]);
         (fs.promises.lstat as jest.Mock).mockResolvedValue({
@@ -521,7 +555,7 @@ describe('DiscoveryScanService', () => {
 
       it('should publish DM error to error stream when WindowsAPINotAvailableError occurs', async () => {
         // Arrange: Setup file system mocks
-        mockOpendir([
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
           { name: 'file1.txt' },
         ]);
         (fs.promises.lstat as jest.Mock).mockResolvedValue({
@@ -563,7 +597,7 @@ describe('DiscoveryScanService', () => {
 
       it('should rethrow WindowsAPINotAvailableError after publishing to error stream', async () => {
         // Arrange: Setup file system mocks
-        mockOpendir([
+        (fs.promises.readdir as jest.Mock).mockResolvedValue([
           { name: 'file1.txt' },
         ]);
         (fs.promises.lstat as jest.Mock).mockResolvedValue({

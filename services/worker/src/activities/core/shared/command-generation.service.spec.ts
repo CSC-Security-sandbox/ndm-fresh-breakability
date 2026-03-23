@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { CommandGenerationService, LocalSetLookup } from './command-generation.service';
+import { CommandGenerationService } from './command-generation.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 import { ErrorType, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
@@ -61,7 +61,7 @@ describe('CommandGenerationService', () => {
         command: { id: 'cmd-1', fPath: '/dir' } as any,
         settings: { skipFile: '', excludePatterns: [] },
         errorType: ErrorType.TRANSIENT_ERROR,
-        targetContent: new LocalSetLookup(new Set<string>()),
+        targetContent: new Set<string>(),
         maxCommandsPerBatch: 100,
     };
 
@@ -192,7 +192,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'newdir' }],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(result.dirCount).toBe(1);
             expect(result.subDirs.length).toBeGreaterThanOrEqual(1);
@@ -202,7 +202,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'newfile.txt' }],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(result.fileCount).toBe(1);
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
@@ -213,7 +213,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'file.txt' }],
-                targetContent: new LocalSetLookup(new Set(['file.txt'])),
+                targetContent: new Set(['file.txt']),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
         });
@@ -224,7 +224,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'same.txt' }],
-                targetContent: new LocalSetLookup(new Set(['same.txt'])),
+                targetContent: new Set(['same.txt']),
             });
             expect(result.commands).toHaveLength(0);
         });
@@ -235,7 +235,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'meta.txt' }],
-                targetContent: new LocalSetLookup(new Set(['meta.txt'])),
+                targetContent: new Set(['meta.txt']),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
         });
@@ -245,7 +245,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: Array.from({ length: 150 }, (_, i) => ({ name: `file${i}.txt` })),
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
                 maxCommandsPerBatch: 50,
             });
             expect(mockJobContext.publishBulkToCommandStream).toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('CommandGenerationService', () => {
                 service.processItems({
                     ...baseInput,
                     items: [{ name: 'bad.txt' }],
-                    targetContent: new LocalSetLookup(new Set<string>()),
+                    targetContent: new Set<string>(),
                 }),
             ).rejects.toThrow('lstat failed');
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
@@ -285,7 +285,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'file.txt ' }],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             expect(result.commands).toHaveLength(0);
@@ -316,7 +316,7 @@ describe('CommandGenerationService', () => {
                     { name: 'file.txt' },
                     { name: 'File.txt' },
                 ],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
@@ -343,7 +343,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'vol' }],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             expect(result.commands).toHaveLength(0);
@@ -371,7 +371,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'link' }],
-                targetContent: new LocalSetLookup(new Set<string>()),
+                targetContent: new Set<string>(),
             });
             expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
             Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
@@ -411,7 +411,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'sym' }],
-                targetContent: new LocalSetLookup(new Set(['sym'])),
+                targetContent: new Set(['sym']),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(0);
         });
@@ -448,7 +448,7 @@ describe('CommandGenerationService', () => {
             const result = await service.processItems({
                 ...baseInput,
                 items: [{ name: 'file.txt' }],
-                targetContent: new LocalSetLookup(new Set(['file.txt'])),
+                targetContent: new Set(['file.txt']),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(1);
         });

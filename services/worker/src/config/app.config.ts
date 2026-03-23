@@ -36,7 +36,6 @@ export default registerAs(
     commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
     maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
     metaUpdatedToleranceMs: parseInt(process.env.META_UPDATED_TOLERANCE_MS || '30000'),
-    dirStreamBatchSize: parseInt(process.env.DIR_STREAM_BATCH_SIZE || '5000'),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
