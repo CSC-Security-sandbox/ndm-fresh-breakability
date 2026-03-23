@@ -251,6 +251,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             BUILD_VERSION="${VERSION_BASE}-nightly"
           elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+            if [[ -z "${{ inputs.build }}" ]]; then
+              echo "Error: 'build' input is required for release branches."
+              exit 1
+            fi
             BUILD_VERSION="${{ inputs.build }}"
           elif [[ -n "${{ inputs.build }}" ]]; then
             BUILD_VERSION="${{ inputs.build }}"

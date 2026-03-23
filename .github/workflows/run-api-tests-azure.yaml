@@ -538,8 +538,6 @@ jobs:
       total_tests: ${{ steps.parser.outputs.total_tests }}
       total_failed: ${{ steps.parser.outputs.total_failed }}
       pipeline_url: ${{ steps.parser.outputs.pipeline_url }}
-      badge_color: ${{ steps.parser.outputs.badge_color }}
-      badge_message: ${{ steps.parser.outputs.badge_message }}
 
     steps:
     - name: Harden the runner (Audit all outbound calls)
@@ -1014,11 +1012,20 @@ jobs:
         echo " GitHub Actions Job Summary created!"
 
     - name: Fail workflow if tests failed
-      if: ${{ steps.parser.outputs.test_status == 'failure' || steps.parser.outputs.total_failed != '0' }}
       run: |
-        echo "::error::E2E tests failed. Total failed: ${{ steps.parser.outputs.total_failed }}"
-        echo "Test Status: ${{ steps.parser.outputs.test_status }}"
-        exit 1
+        TEST_STATUS="${{ steps.parser.outputs.test_status }}"
+        TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
+        
+        # Default to 0 if empty
+        TOTAL_FAILED="${TOTAL_FAILED:-0}"
+        
+        if [[ "$TEST_STATUS" == "failure" ]] || [[ "$TOTAL_FAILED" -gt 0 ]] 2>/dev/null; then
+          echo "::error::E2E tests failed. Total failed: $TOTAL_FAILED"
+          echo "Test Status: $TEST_STATUS"
+          exit 1
+        fi
+        
+        echo "All tests passed. Total failed: $TOTAL_FAILED"
 
   upload-support-bundle:
     name: Upload Support Bundles
