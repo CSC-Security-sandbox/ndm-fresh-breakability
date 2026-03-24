@@ -1,4 +1,4 @@
-import { Inject } from "@nestjs/common";
+import { Catch, Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
@@ -90,8 +90,9 @@ export class DiscoveryScanService {
                     } else output.fileCount++;
 
                 }
-            } finally {
-                await dir.close().catch(()=>{});
+            } catch (error){
+                this.logger.error(`Error scanning directory ${sourcePath}: ${error.message}`);
+                throw error;
             }
         }catch(error) {
             if(error instanceof FatalError)

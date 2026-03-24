@@ -98,8 +98,9 @@ export class DirStreamingService {
                 }
 
                 return { totalCount, redisKey, lowercaseRedisKey };
-            } finally {
-                await dir.close().catch(()=>{});
+            } catch (error){
+                this.logger.error(`Error streaming directory ${dirPath}: ${error.message}`);
+                throw error;
             }
         } catch (error) {
             if (error instanceof FatalError) {
@@ -139,8 +140,9 @@ export class DirStreamingService {
             if (buffer.length > 0) {
                 yield buffer;
             }
-        } finally {
-            await dir.close().catch(()=>{});
+        } catch (error){
+            this.logger.error(`Error streaming directory ${dirPath}: ${error.message}`);
+            throw error;
         }
     }
 
@@ -167,8 +169,9 @@ export class DirStreamingService {
             if (buffer.length > 0) {
                 yield buffer;
             }
-        } finally {
-            await dir.close().catch(()=>{});
+        } catch (error){
+            this.logger.error(`Error streaming directory ${dirPath}: ${error.message}`);
+            throw error;
         }
     }
 
