@@ -99,7 +99,7 @@ export class DirStreamingService {
 
                 return { totalCount, redisKey, lowercaseRedisKey };
             } finally {
-                await dir.close();
+                await dir.close().catch(()=>{});
             }
         } catch (error) {
             if (error instanceof FatalError) {
@@ -140,7 +140,7 @@ export class DirStreamingService {
                 yield buffer;
             }
         } finally {
-            await dir.close();
+            await dir.close().catch(()=>{});
         }
     }
 
@@ -168,7 +168,7 @@ export class DirStreamingService {
                 yield buffer;
             }
         } finally {
-            await dir.close();
+            await dir.close().catch(()=>{});
         }
     }
 

@@ -91,7 +91,7 @@ export class DiscoveryScanService {
 
                 }
             } finally {
-                await dir.close();
+                await dir.close().catch(()=>{});
             }
         }catch(error) {
             if(error instanceof FatalError)
