@@ -303,6 +303,7 @@ export class JobRunInitService {
           username: jobConfig?.sourcePath?.fileServer?.userName,
           password: jobConfig?.sourcePath?.fileServer?.password,
           host: jobConfig?.sourcePath?.fileServer?.host,
+          dnsServer: jobConfig?.sourcePath?.fileServer?.dnsServer,
           workingDirectory: this.mountBasePath,
           protocolVersion:
             jobConfig?.sourcePath?.fileServer?.protocolVersion?.replace(
@@ -347,6 +348,7 @@ export class JobRunInitService {
         username: jobConfig?.targetPath?.fileServer?.userName,
         password: jobConfig?.targetPath?.fileServer?.password,
         host: jobConfig?.targetPath?.fileServer?.host,
+        dnsServer: jobConfig?.targetPath?.fileServer?.dnsServer,
         workingDirectory: this.mountBasePath,
         protocolVersion:
           jobConfig?.targetPath?.fileServer?.protocolVersion?.replace(/^v/, ""),
@@ -566,6 +568,7 @@ export class JobRunInitService {
             credential?.password,
             credential?.workingDirectory,
             credential.protocolVersion,
+            credential?.dnsServer,
           );
     };
     sourcefileServerDetails = createFileServerDetails(sourceCredential);

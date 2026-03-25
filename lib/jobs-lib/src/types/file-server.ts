@@ -10,10 +10,11 @@ export class FileServerDetails implements Serializable {
   path:string;
   workingDirectory:string;
   protocolVersion: string;
+  dnsServer?: string;
 
 
 
-  constructor(hostname: string, protocols: Protocol[],pathId: string, path:string,username?: string, password?:string,  workingDirectory?:string, protocolVersion?: string) {
+  constructor(hostname: string, protocols: Protocol[], pathId: string, path: string, username?: string, password?: string, workingDirectory?: string, protocolVersion?: string, dnsServer?: string) {
     this.hostname = hostname;
     this.protocols = protocols;
     this.password = password;
@@ -21,7 +22,8 @@ export class FileServerDetails implements Serializable {
     this.username = username;
     this.path = path;
     this.workingDirectory = workingDirectory;
-    this.protocolVersion = protocolVersion
+    this.protocolVersion = protocolVersion;
+    this.dnsServer = dnsServer;
   }
 
   serialize(): string {
@@ -37,6 +39,7 @@ export class FileServerDetails implements Serializable {
     this.username = obj?.username;
     this.path = obj?.path;
     this.workingDirectory = obj?.workingDirectory;
-    this.protocolVersion = obj?.protocol
+    this.protocolVersion = obj?.protocol;
+    this.dnsServer = obj?.dnsServer;
   }
 }

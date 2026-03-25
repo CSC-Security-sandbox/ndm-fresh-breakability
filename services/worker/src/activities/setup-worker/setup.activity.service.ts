@@ -13,6 +13,7 @@ import { SetupWorkerParams } from '../types/tasks';
 import { RetryableError } from 'src/errors/errors.types';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { WinShellService } from '../common/win-shell.service';
+import { configureSmbAdDns } from 'src/utils/network.utils';
 // import { SmbUserSetupService } from '../core/migrate/command-execution/smb-user-setup.service';
 
 @Injectable()
@@ -162,6 +163,10 @@ export class SetupActivityService {
       this.logger.log(
         `[${jobRunId}] - [${this.workerId}] Setting up worker`,
       );
+      if (context.jobConfig.sourceFileServer.protocols[0].type === ProtocolTypes.SMB 
+        && context.jobConfig.sourceFileServer.dnsServer) {
+        await configureSmbAdDns(jobRunId, context.jobConfig.sourceFileServer.dnsServer, this.logger);
+      }
       await this.mountPath(
         context.jobConfig.sourceFileServer,
         protocol,
@@ -169,12 +174,17 @@ export class SetupActivityService {
       );
 
       // mount destination path if exists
-      if (context.jobConfig?.destinationFileServer)
+      if (context.jobConfig?.destinationFileServer){
+        if (context.jobConfig.destinationFileServer.protocols[0].type === ProtocolTypes.SMB
+          && context.jobConfig.destinationFileServer.dnsServer) {
+          await configureSmbAdDns(jobRunId, context.jobConfig.destinationFileServer.dnsServer, this.logger);
+        }
         await this.mountPath(
           context.jobConfig.destinationFileServer,
           protocol,
           jobRunId,
         );
+      }
 
       // validate domain join for SMB migrations
       await this.validateDomainJoin(

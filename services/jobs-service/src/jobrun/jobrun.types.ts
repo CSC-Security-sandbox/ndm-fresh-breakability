@@ -18,7 +18,8 @@ interface Credential {
     isDisabled: boolean,
     host: string,
     workingDirectory:string,
-    protocolVersion: string
+    protocolVersion: string,
+    dnsServer?: string,
 }
 
 export interface JobRunConfig{
