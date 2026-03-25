@@ -1,5 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException, BadRequestException, ServiceUnavailableException, Inject, Optional } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as fastCsv from 'fast-csv';
 import { validateFilePath } from 'src/utils/utils';
@@ -9,6 +10,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { JobType } from 'src/constants/enums';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 @Injectable()
 export class CsvService {
@@ -22,6 +24,8 @@ export class CsvService {
     constructor(
         private readonly dataSource: DataSource, 
         private readonly projectIdCacheService: ProjectIdCacheService,
+        @InjectRepository(JobRunEntity)
+        private readonly jobRunRepository: Repository<JobRunEntity>,
         @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
     ) {
         if (loggerFactory) {
@@ -51,8 +55,10 @@ export class CsvService {
             let offset = 0;
 
             let totalRecords = 0;
+            const protocol = await this.getProtocolForJobRun(jobRunId);
+            
             while (true) {
-                const result = await this.getInventoryData(jobRunId, batchSize, offset, jobType);
+                const result = await this.getInventoryData(jobRunId, batchSize, offset, jobType, protocol);
                 if (!result || result.length === 0) break;
                 for (const row of result) {
                     csvStream.write(row);
@@ -74,28 +80,26 @@ export class CsvService {
         }
     }
 
-    async getInventoryData(jobRunId: string, limit: number, offset: number, jobType?: string) {
+    async getProtocolForJobRun(jobRunId: string): Promise<string> {
+        const jobRun = await this.jobRunRepository.findOne({
+            where: { id: jobRunId },
+            relations: ['jobConfig', 'jobConfig.sourcePath', 'jobConfig.sourcePath.fileServer'],
+        });
+        return jobRun?.jobConfig?.sourcePath?.fileServer?.protocol || CsvService.DEFAULT_PROTOCOL;
+    }
+
+    async getInventoryData(jobRunId: string, limit: number, offset: number, jobType?: string, protocol?: string) {
         let query;
         if (jobType?.toUpperCase() === JobType.CutOver) {
             query = await this.getCutoverInventoryDataQuery(jobRunId, limit, offset);
         } else {
-            query = await this.getInventoryDataQuery(jobRunId, limit, offset, jobType);
+            query = await this.getInventoryDataQuery(jobRunId, limit, offset, jobType, protocol);
         }
         return this.dataSource.query(query.query, query.values);
     }
 
-    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number, jobType?: string) {
+    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number, jobType?: string, protocol?: string) {
         const dbSchema = process.env.SCHEMA;
-        const protocolQuery = `
-        SELECT fs.protocol
-        FROM ${dbSchema}.jobrun jr
-        JOIN ${dbSchema}.jobconfig jc ON jc.id = jr.job_config_id
-        JOIN ${dbSchema}.volume v ON v.id = jc.source_path_id
-        JOIN ${dbSchema}.file_server fs ON fs.id = v.file_server_id
-        WHERE jr.id = $1
-    `;
-        const protocolResult = await this.dataSource.query(protocolQuery, [jobRunId]);
-        const protocol = protocolResult[0]?.protocol || CsvService.DEFAULT_PROTOCOL;
         const isMigrate = jobType?.toUpperCase() === JobType.Migrate;
         const columns = this.getMigrationCoCColumns(protocol, isMigrate);
 
