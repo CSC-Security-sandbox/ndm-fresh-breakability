@@ -52,19 +52,19 @@ export class CsvService {
             const fileStream = fs.createWriteStream(filePath); 
             const csvStream = fastCsv.format({ headers: true });
             csvStream.pipe(fileStream);
-            let offset = 0;
 
             let totalRecords = 0;
+            let cursor: string | null = null;
             const protocol = await this.getProtocolForJobRun(jobRunId);
             
             while (true) {
-                const result = await this.getInventoryData(jobRunId, batchSize, offset, jobType, protocol);
+                const result = await this.getInventoryData(jobRunId, batchSize, cursor, jobType, protocol);
                 if (!result || result.length === 0) break;
                 for (const row of result) {
                     csvStream.write(row);
                 }
                 totalRecords += result.length;
-                offset += batchSize;
+                cursor = result[result.length - 1]['Source Path'];
                 
                 if (totalRecords % (batchSize * 10) === 0) {
                     this.logger.log(`projectId: ${projectId} Processed ${totalRecords} records so far for jobRunId: ${jobRunId}`);
@@ -88,40 +88,44 @@ export class CsvService {
         return jobRun?.jobConfig?.sourcePath?.fileServer?.protocol || CsvService.DEFAULT_PROTOCOL;
     }
 
-    async getInventoryData(jobRunId: string, limit: number, offset: number, jobType?: string, protocol?: string) {
+    async getInventoryData(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
         let query;
         if (jobType?.toUpperCase() === JobType.CutOver) {
-            query = await this.getCutoverInventoryDataQuery(jobRunId, limit, offset);
+            query = this.getCutoverInventoryDataQuery(jobRunId, limit, cursor);
         } else {
-            query = await this.getInventoryDataQuery(jobRunId, limit, offset, jobType, protocol);
+            query = this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol);
         }
         return this.dataSource.query(query.query, query.values);
     }
 
-    async getInventoryDataQuery(jobRunId: string, limit: number, offset: number, jobType?: string, protocol?: string) {
+    getInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
         const dbSchema = process.env.SCHEMA;
         const isMigrate = jobType?.toUpperCase() === JobType.Migrate;
         const columns = this.getMigrationCoCColumns(protocol, isMigrate);
 
         const query = `
-        SELECT DISTINCT ON (i.path)
-            COALESCE(v_source.volume_path, '') || i.path as "Source Path",
-            v_target.volume_path || i.path as "Destination Path",
-            ${columns}
-        FROM ${dbSchema}.inventory i
-        LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
-        LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
-        LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
-        LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
-        WHERE i.job_run_id = $1
-          AND (i.is_deleted = false OR i.is_deleted IS NULL)
-        ORDER BY i.path, i.updated_at DESC, i.created_at DESC
-        LIMIT $2 OFFSET $3;
+        SELECT * FROM (
+            SELECT DISTINCT ON (i.path)
+                COALESCE(v_source.volume_path, '') || i.path as "Source Path",
+                v_target.volume_path || i.path as "Destination Path",
+                ${columns}
+            FROM ${dbSchema}.inventory i
+            LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
+            LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
+            LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
+            LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
+            WHERE i.job_run_id = $1
+              AND (i.is_deleted = false OR i.is_deleted IS NULL)
+            ORDER BY i.path, i.updated_at DESC, i.created_at DESC
+        ) AS inventory_data
+        WHERE ($2::text IS NULL OR "Source Path" > $2)
+        ORDER BY "Source Path"
+        LIMIT $3;
     `;
-        return { query, values: [jobRunId, limit, offset] };
+        return { query, values: [jobRunId, cursor, limit] };
     }
 
-    async getCutoverInventoryDataQuery(jobRunId: string, limit: number, offset: number) {
+    getCutoverInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null) {
         const dbSchema = process.env.SCHEMA;
         const query = `
             WITH all_related_jobs AS (
@@ -152,7 +156,6 @@ export class CsvService {
                         WHEN i.is_directory THEN 'directory'
                         ELSE 'file'
                     END AS "Type",
-                    -- Window function to check if file is deleted in latest run
                     FIRST_VALUE(i.is_deleted) OVER (
                         PARTITION BY i.path 
                         ORDER BY arj.start_time DESC
@@ -178,11 +181,12 @@ export class CsvService {
                 "Checksum Generated Timestamp (UTC)",
                 "Type"
             FROM latest_file_versions
-            WHERE latest_deletion_status = false OR latest_deletion_status IS NULL
+            WHERE (latest_deletion_status = false OR latest_deletion_status IS NULL)
+              AND ($2::text IS NULL OR "Source Path" > $2)
             ORDER BY "Source Path"
-            LIMIT $2 OFFSET $3;
+            LIMIT $3;
         `;
-        return { query, values: [jobRunId, limit, offset] };
+        return { query, values: [jobRunId, cursor, limit] };
     }
 
     getMigrationCoCColumns(protocol: string, includeCocStatusColumns: boolean = false): string {
