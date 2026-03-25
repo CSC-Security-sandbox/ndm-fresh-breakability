@@ -34,23 +34,38 @@ export function getLocalIpAddress(): string {
 }
 
 /**
- * Configures the AD server IP as the primary DNS entry on the Windows Ethernet adapter.
- * Inserts at index=1 so it is queried first, preserving all existing DNS entries (shifted down).
- * Idempotent — skips if the IP is already present in the adapter's DNS list.
- * No-op on non-Windows platforms.
+ * Appends the AD server IP to the Windows Ethernet adapter DNS list if not already present.
+ *
+ * Design decisions:
+ * - We do NOT reorder or delete existing DNS entries. The VM may have a Group Policy or a
+ *   preconfigured corporate DNS order that must be preserved. Reordering would be destructive.
+ * - We only add the IP when it is absent entirely, using index=1 so it sits at the top of
+ *   the list on first insertion. If it is already present at any position, it means the adapter
+ *   is already configured (either by us or by the admin) and we leave it untouched.
+ * - `netsh` commands are local registry writes (~50ms each) — no network call, no service restart.
+ * - If `netsh` fails (e.g. Group Policy locks DNS changes), we warn and continue. The operation
+ *   is best-effort: if the admin has locked DNS, they have presumably configured the correct
+ *   servers already.
+ * - No-op on non-Windows platforms.
  */
 export async function configureSmbAdDns(traceId: string, dnsServerIp: string, logger: { log: Function; warn: Function }): Promise<void> {
   if (process.platform !== 'win32') return;
 
   try {
     const { stdout } = await execAsync(`netsh interface ip show dns name="Ethernet"`);
+
     if (stdout.includes(dnsServerIp)) {
-      logger.log(`[${traceId}] AD DNS ${dnsServerIp} already configured, skipping`);
+      logger.log(`[${traceId}] AD DNS ${dnsServerIp} already present in adapter DNS list, skipping`);
       return;
     }
+
+    // Not present — add at index=1 so it is the first entry queried on this adapter.
+    // Existing entries shift down; nothing is removed.
     await execAsync(`netsh interface ip add dns name="Ethernet" addr=${dnsServerIp} index=1 validate=no`);
-    logger.log(`[${traceId}] AD DNS ${dnsServerIp} inserted at index=1 in adapter DNS list`);
+    logger.log(`[${traceId}] AD DNS ${dnsServerIp} added at index=1 in adapter DNS list`);
   } catch (error) {
+    // Warn only — do not throw. If Group Policy prevents DNS changes the VM admin has
+    // presumably already configured the correct DNS, so we should not block the operation.
     logger.warn(`[${traceId}] Failed to configure AD DNS ${dnsServerIp}: ${error.message}`);
   }
 }

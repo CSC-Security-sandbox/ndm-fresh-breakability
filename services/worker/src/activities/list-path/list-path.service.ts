@@ -4,6 +4,7 @@ import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { ConfigService } from '@nestjs/config';
 import { ExportPathSource } from './list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { configureSmbAdDns } from 'src/utils/network.utils';
 
 @Injectable()
 export class ListPathActivity {
@@ -35,6 +36,9 @@ export class ListPathActivity {
     };
 
     try {
+      if (protocolType === ProtocolTypes.SMB && payload.adServerIp) {
+        await configureSmbAdDns(traceId, payload.adServerIp, this.logger);
+      }
       if(payload.exportPathSource !== ExportPathSource.MANUAL_UPLOAD) {
         const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
         response.paths = await protocol.listPaths(traceId, payload);

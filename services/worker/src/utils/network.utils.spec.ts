@@ -172,46 +172,49 @@ describe('configureSmbAdDns', () => {
     expect(mockExecAsync).not.toHaveBeenCalled();
   });
 
-  it('should skip if IP is already in DNS list', async () => {
+  it('should skip add when IP is already present anywhere in the DNS list', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    mockExecAsync.mockResolvedValueOnce({ stdout: '172.30.202.5\n10.0.0.1\n172.30.202.6\n', stderr: '' });
+    // IP already present — existing DNS order must not be disturbed
+    mockExecAsync.mockResolvedValueOnce({ stdout: '8.8.8.8\n10.0.0.1\n172.30.1.5\n', stderr: '' });
 
     await configureSmbAdDns('trace-1', '10.0.0.1', mockLogger);
 
-    expect(mockExecAsync).toHaveBeenCalledTimes(1);
-    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('already configured'));
+    expect(mockExecAsync).toHaveBeenCalledTimes(1); // only show, no add
+    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('already present'));
+    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('skipping'));
   });
 
-  it('should insert DNS at index=1 when IP is not in list', async () => {
+  it('should add at index=1 when IP is not in the list', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     mockExecAsync
-      .mockResolvedValueOnce({ stdout: '172.30.202.5\n172.30.202.6\n', stderr: '' })
-      .mockResolvedValueOnce({ stdout: '', stderr: '' });
+      .mockResolvedValueOnce({ stdout: '8.8.8.8\n172.30.1.5\n', stderr: '' }) // show — IP absent
+      .mockResolvedValueOnce({ stdout: '', stderr: '' });                       // add at index=1
 
     await configureSmbAdDns('trace-1', '10.0.0.50', mockLogger);
 
     expect(mockExecAsync).toHaveBeenCalledTimes(2);
     const addCall = mockExecAsync.mock.calls[1][0] as string;
+    expect(addCall).toContain('add dns');
     expect(addCall).toContain('10.0.0.50');
     expect(addCall).toContain('index=1');
     expect(addCall).toContain('validate=no');
-    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('inserted at index=1'));
+    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('added at index=1'));
   });
 
-  it('should warn and not throw when netsh show command fails', async () => {
+  it('should warn and not throw when netsh show command fails (e.g. Group Policy lock)', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    mockExecAsync.mockRejectedValueOnce(new Error('netsh failed'));
+    mockExecAsync.mockRejectedValueOnce(new Error('Access is denied'));
 
     await expect(configureSmbAdDns('trace-1', '10.0.0.1', mockLogger)).resolves.not.toThrow();
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to configure AD DNS'));
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('10.0.0.1'));
   });
 
-  it('should warn and not throw when netsh add command fails', async () => {
+  it('should warn and not throw when netsh add command fails (e.g. Group Policy lock)', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     mockExecAsync
-      .mockResolvedValueOnce({ stdout: '8.8.8.8\n', stderr: '' })
-      .mockRejectedValueOnce(new Error('access denied'));
+      .mockResolvedValueOnce({ stdout: '8.8.8.8\n', stderr: '' })  // show — IP absent
+      .mockRejectedValueOnce(new Error('Access is denied'));         // add blocked by policy
 
     await expect(configureSmbAdDns('trace-1', '10.0.0.1', mockLogger)).resolves.not.toThrow();
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to configure AD DNS'));
@@ -219,14 +222,31 @@ describe('configureSmbAdDns', () => {
 
   it('should handle multiple file servers with different AD IPs independently', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    // Both IPs absent from DNS list
     mockExecAsync.mockResolvedValue({ stdout: '8.8.8.8\n', stderr: '' });
 
     await configureSmbAdDns('trace-1', '10.0.0.1', mockLogger);
     await configureSmbAdDns('trace-2', '10.0.0.2', mockLogger);
 
-    expect(mockExecAsync).toHaveBeenCalledTimes(4); // show + add for each call
+    expect(mockExecAsync).toHaveBeenCalledTimes(4); // show + add for each
     const addCalls = mockExecAsync.mock.calls.filter((c: any[]) => (c[0] as string).includes('add dns'));
     expect(addCalls[0][0]).toContain('10.0.0.1');
     expect(addCalls[1][0]).toContain('10.0.0.2');
+  });
+
+  it('should not call add when second file server IP is already present', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    mockExecAsync
+      .mockResolvedValueOnce({ stdout: '8.8.8.8\n', stderr: '' })       // first IP absent — show
+      .mockResolvedValueOnce({ stdout: '', stderr: '' })                  // first IP add
+      .mockResolvedValueOnce({ stdout: '8.8.8.8\n10.0.0.2\n', stderr: '' }); // second IP already present — show only
+
+    await configureSmbAdDns('trace-1', '10.0.0.1', mockLogger);
+    await configureSmbAdDns('trace-2', '10.0.0.2', mockLogger);
+
+    expect(mockExecAsync).toHaveBeenCalledTimes(3); // show+add for first, show-only for second
+    const addCalls = mockExecAsync.mock.calls.filter((c: any[]) => (c[0] as string).includes('add dns'));
+    expect(addCalls).toHaveLength(1);
+    expect(addCalls[0][0]).toContain('10.0.0.1');
   });
 });
