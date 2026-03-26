@@ -31,11 +31,6 @@ jobs:
   manage-client-access:
     runs-on: openlab
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Install SSH Tools
         run: |
           sudo apt-get install -y sshpass openssh-client

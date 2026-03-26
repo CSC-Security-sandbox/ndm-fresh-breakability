@@ -24,11 +24,6 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       matrix_count: ${{ steps.set-matrix.outputs.matrix_count }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout Code with full history
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -62,11 +57,6 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.determine-matrix.outputs.matrix) }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 

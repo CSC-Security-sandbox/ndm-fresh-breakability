@@ -53,11 +53,6 @@ jobs:
       vm_resource_group: ${{ steps.create-vm.outputs.vm_resource_group }}
       vm_nic_name: ${{ steps.create-vm.outputs.vm_nic_name }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Install Azure CLI and SSH Tools
         run: |
           # sudo apt-get update -qq
@@ -734,11 +729,6 @@ jobs:
     needs: vhd-export
     runs-on: openlab
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Download Export Info
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.7
         with:
@@ -784,11 +774,6 @@ jobs:
     if: always()  # Run even if previous jobs fail
     runs-on: openlab
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Install Azure CLI
         run: |
           if ! command -v az &> /dev/null; then

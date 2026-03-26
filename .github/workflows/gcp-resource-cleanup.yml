@@ -40,11 +40,6 @@ jobs:
       cutoff_date_images_snapshots: ${{ steps.config.outputs.cutoff_date_images_snapshots }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Configure cleanup parameters
         id: config
         run: |
@@ -83,21 +78,16 @@ jobs:
       deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Authenticate to Google Cloud
-        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
         with:
           credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
 
       - name: Set up Cloud SDK
-        uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
         with:
           version: 'latest'
 
@@ -198,21 +188,16 @@ jobs:
       deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Authenticate to Google Cloud
-        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
         with:
           credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
 
       - name: Set up Cloud SDK
-        uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
         with:
           version: 'latest'
 
@@ -305,21 +290,16 @@ jobs:
       deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Authenticate to Google Cloud
-        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
         with:
           credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
 
       - name: Set up Cloud SDK
-        uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
         with:
           version: 'latest'
 
@@ -412,21 +392,16 @@ jobs:
       deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Authenticate to Google Cloud
-        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
         with:
           credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
 
       - name: Set up Cloud SDK
-        uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
         with:
           version: 'latest'
 
@@ -522,21 +497,16 @@ jobs:
       deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Authenticate to Google Cloud
-        uses: step-security/google-github-auth@57c51210cb4d85d8a5d39dc4c576c79bd693f914 # v3.0.1
+        uses: google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2
         with:
           credentials_json: ${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}
 
       - name: Set up Cloud SDK
-        uses: step-security/setup-gcloud@eca4ba5778ff559fbc5cb59ab4db7ecdcf779b98 # v3.0.1
+        uses: google-github-actions/setup-gcloud@d51b5346f85640ec2aa2fa057354d2b82c2fcbce
         with:
           version: 'latest'
 
@@ -633,11 +603,6 @@ jobs:
       contents: read
     
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Set up environment
         run: |
           sudo apt-get update -qq

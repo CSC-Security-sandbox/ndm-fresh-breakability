@@ -26,11 +26,6 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout Code with full history
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -58,19 +53,14 @@ jobs:
       IMAGE_NAME: trivy-scan-${{ matrix.service }}
       IMAGE_TAG: ${{ github.sha }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up QEMU
-        uses: step-security/setup-qemu-action@8c4aef027ab2df56e08f597afe6dd8cd31cb84f5 # v3.7.0
+        uses: docker/setup-qemu-action@4574d27a4764455b42196d70a065bc6853246a25
 
       - name: Set up Docker Buildx
-        uses: step-security/setup-buildx-action@f931205d68723ad9589fd2a7e2ece238bf9de341 # v4.0.0
+        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca
 
       - name: Log in to Azure
         uses: azure/login@a65d910e8af852a8061c627c456678983e180302
@@ -85,7 +75,7 @@ jobs:
           password: ${{ secrets.AZURE_SP_PASSWORD }}
 
       - name: Set up Trivy
-        uses: step-security/setup-trivy@c90a9e4ee674152fc961ef98d44fc670a5dcceb7 # v0.2.5
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514
         with:
           version: ${{ env.TRIVY_VERSION }}
 

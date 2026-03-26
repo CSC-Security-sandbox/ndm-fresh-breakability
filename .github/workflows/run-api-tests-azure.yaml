@@ -109,11 +109,6 @@ jobs:
       windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
     steps:
       
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -351,11 +346,6 @@ jobs:
       RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
       PROTOCOL_TYPE: SMB
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -456,11 +446,6 @@ jobs:
       RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
       PROTOCOL_TYPE: NFS
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Waiting
         run: |
           sleep 30
@@ -543,11 +528,6 @@ jobs:
       badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
 
     steps:
-    - name: Harden the runner (Audit all outbound calls)
-      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-      with:
-        egress-policy: audit
-
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -1030,11 +1010,6 @@ jobs:
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -1068,11 +1043,6 @@ jobs:
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
     if: always()
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
