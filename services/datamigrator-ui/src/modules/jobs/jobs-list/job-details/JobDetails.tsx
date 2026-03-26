@@ -27,6 +27,7 @@ import {
   useIsErrorLogsCsvReadyQuery,
   useLazyDownloadErrorLogsCSVQuery,
   useLazyGenerateErrorLogsQuery,
+  usePrepareDownloadMutation,
 } from "@api/reportApi";
 import { convertFileToBase64 } from "@/utils/common.utils";
 import { hasPermission } from "@auth/auth.utils";
@@ -186,6 +187,7 @@ const JobDetails = () => {
 
   const [downloadReportApi] = useDownloadReportsMutation();
   const [getPdfReportApi] = useGetPdfReportMutation();
+  const [prepareDownloadApi] = usePrepareDownloadMutation();
   const [retryJobRun] = useRetryJobRunMutation();
   const canDownloadReport = hasPermission(USER_PERMISSION_TYPE_ENUM.Reports);
   const [updateStatus, { isLoading: isUpdating }] = useUpdateJobRunStatusMutation();
@@ -213,7 +215,8 @@ const JobDetails = () => {
           handleDownloadReport,
           handleDownloadCocReport,
           downloadReportApi,
-          getPdfReportApi
+          getPdfReportApi,
+          prepareDownloadApi
         )
       : [];
 

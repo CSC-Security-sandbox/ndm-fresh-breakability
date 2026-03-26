@@ -284,49 +284,28 @@ export class JobRunService {
         throw new NotAcceptableException(`Invalid file path: ${zipFilePath}`);
       }
 
-      let csvExists = false;
-      try {
-        await fs.promises.access(filePath);
-        csvExists = true;
-      } catch {
+      const csvExists = await this.fileExists(filePath);
+      if (!csvExists) {
         this.logger.log(`projectId: ${projectId} CSV not yet present at: ${filePath}, will generate`);
-      }
-
-      if (csvExists) {
-        let zipExists = false;
+        const jobType = jobRun.jobConfig.jobType;
         try {
-          await fs.promises.access(zipFilePath);
-          zipExists = true;
-        } catch {
-          this.logger.log(`projectId: ${projectId} ZIP not yet present at: ${zipFilePath}, creating backfill ZIP`);
+          await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
+        } catch (csvError) {
+          this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
+          throw csvError;
         }
-
-        if (!zipExists) {
-          try {
-            await this.createZipFile([filePath], zipFilePath);
-            this.logger.log(`projectId: ${projectId} COC ZIP (backfill) created at: ${zipFilePath}`);
-          } catch (zipError) {
-            this.logger.error(`projectId: ${projectId} Failed to create backfill ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
-            throw zipError;
-          }
-        }
-        return filePath;
       }
 
-      const jobType = jobRun.jobConfig.jobType;
-      try {
-        await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
-      } catch (csvError) {
-        this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
-        throw csvError;
-      }
-
-      try {
-        await this.createZipFile([filePath], zipFilePath);
-        this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
-      } catch (zipError) {
-        this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
-        throw zipError;
+      const zipExists = await this.fileExists(zipFilePath);
+      if (!zipExists) {
+        this.logger.log(`projectId: ${projectId} ZIP not yet present at: ${zipFilePath}, will create`);
+        try {
+          await this.createZipFile([filePath], zipFilePath);
+          this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
+        } catch (zipError) {
+          this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
+          throw zipError;
+        }
       }
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -371,6 +350,15 @@ export class JobRunService {
       where: { id: jobRunId },
       select: ["subStatus"],
     });
+  }
+
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.promises.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private createZipFile(filePaths: string[], outputPath: string): Promise<void> {

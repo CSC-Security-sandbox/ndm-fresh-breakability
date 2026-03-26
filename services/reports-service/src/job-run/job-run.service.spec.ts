@@ -9,6 +9,7 @@ import { ReportsEntity } from "src/entities/reports.entity";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { CsvService } from "src/csv/csv_export.service";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { find } from "rxjs";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
@@ -728,14 +729,21 @@ describe("JobRunService", () => {
     };
     const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
 
-    it("should return the file path if the report already exists", async () => {
+    it("should return the file path if the report already exists and update DB", async () => {
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined); // both CSV and ZIP exist
+      // CSV exists, ZIP exists, and file verification all pass
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(mockJobRunRepo, "findOne").mockResolvedValue(mockJobRun);
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
 
       const result = await service.getCocReportByJobRunId(jobRunId);
 
       expect(result).toBe(mockFilePath);
+      // DB updates must run even on the backfill path (fix for Temporal retry scenario)
+      expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
+      expect(mockReportsRepo.save).toHaveBeenCalled();
     });
 
     it("should successfully generate and return the file path", async () => {
@@ -822,16 +830,24 @@ describe("JobRunService", () => {
       jest
         .spyOn(fs.promises, "access")
         .mockResolvedValueOnce(undefined)              // CSV exists
-        .mockRejectedValueOnce(new Error("not found")); // ZIP does not exist yet
+        .mockRejectedValueOnce(new Error("not found")) // ZIP does not exist
+        .mockResolvedValueOnce(undefined);             // file verification after ZIP creation
 
       const createZipSpy = jest
         .spyOn(service as any, "createZipFile")
         .mockResolvedValue(undefined);
 
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
       const result = await service.getCocReportByJobRunId(jobRunId);
 
       expect(createZipSpy).toHaveBeenCalled();
       expect(result).toBe(mockFilePath);
+      // DB updates must run even on the backfill path (fix for Temporal retry scenario)
+      expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
+      expect(mockReportsRepo.save).toHaveBeenCalled();
     });
   });
 
@@ -981,6 +997,7 @@ describe("JobRunService", () => {
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
       jest.spyOn(fs.promises, "access")
         .mockRejectedValueOnce(new Error("not found")) // CSV doesn't exist
+        .mockRejectedValueOnce(new Error("not found")) // ZIP doesn't exist
         .mockResolvedValueOnce(undefined);              // file exists after generation
       mockCsvService.generateCsv.mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
@@ -1003,6 +1020,30 @@ describe("JobRunService", () => {
       await expect(
         (service as any).createZipFile(["/etc/passwd"], validOutput)
       ).rejects.toThrow("Source path escapes the reports directory");
+    });
+
+    it("should successfully create a zip file from a valid source file", async () => {
+      const tmpDir = os.tmpdir();
+      const origEnv = process.env.REPORT_DOWNLOAD_LOCATION;
+      process.env.REPORT_DOWNLOAD_LOCATION = tmpDir;
+
+      // Use path.resolve (not path.join) to avoid the path.join spy set by previous tests
+      const sourceFile = path.resolve(tmpDir, "test-coc-source.csv");
+      const outputZip = path.resolve(tmpDir, "test-coc-output.zip");
+      await fs.promises.writeFile(sourceFile, "col1,col2\nval1,val2\n");
+
+      try {
+        await expect(
+          (service as any).createZipFile([sourceFile], outputZip)
+        ).resolves.toBeUndefined();
+
+        const stat = await fs.promises.stat(outputZip);
+        expect(stat.size).toBeGreaterThan(0);
+      } finally {
+        process.env.REPORT_DOWNLOAD_LOCATION = origEnv;
+        await fs.promises.unlink(sourceFile).catch(() => {});
+        await fs.promises.unlink(outputZip).catch(() => {});
+      }
     });
   });
 });
