@@ -32,6 +32,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AboutNdmModule } from './about-ndm/about-ndm.module';
 import { UpgradeModule } from './upgrade/upgrade.module';
+import { EulaModule } from './eula/eula.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { UpgradeModule } from './upgrade/upgrade.module';
     EmailModule,
     AboutNdmModule,
     UpgradeModule,
+    EulaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

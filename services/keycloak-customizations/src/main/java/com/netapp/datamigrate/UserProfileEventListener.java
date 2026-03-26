@@ -15,6 +15,10 @@ import java.sql.SQLException;
 import java.util.logging.Logger;
 import java.util.List;
 import java.util.ArrayList;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
  
 /**
 * An implementation of the Keycloak `EventListenerProvider` interface to handle user events.
@@ -92,6 +96,10 @@ public class UserProfileEventListener implements EventListenerProvider {
                         user.getUsername(), asupEnabled));
                     updateAsupSettingsInDatabase(asupEnabled, userId);
                 }
+                // Profile completion can come via admin update events in this deployment;
+                // keep EULA status in sync through admin-service API as well.
+                logger.info(String.format("Triggering EULA accept API from admin update for userId=%s", userId));
+                markEulaAcceptedViaApi(userId);
             }
         } catch (Exception e) {
             logger.warning(String.format("Failed to process admin user update for user %s: %s", userId, e.getMessage()));
@@ -132,6 +140,46 @@ public class UserProfileEventListener implements EventListenerProvider {
                     updateAsupSettingsInDatabase(asupEnabled, userId);
                 }
             }
+
+            // First profile page acceptance path: mark EULA accepted via admin-service API.
+            logger.info(String.format("Triggering EULA accept API from update-profile event for userId=%s", userId));
+            markEulaAcceptedViaApi(userId);
+        }
+    }
+
+    private void markEulaAcceptedViaApi(String userId) {
+        String adminServiceUrl = System.getenv("ADMIN_SERVICE_URL");
+        String internalApiKey = System.getenv("EULA_INTERNAL_API_KEY");
+
+        if (adminServiceUrl == null || adminServiceUrl.isBlank() || internalApiKey == null || internalApiKey.isBlank()) {
+            logger.warning("Skipping EULA accept API call: ADMIN_SERVICE_URL or EULA_INTERNAL_API_KEY is not configured");
+            return;
+        }
+
+        String endpoint = adminServiceUrl.endsWith("/api/v1")
+            ? adminServiceUrl + "/eula/internal/accept-user"
+            : adminServiceUrl + "/api/v1/eula/internal/accept-user";
+        String payload = String.format("{\"userId\":\"%s\"}", userId);
+        logger.info(String.format("Calling EULA accept API endpoint=%s for userId=%s", endpoint, userId));
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Content-Type", "application/json")
+                .header("x-internal-api-key", internalApiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+
+            HttpResponse<String> response = HttpClient.newHttpClient()
+                .send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                logger.warning(String.format("EULA accept API failed for user %s: status=%d body=%s", userId, response.statusCode(), response.body()));
+            } else {
+                logger.info(String.format("EULA accept API success for user %s: status=%d", userId, response.statusCode()));
+            }
+        } catch (Exception e) {
+            logger.warning(String.format("Error calling EULA accept API for user %s: %s", userId, e.getMessage()));
         }
     }
     

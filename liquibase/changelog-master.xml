@@ -657,4 +657,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260324_02_create_user_eula_status_table.sql" author="jeevitha">
+    <sqlFile path="liquibase/20260324_02_create_user_eula_status_table.sql"/>
+    <rollback>
+        <sqlFile path="liquibase/rollback/20260324_02_create_user_eula_status_table_rollback.sql"/>
+    </rollback>
+   </changeSet>
+
 </databaseChangeLog>

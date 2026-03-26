@@ -20,6 +20,7 @@ import { workerManagerApi } from "@api/workerManagerApi";
 import { aboutApi } from "@api/aboutApi";
 import { upgradeApi } from "@api/upgradeApi";
 import { uploadSlice } from "@store/reducer/uploadSlice";
+import { eulaApi } from "@api/eulaApi";
 
 const createNoopStorage = () => {
   return {
@@ -66,6 +67,7 @@ const reducer = combineReducers({
   [workerManagerApi.reducerPath]: workerManagerApi.reducer,
   [aboutApi.reducerPath]: aboutApi.reducer,
   [upgradeApi.reducerPath]: upgradeApi.reducer,
+  [eulaApi.reducerPath]: eulaApi.reducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, reducer);
@@ -97,7 +99,8 @@ export const store = configureStore({
       asupApi.middleware,
       workerManagerApi.middleware,
       aboutApi.middleware,
-      upgradeApi.middleware
+      upgradeApi.middleware,
+      eulaApi.middleware
     ] as Middleware[]),
 });
 

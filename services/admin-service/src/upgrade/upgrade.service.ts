@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { spawn, exec } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 import {
   LoggerFactory,
   LoggerService,
@@ -242,6 +243,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         upgradeStatus: UpgradeStatus.SUCCESS,
         upgradeCompletedAt: new Date(),
       });
+      await this.markEulaPendingViaApi(bundle.version);
       this.stopUpgradePoller();
 
       // Re-read bundle with updated status for worker trigger
@@ -257,6 +259,28 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `versions.conf current_version=${installedVersion} does not yet match bundle ${bundle.version} — Ansible may still be running, continuing to poll`,
     );
+  }
+
+  private async markEulaPendingViaApi(version: string): Promise<void> {
+    const internalApiKey = this.configService.get<string>('EULA_INTERNAL_API_KEY');
+    const adminServiceUrl =
+      this.configService.get<string>('ADMIN_SERVICE_URL') ||
+      'http://localhost:3000/api/v1';
+
+    if (!internalApiKey) {
+      this.logger.warn('EULA_INTERNAL_API_KEY not set; skipping EULA pending API call');
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${adminServiceUrl}/eula/internal/mark-pending`,
+        { version },
+        { headers: { 'x-internal-api-key': internalApiKey } },
+      );
+    } catch (error) {
+      this.logger.error(`Failed to mark EULA pending via API: ${error.message}`);
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import Modal from "@components/modal/ModalWrapper.tsx";
 import SideDrawer from "@components/side-drawer/SideDrawer.tsx";
 import { Box } from "@components/container/index.tsx";
 import TopProgressBar from "@components/top-progress-bar/TopProgressBar.tsx";
+import EulaReacceptModal from "@components/modal/EulaReacceptModal.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -27,6 +28,7 @@ createRoot(document.getElementById("root")!).render(
                 <AuthGuard>
                   <Modal />
                   <SideDrawer />
+                  <EulaReacceptModal />
                   <App />
                 </AuthGuard>
               </AuthenticationProvider>
