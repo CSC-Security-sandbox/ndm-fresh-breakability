@@ -104,3 +104,8 @@ export interface CaseErrorsInput {
     parent_path: string;
     file_paths: Array<string>;
 }
+
+export interface DirectoryStatsInput {
+    total_directories: string;
+    million_plus_dirs: string;
+}

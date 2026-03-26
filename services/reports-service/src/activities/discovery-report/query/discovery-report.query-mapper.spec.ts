@@ -20,8 +20,10 @@ QueryList,
 REDIRECTS_FILE_NAME_MAPPER,
 TRAILING_SPACE_FILE_MAPPER,
 CASE_ERRORS_MAPPER,
-ALTERNATE_DATA_STREAMS_MAPPER
+ALTERNATE_DATA_STREAMS_MAPPER,
+DIRECTORY_STATS_MAPPER
 } from './discovery-report.query-mapper';
+import { DirectoryStatsInput } from './discovery-report.query.type';
 
 describe('discovery-report.query-mapper', () => {
 it('NUMBER_OF_FILES_BY_SIZE_MAPPER maps input correctly', () => {
@@ -727,6 +729,73 @@ it('CASE_ERRORS_MAPPER handles empty input array', () => {
     const input: any[] = [];
     const result = CASE_ERRORS_MAPPER(input);
     expect(result).toEqual([]);
+});
+
+describe('DIRECTORY_STATS_MAPPER', () => {
+    it('should map total directories and million+ dirs correctly', () => {
+        const input: DirectoryStatsInput[] = [
+            { total_directories: '5000', million_plus_dirs: '/data/logs (2500000); /data/images (1500000)' }
+        ];
+        const result = DIRECTORY_STATS_MAPPER(input);
+        expect(result).toEqual([
+            {
+                value: 5000,
+                category: 'Directory',
+                valueType: 'count',
+                sub_category: 'Total Number of Directories'
+            },
+            {
+                value: '/data/logs (2500000); /data/images (1500000)',
+                category: 'Directory',
+                valueType: 'string',
+                sub_category: 'Directories with more than 1 Million Files'
+            }
+        ]);
+    });
+
+    it('should show None when no directories exceed 1M files', () => {
+        const input: DirectoryStatsInput[] = [{ total_directories: '100', million_plus_dirs: '' }];
+        const result = DIRECTORY_STATS_MAPPER(input);
+        expect(result).toHaveLength(2);
+        expect(result[0].value).toBe(100);
+        expect(result[0].sub_category).toBe('Total Number of Directories');
+        expect(result[1].value).toBe('None');
+        expect(result[1].sub_category).toBe('Directories with more than 1 Million Files');
+    });
+
+    it('should return empty array for empty input', () => {
+        const input: DirectoryStatsInput[] = [];
+        const result = DIRECTORY_STATS_MAPPER(input);
+        expect(result).toEqual([]);
+    });
+
+    it('should handle zero directories', () => {
+        const input: DirectoryStatsInput[] = [{ total_directories: '0', million_plus_dirs: '' }];
+        const result = DIRECTORY_STATS_MAPPER(input);
+        expect(result[0].value).toBe(0);
+        expect(result[1].value).toBe('None');
+    });
+
+    it('should show multiple directories semicolon-separated when more than one exceeds 1M files', () => {
+        const input: DirectoryStatsInput[] = [{
+            total_directories: '12000',
+            million_plus_dirs: '/data/logs (2500000); /data/images (1500000); /data/archive (1200000)'
+        }];
+        const result = DIRECTORY_STATS_MAPPER(input);
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+            value: 12000,
+            category: 'Directory',
+            valueType: 'count',
+            sub_category: 'Total Number of Directories'
+        });
+        expect(result[1]).toEqual({
+            value: '/data/logs (2500000); /data/images (1500000); /data/archive (1200000)',
+            category: 'Directory',
+            valueType: 'string',
+            sub_category: 'Directories with more than 1 Million Files'
+        });
+    });
 });
 
 describe('ALTERNATE_DATA_STREAMS_MAPPER', () => {

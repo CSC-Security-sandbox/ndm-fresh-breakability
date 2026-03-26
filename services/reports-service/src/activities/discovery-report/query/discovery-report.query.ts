@@ -219,30 +219,19 @@ export const TOP_LONGEST_DIRECTORY_NAMES = (schema: string) => `
 `;
 
 export const TOP_DIRECTORY_WITH_MAX_SIZE = (schema: string) => `
-    WITH cleaned_inventory AS (
-        SELECT
-            regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory,
-            i.file_size
-        FROM ${schema}.inventory i
-        WHERE i.job_run_id = $1 AND i.is_directory = false
-    )
-    SELECT directory, SUM(file_size) AS total_size
-    FROM cleaned_inventory
-    GROUP BY directory
+    SELECT i.parent_path AS directory, SUM(i.file_size) AS total_size
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1 AND i.is_directory = false
+    GROUP BY i.parent_path
     ORDER BY total_size DESC
     LIMIT 5;
 `;
 
 export const TOP_DIRECTORY_WITH_MAX_COUNT_CHILD = (schema: string) => `
-    WITH cleaned_inventory AS (
-        SELECT
-            regexp_replace(regexp_replace(i."path", '/+$', ''), '/[^/]+$', '') AS directory
-        FROM ${schema}.inventory i
-        WHERE i.job_run_id = $1 AND i.is_directory = false
-    )
-    SELECT directory, COUNT(*) AS child
-    FROM cleaned_inventory
-    GROUP BY directory
+    SELECT i.parent_path AS directory, COUNT(*) AS child
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1 AND i.is_directory = false
+    GROUP BY i.parent_path
     ORDER BY child DESC
     LIMIT 5;
 `;
@@ -330,4 +319,23 @@ export const ALTERNATE_DATA_STREAMS = (schema: string) => `
     WHERE i.job_run_id = $1
     AND i.file_type = 'STREAM'
     order by i.path
+`;
+
+export const DIRECTORY_STATS = (schema: string) => `
+    WITH dir_counts AS (
+    SELECT
+        i.parent_path AS directory,
+        COUNT(*) AS file_count
+    FROM ${schema}.inventory i
+    WHERE i.job_run_id = $1 AND i.is_directory = false
+    GROUP BY i.parent_path
+    HAVING COUNT(*) >= 1000000
+    )
+    SELECT
+        (SELECT COUNT(*)::text FROM ${schema}.inventory WHERE job_run_id = $1 AND is_directory = true) AS total_directories,
+        COALESCE(
+            (SELECT string_agg(directory || ' (' || file_count || ')', '; ' ORDER BY file_count DESC)
+            FROM dir_counts),
+            ''
+        ) AS million_plus_dirs
 `;

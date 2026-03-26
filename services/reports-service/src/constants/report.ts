@@ -3,6 +3,7 @@ export const PDFReportHeaders = {
   DISCOVER: [
     "File Server Info",
     "Number of Files",
+    "Directory",
     "Modified",
     "Created",
     "Access Time",
@@ -164,7 +165,11 @@ export const ReportSubCategoriesHeader = {
     "Top 5 Biggest Directory With Count",
     "Top 5 Biggest Directory With Capacity",
   ],
-   "Alternative Data Streams": [
+  "Directory": [
+    "Total Number of Directories",
+    "Directories with more than 1 Million Files",
+  ],
+  "Alternative Data Streams": [
     "Files",
     "Directories",  
   ],
