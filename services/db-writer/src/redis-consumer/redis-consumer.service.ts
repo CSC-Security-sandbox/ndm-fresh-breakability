@@ -565,6 +565,9 @@ export class RedisConsumerService implements OnModuleDestroy {
 
 
     private activeWorkers: Map<string, number> = new Map(); // jobId -> start timestamp
+    private workerRetryCounts: Map<string, number> = new Map(); // jobId -> consecutive failure count
+    private readonly maxWorkerRetries: number = parseInt(process.env.MAX_WORKER_RETRIES || '3');
+    private readonly workerTimeoutMs: number = parseInt(process.env.WORKER_TIMEOUT_MS || '3600000');
 
     /**
      * Cron job that monitors Redis for active consumers and manages worker threads
@@ -603,6 +606,26 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                 if (Object.values(consumerStatuses).some(status => status === 'active')) {
                     if (this.activeWorkers.has(jobId)) {
+                        const startedAt = this.activeWorkers.get(jobId);
+                        if (Date.now() - startedAt > this.workerTimeoutMs) {
+                            this.logger.warn(`projectId: ${projectId} Worker for job ${jobId} appears hung (running for ${Math.round((Date.now() - startedAt) / 1000)}s), removing tracking to allow respawn`);
+                            this.activeWorkers.delete(jobId);
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    const retryCount = this.workerRetryCounts.get(jobId) || 0;
+                    if (retryCount >= this.maxWorkerRetries) {
+                        this.logger.error(`projectId: ${projectId} Worker for job ${jobId} exceeded max retries (${retryCount}/${this.maxWorkerRetries}), stopping consumers`);
+                        for (const [consumerType, status] of Object.entries(consumerStatuses)) {
+                            if (status === 'active') {
+                                await this.stopConsumer(jobId, consumerType).catch(stopError => {
+                                    this.logger.error(`projectId: ${projectId} Error stopping consumer ${consumerType} for job ${jobId}:`, stopError);
+                                });
+                            }
+                        }
+                        this.workerRetryCounts.delete(jobId);
                         continue;
                     }
 
@@ -611,24 +634,18 @@ export class RedisConsumerService implements OnModuleDestroy {
                     this.createConsumerWorkerThread(jobId)
                         .then(() => {
                             this.activeWorkers.delete(jobId);
+                            this.workerRetryCounts.delete(jobId);
                         })
                         .catch(error => {
                             this.logger.error(`projectId: ${projectId} Error in worker thread for job ${jobId}: ${error.message}`, error?.stack || error);
                             this.activeWorkers.delete(jobId);
-
-                            for (const [consumerType, status] of Object.entries(consumerStatuses)) {
-                                if (status === 'active') {
-                                    this.stopConsumer(jobId, consumerType).catch(stopError => {
-                                        this.logger.error(`projectId: ${projectId} Error stopping consumer ${consumerType} for job ${jobId}:`, stopError);
-                                    });
-                                }
-                            }
+                            this.workerRetryCounts.set(jobId, (this.workerRetryCounts.get(jobId) || 0) + 1);
                         });
                 } else {
                     if (this.activeWorkers.has(jobId)) {
                         this.activeWorkers.delete(jobId);
                     }
-
+                    this.workerRetryCounts.delete(jobId);
                     await this.removeJobFromRedis(jobId);
                 }
             }
@@ -837,7 +854,6 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         } catch (error) {
             this.logger.error(`projectId: ${projectId} Error running consumer for jobRunId=${jobRunId} and consumerType=${consumerType}: ${error.message}`, error?.stack || error);
-            await this.stopConsumer(jobRunId, consumerType);
             throw error;
         } finally {
             const context = this.jobConsumerMap.get(jobRunId);

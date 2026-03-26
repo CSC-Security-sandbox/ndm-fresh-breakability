@@ -3,9 +3,19 @@ import { AuthService } from '../auth/auth.service';
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { createClient } from 'redis';
+import { Worker } from 'worker_threads';
+import { RedisConsumerService } from './redis-consumer.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { WorkflowService } from '../workflow/workflow.service';
+import { DataSource } from 'typeorm';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
+}));
+
+jest.mock('worker_threads', () => ({
+  Worker: jest.fn(),
+  isMainThread: true,
 }));
 
 const mockLogger = {
@@ -274,6 +284,321 @@ describe('RedisConsumerService - JWT Authentication', () => {
 
       expect(mockClient.quit).toHaveBeenCalled();
       expect(mockLogger.log).toHaveBeenCalledWith('Redis client disconnected');
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worker Thread Crash Recovery
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RedisConsumerService - Worker Thread Crash Recovery', () => {
+  let service: RedisConsumerService;
+  let mockRedisClient: any;
+
+  // Returns a controllable worker whose events can be fired synchronously.
+  function makeWorker() {
+    const listeners: Record<string, Function[]> = {};
+    return {
+      on: jest.fn((event: string, handler: Function) => {
+        listeners[event] = listeners[event] || [];
+        listeners[event].push(handler);
+      }),
+      removeAllListeners: jest.fn(() => { Object.keys(listeners).forEach(k => delete listeners[k]); }),
+      emit(event: string, ...args: any[]) {
+        (listeners[event] || []).forEach(h => h(...args));
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    // Disable JWT so initializeRedisConnection skips Keycloak and setupConnectionRefresh
+    process.env.REDIS_JWT_AUTH_ENABLED = 'false';
+
+    mockRedisClient = {
+      isOpen: false,
+      connect: jest.fn().mockImplementation(() => {
+        mockRedisClient.isOpen = true;
+        return Promise.resolve();
+      }),
+      quit: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      keys: jest.fn().mockResolvedValue([]),
+      hGetAll: jest.fn().mockResolvedValue({}),
+      hSet: jest.fn().mockResolvedValue(1),
+      hDel: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+    };
+    (createClient as jest.Mock).mockReturnValue(mockRedisClient);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisConsumerService,
+        {
+          provide: InventoryService,
+          useValue: {
+            createInventory: jest.fn().mockResolvedValue(undefined),
+            saveTasks: jest.fn().mockResolvedValue(undefined),
+            saveOperationError: jest.fn().mockResolvedValue(undefined),
+            saveTaskError: jest.fn().mockResolvedValue(undefined),
+            createPartitionInventoryTableByJobRunId: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: { query: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: WorkflowService,
+          useValue: { signalWorkflow: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: AuthService,
+          useValue: { getAccessToken: jest.fn().mockResolvedValue('mock-jwt') },
+        },
+        {
+          provide: LoggerFactory,
+          useValue: { create: jest.fn().mockReturnValue(mockLogger) },
+        },
+      ],
+    }).compile();
+
+    service = module.get<RedisConsumerService>(RedisConsumerService);
+
+    // Let the constructor's unawaited initializeRedisConnection() settle
+    await new Promise(r => setImmediate(r));
+
+    // Override with our fully-open mock client for test control
+    (service as any).redisClient = mockRedisClient;
+    mockRedisClient.isOpen = true;
+
+    // Pre-populate the project-ID cache so getProjectIdFromCache() returns
+    // synchronously (no DB query). Without this, createConsumerWorkerThread
+    // would await a DB round-trip before creating the Worker, causing events
+    // emitted in tests to fire before listeners are registered.
+    (service as any).jobRunIdToProjectIdMap.set('job-1', 'proj-1');
+    (service as any).jobRunIdToProjectIdMap.set('job-crash-test', 'proj-crash');
+  });
+
+  afterEach(() => {
+    delete process.env.REDIS_JWT_AUTH_ENABLED;
+  });
+
+  // ── createConsumerWorkerThread ───────────────────────────────────────────
+
+  describe('createConsumerWorkerThread', () => {
+    it('resolves when worker posts { success: true }', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      // Yield one microtask so getProjectIdFromCache resolves and the Worker
+      // is instantiated with its listeners registered before we fire events.
+      await Promise.resolve();
+      w.emit('message', { success: true });
+
+      await expect(p).resolves.toBeUndefined();
+    });
+
+    it('rejects when worker posts { success: false }', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      await Promise.resolve();
+      w.emit('message', { success: false, error: 'DB write failed' });
+
+      await expect(p).rejects.toThrow('DB write failed');
+    });
+
+    it('rejects when worker emits an error event (uncaught exception / OOM)', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      await Promise.resolve();
+      w.emit('error', new Error('Worker OOM'));
+
+      await expect(p).rejects.toThrow('Worker OOM');
+    });
+
+    it('rejects when worker exits non-zero without a prior message (hard crash)', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      await Promise.resolve();
+      w.emit('exit', 1);
+
+      await expect(p).rejects.toThrow('Worker exit code: 1');
+    });
+
+    it('does not double-reject when exit fires after an error event', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      await Promise.resolve();
+      w.emit('error', new Error('crash'));
+      w.emit('exit', 1); // settled=true already — should be ignored
+
+      await expect(p).rejects.toThrow('crash');
+    });
+
+    it('resolves and exit code 0 fires normally (no extra rejection)', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      const p = (service as any).createConsumerWorkerThread('job-1');
+      await Promise.resolve();
+      w.emit('message', { success: true });
+      w.emit('exit', 0); // settled — should not reject
+
+      await expect(p).resolves.toBeUndefined();
+    });
+  });
+
+  // ── checkAndStartActiveConsumers — crash retry logic ────────────────────
+
+  describe('checkAndStartActiveConsumers', () => {
+    const JOB_ID = 'job-crash-test';
+    const REDIS_KEY = `db-writer:${JOB_ID}:`;
+
+    beforeEach(() => {
+      mockRedisClient.keys.mockResolvedValue([REDIS_KEY]);
+      mockRedisClient.hGetAll.mockResolvedValue({
+        files: 'active',
+        tasks: 'active',
+        errors: 'active',
+      });
+    });
+
+    it('increments workerRetryCounts and removes from activeWorkers on crash', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      await (service as any).checkAndStartActiveConsumers();
+
+      // Yield so the fire-and-forget createConsumerWorkerThread advances past
+      // getProjectIdFromCache and creates the Worker with listeners registered.
+      await Promise.resolve();
+
+      expect((service as any).activeWorkers.has(JOB_ID)).toBe(true);
+
+      // Crash the worker
+      w.emit('error', new Error('OOM'));
+      await new Promise(r => setImmediate(r)); // flush .catch()
+
+      expect((service as any).activeWorkers.has(JOB_ID)).toBe(false);
+      expect((service as any).workerRetryCounts.get(JOB_ID)).toBe(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`Error in worker thread for job ${JOB_ID}`),
+        expect.anything(),
+      );
+    });
+
+    it('does NOT stop consumers on crash — statuses stay active so cron can respawn', async () => {
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      await (service as any).checkAndStartActiveConsumers();
+      await Promise.resolve(); // let Worker be created with listeners
+
+      w.emit('error', new Error('crash'));
+      await new Promise(r => setImmediate(r));
+
+      // hSet (stopConsumer path) must NOT have been called
+      expect(mockRedisClient.hSet).not.toHaveBeenCalled();
+    });
+
+    it('stops all consumers and clears retry count when max retries are exhausted', async () => {
+      const maxRetries: number = (service as any).maxWorkerRetries;
+      (service as any).workerRetryCounts.set(JOB_ID, maxRetries);
+
+      await (service as any).checkAndStartActiveConsumers();
+
+      // Worker must NOT have been spawned
+      expect(Worker).not.toHaveBeenCalled();
+
+      // Every active consumer type must be set to 'inactive'
+      expect(mockRedisClient.hSet).toHaveBeenCalledWith(REDIS_KEY, 'files', 'inactive');
+      expect(mockRedisClient.hSet).toHaveBeenCalledWith(REDIS_KEY, 'tasks', 'inactive');
+      expect(mockRedisClient.hSet).toHaveBeenCalledWith(REDIS_KEY, 'errors', 'inactive');
+
+      // Retry count cleared after giving up
+      expect((service as any).workerRetryCounts.has(JOB_ID)).toBe(false);
+    });
+
+    it('clears retry count and activeWorkers entry on successful completion', async () => {
+      (service as any).workerRetryCounts.set(JOB_ID, 2);
+
+      const w = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w);
+
+      await (service as any).checkAndStartActiveConsumers();
+      await Promise.resolve(); // let Worker be created with listeners
+
+      w.emit('message', { success: true });
+      await new Promise(r => setImmediate(r)); // flush .then()
+
+      expect((service as any).workerRetryCounts.has(JOB_ID)).toBe(false);
+      expect((service as any).activeWorkers.has(JOB_ID)).toBe(false);
+    });
+
+    it('skips spawning when a worker for that job is already running', async () => {
+      (service as any).activeWorkers.set(JOB_ID, Date.now());
+
+      await (service as any).checkAndStartActiveConsumers();
+
+      expect(Worker).not.toHaveBeenCalled();
+    });
+
+    it('evicts and respawns a worker that has exceeded workerTimeoutMs', async () => {
+      const hungStart = Date.now() - ((service as any).workerTimeoutMs + 5000);
+      (service as any).activeWorkers.set(JOB_ID, hungStart);
+
+      (Worker as unknown as jest.Mock).mockImplementation(() => makeWorker());
+
+      await (service as any).checkAndStartActiveConsumers();
+      // Yield so the fire-and-forget createConsumerWorkerThread advances past
+      // the cache lookup and actually calls new Worker().
+      await Promise.resolve();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('appears hung'),
+      );
+      expect(Worker).toHaveBeenCalledTimes(1);
+    });
+
+    it('spawns a new worker on the next cron tick after a crash', async () => {
+      // ── Tick 1: first worker spawns ──────────────────────────────────────
+      const w1 = makeWorker();
+      (Worker as unknown as jest.Mock).mockImplementation(() => w1);
+
+      await (service as any).checkAndStartActiveConsumers();
+      await Promise.resolve(); // let createConsumerWorkerThread create w1 + register listeners
+
+      expect(Worker).toHaveBeenCalledTimes(1);
+
+      // Crash w1
+      w1.emit('error', new Error('ENOMEM'));
+      await new Promise(r => setImmediate(r)); // flush .catch()
+
+      // After crash: retry count 1, no longer in activeWorkers
+      expect((service as any).workerRetryCounts.get(JOB_ID)).toBe(1);
+      expect((service as any).activeWorkers.has(JOB_ID)).toBe(false);
+
+      // ── Tick 2: cron runs again, sees active consumers, spawns w2 ────────
+      const w2 = makeWorker();
+      (Worker as unknown as jest.Mock).mockClear(); // reset call count for tick-2 assertion
+      (Worker as unknown as jest.Mock).mockImplementation(() => w2);
+
+      await (service as any).checkAndStartActiveConsumers();
+      await Promise.resolve(); // let createConsumerWorkerThread create w2
+
+      expect(Worker).toHaveBeenCalledTimes(1); // reset between ticks — called once again
+      expect((service as any).activeWorkers.has(JOB_ID)).toBe(true); // new worker is tracked
     });
   });
 });

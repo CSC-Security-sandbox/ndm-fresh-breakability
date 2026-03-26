@@ -187,7 +187,7 @@ process.on('unhandledRejection', async (reason, promise) => {
         // Explicitly await Redis connection before proceeding
         // The constructor fires initializeRedisConnection() without awaiting it
         logger.log(`projectId: ${projectId} Waiting for Redis connection in worker thread`);
-        await redisConsumerService.initializeRedisConnection();
+        await redisConsumerService.initializeRedisConnection(); //  redisConsumerService.redisclient is set here
         if (!redisConsumerService.isValidRedisClient()) {
             throw new Error('Worker thread failed to establish Redis connection');
         }
