@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandStatus, ErrorType, ItemInfo, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
-import { ApplicationFailure, Context } from '@temporalio/activity';
+import { ApplicationFailure, CancelledFailure, Context } from '@temporalio/activity';
 import { basePrefix, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
 import { FatalError, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
@@ -58,6 +58,10 @@ export class SyncService {
       await this.updateAndReportTaskStatus({ taskHashId: taskId, jobContext, errors: syncOutput.errors, task });
       syncOutput.status = TaskStatus.COMPLETED;
     } catch (error) {
+      if (error instanceof CancelledFailure) {
+        this.logger.warn(`[${jobRunId}] SyncTaskActivity cancelled for taskId: ${taskId}`);
+        throw error;
+      }
       this.logger.error(`[${jobRunId}] Error in syncTaskActivity: ${error.message}`, error.stack);
       throw error;
     } finally {
@@ -75,6 +79,9 @@ export class SyncService {
 
     let offset = 0;
     while (offset < task.commands.length) {
+      if (Context.current().cancellationSignal?.aborted) {
+        throw new CancelledFailure('Activity cancelled');
+      }
       let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
       offset += this.maxWriteConcurrency;
       const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);

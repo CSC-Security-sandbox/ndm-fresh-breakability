@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
-import { Context } from '@temporalio/activity';
+import { CancelledFailure, Context } from '@temporalio/activity';
 import { basePrefix, dmError, getScanSettings, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { Operation, Origin } from "src/activities/utils/utils.types";
@@ -86,7 +86,7 @@ export class ScanService {
             return scanActivityOutput;
 
         }catch(error){
-            if(error instanceof FatalError) 
+            if(error instanceof FatalError || error instanceof CancelledFailure) 
                 throw error;  
             //TODO: this is not requried we can just throw the error.isn't it ?     
             throw new RetryableError(error.message)
@@ -104,6 +104,9 @@ export class ScanService {
         task.retryCount++;
         const settings = getScanSettings(jobContext);
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
+            if (Context.current().cancellationSignal?.aborted) {
+                throw new CancelledFailure('Activity cancelled');
+            }
             const batch = task.commands.slice(i, i + this.maxConcurrency);
             await Promise.allSettled(
                 batch.map(async (command) => {

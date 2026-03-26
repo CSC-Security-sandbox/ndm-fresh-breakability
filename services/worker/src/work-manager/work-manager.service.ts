@@ -375,7 +375,7 @@ export class WorkManagerService implements OnModuleDestroy{
     for (let [id, worker] of this.activeWorkers) {
       if (!activeConfigs.has(id)) {
         this.logger.log(`Stopping worker ${id}`);
-        await this.shutdownWorker(worker, false);
+        await this.shutdownWorker(worker);
         this.activeWorkers.delete(id);
         activeConfigs.delete(id);
       }
@@ -447,7 +447,7 @@ export class WorkManagerService implements OnModuleDestroy{
     }
   }
 
-  async shutdownWorker(worker: Worker, force: boolean) {
+  async shutdownWorker(worker: Worker) {
     const workerId = worker.options.identity;
     
     if (
@@ -458,17 +458,6 @@ export class WorkManagerService implements OnModuleDestroy{
     }
 
     const runPromise = this.workerRunPromises.get(workerId);
-    
-    if (!force) {
-      while (worker.getState() !== WorkerState.STOPPED) {
-        this.logger.log(
-          `Waiting for ${worker.options.identity} to be STOPPED. Current state: ${worker.getState()}`,
-        );
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.workerStartupTimeout),
-        );
-      }
-    }
     
     if (runPromise) {
       this.logger.debug(`Waiting for ${workerId} run() promise to complete`);
@@ -506,7 +495,7 @@ export class WorkManagerService implements OnModuleDestroy{
     for (const worker of workerToShutDown) {
       this.logger.log(`Shutting down worker ${worker.options.identity}`);
       try {
-        await this.shutdownWorker(worker, true);
+        await this.shutdownWorker(worker);
       } catch (err) {
         this.logger.error(
           `Error shutting down worker ${worker.options.identity}: ${err}`,

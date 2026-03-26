@@ -13,6 +13,12 @@ jest.mock('@temporalio/activity', () => ({
     Context: {
         current: jest.fn(),
     },
+    CancelledFailure: class CancelledFailure extends Error {
+        constructor(message?: string) {
+            super(message);
+            this.name = 'CancelledFailure';
+        }
+    },
 }));
 
 const BASE_WORKING_PATH = '/tmp/base-worker';

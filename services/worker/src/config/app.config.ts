@@ -46,6 +46,7 @@ export default registerAs(
     // redis and temporal 
     redisMemoryUsageThreshold: parseInt(process.env.REDIS_MEM_USAGE_THRESHOLD || '90'),
     maxActivityConcurrency: parseInt(process.env.JOB_TASK_ACTIVITY_CONCURRENCY || '1'),
+    workerStartupTimeout: parseInt(process.env.WORKER_STARTUP_TIMEOUT || '2000'),
     shutDownForceTime: process.env.WORKER_SHUTDOWN_FORCE_TIME || '10s',
 
     // project id

@@ -16,6 +16,12 @@ jest.mock('@temporalio/activity', () => ({
             heartbeat: jest.fn(),
         })),
     },
+    CancelledFailure: class CancelledFailure extends Error {
+        constructor(message?: string) {
+            super(message);
+            this.name = 'CancelledFailure';
+        }
+    },
 }));
 
 // Mock utils functions

@@ -295,22 +295,12 @@ export class SetupActivityService {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // unmount destination path if exists
-      try {
-        if (context.jobConfig?.destinationFileServer)
-          await this.unmountPath(
-            context.jobConfig.destinationFileServer,
-            protocol,
-            jobRunId,
-          );
-      } catch (error) {
-        console.error(`[${jobRunId}] - Cleanup failed: ${error?.message}`);
-        return {
+      if (context.jobConfig?.destinationFileServer)
+        await this.unmountPath(
+          context.jobConfig.destinationFileServer,
+          protocol,
           jobRunId,
-          status: 'error',
-          workerId: this.workerId,
-          message: `Cleanup failed: ${error?.message}`,
-        };
-      }
+      );
 
       const jobState: JobState = await this.redisService.getJobState(jobRunId);
       //TODO :: Need to looking in feature for job Paused

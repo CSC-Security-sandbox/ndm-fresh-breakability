@@ -375,9 +375,7 @@ describe('SetupActivityService', () => {
                 .mockResolvedValueOnce(undefined)
                 .mockImplementationOnce(() => { throw new Error('dest fail'); });
 
-            const result = await service.cleanup('job-12');
-            expect(result.status).toBe('error');
-            expect(result.message).toContain('dest fail');
+            await expect(service.cleanup('job-12')).rejects.toThrow(RetryableError);
         });
 
         it('should not cleanup job context if job is paused', async () => {

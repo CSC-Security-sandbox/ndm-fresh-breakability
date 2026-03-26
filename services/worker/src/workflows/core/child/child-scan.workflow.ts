@@ -31,7 +31,7 @@ const {
         maximumAttempts: 3,
         initialInterval: '10s',
         backoffCoefficient: 2.0,
-        nonRetryableErrorTypes: ['ActivityFailure','FatalError',],
+        nonRetryableErrorTypes: ['ActivityFailure','FatalError','CancelledFailure'],
     },
     startToCloseTimeout: '96h',
     heartbeatTimeout: '2m',

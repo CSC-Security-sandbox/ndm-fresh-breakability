@@ -234,7 +234,7 @@ describe('WorkManagerService', () => {
         options: { identity: 'id' },
       };
       service['taskQueuesToMonitor'] = [{ queueName: 'tq', workerId: 'id' }];
-      await service.shutdownWorker(mockWorker as any, false);
+      await service.shutdownWorker(mockWorker as any);
       expect(mockWorker.shutdown).toHaveBeenCalled();
       expect(service['taskQueuesToMonitor']).toHaveLength(0);
     });
@@ -247,7 +247,7 @@ describe('WorkManagerService', () => {
       };
       service['taskQueuesToMonitor'] = [{ queueName: 'tq', workerId: 'id' }];
       jest.useFakeTimers();
-      await service.shutdownWorker(mockWorker as any, true);
+      await service.shutdownWorker(mockWorker as any);
       jest.runAllTimers();
       expect(service['taskQueuesToMonitor']).toHaveLength(0);
       jest.useRealTimers();
@@ -272,7 +272,7 @@ describe('WorkManagerService', () => {
 
       await service.monitorTaskQueues();
 
-      expect(service.shutdownWorker).toHaveBeenCalledWith(mockWorker, true);
+      expect(service.shutdownWorker).toHaveBeenCalledWith(mockWorker);
       expect(service['activeWorkers'].has('id')).toBe(false);
     });
   });
