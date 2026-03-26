@@ -244,11 +244,6 @@ jobs:
       windows_worker_count: ${{ steps.vm-config.outputs.windows_worker_count }}
     steps:
       
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -522,11 +517,6 @@ jobs:
       PERF_WORKER_VM_SIZE: ${{ needs.setup-infrastructure.outputs.windows_worker_vm_size }}
       PERF_WORKER_COUNT: ${{ needs.setup-infrastructure.outputs.windows_worker_count }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -593,11 +583,6 @@ jobs:
       PERF_WORKER_VM_SIZE: ${{ needs.setup-infrastructure.outputs.linux_worker_vm_size }}
       PERF_WORKER_COUNT: ${{ needs.setup-infrastructure.outputs.linux_worker_count }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Waiting
         run: |
           sleep 30
@@ -645,11 +630,6 @@ jobs:
     needs: [setup-infrastructure, run-nfs-perf, run-smb-perf]
     if: always()
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 

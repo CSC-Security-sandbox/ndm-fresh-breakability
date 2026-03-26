@@ -14,11 +14,6 @@ jobs:
     name: trivy-pr-scan (admin-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: trivy-pr-scan (admin-service)"
 
@@ -26,11 +21,6 @@ jobs:
     name: trivy-pr-scan (config-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: | 
           echo "Satisfying required check: trivy-pr-scan (config-service)"
 
@@ -38,11 +28,6 @@ jobs:
     name: trivy-pr-scan (datamigrator-ui)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: | 
           echo "Satisfying required check: trivy-pr-scan (datamigrator-ui)"
 
@@ -50,11 +35,6 @@ jobs:
     name: trivy-pr-scan (db-migrations)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: | 
           echo "Satisfying required check: trivy-pr-scan (db-migrations)"
 
@@ -62,11 +42,6 @@ jobs:
     name: trivy-pr-scan (db-writer)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: | 
           echo "Satisfying required check: trivy-pr-scan (db-writer)"
 
@@ -74,11 +49,6 @@ jobs:
     name: trivy-pr-scan (jobs-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: trivy-pr-scan (jobs-service)"
 
@@ -86,11 +56,6 @@ jobs:
     name: trivy-pr-scan (keycloak-customizations)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: trivy-pr-scan (keycloak-customizations)"
 
@@ -98,11 +63,6 @@ jobs:
     name: trivy-pr-scan (reports-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: trivy-pr-scan (reports-service)"
 
@@ -110,11 +70,6 @@ jobs:
     name: trivy-pr-scan (support-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: trivy-pr-scan (support-service)"
 
@@ -122,11 +77,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (admin-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (admin-service)"
 
@@ -134,11 +84,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (config-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (config-service)"
 
@@ -146,11 +91,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (db-writer)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (db-writer)"
 
@@ -158,11 +98,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (jobs-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (jobs-service)"
 
@@ -170,11 +105,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (reports-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (reports-service)"
   
@@ -182,11 +112,6 @@ jobs:
     name: unit-test-cases-and-code-coverage (support-service)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (support-service)"
 
@@ -194,10 +119,5 @@ jobs:
     name: unit-test-cases-and-code-coverage (worker)
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
-
       - run: |
           echo "Satisfying required check: unit-test-cases-and-code-coverage (worker)"
