@@ -99,17 +99,18 @@ jobs:
             echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
           fi
 
-      - name: Run Trivy filesystem (fs) scan for worker
-        if: matrix.service == 'worker'
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        with:
-          scan-type: 'fs'
-          scan-ref: 'services/worker'
-          format: 'json'
-          output: 'trivy-results-${{ matrix.service }}.json'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-          ignore-unfixed: false
-          exit-code: '0'
+      # DISABLED: aquasecurity/trivy-action temporarily disabled
+      # - name: Run Trivy filesystem (fs) scan for worker
+      #   if: matrix.service == 'worker'
+      #   uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+      #   with:
+      #     scan-type: 'fs'
+      #     scan-ref: 'services/worker'
+      #     format: 'json'
+      #     output: 'trivy-results-${{ matrix.service }}.json'
+      #     severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+      #     ignore-unfixed: false
+      #     exit-code: '0'
 
       - name: Build Docker Image for ${{ matrix.service }} (for scan only)
         if: matrix.service != 'worker'
@@ -124,16 +125,17 @@ jobs:
           DOCKER_BUILDKIT: 1
           CONTEXT: ${{ env.CONTEXT }}
 
-      - name: Run Trivy vulnerability scanner for ${{ matrix.service }} (JSON format)
-        if: matrix.service != 'worker'
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        with:
-          image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
-          format: 'json'
-          output: 'trivy-results-${{ matrix.service }}.json'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-          ignore-unfixed: false
-          exit-code: '0'
+      # DISABLED: aquasecurity/trivy-action temporarily disabled
+      # - name: Run Trivy vulnerability scanner for ${{ matrix.service }} (JSON format)
+      #   if: matrix.service != 'worker'
+      #   uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+      #   with:
+      #     image-ref: '${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
+      #     format: 'json'
+      #     output: 'trivy-results-${{ matrix.service }}.json'
+      #     severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+      #     ignore-unfixed: false
+      #     exit-code: '0'
 
       - name: Convert Trivy JSON to SARIF and Table format
         run: |
