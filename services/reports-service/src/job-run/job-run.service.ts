@@ -315,7 +315,7 @@ export class JobRunService {
 
       const jobType = jobRun.jobConfig.jobType;
       try {
-        await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
+        await this.csvService.generateCsv(filePath, jobRunId, 500000, jobType);
       } catch (csvError) {
         this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
         throw csvError;

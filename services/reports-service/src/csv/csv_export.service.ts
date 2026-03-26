@@ -46,8 +46,6 @@ export class CsvService {
         } else {
             this.logger.log(`projectId: ${projectId} File path validation passed: ${filePath}`);
         }
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
         try {
             const fileStream = fs.createWriteStream(filePath); 
             const csvStream = fastCsv.format({ headers: true });
@@ -55,6 +53,7 @@ export class CsvService {
 
             let totalRecords = 0;
             let cursor: string | null = null;
+            const isCutover = jobType?.toUpperCase() === JobType.CutOver;
             const protocol = await this.getProtocolForJobRun(jobRunId);
             
             while (true) {
@@ -64,7 +63,15 @@ export class CsvService {
                     csvStream.write(row);
                 }
                 totalRecords += result.length;
-                cursor = result[result.length - 1]['Source Path'];
+                if (isCutover) {
+                    cursor = result[result.length - 1]['Source Path'];
+                } else {
+                    const lastSourcePath = result[result.length - 1]['Source Path'];
+                    const volumePath = await this.getVolumePathForJobRun(jobRunId);
+                    cursor = volumePath && lastSourcePath.startsWith(volumePath)
+                        ? lastSourcePath.substring(volumePath.length)
+                        : lastSourcePath;
+                }
                 
                 if (totalRecords % (batchSize * 10) === 0) {
                     this.logger.log(`projectId: ${projectId} Processed ${totalRecords} records so far for jobRunId: ${jobRunId}`);
@@ -75,8 +82,6 @@ export class CsvService {
         } catch (err) {
             this.logger.error(`projectId: ${projectId} Error generating CSV for jobRunId: ${jobRunId}: ${err.message}`, err?.stack || err);
             throw err;
-        } finally {
-            await queryRunner.release();
         }
     }
 
@@ -88,23 +93,34 @@ export class CsvService {
         return jobRun?.jobConfig?.sourcePath?.fileServer?.protocol || CsvService.DEFAULT_PROTOCOL;
     }
 
+    private volumePathCache = new Map<string, string>();
+    async getVolumePathForJobRun(jobRunId: string): Promise<string> {
+        if (this.volumePathCache.has(jobRunId)) return this.volumePathCache.get(jobRunId);
+        const jobRun = await this.jobRunRepository.findOne({
+            where: { id: jobRunId },
+            relations: ['jobConfig', 'jobConfig.sourcePath'],
+        });
+        const vp = jobRun?.jobConfig?.sourcePath?.volumePath || '';
+        this.volumePathCache.set(jobRunId, vp);
+        return vp;
+    }
+
     async getInventoryData(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
         let query;
         if (jobType?.toUpperCase() === JobType.CutOver) {
             query = this.getCutoverInventoryDataQuery(jobRunId, limit, cursor);
         } else {
-            query = this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol);
+            query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol);
         }
         return this.dataSource.query(query.query, query.values);
     }
 
-    getInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
+    async getInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
         const dbSchema = process.env.SCHEMA;
         const isMigrate = jobType?.toUpperCase() === JobType.Migrate;
         const columns = this.getMigrationCoCColumns(protocol, isMigrate);
 
         const query = `
-        SELECT * FROM (
             SELECT DISTINCT ON (i.path)
                 COALESCE(v_source.volume_path, '') || i.path as "Source Path",
                 v_target.volume_path || i.path as "Destination Path",
@@ -116,11 +132,9 @@ export class CsvService {
             LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
             WHERE i.job_run_id = $1
               AND (i.is_deleted = false OR i.is_deleted IS NULL)
+              AND ($2::text IS NULL OR i.path > $2)
             ORDER BY i.path, i.updated_at DESC, i.created_at DESC
-        ) AS inventory_data
-        WHERE ($2::text IS NULL OR "Source Path" > $2)
-        ORDER BY "Source Path"
-        LIMIT $3;
+            LIMIT $3;
     `;
         return { query, values: [jobRunId, cursor, limit] };
     }
