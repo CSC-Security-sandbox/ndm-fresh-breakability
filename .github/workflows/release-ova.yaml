@@ -1,27 +1,21 @@
-name: OVA Image Signing & Release
+name: Release OVA (VSphere)
 
 on:
   workflow_dispatch:
     inputs:
-      release_worker_ova_name:
-        description: "Worker OVA filename (without .ova extension) to be taken from artifactory from release folder"
+      branch_name:
+        description: "Release branch name (e.g. release/2026.03.1). The version is extracted automatically to fetch manifests and OVAs from artifactory."
         required: true
         type: string
-      release_controlplane_ova_name:
-        description: "Control Plane OVA filename (without .ova extension) to be taken from artifactory from release folder"
-        required: true
-        type: string
-      release_folder:
-        description: "Release folder name (e.g. preview_x). If this folder already exists in scratch space (created by GCP or Windows installer workflows), use it; otherwise, create a new one."
-        required: true
-        type: string
-      artifactory_path:
-        description: "Artifactory path (e.g., releases/preview_version/ova) to download these cp and worker file"
+  workflow_call:
+    inputs:
+      branch_name:
+        description: "Release branch name (e.g. release/2026.03.1)"
         required: true
         type: string
 
 env:
-  ARTIFACTORY_BASE_URL: ${{ vars.ARTIFACTORY_BASE_URL || 'https://artifactory.example.com/artifactory' }}
+  ARTIFACTORY_BASE_URL: https://generic.repo.eng.netapp.com/artifactory
   LOCAL_BASE_PATH: ${{vars.LOCAL_BASE_PATH || '/home/ubuntu'}}
   SIGNING_CERTS_PATH: ${{vars.OVA_SIGNING_CERTS_PATH || '/home/ubuntu/ova-signing-certificates'}}
   PRIVATE_KEY: ${{ vars.OVA_PRIVATE_KEY || 'NDM-OVA-private.key' }}
@@ -53,15 +47,67 @@ jobs:
           # sudo apt-get update -qq
           sudo apt-get install -y sshpass openssh-client curl
 
-      - name: Extract Branch Name
-        id: branch-info
+      - name: Fetch Manifests and Derive OVA Names
+        id: manifest-info
+        env:
+          BRANCH_NAME: ${{ github.event.inputs.branch_name }}
         run: |
-          # Extract branch name from github.ref
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          # Sanitize branch name: replace non-alphanumeric chars with dashes, lowercase
-          BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-          echo "branch_suffix=$BRANCH_SUFFIX" >> $GITHUB_OUTPUT
-          echo "Branch suffix for file naming: $BRANCH_SUFFIX"
+          RELEASE_VERSION="${BRANCH_NAME##*/}"
+          echo "Branch name: ${BRANCH_NAME}"
+          echo "Extracted release version: ${RELEASE_VERSION}"
+
+          if [ -z "$RELEASE_VERSION" ]; then
+            echo "ERROR: Could not extract version from branch name '${BRANCH_NAME}'"
+            exit 1
+          fi
+
+          MANIFEST_BASE="${{ env.ARTIFACTORY_BASE_URL }}/openlab-generic-local/cicd/ndm/releases/${RELEASE_VERSION}/manifests/vsphere"
+
+          echo "Fetching control-plane.json from ${MANIFEST_BASE}/control-plane.json ..."
+          CP_JSON=$(curl -fsSL "${MANIFEST_BASE}/control-plane.json")
+          if [ $? -ne 0 ] || [ -z "$CP_JSON" ]; then
+            echo "ERROR: Failed to fetch control-plane.json"
+            exit 1
+          fi
+
+          echo "Fetching worker.json from ${MANIFEST_BASE}/worker.json ..."
+          WORKER_JSON=$(curl -fsSL "${MANIFEST_BASE}/worker.json")
+          if [ $? -ne 0 ] || [ -z "$WORKER_JSON" ]; then
+            echo "ERROR: Failed to fetch worker.json"
+            exit 1
+          fi
+
+          CP_BUILD_VERSION=$(echo "$CP_JSON" | jq -r '.build_version')
+          WORKER_BUILD_VERSION=$(echo "$WORKER_JSON" | jq -r '.build_version')
+
+          if [ -z "$CP_BUILD_VERSION" ] || [ "$CP_BUILD_VERSION" = "null" ]; then
+            echo "ERROR: build_version not found in control-plane.json"
+            exit 1
+          fi
+          if [ -z "$WORKER_BUILD_VERSION" ] || [ "$WORKER_BUILD_VERSION" = "null" ]; then
+            echo "ERROR: build_version not found in worker.json"
+            exit 1
+          fi
+
+          RELEASE_CP_OVA="control-plane-${CP_BUILD_VERSION}"
+          RELEASE_WORKER_OVA="worker-${WORKER_BUILD_VERSION}"
+          RELEASE_FOLDER="${RELEASE_VERSION}"
+          ARTIFACTORY_PATH="releases/${RELEASE_VERSION}/ova"
+
+          BRANCH_SUFFIX=$(echo "$RELEASE_VERSION" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+
+          echo "release_cp_ova=${RELEASE_CP_OVA}" >> $GITHUB_OUTPUT
+          echo "release_worker_ova=${RELEASE_WORKER_OVA}" >> $GITHUB_OUTPUT
+          echo "release_folder=${RELEASE_FOLDER}" >> $GITHUB_OUTPUT
+          echo "artifactory_path=${ARTIFACTORY_PATH}" >> $GITHUB_OUTPUT
+          echo "branch_suffix=${BRANCH_SUFFIX}" >> $GITHUB_OUTPUT
+
+          echo "Derived values:"
+          echo "  Control Plane OVA: ${RELEASE_CP_OVA}"
+          echo "  Worker OVA:        ${RELEASE_WORKER_OVA}"
+          echo "  Release Folder:    ${RELEASE_FOLDER}"
+          echo "  Artifactory Path:  ${ARTIFACTORY_PATH}"
+          echo "  Branch Suffix:     ${BRANCH_SUFFIX}"
 
       - name: Add VM SSH Host Key to known_hosts
         run: |
@@ -75,11 +121,11 @@ jobs:
         env:
           RUNNER_PASSWORD: ${{ secrets.RUNNER_GITHUB_PASS_66 }}
           RUNNER_HOST: ${{ vars.RUNNER_GITHUB_IP_66 }}
-          INPUT_WORKER_OVA: ${{ github.event.inputs.release_worker_ova_name }}
-          INPUT_CP_OVA: ${{ github.event.inputs.release_controlplane_ova_name }}
-          INPUT_RELEASE_FOLDER: ${{ github.event.inputs.release_folder }}
-          INPUT_ARTIFACTORY_PATH: ${{ github.event.inputs.artifactory_path }}
-          INPUT_BRANCH_SUFFIX: ${{ steps.branch-info.outputs.branch_suffix }}
+          INPUT_WORKER_OVA: ${{ steps.manifest-info.outputs.release_worker_ova }}
+          INPUT_CP_OVA: ${{ steps.manifest-info.outputs.release_cp_ova }}
+          INPUT_RELEASE_FOLDER: ${{ steps.manifest-info.outputs.release_folder }}
+          INPUT_ARTIFACTORY_PATH: ${{ steps.manifest-info.outputs.artifactory_path }}
+          INPUT_BRANCH_SUFFIX: ${{ steps.manifest-info.outputs.branch_suffix }}
           INPUT_LOCAL_BASE_PATH: ${{ env.LOCAL_BASE_PATH }}
           INPUT_SIGNING_CERTS_PATH: ${{ env.SIGNING_CERTS_PATH }}
           INPUT_SCRATCH_SPACE: ${{ env.SCRATCH_SPACE }}

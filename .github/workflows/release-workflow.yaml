@@ -74,3 +74,10 @@ jobs:
     with:
       build: ${{ needs.check-branch.outputs.build }}
     secrets: inherit
+
+  release-ova:
+    needs: [build-vm-images]
+    uses: ./.github/workflows/release-ova.yaml
+    with:
+      branch_name: ${{ github.ref_name }}
+    secrets: inherit
