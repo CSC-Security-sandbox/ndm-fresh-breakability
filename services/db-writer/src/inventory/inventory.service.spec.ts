@@ -1042,6 +1042,41 @@ describe("InventoryService", () => {
       expect(operationErrorRepo.query).not.toHaveBeenCalled();
     });
 
+    it("should map command statuses to operation statuses via getOperationStatusFor when upserting operations", async () => {
+      const data = {
+        jobRunId: "jobRunId",
+        taskType: "taskType",
+        status: TaskStatus.RUNNING,
+        sPathId: "sPathId",
+        tPathId: "tPathId",
+        commands: [
+          { id: "cmd-ready",      fPath: "/path/ready.txt",      status: CommandStatus.READY },
+          { id: "cmd-in-process", fPath: "/path/in-process.txt", status: CommandStatus.IN_PROCESS },
+          { id: "cmd-completed",  fPath: "/path/completed.txt",  status: CommandStatus.COMPLETED },
+          { id: "cmd-error",      fPath: "/path/error.txt",      status: CommandStatus.ERROR },
+        ],
+        workerId: "workerId",
+        id: "taskId",
+      };
+
+      const mockTask = { id: "taskId", status: TaskStatus.RUNNING };
+      (queryRunner.manager.findOne as jest.Mock).mockResolvedValue(mockTask);
+      (queryRunner.manager.upsert as jest.Mock).mockResolvedValue(undefined);
+      operationRepo.upsert.mockResolvedValue({} as InsertResult);
+
+      await service.saveTasks(data);
+
+      expect(operationRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "cmd-ready",      status: OperationStatus.READY }),
+          expect.objectContaining({ id: "cmd-in-process", status: OperationStatus.IN_PROCESS }),
+          expect.objectContaining({ id: "cmd-completed",  status: OperationStatus.COMPLETED }),
+          expect.objectContaining({ id: "cmd-error",      status: OperationStatus.ERROR }),
+        ]),
+        ["id"]
+      );
+    });
+
     it("should resolve errors for COMPLETED_WITH_ERROR task status", async () => {
       const data = {
         jobRunId: "jobRunId",
@@ -1834,6 +1869,28 @@ describe("InventoryService", () => {
       expect(loggerSpy).toHaveBeenCalledWith(
         `Successfully marked 1 items (files and directories) as deleted for directory: ${directoryPath}`
       );
+    });
+  });
+
+  describe("getOperationStatusFor", () => {
+    it("should map CommandStatus.READY to OperationStatus.READY", () => {
+      const result = (service as any).getOperationStatusFor(CommandStatus.READY);
+      expect(result).toBe(OperationStatus.READY);
+    });
+
+    it("should map CommandStatus.IN_PROCESS to OperationStatus.IN_PROCESS", () => {
+      const result = (service as any).getOperationStatusFor(CommandStatus.IN_PROCESS);
+      expect(result).toBe(OperationStatus.IN_PROCESS);
+    });
+
+    it("should map CommandStatus.COMPLETED to OperationStatus.COMPLETED", () => {
+      const result = (service as any).getOperationStatusFor(CommandStatus.COMPLETED);
+      expect(result).toBe(OperationStatus.COMPLETED);
+    });
+
+    it("should map CommandStatus.ERROR to OperationStatus.ERROR", () => {
+      const result = (service as any).getOperationStatusFor(CommandStatus.ERROR);
+      expect(result).toBe(OperationStatus.ERROR);
     });
   });
 

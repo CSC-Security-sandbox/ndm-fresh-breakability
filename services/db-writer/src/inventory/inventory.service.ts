@@ -456,6 +456,18 @@ export class InventoryService {
     }
   }
 
+  private getOperationStatusFor(commandStatus: CommandStatus): OperationStatus {
+    switch (commandStatus) {
+      case CommandStatus.READY:
+        return OperationStatus.READY;
+      case CommandStatus.IN_PROCESS:
+        return OperationStatus.IN_PROCESS;
+      case CommandStatus.COMPLETED:
+        return OperationStatus.COMPLETED;
+      case CommandStatus.ERROR:
+        return OperationStatus.ERROR;
+    }
+  }
 
   async saveTasks(data: any) {
     if (!data || !data.jobRunId || !data.taskType || !data.status) {
@@ -463,7 +475,7 @@ export class InventoryService {
     }
     
     try {
-      const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id } = data;
+      const { jobRunId, taskType, status, sPathId, tPathId, commands, workerId, id, retryCount } = data;
       const taskId = id;
       
       if (!taskId) {
@@ -511,7 +523,8 @@ export class InventoryService {
             jobRunId,
             sPathId,
             tPathId: tPathId?.length ? tPathId : null,
-            status: OperationStatus.IN_PROCESS,
+            status: this.getOperationStatusFor(command.status),
+            retryCount: retryCount ?? 0,
             operationType: taskType,
             request: command,
             fPath: command?.fPath,

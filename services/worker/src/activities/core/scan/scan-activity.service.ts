@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { CancelledFailure, Context } from '@temporalio/activity';
+import { CommandStatus, ErrorType, JobManagerContext, TaskStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { basePrefix, dmError, getScanSettings, isSourceFatalError } from "src/activities/utils/utils";
 import { FatalError, RetryableError, RetryExceededError } from "src/errors/errors.types";
 import { Operation, Origin } from "src/activities/utils/utils.types";
@@ -131,7 +131,9 @@ export class ScanService {
                         output.fileCount += result.fileCount;
                         output.dirCount += result.dirCount;
                         output.subDirs.push(...result.subDirs);
+                        command.status = CommandStatus.COMPLETED;
                     }catch(error) {
+                        command.status = CommandStatus.ERROR;
                         errors.push(error.code ?? '')
                     }
                     await jobContext.setTask(activityId, task);
