@@ -6,7 +6,7 @@ import { DiscoveryScanService } from './discovery/discovery-scan.service';
 import { MigrateScanService } from './migrate/migrate-scan.service';
 import { FatalError, RetryableError, RetryExceededError } from 'src/errors/errors.types';
 import { Context } from '@temporalio/activity';
-import { TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { CommandStatus, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as utils from 'src/activities/utils/utils';
 
 jest.mock('@temporalio/activity', () => ({
@@ -194,7 +194,7 @@ describe('ScanService', () => {
 
         describe('executeTask', () => {
         it('should execute discovery scan and aggregate results', async () => {
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0, status: CommandStatus.READY }, { fPath: '/bar', retryCount: 0, status: CommandStatus.READY }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
             jest.spyOn(utils, 'getScanSettings').mockReturnValue({
             skipFile: '2d',
@@ -216,10 +216,12 @@ describe('ScanService', () => {
             expect(result.result.dirCount).toBe(2);
             expect(result.result.batchDirs).toEqual(['batch1']);
             expect(result.errors).toEqual([]);
+            expect(task.commands[0].status).toBe(CommandStatus.COMPLETED);
+            expect(task.commands[1].status).toBe(CommandStatus.COMPLETED);
         });
 
         it('should execute migrate scan and aggregate results', async () => {
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }, { fPath: '/bar', retryCount: 0 }] };
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0, status: CommandStatus.READY }, { fPath: '/bar', retryCount: 0, status: CommandStatus.READY }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
             jest.spyOn(utils, 'getScanSettings').mockReturnValue({
             skipFile: '2d',
@@ -248,10 +250,12 @@ describe('ScanService', () => {
             expect(result.result.dirCount).toBe(2);
             expect(result.result.batchDirs).toEqual(['batch1']);
             expect(result.errors).toEqual([]);
+            expect(task.commands[0].status).toBe(CommandStatus.COMPLETED);
+            expect(task.commands[1].status).toBe(CommandStatus.COMPLETED);
         });
 
         it('should collect errors from scanDirectory', async () => {
-            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0 }] };
+            const task = { ...mockTask, commands: [{ fPath: '/foo', retryCount: 0, status: CommandStatus.READY }] };
             const jobContext = { ...mockJobContext, setTask: jest.fn() };
             discoveryScanService.scanDirectory.mockRejectedValueOnce({ code: 'ERR_CODE' });
             jest.spyOn(utils, 'getScanSettings').mockReturnValue({
@@ -272,6 +276,7 @@ describe('ScanService', () => {
             expect(result.errors).toEqual(['ERR_CODE']);
             expect(result.result.fileCount).toBe(0);
             expect(result.result.dirCount).toBe(0);
+            expect(task.commands[0].status).toBe(CommandStatus.ERROR);
         });
         });
 
