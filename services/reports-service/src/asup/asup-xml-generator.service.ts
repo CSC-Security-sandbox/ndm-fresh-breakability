@@ -165,14 +165,15 @@ export class AsupXmlGeneratorService {
   }
 
   async buildSupportBundleManifestXml(
-    bundleEntries: string[],
-    bundleFilename: string,
-    bundleSize: number,
+    bundleEntries: Array<{ name: string; size: number }>,
     collectionTimeMs: number,
   ): Promise<string> {
     const { prefix, rowTemplate, suffix } = await this.getSupportBundleManifestTemplate();
     const colTimeUs = (Date.now() * 1000).toString();
-    const normalizedEntries = bundleEntries.length > 0 ? bundleEntries : [bundleFilename];
+    const normalizedEntries =
+      bundleEntries.length > 0
+        ? bundleEntries
+        : [{ name: 'support-bundle-unknown.log', size: 0 }];
 
     const rows = normalizedEntries.map((entry, index) =>
       rowTemplate
@@ -181,10 +182,10 @@ export class AsupXmlGeneratorService {
         .replace(/\{\{PRIO_NUM\}\}/g, String(index + 1))
         .replace(/\{\{SUBSYS\}\}/g, 'support_bundle')
         .replace(/\{\{CMD_TGT\}\}/g, 'dblade')
-        .replace(/\{\{BODY_FILE\}\}/g, this.escapeXml(entry))
-        .replace(/\{\{SIZE_COLLECTED\}\}/g, String(bundleSize))
+        .replace(/\{\{BODY_FILE\}\}/g, this.escapeXml(entry.name))
+        .replace(/\{\{SIZE_COLLECTED\}\}/g, String(entry.size))
         .replace(/\{\{TIME_COLLECTED_MS\}\}/g, String(collectionTimeMs))
-        .replace(/\{\{SIZE_COMPRESSED\}\}/g, String(bundleSize))
+        .replace(/\{\{SIZE_COMPRESSED\}\}/g, String(entry.size))
     );
 
     return `${prefix}\n${rows.join('\n')}\n${suffix}\n`;
