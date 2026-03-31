@@ -29,7 +29,13 @@ export class AsupPackagerService {
   private readonly WORK_DIR = '/tmp/asup-packaging';
   private readonly ASUP_REPORTS_DIR = process.env.ASUP_REPORTS_DIR || '/tmp/asup-reports';
   private readonly XHEADERS_TEMPLATE_PATH = path.join(__dirname, 'templates', 'x-headers.template');
+  private readonly SUPPORT_BUNDLE_XHEADERS_TEMPLATE_PATH = path.join(
+    __dirname,
+    'templates',
+    'support-bundle-x-headers.template',
+  );
   private xHeadersTemplate = '';
+  private supportBundleXHeadersTemplate = '';
 
   constructor(
     private readonly asupXmlGeneratorService: AsupXmlGeneratorService,
@@ -65,7 +71,7 @@ export class AsupPackagerService {
     this.logger.log(`Manifest XML from generator (${Buffer.byteLength(manifestXml, 'utf-8')} bytes)`);
 
     // 3. Build x-header.txt + HTTP headers map
-    const { headersText, headersMap } = this.buildXHeaders();
+    const { headersText, headersMap } = this.buildXHeaders(this.xHeadersTemplate);
     this.logger.log(`Generated x-header.txt (${Buffer.byteLength(headersText, 'utf-8')} bytes)`);
 
     // 4. Write temp files and compress into .7z
@@ -139,21 +145,36 @@ export class AsupPackagerService {
       manifest: path.join(this.WORK_DIR, 'manifest.xml'),
       xHeader: path.join(this.WORK_DIR, 'x-header.txt'),
     };
+    const extractedDir = path.join(this.WORK_DIR, `support-bundle-extracted-${Date.now()}`);
+    const stagedPayloadDir = path.join(this.WORK_DIR, `support-bundle-staged-${Date.now()}`);
 
     await fs.writeFile(files.bundle, bundleBuffer);
-    const bundleEntries = await this.listZipEntries(files.bundle);
+    await this.extractZip(files.bundle, extractedDir);
+    const bundledFiles = await this.collectExtractedFiles(extractedDir);
+    await fs.mkdir(stagedPayloadDir, { recursive: true });
+
+    const manifestEntries: Array<{ name: string; size: number }> = [];
+    for (const file of bundledFiles) {
+      const safeName = this.toFlatFilename(file.relativePath);
+      await fs.copyFile(file.absolutePath, path.join(stagedPayloadDir, safeName));
+      manifestEntries.push({ name: safeName, size: file.size });
+    }
+
     const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
-      bundleEntries,
-      safeBundleName,
-      bundleBuffer.length,
+      manifestEntries,
       Date.now() - startTime,
     );
-    const { headersText, headersMap } = this.buildXHeaders();
-    headersMap['X-Netapp-asup-payload-type'] = 'support-bundle';
+    const { headersText, headersMap } = this.buildXHeaders(
+      this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
+    );
 
     await Promise.all([
       fs.writeFile(files.manifest, manifestXml, 'utf-8'),
       fs.writeFile(files.xHeader, headersText, 'utf-8'),
+    ]);
+    await Promise.all([
+      fs.copyFile(files.manifest, path.join(stagedPayloadDir, 'manifest.xml')),
+      fs.copyFile(files.xHeader, path.join(stagedPayloadDir, 'x-header.txt')),
     ]);
 
     const archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
@@ -161,7 +182,7 @@ export class AsupPackagerService {
     await new Promise<void>((resolve, reject) => {
       const stream = Seven.add(
         archivePath,
-        [files.bundle, files.manifest, files.xHeader],
+        [path.join(stagedPayloadDir, '*')],
         { $bin: sevenBin.path7za },
       );
       stream.on('end', () => resolve());
@@ -175,6 +196,8 @@ export class AsupPackagerService {
     await Promise.all(
       Object.values(files).map((f) => fs.unlink(f).catch(() => {})),
     );
+    await fs.rm(extractedDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(stagedPayloadDir, { recursive: true, force: true }).catch(() => {});
 
     return { archivePath, md5Checksum, headersMap };
   }
@@ -189,17 +212,29 @@ export class AsupPackagerService {
     } catch (error) {
       this.logger.error(`Failed to load ASUP x-headers template: ${(error as Error).message}`);
     }
+
+    try {
+      this.supportBundleXHeadersTemplate = await fs.readFile(
+        this.SUPPORT_BUNDLE_XHEADERS_TEMPLATE_PATH,
+        'utf-8',
+      );
+      this.logger.log('Loaded support bundle ASUP x-headers template');
+    } catch (error) {
+      this.logger.error(
+        `Failed to load support bundle ASUP x-headers template: ${(error as Error).message}`,
+      );
+    }
   }
 
   // ─── X-Headers ────────────────────────────────────────────────
 
-  private buildXHeaders(): {
+  private buildXHeaders(template: string): {
     headersText: string;
     headersMap: Record<string, string>;
   } {
     const generatedOn = this.formatAsupDate(new Date());
 
-    const headersText = this.xHeadersTemplate
+    const headersText = template
       .replace(/\{\{GENERATED_ON\}\}/g, generatedOn);
 
     // Parse the text into a key-value map for HTTP headers
@@ -214,19 +249,38 @@ export class AsupPackagerService {
     return { headersText, headersMap };
   }
 
-  private async listZipEntries(zipPath: string): Promise<string[]> {
-    try {
-      const { stdout } = await execFile('unzip', ['-Z1', zipPath]);
-      return stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && !line.endsWith('/'));
-    } catch (error) {
-      this.logger.warn(
-        `Failed to enumerate zip entries for manifest rows: ${(error as Error).message}`,
-      );
-      return [];
-    }
+  private async extractZip(zipPath: string, outputDir: string): Promise<void> {
+    await fs.mkdir(outputDir, { recursive: true });
+    await execFile('unzip', ['-o', '-qq', zipPath, '-d', outputDir]);
+  }
+
+  private async collectExtractedFiles(
+    rootDir: string,
+  ): Promise<Array<{ relativePath: string; absolutePath: string; size: number }>> {
+    const files: Array<{ relativePath: string; absolutePath: string; size: number }> = [];
+    const walk = async (dir: string) => {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const absolutePath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(absolutePath);
+          continue;
+        }
+        const stat = await fs.stat(absolutePath);
+        files.push({
+          relativePath: path.relative(rootDir, absolutePath).replace(/\\/g, '/'),
+          absolutePath,
+          size: stat.size,
+        });
+      }
+    };
+    await walk(rootDir);
+    return files;
+  }
+
+  private toFlatFilename(relativePath: string): string {
+    const safe = relativePath.replace(/[\\/]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return safe.length > 0 ? safe : `file-${Date.now()}`;
   }
 
   /** Format date for ASUP x-headers (e.g. "Sun Jan 05 14:30:00 UTC 2025"). */

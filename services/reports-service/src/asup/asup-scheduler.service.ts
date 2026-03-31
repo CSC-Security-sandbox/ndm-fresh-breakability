@@ -16,6 +16,8 @@ import {
 const ASUP_ENABLED_KEY = 'asup_enabled';
 const ASUP_TRANSMIT_MAX_RETRIES = 3;
 const ASUP_TRANSMIT_RETRY_DELAY_MS = 3000;
+const ASUP_ISF_THRESHOLD_BYTES = 200 * 1024 * 1024;
+const ASUP_ISF_CHUNK_BYTES = 100 * 1024 * 1024;
 
 export interface AsupSettingsData {
   enabled: boolean;
@@ -229,20 +231,76 @@ export class AsupSchedulerService {
     const archiveFilename = path.basename(archivePath);
     const requestUrl = `${this.asupSupportBundleEndpointUrl.replace(/\/$/, '')}/${archiveFilename}`;
     const archiveBuffer = await fs.readFile(archivePath);
-    const putOptions = {
-      headers: {
-        'Content-Type': 'application/x-7z-compressed',
-        'X-ASUP-Source': 'NDM',
-        'X-ASUP-Version': '1.3',
-        'X-Netapp-Asup-Payload-Checksum': md5Checksum,
-        ...headersMap,
-      },
-      timeout: 60000,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
+    const baseHeaders = {
+      'Content-Type': 'application/x-7z-compressed',
+      'X-ASUP-Source': 'NDM',
+      'X-ASUP-Version': '1.3',
+      'X-Netapp-Asup-Payload-Checksum': md5Checksum,
+      ...headersMap,
     };
 
-    await axios.put(requestUrl, archiveBuffer, putOptions);
-    this.logger.log(`Support bundle transmitted successfully to ${requestUrl}`);
+    if (archiveBuffer.length <= ASUP_ISF_THRESHOLD_BYTES) {
+      await axios.put(requestUrl, archiveBuffer, {
+        headers: baseHeaders,
+        timeout: 60000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      this.logger.log(`Support bundle transmitted successfully to ${requestUrl}`);
+      return;
+    }
+
+    const totalChunks = Math.ceil(archiveBuffer.length / ASUP_ISF_CHUNK_BYTES);
+    this.logger.log(
+      `Support bundle exceeds 200MB (${archiveBuffer.length} bytes), sending via ISF chunking (${totalChunks} chunks)`,
+    );
+
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * ASUP_ISF_CHUNK_BYTES;
+      const end = Math.min(start + ASUP_ISF_CHUNK_BYTES, archiveBuffer.length);
+      const chunkBuffer = archiveBuffer.subarray(start, end);
+      const chunkNumber = chunkIndex + 1;
+
+      const chunkHeaders = {
+        ...baseHeaders,
+        'X-Netapp-asup-large': 'true',
+        'X-Netapp-asup-large-filename': archiveFilename,
+        'X-Netapp-asup-large-size': archiveBuffer.length.toString(),
+        'X-Netapp-asup-chunk-filename': archiveFilename,
+        'X-Netapp-asup-chunk-number': chunkNumber.toString(),
+        'X-Netapp-asup-chunk-size': chunkBuffer.length.toString(),
+        'X-Netapp-asup-chunk-total': totalChunks.toString(),
+        'X-Netapp-asup-retransmit': 'false',
+      };
+
+      let lastError: Error | null = null;
+      for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
+        try {
+          await axios.put(requestUrl, chunkBuffer, {
+            headers: chunkHeaders,
+            timeout: 120000,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+          });
+          lastError = null;
+          this.logger.log(`Sent support bundle chunk ${chunkNumber}/${totalChunks}`);
+          break;
+        } catch (err) {
+          lastError = err as Error;
+          this.logger.error(
+            `Support bundle chunk ${chunkNumber}/${totalChunks} attempt ${attempt}/${ASUP_TRANSMIT_MAX_RETRIES} failed: ${lastError.message}`,
+            lastError.stack,
+          );
+          if (attempt < ASUP_TRANSMIT_MAX_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, ASUP_TRANSMIT_RETRY_DELAY_MS));
+          }
+        }
+      }
+      if (lastError) {
+        throw lastError;
+      }
+    }
+
+    this.logger.log(`Support bundle ISF chunked transmission completed to ${requestUrl}`);
   }
 }

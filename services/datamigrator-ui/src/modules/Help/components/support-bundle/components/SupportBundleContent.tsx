@@ -60,20 +60,19 @@ const SupportBundleContent = () => {
           >
             {DOWNLOAD_REPORT_LABEL}
           </Button>
-          <span title={SEND_SUPPORT_BUNDLE_TOOLTIP}>
-            <Button
-              className="w-48"
-              disabled={
-                !isDateSame ||
-                !bundleStatus.isBundleReady ||
-                isSupportBundleAlreadySent
-              }
-              onClick={handleSendToNetAppSupport}
-              isSubmitting={isSending}
-            >
-              {SEND_SUPPORT_BUNDLE_LABEL}
-            </Button>
-          </span>
+          <Button
+            className="w-48"
+            title={SEND_SUPPORT_BUNDLE_TOOLTIP}
+            disabled={
+              !isDateSame ||
+              !bundleStatus.isBundleReady ||
+              isSupportBundleAlreadySent
+            }
+            onClick={handleSendToNetAppSupport}
+            isSubmitting={isSending}
+          >
+            {SEND_SUPPORT_BUNDLE_LABEL}
+          </Button>
         </Box>
       </Box>
 
