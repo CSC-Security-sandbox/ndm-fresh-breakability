@@ -200,4 +200,19 @@ build {
       "--extra-vars", "build_version=${var.build_version}"
     ]
   }
+
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
+    inline = [
+      "echo 'Cleaning package cache and temporary files...'",
+      "apt-get autoremove --purge -y",
+      "apt-get clean",
+      "rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*",
+      "journalctl --flush --rotate && journalctl --vacuum-size=0 || true",
+      "shred -u /root/.ssh/authorized_keys /home/${var.ssh_username}/.ssh/authorized_keys || true",
+      "export HISTSIZE=0",
+      "sync"
+    ]
+    inline_shebang = "/bin/sh -x"
+  }
 }

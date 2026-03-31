@@ -764,6 +764,17 @@ build {
     ]
   }
 
+  provisioner "shell" {
+    execute_command = "echo '${var.build_password}' | sudo -S -E sh '{{ .Path }}'"
+    inline = [
+      "echo 'Zeroing free space for smaller exported image...'",
+      "dd if=/dev/zero of=/var/tmp/zeros bs=1M 2>/dev/null || true",
+      "rm -f /var/tmp/zeros",
+      "sync"
+    ]
+    inline_shebang = "/bin/sh -x"
+  }
+
   post-processors {
   
     post-processor "manifest" {
