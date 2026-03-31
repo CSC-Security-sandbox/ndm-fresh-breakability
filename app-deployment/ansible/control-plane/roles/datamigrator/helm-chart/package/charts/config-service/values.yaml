@@ -76,6 +76,8 @@ env:
     value: "http://admin-service-service:3000"
   - name: BUNDLE_OUTPUT_PATH
     value: "/generated-zips"
+  - name: SUPPORT_BUNDLE_SEND_URL
+    value: "http://reports-service-service:3000/api/v1/report/asup/support-bundle/send"
   - name: ISTIO_GATEWAY_TLS_SECRET
     value: "datamigrator-istio-tls"
   - name: ISTIO_NAMESPACE
