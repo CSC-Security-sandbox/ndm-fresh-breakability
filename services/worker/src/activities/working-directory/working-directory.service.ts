@@ -11,7 +11,6 @@ import { ConfigError, ConfigStatus, ConfigStatusPayload } from './working-direct
 import { ExportPathSource } from '../list-path/list-path.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { ClientConfig, StorageClientFactory } from 'src/storage-clients/storage-client.factory';
-import { configureSmbAdDns } from 'src/utils/network.utils';
 
 @Injectable()
 export class ValidateWorkingDirectoryActivity {
@@ -148,11 +147,6 @@ export class ValidateWorkingDirectoryActivity {
         
         const protocol = this.protocols.getProtocol(ProtocolTypes[fileServer.type]);
 
-        // Configure AD DNS before mount so authentication can resolve the AD server
-        if (fileServer.type === ProtocolTypes.SMB && fileServer.dnsServer) {
-          await configureSmbAdDns(traceId, fileServer.dnsServer, this.logger);
-        }
-
         // For storage-aware types, get the export path from exportsMap for this specific host
         // This was discovered via storage API and stored in VolumeEntity
         let exportPath = payload.fetchedPath;
@@ -225,11 +219,6 @@ export class ValidateWorkingDirectoryActivity {
 
     try {
       for (const fileServer of payload.listPathPayload) {
-        // Configure AD DNS before mount so authentication can resolve the AD server
-        if (fileServer.type === ProtocolTypes.SMB && fileServer.dnsServer) {
-          await configureSmbAdDns(traceId, fileServer.dnsServer, this.logger);
-        }
-
         if (isStorageAware){
           let clientConfig = new ClientConfig(payload.serverType);
           const storageClient = this.storageClientFactory.getClient(clientConfig);

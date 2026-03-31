@@ -3,6 +3,8 @@ import { promisify } from 'util';
 import { WorkersConfig } from "src/config/app.config";
 import { ProtocolPayload } from "./protocol.type";
 import { sanitize } from "src/utils/utilities";
+import { resolveHostnameForSmb } from "src/utils/network.utils";
+import { ProtocolTypes } from "src/protocols/protocols";
 
 const execAsync = promisify(exec);
 import {
@@ -47,8 +49,16 @@ export abstract class Protocol {
           workerId: this.workerId,
           message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
         };
+
+        // For SMB on Windows: register adServerIp on the adapter, then iterate over all
+        // adapter DNS entries to resolve hostname → IP before the command is built.
+        let effectiveHostname = payload?.hostname;
+        if (protocolType === ProtocolTypes.SMB) {
+          effectiveHostname = await resolveHostnameForSmb(traceId, payload.hostname, payload.adServerIp, this.logger);
+        }
+
         const command = commandPattern
-          ?.replaceAll('${HOST}', payload?.hostname)
+          ?.replaceAll('${HOST}', effectiveHostname)
           ?.replaceAll('${USERNAME}', payload?.username)
           ?.replaceAll('${PASSWORD}', payload?.password)
           ?.replaceAll('${MOUNT_PATH}', payload?.path)

@@ -1,16 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ValidateConnectionActivity } from './validate-connection.service';
 import { ConfigService } from '@nestjs/config';
-import { Protocol } from 'src/protocols/protocol/protocol';
-import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
+import { Protocols } from 'src/protocols/protocols';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
-import * as networkUtils from 'src/utils/network.utils';
 
 jest.mock('src/protocols/protocols');
-jest.mock('src/utils/network.utils', () => ({
-  configureSmbAdDns: jest.fn().mockResolvedValue(undefined),
-}));
 
 describe('ValidateConnectionActivity', () => {
   let service: ValidateConnectionActivity;
@@ -147,96 +142,4 @@ describe('ValidateConnectionActivity', () => {
     expect(response.status).toBe('error');
     expect(response.message).toContain('Failed to validate connection for localhost of type HTTP: Error: Fetch versions error');
   });
-
-  describe('AD DNS configuration for SMB', () => {
-    let configureSmbAdDnsSpy: jest.SpyInstance;
-
-    beforeEach(() => {
-      configureSmbAdDnsSpy = jest.spyOn(networkUtils, 'configureSmbAdDns').mockResolvedValue(undefined);
-    });
-
-    afterEach(() => {
-      configureSmbAdDnsSpy.mockRestore();
-    });
-
-    it('should call configureSmbAdDns when protocolType is SMB and adServerIp is provided', async () => {
-      const traceId = 'trace-smb-dns';
-      const mockProtocol = {
-        validateConnection: jest.fn().mockResolvedValue(undefined),
-      };
-      (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-      const payload = { hostname: 'smb-host', adServerIp: '10.0.0.100' };
-      const feature = { enablePreListPath: false, enableVersionFetch: false };
-
-      const response = await service.validate(traceId, 'SMB', payload, feature);
-
-      expect(configureSmbAdDnsSpy).toHaveBeenCalledWith(traceId, '10.0.0.100', expect.anything());
-      expect(response.status).toBe('success');
-    });
-
-    it('should not call configureSmbAdDns when protocolType is SMB but adServerIp is absent', async () => {
-      const traceId = 'trace-smb-no-dns';
-      const mockProtocol = {
-        validateConnection: jest.fn().mockResolvedValue(undefined),
-      };
-      (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-      const payload = { hostname: 'smb-host' };
-      const feature = { enablePreListPath: false, enableVersionFetch: false };
-
-      await service.validate(traceId, 'SMB', payload, feature);
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not call configureSmbAdDns for non-SMB protocols even with an IP-like field', async () => {
-      const traceId = 'trace-nfs-no-dns';
-      const mockProtocol = {
-        validateConnection: jest.fn().mockResolvedValue(undefined),
-        listPaths: jest.fn().mockResolvedValue([]),
-      };
-      (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-      const payload = { hostname: 'nfs-host', adServerIp: '10.0.0.100' };
-      const feature = { enablePreListPath: true, enableVersionFetch: false };
-
-      await service.validate(traceId, 'NFS', payload, feature);
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-    });
-
-    it('should still return success when configureSmbAdDns resolves but validation proceeds normally', async () => {
-      const traceId = 'trace-smb-dns-ok';
-      configureSmbAdDnsSpy.mockResolvedValue(undefined);
-      const mockProtocol = {
-        validateConnection: jest.fn().mockResolvedValue(undefined),
-      };
-      (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-      const payload = { hostname: 'smb-host', adServerIp: '192.168.1.10' };
-      const feature = { enablePreListPath: false, enableVersionFetch: false };
-
-      const response = await service.validate(traceId, 'SMB', payload, feature);
-
-      expect(response.status).toBe('success');
-    });
-
-    it('should return error if configureSmbAdDns throws', async () => {
-      const traceId = 'trace-smb-dns-err';
-      configureSmbAdDnsSpy.mockRejectedValue(new Error('DNS config failed'));
-      const mockProtocol = {
-        validateConnection: jest.fn().mockResolvedValue(undefined),
-      };
-      (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-      const payload = { hostname: 'smb-host', adServerIp: '192.168.1.10' };
-      const feature = { enablePreListPath: false, enableVersionFetch: false };
-
-      const response = await service.validate(traceId, 'SMB', payload, feature);
-
-      expect(response.status).toBe('error');
-      expect(response.message).toContain('DNS config failed');
-    });
-  });
-}); 
+});

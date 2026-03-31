@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { configureSmbAdDns } from 'src/utils/network.utils';
 
 @Injectable()
 export class ValidateConnectionActivity {
@@ -35,9 +34,6 @@ export class ValidateConnectionActivity {
     };
     try {
       const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
-      if (protocolType === ProtocolTypes.SMB && payload.adServerIp) {
-        await configureSmbAdDns(traceId, payload.adServerIp, this.logger);
-      }
       await protocol.validateConnection(traceId, payload);
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);

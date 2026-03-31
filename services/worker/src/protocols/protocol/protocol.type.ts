@@ -10,6 +10,7 @@ export interface ProtocolPayload{
     jobRunId?: string
     pathId?: string;
     mountBasePath?: string;
+    adServerIp?: string;
 }
 
 export interface CommandOutput{

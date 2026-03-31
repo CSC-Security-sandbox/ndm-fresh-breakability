@@ -8,7 +8,6 @@ import { SMBProtocol } from '../../protocols/smb/smb.protocol';
 import { NFSProtocol } from '../../protocols/nfs/nfs.protocol';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { WinShellService } from '../common/win-shell.service';
-import * as networkUtils from 'src/utils/network.utils';
 
 let loggerFactory: LoggerFactory;
 
@@ -17,9 +16,6 @@ jest.mock('src/protocols/protocols');
 jest.mock('@netapp-cloud-datamigrate/jobs-lib');
 jest.mock('src/config/app.config', () => ({
     WorkersConfig: { get: jest.fn() }
-}));
-jest.mock('src/utils/network.utils', () => ({
-    configureSmbAdDns: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockConfigService = {
@@ -501,110 +497,6 @@ describe('SetupActivityService', () => {
             const result = await service.setup('job-nfs-dest');
             expect(result.status).toBe('success');
             expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('AD DNS configuration for SMB in setup', () => {
-        let configureSmbAdDnsSpy: jest.SpyInstance;
-
-        beforeEach(() => {
-            configureSmbAdDnsSpy = jest.spyOn(networkUtils, 'configureSmbAdDns').mockResolvedValue(undefined);
-            mockProtocol.mountPath.mockResolvedValue(undefined);
-            mockProtocol.unmountPath.mockResolvedValue(undefined);
-            mockAuthService.getAccessToken.mockResolvedValue('token');
-            (axios.post as jest.Mock).mockResolvedValue({});
-        });
-
-        afterEach(() => {
-            configureSmbAdDnsSpy.mockRestore();
-        });
-
-        it('should call configureSmbAdDns for SMB source with dnsServer before mounting', async () => {
-            const context = {
-                jobConfig: {
-                    sourceFileServer: {
-                        protocols: [{ type: 'SMB' }],
-                        dnsServer: '10.0.0.10',
-                    },
-                },
-            };
-            mockRedisService.getJobManagerContext.mockResolvedValue(context);
-
-            const result = await service.setup('job-smb-src-dns');
-
-            expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('job-smb-src-dns', '10.0.0.10', expect.anything());
-            expect(mockProtocol.mountPath).toHaveBeenCalledTimes(1);
-            expect(result.status).toBe('success');
-        });
-
-        it('should call configureSmbAdDns for SMB destination with dnsServer before mounting', async () => {
-            const context = {
-                jobConfig: {
-                    sourceFileServer: { protocols: [{ type: 'NFS' }] },
-                    destinationFileServer: {
-                        protocols: [{ type: 'SMB' }],
-                        dnsServer: '10.0.0.20',
-                    },
-                },
-            };
-            mockRedisService.getJobManagerContext.mockResolvedValue(context);
-
-            const result = await service.setup('job-smb-dst-dns');
-
-            expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('job-smb-dst-dns', '10.0.0.20', expect.anything());
-            expect(result.status).toBe('success');
-        });
-
-        it('should call configureSmbAdDns for both source and destination when both are SMB with dnsServer', async () => {
-            const context = {
-                jobConfig: {
-                    sourceFileServer: {
-                        protocols: [{ type: 'SMB' }],
-                        dnsServer: '10.0.0.10',
-                    },
-                    destinationFileServer: {
-                        protocols: [{ type: 'SMB' }],
-                        dnsServer: '10.0.0.20',
-                    },
-                },
-            };
-            mockRedisService.getJobManagerContext.mockResolvedValue(context);
-
-            const result = await service.setup('job-smb-both-dns');
-
-            expect(configureSmbAdDnsSpy).toHaveBeenCalledTimes(2);
-            expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('job-smb-both-dns', '10.0.0.10', expect.anything());
-            expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('job-smb-both-dns', '10.0.0.20', expect.anything());
-            expect(result.status).toBe('success');
-        });
-
-        it('should not call configureSmbAdDns for SMB source without dnsServer', async () => {
-            const context = {
-                jobConfig: {
-                    sourceFileServer: { protocols: [{ type: 'SMB' }] },
-                },
-            };
-            mockRedisService.getJobManagerContext.mockResolvedValue(context);
-
-            await service.setup('job-smb-no-dns');
-
-            expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-        });
-
-        it('should not call configureSmbAdDns for NFS source even with dnsServer', async () => {
-            const context = {
-                jobConfig: {
-                    sourceFileServer: {
-                        protocols: [{ type: 'NFS' }],
-                        dnsServer: '10.0.0.10',
-                    },
-                },
-            };
-            mockRedisService.getJobManagerContext.mockResolvedValue(context);
-
-            await service.setup('job-nfs-has-dns');
-
-            expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
         });
     });
 });

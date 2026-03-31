@@ -1,15 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
+ import { Test, TestingModule } from '@nestjs/testing';
  import { ConfigService } from '@nestjs/config';
  import { ListPathActivity } from './list-path.service';
  import { Protocols } from 'src/protocols/protocols';
  import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
  import { mockLogger } from 'src/auth/auth.service.spec';
- import * as networkUtils from 'src/utils/network.utils';
 
  jest.mock('src/protocols/protocols');
- jest.mock('src/utils/network.utils', () => ({
-   configureSmbAdDns: jest.fn().mockResolvedValue(undefined),
- }));
  
  describe('ListPathActivity', () => {
    let service: ListPathActivity;
@@ -118,67 +114,6 @@ import { Test, TestingModule } from '@nestjs/testing';
        expect(logger.log).toHaveBeenCalledWith(
          `[${traceId}] List Path for ${payload.hostname} of type ${protocolType} from test-worker-id`,
        );
-     });
-   });
-
-   describe('AD DNS configuration for SMB refresh', () => {
-     let configureSmbAdDnsSpy: jest.SpyInstance;
-
-     beforeEach(() => {
-       configureSmbAdDnsSpy = jest.spyOn(networkUtils, 'configureSmbAdDns').mockResolvedValue(undefined);
-     });
-
-     afterEach(() => {
-       configureSmbAdDnsSpy.mockRestore();
-     });
-
-     it('should call configureSmbAdDns before listing paths when type is SMB with adServerIp', async () => {
-       const mockProtocol = { listPaths: jest.fn().mockResolvedValue(['/share1']) };
-       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-       const smbPayload = { hostname: 'smb-host', adServerIp: '10.0.0.100' };
-       await service.listPath('trace-smb', 'SMB', smbPayload);
-
-       expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('trace-smb', '10.0.0.100', expect.anything());
-       expect(mockProtocol.listPaths).toHaveBeenCalledWith('trace-smb', smbPayload);
-     });
-
-     it('should re-configure DNS on every refresh call (not just once)', async () => {
-       const mockProtocol = { listPaths: jest.fn().mockResolvedValue([]) };
-       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-       const smbPayload = { hostname: 'smb-host', adServerIp: '10.0.0.100' };
-       await service.listPath('trace-r1', 'SMB', smbPayload);
-       await service.listPath('trace-r2', 'SMB', smbPayload);
-
-       expect(configureSmbAdDnsSpy).toHaveBeenCalledTimes(2);
-     });
-
-     it('should not call configureSmbAdDns when type is SMB but adServerIp is absent', async () => {
-       const mockProtocol = { listPaths: jest.fn().mockResolvedValue([]) };
-       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-       await service.listPath('trace-no-dns', 'SMB', { hostname: 'smb-host' });
-
-       expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-     });
-
-     it('should not call configureSmbAdDns for NFS protocol', async () => {
-       const mockProtocol = { listPaths: jest.fn().mockResolvedValue([]) };
-       (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
-
-       await service.listPath('trace-nfs', 'NFS', { hostname: 'nfs-host', adServerIp: '10.0.0.100' });
-
-       expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-     });
-
-     it('should return error when configureSmbAdDns throws', async () => {
-       configureSmbAdDnsSpy.mockRejectedValue(new Error('DNS setup failed'));
-
-       const result = await service.listPath('trace-dns-err', 'SMB', { hostname: 'smb-host', adServerIp: '10.0.0.1' });
-
-       expect(result.status).toBe('error');
-       expect(result.message).toContain('DNS setup failed');
      });
    });
  });

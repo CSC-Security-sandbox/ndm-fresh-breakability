@@ -9,7 +9,6 @@ import { ValidateWorkingDirectoryActivity } from './working-directory.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLogger } from 'src/auth/auth.service.spec';
 import { StorageClientFactory } from 'src/storage-clients/storage-client.factory';
-import * as networkUtils from 'src/utils/network.utils';
 
 // Mock Temporal dependencies to avoid native binary issues
 jest.mock('@temporalio/core-bridge', () => ({}));
@@ -38,10 +37,6 @@ jest.mock('src/config/command.config', () => ({
     getFstabPath: jest.fn(() => '/etc/fstab'),
   },
   CommandPattern: {},
-}));
-
-jest.mock('src/utils/network.utils', () => ({
-  configureSmbAdDns: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock other dependencies
@@ -548,154 +543,6 @@ describe('ValidateWorkingDirectoryActivity', () => {
       expect(configService.get).toHaveBeenCalledWith('worker.workerId');
       expect(configService.get).toHaveBeenCalledWith('worker.baseWorkingPath');
       expect(configService.get).toHaveBeenCalledWith('worker.connection.workerConfigUrl');
-    });
-  });
-
-  describe('AD DNS configuration for SMB in handleMountAndUnmountPaths', () => {
-    let configureSmbAdDnsSpy: jest.SpyInstance;
-
-    beforeEach(() => {
-      configureSmbAdDnsSpy = jest.spyOn(networkUtils, 'configureSmbAdDns').mockResolvedValue(undefined);
-      mockProtocol.mountPath.mockResolvedValue(undefined);
-      mockProtocol.unmountPath.mockResolvedValue(undefined);
-    });
-
-    afterEach(() => {
-      configureSmbAdDnsSpy.mockRestore();
-    });
-
-    it('should call configureSmbAdDns before mounting an SMB path with dnsServer', async () => {
-      const payload = {
-        fetchedPath: '/export/path',
-        listPathPayload: [
-          {
-            type: 'SMB',
-            host: 'smb-host',
-            username: 'user',
-            password: 'pass',
-            protocolVersion: '3',
-            dnsServer: '10.0.0.50',
-          },
-        ],
-      };
-
-      await service.handleMountAndUnmountPaths('trace-dns', payload);
-
-      expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('trace-dns', '10.0.0.50', expect.anything());
-      expect(mockProtocol.mountPath).toHaveBeenCalled();
-    });
-
-    it('should not call configureSmbAdDns for SMB path without dnsServer', async () => {
-      const payload = {
-        fetchedPath: '/export/path',
-        listPathPayload: [
-          {
-            type: 'SMB',
-            host: 'smb-host',
-            username: 'user',
-            password: 'pass',
-            protocolVersion: '3',
-          },
-        ],
-      };
-
-      await service.handleMountAndUnmountPaths('trace-no-dns', payload);
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not call configureSmbAdDns for NFS path even with dnsServer field', async () => {
-      const payload = {
-        fetchedPath: '/export/path',
-        listPathPayload: [
-          {
-            type: 'NFS',
-            host: 'nfs-host',
-            username: 'user',
-            password: 'pass',
-            protocolVersion: '3',
-            dnsServer: '10.0.0.50',
-          },
-        ],
-      };
-
-      await service.handleMountAndUnmountPaths('trace-nfs', payload);
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-    });
-
-    it('should call configureSmbAdDns for each SMB entry with dnsServer in multi-server payload', async () => {
-      const payload = {
-        fetchedPath: '/export/path',
-        listPathPayload: [
-          { type: 'SMB', host: 'smb-host-1', username: 'u', password: 'p', protocolVersion: '3', dnsServer: '10.0.0.1' },
-          { type: 'SMB', host: 'smb-host-2', username: 'u', password: 'p', protocolVersion: '3', dnsServer: '10.0.0.2' },
-        ],
-      };
-
-      await service.handleMountAndUnmountPaths('trace-multi', payload);
-
-      expect(configureSmbAdDnsSpy).toHaveBeenCalledTimes(2);
-      expect(configureSmbAdDnsSpy).toHaveBeenNthCalledWith(1, 'trace-multi', '10.0.0.1', expect.anything());
-      expect(configureSmbAdDnsSpy).toHaveBeenNthCalledWith(2, 'trace-multi', '10.0.0.2', expect.anything());
-    });
-  });
-
-  describe('AD DNS configuration for SMB in isValidDirectory', () => {
-    let configureSmbAdDnsSpy: jest.SpyInstance;
-
-    beforeEach(() => {
-      configureSmbAdDnsSpy = jest.spyOn(networkUtils, 'configureSmbAdDns').mockResolvedValue(undefined);
-      mockProtocol.mountPath.mockResolvedValue(undefined);
-      mockProtocol.unmountPath.mockResolvedValue(undefined);
-      mockedFs.existsSync.mockReturnValue(true);
-      jest.spyOn(service, 'checkWritable').mockResolvedValue(true);
-    });
-
-    afterEach(() => {
-      configureSmbAdDnsSpy.mockRestore();
-    });
-
-    it('should call configureSmbAdDns before mounting when type is SMB with dnsServer', async () => {
-      const payload = {
-        exportPath: '/export',
-        workingDirectory: 'wd',
-        listPathPayload: [
-          { type: 'SMB', host: 'smb-host', username: 'u', password: 'p', protocolVersion: '3', dnsServer: '10.0.0.50' },
-        ],
-      };
-
-      await service.isValidDirectory(payload, 'trace-valid-dns');
-
-      expect(configureSmbAdDnsSpy).toHaveBeenCalledWith('trace-valid-dns', '10.0.0.50', expect.anything());
-    });
-
-    it('should not call configureSmbAdDns when type is SMB but dnsServer is absent', async () => {
-      const payload = {
-        exportPath: '/export',
-        workingDirectory: 'wd',
-        listPathPayload: [
-          { type: 'SMB', host: 'smb-host', username: 'u', password: 'p', protocolVersion: '3' },
-        ],
-      };
-
-      await service.isValidDirectory(payload, 'trace-no-dns');
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not call configureSmbAdDns for NFS type', async () => {
-      const payload = {
-        exportPath: '/export',
-        workingDirectory: 'wd',
-        listPathPayload: [
-          { type: 'NFS', host: 'nfs-host', username: 'u', password: 'p', protocolVersion: '3', dnsServer: '10.0.0.50' },
-        ],
-      };
-
-      await service.isValidDirectory(payload, 'trace-nfs-valid');
-
-      expect(configureSmbAdDnsSpy).not.toHaveBeenCalled();
     });
   });
 });
