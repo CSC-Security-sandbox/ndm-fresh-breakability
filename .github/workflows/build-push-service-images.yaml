@@ -91,12 +91,8 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  security-events: write
   id-token: write
   actions: read
-
-env:
-  TRIVY_VERSION: v0.69.2
 
 jobs:
   determine-matrix:
