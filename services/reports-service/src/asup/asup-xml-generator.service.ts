@@ -20,6 +20,7 @@ export class AsupXmlGeneratorService {
   /** Parsed migration body: prefix (DOCTYPE + root + table info), row template, suffix (closing tags). */
   private migrationBodyCache: { prefix: string; rowTemplate: string; suffix: string } | null = null;
   private manifestTemplateCache: string | null = null;
+  private supportBundleManifestTemplateCache: { prefix: string; rowTemplate: string; suffix: string } | null = null;
   private readonly ROW_TEMPLATE_START = '{{ROW_TEMPLATE_START}}';
   private readonly ROW_TEMPLATE_END = '{{ROW_TEMPLATE_END}}';
 
@@ -111,6 +112,29 @@ export class AsupXmlGeneratorService {
   /**
    * Load manifest.xml.template (lazy). Used for ASUP payload packaging.
    */
+  private async getSupportBundleManifestTemplate(): Promise<{
+    prefix: string;
+    rowTemplate: string;
+    suffix: string;
+  }> {
+    if (this.supportBundleManifestTemplateCache) return this.supportBundleManifestTemplateCache;
+    const content = await this.loadTemplate('support-bundle-manifest.xml.template');
+    const startIdx = content.indexOf(this.ROW_TEMPLATE_START);
+    const endIdx = content.indexOf(this.ROW_TEMPLATE_END);
+    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+      throw new Error(
+        'manifest.xml.template must contain {{ROW_TEMPLATE_START}} and {{ROW_TEMPLATE_END}}.',
+      );
+    }
+    const prefix = content.substring(0, startIdx).trim();
+    const rowTemplate = content
+      .substring(startIdx + this.ROW_TEMPLATE_START.length, endIdx)
+      .trim();
+    const suffix = content.substring(endIdx + this.ROW_TEMPLATE_END.length).trim();
+    this.supportBundleManifestTemplateCache = { prefix, rowTemplate, suffix };
+    return this.supportBundleManifestTemplateCache;
+  }
+
   private async getManifestTemplate(): Promise<string> {
     if (this.manifestTemplateCache) return this.manifestTemplateCache;
     this.manifestTemplateCache = await this.loadTemplate('manifest.xml.template');
@@ -138,6 +162,32 @@ export class AsupXmlGeneratorService {
       .replace(/\{\{SIZE_COMPRESSED\}\}/g, sizeCompressed.toString())
       .replace(/\{\{XHEADER_SIZE_COLLECTED\}\}/g, xHeaderSize.toString())
       .replace(/\{\{XHEADER_TIME_COLLECTED_MS\}\}/g, xHeaderTimeMs.toString());
+  }
+
+  async buildSupportBundleManifestXml(
+    bundleEntries: string[],
+    bundleFilename: string,
+    bundleSize: number,
+    collectionTimeMs: number,
+  ): Promise<string> {
+    const { prefix, rowTemplate, suffix } = await this.getSupportBundleManifestTemplate();
+    const colTimeUs = (Date.now() * 1000).toString();
+    const normalizedEntries = bundleEntries.length > 0 ? bundleEntries : [bundleFilename];
+
+    const rows = normalizedEntries.map((entry, index) =>
+      rowTemplate
+        .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
+        .replace(/\{\{SEQ_NUM\}\}/g, String(index + 1))
+        .replace(/\{\{PRIO_NUM\}\}/g, String(index + 1))
+        .replace(/\{\{SUBSYS\}\}/g, 'support_bundle')
+        .replace(/\{\{CMD_TGT\}\}/g, 'dblade')
+        .replace(/\{\{BODY_FILE\}\}/g, this.escapeXml(entry))
+        .replace(/\{\{SIZE_COLLECTED\}\}/g, String(bundleSize))
+        .replace(/\{\{TIME_COLLECTED_MS\}\}/g, String(collectionTimeMs))
+        .replace(/\{\{SIZE_COMPRESSED\}\}/g, String(bundleSize))
+    );
+
+    return `${prefix}\n${rows.join('\n')}\n${suffix}\n`;
   }
 
   /**

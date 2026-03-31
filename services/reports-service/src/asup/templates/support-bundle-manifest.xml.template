@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Manifest [
+<!ELEMENT Manifest (asup:TABLE_INFO,asup:ROW*,asup:ABORT?)>
+<!ATTLIST Manifest xmlns CDATA #FIXED "http://asup_search.netapp.com/ns/Manifest/1.0">
+<!ATTLIST Manifest xmlns:asup CDATA #FIXED "http://asup_search.netapp.com/ns/ASUP/1.1">
+<!ATTLIST Manifest smf_table_name CDATA #REQUIRED>
+<!ATTLIST Manifest smf_table_desc CDATA #REQUIRED>
+<!ATTLIST Manifest col_time_us CDATA #REQUIRED>
+<!ATTLIST Manifest cluster_uuid CDATA "0">
+<!ATTLIST Manifest node_uuid CDATA #REQUIRED>
+<!ATTLIST Manifest node_sn CDATA #REQUIRED>
+<!ATTLIST Manifest node_system_id CDATA #REQUIRED>
+<!ATTLIST Manifest data_scope (cluster|node) #REQUIRED>
+<!ELEMENT asup:TABLE_INFO (asup:field*,asup:ABORT?)>
+<!ELEMENT asup:field (asup:tag,asup:smf_name,asup:ui_name,asup:type,asup:qualification,asup:remap)>
+<!ELEMENT asup:tag (#PCDATA)>
+<!ELEMENT asup:smf_name (#PCDATA)>
+<!ELEMENT asup:ui_name (#PCDATA)>
+<!ELEMENT asup:type (#PCDATA)>
+<!ELEMENT asup:list (asup:li+)>
+<!ELEMENT asup:li (#PCDATA)>
+<!ATTLIST asup:type is_list (true|false) "false">
+<!ELEMENT asup:qualification (#PCDATA)>
+<!ELEMENT asup:remap (#PCDATA)>
+<!ELEMENT asup:ABORT (#PCDATA)>
+<!ELEMENT asup:ROW (seq-num,prio-num,subsys,cmd-tgt,body-file,size-collected,time-collected-ms,status,error,content-type,orig-size-collected,size-compressed)>
+<!ATTLIST asup:ROW col_time_us CDATA #REQUIRED>
+<!ELEMENT seq-num (#PCDATA)><!ELEMENT prio-num (#PCDATA)><!ELEMENT subsys (#PCDATA)><!ELEMENT cmd-tgt (#PCDATA)><!ELEMENT body-file (#PCDATA)><!ELEMENT size-collected (#PCDATA)><!ELEMENT time-collected-ms (#PCDATA)><!ELEMENT status (#PCDATA)><!ELEMENT error (#PCDATA)><!ELEMENT content-type (#PCDATA)><!ELEMENT orig-size-collected (#PCDATA)><!ELEMENT size-compressed (#PCDATA)>]>
+
+<Manifest col_time_us="{{COL_TIME_US}}" smf_table_name="nd_autosupport_manifest" smf_table_desc="AutoSupport Manifest Table" cluster_uuid="c76500e2-f9ef-11ef-847d-6045bd370ca7" node_uuid="0e934e08-f9ef-11ef-847d-6045bd370ca7" node_system_id="97548219305762481930" node_sn="97548219305762481930" data_scope="node" xmlns="http://asup_search.netapp.com/ns/Manifest/1.0" xmlns:asup="http://asup_search.netapp.com/ns/ASUP/1.1">
+<asup:TABLE_INFO>
+<asup:field>
+  <asup:tag>seq-num</asup:tag>
+  <asup:smf_name>seq-num</asup:smf_name>
+  <asup:ui_name>AutoSupport Sequence Number</asup:ui_name>
+  <asup:type>seqnum</asup:type>
+  <asup:qualification>key</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>prio-num</asup:tag>
+  <asup:smf_name>prio-num</asup:smf_name>
+  <asup:ui_name>Collection Order</asup:ui_name>
+  <asup:type>unsigned</asup:type>
+  <asup:qualification>key</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>cmd-tgt</asup:tag>
+  <asup:smf_name>cmd-tgt</asup:smf_name>
+  <asup:ui_name>Execution domain for command</asup:ui_name>
+  <asup:type>AutoSupport_cmd_tgt</asup:type>
+  <asup:qualification>read</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>body-file</asup:tag>
+  <asup:smf_name>body-file</asup:smf_name>
+  <asup:ui_name>The AutoSupport Content filename for this data</asup:ui_name>
+  <asup:type>text</asup:type>
+  <asup:qualification>read</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>size-collected</asup:tag>
+  <asup:smf_name>size-collected</asup:smf_name>
+  <asup:ui_name>Number of bytes collected</asup:ui_name>
+  <asup:type>size</asup:type>
+  <asup:qualification>write</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>time-collected-ms</asup:tag>
+  <asup:smf_name>time-collected</asup:smf_name>
+  <asup:ui_name>Time spent collecting (ms)</asup:ui_name>
+  <asup:type>unsigned64</asup:type>
+  <asup:qualification>write</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>status</asup:tag>
+  <asup:smf_name>status</asup:smf_name>
+  <asup:ui_name>The status of this data item</asup:ui_name>
+  <asup:type>asup_manifest_status</asup:type>
+  <asup:qualification>read</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>error</asup:tag>
+  <asup:smf_name>error</asup:smf_name>
+  <asup:ui_name>The textual description of error</asup:ui_name>
+  <asup:type>text</asup:type>
+  <asup:qualification>read</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>content-type</asup:tag>
+  <asup:smf_name>content-type</asup:smf_name>
+  <asup:ui_name>The AutoSupport content type for this data</asup:ui_name>
+  <asup:type>asup_content_type</asup:type>
+  <asup:qualification>read</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>orig-size-collected</asup:tag>
+  <asup:smf_name>orig-size-collected</asup:smf_name>
+  <asup:ui_name>Initial number of bytes collected</asup:ui_name>
+  <asup:type>size</asup:type>
+  <asup:qualification>write</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+<asup:field>
+  <asup:tag>size-compressed</asup:tag>
+  <asup:smf_name>size-compressed</asup:smf_name>
+  <asup:ui_name>Compressed size</asup:ui_name>
+  <asup:type>size</asup:type>
+  <asup:qualification>write</asup:qualification>
+  <asup:remap>noop</asup:remap>
+</asup:field>
+</asup:TABLE_INFO>
+{{ROW_TEMPLATE_START}}
+<asup:ROW col_time_us="{{COL_TIME_US}}">
+  <seq-num>{{SEQ_NUM}}</seq-num>
+  <prio-num>{{PRIO_NUM}}</prio-num>
+  <subsys>{{SUBSYS}}</subsys>
+  <cmd-tgt>{{CMD_TGT}}</cmd-tgt>
+  <body-file>{{BODY_FILE}}</body-file>
+  <size-collected>{{SIZE_COLLECTED}}</size-collected>
+  <time-collected-ms>{{TIME_COLLECTED_MS}}</time-collected-ms>
+  <status>completed</status>
+  <error></error>
+  <content-type>basic</content-type>
+  <orig-size-collected>{{SIZE_COLLECTED}}</orig-size-collected>
+  <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
+</asup:ROW>
+{{ROW_TEMPLATE_END}}
+</Manifest>

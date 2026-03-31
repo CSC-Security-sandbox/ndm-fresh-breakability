@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Put,
   Body,
   Inject,
@@ -17,6 +18,7 @@ import {
 import { AsupSchedulerService } from './asup-scheduler.service';
 import {
   AsupSettingsDto,
+  SendSupportBundleDto,
   UpdateAsupSettingsDto,
 } from './dto/asup.dto';
 
@@ -83,6 +85,30 @@ export class AsupController {
       );
       throw new InternalServerErrorException(
         'Something went wrong, please try again.',
+      );
+    }
+  }
+
+  @ApiOperation({ summary: 'Send generated support bundle to ASUP endpoint' })
+  @ApiResponse({ status: 200, description: 'Support bundle sent successfully' })
+  @Post('support-bundle/send')
+  async sendSupportBundle(
+    @Body() dto: SendSupportBundleDto,
+  ): Promise<{ success: boolean }> {
+    try {
+      const bundleBuffer = Buffer.from(dto.bundleBase64, 'base64');
+      await this.asupSchedulerService.transmitSupportBundle(
+        dto.fileName,
+        bundleBuffer,
+      );
+      return { success: true };
+    } catch (error) {
+      this.logger.error(
+        `sendSupportBundle failed: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+      throw new InternalServerErrorException(
+        'Failed to send support bundle to ASUP.',
       );
     }
   }

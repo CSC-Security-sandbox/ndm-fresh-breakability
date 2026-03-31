@@ -5,6 +5,7 @@ import {
   useGenerateSupportBundleMutation,
   useLazyDownloadSupportBundleQuery,
   useLazyIsBundleReadyQuery,
+  useSendSupportBundleMutation,
 } from "@api/configApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import {
@@ -46,10 +47,15 @@ export const SupportBundleProvider = ({
     new Date()
   );
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [sentBundleFingerprint, setSentBundleFingerprint] = useState<string | null>(
+    null
+  );
 
   const [generateBundle] = useGenerateSupportBundleMutation();
   const [downloadBundle, { isFetching: isDownloading }] =
     useLazyDownloadSupportBundleQuery();
+  const [sendSupportBundle, { isLoading: isSending }] =
+    useSendSupportBundleMutation();
   const [isBundleReady] = useLazyIsBundleReadyQuery();
   const { data: projectWorkerData } = useFetchProjectWithWorkerQuery();
 
@@ -63,6 +69,15 @@ export const SupportBundleProvider = ({
     handleSelectionChange,
     wrapperClass,
   } = useTreeSelect();
+
+  const getBundleFingerprint = (status: isBundleReadyApiType) => {
+    if (!status?.isBundleReady || !status?.filters) return null;
+    return `${status.createdAt || ""}|${status.filters.startDate}|${
+      status.filters.endDate
+    }|${status.filters.projectWorkerMap?.length || 0}|${
+      status.filters.otherMetrics?.join(",") || ""
+    }`;
+  };
 
   // IS BUNDLE READY POLLING API
   useEffect(() => {
@@ -121,6 +136,10 @@ export const SupportBundleProvider = ({
           setIsInitialLoad(false);
         }
         setBundleStatus(_isBundleReadyResponse);
+        const currentFingerprint = getBundleFingerprint(_isBundleReadyResponse);
+        if (!currentFingerprint || currentFingerprint !== sentBundleFingerprint) {
+          setSentBundleFingerprint(null);
+        }
       } catch (error) {
         console.error("Support Bundle Ready Status", error);
         notify.error(error?.data?.message || "Failed to check bundle status.");
@@ -138,7 +157,7 @@ export const SupportBundleProvider = ({
     return () => {
       clearInterval(intervalId);
     };
-  }, [isBundleReady, lastFormChangeTime]);
+  }, [isBundleReady, lastFormChangeTime, sentBundleFingerprint]);
 
   // DOWNLOAD SUPPORT BUNDLE
   const handleDownloadReport = async () => {
@@ -153,6 +172,21 @@ export const SupportBundleProvider = ({
     } catch (error) {
       console.error("Failed to download Error Report:", error?.data?.message);
       notify.error(error?.data?.message || "Failed to download Error Report.");
+    }
+  };
+
+  // SEND SUPPORT BUNDLE TO NETAPP SUPPORT (ASUP)
+  const handleSendToNetAppSupport = async () => {
+    try {
+      await sendSupportBundle().unwrap();
+      const currentFingerprint = getBundleFingerprint(bundleStatus);
+      if (currentFingerprint) {
+        setSentBundleFingerprint(currentFingerprint);
+      }
+      notify.success("Support bundle sent to NetApp Support successfully.");
+    } catch (error) {
+      console.error("Failed to send Support Bundle:", error?.data?.message);
+      notify.error(error?.data?.message || "Failed to send Support Bundle to NetApp Support.");
     }
   };
 
@@ -187,6 +221,7 @@ export const SupportBundleProvider = ({
     };
     try {
       await generateBundle({ payload }).unwrap();
+      setSentBundleFingerprint(null);
       const _isBundleReadyResponse = await isBundleReady().unwrap();
       if (_isBundleReadyResponse) {
         setBundleStatus(_isBundleReadyResponse);
@@ -211,6 +246,7 @@ export const SupportBundleProvider = ({
     supportBundleForm,
     handleDateChange,
     handleDownloadReport,
+    handleSendToNetAppSupport,
     handleGenerateBundle,
     bundleStatus,
     selectedItems,
@@ -219,6 +255,10 @@ export const SupportBundleProvider = ({
     wrapperClass,
     projectWorkerData,
     isDownloading,
+    isSending,
+    isSupportBundleAlreadySent:
+      getBundleFingerprint(bundleStatus) !== null &&
+      getBundleFingerprint(bundleStatus) === sentBundleFingerprint,
     infoMessage,
   };
 

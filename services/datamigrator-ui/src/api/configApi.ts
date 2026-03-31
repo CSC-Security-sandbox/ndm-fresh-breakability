@@ -177,6 +177,13 @@ export const configApi = createApi({
       }),
     }),
 
+    sendSupportBundle: builder.mutation<{ success: boolean }, void>({
+      query: () => ({
+        url: "support-bundle/send",
+        method: "POST",
+      }),
+    }),
+
     isBundleReady: builder.query<isBundleReadyApiType, void>({
       query: () => "support-bundle/is-bundle-ready",
       providesTags: ["IS_BUNDLE_READY"],
@@ -317,6 +324,7 @@ export const {
   useGenerateSupportBundleMutation,
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
+  useSendSupportBundleMutation,
   useFetchProjectWithWorkerQuery,
   useFetchCertificateMutation,
   useCreateManagementServerMutation,

@@ -2,7 +2,8 @@ import { Injectable, Inject } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { execFile as execFileCb } from 'child_process';
 import {
   LoggerFactory,
   LoggerService,
@@ -11,6 +12,7 @@ import { AsupXmlGeneratorService } from './asup-xml-generator.service';
 import { SerialIdSyncService } from '../serial-id-sync.service';
 
 const sevenBin = require('7zip-bin');
+const execFile = promisify(execFileCb);
 
 /**
  * AsupPackagerService
@@ -134,6 +136,65 @@ export class AsupPackagerService {
     return { archivePath, md5Checksum, headersMap, xmlContent: migrationXml };
   }
 
+  async packageSupportBundlePayload(
+    bundleFilename: string,
+    bundleBuffer: Buffer,
+  ): Promise<{
+    archivePath: string;
+    md5Checksum: string;
+    headersMap: Record<string, string>;
+  }> {
+    this.logger.log(`Starting support bundle ASUP packaging for ${bundleFilename}...`);
+    const startTime = Date.now();
+    await fs.mkdir(this.WORK_DIR, { recursive: true });
+    await fs.mkdir(this.ASUP_REPORTS_DIR, { recursive: true });
+
+    const safeBundleName = path.basename(bundleFilename || 'support-bundle.zip');
+    const files = {
+      bundle: path.join(this.WORK_DIR, safeBundleName),
+      manifest: path.join(this.WORK_DIR, 'manifest.xml'),
+      xHeader: path.join(this.WORK_DIR, 'x-header.txt'),
+    };
+
+    await fs.writeFile(files.bundle, bundleBuffer);
+    const bundleEntries = await this.listZipEntries(files.bundle);
+    const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
+      bundleEntries,
+      safeBundleName,
+      bundleBuffer.length,
+      Date.now() - startTime,
+    );
+    const { headersText, headersMap } = this.buildXHeaders();
+    headersMap['X-Netapp-asup-payload-type'] = 'support-bundle';
+
+    await Promise.all([
+      fs.writeFile(files.manifest, manifestXml, 'utf-8'),
+      fs.writeFile(files.xHeader, headersText, 'utf-8'),
+    ]);
+
+    const archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
+
+    await new Promise<void>((resolve, reject) => {
+      const stream = Seven.add(
+        archivePath,
+        [files.bundle, files.manifest, files.xHeader],
+        { $bin: sevenBin.path7za },
+      );
+      stream.on('end', () => resolve());
+      stream.on('error', (err: Error) => reject(err));
+    });
+
+    const archiveBuffer = await fs.readFile(archivePath);
+    const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
+    headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
+
+    await Promise.all(
+      Object.values(files).map((f) => fs.unlink(f).catch(() => {})),
+    );
+
+    return { archivePath, md5Checksum, headersMap };
+  }
+
   // ─── Templates ───────────────────────────────────────────────
 
   /** Load x-headers template once at startup. Manifest is built by xml-generator. */
@@ -169,6 +230,21 @@ export class AsupPackagerService {
     }
 
     return { headersText, headersMap };
+  }
+
+  private async listZipEntries(zipPath: string): Promise<string[]> {
+    try {
+      const { stdout } = await execFile('unzip', ['-Z1', zipPath]);
+      return stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.endsWith('/'));
+    } catch (error) {
+      this.logger.warn(
+        `Failed to enumerate zip entries for manifest rows: ${(error as Error).message}`,
+      );
+      return [];
+    }
   }
 
   /** Format date for ASUP x-headers (e.g. "Sun Jan 05 14:30:00 UTC 2025"). */
