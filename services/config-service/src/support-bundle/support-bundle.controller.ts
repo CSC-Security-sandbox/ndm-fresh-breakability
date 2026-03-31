@@ -124,6 +124,17 @@ export class SupportBundleController {
     });
   }
 
+  @ApiOperation({ summary: 'Send generated support bundle to ASUP' })
+  @ApiResponse({ status: 200, description: 'Support bundle sent to ASUP' })
+  @ApiBearerAuth()
+  @Auth()
+  @Post('send')
+  async sendSupportBundle(@Request() userDetails: UserDetails) {
+    const fullFileName = `ndm_logs_${userDetails?.user?.id}.zip`;
+    await this.supportBundleService.sendSupportBundleToAsup(fullFileName);
+    return { success: true };
+  }
+
   @ApiOperation({
     summary: 'Get projects associated to a User',
     description:

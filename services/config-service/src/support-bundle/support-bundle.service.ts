@@ -11,6 +11,7 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs';
 import * as path from 'path';
+import axios from 'axios';
 import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
 import { BundleStatus, UserDetails } from 'src/constants/types';
 import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
@@ -29,6 +30,7 @@ import { ProjectEntity } from 'src/entities/project.entity';
 export class SupportBundleService {
   private logger: LoggerService;
   private bundleOutputPath: string;
+  private reportsSupportBundleSendUrl: string;
   constructor(
     @InjectRepository(SupportBundleEntity)
     private readonly supportBundleRepo: Repository<SupportBundleEntity>,
@@ -42,6 +44,9 @@ export class SupportBundleService {
     this.logger = this.loggerFactory.create(SupportBundleService.name);
     this.bundleOutputPath = this.configService.get<string>(
       'app.bundle.bundleOutputPath',
+    );
+    this.reportsSupportBundleSendUrl = this.configService.get<string>(
+      'app.reports.supportBundleSendUrl',
     );
   }
 
@@ -197,6 +202,24 @@ export class SupportBundleService {
     }
 
     return fullPath;
+  }
+
+  async sendSupportBundleToAsup(fileName: string): Promise<void> {
+    const fullPath = this.downloadSupportBundle(fileName);
+    const bundleBuffer = await fs.promises.readFile(fullPath);
+
+    await axios.post(
+      this.reportsSupportBundleSendUrl,
+      {
+        fileName,
+        bundleBase64: bundleBuffer.toString('base64'),
+      },
+      {
+        timeout: 120000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      },
+    );
   }
 
   async getProjects(userDetails: UserDetails) {

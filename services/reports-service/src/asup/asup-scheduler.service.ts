@@ -42,6 +42,7 @@ export class AsupSchedulerService {
 
   /** ASUP endpoint URL from env ASUP_ENDPOINT_URL. */
   private readonly asupEndpointUrl: string;
+  private readonly asupSupportBundleEndpointUrl: string;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -57,6 +58,9 @@ export class AsupSchedulerService {
     }
 
     this.asupEndpointUrl = this.configService.get<string>('app.asup.asupEndpoint');
+    this.asupSupportBundleEndpointUrl = this.configService.get<string>(
+      'app.asup.supportBundleEndpoint',
+    );
 
     this.logger.log('ASUP Scheduler Service initialized');
   }
@@ -204,5 +208,41 @@ export class AsupSchedulerService {
 
     const recordsMarked = await this.asupStatsService.markAsTransmitted();
     this.logger.log(`Marked ${recordsMarked} records as transmitted`);
+  }
+
+  async transmitSupportBundle(
+    bundleFilename: string,
+    bundleBuffer: Buffer,
+  ): Promise<void> {
+    this.logger.log(`Starting support bundle transmission for ${bundleFilename}`);
+    const { archivePath, md5Checksum, headersMap } =
+      await this.asupPackagerService.packageSupportBundlePayload(
+        bundleFilename,
+        bundleBuffer,
+      );
+    this.logger.log(`Packaged support bundle payload: ${archivePath}, MD5=${md5Checksum}`);
+
+    if (!this.asupSupportBundleEndpointUrl) {
+      throw new Error('ASUP support bundle endpoint is not configured');
+    }
+
+    const archiveFilename = path.basename(archivePath);
+    const requestUrl = `${this.asupSupportBundleEndpointUrl.replace(/\/$/, '')}/${archiveFilename}`;
+    const archiveBuffer = await fs.readFile(archivePath);
+    const putOptions = {
+      headers: {
+        'Content-Type': 'application/x-7z-compressed',
+        'X-ASUP-Source': 'NDM',
+        'X-ASUP-Version': '1.3',
+        'X-Netapp-Asup-Payload-Checksum': md5Checksum,
+        ...headersMap,
+      },
+      timeout: 60000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    };
+
+    await axios.put(requestUrl, archiveBuffer, putOptions);
+    this.logger.log(`Support bundle transmitted successfully to ${requestUrl}`);
   }
 }

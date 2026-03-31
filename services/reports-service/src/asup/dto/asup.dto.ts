@@ -14,3 +14,11 @@ export class UpdateAsupSettingsDto {
   @IsBoolean()
   enabled: boolean;
 }
+
+export class SendSupportBundleDto {
+  @ApiProperty({ description: 'Support bundle file name', example: 'ndm_logs_user-id.zip' })
+  fileName: string;
+
+  @ApiProperty({ description: 'Support bundle file content encoded as base64' })
+  bundleBase64: string;
+}
