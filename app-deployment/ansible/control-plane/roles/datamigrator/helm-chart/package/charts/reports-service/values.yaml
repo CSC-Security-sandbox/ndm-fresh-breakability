@@ -63,7 +63,7 @@ env:
   - name: ASUP_ENDPOINT
     value: "https://support.netapp.com/put/AsupPut"
   - name: ASUP_SUPPORT_BUNDLE_ENDPOINT
-    value: "https://eprod.netapp.com/put/AsupPut"
+    value: "https://stagesupport.netapp.com/put/AsupPut"
 
 service:
   type: ClusterIP
