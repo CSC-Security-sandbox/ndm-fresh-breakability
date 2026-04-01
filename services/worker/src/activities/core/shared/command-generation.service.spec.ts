@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { CommandGenerationService, LocalSetLookup } from './command-generation.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
-import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
+import { FileTypeDetectionService } from '../utils/file-type-detection.service';
 import { ErrorType, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -50,6 +50,7 @@ describe('CommandGenerationService', () => {
             options: {},
         },
         publishToErrorStream: jest.fn(),
+        publishBulkToCommandStream: jest.fn(),
     };
 
     const baseInput = {
@@ -414,6 +415,207 @@ describe('CommandGenerationService', () => {
                 targetContent: new LocalSetLookup(new Set(['sym'])),
             });
             expect(result.commands.length).toBeGreaterThanOrEqual(0);
+        });
+
+        it('CASE 2: should generate stamp-only command and NOT recurse when directory exists in target with originalCommandId', async () => {
+            const sourceDirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2024-01-01'),
+                mode: 0o755,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date('2024-01-01'),
+                ctime: new Date('2024-01-01'),
+                birthtime: new Date('2024-01-01'),
+                ino: 100,
+            };
+            const targetDirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2023-06-01'),
+                mode: 0o700,
+                uid: 0,
+                gid: 0,
+                atime: new Date('2023-06-01'),
+                ctime: new Date('2023-06-01'),
+                birthtime: new Date('2023-06-01'),
+                ino: 200,
+            };
+            // First lstat = source, second lstat = target directory
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(sourceDirStat)
+                .mockResolvedValueOnce(targetDirStat);
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'data/existingdir' });
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(true);
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'existingdir', originalCommandId: 'orig-cmd-dir', fPath: 'data/existingdir', isDir: true }],
+                targetContent: new LocalSetLookup(new Set(['existingdir'])),
+            });
+
+            // Should NOT recurse (no subDirs) — avoids inflated error counts
+            expect(result.subDirs).toEqual([]);
+            // Should generate a stamp-only command
+            expect(result.commands).toHaveLength(1);
+            expect(result.commands[0].originalCmdId).toBe('orig-cmd-dir');
+            expect(result.dirCount).toBe(1);
+        });
+
+        it('CASE 2: should not generate command when directory exists in target with originalCommandId and no meta update needed', async () => {
+            const dirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2024-01-01'),
+                mode: 0o755,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date('2024-01-01'),
+                ctime: new Date('2024-01-01'),
+                birthtime: new Date('2024-01-01'),
+                ino: 100,
+            };
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(dirStat)
+                .mockResolvedValueOnce(dirStat); // same stats → no update needed
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'data/samedir' });
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'samedir', originalCommandId: 'orig-cmd-same', fPath: 'data/samedir', isDir: true }],
+                targetContent: new LocalSetLookup(new Set(['samedir'])),
+            });
+
+            expect(result.subDirs).toEqual([]);
+            expect(result.commands).toHaveLength(0);
+            expect(result.dirCount).toBe(1);
+        });
+
+        it('CASE 1: should recurse AND generate copy command when directory does not exist in target with originalCommandId', async () => {
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date(),
+                mode: 0o755,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            });
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'data/newdir' });
+            mockIsContentUpdate.mockReturnValue(true);
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'newdir', originalCommandId: 'orig-cmd-new', fPath: 'data/newdir', isDir: true }],
+                targetContent: new LocalSetLookup(new Set<string>()),
+            });
+
+            // Should recurse (mkdir failed → scan children)
+            expect(result.subDirs.length).toBeGreaterThanOrEqual(1);
+            // Should generate a COPY_DIR command with originalCmdId
+            expect(result.commands).toHaveLength(1);
+            expect(result.commands[0].originalCmdId).toBe('orig-cmd-new');
+            expect(result.dirCount).toBe(1);
+        });
+
+        it('CASE 3: should recurse and generate stamp command when directory exists in target without originalCommandId', async () => {
+            const sourceDirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2024-01-01'),
+                mode: 0o755,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date('2024-01-01'),
+                ctime: new Date('2024-01-01'),
+                birthtime: new Date('2024-01-01'),
+                ino: 100,
+            };
+            const targetDirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2023-06-01'),
+                mode: 0o700,
+                uid: 0,
+                gid: 0,
+                atime: new Date('2023-06-01'),
+                ctime: new Date('2023-06-01'),
+                birthtime: new Date('2023-06-01'),
+                ino: 200,
+            };
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(sourceDirStat)
+                .mockResolvedValueOnce(targetDirStat);
+            mockIsExists.mockResolvedValue(true);
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'data/existingdir' });
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(true);
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'existingdir' }],
+                targetContent: new LocalSetLookup(new Set(['existingdir'])),
+            });
+
+            // CASE 3: Should recurse into children
+            expect(result.subDirs.length).toBeGreaterThanOrEqual(1);
+            // Should generate a STAMP_META-only command since meta differs
+            expect(result.commands).toHaveLength(1);
+            expect(result.commands[0].originalCmdId).toBeUndefined();
+            expect(result.dirCount).toBe(1);
+        });
+
+        it('CASE 3: should recurse but not generate command when directory exists in target and no update needed', async () => {
+            const dirStat = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date('2024-01-01'),
+                mode: 0o755,
+                uid: 1000,
+                gid: 1000,
+                atime: new Date('2024-01-01'),
+                ctime: new Date('2024-01-01'),
+                birthtime: new Date('2024-01-01'),
+                ino: 100,
+            };
+            (fs.promises.lstat as jest.Mock)
+                .mockResolvedValueOnce(dirStat)
+                .mockResolvedValueOnce(dirStat);
+            mockIsExists.mockResolvedValue(true);
+            fileTypeDetectionService.detectFileType = jest.fn().mockResolvedValue(FileType.DIRECTORY);
+            mockGetFileInfo.mockResolvedValue({ path: 'data/uptodate' });
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'uptodate' }],
+                targetContent: new LocalSetLookup(new Set(['uptodate'])),
+            });
+
+            // CASE 3: Should still recurse into children
+            expect(result.subDirs.length).toBeGreaterThanOrEqual(1);
+            // No command needed — directory is up to date
+            expect(result.commands).toHaveLength(0);
+            expect(result.dirCount).toBe(1);
         });
 
         it('should use target lstat when target file is symlink', async () => {

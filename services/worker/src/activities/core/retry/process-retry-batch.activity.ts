@@ -116,8 +116,18 @@ export class ProcessRetryBatchActivity {
 
         const targetLookup = new RedisSetLookup(jobContext, targetRedisKey);
 
-        // Convert operations to items - process ONLY specific failed files
-        const items = operations.map((op) => ({
+        // Deduplicate operations by fPath before building items.
+        // A single file can generate multiple failed operations from the same root cause
+        // (e.g., an unresolved SID error AND a subsequent stamping error are both recorded
+        // separately for the same file). 
+        const seenPaths = new Set<string>();
+        const items = operations
+          .filter((op) => {
+            if (seenPaths.has(op.fPath)) return false;
+            seenPaths.add(op.fPath);
+            return true;
+          })
+          .map((op) => ({
           name: path.basename(op.fPath),
           fPath: op.fPath,
           originalCommandId: op.id,
@@ -142,7 +152,9 @@ export class ProcessRetryBatchActivity {
           this.logger.debug(`Published ${result.commands.length} commands for batch ${batchId}`);
         }
 
-        // Use batchSubDirsWithTask to create DB entries for discovered subdirectories
+        // Use batchSubDirsWithTask to create DB entries for discovered subdirectories.
+        // Use the current retry jobRunId — errors from these ops will be propagated to the
+        // original run automatically via syncErrorToOriginalJobRun in db-writer.
         const { batchIds: batchDirs } = await batchSubDirsWithTask(result.subDirs, batchSize, jobContext, jobRunId);
 
         // Update parent task status to COMPLETED
@@ -180,7 +192,7 @@ export class ProcessRetryBatchActivity {
    */
   private async processDirectoryBatch(input: ProcessRetryBatchInput): Promise<ProcessRetryBatchOutput> {
     const { jobRunId, batchId, batchSize = DEFAULT_BATCH_SIZE, settings } = input;
-
+    
     const activityContext = Context.current();
     const heartbeatInterval = setInterval(() => {
       activityContext.heartbeat({});
@@ -232,7 +244,6 @@ export class ProcessRetryBatchActivity {
           for await (const batch of this.dirStreamingService.streamDirEntries(sourceDirPath)) {
             const items = batch.map(name => ({ name }));
             dirItemCount += batch.length;
-
             const result = await this.commandGenerationService.processItems({
               items,
               sourcePath: sourceDirPath,
@@ -246,14 +257,14 @@ export class ProcessRetryBatchActivity {
               targetContent: targetLookup,
               maxCommandsPerBatch: this.maxMigrationCommand
             });
-
+          
             if (result.commands.length > 0) {
               await jobContext.publishBulkToCommandStream(result.commands);
             }
-
+            
             allSubDirs.push(...result.subDirs);
           }
-
+          
           this.logger.debug(
             `Scanned retry subdir ${relativeDir}: ${dirItemCount} items`
           );
@@ -270,8 +281,10 @@ export class ProcessRetryBatchActivity {
           await jobContext.deleteDirContentSet(targetRedisKey).catch(() => {});
         }
       }
-
-      // Use batchSubDirsWithTask to create DB entries for newly discovered subdirectories
+      
+      // Use batchSubDirsWithTask to create DB entries for newly discovered subdirectories.
+      // Use the current retry jobRunId — errors from these ops are propagated to the
+      // original run automatically via syncErrorToOriginalJobRun in db-writer.
       const { batchIds: batchDirs } = await batchSubDirsWithTask(allSubDirs, batchSize, jobContext, jobRunId);
 
       // Update task status and clean up

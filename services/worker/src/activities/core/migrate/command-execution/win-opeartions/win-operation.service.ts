@@ -459,7 +459,7 @@ export class WinOperationService {
     } catch (error) {
       if(error instanceof WindowsAPINotAvailableError){       
         const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, error, {name: command.fPath, path: filePath});
-        await jobContext.publishToErrorStream(dmErr);  
+        await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);  
       }
       // Log error but don't throw - ADS detection failure shouldn't break the scan
       this.logger.error(`Exception during ADS detection for ${filePath}: ${error.message}`, error.stack);

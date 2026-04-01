@@ -105,14 +105,14 @@ export class DirStreamingService {
         } catch (error) {
             if (error instanceof FatalError) {
                 const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, ErrorType.FATAL_ERROR, command.id, error, { name: command.fPath, path: dirPath });
-                await jobContext.publishToErrorStream(ndmError);
+                await jobContext.publishToErrorStream(ndmError, jobContext.jobConfig?.jobRunId);
                 throw error;
             }
             if (origin === Origin.DESTINATION && (error as NodeJS.ErrnoException).code === 'ENOENT') {
                 return { totalCount: 0, redisKey, lowercaseRedisKey };
             }
             const ndmError = dmError("OPERATION", origin, Operation.READ_DIR, errorType, command.id, error, { name: command.fPath, path: dirPath });
-            await jobContext.publishToErrorStream(ndmError);
+            await jobContext.publishToErrorStream(ndmError, jobContext.jobConfig?.jobRunId);
             throw error;
         }
     }

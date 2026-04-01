@@ -188,7 +188,6 @@ export class CommandGenerationService {
       const sourceContentPath = itemData.fPath
         ? path.join(sourcePrefix, itemData.fPath)
         : path.join(sourcePath, itemData.name);
-
       try {
         // Check if source exists
         const sourceContentExists = await isExists(sourceContentPath);
@@ -249,16 +248,38 @@ export class CommandGenerationService {
           if (isSMB && fileType === FileType.VOLUME_MOUNT_POINT) {
             const transientError = new Error(`Volume mount point detected at ${relativeSourcePath}`);
             await jobContext.publishToErrorStream(
-              dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command?.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+              dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command?.id, transientError, { name: relativeSourcePath, path: relativeSourcePath }),
+              jobContext.jobConfig?.jobRunId
             );
             continue;
           }
-          result.subDirs.push(relativeSourcePath);
-
-          // Generate command if target doesn't have this directory
           if (!itemInTarget) {
+            // CASE 1: mkdir failed — directory does not exist in target.
+            // Scan children recursively AND generate a COPY_DIR command.
+            result.subDirs.push(relativeSourcePath);
             const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
             if (newCommand) result.commands.push(newCommand);
+          } else if (itemData.originalCommandId) {
+            // CASE 2: stamp failed — directory already exists in target, retry with originalCommandId.
+            // Generate a stamp-only command (target stat passed in → buildCommand emits STAMP_META only).
+            // Do NOT recurse: that would inflate error counts with phantom child errors.
+            const targetDirPath = path.join(targetPath, itemName);
+            const targetDirStat = await fs.promises.lstat(targetDirPath);
+            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId);
+            if (newCommand) result.commands.push(newCommand);
+          } else {
+            // CASE 3: normal scan — directory exists in target, no originalCommandId.
+            // Just recurse into children; no command needed for the directory itself.
+            result.subDirs.push(relativeSourcePath);
+
+            // Check if directory metadata (permissions, ownership, timestamps) needs updating
+            const targetDirPath = path.join(targetPath, itemName);
+            const targetDirExists = await isExists(targetDirPath);
+            if (targetDirExists) {
+                const targetDirStat = await fs.promises.lstat(targetDirPath);
+                const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetDirStat);
+                if (newCommand) result.commands.push(newCommand);  // STAMP_META only if needed
+            }
           }
         } else if (sourceStat.isSymbolicLink()) {
           // Handle symbolic links
@@ -267,7 +288,8 @@ export class CommandGenerationService {
             if (isSMB && (fileType === FileType.JUNCTION || fileType === FileType.SYMBOLIC_LINK)) {
               const transientError = new Error(`${fileType} detected at ${relativeSourcePath}`);
               await jobContext.publishToErrorStream(
-                dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command?.id, transientError, { name: relativeSourcePath, path: relativeSourcePath })
+                dmError("OPERATION", Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command?.id, transientError, { name: relativeSourcePath, path: relativeSourcePath }),
+                jobContext.jobConfig?.jobRunId
               );
               continue;
             }
@@ -313,7 +335,7 @@ export class CommandGenerationService {
       } catch (error) {
         this.logger.error(`Error processing item ${itemName} in directory ${sourcePath}: ${error}`);
         const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.READ_DIR, errorType, command?.id, error, { name: command?.fPath || relativePath, path: targetPath });
-        await jobContext.publishToErrorStream(dmErr);
+        await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
         throw error;
       }
     }
@@ -374,7 +396,7 @@ export class CommandGenerationService {
       error,
       { name: relativeSourcePath, path: sourceContentPath }
     );
-    await jobContext.publishToErrorStream(dmErr);
+    await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
     return true;
   }
 
@@ -405,7 +427,7 @@ export class CommandGenerationService {
       const origin = isDiscovery ? Origin.SOURCE : Origin.DESTINATION;
       const operationName: Operation = isDiscovery ? Operation.READ_DIR : Operation.COPY_CONTENT;
       const dmErr = dmError("OPERATION", origin, operationName, ErrorType.TRANSIENT_ERROR, operationId, error, { name: relativeSourcePath, path: sourceContentPath });
-      await jobContext.publishToErrorStream(dmErr);
+      await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
       return true;
     }
     lowerCaseSourceData.add(lowerCaseFileName);
