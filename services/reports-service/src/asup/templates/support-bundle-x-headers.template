@@ -8,7 +8,7 @@ X-Netapp-asup-host-os: Ubuntu 24.04.2 LTS
 X-Netapp-Asup-Hostname: NDM Control Plane
 X-Netapp-Asup-Model-Name: NetApp Data Migrator
 X-Netapp-Asup-Os-Version: 2026.1.1
-X-Netapp-asup-payload-type: periodic-asup
+X-Netapp-asup-payload-type: support-bundle
 X-Netapp-asup-sequence: 1
 X-Netapp-Asup-Serial-Num: 97548219305762481930
 X-Netapp-Asup-Subject: NDM Support Bundle Notification from NDM Control Plane (MANAGEMENT_LOG) INFO
