@@ -664,4 +664,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260331_01_generate_inventory_csv_proc.sql" author="kb93278" runOnChange="true">
+      <sqlFile path="liquibase/20260331_01_generate_inventory_csv_proc.sql" splitStatements="false"/>
+      <rollback>
+         <sql>DROP PROCEDURE IF EXISTS generate_inventory_csv(UUID, TEXT, TEXT, TEXT);</sql>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

@@ -32,6 +32,18 @@ primary:
     runAsNonRoot: true
     runAsGroup: {{ vm_gid }}
 
+  # Shared mount so the generate_inventory_csv procedure can write CSV
+  # files directly to the same directory that reports-service serves.
+  # Host path /data/reports is mounted at /reports in both containers.
+  extraVolumes:
+    - name: reports-volume
+      hostPath:
+        path: /data/reports
+        type: DirectoryOrCreate
+  extraVolumeMounts:
+    - name: reports-volume
+      mountPath: /reports
+
   extendedConfiguration: |
     max_connections = 1000
     tcp_keepalives_idle = 180
