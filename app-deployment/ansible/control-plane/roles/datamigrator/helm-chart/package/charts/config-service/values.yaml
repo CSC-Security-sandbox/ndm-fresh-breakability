@@ -61,6 +61,17 @@ env:
     value: "datamigrator"
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
+  # Workflow timeout overrides — tune for large volume (50TB+) workloads
+  - name: PARENT_WORKFLOW_EXECUTION_TIMEOUT
+    value: "720h"
+  - name: PARENT_WORKFLOW_RUN_TIMEOUT
+    value: "720h"
+  - name: CHILD_WORKFLOW_EXECUTION_TIMEOUT
+    value: "720h"
+  - name: CHILD_WORKFLOW_RUN_TIMEOUT
+    value: "24h"
+  - name: ACTIVITY_TIMEOUT
+    value: "6h"
   - name: SEND_EMAIL
     value: "http://admin-service-service:3000"
   - name: BUNDLE_OUTPUT_PATH
