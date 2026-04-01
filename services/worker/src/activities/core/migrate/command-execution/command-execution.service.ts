@@ -116,7 +116,7 @@ export class CommandExecService {
         } catch (error) {
             this.logger.error(`Copying SYMLINK from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
             const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
-            await jobContext.publishToErrorStream(dmErr);
+            await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
             output.targetErrors.push(error.code);
         }        
     return output;
@@ -142,7 +142,7 @@ export class CommandExecService {
             if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.sourceErrors.push('ENOENT');
                 return output
             }
@@ -175,7 +175,7 @@ export class CommandExecService {
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
                 this.logger.error(`Copying FILE from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);   
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);   
                 output.targetErrors.push(error.code);
                 
                 // Do not attempt metadata stamping if file creation failed due to collision
@@ -211,7 +211,7 @@ export class CommandExecService {
                 command.ops[OPS_CMD.COPY_DIR].status = OPS_STATUS.ERROR;
                 this.logger.error(`Copying DIR from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.targetErrors.push(error.code);
                 
                 // Do not attempt metadata stamping if directory creation failed due to collision
@@ -237,7 +237,7 @@ export class CommandExecService {
                     command.ops[OPS_CMD.REMOVE_FILE].status = OPS_STATUS.ERROR;
                     this.logger.error(`Deleting FILE from  ${targetPath}, Error: ${error.message}`, error.stack);
                     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                    await jobContext.publishToErrorStream(dmErr);
+                    await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                     output.sourceErrors.push(error.code);
                 }
             }
@@ -257,7 +257,7 @@ export class CommandExecService {
                     command.ops[OPS_CMD.REMOVE_DIR].status = OPS_STATUS.ERROR;
                     this.logger.error(`Deleting DIR from  ${targetPath}, Error: ${error.message}`, error.stack);
                     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.COPY_CONTENT, errorType, command.id, error, {name: command.fPath, path: targetPath});
-                    await jobContext.publishToErrorStream(dmErr);
+                    await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                     output.sourceErrors.push(error.code);
                 }
             }
@@ -429,7 +429,7 @@ export class CommandExecService {
             const dmErr = dmError( "OPERATION",
                 Origin.DESTINATION, Operation.STAMP_META,
                 errorType, cmd.id, error, {name: cmd.fPath, path: targetPath});
-            await jobContext.publishToErrorStream(dmErr);
+            await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
         }
         
     }

@@ -541,9 +541,10 @@ describe("InventoryService", () => {
       await service.saveOperationError(data);
 
       // Verify syncErrorToOriginalJobRun was triggered
+      // Uses fileName (relative fPath / basename), not the full filePath
       expect(operationRepo.findOne).toHaveBeenCalledWith({
         where: {
-          fPath: "/path/to/file.txt",
+          fPath: "file.txt",
           jobRunId: "original-job-run-123"
         }
       });
@@ -595,9 +596,10 @@ describe("InventoryService", () => {
 
       await service.saveOperationError(data);
 
+      // Uses fileName (relative fPath / basename), not the full filePath
       expect(operationRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          fPath: "/new/path/newfile.txt",
+          fPath: "newfile.txt",
           jobRunId: "original-job-run-456",
           status: OperationStatus.ERROR,
         })

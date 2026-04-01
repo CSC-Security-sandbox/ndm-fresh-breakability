@@ -1,14 +1,14 @@
 import { ProcessRetryBatchActivity } from './process-retry-batch.activity';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
-import { CommandGenerationService } from '../shared/command-generation.service';
+import { CommandGenerationService, ProcessItemsResult } from '../shared/command-generation.service';
 import { DirStreamingService } from '../shared/dir-streaming.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FatalError, RetryableError } from 'src/errors/errors.types';
 import { Context } from '@temporalio/activity';
-import { TaskStatus, TaskType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
+import { Cmd, FailedOperations, TaskStatus, TaskType, CommandStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { RetryScanSettings } from 'src/workflows/core/child/child-retry-scan.workflow.type';
+import { RetryScanSettings, GroupedOperationsBatch } from 'src/workflows/core/child/child-retry-scan.workflow.type';
 
 jest.mock('@temporalio/activity', () => ({
     Context: {
@@ -48,7 +48,9 @@ describe('ProcessRetryBatchActivity', () => {
     };
 
     const mockJobContext = {
+        jobRunId: jobRunId,
         jobConfig: {
+            jobRunId: 'original-job-456', // originalJobRunId stored in jobConfig for retry runs
             workerIds: ['worker-1'],
             sourceFileServer: { pathId: 'source-path-id' },
             destinationFileServer: { pathId: 'target-path-id' },
@@ -70,11 +72,11 @@ describe('ProcessRetryBatchActivity', () => {
         scanDirContentSet: jest.fn().mockResolvedValue({ cursor: 0, members: [] }),
     };
 
-    const mockOperationsBatch = {
+    const mockOperationsBatch: GroupedOperationsBatch = {
         parentPath: '/data/folder1',
         operations: [
-            { id: 'op-1', fPath: '/data/folder1/file1.txt', errorCode: 'ENOENT' },
-            { id: 'op-2', fPath: '/data/folder1/file2.txt', errorCode: 'EACCES' },
+            new FailedOperations('op-1', '/data/folder1/file1.txt'),
+            new FailedOperations('op-2', '/data/folder1/file2.txt'),
         ],
     };
 
@@ -86,11 +88,11 @@ describe('ProcessRetryBatchActivity', () => {
             error: jest.fn(),
             warn: jest.fn(),
             log: jest.fn(),
-        } as any;
+        } as unknown as jest.Mocked<LoggerService>;
 
         loggerFactory = {
             create: jest.fn().mockReturnValue(mockLogger),
-        } as any;
+        } as unknown as jest.Mocked<LoggerFactory>;
 
         configService = {
             get: jest.fn((key: string) => {
@@ -99,18 +101,23 @@ describe('ProcessRetryBatchActivity', () => {
                     default: return undefined;
                 }
             }),
-        } as any;
+        } as unknown as jest.Mocked<ConfigService>;
 
         redisService = {
             getJobManagerContext: jest.fn().mockResolvedValue(mockJobContext),
-        } as any;
+        } as unknown as jest.Mocked<RedisService>;
+
+        const defaultProcessItemsResult: ProcessItemsResult = {
+            commands: [new Cmd('cmd-1', '/file1.txt', CommandStatus.READY, false, {})],
+            subDirs: [],
+            fileCount: 0,
+            dirCount: 0,
+            totalSize: 0,
+        };
 
         commandGenerationService = {
-            processItems: jest.fn().mockResolvedValue({
-                commands: [{ id: 'cmd-1', fPath: '/file1.txt' }],
-                subDirs: [],
-            }),
-        } as any;
+            processItems: jest.fn().mockResolvedValue(defaultProcessItemsResult),
+        } as unknown as jest.Mocked<CommandGenerationService>;
 
         dirStreamingService = {
             getDirContentKey: jest.fn().mockReturnValue('mock-redis-key'),
@@ -120,7 +127,7 @@ describe('ProcessRetryBatchActivity', () => {
             }),
             streamDirEntriesWithFileTypes: jest.fn(),
             scanForNonMembers: jest.fn(),
-        } as any;
+        } as unknown as jest.Mocked<DirStreamingService>;
 
         (Context.current as jest.Mock).mockReturnValue({
             info: { activityId: 'activity-1' },
@@ -202,6 +209,9 @@ describe('ProcessRetryBatchActivity', () => {
             commandGenerationService.processItems.mockResolvedValue({
                 commands: [],
                 subDirs: ['/data/folder1/subdir1', '/data/folder1/subdir2'],
+                fileCount: 0,
+                dirCount: 0,
+                totalSize: 0,
             });
 
             const result = await activity.processRetryBatch({
@@ -261,9 +271,9 @@ describe('ProcessRetryBatchActivity', () => {
     });
 
     describe('processRetryBatch - dir type', () => {
-        const mockDirCommands = [
-            { id: 'cmd-1', fPath: '/data/subdir1', status: CommandStatus.READY, isDir: true },
-            { id: 'cmd-2', fPath: '/data/subdir2', status: CommandStatus.READY, isDir: true },
+        const mockDirCommands: Cmd[] = [
+            new Cmd('cmd-1', '/data/subdir1', CommandStatus.READY, true, {}),
+            new Cmd('cmd-2', '/data/subdir2', CommandStatus.READY, true, {}),
         ];
 
         beforeEach(() => {
@@ -349,7 +359,7 @@ describe('ProcessRetryBatchActivity', () => {
         it('should skip updateTaskStatus and deleteTask when batchTaskInfo is null', async () => {
             mockJobContext.getTask.mockResolvedValue(null);
             mockJobContext.getBatchDir.mockResolvedValue(mockDirCommands);
-            commandGenerationService.processItems.mockResolvedValue({ commands: [], subDirs: [] });
+            commandGenerationService.processItems.mockResolvedValue({ commands: [], subDirs: [], fileCount: 0, dirCount: 0, totalSize: 0 });
 
             const result = await activity.processRetryBatch({
                 jobRunId,
@@ -364,8 +374,8 @@ describe('ProcessRetryBatchActivity', () => {
 
         it('should collect subdirs from all directory scans', async () => {
             commandGenerationService.processItems
-                .mockResolvedValueOnce({ commands: [], subDirs: ['/subdir1/nested'] })
-                .mockResolvedValueOnce({ commands: [], subDirs: ['/subdir2/nested'] });
+                .mockResolvedValueOnce({ commands: [], subDirs: ['/subdir1/nested'], fileCount: 0, dirCount: 0, totalSize: 0 })
+                .mockResolvedValueOnce({ commands: [], subDirs: ['/subdir2/nested'], fileCount: 0, dirCount: 0, totalSize: 0 });
 
             const result = await activity.processRetryBatch({
                 jobRunId,
@@ -381,7 +391,7 @@ describe('ProcessRetryBatchActivity', () => {
         it('should continue processing other directories on non-fatal error', async () => {
             commandGenerationService.processItems
                 .mockRejectedValueOnce(new Error('First dir failed'))
-                .mockResolvedValueOnce({ commands: [], subDirs: [] });
+                .mockResolvedValueOnce({ commands: [], subDirs: [], fileCount: 0, dirCount: 0, totalSize: 0 });
 
             // Should not throw, continue with other directories
             await expect(
@@ -434,7 +444,7 @@ describe('ProcessRetryBatchActivity', () => {
 
         it('should throw FatalError on fatal errors for dir type', async () => {
             mockJobContext.getBatchDir.mockResolvedValue([
-                { id: 'cmd-1', fPath: '/data/subdir1' },
+                new Cmd('cmd-1', '/data/subdir1', CommandStatus.READY, true, {}),
             ]);
             commandGenerationService.processItems.mockRejectedValue(
                 new FatalError('Fatal directory error')
@@ -524,6 +534,9 @@ describe('ProcessRetryBatchActivity', () => {
             commandGenerationService.processItems.mockResolvedValue({
                 commands: [],
                 subDirs: [],
+                fileCount: 0,
+                dirCount: 0,
+                totalSize: 0,
             });
 
             await activity.processRetryBatch({
@@ -534,6 +547,112 @@ describe('ProcessRetryBatchActivity', () => {
             });
 
             expect(mockJobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('duplicate operation deduplication', () => {
+        it('should deduplicate operations with the same fPath before processing', async () => {
+            const batchWithDuplicates: GroupedOperationsBatch = {
+                parentPath: '/data/folder1',
+                operations: [
+                    new FailedOperations('op-1', '/data/folder1/file1.txt'),
+                    new FailedOperations('op-2', '/data/folder1/file1.txt'), // duplicate fPath, different error
+                    new FailedOperations('op-3', '/data/folder1/file2.txt'),
+                ],
+            };
+            mockJobContext.getRetryBatch.mockResolvedValue(batchWithDuplicates);
+
+            await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'ops',
+                settings: mockSettings,
+            });
+
+            // processItems should receive only 2 unique items (file1.txt deduped)
+            expect(commandGenerationService.processItems).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    items: expect.arrayContaining([
+                        expect.objectContaining({ fPath: '/data/folder1/file1.txt', originalCommandId: 'op-1' }),
+                        expect.objectContaining({ fPath: '/data/folder1/file2.txt', originalCommandId: 'op-3' }),
+                    ]),
+                })
+            );
+            const calledItems = (commandGenerationService.processItems as jest.Mock).mock.calls[0][0].items;
+            expect(calledItems).toHaveLength(2);
+        });
+
+        it('should keep first operation when duplicates exist (preserves original error id)', async () => {
+            const batchWithDuplicates: GroupedOperationsBatch = {
+                parentPath: '/data/folder1',
+                operations: [
+                    new FailedOperations('first-op', '/data/folder1/same-file.txt'),
+                    new FailedOperations('second-op', '/data/folder1/same-file.txt'),
+                    new FailedOperations('third-op', '/data/folder1/same-file.txt'),
+                ],
+            };
+            mockJobContext.getRetryBatch.mockResolvedValue(batchWithDuplicates);
+
+            await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'ops',
+                settings: mockSettings,
+            });
+
+            const calledItems = (commandGenerationService.processItems as jest.Mock).mock.calls[0][0].items;
+            expect(calledItems).toHaveLength(1);
+            expect(calledItems[0].originalCommandId).toBe('first-op');
+        });
+    });
+
+    describe('originalCommandId propagation', () => {
+        beforeEach(() => {
+            mockJobContext.getRetryBatch.mockResolvedValue(mockOperationsBatch);
+        });
+
+        it('should pass originalCommandId from failed operation id to processItems items', async () => {
+            await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'ops',
+                settings: mockSettings,
+            });
+
+            expect(commandGenerationService.processItems).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    items: expect.arrayContaining([
+                        expect.objectContaining({
+                            name: 'file1.txt',
+                            fPath: '/data/folder1/file1.txt',
+                            originalCommandId: 'op-1',
+                        }),
+                        expect.objectContaining({
+                            name: 'file2.txt',
+                            fPath: '/data/folder1/file2.txt',
+                            originalCommandId: 'op-2',
+                        }),
+                    ]),
+                })
+            );
+        });
+
+        it('should pass correct source and target paths derived from settings and parentPath', async () => {
+            await activity.processRetryBatch({
+                jobRunId,
+                batchId,
+                type: 'ops',
+                settings: mockSettings,
+            });
+
+            expect(commandGenerationService.processItems).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sourcePath: '/mnt/source/data/folder1',
+                    targetPath: '/mnt/target/data/folder1',
+                    sourcePrefix: mockSettings.sourcePrefix,
+                    targetPrefix: mockSettings.targetPrefix,
+                })
+            );
         });
     });
 
@@ -551,8 +670,11 @@ describe('ProcessRetryBatchActivity', () => {
                 return Promise.resolve(['file1.txt']);
             });
             commandGenerationService.processItems.mockResolvedValue({
-                commands: [{ id: 'c1', fPath: '/file1.txt' }],
+                commands: [new Cmd('c1', '/file1.txt', CommandStatus.READY, false, {})],
                 subDirs: [],
+                fileCount: 1,
+                dirCount: 0,
+                totalSize: 0,
             });
 
             const result = await activity.processRetryBatch({

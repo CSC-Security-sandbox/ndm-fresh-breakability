@@ -94,7 +94,7 @@ export class StampMetaService {
             } catch (error) {
                 this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.targetErrors.push(error.code);
             }
         }
@@ -127,7 +127,7 @@ export class StampMetaService {
             } catch (error) {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.targetErrors.push(error.code);
             }
         }
@@ -147,7 +147,7 @@ export class StampMetaService {
             } catch (error) {
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.targetErrors.push(error.code);
             }
         }
@@ -167,7 +167,7 @@ export class StampMetaService {
             } catch (error) {
                 this.logger.error(`Preserve Access and Modified Time  to ${sourcePath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.sourceErrors.push(error.code);
             }
         }
@@ -183,14 +183,14 @@ export class StampMetaService {
                 const stampAclOutput = await this.winOperationService.stampAclOperation({ command, jobContext, sourcePath, targetPath, errorType });
                 if (stampAclOutput.errors && stampAclOutput.errors.length > 0) {
                     const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, new Error(stampAclOutput.errors.join(",\n")), { name: command.fPath, path: targetPath });
-                    await jobContext.publishToErrorStream(dmErr);
+                    await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                     output.targetErrors.push(...stampAclOutput.errors);
                 }
             } catch (error) {
                 const origin = error instanceof SourceAclError ? Origin.SOURCE : Origin.DESTINATION;
                 this.logger.error(`Stamping ACL from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", origin, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
-                await jobContext.publishToErrorStream(dmErr);
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
                 output.sourceErrors.push(error.code);
             }
         }

@@ -350,7 +350,10 @@ export class InventoryService {
    * If the file already existed in the original job run, it already has an error there.
    */
   private async syncErrorToOriginalJobRun(data: OperationError): Promise<void> {
-    if (!data.originalJobRunId || !data.errorFiles?.filePath) {
+    // fileName holds the relative fPath (command.fPath), filePath holds the absolute targetPath.
+    // Operations are stored with relative fPath, so we must use fileName for the lookup.
+    const relativeFPath = data.errorFiles?.fileName;
+    if (!data.originalJobRunId || !relativeFPath) {
       return;
     }
 
@@ -358,7 +361,7 @@ export class InventoryService {
       // Check if operation already exists in original job run
       const existingOperation = await this.operationRepo.findOne({
         where: {
-          fPath: data.errorFiles.filePath,
+          fPath: relativeFPath,
           jobRunId: data.originalJobRunId
         }
       });
@@ -367,7 +370,7 @@ export class InventoryService {
       if (!existingOperation) {
         const newOperation = await this.createOperationInOriginalJobRun(
           data.originalJobRunId,
-          data.errorFiles.filePath
+          relativeFPath   // store relative path, consistent with all other operations
         );
         await this.upsertOperationError(newOperation.id, data);
         
