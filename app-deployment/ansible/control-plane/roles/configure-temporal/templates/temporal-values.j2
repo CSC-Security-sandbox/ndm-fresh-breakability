@@ -15,7 +15,7 @@ server:
       create: true
       namespace:
         - name: default
-          retention: 7d
+          retention: 30d
     persistence:
       default:
         driver: "sql"
@@ -41,7 +41,22 @@ server:
           secretName: "temporal-credentials"
           maxConns: 450
           maxConnLifetime: "1h"
-      
+
+  dynamicConfig:
+    # Max payload size per activity/workflow result
+    limit.blobSize:
+      - value: 33554432  # 32MB
+    limit.historySize:
+      - value: 536870912  # 512MB
+    limit.historyCount:
+      - value: 200000
+    history.maximumSignalsPerExecution:
+      - value: 100000
+    frontend.keepAliveMaxConnectionAge:
+      - value: "10m"
+    frontend.keepAliveMaxConnectionAgeGrace:
+      - value: "1m"
+
   frontend:
     service:
       type: ClusterIP

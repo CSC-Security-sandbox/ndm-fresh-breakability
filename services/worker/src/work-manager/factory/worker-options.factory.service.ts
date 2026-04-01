@@ -26,6 +26,7 @@ import { UpgradeActivityService } from "src/activities/upgrade/upgrade.activity.
 @Injectable()
 export class WorkerOptionsService {
   readonly jobTaskActivityConcurrency : number;
+  readonly maxActivityTaskPollers: number;
   private readonly logger: LoggerService;
   readonly shutDownForceTime: string;
 
@@ -52,9 +53,14 @@ export class WorkerOptionsService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.jobTaskActivityConcurrency = this.configService.get<number>('worker.maxActivityConcurrency') || 1;
+    const configuredPollers = this.configService.get<number>('worker.maxActivityTaskPollers') || 0;
+    // Auto-calculate pollers if not explicitly set: ~25% of executors, minimum 2
+    this.maxActivityTaskPollers = configuredPollers > 0
+      ? configuredPollers
+      : Math.max(2, Math.ceil(this.jobTaskActivityConcurrency / 4));
     this.shutDownForceTime = this.configService.get<string>('worker.shutDownForceTime') || '10s';
     this.logger = loggerFactory.create(WorkerOptionsService.name);
-    this.logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}`, WorkerOptionsService.name);
+    this.logger.log(`WorkerOptionsService initialized with jobTaskActivityConcurrency: ${this.jobTaskActivityConcurrency}, maxActivityTaskPollers: ${this.maxActivityTaskPollers}`, WorkerOptionsService.name);
   }
 
   createWorkerOptions(id: string, config: WorkerConfiguration, workerId: string, connection: NativeConnection) {
@@ -119,7 +125,7 @@ export class WorkerOptionsService {
           // Retry workflow activities
           fetchFailedOperations: this.fetchFailedOperationsActivity.fetchFailedOperations.bind(this.fetchFailedOperationsActivity),
           processRetryBatch: this.processRetryBatchActivity.processRetryBatch.bind(this.processRetryBatchActivity),
-        }, this.jobTaskActivityConcurrency, this.shutDownForceTime);
+        }, this.jobTaskActivityConcurrency, this.shutDownForceTime, this.maxActivityTaskPollers);
       default:
         return undefined;
     }

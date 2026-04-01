@@ -212,6 +212,36 @@ describe('WorkFlowOptions', () => {
     expect(options.taskQueue).toBe('queue-with-dashes');
   });
 
+  it('should set default maxConcurrentActivityTaskPollers when not provided', () => {
+    const config = { dynamicTaskQueue: false, taskQueueId: 'poller-default' } as any;
+    const options = new WorkFlowOptions(
+      'identity-poller',
+      'worker-poller',
+      mockConnection,
+      'queue-poller',
+      config,
+    );
+
+    expect(options.maxConcurrentActivityTaskPollers).toBe(2);
+  });
+
+  it('should set custom maxConcurrentActivityTaskPollers when provided', () => {
+    const config = { dynamicTaskQueue: false, taskQueueId: 'poller-custom' } as any;
+    const options = new WorkFlowOptions(
+      'identity-poller',
+      'worker-poller',
+      mockConnection,
+      'queue-poller',
+      config,
+      undefined,
+      20,
+      '30s',
+      5,
+    );
+
+    expect(options.maxConcurrentActivityTaskPollers).toBe(5);
+  });
+
   it('should verify all properties are set correctly in comprehensive test', () => {
     const config = {
       dynamicTaskQueue: true,
@@ -227,6 +257,7 @@ describe('WorkFlowOptions', () => {
       testActivities,
       15,
       '90s',
+      5,
     );
 
     // Verify all properties are set
@@ -238,5 +269,8 @@ describe('WorkFlowOptions', () => {
     expect(options.workflowsPath).toContain('workflows');
     expect(options.maxConcurrentActivityTaskExecutions).toBe(15);
     expect(options.shutdownForceTime).toBe('90s');
+    expect(options.maxCachedWorkflows).toBe(50);
+    expect(options.stickyQueueScheduleToStartTimeout).toBe('30s');
+    expect(options.maxConcurrentActivityTaskPollers).toBe(5);
   });
 });
