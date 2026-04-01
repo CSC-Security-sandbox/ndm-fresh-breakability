@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { Logger, ValidationPipe } from "@nestjs/common";
+import { json } from "express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
@@ -32,6 +33,8 @@ async function bootstrap() {
 
   await app.startAllMicroservices();
 
+  const jsonPayloadLimit = process.env.JSON_PAYLOAD_LIMIT || '500mb';
+  app.use(json({ limit: jsonPayloadLimit }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.setGlobalPrefix("api/v1/report");

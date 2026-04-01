@@ -273,7 +273,11 @@ export class AsupPackagerService {
 
   private async extractZip(zipPath: string, outputDir: string): Promise<void> {
     await fs.mkdir(outputDir, { recursive: true });
-    await execFile('unzip', ['-o', '-qq', zipPath, '-d', outputDir]);
+    // Use 7za (already bundled via 7zip-bin) instead of unzip to avoid the
+    // "overlapped components (possible zip bomb)" false-positive from unzip 6.0
+    // which rejects zip files created by Java/Node.js zip libraries.
+    const sevenZaPath: string = sevenBin.path7za;
+    await execFile(sevenZaPath, ['x', zipPath, `-o${outputDir}`, '-y']);
   }
 
   private async collectExtractedFiles(

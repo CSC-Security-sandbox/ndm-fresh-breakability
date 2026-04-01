@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class AsupSettingsDto {
   @ApiProperty({ description: 'Whether ASUP is enabled' })
@@ -17,8 +17,12 @@ export class UpdateAsupSettingsDto {
 
 export class SendSupportBundleDto {
   @ApiProperty({ description: 'Support bundle file name', example: 'ndm_logs_user-id.zip' })
+  @IsString()
+  @IsNotEmpty()
   fileName: string;
 
   @ApiProperty({ description: 'Support bundle file content encoded as base64' })
+  @IsString()
+  @IsNotEmpty()
   bundleBase64: string;
 }

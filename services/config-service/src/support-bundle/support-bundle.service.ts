@@ -205,21 +205,42 @@ export class SupportBundleService {
   }
 
   async sendSupportBundleToAsup(fileName: string): Promise<void> {
-    const fullPath = this.downloadSupportBundle(fileName);
-    const bundleBuffer = await fs.promises.readFile(fullPath);
+    this.logger.log(`[SendSupportBundleToAsup] Looking up file: ${fileName}`);
 
-    await axios.post(
-      this.reportsSupportBundleSendUrl,
-      {
-        fileName,
-        bundleBase64: bundleBuffer.toString('base64'),
-      },
-      {
-        timeout: 120000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      },
-    );
+    const fullPath = this.downloadSupportBundle(fileName);
+    this.logger.log(`[SendSupportBundleToAsup] File found at path: ${fullPath}`);
+
+    const bundleBuffer = await fs.promises.readFile(fullPath);
+    const fileSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
+    this.logger.log(`[SendSupportBundleToAsup] File read successfully - size=${fileSizeMB}MB (${bundleBuffer.length} bytes)`);
+
+    const bundleBase64 = bundleBuffer.toString('base64');
+    const base64SizeMB = (Buffer.byteLength(bundleBase64) / (1024 * 1024)).toFixed(2);
+    this.logger.log(`[SendSupportBundleToAsup] Base64 encoded size=${base64SizeMB}MB - forwarding to reports-service at: ${this.reportsSupportBundleSendUrl}`);
+
+    try {
+      await axios.post(
+        this.reportsSupportBundleSendUrl,
+        {
+          fileName,
+          bundleBase64,
+        },
+        {
+          timeout: 120000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        },
+      );
+      this.logger.log(`[SendSupportBundleToAsup] reports-service accepted the bundle successfully`);
+    } catch (error) {
+      const status = error?.response?.status;
+      const responseData = JSON.stringify(error?.response?.data);
+      this.logger.error(
+        `[SendSupportBundleToAsup] reports-service call failed - status=${status}, url=${this.reportsSupportBundleSendUrl}, response=${responseData}, error=${error?.message}`,
+        error?.stack,
+      );
+      throw error;
+    }
   }
 
   async getProjects(userDetails: UserDetails) {

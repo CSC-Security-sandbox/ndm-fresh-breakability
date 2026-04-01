@@ -220,21 +220,26 @@ export class AsupSchedulerService {
     bundleFilename: string,
     bundleBuffer: Buffer,
   ): Promise<void> {
-    this.logger.log(`Starting support bundle transmission for ${bundleFilename}`);
+    this.logger.log(`[TransmitSupportBundle] Starting - fileName=${bundleFilename}, inputBufferSize=${(bundleBuffer.length / (1024 * 1024)).toFixed(2)}MB`);
+
     const { archivePath, md5Checksum, headersMap } =
       await this.asupPackagerService.packageSupportBundlePayload(
         bundleFilename,
         bundleBuffer,
       );
-    this.logger.log(`Packaged support bundle payload: ${archivePath}, MD5=${md5Checksum}`);
+    this.logger.log(`[TransmitSupportBundle] Packaged - archivePath=${archivePath}, MD5=${md5Checksum}`);
 
     if (!this.asupSupportBundleEndpointUrl) {
+      this.logger.error('[TransmitSupportBundle] ASUP_SUPPORT_BUNDLE_ENDPOINT env var is not set');
       throw new Error('ASUP support bundle endpoint is not configured');
     }
 
     const archiveFilename = path.basename(archivePath);
     const requestUrl = `${this.asupSupportBundleEndpointUrl.replace(/\/$/, '')}/${archiveFilename}`;
     const archiveBuffer = await fs.readFile(archivePath);
+    const archiveSizeMB = (archiveBuffer.length / (1024 * 1024)).toFixed(2);
+    this.logger.log(`[TransmitSupportBundle] Archive size=${archiveSizeMB}MB (${archiveBuffer.length} bytes), endpoint=${requestUrl}`);
+
     const baseHeaders = {
       'Content-Type': 'application/x-7z-compressed',
       'X-ASUP-Source': 'NDM',
@@ -244,19 +249,30 @@ export class AsupSchedulerService {
     };
 
     if (archiveBuffer.length <= ASUP_ISF_THRESHOLD_BYTES) {
-      await axios.put(requestUrl, archiveBuffer, {
-        headers: baseHeaders,
-        timeout: 60000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
-      this.logger.log(`Support bundle transmitted successfully to ${requestUrl}`);
+      this.logger.log(`[TransmitSupportBundle] Archive <= 200MB — sending as single PUT to ${requestUrl}`);
+      try {
+        const response = await axios.put(requestUrl, archiveBuffer, {
+          headers: baseHeaders,
+          timeout: 60000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        });
+        this.logger.log(`[TransmitSupportBundle] Single PUT succeeded - status=${response.status} to ${requestUrl}`);
+      } catch (err) {
+        const status = (err as any)?.response?.status;
+        const responseData = JSON.stringify((err as any)?.response?.data);
+        this.logger.error(
+          `[TransmitSupportBundle] Single PUT failed - status=${status}, url=${requestUrl}, response=${responseData}, error=${(err as Error).message}`,
+          (err as Error).stack,
+        );
+        throw err;
+      }
       return;
     }
 
     const totalChunks = Math.ceil(archiveBuffer.length / ASUP_ISF_CHUNK_BYTES);
     this.logger.log(
-      `Support bundle exceeds 200MB (${archiveBuffer.length} bytes), sending via ISF chunking (${totalChunks} chunks)`,
+      `[TransmitSupportBundle] Archive > 200MB (${archiveSizeMB}MB) — ISF chunked send: totalChunks=${totalChunks}, chunkSize=100MB, url=${requestUrl}`,
     );
 
     for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
@@ -264,6 +280,9 @@ export class AsupSchedulerService {
       const end = Math.min(start + ASUP_ISF_CHUNK_BYTES, archiveBuffer.length);
       const chunkBuffer = archiveBuffer.subarray(start, end);
       const chunkNumber = chunkIndex + 1;
+      const chunkSizeMB = (chunkBuffer.length / (1024 * 1024)).toFixed(2);
+
+      this.logger.log(`[TransmitSupportBundle] Sending chunk ${chunkNumber}/${totalChunks} - size=${chunkSizeMB}MB, bytes=[${start}-${end}]`);
 
       const chunkHeaders = {
         ...baseHeaders,
@@ -280,31 +299,35 @@ export class AsupSchedulerService {
       let lastError: Error | null = null;
       for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
         try {
-          await axios.put(requestUrl, chunkBuffer, {
+          const response = await axios.put(requestUrl, chunkBuffer, {
             headers: chunkHeaders,
             timeout: 120000,
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
           });
           lastError = null;
-          this.logger.log(`Sent support bundle chunk ${chunkNumber}/${totalChunks}`);
+          this.logger.log(`[TransmitSupportBundle] Chunk ${chunkNumber}/${totalChunks} sent - status=${response.status}`);
           break;
         } catch (err) {
           lastError = err as Error;
+          const status = (err as any)?.response?.status;
+          const responseData = JSON.stringify((err as any)?.response?.data);
           this.logger.error(
-            `Support bundle chunk ${chunkNumber}/${totalChunks} attempt ${attempt}/${ASUP_TRANSMIT_MAX_RETRIES} failed: ${lastError.message}`,
+            `[TransmitSupportBundle] Chunk ${chunkNumber}/${totalChunks} attempt ${attempt}/${ASUP_TRANSMIT_MAX_RETRIES} failed - status=${status}, response=${responseData}, error=${lastError.message}`,
             lastError.stack,
           );
           if (attempt < ASUP_TRANSMIT_MAX_RETRIES) {
+            this.logger.log(`[TransmitSupportBundle] Retrying chunk ${chunkNumber} in ${ASUP_TRANSMIT_RETRY_DELAY_MS}ms...`);
             await new Promise((resolve) => setTimeout(resolve, ASUP_TRANSMIT_RETRY_DELAY_MS));
           }
         }
       }
       if (lastError) {
+        this.logger.error(`[TransmitSupportBundle] Chunk ${chunkNumber}/${totalChunks} exhausted all retries - aborting transmission`);
         throw lastError;
       }
     }
 
-    this.logger.log(`Support bundle ISF chunked transmission completed to ${requestUrl}`);
+    this.logger.log(`[TransmitSupportBundle] ISF chunked transmission complete - all ${totalChunks} chunks sent to ${requestUrl}`);
   }
 }
