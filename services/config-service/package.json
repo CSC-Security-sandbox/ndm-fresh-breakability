@@ -33,7 +33,7 @@
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.4.1",
-    "@netapp-cloud-datamigrate/api-handler-lib": "0.0.5",
+    "@netapp-cloud-datamigrate/api-handler-lib": "0.0.6",
     "@netapp-cloud-datamigrate/auth-lib": "0.1.1",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@temporalio/client": "^1.11.6",
