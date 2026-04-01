@@ -151,6 +151,9 @@
     "js-yaml": "4.1.1",
     "test-exclude": "^8.0.0",
     "minimatch": "^10.2.3",
-    "serialize-javascript": "^7.0.3"
+    "serialize-javascript": "^7.0.3",
+    "hbs": {
+            "handlebars": "^4.7.9"
+    }
   }
 }
