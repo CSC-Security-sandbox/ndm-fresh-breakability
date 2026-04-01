@@ -502,3 +502,143 @@
                  if old_helm_chart | length > 0
                  else 'No old Helm chart found. Manual intervention required.' }}
 
+      always:
+        # =================================================================
+        # Re-apply postgres CronJob resources (not bundled, applied inline)
+        # =================================================================
+        - name: "Always — Apply postgres cronjob ConfigMap"
+          ansible.builtin.shell: |
+            kubectl apply -f - <<'EOF'
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: ndm-postgres-cronjob-cm
+              namespace: {{ namespace }}
+            data:
+              run_ndm_pg_cron.sh: |
+                #!/bin/bash
+                set -euo pipefail
+
+                echo "Sourcing environment variables from Vault..."
+                if [ -f /vault/secrets/postgres.env ]; then
+                  source /vault/secrets/postgres.env
+                else
+                  echo "No env file from vault present. Exiting."
+                  exit 1
+                fi
+
+                refresh_mv() {
+                  local mv_name="$1"
+                  echo "Refreshing materialized view ${mv_name} concurrently..."
+                  local start_time=$(date +%s)
+                  psql -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+                    -c "REFRESH MATERIALIZED VIEW CONCURRENTLY datamigrator.${mv_name};"
+                  local end_time=$(date +%s)
+                  local elapsed=$((end_time - start_time))
+                  echo "Refreshing materialized view ${mv_name} completed successfully in ${elapsed} seconds."
+                  echo "------------------------------------------------------------"
+                }
+
+                refresh_mv "job_stats_summary_mv"
+                refresh_mv "storage_jobs_overview_mv"
+
+              run_vacuum_analyze.sh: |
+                #!/bin/bash
+                set -euo pipefail
+
+                if [ "$VACUUM_ANALYZE_ENABLED" = "TRUE" ]; then
+                  echo "Running VACUUM ANALYZE on database: $PGDATABASE ..."
+
+                  if [ -f /vault/secrets/postgres.env ]; then
+                    source /vault/secrets/postgres.env
+                  else
+                    echo "No env file from vault present. Exiting."
+                    exit 1
+                  fi
+
+                  PGSCHEMA=$PGSCHEMA
+                  echo "Setting search path to schema: $PGSCHEMA"
+
+                  start_time=$(date +%s)
+
+                  if echo -e "SET search_path TO $PGSCHEMA;\nSET vacuum_cost_delay = '20ms';\nVACUUM ANALYZE;" | \
+                    psql -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" --set AUTOCOMMIT=on; then
+                    end_time=$(date +%s)
+                    elapsed=$((end_time - start_time))
+                    echo "VACUUM ANALYZE completed successfully in ${elapsed} seconds with search path set to: $PGSCHEMA"
+                  else
+                    echo "VACUUM ANALYZE failed with search path set to: $PGSCHEMA"
+                    echo "Check the error output above for details."
+                    exit 1
+                  fi
+                else
+                  echo "VACUUM ANALYZE is disabled. Skipping."
+                fi
+
+              VACUUM_ANALYZE_ENABLED: "FALSE"
+              MATERIALIZED_VIEW_ENABLED: "TRUE"
+            EOF
+          environment: "{{ helm_environment }}"
+
+        - name: "Always — Apply postgres CronJob"
+          ansible.builtin.shell: |
+            kubectl apply -f - <<'EOF'
+            apiVersion: batch/v1
+            kind: CronJob
+            metadata:
+              name: ndm-postgres-mv-cronjob
+              namespace: {{ namespace }}
+            spec:
+              schedule: "*/10 * * * *"
+              concurrencyPolicy: Forbid
+              successfulJobsHistoryLimit: 2
+              failedJobsHistoryLimit: 3
+              jobTemplate:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        vault.hashicorp.com/agent-json-patch: '[{"op": "replace", "path": "/imagePullPolicy", "value": "Never"}]'
+                        vault.hashicorp.com/agent-inject: "true"
+                        vault.hashicorp.com/role: "datamigrator-role"
+                        vault.hashicorp.com/agent-inject-secret-postgres.env: "secrets/postgres-secrets/postgres-creds"
+                        vault.hashicorp.com/agent-pre-populate-only: "true"
+                        sidecar.istio.io/inject: "false"
+                        traffic.sidecar.istio.io/excludeOutboundPorts: "8200,8201"
+                        vault.hashicorp.com/agent-inject-template-postgres.env: |
+                          {{ '{{' }}- with secret "secrets/postgres-secrets/postgres-creds" -{{ '}}' }}
+                          export PGUSER="{{ '{{' }} .Data.POSTGRES_DMADMIN_USER {{ '}}' }}"
+                          export PGPASSWORD="{{ '{{' }} .Data.POSTGRES_DMADMIN_PASSWORD {{ '}}' }}"
+                          {{ '{{' }}- end -{{ '}}' }}
+                    spec:
+                      serviceAccountName: datamigrator-openbao-sa
+                      restartPolicy: OnFailure
+                      containers:
+                        - name: ndm-postgres-mv-cronjob
+                          image: bitnami/postgresql:17.6.0-debian-12-r0
+                          imagePullPolicy: Never
+                          env:
+                            - name: PGHOST
+                              value: "postgresql.postgres.svc.cluster.local"
+                            - name: PGDATABASE
+                              value: "datamigrator"
+                            - name: MATERIALIZED_VIEW_ENABLED
+                              valueFrom:
+                                configMapKeyRef:
+                                  name: ndm-postgres-cronjob-cm
+                                  key: MATERIALIZED_VIEW_ENABLED
+                          command:
+                            - /bin/bash
+                            - -c
+                            - |
+                              /bin/bash /scripts/run_ndm_pg_cron.sh
+                          volumeMounts:
+                            - name: script-volume
+                              mountPath: /scripts
+                      volumes:
+                        - name: script-volume
+                          configMap:
+                            name: ndm-postgres-cronjob-cm
+            EOF
+          environment: "{{ helm_environment }}"
+
