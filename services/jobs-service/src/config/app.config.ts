@@ -35,6 +35,13 @@ export default registerAs(
       backupuid: process.env.MOUNT_BACKUP_UID
         ? parseInt(process.env.MOUNT_BACKUP_UID, 10)
         : 0,
+      smbclientPath: process.env.SMBCLIENT_PATH || 'smbclient',
+      // Strategy for SMB directory listing in get-dirs endpoint.
+      // 'mount' (default): traditional mount -t cifs + readdir.
+      // 'smbclient': uses smbclient userspace tool — no kernel mount required,
+      //   avoids STATUS_LOGON_FAILURE / machine trust issues on the CP.
+      //   Set SMB_DIR_LIST_STRATEGY=smbclient to enable.
+      smbDirListStrategy: process.env.SMB_DIR_LIST_STRATEGY || 'mount',
     },
   }),
 );

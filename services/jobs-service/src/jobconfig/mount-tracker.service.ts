@@ -90,6 +90,8 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private readonly resolveCifsHostnameToIp: boolean;
 
   private readonly cifsBackupUid: number;
+  private readonly smbclientPath: string;
+  private readonly smbDirListStrategy: 'smbclient' | 'mount';
   private readonly mounts = new Map<string, MountRecord>();
   private readonly inflightMounts = new Map<string, Promise<MountRecord>>();
 
@@ -112,6 +114,11 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<boolean>("app.mount.resolveCifsHostnameToIp") ?? true;
     const configBackupUid = this.configService.get<number>("app.mount.backupuid") ?? 0;
     this.cifsBackupUid = configBackupUid;
+    this.smbclientPath =
+      this.configService.get<string>("app.mount.smbclientPath") ?? "smbclient";
+    const strategy = this.configService.get<string>("app.mount.smbDirListStrategy") ?? "mount";
+    this.smbDirListStrategy = strategy === "smbclient" ? "smbclient" : "mount";
+    this.logger.log(`SMB directory listing strategy: ${this.smbDirListStrategy}`);
   }
 
   private async resolveHostToIp(host: string, exportPath: string, mountKey: string, fileServerId?: string): Promise<string> {
@@ -713,5 +720,189 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private withoutTimer(record: MountRecord): MountDetails {
     const { timeoutHandle, ...rest } = record;
     return rest;
+  }
+
+  /**
+   * Entry point for SMB directory listing in get-dirs.
+   * Defaults to traditional mount+readdir (SMB_DIR_LIST_STRATEGY=mount).
+   * Set SMB_DIR_LIST_STRATEGY=smbclient to use the smbclient userspace tool instead,
+   * which avoids STATUS_LOGON_FAILURE / machine trust issues on the control plane.
+   */
+  async listSmbDirectories(
+    fileServerId: string,
+    hostname: string,
+    exportPath: string,
+    dir: string,
+    path: string,
+    username?: string,
+    password?: string,
+    protocolVersion?: string,
+  ): Promise<DirectoryEntry[]> {
+    this.logger.log(`SMB dir list strategy: ${this.smbDirListStrategy} for ${hostname}:${exportPath}`);
+
+    if (this.smbDirListStrategy === 'mount') {
+      const mountDetails = await this.ensureMounted({
+        fileServerId,
+        hostname,
+        exportPath,
+        dir: dir || '',
+        protocol: Protocol.SMB,
+        username,
+        password,
+        protocolVersion,
+      });
+      const dirs = await this.listDirectoriesls({ mountPath: mountDetails.mountPath, path: path || '' });
+      await this.touch(mountDetails.key);
+      return dirs;
+    }
+
+    return this.listDirectoriesViaSmbclient(hostname, exportPath, path, username, password);
+  }
+
+  /**
+   * Lists directories on an SMB share directly via smbclient, without a kernel CIFS mount.
+   * Used for the get-dirs endpoint (job configuration / directory browsing).
+   * smbclient auto-negotiates SMB dialect and auth mechanism (NTLMSSP/Kerberos/SPNEGO),
+   * which avoids STATUS_LOGON_FAILURE issues seen with mount -t cifs on the control plane.
+   */
+  async listDirectoriesViaSmbclient(
+    hostname: string,
+    exportPath: string,
+    subPath: string,
+    username?: string,
+    password?: string,
+  ): Promise<DirectoryEntry[]> {
+    const cleanHost = hostname.replace(/\0/g, '').trim();
+    const cleanExport = exportPath
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/\0/g, '')
+      .trim();
+
+    // exportPath may be "sharename" or "sharename/subdir/..."
+    // smbclient connects to //host/sharename and navigates into the rest
+    const parts = cleanExport.split('/');
+    const shareName = parts[0];
+    const inSharePath = parts.slice(1).join('/');
+
+    const cleanSub = (subPath ?? '').replace(/^\/+/, '').replace(/\0/g, '').trim();
+    const navigatePath = [inSharePath, cleanSub].filter(Boolean).join('/');
+
+    const share = `//${cleanHost}/${shareName}`;
+    // Prepend 'backup' to toggle FILE_OPEN_FOR_BACKUP_INTENT on all subsequent
+    // directory opens — equivalent to backupuid=0 in mount -t cifs.
+    // The server bypasses ACL checks if the authenticated user has SeBackupPrivilege.
+    const lsCmd = navigatePath ? `backup; cd "${navigatePath}"; ls` : 'backup; ls';
+
+    // Write a temporary smb.conf to force NTLMv2 user-level auth and disable
+    // SPNEGO/Kerberos. --option flags are unreliable across Samba versions on Alpine;
+    // a temp config file passed via -s is guaranteed to apply. This prevents
+    // NT_STATUS_TRUSTED_RELATIONSHIP_FAILURE caused by smbclient attempting machine
+    // account / domain auth when the container is not domain-joined.
+    const tmpConf = path.join(os.tmpdir(), `.smbconf-${randomBytes(4).toString('hex')}`);
+    await fs.promises.writeFile(
+      tmpConf,
+      [
+        '[global]',
+        '\tclient use spnego = no',
+        '\tclient ntlmv2 auth = yes',
+        '\tkerberos method = off',
+        '\tworkgroup = WORKGROUP',
+        '\tsecurity = user',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+
+    const args: string[] = [share, '-s', tmpConf];
+    if (username) {
+      const cleanUser = username.replace(/\0/g, '').trim();
+      const cleanPass = String(password ?? '').replace(/\0/g, '');
+      args.push('-U', `${cleanUser}%${cleanPass}`);
+    } else {
+      args.push('-N');
+    }
+    args.push('-c', lsCmd);
+
+    this.logger.log(`Listing SMB directories via smbclient: ${share}, path: /${navigatePath}`);
+
+    try {
+      const { stdout } = await execFileAsync(this.smbclientPath, args, {
+        timeout: this.mountTimeoutMs,
+        maxBuffer: 1024 * 1024,
+        env: {
+          ...process.env,
+          KRB5CCNAME: '/dev/null',  // prevent any Kerberos ticket from being used
+        },
+      });
+      await fs.promises.unlink(tmpConf).catch(() => {});
+      return this.parseSmbclientLsOutput(stdout);
+    } catch (error) {
+      await fs.promises.unlink(tmpConf).catch(() => {});
+      // execFileAsync puts the actual smbclient output in error.stderr, not error.message
+      // error.message only contains "Command failed: <cmd>" which isn't useful
+      const stderr = (error as any).stderr ?? '';
+      const stdout = (error as any).stdout ?? '';
+      const combined = [stderr, stdout].filter(Boolean).join('\n');
+      this.logger.error(`smbclient listing failed for ${share} — stderr: ${stderr}`);
+
+      // Credential errors — wrong username/password
+      if (combined.includes('NT_STATUS_LOGON_FAILURE') || combined.includes('NT_STATUS_WRONG_PASSWORD') || combined.includes('NT_STATUS_NO_SUCH_USER')) {
+        throw new HttpException(
+          'SMB authentication failed. Check username and password.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      // Permission errors — authenticated successfully but no ACL access
+      if (combined.includes('NT_STATUS_ACCESS_DENIED') || combined.includes('NT_STATUS_NETWORK_ACCESS_DENIED')) {
+        throw new HttpException(
+          'Access denied. The user does not have permission to access this SMB share or directory.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      if (combined.includes('NT_STATUS_TRUSTED_RELATIONSHIP_FAILURE')) {
+        throw new HttpException(
+          'SMB authentication failed: machine trust relationship error. Check domain membership or use a local account.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      if (combined.includes('NT_STATUS_BAD_NETWORK_NAME') || combined.includes('NT_STATUS_NOT_FOUND') || combined.includes('NT_STATUS_OBJECT_NAME_NOT_FOUND')) {
+        throw new HttpException(
+          `SMB share or path not found: ${share}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (combined.includes('NT_STATUS_CONNECTION_REFUSED') || combined.includes('NT_STATUS_HOST_UNREACHABLE') || combined.includes('NT_STATUS_IO_TIMEOUT') || combined.includes('NT_STATUS_NETWORK_UNREACHABLE')) {
+        throw new HttpException(
+          `SMB host unreachable: ${share}`,
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+      // Surface the actual smbclient error text to the caller
+      const detail = combined.trim() || (error instanceof Error ? error.message : String(error));
+      throw new HttpException(
+        `Failed to list SMB directories: ${detail}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Parses smbclient `ls` output and returns directory entries.
+   * Format per line: "  name                        ATTRS     size   date"
+   * ATTRS contains 'D' for directories (e.g. D, DA, DHS).
+   */
+  private parseSmbclientLsOutput(stdout: string): DirectoryEntry[] {
+    const entries: DirectoryEntry[] = [];
+    for (const line of stdout.split('\n')) {
+      // Match lines where attribute block contains D (directory flag)
+      const match = line.match(/^\s{2}(.+?)\s{2,}[A-Z]*D[A-Z]*\s+\d+\s+/);
+      if (match) {
+        const name = match[1].trimEnd();
+        if (name !== '.' && name !== '..') {
+          entries.push({ name });
+        }
+      }
+    }
+    return entries;
   }
 }

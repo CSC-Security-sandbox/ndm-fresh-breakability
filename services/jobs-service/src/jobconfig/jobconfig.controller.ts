@@ -7,7 +7,7 @@ import { JobConfigDto } from './dto/jobconfig.dto';
 import { JobConfigService } from './jobconfig.service';
 import { JobListingDTO } from './dto/joblisting.dto';
 import { JobConfigCutoverBulk, JobConfigDiscoverBulk, JobConfigPrecheck, MigrateConfig, UpdateDiscoveryConfigDto, UpdateMigrationConfigDto} from './dto/jobdicoverybulk.dto';
-import { JobType } from 'src/constants/enums';
+import { JobType, Protocol } from 'src/constants/enums';
 import { JobConfigSpeedTest, SpeedTestResult } from './dto/jobspeedTest.dto'
 import { JobConfigBulkCutoverRes, JobConfigBulkMigrateFinalResponse, JobConfigBulkMigrateRes, JobConfigPrecheckRes, SpeedTestEntry, SpeedTestJobRun } from './jobconfig.types';
 import { BulkMigrateJobConfig } from './dto/bulkMigrateJob.dto';
@@ -352,6 +352,20 @@ export class JobConfigController {
     if (!fileServer) {
       throw new NotFoundException(`File server not found: ${request.fileServerId}`);
     }
+
+    if (fileServer.protocol === Protocol.SMB) {
+      return this.mountTrackerService.listSmbDirectories(
+        request.fileServerId,
+        fileServer.host,
+        request.exportPath,
+        request.dir || '',
+        request.path || '',
+        fileServer.userName,
+        fileServer.password,
+        fileServer.protocolVersion,
+      );
+    }
+
     const mountDetails = await this.mountTrackerService.ensureMounted({
       fileServerId: request.fileServerId,
       hostname: fileServer.host,

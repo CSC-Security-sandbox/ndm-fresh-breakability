@@ -85,6 +85,10 @@ env:
     value: "30000"
   - name: MOUNT_BACKUP_UID
     value: "0"
+  - name: SMB_DIR_LIST_STRATEGY
+    value: "mount"
+  - name: SMBCLIENT_PATH
+    value: "smbclient"
   - name: MOUNT_IDLE_TIMEOUT_MS
     value: "600000"
   - name: MOUNT_TIMEOUT_MS

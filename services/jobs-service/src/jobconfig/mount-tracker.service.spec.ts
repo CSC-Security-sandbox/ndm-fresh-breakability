@@ -877,6 +877,425 @@ describe('MountTrackerService', () => {
     });
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // parseSmbclientLsOutput (private helper)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('parseSmbclientLsOutput', () => {
+    const parse = (stdout: string) =>
+      (service as any).parseSmbclientLsOutput(stdout);
+
+    it('should return empty array for empty output', () => {
+      expect(parse('')).toEqual([]);
+    });
+
+    it('should return directory entries (D flag)', () => {
+      const stdout = [
+        '  .                                   D        0  Mon Jan  1 00:00:00 2024',
+        '  ..                                  D        0  Mon Jan  1 00:00:00 2024',
+        '  dirname                             D        0  Mon Jan  1 00:00:00 2024',
+        '  filename.txt                        A    12345  Mon Jan  1 00:00:00 2024',
+      ].join('\n');
+
+      const result = parse(stdout);
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('dirname');
+    });
+
+    it('should skip . and .. entries', () => {
+      const stdout = [
+        '  .                                   D        0  Mon Jan  1 00:00:00 2024',
+        '  ..                                  D        0  Mon Jan  1 00:00:00 2024',
+      ].join('\n');
+      expect(parse(stdout)).toEqual([]);
+    });
+
+    it('should skip files (lines without D in attribute block)', () => {
+      const stdout = [
+        '  report.pdf                          A   102400  Mon Jan  1 00:00:00 2024',
+        '  archive.zip                         AH   5000  Mon Jan  1 00:00:00 2024',
+      ].join('\n');
+      expect(parse(stdout)).toEqual([]);
+    });
+
+    it('should handle combined attribute flags like DH, DA, DHS', () => {
+      const stdout = [
+        '  hidden_dir                         DH        0  Mon Jan  1 00:00:00 2024',
+        '  archive_dir                        DA        0  Mon Jan  1 00:00:00 2024',
+        '  system_dir                        DHS        0  Mon Jan  1 00:00:00 2024',
+      ].join('\n');
+      const result = parse(stdout);
+      expect(result).toHaveLength(3);
+      expect(result.map((e: any) => e.name).sort()).toEqual(['archive_dir', 'hidden_dir', 'system_dir']);
+    });
+
+    it('should handle directory names with spaces', () => {
+      const stdout =
+        '  my folder name                      D        0  Mon Jan  1 00:00:00 2024';
+      const result = parse(stdout);
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('my folder name');
+    });
+
+    it('should return multiple directory entries', () => {
+      const stdout = [
+        '  dir1                                D        0  Mon Jan  1 00:00:00 2024',
+        '  dir2                                D        0  Mon Jan  1 00:00:00 2024',
+        '  dir3                                D        0  Mon Jan  1 00:00:00 2024',
+      ].join('\n');
+      const result = parse(stdout);
+      expect(result).toHaveLength(3);
+      expect(result.map((e: any) => e.name)).toEqual(['dir1', 'dir2', 'dir3']);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // listDirectoriesViaSmbclient
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('listDirectoriesViaSmbclient', () => {
+    const smbclientOutput = [
+      '  .                                   D        0  Mon Jan  1 00:00:00 2024',
+      '  ..                                  D        0  Mon Jan  1 00:00:00 2024',
+      '  projects                            D        0  Mon Jan  1 00:00:00 2024',
+      '  reports                             D        0  Mon Jan  1 00:00:00 2024',
+      '  readme.txt                          A     1024  Mon Jan  1 00:00:00 2024',
+    ].join('\n');
+
+    it('should return parsed directory entries on success', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      const result = await service.listDirectoriesViaSmbclient(
+        '192.168.1.10', 'sharename', '', 'user', 'pass',
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result.map((e: any) => e.name).sort()).toEqual(['projects', 'reports']);
+    });
+
+    it('should use "backup; ls" command for root listing', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCall).toBeDefined();
+      expect(smbCall[1]).toContain('-c');
+      const cIdx = smbCall[1].indexOf('-c');
+      expect(smbCall[1][cIdx + 1]).toBe('backup; ls');
+    });
+
+    it('should use "backup; cd; ls" command when navigatePath is set', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share/subdir', 'deeper', 'u', 'p');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      const cIdx = smbCall[1].indexOf('-c');
+      expect(smbCall[1][cIdx + 1]).toBe('backup; cd "subdir/deeper"; ls');
+    });
+
+    it('should connect to share name only (first segment of exportPath)', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('192.168.1.10', 'myshare/subdir', '', 'u', 'p');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCall[1][0]).toBe('//192.168.1.10/myshare');
+    });
+
+    it('should pass -U user%pass for authenticated access', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'testuser', 'testpass');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      const uIdx = smbCall[1].indexOf('-U');
+      expect(smbCall[1][uIdx + 1]).toBe('testuser%testpass');
+    });
+
+    it('should pass -N for guest access (no username)', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', undefined, undefined);
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCall[1]).toContain('-N');
+      expect(smbCall[1]).not.toContain('-U');
+    });
+
+    it('should pass -s with temp smb.conf path', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      const sIdx = smbCall[1].indexOf('-s');
+      expect(sIdx).toBeGreaterThan(-1);
+      expect(smbCall[1][sIdx + 1]).toMatch(/\.smbconf-/);
+    });
+
+    it('should write temp smb.conf with NTLM and no-SPNEGO options', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p');
+
+      const writeCall = (fs.promises.writeFile as jest.Mock).mock.calls.find(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('.smbconf-'),
+      );
+      expect(writeCall).toBeDefined();
+      const content: string = writeCall[1];
+      expect(content).toContain('client use spnego = no');
+      expect(content).toContain('client ntlmv2 auth = yes');
+      expect(content).toContain('kerberos method = off');
+      expect(content).toContain('security = user');
+      expect(writeCall[2]).toEqual({ mode: 0o600 });
+    });
+
+    it('should set KRB5CCNAME=/dev/null in exec environment', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p');
+
+      const smbCall = mockExecAsync.mock.calls.find(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCall[2].env.KRB5CCNAME).toBe('/dev/null');
+    });
+
+    it('should delete temp smb.conf after successful listing', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      await service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p');
+
+      expect(fs.promises.unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/\.smbconf-/),
+      );
+    });
+
+    it('should delete temp smb.conf even when exec fails', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'NT_STATUS_LOGON_FAILURE';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'badpass'),
+      ).rejects.toThrow();
+
+      expect(fs.promises.unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/\.smbconf-/),
+      );
+    });
+
+    it('should throw UNAUTHORIZED on NT_STATUS_LOGON_FAILURE', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'session setup failed: NT_STATUS_LOGON_FAILURE';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('should throw UNAUTHORIZED on NT_STATUS_WRONG_PASSWORD', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'session setup failed: NT_STATUS_WRONG_PASSWORD';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('should throw FORBIDDEN on NT_STATUS_ACCESS_DENIED', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'NT_STATUS_ACCESS_DENIED';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('should throw UNAUTHORIZED on NT_STATUS_TRUSTED_RELATIONSHIP_FAILURE', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'session setup failed: NT_STATUS_TRUSTED_RELATIONSHIP_FAILURE';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('should throw NOT_FOUND on NT_STATUS_BAD_NETWORK_NAME', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'tree connect failed: NT_STATUS_BAD_NETWORK_NAME';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('should throw BAD_GATEWAY on NT_STATUS_CONNECTION_REFUSED', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'Connection to host failed: NT_STATUS_CONNECTION_REFUSED';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 502 });
+    });
+
+    it('should throw INTERNAL_SERVER_ERROR for unknown errors and surface stderr', async () => {
+      const err: any = new Error('Command failed');
+      err.stderr = 'some unknown samba error';
+      err.stdout = '';
+      mockExecAsync.mockRejectedValue(err);
+
+      await expect(
+        service.listDirectoriesViaSmbclient('host', 'share', '', 'u', 'p'),
+      ).rejects.toMatchObject({ status: 500, message: expect.stringContaining('some unknown samba error') });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // listSmbDirectories (strategy router)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('listSmbDirectories', () => {
+    it('should route to ensureMounted + listDirectoriesls when strategy is "mount" (default)', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      const mockEntries = [
+        { name: 'dir1', isDirectory: () => true },
+        { name: 'dir2', isDirectory: () => true },
+      ];
+      (fs.promises.readdir as jest.Mock).mockResolvedValue(mockEntries);
+
+      const result = await service.listSmbDirectories(
+        'server-456', '192.168.1.200', 'smb/share', '', '', 'user', 'pass', 'v3.0',
+      );
+
+      expect(result).toHaveLength(2);
+      const mountCalls = mockExecAsync.mock.calls.filter(
+        (c: any[]) => c[0] === 'mount',
+      );
+      expect(mountCalls.length).toBeGreaterThan(0);
+      const smbCalls = mockExecAsync.mock.calls.filter(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCalls).toHaveLength(0);
+    });
+
+    it('should touch the mount key after listing when strategy is "mount"', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
+        { name: 'dirA', isDirectory: () => true },
+      ]);
+      const touchSpy = jest.spyOn(service, 'touch');
+
+      await service.listSmbDirectories(
+        'server-456', '192.168.1.200', 'smb/share', '', '', 'user', 'pass', 'v3.0',
+      );
+
+      expect(touchSpy).toHaveBeenCalled();
+      touchSpy.mockRestore();
+    });
+
+    it('should route to listDirectoriesViaSmbclient when strategy is "smbclient"', async () => {
+      // Create a service instance with smbclient strategy
+      const smbclientConfigService = {
+        get: jest.fn((key: string) => {
+          if (key === 'app.mount.basePath') return '/mnt';
+          if (key === 'app.mount.idleTimeoutMs') return 600000;
+          if (key === 'app.mount.timeoutMs') return 120000;
+          if (key === 'app.mount.backupuid') return 0;
+          if (key === 'app.mount.smbDirListStrategy') return 'smbclient';
+          return undefined;
+        }),
+      } as unknown as ConfigService;
+
+      const smbclientModule = await Test.createTestingModule({
+        providers: [
+          MountTrackerService,
+          { provide: LoggerFactory, useValue: loggerFactory },
+          { provide: ConfigService, useValue: smbclientConfigService },
+          { provide: getRepositoryToken(FileServerEntity), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
+        ],
+      }).compile();
+      const smbclientService = smbclientModule.get<MountTrackerService>(MountTrackerService);
+
+      const smbclientOutput = '  dir1                                D        0  Mon Jan  1 00:00:00 2024\n';
+      mockExecAsync.mockResolvedValue({ stdout: smbclientOutput, stderr: '' });
+
+      const result = await smbclientService.listSmbDirectories(
+        'server-456', '192.168.1.200', 'share', '', '', 'user', 'pass',
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('dir1');
+      const smbCalls = mockExecAsync.mock.calls.filter(
+        (c: any[]) => c[0] === 'smbclient',
+      );
+      expect(smbCalls.length).toBeGreaterThan(0);
+      const mountCalls = mockExecAsync.mock.calls.filter(
+        (c: any[]) => c[0] === 'mount',
+      );
+      expect(mountCalls).toHaveLength(0);
+    });
+
+    it('should log the active strategy on construction', async () => {
+      expect(loggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('SMB directory listing strategy: mount'),
+      );
+    });
+
+    it('should default to "mount" when SMB_DIR_LIST_STRATEGY is not configured', async () => {
+      // service created in beforeEach has no smbDirListStrategy → defaults to 'mount'
+      expect((service as any).smbDirListStrategy).toBe('mount');
+    });
+
+    it('should treat any non-"smbclient" value as "mount"', async () => {
+      const weirdConfigService = {
+        get: jest.fn((key: string) => {
+          if (key === 'app.mount.basePath') return '/mnt';
+          if (key === 'app.mount.idleTimeoutMs') return 600000;
+          if (key === 'app.mount.timeoutMs') return 120000;
+          if (key === 'app.mount.smbDirListStrategy') return 'unknown-value';
+          return undefined;
+        }),
+      } as unknown as ConfigService;
+
+      const weirdModule = await Test.createTestingModule({
+        providers: [
+          MountTrackerService,
+          { provide: LoggerFactory, useValue: loggerFactory },
+          { provide: ConfigService, useValue: weirdConfigService },
+          { provide: getRepositoryToken(FileServerEntity), useValue: { findOne: jest.fn() } },
+        ],
+      }).compile();
+      const weirdService = weirdModule.get<MountTrackerService>(MountTrackerService);
+
+      expect((weirdService as any).smbDirListStrategy).toBe('mount');
+    });
+  });
+
   describe('buildMountArgs (via ensureMounted)', () => {
     it('should build correct NFS mount args for execFile', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
