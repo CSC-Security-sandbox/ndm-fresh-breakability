@@ -95,16 +95,21 @@ export class AsupController {
   async sendSupportBundle(
     @Body() dto: SendSupportBundleDto,
   ): Promise<{ success: boolean }> {
+    this.logger.log(`[SendSupportBundle] Request received - fileName=${dto?.fileName}, bundleBase64 length=${dto?.bundleBase64?.length ?? 0} chars`);
     try {
       const bundleBuffer = Buffer.from(dto.bundleBase64, 'base64');
+      const bufferSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
+      this.logger.log(`[SendSupportBundle] Decoded buffer size=${bufferSizeMB}MB - passing to transmitSupportBundle`);
+
       await this.asupSchedulerService.transmitSupportBundle(
         dto.fileName,
         bundleBuffer,
       );
+      this.logger.log(`[SendSupportBundle] transmitSupportBundle completed successfully for fileName=${dto?.fileName}`);
       return { success: true };
     } catch (error) {
       this.logger.error(
-        `sendSupportBundle failed: ${(error as Error).message}`,
+        `[SendSupportBundle] Failed - fileName=${dto?.fileName}, error=${(error as Error).message}`,
         (error as Error).stack,
       );
       throw new InternalServerErrorException(

@@ -130,9 +130,20 @@ export class SupportBundleController {
   @Auth()
   @Post('send')
   async sendSupportBundle(@Request() userDetails: UserDetails) {
-    const fullFileName = `ndm_logs_${userDetails?.user?.id}.zip`;
-    await this.supportBundleService.sendSupportBundleToAsup(fullFileName);
-    return { success: true };
+    const userId = userDetails?.user?.id;
+    const fullFileName = `ndm_logs_${userId}.zip`;
+    this.logger.log(`[SendSupportBundle] Request received - userId=${userId}, fileName=${fullFileName}`);
+    try {
+      await this.supportBundleService.sendSupportBundleToAsup(fullFileName);
+      this.logger.log(`[SendSupportBundle] Successfully sent support bundle to ASUP - fileName=${fullFileName}`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(
+        `[SendSupportBundle] Failed to send support bundle - fileName=${fullFileName}, error=${error?.message}`,
+        error?.stack,
+      );
+      throw error;
+    }
   }
 
   @ApiOperation({
