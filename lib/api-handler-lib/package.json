@@ -12,7 +12,7 @@
     "build": "tsc"
   },
   "author": "Geetha Shree",
-  "license": "ISC",
+  "license": "UNLICENSED",
   "dependencies": {
     "@nestjs/common": "^10.4.16",
     "@nestjs/config": "^3.3.0",
@@ -20,7 +20,6 @@
     "@nestjs/platform-express": "^10.4.12",
     "@types/node": "^22.9.0",
     "express": "^5.1.0",
-    "flatted": "^3.3.3",
     "nest-winston": "^1.9.7",
     "typescript": "^5.6.3",
     "uuid": "^11.0.3",
