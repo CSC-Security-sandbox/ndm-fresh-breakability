@@ -11,6 +11,6 @@ X-Netapp-Asup-Os-Version: 2026.1.1
 X-Netapp-asup-payload-type: periodic-asup
 X-Netapp-asup-sequence: 1
 X-Netapp-Asup-Serial-Num: 97548219305762481930
-X-Netapp-Asup-Subject: NDM System Notification from NDM Control Plane (MANAGEMENT_LOG) INFO
+X-Netapp-Asup-Subject: NDM System Notification from NDM Control Plane (MIGRATION_LOG) INFO
 X-Netapp-Asup-System-Id: 97548219305762481930
 X-Netapp-Asup-Version: 3

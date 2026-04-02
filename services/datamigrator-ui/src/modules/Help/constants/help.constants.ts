@@ -10,7 +10,7 @@ export enum HELP_ITEMS_ENUM {
   FEEDBACK = "Feedback",
   SUPPORT_BUNDLE = "Support Bundle",
   UPGRADE = "Upgrade",
-  ASUP_METRICS_SHARING = "AutoSupport Transmission",
+  ASUP_METRICS_SHARING = "Telemetry Transmission",
 }
 
 export const HELP_ITEMS = [

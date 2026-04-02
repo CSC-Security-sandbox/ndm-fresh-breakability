@@ -33,9 +33,9 @@ const AsupHelpItem = () => {
       dispatch(setAsupEnabled(newValue));
       
       if (newValue) {
-        notify.success("AutoSupport Transmission has been enabled. Anonymous usage metrics will be shared to help us improve NetApp Data Migrator and provide better support.");
+        notify.success("Telemetry Transmission has been enabled. Anonymous usage metrics will be shared to help us improve NetApp Data Migrator and provide better support.");
       } else {
-        notify.info("AutoSupport Transmission has been disabled. Anonymous usage metrics will no longer be shared.");
+        notify.info("Telemetry Transmission has been disabled. Anonymous usage metrics will no longer be shared.");
       }
     } catch (error) {
       notify.error("Failed to update ASUP Metrics Sharing settings");
