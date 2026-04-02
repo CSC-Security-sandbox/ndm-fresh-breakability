@@ -35,6 +35,13 @@ export default registerAs(
       backupuid: process.env.MOUNT_BACKUP_UID
         ? parseInt(process.env.MOUNT_BACKUP_UID, 10)
         : 0,
+      nfsLinuxMountPathCmd:
+        process.env.NFS_LINUX_MOUNT_PATH_CMD ||
+        "mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}",
+      smbLinuxMountPathCmd:
+        process.env.SMB_LINUX_MOUNT_PATH_CMD ||
+        "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}",
+      unmountCmd: process.env.UNMOUNT_CMD || "umount ${DIR_PATH}",
     },
   }),
 );

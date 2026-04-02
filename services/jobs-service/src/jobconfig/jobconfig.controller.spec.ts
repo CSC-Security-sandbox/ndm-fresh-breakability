@@ -1519,7 +1519,7 @@ describe("JobConfigController", () => {
   });
 
   describe("getDirs", () => {
-    it("should return directories from mount and list listDirectoriesls", async () => {
+    it("should return directories from mount and list listDirectories", async () => {
       const request: GetDirsDto = {
         fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         exportPath: "/export",
@@ -1539,7 +1539,7 @@ describe("JobConfigController", () => {
 
       mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
       (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
-      (mountTrackerService.listDirectoriesls as jest.Mock).mockResolvedValue(mockDirs);
+      (mountTrackerService.listDirectories as jest.Mock).mockResolvedValue(mockDirs);
       (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
 
       const result = await controller.getDirs(request);
@@ -1556,9 +1556,10 @@ describe("JobConfigController", () => {
         password: mockFileServer.password,
         protocolVersion: mockFileServer.protocolVersion,
       });
-      expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
+      expect(mountTrackerService.listDirectories).toHaveBeenCalledWith({
         mountPath: mockMountDetails.mountPath,
         path: request.path || "",
+        protocol: mockFileServer.protocol,
       });
       expect(mountTrackerService.touch).toHaveBeenCalledWith(mockMountDetails.key);
     });
@@ -1575,7 +1576,7 @@ describe("JobConfigController", () => {
       expect(service.getFileServerById).toHaveBeenCalledWith(request.fileServerId);
       expect(mountTrackerService.ensureMounted).not.toHaveBeenCalled();
     });
-    it("should propagate error when listDirectoriesls fails with Internal Server Error", async () => {
+    it("should propagate error when listDirectories fails with Internal Server Error", async () => {
       const request: GetDirsDto = {
         fileServerId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         exportPath: "/export",
@@ -1594,15 +1595,16 @@ describe("JobConfigController", () => {
 
       mockJobConfigService.getFileServerById.mockResolvedValue(mockFileServer);
       (mountTrackerService.ensureMounted as jest.Mock).mockResolvedValue(mockMountDetails);
-      (mountTrackerService.listDirectoriesls as jest.Mock).mockRejectedValue(
+      (mountTrackerService.listDirectories as jest.Mock).mockRejectedValue(
         new InternalServerErrorException("Internal Server Error"),
       );
       (mountTrackerService.touch as jest.Mock).mockResolvedValue(undefined);
 
       await expect(controller.getDirs(request)).rejects.toThrow(InternalServerErrorException);
-      expect(mountTrackerService.listDirectoriesls).toHaveBeenCalledWith({
+      expect(mountTrackerService.listDirectories).toHaveBeenCalledWith({
         mountPath: mockMountDetails.mountPath,
         path: request.path || "",
+        protocol: mockFileServer.protocol,
       });
     });
   });
