@@ -1,10 +1,10 @@
 import { useGetInProcessFilesQuery, useLazyGetInProcessFilesQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import RefreshButton from "@components/refresh-button/RefreshButton";
+import { notify } from "@components/notification/NotificationWrapper";
 import {
   Breadcrumbs,
   Button,
-  Notification,
   Table,
   Text,
   Tooltip,
@@ -125,10 +125,7 @@ const MigrationActivity = () => {
 
   const [fetchAllInProcessFiles, { isFetching: isDownloading }] = useLazyGetInProcessFilesQuery();
 
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-
   const handleDownloadCSV = async () => {
-    setDownloadError(null);
     try {
       const result = await fetchAllInProcessFiles({ jobRunId: jobRunId!, all: true }).unwrap();
       const now = new Date();
@@ -136,12 +133,12 @@ const MigrationActivity = () => {
       const timeStr = now.toISOString().slice(11, 16).replace(/:/g, "-");
       downloadCSV(result?.data ?? [], `migration-activity-${jobRunId}-${dateStr}_${timeStr}-UTC.csv`);
     } catch (err: unknown) {
-      setDownloadError(err instanceof Error ? err.message : String(err) || "Failed to download. Please try again.");
+      notify.error("There was a problem downloading the in-process files.");
     }
   };
 
-  const rows: InProcessFile[] = inProcessData?.data ?? [];
-  const totalCount: number = inProcessData?.totalCount ?? 0;
+  const rows: InProcessFile[] = error ? [] : (inProcessData?.data ?? []);
+  const totalCount: number = error ? 0 : (inProcessData?.totalCount ?? 0);
 
   const { rowState, sortState, toggleSort } = useTable({
     columns: COLUMN_DEFS,
@@ -193,23 +190,13 @@ const MigrationActivity = () => {
           sortState={sortState || {}}
           toggleSort={toggleSort}
           rowState={rowState}
-          noDataLabel="Scanning in progress or Job not running"
+          noDataLabel={
+            error
+              ? <span style={{ color: '#dc2626' }}>There was a problem fetching the data. Please try again.</span>
+              : "Scanning in progress or Job not running"
+          }
         />
       </Box>
-      {error && (
-        <Box>
-          <Notification type="error">
-            There was a problem fetching the in-process files data.
-          </Notification>
-        </Box>
-      )}
-      {downloadError && (
-        <Box>
-          <Notification type="error">
-            There was a problem downloading the in-process files.
-          </Notification>
-        </Box>
-      )}
     </Box>
   );
 };

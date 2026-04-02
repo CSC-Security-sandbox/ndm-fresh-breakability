@@ -365,6 +365,7 @@ export const jobsApi = createApi({
       query: ({ jobRunId, all = false }: { jobRunId: string; all?: boolean }) => ({
         url: `job-run/${jobRunId}/migration-activity${all ? '?all=true' : ''}`,
         method: 'GET',
+        signal: AbortSignal.timeout(5000),
       }),
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response;
