@@ -109,7 +109,8 @@
     "diff": "4.0.4",
     "serialize-javascript": "^7.0.3",
     "minimatch": "^10.2.3",
-    "test-exclude": "^8.0.0"
+    "test-exclude": "^8.0.0",
+    "handlebars": "^4.7.9"
   },
   "jest-junit": {
     "suiteName": "Unit Tests",
