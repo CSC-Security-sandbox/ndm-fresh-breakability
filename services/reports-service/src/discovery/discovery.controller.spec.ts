@@ -18,6 +18,9 @@ describe('DiscoveryController', () => {
     getDiscoveryByFileServerIdAndParentPath: jest.fn(),
     getReportsAsZip: jest.fn(),
     createReportFile: jest.fn(),
+    prepareDownload: jest.fn(),
+    streamZipToResponse: jest.fn(),
+    createJobsPDFReportData: jest.fn(),
   };
 
   const mockJwtService = {
@@ -234,6 +237,91 @@ describe('DiscoveryController', () => {
         `Received discovery completed message: ${JSON.stringify(payload)}`
       );
       logSpy.mockRestore();
+    });
+
+    it('should nack the message and log error when processing fails', async () => {
+      const payload = { jobRunId: 'job1' };
+      mockDiscoveryService.createReportFile.mockImplementation(() => {
+        throw new Error('processing failed');
+      });
+
+      await controller.generateDiscoveryReport(payload, mockContext);
+
+      expect(mockChannel.nack).toHaveBeenCalled();
+      expect(mockChannel.ack).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error processing inventory message: processing failed'),
+      );
+    });
+  });
+
+  // ─── prepareDownload ─────────────────────────────────────────
+
+  describe('prepareDownload', () => {
+    it('should return a token for a valid jobRunId and reportType', async () => {
+      mockDiscoveryService.prepareDownload.mockResolvedValue('token-abc123');
+
+      const result = await controller.prepareDownload('job-1', ReportType.DISCOVERY);
+
+      expect(result).toEqual({ token: 'token-abc123' });
+      expect(service.prepareDownload).toHaveBeenCalledWith('job-1', ReportType.DISCOVERY);
+    });
+
+    it('should throw BadRequestException when jobRunId is missing', async () => {
+      await expect(
+        controller.prepareDownload('', ReportType.DISCOVERY),
+      ).rejects.toThrow(new BadRequestException('jobRunId is required'));
+    });
+
+    it('should throw BadRequestException when reportType is invalid', async () => {
+      await expect(
+        controller.prepareDownload('job-1', 'INVALID' as any),
+      ).rejects.toThrow(
+        new BadRequestException('Invalid report type. Allowed values are COC or discovery'),
+      );
+    });
+  });
+
+  // ─── downloadByToken ─────────────────────────────────────────
+
+  describe('downloadByToken', () => {
+    it('should stream the zip to the response', async () => {
+      const mockRes = {} as any;
+      mockDiscoveryService.streamZipToResponse.mockResolvedValue(undefined);
+
+      await controller.downloadByToken('token-xyz', mockRes);
+
+      expect(service.streamZipToResponse).toHaveBeenCalledWith('token-xyz', mockRes);
+    });
+  });
+
+  // ─── generateJobsReport ──────────────────────────────────────
+
+  describe('generateJobsReport', () => {
+    it('should call createJobsPDFReportData and return OK', async () => {
+      mockDiscoveryService.createJobsPDFReportData.mockReturnValue(undefined);
+
+      const result = await controller.generateJobsReport('job-1');
+
+      expect(result).toBe('OK');
+      expect(service.createJobsPDFReportData).toHaveBeenCalledWith('job-1');
+    });
+  });
+
+  // ─── constructor fallback Logger ─────────────────────────────
+
+  describe('constructor without LoggerFactory', () => {
+    it('should fall back to NestJS Logger when LoggerFactory is not provided', async () => {
+      const module = await Test.createTestingModule({
+        controllers: [DiscoveryController],
+        providers: [
+          { provide: DiscoveryService, useValue: mockDiscoveryService },
+          { provide: JwtService, useValue: mockJwtService },
+        ],
+      }).compile();
+
+      const ctrl = module.get<DiscoveryController>(DiscoveryController);
+      expect(ctrl).toBeDefined();
     });
   });
 });

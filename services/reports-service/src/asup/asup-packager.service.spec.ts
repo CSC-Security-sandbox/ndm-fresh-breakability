@@ -411,4 +411,126 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       );
     });
   });
+
+  // ─── toFlatFilename branch: empty safe string ────────────────
+
+  describe('toFlatFilename', () => {
+    it('should return a fallback filename when relativePath is empty string', () => {
+      const result = (service as any).toFlatFilename('');
+      expect(result).toMatch(/^file-\d+$/);
+    });
+  });
+
+  // ─── supportBundleXHeadersTemplate fallback branch ───────────
+
+  describe('packageSupportBundlePayload with null supportBundleXHeadersTemplate', () => {
+    beforeEach(() => {
+      Seven.add.mockImplementation(() => {
+        const EventEmitter = require('events');
+        const emitter = new EventEmitter();
+        process.nextTick(() => emitter.emit('end'));
+        return emitter;
+      });
+    });
+
+    it('should fall back to xHeadersTemplate when supportBundleXHeadersTemplate is null', async () => {
+      // Force the `|| this.xHeadersTemplate` branch on line 171
+      (service as any).supportBundleXHeadersTemplate = null;
+
+      const result = await service.packageSupportBundlePayload(
+        'bundle.zip',
+        Buffer.from('zip'),
+      );
+
+      // Headers built via the fallback xHeadersTemplate still resolve correctly
+      expect(result.headersMap['X-Netapp-Asup-Subject']).toBe('NDM ASUP Report');
+    });
+
+    it('should use fallback filename support-bundle.zip when bundleFilename is empty', async () => {
+      // Exercises the `bundleFilename || 'support-bundle.zip'` branch (line 145)
+      const result = await service.packageSupportBundlePayload('', Buffer.from('zip'));
+
+      expect(result.archivePath).toContain('support-bundle-asup-');
+      expect(result.isLargePayload).toBe(false);
+    });
+  });
+
+  // ─── loadTemplates error handling ────────────────────────────
+
+  describe('loadTemplates error handling', () => {
+    // After each error test restore the default readFile implementation
+    // so subsequent outer-describe tests remain unaffected.
+    afterEach(() => {
+      mockedFs.readFile.mockImplementation(((filePath: string) => {
+        if (
+          filePath.includes('x-headers.template') ||
+          filePath.includes('support-bundle-x-headers.template')
+        ) {
+          return Promise.resolve(xHeadersTemplate);
+        }
+        return Promise.resolve(Buffer.from('mock-7z-data'));
+      }) as any);
+    });
+
+    it('should log error when x-headers.template fails to load', async () => {
+      // Make the outer beforeEach module's loadTemplates settle first,
+      // then override readFile for the fresh module below.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      jest.clearAllMocks(); // clear any logger calls from the outer beforeEach module
+
+      mockedFs.readFile.mockImplementation(((filePath: string) => {
+        if (filePath.includes('x-headers.template')) {
+          return Promise.reject(new Error('x-headers read failed'));
+        }
+        return Promise.resolve(xHeadersTemplate);
+      }) as any);
+
+      await Test.createTestingModule({
+        providers: [
+          AsupPackagerService,
+          { provide: AsupXmlGeneratorService, useValue: xmlGeneratorService },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+        ],
+      }).compile();
+
+      // Allow the fire-and-forget loadTemplates() to settle
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load ASUP x-headers template'),
+      );
+    });
+
+    it('should log error when support-bundle-x-headers.template fails to load', async () => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      jest.clearAllMocks();
+
+      mockedFs.readFile.mockImplementation(((filePath: string) => {
+        if (
+          filePath.includes('x-headers.template') &&
+          !filePath.includes('support-bundle')
+        ) {
+          return Promise.resolve(xHeadersTemplate); // regular template succeeds
+        }
+        if (filePath.includes('support-bundle-x-headers.template')) {
+          return Promise.reject(new Error('support-bundle x-headers read failed'));
+        }
+        return Promise.resolve(Buffer.from('mock-7z-data'));
+      }) as any);
+
+      await Test.createTestingModule({
+        providers: [
+          AsupPackagerService,
+          { provide: AsupXmlGeneratorService, useValue: xmlGeneratorService },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+        ],
+      }).compile();
+
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load support bundle ASUP x-headers template'),
+      );
+    });
+  });
 });
