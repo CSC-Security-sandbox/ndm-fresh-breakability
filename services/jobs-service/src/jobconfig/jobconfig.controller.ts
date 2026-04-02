@@ -363,9 +363,10 @@ export class JobConfigController {
       protocolVersion: fileServer.protocolVersion,
     });
 
-    const directories = await this.mountTrackerService.listDirectoriesls({
+    const directories = await this.mountTrackerService.listDirectories({
       mountPath: mountDetails.mountPath,
       path: request.path || '',
+      protocol: fileServer.protocol,
     });
 
     await this.mountTrackerService.touch(mountDetails.key);

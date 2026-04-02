@@ -22,6 +22,20 @@ export class RedisJobManagerContext extends JobManagerContext {
         this.retryBatches = new RedisHMapCollection(this.jobRunId, 'retryBatches', this.redisClient);
     }
 
+    private inProcessFilesKey(): string {
+        return `${this.jobRunId}:inProcessFiles`;
+    }
+
+    async addInProcessFile(fPath: string, size: number | null): Promise<void> {
+        const member = JSON.stringify({ fPath, size: size ?? null });
+        await this.redisClient.zAdd(this.inProcessFilesKey(), { score: Date.now(), value: member });
+    }
+
+    async removeInProcessFile(fPath: string, size: number | null): Promise<void> {
+        const member = JSON.stringify({ fPath, size: size ?? null });
+        await this.redisClient.zRem(this.inProcessFilesKey(), member);
+    }
+
     async initializeInstance(): Promise<void> {
         const jobDetail =  await this.redisClient.get(this.jobRunId);
         if (!jobDetail) return;

@@ -85,7 +85,7 @@ export class SyncService {
       let slice = task.commands.slice(offset, offset + this.maxWriteConcurrency)
       offset += this.maxWriteConcurrency;
       const filteredCommands = slice.filter(command => command.status !== CommandStatus.COMPLETED);
-      const results = await Promise.allSettled(filteredCommands.map(command => {
+      const results = await Promise.allSettled(filteredCommands.map( async (command) => {
         const scanInput: CommandExecInput = {
           sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
           targetPath: `${baseTargetPrefixPath}${command.fPath}`,
@@ -93,7 +93,24 @@ export class SyncService {
           jobContext,
           errorType
         };
-        return this.commandExecService.executeCommand(scanInput);
+        if (!command.isDir) {
+          try {
+            await jobContext.addInProcessFile(command.fPath, command.metadata?.size ?? null);
+          } catch (error: unknown) {
+            this.logger.error(`[${task.jobRunId}] Error adding in-process file to redis set: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : undefined);
+          }
+        }
+        try {
+            return await this.commandExecService.executeCommand(scanInput);
+        } finally {
+            if (!command.isDir) {
+              try {
+                await jobContext.removeInProcessFile(command.fPath, command.metadata?.size ?? null);
+              } catch (error: unknown) {
+                this.logger.error(`[${task.jobRunId}] Error removing in-process file from redis set: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : undefined);
+              }
+            }
+        }
       }));
 
       // Collect ItemInfo objects and errors from batch results

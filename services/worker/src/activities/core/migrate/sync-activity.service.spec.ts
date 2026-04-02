@@ -76,6 +76,8 @@ describe('SyncService', () => {
             setTask: jest.fn(),
             deleteTask: jest.fn(),
             publishToFileStreamBulk: jest.fn().mockResolvedValue(undefined),
+            addInProcessFile: jest.fn().mockResolvedValue(undefined),
+            removeInProcessFile: jest.fn().mockResolvedValue(undefined),
             jobConfig: {
                 sourceDirectoryPath: '/source-dir',
                 destinationDirectoryPath: '/target-dir',
@@ -510,6 +512,68 @@ describe('SyncService', () => {
         });
 
        
+    });
+
+    describe('in-process file tracking', () => {
+        it('should call addInProcessFile before executeCommand for non-directory commands', async () => {
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt', isDir: false, metadata: { size: 1024 } } as any],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+            commandExecService.executeCommand.mockResolvedValue({ sourceErrors: [], targetErrors: [], cmd: {} as any });
+
+            await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(mockJobContext.addInProcessFile).toHaveBeenCalledWith('/file1.txt', 1024);
+            expect(mockJobContext.removeInProcessFile).toHaveBeenCalledWith('/file1.txt', 1024);
+        });
+
+        it('should call removeInProcessFile in finally block even when executeCommand throws', async () => {
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.READY, fPath: '/file1.txt', isDir: false, metadata: { size: 512 } } as any],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+            commandExecService.executeCommand.mockRejectedValue(new Error('exec failed'));
+
+            await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(mockJobContext.addInProcessFile).toHaveBeenCalledWith('/file1.txt', 512);
+            expect(mockJobContext.removeInProcessFile).toHaveBeenCalledWith('/file1.txt', 512);
+        });
+
+        it('should NOT call addInProcessFile or removeInProcessFile for directory commands', async () => {
+            const mockTask = new TaskInfo(
+                'task-456',
+                'job-123',
+                TaskType.MIGRATE,
+                TaskStatus.RUNNING,
+                'test-worker-1',
+                'source-path',
+                [{ id: 'cmd-1', status: CommandStatus.READY, fPath: '/somedir/', isDir: true, metadata: { size: null } } as any],
+                'target-path'
+            );
+            mockTask.retryCount = 1;
+            commandExecService.executeCommand.mockResolvedValue({ sourceErrors: [], targetErrors: [], cmd: {} as any });
+
+            await service.executeSyncTask('task-hash-456', mockTask, mockJobContext);
+
+            expect(mockJobContext.addInProcessFile).not.toHaveBeenCalled();
+            expect(mockJobContext.removeInProcessFile).not.toHaveBeenCalled();
+        });
     });
 
     describe('error handling edge cases', () => {

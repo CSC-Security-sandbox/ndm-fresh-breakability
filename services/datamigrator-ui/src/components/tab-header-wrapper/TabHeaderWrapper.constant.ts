@@ -93,6 +93,7 @@ export const HEADER_WITH_PATHNAME: HeaderType = {
   "/job-details/:jobId/run/:jobRunId": JOB_HEADER_TAB,
   "/job-details/:jobId/run/:jobRunId/errors": JOB_HEADER_TAB,
   "/job-details/:jobId/run/:jobRunId/tasks": JOB_HEADER_TAB,
+  "/job-details/:jobId/run/:jobRunId/migration-activity": JOB_HEADER_TAB,
   "/jobs-run-list": JOB_HEADER_TAB,
   "/job-discovery-preview/:jobRunId": JOB_HEADER_TAB,
   "/speed-test/config": SPEED_TEST_HEADER_TAB,

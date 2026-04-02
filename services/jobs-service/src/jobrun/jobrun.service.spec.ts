@@ -427,6 +427,7 @@ describe("JobRunService", () => {
           useValue: {
             getJobContext: jest.fn(),
             setJobContext: jest.fn(),
+            getInProcessFiles: jest.fn(),
           },
         },
         {
@@ -4263,6 +4264,57 @@ describe("JobRunService", () => {
         expect.stringContaining("INSERT INTO"),
         expect.arrayContaining(["cutover"]),
       );
+    });
+  });
+
+  describe("getInProcessFiles", () => {
+    const allFiles = Array.from({ length: 11 }, (_, i) => ({
+      fileName: `dir/file${i + 1}.txt`,
+      fileSize: (i + 1) * 512,
+      timeElapsed: (i + 1) * 10,
+    }));
+    const paginatedResult = {
+      data: allFiles.slice(0, 10),
+      totalCount: 11,
+    };
+    const fullResult = {
+      data: allFiles,
+      totalCount: 11,
+    };
+
+    it("should delegate to redisService.getInProcessFiles with all=false by default and return top 10 of 11 files", async () => {
+      const jobRunId = "run1";
+      (redisService.getInProcessFiles as jest.Mock).mockResolvedValue(paginatedResult);
+
+      const result = await service.getInProcessFiles(jobRunId, false);
+
+      expect(result).toBe(paginatedResult);
+      expect(result.data).toHaveLength(10);
+      expect(result.totalCount).toBe(11);
+      expect(redisService.getInProcessFiles).toHaveBeenCalledWith(jobRunId, false);
+    });
+
+    it("should delegate to redisService.getInProcessFiles with all=true and return all 11 files", async () => {
+      const jobRunId = "run1";
+      (redisService.getInProcessFiles as jest.Mock).mockResolvedValue(fullResult);
+
+      const result = await service.getInProcessFiles(jobRunId, true);
+
+      expect(result).toBe(fullResult);
+      expect(result.data).toHaveLength(11);
+      expect(result.totalCount).toBe(11);
+      expect(redisService.getInProcessFiles).toHaveBeenCalledWith(jobRunId, true);
+    });
+
+    it("should return empty data and zero totalCount when no files are in progress", async () => {
+      const jobRunId = "run-empty";
+      const emptyResult = { data: [], totalCount: 0 };
+      (redisService.getInProcessFiles as jest.Mock).mockResolvedValue(emptyResult);
+
+      const result = await service.getInProcessFiles(jobRunId, false);
+
+      expect(result).toEqual({ data: [], totalCount: 0 });
+      expect(redisService.getInProcessFiles).toHaveBeenCalledWith(jobRunId, false);
     });
   });
 });

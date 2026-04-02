@@ -9,13 +9,12 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { execFile } from "child_process";
+import { exec, execFile } from "child_process";
 import { randomBytes } from "crypto";
 import * as dns from "dns";
 import * as net from "net";
 import { promisify } from "util";
 import * as fs from "fs";
-import fg from "fast-glob";
 import * as os from "os";
 import * as path from "path";
 import { Protocol } from "src/constants/enums";
@@ -32,6 +31,7 @@ import {
 import { FileServerEntity } from "../entities/fileserver.entity";
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 function sanitizePathSegment(segment: string): string {
   const s = String(segment).replace(/\0/g, "").trim();
@@ -52,16 +52,80 @@ function resolvePathUnderBase(basePath: string, subPath: string): string {
   return resolved;
 }
 
-function sanitizeRelativePathForFs(subPath: string): string {
-  const s = String(subPath ?? ".").replace(/\0/g, "").trim().replace(/^\/+/, "") || ".";
-  if (path.isAbsolute(s) || s.includes("..")) {
-    throw new Error("Path traversal not allowed");
+
+function buildPathUnderTrustedBase(trustedBase: string, pathToCheck: string,): string | null {
+  const baseResolved = path.resolve(trustedBase);
+  const resolved = path.resolve(pathToCheck);
+  const baseWithSep = baseResolved + path.sep;
+  if (resolved !== baseResolved && !resolved.startsWith(baseWithSep)) {
+    return null;
   }
-  const normalized = path.normalize(s).replace(/^\/+/, "");
-  if (path.isAbsolute(normalized) || normalized.includes("..")) {
-    throw new Error("Path traversal not allowed");
+  const relative = path.relative(baseResolved, resolved);
+  const segments = relative.split(path.sep).filter(Boolean);
+  if (segments.some((s) => s === ".." || s.includes("/") || s.includes("\\"))) {
+    return null;
   }
-  return normalized || ".";
+  return path.join(baseResolved, ...segments);
+}
+
+async function shouldExcludeSmbEntry(
+  entryPath: string,
+  allowedBaseResolved: string,
+  trustedBaseResolved: string,
+  parentStat: fs.Stats | null,
+): Promise<{ exclude: boolean; reason?: "mount_or_junction" | "special" }> {
+  try {
+    const resolvedPath = path.resolve(entryPath);
+    const allowedWithSep = allowedBaseResolved + path.sep;
+    if (resolvedPath !== allowedBaseResolved && !resolvedPath.startsWith(allowedWithSep)) {
+      return { exclude: false };
+    }
+    const trustedWithSep = trustedBaseResolved + path.sep;
+    if (resolvedPath !== trustedBaseResolved && !resolvedPath.startsWith(trustedWithSep)) {
+      return { exclude: false };
+    }
+
+    const pathForStat = buildPathUnderTrustedBase(trustedBaseResolved, entryPath);
+    if (!pathForStat) return { exclude: false };
+
+    const lstat = await fs.promises.lstat(pathForStat);
+    const lstatIsSymLink =
+      typeof lstat.isSymbolicLink === "function" ? lstat.isSymbolicLink() : false;
+    if (lstatIsSymLink) return { exclude: true, reason: "special" };
+    const lstatIsDir =
+      typeof lstat.isDirectory === "function" ? lstat.isDirectory() : true;
+    if (!lstatIsDir) return { exclude: true, reason: "special" };
+    if (
+      (typeof lstat.isBlockDevice === "function" && lstat.isBlockDevice()) ||
+      (typeof lstat.isCharacterDevice === "function" && lstat.isCharacterDevice()) ||
+      (typeof lstat.isFIFO === "function" && lstat.isFIFO()) ||
+      (typeof lstat.isSocket === "function" && lstat.isSocket())
+    ) {
+      return { exclude: true, reason: "special" };
+    }
+
+    const dirStat = await fs.promises.stat(pathForStat);
+    const parent = parentStat ?? await fs.promises.stat(path.dirname(pathForStat));
+
+    // SMB mountpoint/junction heuristic: device differs from parent.
+    if (dirStat.dev !== parent.dev) {
+      return { exclude: true, reason: "mount_or_junction" };
+    }
+
+    // Reparse/junction-like behavior can appear as lstat/stat divergence on SMB.
+    const statIsDir =
+      typeof dirStat.isDirectory === "function" ? dirStat.isDirectory() : true;
+    if (!statIsDir) return { exclude: true, reason: "special" };
+    if (lstat.dev !== dirStat.dev) return { exclude: true, reason: "special" };
+    if (lstat.ino != null && dirStat.ino != null && lstat.ino !== dirStat.ino) {
+      return { exclude: true, reason: "special" };
+    }
+
+    return { exclude: false };
+  } catch {
+    // Fail closed: unknown/broken entries are treated as special and skipped.
+    return { exclude: true, reason: "special" };
+  }
 }
 
 function getNormalizedMountSegments(request: MountRequest): {
@@ -87,8 +151,9 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private readonly idleTimeoutMs: number;
   private readonly mountTimeoutMs: number;
   private readonly unmountTimeoutMs: number;
-  private readonly resolveCifsHostnameToIp: boolean;
-
+  private readonly nfsMountCmd: string;
+  private readonly smbMountCmd: string;
+  private readonly unmountCmd: string;
   private readonly cifsBackupUid: number;
   private readonly mounts = new Map<string, MountRecord>();
   private readonly inflightMounts = new Map<string, Promise<MountRecord>>();
@@ -108,8 +173,14 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<number>("app.mount.timeoutMs") ?? 120000;
     this.unmountTimeoutMs =
       this.configService.get<number>("app.mount.unmountTimeoutMs") ?? 30000;
-    this.resolveCifsHostnameToIp =
-      this.configService.get<boolean>("app.mount.resolveCifsHostnameToIp") ?? true;
+    this.nfsMountCmd =
+      this.configService.get<string>("app.mount.nfsLinuxMountPathCmd") ??
+      "mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}";
+    this.smbMountCmd =
+      this.configService.get<string>("app.mount.smbLinuxMountPathCmd") ??
+      "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}";
+    this.unmountCmd =
+      this.configService.get<string>("app.mount.unmountCmd") ?? "umount ${DIR_PATH}";
     const configBackupUid = this.configService.get<number>("app.mount.backupuid") ?? 0;
     this.cifsBackupUid = configBackupUid;
   }
@@ -392,55 +463,18 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     return `${fileServerId}:${exportPath}:${dir}`;
   }
 
-  private buildMountArgs(
-    request: MountRequest,
-    mountDest: string,
-    smbCredentialsPath?: string,
-    /** Resolved IP (whether direct IP or DNS resolved) */
-    resolvedIp?: string,
-  ): string[] {
-    this.logger.log(
-      `Building mount args for ${request.protocol} to ${mountDest}`,
-    );
-    const hostname = (resolvedIp ?? request.hostname).replace(/\0/g, "").trim();
-    const exportPath = request.exportPath.replace(/\\/g, "/").replace(/\0/g, "").trim();
 
-    if (request.protocol === Protocol.NFS) {
-      return [
-        "-t",
-        "nfs",
-        "-o",
-        "nolock",
-        `${request.hostname.replace(/\0/g, "").trim()}:${exportPath}`,
-        mountDest,
-      ];
-    }
-
-    if (request.protocol === Protocol.SMB) {
-      const normalizedExport = exportPath.replace(/^\/+/, "");
-      const version = (request.protocolVersion?.replace(/^v/i, "") || "3.0").replace(/\0/g, "");
-      const credsOpt =
-        smbCredentialsPath != null
-          ? `credentials=${smbCredentialsPath}`
-          : "guest";
-      let opts = `${credsOpt},vers=${version}`;
-      if (this.cifsBackupUid != null) {
-        opts += `,backupuid=${this.cifsBackupUid}`;
-      }
-      this.logger.debug(
-        `CIFS mount opts (cifsBackupUid=${this.cifsBackupUid}): ${opts}`,
-      );
-      return [
-        "-t",
-        "cifs",
-        `//${hostname}/${normalizedExport}`,
-        mountDest,
-        "-o",
-        opts,
-      ];
-    }
-
-    throw new Error(`Unsupported protocol: ${request.protocol}`);
+  private async runCommand(
+    template: string,
+    envVars: Record<string, string>,
+    timeoutMs?: number,
+  ): Promise<void> {
+    const env = { ...process.env, ...envVars };
+    await execAsync(template, {
+      env,
+      timeout: timeoutMs ?? this.mountTimeoutMs,
+      maxBuffer: 1024 * 1024,
+    });
   }
 
   async ensureMounted(request: MountRequest): Promise<MountDetails> {
@@ -468,79 +502,91 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       this.inflightMounts.delete(key);
     }
   }
-  //Implementation using fs.promises.readdir
-  async listDirectoriesls(input: ListDirsInput): Promise<DirectoryEntry[]> {
-    const baseResolved = path.resolve(input.mountPath);
-    let pathToRead: string;
-    try {
-      const safeRelative = sanitizeRelativePathForFs(input.path ?? ".");
-      pathToRead = path.resolve(path.join(baseResolved, safeRelative));
-    } catch {
-      this.logger.warn("Path traversal rejected in listDirectoriesls");
+  
+  async listDirectories(input: ListDirsInput): Promise<DirectoryEntry[]> {
+    const mountBaseResolved = path.resolve(this.mountBase);
+    const mountBaseWithSep = mountBaseResolved + path.sep;
+    const requestedMountResolved = path.resolve(input.mountPath);
+    if (
+      requestedMountResolved !== mountBaseResolved &&
+      !requestedMountResolved.startsWith(mountBaseWithSep)
+    ) {
+      this.logger.warn("Mount path not under configured mount base");
       return [];
     }
-    if (pathToRead !== baseResolved && !pathToRead.startsWith(baseResolved + path.sep)) {
-      this.logger.warn("Path traversal rejected in listDirectoriesls");
-      return [];
-    }
-    const startTime = Date.now();
-    this.logger.log(`Listing directories in ${pathToRead}`);
-
-    try {
-      const entries = await fs.promises.readdir(pathToRead, { withFileTypes: true });
-
-      const directories = entries
-        .filter(entry => entry.isDirectory())
-        .map(entry => ({ name: entry.name }));
-
-      this.logger.log(`Found ${directories.length} directories`);
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      this.logger.log(`Directory listing completed in ${duration}s`);
-      return directories;
-      
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      
-      if (message.includes('ENOENT') || message.includes('No such file')) {
-        this.logger.warn(`Directory not found: ${pathToRead}`);
-        return [];
-      }
-
-      this.logger.error(`Error listing directories: ${message}`);
-      throw error;
-    }
-  }
-  //implementation using fast-glob
-  async listDirectoriesFastGlob(input: ListDirsInput): Promise<DirectoryEntry[]> {
     let fullPath: string;
     try {
       fullPath = resolvePathUnderBase(input.mountPath, input.path || ".");
     } catch {
-      this.logger.warn("Path traversal rejected in listDirectoriesFastGlob");
+      this.logger.warn("Path traversal rejected in listDirectories");
       return [];
     }
-    // In-function guard for static analysis (CodeQL): ensure path stays under base
-    const baseResolved = path.resolve(input.mountPath);
-    if (fullPath !== baseResolved && !fullPath.startsWith(baseResolved + path.sep)) {
-      this.logger.warn("Path traversal rejected in listDirectoriesFastGlob");
+    const resolvedFullPath = path.resolve(fullPath);
+    if (
+      resolvedFullPath !== requestedMountResolved &&
+      !resolvedFullPath.startsWith(requestedMountResolved + path.sep)
+    ) {
+      this.logger.warn("Path traversal rejected in listDirectories");
+      return [];
+    }
+    const safePath = buildPathUnderTrustedBase(
+      mountBaseResolved,
+      resolvedFullPath,
+    );
+    if (!safePath) {
+      this.logger.warn("Path traversal rejected in listDirectories");
       return [];
     }
     const startTime = Date.now();
-    this.logger.log(`Listing directories in ${fullPath}`);
+    this.logger.log(`Listing directories in ${safePath}`);
 
     try {
-      const entries = await fg(`${fullPath}/**`, {
-        onlyDirectories: true,
-        deep: 2,
-        followSymbolicLinks: false,
-        suppressErrors: true,
+      const entries = await fs.promises.readdir(safePath, {
+        withFileTypes: true,
       });
+      let directories: DirectoryEntry[] = [];
+      const safePathResolved = path.resolve(safePath);
+      const mountBaseResolvedForSmb = path.resolve(mountBaseResolved);
+      const safePathParentStat = input.protocol === Protocol.SMB
+        ? await fs.promises.stat(safePathResolved).catch(() => null)
+        : null;
+      const candidateDirents = entries.filter(
+        (dirent) => dirent.isDirectory() && !dirent.isSymbolicLink(),
+      );
 
-      const normalizedFullPath = fullPath.replace(/\/$/, '');
-      const directories = entries.map(entry => {
-        const name = entry.replace(normalizedFullPath + '/', '');
-        return { name };
-      });
+      if (input.protocol === Protocol.SMB) {
+        // Bounded concurrency improves SMB listing latency without flooding metadata calls.
+        const smbCheckBatchSize = 8;
+        for (let i = 0; i < candidateDirents.length; i += smbCheckBatchSize) {
+          const batch = candidateDirents.slice(i, i + smbCheckBatchSize);
+          const checked = await Promise.all(
+            batch.map(async (dirent) => {
+              const name = dirent.name.split(path.sep).join("/");
+              const entryFullPath = path.join(safePathResolved, dirent.name);
+              const smbFilter = await shouldExcludeSmbEntry(
+                entryFullPath,
+                safePathResolved,
+                mountBaseResolvedForSmb,
+                safePathParentStat,
+              );
+              return { name, smbFilter };
+            }),
+          );
+
+          for (const { name, smbFilter } of checked) {
+            if (smbFilter.exclude) {
+              this.logger.debug(`Excluding special file or mountpoint or junction from SMB listing: ${name}`);
+              continue;
+            }
+            directories.push({ name });
+          }
+        }
+      } else {
+        for (const dirent of candidateDirents) {
+          const name = dirent.name.split(path.sep).join("/");
+          directories.push({ name });
+        }
+      }
 
       this.logger.log(`Found ${directories.length} directories`);
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -549,10 +595,9 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('ENOENT') || message.includes('No such file')) {
-        this.logger.warn(`Directory not found: ${fullPath}`);
+        this.logger.warn(`Directory not found: ${safePath}`);
         return [];
       }
-
       this.logger.error(`Error listing directories: ${message}`);
       throw error;
     }
@@ -587,7 +632,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     let credsPath: string | undefined;
     let resolvedIp: string | undefined;
     
-    if (request.protocol === Protocol.SMB && this.resolveCifsHostnameToIp) {
+    if (request.protocol === Protocol.SMB) {
       // Always resolve/store IP for CIFS mounts (whether direct IP or DNS resolution)
       resolvedIp = await this.resolveHostToIp(
         request.hostname, 
@@ -597,9 +642,9 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       );
       this.logger.log(`Using IP ${resolvedIp} for CIFS mount ${request.hostname}:${request.exportPath}`);
     }
-    if (request.protocol === Protocol.SMB && request.username) {
+    if (request.protocol === Protocol.SMB) {
       credsPath = path.join(os.tmpdir(), `.cifs-${randomBytes(8).toString("hex")}.cred`);
-      const username = request.username.replace(/\0/g, "").trim();
+      const username = request.username ? request.username.replace(/\0/g, "").trim() : "guest";
       const password = String(request.password ?? "").replace(/\0/g, "");
       await fs.promises.writeFile(
         credsPath,
@@ -608,15 +653,38 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
       );
     }
     try {
-      const mountArgs = this.buildMountArgs(request, mountDir, credsPath, resolvedIp);
       await fs.promises.mkdir(mountDir, { recursive: true });
 
       this.logger.log(`Mounting ${request.hostname}:${request.exportPath} to ${mountDir}`);
+      const hostname = (resolvedIp ?? request.hostname).replace(/\0/g, "").trim();
+      const exportPath = request.exportPath.replace(/\\/g, "/").replace(/\0/g, "").trim();
+      const normalizedExport = exportPath.replace(/^\/+/, "");
+
       try {
-        await execFileAsync("mount", mountArgs, {
-          timeout: this.mountTimeoutMs,
-          maxBuffer: 1024 * 1024,
-        });
+        if (request.protocol === Protocol.NFS) {
+          const nfsVersion = (request as MountRequest & { protocolVersion?: string }).protocolVersion?.replace(/\0/g, "") || "4";
+          await this.runCommand(this.nfsMountCmd, {
+            HOST: request.hostname.replace(/\0/g, "").trim(),
+            MOUNT_PATH: exportPath,
+            DIR_PATH: mountDir,
+            PROTOCOL_VERSION: nfsVersion,
+          });
+        } else if (request.protocol === Protocol.SMB) {
+          const vers = (request.protocolVersion?.replace(/^v/i, "") || "3.0").replace(/\0/g, "");
+          const backupUid = this.cifsBackupUid != null ? String(this.cifsBackupUid) : "0";
+          await this.runCommand(this.smbMountCmd, {
+            HOST: hostname,
+            SHARE_PATH: normalizedExport,
+            DIR_PATH: mountDir,
+            USERNAME: (request.username ?? "").replace(/\0/g, "").trim(),
+            PASSWORD: String(request.password ?? "").replace(/\0/g, ""),
+            CREDENTIALS_FILE: credsPath ?? "",
+            VERS: vers,
+            BACKUPUID: backupUid,
+          });
+        } else {
+          throw new Error(`Unsupported protocol: ${request.protocol}`);
+        }
       } catch (error) {
         // Clean up the directory created by mkdir since the mount failed
         await fs.promises.rm(mountDir, { recursive: true, force: true }).catch(() => {});
@@ -704,9 +772,11 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
 
   private async performUnmount(record: MountRecord): Promise<void> {
     this.logger.log(`Unmounting ${record.mountPath}`);
-    await execFileAsync("umount", [record.mountPath], {
-      timeout: this.unmountTimeoutMs,
-    });
+    await this.runCommand(
+      this.unmountCmd,
+      { DIR_PATH: record.mountPath },
+      this.unmountTimeoutMs,
+    );
     await fs.promises.rm(record.mountPath, { recursive: true, force: true });
   }
 

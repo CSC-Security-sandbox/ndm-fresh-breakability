@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 import JobErrorsContainer from "@modules/jobs/jobs-list/job-details/components/JobErrorsContainer";
 import { JobRunErrorsOverviewApiType } from "@/types/app.type";
 
-const JobErrors = ({ latestJobRunId }: { latestJobRunId: string }) => {
+const JobErrors = ({ latestJobRunId }: { latestJobRunId?: string }) => {
   const navigate = useNavigate();
   const [errorDetails, setErrorDetails] = useState<
     JobRunErrorsOverviewApiType[]

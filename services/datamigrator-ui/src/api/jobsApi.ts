@@ -360,6 +360,16 @@ export const jobsApi = createApi({
         body: payload,
       }),
     }),
+
+    getInProcessFiles: builder.query({
+      query: ({ jobRunId, all = false }: { jobRunId: string; all?: boolean }) => ({
+        url: `job-run/${jobRunId}/migration-activity${all ? '?all=true' : ''}`,
+        method: 'GET',
+      }),
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response;
+      },
+    }),
   }),
 });
 
@@ -396,4 +406,6 @@ export const {
   useLazyGetJobRunIdentityMappingsQuery,
   useGetJobConfigInventoryStatsMutation,
   useRetryJobRunMutation,
+  useGetInProcessFilesQuery,
+  useLazyGetInProcessFilesQuery,
 } = jobsApi;

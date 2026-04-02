@@ -152,6 +152,7 @@ export interface MountDetails {
 export interface ListDirsInput {
   mountPath: string;
   path?: string;
+  protocol?: Protocol;
 }
 
 //A single directory entry returned by directory listing operations
