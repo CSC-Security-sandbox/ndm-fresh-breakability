@@ -120,8 +120,8 @@
 </asup:TABLE_INFO>
 {{ROW_TEMPLATE_START}}
 <asup:ROW col_time_us="{{COL_TIME_US}}">
-  <seq-num>{{SEQ_NUM}}</seq-num>
-  <prio-num>{{PRIO_NUM}}</prio-num>
+  <seq-num>1</seq-num>
+  <prio-num>1</prio-num>
   <subsys>support_bundle</subsys>
   <cmd-tgt>dblade</cmd-tgt>
   <body-file>{{BODY_FILE}}</body-file>
