@@ -42,6 +42,7 @@ describe('AsupController', () => {
       updateAsupSettings: jest.fn(),
       handleAsupTransmission: jest.fn(),
       transmitAsupMetrics: jest.fn(),
+      transmitSupportBundle: jest.fn(),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -206,6 +207,52 @@ describe('AsupController', () => {
         controller.updateAsupSettings({ enabled: true }, mockRequest('user-1')),
       ).rejects.toThrow(InternalServerErrorException);
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  // ─── POST /asup/support-bundle/send ─────────────────────────
+
+  describe('sendSupportBundle', () => {
+    const validBase64 = Buffer.from('mock-zip-data').toString('base64');
+    const validDto = { fileName: 'ndm_bundle.zip', bundleBase64: validBase64 };
+
+    it('should decode base64, call transmitSupportBundle, and return success=true', async () => {
+      schedulerService.transmitSupportBundle.mockResolvedValue(undefined);
+
+      const result = await controller.sendSupportBundle(validDto);
+
+      expect(result).toEqual({ success: true });
+      expect(schedulerService.transmitSupportBundle).toHaveBeenCalledWith(
+        validDto.fileName,
+        expect.any(Buffer),
+      );
+      // Verify the buffer content matches the decoded base64
+      const [, passedBuffer] = schedulerService.transmitSupportBundle.mock.calls[0];
+      expect(passedBuffer.toString()).toBe('mock-zip-data');
+    });
+
+    it('should log the file name and decoded buffer size', async () => {
+      schedulerService.transmitSupportBundle.mockResolvedValue(undefined);
+
+      await controller.sendSupportBundle(validDto);
+
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining(`fileName=${validDto.fileName}`),
+      );
+    });
+
+    it('should throw InternalServerErrorException when transmitSupportBundle fails', async () => {
+      schedulerService.transmitSupportBundle.mockRejectedValue(
+        new Error('ASUP endpoint unreachable'),
+      );
+
+      await expect(controller.sendSupportBundle(validDto)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`fileName=${validDto.fileName}`),
+        expect.any(String),
+      );
     });
   });
 });

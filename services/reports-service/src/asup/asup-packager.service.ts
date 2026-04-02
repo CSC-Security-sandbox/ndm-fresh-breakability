@@ -72,7 +72,7 @@ export class AsupPackagerService {
     this.logger.log(`Migration XML from generator (${migrationXmlSize} bytes, ${collectionTimeMs}ms)`);
 
     // 2. Build x-header-data.txt first so its size is available for the manifest row
-    const { headersText, headersMap } = this.buildXHeaders(serialId);
+    const { headersText, headersMap } = this.buildXHeaders(this.xHeadersTemplate, serialId);
     const xHeaderSize = Buffer.byteLength(headersText, 'utf-8');
     this.logger.log(`Generated x-header-data.txt (${xHeaderSize} bytes)`);
 
@@ -84,10 +84,6 @@ export class AsupPackagerService {
       xHeaderSize,
     );
     this.logger.log(`Manifest XML from generator (${Buffer.byteLength(manifestXml, 'utf-8')} bytes)`);
-
-    // 3. Build x-header.txt + HTTP headers map
-    const { headersText, headersMap } = this.buildXHeaders(this.xHeadersTemplate);
-    this.logger.log(`Generated x-header.txt (${Buffer.byteLength(headersText, 'utf-8')} bytes)`);
 
     // 4. Write temp files and compress into .7z
     await fs.mkdir(this.WORK_DIR, { recursive: true });
@@ -110,7 +106,7 @@ export class AsupPackagerService {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        execFile(
+        execFileCb(
           sevenBin.path7za,
           ['a', archivePath, files.migration, files.manifest, files.xHeader],
           (err, _stdout, stderr) => {
@@ -202,15 +198,7 @@ export class AsupPackagerService {
 
     const archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
 
-    await new Promise<void>((resolve, reject) => {
-      const stream = Seven.add(
-        archivePath,
-        [path.join(stagedPayloadDir, '*')],
-        { $bin: sevenBin.path7za },
-      );
-      stream.on('end', () => resolve());
-      stream.on('error', (err: Error) => reject(err));
-    });
+    await execFile(sevenBin.path7za, ['a', archivePath, '.'], { cwd: stagedPayloadDir });
 
     let archiveBuffer = await fs.readFile(archivePath);
     const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
@@ -282,7 +270,7 @@ export class AsupPackagerService {
 
   // ─── X-Headers ────────────────────────────────────────────────
 
-  private buildXHeaders(serialId: string, template: string): {
+  private buildXHeaders(template: string, serialId = ''): {
     headersText: string;
     headersMap: Record<string, string>;
   } {
