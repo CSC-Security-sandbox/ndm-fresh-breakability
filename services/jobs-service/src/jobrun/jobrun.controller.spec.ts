@@ -70,6 +70,7 @@ describe('JobRunController', () => {
             checkWorkerHealth: jest.fn(),
             updateWorkerResponse: jest.fn(),
             getJobRunIdentityMappings: jest.fn(),
+            getInProcessFiles: jest.fn(),
           },
         },
         {
@@ -299,6 +300,30 @@ describe('JobRunController', () => {
       jobRunService.getJobRunIdentityMappings.mockResolvedValue(result as any);
       expect(await controller.getJobRunIdentityMappings(jobRunId)).toBe(result);
       expect(jobRunService.getJobRunIdentityMappings).toHaveBeenCalledWith(jobRunId);
+    });
+  });
+
+  describe('getInProcessFiles', () => {
+    const mockResult = {
+      data: [
+        { fileName: 'dir/file.txt', fileSize: 1024, timeElapsed: 30 },
+        { fileName: 'dir/file2.txt', fileSize: null, timeElapsed: 90 },
+      ],
+      totalCount: 2,
+    };
+
+    it('should return in-process files with all defaulting to false when param is absent', async () => {
+      const jobRunId = 'run1';
+      jobRunService.getInProcessFiles.mockResolvedValue(mockResult);
+      expect(await controller.getInProcessFiles(jobRunId)).toBe(mockResult);
+      expect(jobRunService.getInProcessFiles).toHaveBeenCalledWith(jobRunId, false);
+    });
+
+    it('should pass all=true when query param is true', async () => {
+      const jobRunId = 'run1';
+      jobRunService.getInProcessFiles.mockResolvedValue(mockResult);
+      expect(await controller.getInProcessFiles(jobRunId, true)).toBe(mockResult);
+      expect(jobRunService.getInProcessFiles).toHaveBeenCalledWith(jobRunId, true);
     });
   });
 });

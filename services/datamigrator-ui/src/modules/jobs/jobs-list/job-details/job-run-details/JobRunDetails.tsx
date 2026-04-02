@@ -32,6 +32,9 @@ import {
   ActionMenuButtonStyle,
   Breadcrumbs,
   Button,
+  Card,
+  CardHeader,
+  CardTitle,
   DropdownButton, 
   Text, 
 } from "@netapp/bxp-design-system-react";
@@ -42,6 +45,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import useAdhocRun from "@hooks/useAdhocRun";
 import { Show } from "@components/show/Show";
 import JobErrors from "@modules/jobs/jobs-list/job-details/components/JobErrors";
+import { InfoIcon } from "@netapp/bxp-style/react-icons/Notification";
 import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 import ExistingIdentityMappings from "@hooks/useExistingIdentityMappings";
@@ -427,8 +431,30 @@ const JobRunDetails = () => {
             workersUrl={workersUrl}
           />
         </Box>
-        <Box className="grow basis-1/2 items-stretch">
-          <JobErrors />
+        <Box className="grow basis-1/2 flex flex-col gap-6">
+          { jobRunDetails?.jobConfig?.jobType !== JOBS_TYPE.DISCOVERY && <Card>
+            <CardHeader>
+              <CardTitle className="flex gap-4 items-center">
+                <InfoIcon />
+                <Text bold>Migration Activity</Text>
+              </CardTitle>
+              <Button
+                onClick={() => navigate(`/job-details/${jobId}/run/${jobRunId}/migration-activity`)}
+                color="secondary"
+                style={{ margin: "0 0 0 auto" }}
+                isDisabled={![
+                  JOB_STATUS_TYPE_ENUM.RUNNING,
+                  JOB_STATUS_TYPE_ENUM.PAUSING,
+                  JOB_STATUS_TYPE_ENUM.STOPPING,
+                ].includes(jobRunDetails?.status)}
+              >
+                View
+              </Button>
+            </CardHeader>
+          </Card>}
+          <Box className="items-stretch">
+            <JobErrors />
+          </Box>
         </Box>
       </Box>
     </Box>

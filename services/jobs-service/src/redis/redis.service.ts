@@ -188,6 +188,29 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`[Job-Service] [${traceId}] Job context saved to Redis.`);
   }
 
+  async getInProcessFiles(jobRunId: string, all: boolean = false): Promise<{ data: { fileName: string; fileSize: number | null; timeElapsed: number }[]; totalCount: number }> {
+    await this.ensureClient();
+    const key = `${jobRunId}:inProcessFiles`;
+    const IN_PROCESS_FILES_LIMIT = 10;
+    const stopIndex = all ? -1 : IN_PROCESS_FILES_LIMIT - 1;
+    const [entries, total] = await Promise.all([
+      this.client.zRangeWithScores(key, 0, stopIndex),
+      this.client.zCard(key),
+    ]);
+    const now = Date.now();
+    return {
+      data: entries.map(({ value, score }) => {
+        const { fPath, size } = JSON.parse(value);
+        return {
+          fileName: fPath,
+          fileSize: size,
+          timeElapsed: Math.floor((now - score) / 1000),
+        };
+      }),
+      totalCount: total,
+    };
+  }
+
   async getJobState(traceId: string): Promise<any> {
     try {
       const jobContext = await this.getJobContext(traceId);

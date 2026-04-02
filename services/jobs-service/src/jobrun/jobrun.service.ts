@@ -307,6 +307,11 @@ export class JobRunService {
     );
   }
 
+  // ------------------ Get In-Process Files -------------------- //
+  async getInProcessFiles(jobRunId: string, all: boolean): Promise<{ data: { fileName: string; fileSize: number | null; timeElapsed: number }[]; totalCount: number }> {
+    return this.redisService.getInProcessFiles(jobRunId, all);
+  }
+
   // ------------------ Get Failed Operations -------------------- //
   async getFailedOperations(
     jobRunId: string,

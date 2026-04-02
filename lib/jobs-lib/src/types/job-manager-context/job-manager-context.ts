@@ -168,6 +168,10 @@ export  class JobManagerContext {
         await this.cursorMap.setValue('retryCursor', cursor);
     }
     
+    // In-Process Files ZSET Methods
+    async addInProcessFile(fPath: string, size: number | null): Promise<void> {}
+    async removeInProcessFile(fPath: string, size: number | null): Promise<void> {}
+
     serialize(): string {
         const data = {
             jobRunId: this.jobRunId,

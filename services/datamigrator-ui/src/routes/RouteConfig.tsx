@@ -31,6 +31,7 @@ const JobRunListPage = lazy(() => import("@pages/JobRunListPage"));
 const SpeedTestPage = lazy(() => import("@pages/SpeedTestPage"));
 const JobTaskErrorsPage = lazy(() => import("@pages/JobTaskErrorsPage"));
 const SpeedTestDetailsPage = lazy(() => import("@pages/SpeedTestDetailsPage"));
+const MigrationActivityPage = lazy(() => import("@pages/MigrationActivityPage"));
 
 export const routeConfig: RouteConfigType[] = [
   {
@@ -106,6 +107,10 @@ export const routeConfig: RouteConfigType[] = [
   {
     path: "job-details/:jobId/run/:jobRunId/tasks",
     element: <JobTasksPage />,
+  },
+  {
+    path: "job-details/:jobId/run/:jobRunId/migration-activity",
+    element: <MigrationActivityPage />,
   },
   {
     path: "jobs-run-list",

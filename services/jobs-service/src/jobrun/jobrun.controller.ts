@@ -6,6 +6,7 @@ import {
   Inject,
   Param,
   Patch,
+  ParseBoolPipe,
   Post,
   Put,
   Query,
@@ -243,5 +244,21 @@ export class JobRunController {
   @Get(":jobRunId/mappings-fetch-jobrun")
   async getJobRunIdentityMappings(@Param("jobRunId") jobRunId: string) {
     return this.jobRunService.getJobRunIdentityMappings(jobRunId);
+  }
+
+  @ApiOperation({ summary: "Get in-process files for a job run, sorted by longest elapsed time" })
+  @ApiResponse({
+    status: 200,
+    description: "Returns in-process MIGRATE operations sorted by time elapsed. Use all=true to retrieve all files.",
+  })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
+  @Get(":jobRunId/migration-activity")
+  async getInProcessFiles(
+    @Param("jobRunId") jobRunId: string,
+    @Query("all", new ParseBoolPipe({ optional: true })) all?: boolean,
+  ) {
+    const fetchAll = all ?? false;
+    return this.jobRunService.getInProcessFiles(jobRunId, fetchAll);
   }
 }
