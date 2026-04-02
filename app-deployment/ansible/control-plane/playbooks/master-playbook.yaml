@@ -37,6 +37,7 @@
 
 - name: Configure fluentd
   import_playbook: configure-fluentd.yaml
+  when: local_cluster is not defined
 
 - name: Configure otel 
   import_playbook: configure-otel.yaml

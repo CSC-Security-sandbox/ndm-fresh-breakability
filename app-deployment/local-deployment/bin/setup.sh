@@ -150,7 +150,7 @@ case $1 in
         ansible_base="$script_dir/../../ansible/control-plane"
         
         cd "$ansible_base/playbooks"
-        ansible-playbook package-helm-chart.yaml \
+        ANSIBLE_CONFIG="$ansible_base/config/ansible.cfg" ansible-playbook package-helm-chart.yaml \
             -i ../config/local-inventory.yaml \
             --extra-vars "build_version=0.1.0" \
             --extra-vars "@../config/group_vars/all.yaml"
@@ -161,7 +161,7 @@ case $1 in
 
         # Run master playbook from playbooks directory to resolve vars.yaml paths
         cd "$ansible_base/playbooks"
-        ansible-playbook master-playbook.yaml -i ../config/inventory.yaml -e local_cluster=true
+        ANSIBLE_CONFIG="$ansible_base/config/ansible.cfg" ansible-playbook master-playbook.yaml -i ../config/inventory.yaml -e local_cluster=true
         cd - > /dev/null
         ;;
     data-plane)
@@ -216,7 +216,7 @@ case $1 in
         echo "      ansible_user: ubuntu" >> $worker_inventory_file
         echo "      ansible_ssh_private_key_file: ~/.ssh/id_rsa" >> $worker_inventory_file
 
-        ansible-playbook ../../ansible/worker/playbooks/master-playbook.yaml -i $worker_inventory_file -e local_binary_path=$worker_binary_path -e local_cluster=true
+        ANSIBLE_CONFIG="../../ansible/worker/config/ansible.cfg" ansible-playbook ../../ansible/worker/playbooks/master-playbook.yaml -i $worker_inventory_file -e local_binary_path=$worker_binary_path -e local_cluster=true
         ;;
 
     *)
