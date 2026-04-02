@@ -52,6 +52,9 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.8.3"
   },
+  "overrides": {
+    "flatted": "3.4.2"
+  },
   "jest-junit": {
     "suiteName": "Unit Tests",
     "outputDirectory": "./test/unit/test-results",

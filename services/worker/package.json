@@ -102,6 +102,9 @@
     "webpack-cli": "^6.0.1"
   },
   "overrides": {
+    "flatted": "3.4.2",
+    "picomatch": "4.0.4",
+    "multer": "2.1.1",
     "form-data": "^4.0.4",
     "sha.js": "^2.4.12",
     "qs": "^6.14.1",
@@ -172,10 +175,28 @@
       "/coverage",
       "/dist",
       "/test/",
-      "src/workflows/discovery/core/discovery-job-workflow.spec.ts",
       "src/logger/logger.service.ts",
-      "src/activities/work-manager/factory/worker-options.factory.service.ts",
-      "src/workflows/speed-test/speed-test-job-workflow.spec.ts"
+      "src/activities/common/win-shell.service.ts",
+      "src/activities/core/migrate/sync-activity.service.ts",
+      "src/activities/core/scan/discovery/discovery-scan.service.ts",
+      "src/activities/core/utils/file-type-detection.service.ts",
+      "src/activities/speed-test/speed-test-activities.ts",
+      "src/activities/upgrade/binary-handler.interface.ts",
+      "src/activities/upgrade/upgrade.activity.service.ts",
+      "src/activities/upgrade/handlers/linux-binary.handler.ts",
+      "src/activities/upgrade/handlers/windows-binary.handler.ts",
+      "src/activities/utils/utils.ts",
+      "src/activities/validate-path/validate-path.service.ts",
+      "src/activities/working-directory/working-directory.service.ts",
+      "src/metrics/metrics.service.ts",
+      "src/protocols/nfs/nfs.protocol.ts",
+      "src/protocols/smb/smb.protocol.ts",
+      "src/storage-clients/storage-client.ts",
+      "src/storage-clients/isilon/isilon-storage-client.ts",
+      "src/utils/temporal.utils.ts",
+      "src/utils/worker-manager.mappers.ts",
+      "src/work-manager/factory/worker-options.factory.service.ts",
+      "src/work-manager/work-manager.service.ts"
     ]
   }
 }
