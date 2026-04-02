@@ -175,6 +175,9 @@ export class AsupXmlGeneratorService {
         ? bundleEntries
         : [{ name: 'support-bundle-unknown.log', size: 0 }];
 
+    // Replace {{COL_TIME_US}} in the prefix (Manifest root element attribute) as well as each row
+    const filledPrefix = prefix.replace(/\{\{COL_TIME_US\}\}/g, colTimeUs);
+
     const rows = normalizedEntries.map((entry, index) =>
       rowTemplate
         .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
@@ -188,7 +191,7 @@ export class AsupXmlGeneratorService {
         .replace(/\{\{SIZE_COMPRESSED\}\}/g, String(entry.size))
     );
 
-    return `${prefix}\n${rows.join('\n')}\n${suffix}\n`;
+    return `${filledPrefix}\n${rows.join('\n')}\n${suffix}\n`;
   }
 
   /**

@@ -56,6 +56,21 @@ describe('AsupXmlGeneratorService', () => {
   <xheader-time>{{XHEADER_TIME_COLLECTED_MS}}</xheader-time>
 </manifest>`;
 
+  // Minimal support-bundle manifest template (mirrors actual template structure)
+  const supportBundleManifestTemplate = `<Manifest col_time_us="{{COL_TIME_US}}">
+{{ROW_TEMPLATE_START}}
+<asup:ROW col_time_us="{{COL_TIME_US}}">
+  <seq-num>{{SEQ_NUM}}</seq-num>
+  <prio-num>{{PRIO_NUM}}</prio-num>
+  <subsys>{{SUBSYS}}</subsys>
+  <cmd-tgt>{{CMD_TGT}}</cmd-tgt>
+  <body-file>{{BODY_FILE}}</body-file>
+  <size-collected>{{SIZE_COLLECTED}}</size-collected>
+  <time-collected-ms>{{TIME_COLLECTED_MS}}</time-collected-ms>
+  <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
+</asup:ROW>
+{{ROW_TEMPLATE_END}}
+</Manifest>`;
 
   beforeEach(async () => {
     asupStatsService = {
@@ -73,6 +88,9 @@ describe('AsupXmlGeneratorService', () => {
       }
       if (filename === 'manifest.xml.template') {
         return Promise.resolve(manifestTemplate);
+      }
+      if (filename === 'support-bundle-manifest.xml.template') {
+        return Promise.resolve(supportBundleManifestTemplate);
       }
       return Promise.reject(new Error(`Unknown template: ${filename}`));
     }) as any);
@@ -453,6 +471,7 @@ describe('AsupXmlGeneratorService', () => {
     });
 
     it('should use discovery job type when project has only discovery jobs', async () => {
+
       const mockStats: ProjectStats[] = [
         {
           projectId: 'proj-disc',
@@ -485,6 +504,141 @@ describe('AsupXmlGeneratorService', () => {
       const xml = await service.buildMigrationProjectXml();
 
       expect(xml).toContain('<job-type>discovery</job-type>');
+    });
+  });
+
+  // ─── buildSupportBundleManifestXml ─────────────────────────
+
+  describe('buildSupportBundleManifestXml', () => {
+    it('should replace {{COL_TIME_US}} in the manifest prefix col_time_us attribute (Bug 1 fix)', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'service.log', size: 1024 }],
+        100,
+      );
+
+      // The Manifest root element attribute must not contain the raw placeholder
+      expect(xml).not.toContain('col_time_us="{{COL_TIME_US}}"');
+      // Must be replaced with a numeric microsecond timestamp
+      expect(xml).toMatch(/col_time_us="\d{16,}"/);
+    });
+
+    it('should assign 1-indexed sequential seq-num and prio-num for each entry (Bug 2 fix)', async () => {
+      const entries = [
+        { name: 'alpha.log', size: 100 },
+        { name: 'beta.log', size: 200 },
+        { name: 'gamma.log', size: 300 },
+      ];
+
+      const xml = await service.buildSupportBundleManifestXml(entries, 50);
+
+      expect(xml).toContain('<seq-num>1</seq-num>');
+      expect(xml).toContain('<seq-num>2</seq-num>');
+      expect(xml).toContain('<seq-num>3</seq-num>');
+      expect(xml).toContain('<prio-num>1</prio-num>');
+      expect(xml).toContain('<prio-num>2</prio-num>');
+      expect(xml).toContain('<prio-num>3</prio-num>');
+      expect(xml).not.toContain('{{SEQ_NUM}}');
+      expect(xml).not.toContain('{{PRIO_NUM}}');
+    });
+
+    it('should render body-file, size-collected, and time-collected-ms for each entry', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'error.log', size: 2048 }],
+        200,
+      );
+
+      expect(xml).toContain('<body-file>error.log</body-file>');
+      expect(xml).toContain('<size-collected>2048</size-collected>');
+      expect(xml).toContain('<time-collected-ms>200</time-collected-ms>');
+      expect(xml).toContain('<size-compressed>2048</size-compressed>');
+    });
+
+    it('should escape XML special characters in entry filenames', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'log<>&"test.txt', size: 50 }],
+        10,
+      );
+
+      expect(xml).toContain('<body-file>log&lt;&gt;&amp;&quot;test.txt</body-file>');
+      expect(xml).not.toContain('<body-file>log<>');
+    });
+
+    it('should use a placeholder entry when bundleEntries is empty', async () => {
+      const xml = await service.buildSupportBundleManifestXml([], 0);
+
+      expect(xml).toContain('<body-file>support-bundle-unknown.log</body-file>');
+      expect(xml).toContain('<seq-num>1</seq-num>');
+    });
+
+    it('should not contain any unreplaced template placeholders in the output', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'ndm.log', size: 512 }],
+        75,
+      );
+
+      expect(xml).not.toContain('{{');
+      expect(xml).not.toContain('}}');
+    });
+
+    it('should replace {{COL_TIME_US}} in asup:ROW col_time_us attribute for every row', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'a.log', size: 100 }, { name: 'b.log', size: 200 }],
+        10,
+      );
+
+      // Neither row should keep the raw placeholder
+      expect(xml).not.toContain('col_time_us="{{COL_TIME_US}}"');
+      // Both rows (2 occurrences) should have a numeric timestamp
+      const rowMatches = xml.match(/<asup:ROW col_time_us="\d{16,}">/g);
+      expect(rowMatches).toHaveLength(2);
+    });
+
+    it('should set subsys=support_bundle and cmd-tgt=dblade in every row', async () => {
+      const xml = await service.buildSupportBundleManifestXml(
+        [{ name: 'a.log', size: 100 }, { name: 'b.log', size: 200 }],
+        10,
+      );
+
+      const subsysMatches = xml.match(/<subsys>support_bundle<\/subsys>/g);
+      const cmdTgtMatches = xml.match(/<cmd-tgt>dblade<\/cmd-tgt>/g);
+      expect(subsysMatches).toHaveLength(2);
+      expect(cmdTgtMatches).toHaveLength(2);
+    });
+
+    it('should use cached support-bundle-manifest template on subsequent calls', async () => {
+      await service.buildSupportBundleManifestXml([{ name: 'first.log', size: 10 }], 5);
+      mockedFs.readFile.mockClear();
+
+      const xml = await service.buildSupportBundleManifestXml([{ name: 'second.log', size: 20 }], 10);
+
+      const templateReads = mockedFs.readFile.mock.calls.filter(
+        (call) => String(call[0]).includes('support-bundle-manifest.xml.template'),
+      );
+      expect(templateReads).toHaveLength(0);
+      expect(xml).toContain('<body-file>second.log</body-file>');
+    });
+
+    it('should throw when support-bundle-manifest.xml.template has invalid structure', async () => {
+      mockedFs.readFile.mockImplementation(((filePath: string) => {
+        const filename = path.basename(filePath);
+        if (filename === 'support-bundle-manifest.xml.template') {
+          return Promise.resolve('<Manifest>no row template markers here</Manifest>');
+        }
+        return Promise.resolve('');
+      }) as any);
+
+      const module = await Test.createTestingModule({
+        providers: [
+          AsupXmlGeneratorService,
+          { provide: AsupStatsService, useValue: asupStatsService },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+        ],
+      }).compile();
+      const freshService = module.get<AsupXmlGeneratorService>(AsupXmlGeneratorService);
+
+      await expect(
+        freshService.buildSupportBundleManifestXml([{ name: 'a.log', size: 0 }], 0),
+      ).rejects.toThrow('manifest.xml.template must contain {{ROW_TEMPLATE_START}} and {{ROW_TEMPLATE_END}}');
     });
   });
 });

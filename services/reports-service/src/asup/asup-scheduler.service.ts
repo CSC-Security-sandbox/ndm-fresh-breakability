@@ -284,7 +284,7 @@ export class AsupSchedulerService {
 
       this.logger.log(`[TransmitSupportBundle] Sending chunk ${chunkNumber}/${totalChunks} - size=${chunkSizeMB}MB, bytes=[${start}-${end}]`);
 
-      const chunkHeaders = {
+      const chunkBaseHeaders = {
         ...baseHeaders,
         'X-Netapp-asup-large': 'true',
         'X-Netapp-asup-large-filename': archiveFilename,
@@ -293,15 +293,19 @@ export class AsupSchedulerService {
         'X-Netapp-asup-chunk-number': chunkNumber.toString(),
         'X-Netapp-asup-chunk-size': chunkBuffer.length.toString(),
         'X-Netapp-asup-chunk-total': totalChunks.toString(),
-        'X-Netapp-asup-retransmit': 'false',
       };
 
       let lastError: Error | null = null;
       for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
+        // ISF spec: retransmit must be true for any attempt after the first
+        const chunkHeaders = {
+          ...chunkBaseHeaders,
+          'X-Netapp-asup-retransmit': attempt > 1 ? 'true' : 'false',
+        };
         try {
           const response = await axios.put(requestUrl, chunkBuffer, {
             headers: chunkHeaders,
-            timeout: 120000,
+            timeout: 1800000,
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
           });

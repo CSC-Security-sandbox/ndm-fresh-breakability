@@ -14,6 +14,8 @@ import { SerialIdSyncService } from '../serial-id-sync.service';
 const sevenBin = require('7zip-bin');
 const execFile = promisify(execFileCb);
 
+const ISF_THRESHOLD_BYTES = 200 * 1024 * 1024; // 200 MB
+
 /**
  * AsupPackagerService
  *
@@ -153,6 +155,7 @@ export class AsupPackagerService {
     archivePath: string;
     md5Checksum: string;
     headersMap: Record<string, string>;
+    isLargePayload: boolean;
   }> {
     this.logger.log(`Starting support bundle ASUP packaging for ${bundleFilename}...`);
     const startTime = Date.now();
@@ -209,17 +212,48 @@ export class AsupPackagerService {
       stream.on('error', (err: Error) => reject(err));
     });
 
-    const archiveBuffer = await fs.readFile(archivePath);
+    let archiveBuffer = await fs.readFile(archivePath);
+    const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
+    const archiveFilename = path.basename(archivePath);
+
+    // ISF spec: X-Netapp-asup-large and X-Netapp-asup-large-filename must appear
+    // in BOTH the Payload (x-header.txt inside .7z) and Transmission (HTTP headers).
+    // We update x-header.txt inside the existing archive only when the payload is large.
+    if (isLargePayload) {
+      this.logger.log(
+        `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
+        ` > 200MB threshold — appending ISF fields to x-header.txt inside .7z`,
+      );
+      const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
+      const existingXHeader = await fs.readFile(isfXHeaderPath, 'utf-8');
+      const isfLines =
+        `X-Netapp-asup-large: true\n` +
+        `X-Netapp-asup-large-filename: ${archiveFilename}\n`;
+      await fs.writeFile(isfXHeaderPath, existingXHeader.trimEnd() + '\n' + isfLines, 'utf-8');
+
+      // Update only x-header.txt inside the existing .7z (avoids full recompression)
+      await execFile(sevenBin.path7za, ['u', archivePath, 'x-header.txt'], {
+        cwd: stagedPayloadDir,
+      });
+
+      // MD5 must be recomputed over the updated archive
+      archiveBuffer = await fs.readFile(archivePath);
+      this.logger.log(
+        `[packageSupportBundlePayload] x-header.txt updated inside .7z with ISF fields`,
+      );
+    }
+
     const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
     headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
 
+    // Staged dir must be cleaned up AFTER the ISF update above
     await Promise.all(
       Object.values(files).map((f) => fs.unlink(f).catch(() => {})),
     );
     await fs.rm(extractedDir, { recursive: true, force: true }).catch(() => {});
     await fs.rm(stagedPayloadDir, { recursive: true, force: true }).catch(() => {});
 
-    return { archivePath, md5Checksum, headersMap };
+    return { archivePath, md5Checksum, headersMap, isLargePayload };
   }
 
   // ─── Templates ───────────────────────────────────────────────

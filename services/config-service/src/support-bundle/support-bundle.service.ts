@@ -226,7 +226,7 @@ export class SupportBundleService {
           bundleBase64,
         },
         {
-          timeout: 120000,
+          timeout: 0,
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
         },
