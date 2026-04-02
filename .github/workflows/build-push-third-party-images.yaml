@@ -1,0 +1,174 @@
+name: Build and Push Third-Party Docker Images Tarball
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — pull and save images but skip Artifactory upload'
+        required: false
+        default: false
+        type: boolean
+      keycloak_tag:
+        description: 'Keycloak image tag (most frequently changed)'
+        required: false
+        default: '26.5.6-debian-12-r0'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-tarball:
+    name: Build ndm-docker-images.tar
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      TARBALL_NAME: ndm-docker-images.tar
+      ARTIFACTORY_BASE_URL: https://generic.repo.eng.netapp.com/artifactory/openlab-generic
+      ARTIFACTORY_PATH: cicd/ndm/docker-images
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+
+      - name: Define image list
+        id: images
+        run: |
+          KEYCLOAK_TAG="${{ github.event.inputs.keycloak_tag }}"
+
+          if [[ ! "${KEYCLOAK_TAG}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "::error::Invalid keycloak_tag '${KEYCLOAK_TAG}'. Must match [a-zA-Z0-9._-]+"
+            exit 1
+          fi
+
+          cat > /tmp/images.txt <<IMAGES
+          docker.io/bitnami/keycloak:${KEYCLOAK_TAG}
+          docker.io/bitnami/postgresql:17.6.0-debian-12-r0
+          docker.io/bitnami/os-shell:12-debian-12-r50
+          docker.io/bitnami/postgres-exporter:0.17.1-debian-12-r15
+          docker.io/bitnami/redis:8.2.1-debian-12-r0
+          docker.io/bitnami/redis-exporter:1.75.0-debian-12-r1
+          docker.io/bitnami/kubectl:1.33.4-debian-12-r0
+          docker.io/bitnami/grafana:12.1.1-debian-12-r1
+          docker.io/grafana/loki:3.5.3
+          docker.io/grafana/loki-canary:3.5.3
+          docker.io/grafana/loki-helm-test:ewelch-distributed-helm-chart-17db5ee
+          docker.io/nginxinc/nginx-unprivileged:1.29-alpine
+          docker.io/memcached:1.6.38-alpine
+          docker.io/kiwigrid/k8s-sidecar:1.30.7
+          docker.io/temporalio/server:1.28.1
+          docker.io/temporalio/ui:2.39.0
+          docker.io/temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
+          quay.io/openbao/openbao:2.3.2
+          docker.io/busybox:1.36
+          docker.io/hashicorp/vault-k8s:1.4.2
+          registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.16.0
+          quay.io/prometheus/node-exporter:v1.9.1
+          quay.io/prometheus/pushgateway:v1.11.1
+          quay.io/prometheus/prometheus:v3.5.0
+          quay.io/prometheus/alertmanager:v0.28.1
+          quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+          quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+          ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.132.4
+          IMAGES
+
+          sed -i 's/^[[:space:]]*//' /tmp/images.txt
+          sed -i '/^$/d' /tmp/images.txt
+
+          echo "Image list:"
+          cat /tmp/images.txt
+          echo ""
+          echo "count=$(wc -l < /tmp/images.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Check available disk space
+        run: df -h /
+
+      - name: Pull images (linux/amd64)
+        run: |
+          KEYCLOAK_TAG="${{ github.event.inputs.keycloak_tag }}"
+          KEYCLOAK_DOCKER="docker.io/bitnami/keycloak:${KEYCLOAK_TAG}"
+          KEYCLOAK_ECR="public.ecr.aws/bitnami/keycloak:${KEYCLOAK_TAG}"
+
+          FAILED=()
+          while IFS= read -r image; do
+            echo "::group::Pulling ${image}"
+            if docker pull --platform linux/amd64 "${image}"; then
+              echo "✓ ${image}"
+            elif [ "${image}" = "${KEYCLOAK_DOCKER}" ]; then
+              echo "::warning::Docker Hub pull failed for Keycloak, trying ECR fallback..."
+              if docker pull --platform linux/amd64 "${KEYCLOAK_ECR}"; then
+                docker tag "${KEYCLOAK_ECR}" "${KEYCLOAK_DOCKER}"
+                echo "✓ ${image} (via ECR fallback)"
+              else
+                echo "::error::Both Docker Hub and ECR failed for Keycloak"
+                FAILED+=("${image}")
+              fi
+            else
+              echo "::error::Failed to pull ${image}"
+              FAILED+=("${image}")
+            fi
+            echo "::endgroup::"
+          done < /tmp/images.txt
+
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo ""
+            echo "::error::Failed to pull ${#FAILED[@]} image(s):"
+            printf '  - %s\n' "${FAILED[@]}"
+            exit 1
+          fi
+
+      - name: Save all images to tarball
+        run: |
+          mapfile -t IMAGES < /tmp/images.txt
+          echo "Saving ${#IMAGES[@]} images to ${TARBALL_NAME}..."
+          docker save -o "${TARBALL_NAME}" "${IMAGES[@]}"
+          ls -lh "${TARBALL_NAME}"
+          tarball_size=$(du -h "${TARBALL_NAME}" | cut -f1)
+          echo "tarball_size=${tarball_size}" >> "$GITHUB_ENV"
+
+      - name: Upload tarball to Artifactory
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          TARGET_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${TARBALL_NAME}"
+          echo "Uploading ${TARBALL_NAME} (${tarball_size}) to ${TARGET_URL}..."
+
+          HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            -T "${TARBALL_NAME}" \
+            "${TARGET_URL}")
+
+          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
+            echo "✓ Upload successful (HTTP ${HTTP_CODE})"
+          else
+            echo "::error::Upload failed with HTTP ${HTTP_CODE}"
+            cat /tmp/upload_response.txt
+            exit 1
+          fi
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "## Third-Party Docker Images Tarball Build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image count | ${{ steps.images.outputs.count }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Keycloak tag | ${{ github.event.inputs.keycloak_tag }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "${TARBALL_NAME}" ]; then
+            SIZE=$(du -h "${TARBALL_NAME}" | cut -f1)
+            echo "| Tarball size | ${SIZE} |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Images included" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/images.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
