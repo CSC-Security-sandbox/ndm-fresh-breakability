@@ -361,7 +361,7 @@ var _ = Describe("Support Bundle Test e2e", func() {
 		AfterAll(func() {
 			testEndTime := time.Now()
 			testDuration := testEndTime.Sub(testStartTime)
-			
+
 			LogDebug(fmt.Sprintf("[TC-SUPPORT-BUNDLE END] Test execution completed at: %s", testEndTime.Format("2006-01-02 15:04:05")))
 			LogDebug(fmt.Sprintf("[TC-SUPPORT-BUNDLE DURATION] Total test execution time: %s (%.2f minutes)", testDuration, testDuration.Minutes()))
 			By("########################## START-TC-SUPPORT-BUNDLE END ################################")

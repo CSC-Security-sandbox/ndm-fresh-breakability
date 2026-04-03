@@ -1,3 +1,5 @@
+import { Duration } from '@temporalio/common';
+
 export const ALLOWED_KEYWORDS = [
   'nfs',
   'smb',
@@ -22,9 +24,9 @@ export const CSV_FILE_EXTENSION = '.csv';
 import type { Duration } from '@temporalio/common';
 
 export const WORKFLOW_TIMEOUTS = {
-  PARENT_WORKFLOW_EXECUTION_TIMEOUT: (process.env.SUPPORT_PARENT_WORKFLOW_EXECUTION_TIMEOUT || '24h') as Duration,
-  PARENT_WORKFLOW_RUN_TIMEOUT: (process.env.SUPPORT_PARENT_WORKFLOW_RUN_TIMEOUT || '24h') as Duration,
-  CHILD_WORKFLOW_EXECUTION_TIMEOUT: (process.env.SUPPORT_CHILD_WORKFLOW_EXECUTION_TIMEOUT || '19h') as Duration,
-  CHILD_WORKFLOW_RUN_TIMEOUT: (process.env.SUPPORT_CHILD_WORKFLOW_RUN_TIMEOUT || '19h') as Duration,
-  ACTIVITY_TIMEOUT: (process.env.SUPPORT_ACTIVITY_TIMEOUT || '6h') as Duration,
+  PARENT_WORKFLOW_EXECUTION_TIMEOUT: '24h' as Duration,
+  PARENT_WORKFLOW_RUN_TIMEOUT: '24h' as Duration,
+  CHILD_WORKFLOW_EXECUTION_TIMEOUT: '19h' as Duration,
+  CHILD_WORKFLOW_RUN_TIMEOUT: '19h' as Duration,
+  ACTIVITY_TIMEOUT: '6h' as Duration,
 };
