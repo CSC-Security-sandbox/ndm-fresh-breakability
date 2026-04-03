@@ -1716,13 +1716,60 @@ jobs:
 
           echo "Build notification sent successfully"
 
+  check-azure-build:
+    if: ${{ !cancelled() && needs.packer.result != 'skipped' }}
+    needs: [packer]
+    runs-on: openlab
+    outputs:
+      control_plane_image_version: ${{ steps.read-versions.outputs.control_plane_image_version }}
+      worker_image_version: ${{ steps.read-versions.outputs.worker_image_version }}
+    steps:
+      - name: Download Azure Control Plane Image Version artifact
+        id: download-cp-version
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: image-version-control-plane-azure
+          path: ./azure-versions/
+
+      - name: Download Azure Worker Image Version artifact
+        id: download-worker-version
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: image-version-worker-azure
+          path: ./azure-versions/
+
+      - name: Read Azure image versions from artifacts
+        id: read-versions
+        run: |
+          CP_VERSION=""
+          WORKER_VERSION=""
+
+          if [[ -f "./azure-versions/control-plane-azure-version.txt" ]]; then
+            CP_VERSION=$(cat "./azure-versions/control-plane-azure-version.txt")
+            echo "Azure control-plane image version: $CP_VERSION"
+          else
+            echo "Azure control-plane image version artifact not found - azure control-plane build may have failed"
+          fi
+
+          if [[ -f "./azure-versions/worker-azure-version.txt" ]]; then
+            WORKER_VERSION=$(cat "./azure-versions/worker-azure-version.txt")
+            echo "Azure worker image version: $WORKER_VERSION"
+          else
+            echo "Azure worker image version artifact not found - azure worker build may have failed"
+          fi
+
+          echo "control_plane_image_version=$CP_VERSION" >> $GITHUB_OUTPUT
+          echo "worker_image_version=$WORKER_VERSION" >> $GITHUB_OUTPUT
+
   run-azure-ndm-api-tests:
-    if: ${{ ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call' || startsWith(github.ref, 'refs/heads/release/')) && needs.packer.outputs.control_plane_image_version != '' && needs.packer.outputs.worker_image_version != '' }}
-    needs: [package-artifacts, packer, determine-matrix, upload-windows-installer]
+    if: ${{ !cancelled() && ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call' || startsWith(github.ref, 'refs/heads/release/')) && needs.check-azure-build.outputs.control_plane_image_version != '' && needs.check-azure-build.outputs.worker_image_version != '' }}
+    needs: [package-artifacts, packer, determine-matrix, upload-windows-installer, check-azure-build]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:
-      control_plane_image_version: ${{ needs.packer.outputs.control_plane_image_version }}
-      worker_image_version: ${{ needs.packer.outputs.worker_image_version }}
+      control_plane_image_version: ${{ needs.check-azure-build.outputs.control_plane_image_version }}
+      worker_image_version: ${{ needs.check-azure-build.outputs.worker_image_version }}
       windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
       build_version: ${{ needs.package-artifacts.outputs.build_version }}
       ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
