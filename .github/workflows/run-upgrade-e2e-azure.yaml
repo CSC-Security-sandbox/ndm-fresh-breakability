@@ -1,0 +1,634 @@
+name: Run Upgrade E2E Tests for NDM on Azure
+
+env:
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  TERRAFORM_VERSION: 1.12.1
+  NODE_VERSION: 22.15.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_cp_image_version:
+        description: 'Previous CP image version to provision (pre-upgrade)'
+        required: true
+        type: string
+      old_worker_image_version:
+        description: 'Previous worker image version to provision (pre-upgrade)'
+        required: true
+        type: string
+      old_windows_worker_installer_url:
+        description: 'Previous Windows installer Artifactory URL (pre-upgrade, optional)'
+        required: false
+        type: string
+      upgrade_bundle_path:
+        description: 'Artifactory path to the upgrade bundle tar.gz (e.g. cicd/ndm/builds/nightly/<ver>/upgrade-<ver>.tar.gz)'
+        required: true
+        type: string
+      build_version:
+        description: 'New build version being upgraded to'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
+        type: string
+
+  workflow_call:
+    inputs:
+      old_cp_image_version:
+        description: 'Previous CP image version to provision (pre-upgrade)'
+        required: true
+        type: string
+      old_worker_image_version:
+        description: 'Previous worker image version to provision (pre-upgrade)'
+        required: true
+        type: string
+      old_windows_worker_installer_url:
+        description: 'Previous Windows installer Artifactory URL (pre-upgrade, optional)'
+        required: false
+        type: string
+      upgrade_bundle_path:
+        description: 'Artifactory path to the upgrade bundle tar.gz'
+        required: true
+        type: string
+      build_version:
+        description: 'New build version being upgraded to'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Provision Azure VMs using the PREVIOUS nightly images
+  # ---------------------------------------------------------------------------
+  setup-infrastructure:
+    name: Provision VMs with Previous-Version Images
+    runs-on: openlab
+    outputs:
+      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
+      linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
+      windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure Provider Credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+          # Provision with the PREVIOUS (pre-upgrade) image versions
+          OLD_CP_IMAGE="${{ inputs.old_cp_image_version || github.event.inputs.old_cp_image_version }}"
+          OLD_WORKER_IMAGE="${{ inputs.old_worker_image_version || github.event.inputs.old_worker_image_version }}"
+          echo "TF_VAR_control_plane_image_version=$OLD_CP_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image_version=$OLD_WORKER_IMAGE" >> $GITHUB_ENV
+
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          echo "TF_VAR_vm_owner=NDM-Upgrade-E2E-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Initialize Terraform
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform init
+
+      - name: Validate Terraform Configuration
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform validate
+
+      - name: Create Terraform Plan
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform plan -out=tfplan
+
+      - name: Apply Terraform Plan
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform apply -auto-approve tfplan
+
+      - name: Upload Terraform State
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: upgrade-e2e-terraform-state
+          path: |
+            app-deployment/terraform/azure/environments/api/terraform.tfstate
+            app-deployment/terraform/azure/environments/api/.terraform.lock.hcl
+            app-deployment/terraform/azure/environments/api/.terraform
+
+      - name: Extract Deployment Information
+        id: deployment-info
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
+          LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
+          WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
+          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
+          echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
+          echo "Control Plane IP : $CONTROL_PLANE_IP"
+          echo "Linux Worker IPs : $LINUX_WORKER_IPS"
+          echo "Windows Worker IPs: $WINDOWS_WORKER_IPS"
+
+      - name: Install sshpass
+        run: |
+          for i in {1..60}; do
+            if sudo apt-get update -qq 2>/dev/null; then break; fi
+            echo "Waiting for apt locks... ($i/60)"; sleep 5
+          done
+          sudo apt-get install -y sshpass || {
+            sudo pkill -9 unattended-upgrade 2>/dev/null || true
+            sleep 5
+            sudo apt-get install -y sshpass
+          }
+          echo "sshpass installed successfully."
+
+      - name: Install previous Windows worker on Windows VMs
+        run: |
+          OLD_INSTALLER_URL="${{ inputs.old_windows_worker_installer_url || github.event.inputs.old_windows_worker_installer_url }}"
+          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
+
+          if [ -z "$OLD_INSTALLER_URL" ]; then
+            echo "No previous Windows installer URL provided — skipping pre-upgrade Windows worker installation"
+            exit 0
+          fi
+
+          echo "Downloading previous Windows worker installer from: $OLD_INSTALLER_URL"
+          curl -s -o "prev-windows-worker-installer.exe" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "$OLD_INSTALLER_URL"
+
+          if [ ! -s "prev-windows-worker-installer.exe" ]; then
+            echo "WARNING: Downloaded file is empty or missing, skipping copy"
+            exit 0
+          fi
+
+          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
+          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
+            echo "No Windows VM IPs found, skipping"
+            exit 0
+          fi
+
+          for WINDOWS_IP in "${WINDOWS_IP_ARRAY[@]}"; do
+            echo "Copying previous installer to Windows VM at $WINDOWS_IP..."
+            SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              prev-windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/" || \
+              echo "WARNING: Failed to copy to $WINDOWS_IP (continuing)"
+          done
+
+      - name: Wait for Service Boot Setup to Complete
+        run: |
+          echo "Waiting for old NDM version to boot on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
+          chmod +x ./app-deployment/scripts/service_check.sh
+          ./app-deployment/scripts/service_check.sh \
+            "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
+            "$VM_USERNAME" \
+            "$VM_PASSWORD"
+          if [ $? -ne 0 ]; then
+            echo "Service setup failed or timed out"
+            exit 1
+          fi
+          echo "Old NDM version is running — ready for upgrade."
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Upload upgrade bundle via NDM API and trigger upgrade
+  # ---------------------------------------------------------------------------
+  run-upgrade:
+    name: Upload Bundle and Trigger Upgrade via API
+    runs-on: openlab
+    needs: setup-infrastructure
+    env:
+      CP_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CHUNK_SIZE: 15728640  # 15 MB — matches server default
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Download upgrade bundle from Artifactory
+        run: |
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+          BUNDLE_PATH="${{ inputs.upgrade_bundle_path || github.event.inputs.upgrade_bundle_path }}"
+          BUNDLE_FILENAME="upgrade-${BUILD_VERSION}.tar.gz"
+
+          echo "Downloading upgrade bundle: ${BUNDLE_PATH}"
+          curl --silent --show-error --fail \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            -o "${BUNDLE_FILENAME}" \
+            "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${BUNDLE_PATH}"
+
+          SIZE=$(stat -c%s "${BUNDLE_FILENAME}")
+          echo "Bundle downloaded: ${BUNDLE_FILENAME} ($(numfmt --to=iec ${SIZE}))"
+          echo "BUNDLE_FILENAME=${BUNDLE_FILENAME}" >> $GITHUB_ENV
+          echo "BUNDLE_SIZE=${SIZE}" >> $GITHUB_ENV
+
+      - name: Authenticate with Keycloak
+        run: |
+          BASE_URL="https://${CP_IP}"
+          NDM_USERNAME="${{ secrets.NDM_APP_USERNAME }}"
+          NDM_PASSWORD="${{ secrets.NDM_APP_PASSWORD }}"
+
+          echo "Fetching bearer token from Keycloak at ${BASE_URL}..."
+          TOKEN_RESPONSE=$(curl -k --silent --show-error \
+            -X POST "${BASE_URL}/keycloak/realms/datamigrator/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=datamigrator-client&grant_type=password&username=${NDM_USERNAME}&password=${NDM_PASSWORD}")
+
+          TOKEN=$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: Failed to get token. Response: ${TOKEN_RESPONSE}"
+            exit 1
+          fi
+
+          echo "::add-mask::${TOKEN}"
+          echo "NDM_TOKEN=${TOKEN}" >> $GITHUB_ENV
+          echo "Token obtained successfully."
+
+      - name: Initialize upload session
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+
+          echo "Initializing upload: ${BUNDLE_FILENAME} (${BUNDLE_SIZE} bytes)..."
+          INIT_RESPONSE=$(curl -k --silent --show-error \
+            -X POST "${BASE_URL}/init" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${NDM_TOKEN}" \
+            -d "{\"fileName\":\"${BUNDLE_FILENAME}\",\"fileSize\":${BUNDLE_SIZE}}")
+
+          echo "Init response: $(echo ${INIT_RESPONSE} | jq -c .)"
+
+          UPLOAD_ID=$(echo "${INIT_RESPONSE}" | jq -r '.data.items.uploadId // .data.uploadId // .uploadId // empty')
+          TOTAL_CHUNKS=$(echo "${INIT_RESPONSE}" | jq -r '.data.items.totalChunks // .data.totalChunks // .totalChunks // empty')
+          SERVER_CHUNK_SIZE=$(echo "${INIT_RESPONSE}" | jq -r '.data.items.chunkSize // .data.chunkSize // .chunkSize // empty')
+
+          if [ -z "$UPLOAD_ID" ]; then
+            echo "ERROR: Failed to init upload. Response: ${INIT_RESPONSE}"
+            exit 1
+          fi
+
+          # Use server-provided chunk size if available
+          [ -n "$SERVER_CHUNK_SIZE" ] && echo "CHUNK_SIZE=${SERVER_CHUNK_SIZE}" >> $GITHUB_ENV
+
+          echo "UPLOAD_ID=${UPLOAD_ID}" >> $GITHUB_ENV
+          echo "TOTAL_CHUNKS=${TOTAL_CHUNKS}" >> $GITHUB_ENV
+          echo "Upload session: id=${UPLOAD_ID}, chunks=${TOTAL_CHUNKS}, chunkSize=${SERVER_CHUNK_SIZE:-${CHUNK_SIZE}}"
+
+      - name: Upload bundle chunks
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+          CHUNK_INDEX=0
+          OFFSET=0
+
+          echo "Uploading ${TOTAL_CHUNKS} chunks (${CHUNK_SIZE} bytes each)..."
+
+          while [ "${OFFSET}" -lt "${BUNDLE_SIZE}" ]; do
+            REMAINING=$(( BUNDLE_SIZE - OFFSET ))
+            THIS_CHUNK_SIZE=${CHUNK_SIZE}
+            [ "${REMAINING}" -lt "${THIS_CHUNK_SIZE}" ] && THIS_CHUNK_SIZE=${REMAINING}
+
+            PCT=$(( (CHUNK_INDEX * 100) / TOTAL_CHUNKS ))
+            echo "  Chunk $(( CHUNK_INDEX + 1 ))/${TOTAL_CHUNKS} (${PCT}%, offset=${OFFSET}, size=${THIS_CHUNK_SIZE})..."
+
+            HTTP_CODE=$(dd if="${BUNDLE_FILENAME}" bs="${THIS_CHUNK_SIZE}" skip="${OFFSET}" iflag=skip_bytes count=1 2>/dev/null | \
+              curl -k --silent --show-error --output /dev/null --write-out "%{http_code}" \
+                -X POST "${BASE_URL}/chunk-upload/${UPLOAD_ID}" \
+                -H "Content-Type: application/octet-stream" \
+                -H "Authorization: Bearer ${NDM_TOKEN}" \
+                -H "X-Chunk-Index: ${CHUNK_INDEX}" \
+                --data-binary @-)
+
+            if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+              echo "ERROR: Chunk ${CHUNK_INDEX} upload failed with HTTP ${HTTP_CODE}"
+              exit 1
+            fi
+
+            OFFSET=$(( OFFSET + THIS_CHUNK_SIZE ))
+            CHUNK_INDEX=$(( CHUNK_INDEX + 1 ))
+          done
+
+          echo "All ${TOTAL_CHUNKS} chunks uploaded successfully."
+
+      - name: Process upload (assemble, validate checksums, extract)
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          echo "Processing upload ${UPLOAD_ID} (assembling, validating, extracting)..."
+          echo "This may take a few minutes for large bundles..."
+
+          PROCESS_RESPONSE=$(curl -k --silent --show-error \
+            --max-time 600 \
+            -X POST "${BASE_URL}/process-upload/${UPLOAD_ID}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          echo "Process response: $(echo ${PROCESS_RESPONSE} | jq -c .)"
+
+          SUCCESS=$(echo "${PROCESS_RESPONSE}" | jq -r '.success // false')
+          if [ "${SUCCESS}" != "true" ]; then
+            ERRORS=$(echo "${PROCESS_RESPONSE}" | jq -r '.errors // .message // "unknown error"')
+            echo "ERROR: process-upload failed: ${ERRORS}"
+            exit 1
+          fi
+
+          UPLOAD_VERSION=$(echo "${PROCESS_RESPONSE}" | jq -r '.version // empty')
+          echo "Upload processed successfully! Version: ${UPLOAD_VERSION}"
+
+      - name: Get bundleId from latest-upload-status
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          STATUS_RESPONSE=$(curl -k --silent --show-error \
+            "${BASE_URL}/latest-upload-status" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          echo "Upload status: $(echo ${STATUS_RESPONSE} | jq -c '{bundleId,uploadStatus,upgradeStatus,version}')"
+
+          BUNDLE_ID=$(echo "${STATUS_RESPONSE}" | jq -r '.bundleId // empty')
+          UPLOAD_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.uploadStatus // empty')
+
+          if [ -z "${BUNDLE_ID}" ]; then
+            echo "ERROR: bundleId not found in latest-upload-status response."
+            exit 1
+          fi
+
+          if [ "${UPLOAD_STATUS}" != "success" ]; then
+            echo "ERROR: Expected uploadStatus=success, got: ${UPLOAD_STATUS}"
+            exit 1
+          fi
+
+          echo "BUNDLE_ID=${BUNDLE_ID}" >> $GITHUB_ENV
+          echo "bundleId: ${BUNDLE_ID}"
+
+      - name: Trigger upgrade
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          echo "Triggering upgrade for bundleId=${BUNDLE_ID}..."
+          TRIGGER_RESPONSE=$(curl -k --silent --show-error \
+            -X POST "${BASE_URL}/trigger-upgrade" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${NDM_TOKEN}" \
+            -d "{\"bundleId\":\"${BUNDLE_ID}\"}")
+
+          echo "Trigger response: $(echo ${TRIGGER_RESPONSE} | jq -c .)"
+
+          # A successful trigger returns the staged upgrade record — any non-null bundleId confirms staging
+          STAGED_STATUS=$(echo "${TRIGGER_RESPONSE}" | jq -r '.upgradeStatus // .status // empty')
+          if echo "${TRIGGER_RESPONSE}" | jq -e '.message' 2>/dev/null | grep -qi "error\|failed\|invalid"; then
+            echo "ERROR: trigger-upgrade returned an error: ${TRIGGER_RESPONSE}"
+            exit 1
+          fi
+
+          echo "Upgrade triggered successfully. Status: ${STAGED_STATUS}"
+          echo "CP pods will now restart — polling for completion..."
+
+      - name: Poll for upgrade completion
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+          NDM_USERNAME="${{ secrets.NDM_APP_USERNAME }}"
+          NDM_PASSWORD="${{ secrets.NDM_APP_PASSWORD }}"
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+
+          # Allow up to 45 minutes (270 × 10s) for the upgrade to complete.
+          # The Ansible playbook imports Docker images and waits for pod readiness,
+          # which can take 20-30 minutes on a fresh VM.
+          MAX_RETRIES=270
+          RETRY=0
+          UPGRADE_STATUS=""
+
+          echo "Polling ${BASE_URL}/upgrade-status every 10 seconds (max ${MAX_RETRIES} attempts)..."
+
+          while [ "${RETRY}" -lt "${MAX_RETRIES}" ]; do
+            RETRY=$(( RETRY + 1 ))
+            sleep 10
+
+            # Re-authenticate on every attempt: Keycloak restarts during the upgrade
+            # so the original token becomes invalid. Silently skip if Keycloak is still down.
+            CURRENT_TOKEN=$(curl -k --silent \
+              -X POST "${BASE_URL%/api/v1/upgrade}/keycloak/realms/datamigrator/protocol/openid-connect/token" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "client_id=datamigrator-client&grant_type=password&username=${NDM_USERNAME}&password=${NDM_PASSWORD}" \
+              | jq -r '.access_token // empty' 2>/dev/null || true)
+
+            if [ -z "${CURRENT_TOKEN}" ]; then
+              echo "  [${RETRY}/${MAX_RETRIES}] Keycloak not yet reachable — pods still restarting..."
+              continue
+            fi
+
+            STATUS_RESPONSE=$(curl -k --silent \
+              "${BASE_URL}/upgrade-status" \
+              -H "Authorization: Bearer ${CURRENT_TOKEN}" 2>/dev/null || true)
+
+            UPGRADE_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.status // empty' 2>/dev/null || true)
+
+            case "${UPGRADE_STATUS}" in
+              success)
+                REPORTED_VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
+                echo "  [${RETRY}/${MAX_RETRIES}] ✅ Upgrade succeeded! Version: ${REPORTED_VERSION}"
+                break
+                ;;
+              failed)
+                echo "  [${RETRY}/${MAX_RETRIES}] ❌ Upgrade FAILED. Response: ${STATUS_RESPONSE}"
+                exit 1
+                ;;
+              rolled_back)
+                echo "  [${RETRY}/${MAX_RETRIES}] ❌ Upgrade ROLLED BACK. Response: ${STATUS_RESPONSE}"
+                exit 1
+                ;;
+              staged|pending)
+                echo "  [${RETRY}/${MAX_RETRIES}] ⏳ Upgrade in progress (status=${UPGRADE_STATUS})..."
+                ;;
+              *)
+                echo "  [${RETRY}/${MAX_RETRIES}] ⏳ Waiting... (status=${UPGRADE_STATUS:-unknown})"
+                ;;
+            esac
+          done
+
+          if [ "${UPGRADE_STATUS}" != "success" ]; then
+            echo "❌ Upgrade timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${UPGRADE_STATUS}"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Verify the new version is running via API
+  # ---------------------------------------------------------------------------
+  verify-upgrade:
+    name: Verify Upgrade Success
+    runs-on: openlab
+    needs: [setup-infrastructure, run-upgrade]
+    env:
+      CP_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Authenticate with Keycloak
+        run: |
+          BASE_URL="https://${CP_IP}"
+          NDM_USERNAME="${{ secrets.NDM_APP_USERNAME }}"
+          NDM_PASSWORD="${{ secrets.NDM_APP_PASSWORD }}"
+
+          TOKEN_RESPONSE=$(curl -k --silent --show-error \
+            -X POST "${BASE_URL}/keycloak/realms/datamigrator/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=datamigrator-client&grant_type=password&username=${NDM_USERNAME}&password=${NDM_PASSWORD}")
+
+          TOKEN=$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: Failed to get token. Response: ${TOKEN_RESPONSE}"
+            exit 1
+          fi
+
+          echo "::add-mask::${TOKEN}"
+          echo "NDM_TOKEN=${TOKEN}" >> $GITHUB_ENV
+
+      - name: Verify upgrade-status reports success and correct version
+        run: |
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          STATUS_RESPONSE=$(curl -k --silent --show-error \
+            "${BASE_URL}/upgrade-status" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          echo "upgrade-status response: $(echo ${STATUS_RESPONSE} | jq .)"
+
+          STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.status // empty')
+          VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
+
+          if [ "${STATUS}" != "success" ]; then
+            echo "❌ upgrade-status is '${STATUS}', expected 'success'"
+            exit 1
+          fi
+
+          if [ "${VERSION}" != "${BUILD_VERSION}" ]; then
+            echo "❌ Version mismatch: expected '${BUILD_VERSION}', got '${VERSION}'"
+            exit 1
+          fi
+
+          echo "✅ CP upgrade verified: status=success, version=${VERSION}"
+
+      - name: Verify latest-upload-status shows upgradeStatus success
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          STATUS_RESPONSE=$(curl -k --silent --show-error \
+            "${BASE_URL}/latest-upload-status" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          echo "latest-upload-status: $(echo ${STATUS_RESPONSE} | jq -c '{upgradeStatus,workerUpgradeStatus,version}')"
+
+          UPGRADE_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.upgradeStatus // empty')
+          if [ "${UPGRADE_STATUS}" != "success" ]; then
+            echo "❌ upgradeStatus is '${UPGRADE_STATUS}', expected 'success'"
+            exit 1
+          fi
+
+          WORKER_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.workerUpgradeStatus // "unknown"')
+          echo "✅ upgradeStatus=success | workerUpgradeStatus=${WORKER_STATUS}"
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Always destroy provisioned VMs
+  # ---------------------------------------------------------------------------
+  cleanup:
+    name: Cleanup Infrastructure
+    runs-on: openlab
+    needs: [setup-infrastructure, run-upgrade, verify-upgrade]
+    if: always()
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure Provider Credentials for Cleanup
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+          # Must match the values used during apply for terraform destroy to work correctly
+          OLD_CP_IMAGE="${{ inputs.old_cp_image_version || github.event.inputs.old_cp_image_version }}"
+          OLD_WORKER_IMAGE="${{ inputs.old_worker_image_version || github.event.inputs.old_worker_image_version }}"
+          echo "TF_VAR_control_plane_image_version=$OLD_CP_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image_version=$OLD_WORKER_IMAGE" >> $GITHUB_ENV
+
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          echo "TF_VAR_vm_owner=NDM-Upgrade-E2E-$TIMESTAMP" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Download Terraform State
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: upgrade-e2e-terraform-state
+          path: app-deployment/terraform/azure/environments/api
+
+      - name: Initialize Terraform for Cleanup
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform init
+
+      - name: Destroy Terraform Resources
+        run: |
+          cd app-deployment/terraform/azure/environments/api
+          terraform destroy -auto-approve
+
+      - name: Clean Up Temporary Files
+        run: |
+          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true

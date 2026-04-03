@@ -672,6 +672,160 @@ jobs:
           # Create the matrix JSON
           echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
 
+  fetch-previous-nightly-images:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') }}
+    runs-on: openlab
+    outputs:
+      old_cp_image_version: ${{ steps.fetch-cp.outputs.old_cp_image_version }}
+      old_worker_image_version: ${{ steps.fetch-worker.outputs.old_worker_image_version }}
+      old_build_version: ${{ steps.fetch-cp.outputs.old_build_version }}
+      old_windows_worker_installer_url: ${{ steps.fetch-windows-installer.outputs.old_windows_worker_installer_url }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Fetch previous nightly Control Plane image info
+        id: fetch-cp
+        run: |
+          ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm"
+          AUTH="${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+
+          echo "Step 1 — Fetching azure-control-plane-latest.json..."
+          HTTP_STATUS=$(curl -s -o cp-latest.json -w "%{http_code}" \
+            -u "$AUTH" \
+            "${ARTIFACTORY_BASE}/builds/nightly/azure-control-plane-latest.json")
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "WARNING: Could not fetch azure-control-plane-latest.json (HTTP $HTTP_STATUS). No previous nightly image available yet."
+            echo "old_cp_image_version=" >> $GITHUB_OUTPUT
+            echo "old_build_version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "cp-latest.json contents:"; cat cp-latest.json
+
+          OLD_BUILD_VERSION=$(jq -r '.build_version // empty' cp-latest.json)
+          METADATA_PATH=$(jq -r '.metadata_path // empty' cp-latest.json)
+
+          if [[ -z "$METADATA_PATH" ]]; then
+            echo "WARNING: metadata_path not found in azure-control-plane-latest.json."
+            echo "old_cp_image_version=" >> $GITHUB_OUTPUT
+            echo "old_build_version=$OLD_BUILD_VERSION" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Step 2 — Fetching CP metadata from ${METADATA_PATH}..."
+          HTTP_STATUS=$(curl -s -o cp-metadata.json -w "%{http_code}" \
+            -u "$AUTH" \
+            "${ARTIFACTORY_BASE}/${METADATA_PATH}")
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "WARNING: Could not fetch CP metadata.json (HTTP $HTTP_STATUS)."
+            echo "old_cp_image_version=" >> $GITHUB_OUTPUT
+            echo "old_build_version=$OLD_BUILD_VERSION" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "cp-metadata.json contents:"; cat cp-metadata.json
+
+          OLD_CP_IMAGE_VERSION=$(jq -r '.image_version // empty' cp-metadata.json)
+
+          if [[ -z "$OLD_CP_IMAGE_VERSION" ]]; then
+            echo "WARNING: image_version not found in CP metadata.json."
+            echo "old_cp_image_version=" >> $GITHUB_OUTPUT
+            echo "old_build_version=$OLD_BUILD_VERSION" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Previous CP image version : $OLD_CP_IMAGE_VERSION"
+          echo "Previous build version    : $OLD_BUILD_VERSION"
+          echo "old_cp_image_version=$OLD_CP_IMAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "old_build_version=$OLD_BUILD_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Fetch previous nightly Worker image info
+        id: fetch-worker
+        run: |
+          ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm"
+          AUTH="${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+
+          echo "Step 1 — Fetching azure-worker-latest.json..."
+          HTTP_STATUS=$(curl -s -o worker-latest.json -w "%{http_code}" \
+            -u "$AUTH" \
+            "${ARTIFACTORY_BASE}/builds/nightly/azure-worker-latest.json")
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "WARNING: Could not fetch azure-worker-latest.json (HTTP $HTTP_STATUS). No previous nightly image available yet."
+            echo "old_worker_image_version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "worker-latest.json contents:"; cat worker-latest.json
+
+          METADATA_PATH=$(jq -r '.metadata_path // empty' worker-latest.json)
+
+          if [[ -z "$METADATA_PATH" ]]; then
+            echo "WARNING: metadata_path not found in azure-worker-latest.json."
+            echo "old_worker_image_version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Step 2 — Fetching worker metadata from ${METADATA_PATH}..."
+          HTTP_STATUS=$(curl -s -o worker-metadata.json -w "%{http_code}" \
+            -u "$AUTH" \
+            "${ARTIFACTORY_BASE}/${METADATA_PATH}")
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "WARNING: Could not fetch worker metadata.json (HTTP $HTTP_STATUS)."
+            echo "old_worker_image_version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "worker-metadata.json contents:"; cat worker-metadata.json
+
+          OLD_WORKER_IMAGE_VERSION=$(jq -r '.image_version // empty' worker-metadata.json)
+
+          if [[ -z "$OLD_WORKER_IMAGE_VERSION" ]]; then
+            echo "WARNING: image_version not found in worker metadata.json."
+            echo "old_worker_image_version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Previous worker image version: $OLD_WORKER_IMAGE_VERSION"
+          echo "old_worker_image_version=$OLD_WORKER_IMAGE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Fetch previous nightly Windows installer URL
+        id: fetch-windows-installer
+        run: |
+          ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm"
+          AUTH="${{ secrets.NDM_NEXUS_USERNAME }}:${{ secrets.NDM_NEXUS_PASSWORD }}"
+
+          echo "Step 1 — Fetching windows-installer-latest.json..."
+          HTTP_STATUS=$(curl -s -o win-latest.json -w "%{http_code}" \
+            -u "$AUTH" \
+            "${ARTIFACTORY_BASE}/builds/nightly/windows-installer-latest.json")
+
+          if [[ "$HTTP_STATUS" != "200" ]]; then
+            echo "WARNING: Could not fetch windows-installer-latest.json (HTTP $HTTP_STATUS). No previous nightly Windows installer available yet."
+            echo "old_windows_worker_installer_url=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "win-latest.json contents:"; cat win-latest.json
+
+          INSTALLER_PATH=$(jq -r '.installer_path // empty' win-latest.json)
+
+          if [[ -z "$INSTALLER_PATH" ]]; then
+            echo "WARNING: installer_path not found in windows-installer-latest.json."
+            echo "old_windows_worker_installer_url=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          OLD_WINDOWS_INSTALLER_URL="${ARTIFACTORY_BASE}/${INSTALLER_PATH}"
+          echo "Previous Windows installer URL: $OLD_WINDOWS_INSTALLER_URL"
+          echo "old_windows_worker_installer_url=$OLD_WINDOWS_INSTALLER_URL" >> $GITHUB_OUTPUT
+
   build-windows-installer:
     if: ${{ github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
     runs-on: windows-latest
@@ -904,21 +1058,31 @@ jobs:
           done
 
   create-upgrade-bundle:
-    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') }}
     needs: [package-artifacts]
     runs-on: openlab
+    outputs:
+      upgrade_bundle_path: ${{ steps.upload-bundle.outputs.upgrade_bundle_path }}
     env:
       BUILD_VERSION: ${{ needs.package-artifacts.outputs.build_version }}
       NDM_NEXUS_USERNAME: ${{ secrets.NDM_NEXUS_USERNAME }}
       NDM_NEXUS_PASSWORD: ${{ secrets.NDM_NEXUS_PASSWORD }}
       ARTIFACTORY_URL: "https://generic.repo.eng.netapp.com/artifactory"
       REPO: "openlab-generic"
-      BASE_PATH: "cicd/ndm/releases"
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
         with:
           egress-policy: audit
+
+      - name: Set Artifactory base path
+        id: set-base-path
+        run: |
+          if [[ "${{ github.ref }}" =~ refs/heads/release/ ]]; then
+            echo "BASE_PATH=cicd/ndm/releases" >> $GITHUB_ENV
+          else
+            echo "BASE_PATH=cicd/ndm/builds/nightly" >> $GITHUB_ENV
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -1029,21 +1193,27 @@ jobs:
           tar -cvzf "${UPGRADE}.tar.gz" "${UPGRADE}"
 
       - name: Upload checksums and upgrade tar to Artifactory
+        id: upload-bundle
         run: |
           UPGRADE="upgrade-${BUILD_VERSION}"
           BASE="${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}"
           # .sha256.txt so Artifactory treats it as an artifact, not checksum metadata
           curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" \
             -T "${UPGRADE}/checksums-${BUILD_VERSION}.sha256" "${ARTIFACTORY_URL}/${REPO}/${BASE}/checksums-${BUILD_VERSION}.sha256.txt"
-          curl -f -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
-            --upload-file "${UPGRADE}.tar.gz" "${ARTIFACTORY_URL}/${REPO}/${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar.gz"
+
+          BUNDLE_PATH="${BASE_PATH}/${BUILD_VERSION}/${UPGRADE}.tar.gz"
+          curl --silent --show-error --fail -u "${NDM_NEXUS_USERNAME}:${NDM_NEXUS_PASSWORD}" --request PUT \
+            --upload-file "${UPGRADE}.tar.gz" "${ARTIFACTORY_URL}/${REPO}/${BUNDLE_PATH}"
+
+          echo "Upgrade bundle uploaded to: ${BUNDLE_PATH}"
+          echo "upgrade_bundle_path=${BUNDLE_PATH}" >> $GITHUB_OUTPUT
 
       - name: Upload upgrade tar as workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: upgrade-${{ env.BUILD_VERSION }}
           path: upgrade-${{ env.BUILD_VERSION }}.tar.gz
-          
+
   packer:
     if: ${{ github.event.inputs.component != 'windows-installer' }}
     needs: [package-artifacts, determine-matrix]
@@ -1960,4 +2130,22 @@ jobs:
       ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
       volume_clone_provider: ${{ ((github.event_name == 'schedule') || startsWith(github.ref, 'refs/heads/release/')) && 'anf' || inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       trigger_type: ${{ github.event_name }}
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Upgrade E2E: provision VMs with yesterday's images, then upgrade to today's
+  # bundle. Runs only on nightly schedule and manual workflow_dispatch with
+  # run_e2e=true, and only when previous nightly metadata is available.
+  # ---------------------------------------------------------------------------
+  run-upgrade-e2e-azure:
+    if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true')) && needs.fetch-previous-nightly-images.outputs.old_cp_image_version != '' && needs.fetch-previous-nightly-images.outputs.old_worker_image_version != '' && needs.create-upgrade-bundle.outputs.upgrade_bundle_path != '' }}
+    needs: [fetch-previous-nightly-images, create-upgrade-bundle, packer, package-artifacts, upload-windows-installer]
+    uses: ./.github/workflows/run-upgrade-e2e-azure.yaml
+    with:
+      old_cp_image_version: ${{ needs.fetch-previous-nightly-images.outputs.old_cp_image_version }}
+      old_worker_image_version: ${{ needs.fetch-previous-nightly-images.outputs.old_worker_image_version }}
+      old_windows_worker_installer_url: ${{ needs.fetch-previous-nightly-images.outputs.old_windows_worker_installer_url }}
+      upgrade_bundle_path: ${{ needs.create-upgrade-bundle.outputs.upgrade_bundle_path }}
+      build_version: ${{ needs.package-artifacts.outputs.build_version }}
+      ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
     secrets: inherit
