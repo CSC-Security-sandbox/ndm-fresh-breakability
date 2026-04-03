@@ -8,6 +8,7 @@ import { RedisConsumerService } from './redis-consumer.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { DataSource } from 'typeorm';
+import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -16,6 +17,21 @@ jest.mock('redis', () => ({
 jest.mock('worker_threads', () => ({
   Worker: jest.fn(),
   isMainThread: true,
+}));
+
+jest.mock('@netapp-cloud-datamigrate/jobs-lib', () => ({
+  JobContextFactory: {
+    getJobManagerProvider: jest.fn(),
+  },
+  GroupReaderType: { DB_WRITER: 'DB_WRITER' },
+}));
+
+jest.mock('@temporalio/common', () => ({
+  defaultDataConverter: {
+    payloadConverter: {
+      toPayload: jest.fn().mockReturnValue({ metadata: {}, data: 'mock-encoded-payload' }),
+    },
+  },
 }));
 
 const mockLogger = {
@@ -472,6 +488,10 @@ describe('RedisConsumerService - Worker Thread Crash Recovery', () => {
         tasks: 'active',
         errors: 'active',
       });
+      // Prevent the real signalWorkflowDbWriterFailure from running in tests that
+      // don't specifically target it (it requires JobContextFactory which is mocked
+      // separately in its own describe block).
+      jest.spyOn(service as any, 'signalWorkflowDbWriterFailure').mockResolvedValue(undefined);
     });
 
     it('increments workerRetryCounts and removes from activeWorkers on crash', async () => {
@@ -600,5 +620,233 @@ describe('RedisConsumerService - Worker Thread Crash Recovery', () => {
       expect(Worker).toHaveBeenCalledTimes(1); // reset between ticks — called once again
       expect((service as any).activeWorkers.has(JOB_ID)).toBe(true); // new worker is tracked
     });
+
+    it('calls signalWorkflowDbWriterFailure with the jobId when max retries are exceeded', async () => {
+      const signalSpy = jest.spyOn(service as any, 'signalWorkflowDbWriterFailure').mockResolvedValue(undefined);
+      const maxRetries: number = (service as any).maxWorkerRetries;
+      (service as any).workerRetryCounts.set(JOB_ID, maxRetries);
+
+      await (service as any).checkAndStartActiveConsumers();
+
+      expect(signalSpy).toHaveBeenCalledWith(JOB_ID);
+    });
+
+    it('logs the error but does NOT crash the cron when signalWorkflowDbWriterFailure throws', async () => {
+      jest.spyOn(service as any, 'signalWorkflowDbWriterFailure').mockRejectedValue(new Error('signal failed'));
+      const maxRetries: number = (service as any).maxWorkerRetries;
+      (service as any).workerRetryCounts.set(JOB_ID, maxRetries);
+
+      await expect((service as any).checkAndStartActiveConsumers()).resolves.toBeUndefined();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to signal workflow failure'),
+        expect.anything(),
+      );
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// signalWorkflowDbWriterFailure
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RedisConsumerService - signalWorkflowDbWriterFailure', () => {
+  let service: RedisConsumerService;
+  let mockRedisClient: any;
+  let mockWorkflowService: any;
+
+  const JOB_ID = 'signal-failure-job';
+
+  const makeJobContext = (jobType = 'MIGRATE', jobRunId: string | null = null) => ({
+    jobConfig: { jobType, jobRunId },
+  });
+
+  const mockLogger = {
+    log: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.REDIS_JWT_AUTH_ENABLED = 'false';
+
+    mockWorkflowService = { signalWorkflow: jest.fn().mockResolvedValue(undefined) };
+
+    mockRedisClient = {
+      isOpen: false,
+      connect: jest.fn().mockImplementation(() => { mockRedisClient.isOpen = true; return Promise.resolve(); }),
+      quit: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      keys: jest.fn().mockResolvedValue([]),
+      hGetAll: jest.fn().mockResolvedValue({}),
+      hSet: jest.fn().mockResolvedValue(1),
+      hDel: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+    };
+    (createClient as jest.Mock).mockReturnValue(mockRedisClient);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisConsumerService,
+        { provide: InventoryService, useValue: { createInventory: jest.fn(), saveTasks: jest.fn(), saveOperationError: jest.fn(), saveTaskError: jest.fn(), createPartitionInventoryTableByJobRunId: jest.fn() } },
+        { provide: DataSource, useValue: { query: jest.fn().mockResolvedValue([]) } },
+        { provide: WorkflowService, useValue: mockWorkflowService },
+        { provide: AuthService, useValue: { getAccessToken: jest.fn().mockResolvedValue('mock-jwt') } },
+        { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+      ],
+    }).compile();
+
+    service = module.get<RedisConsumerService>(RedisConsumerService);
+    await new Promise(r => setImmediate(r));
+
+    (service as any).redisClient = mockRedisClient;
+    mockRedisClient.isOpen = true;
+    (service as any).jobRunIdToProjectIdMap.set(JOB_ID, 'proj-signal-test');
+  });
+
+  afterEach(() => {
+    delete process.env.REDIS_JWT_AUTH_ENABLED;
+    jest.useRealTimers();
+  });
+
+  it('sends action=STOPPED signal first, then reportingSignal with DB_WRITER_FAILURE_REPORTED', async () => {
+    const mockContextProvider = { getContext: jest.fn().mockResolvedValue(makeJobContext('MIGRATE')) };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+
+    await (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+
+    // Two signals must be sent in order
+    expect(mockWorkflowService.signalWorkflow).toHaveBeenCalledTimes(2);
+
+    const [firstCall, secondCall] = mockWorkflowService.signalWorkflow.mock.calls;
+
+    // First signal cancels child workflows
+    expect(firstCall[0]).toMatchObject({
+      namespace: 'default',
+      workflowExecution: { workflowId: `MigrationWorkflow-${JOB_ID}` },
+      signalName: 'action',
+    });
+
+    // Second signal triggers handleReporting failure path
+    expect(secondCall[0]).toMatchObject({
+      namespace: 'default',
+      workflowExecution: { workflowId: `MigrationWorkflow-${JOB_ID}` },
+      signalName: 'reportingSignal',
+    });
+
+    expect(mockLogger.log).toHaveBeenCalledWith(
+      expect.stringContaining('Successfully signaled workflow failure'),
+    );
+  });
+
+  it('uses the RETRY workflow ID when jobConfig.jobRunId is set (isRetryRun = true)', async () => {
+    const mockContextProvider = {
+      getContext: jest.fn().mockResolvedValue(makeJobContext('MIGRATE', 'original-job-id')),
+    };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+
+    await (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+
+    expect(mockWorkflowService.signalWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowExecution: { workflowId: `RetryMigrationWorkflow-${JOB_ID}` },
+      }),
+    );
+  });
+
+  it('returns early without signaling when job context is null', async () => {
+    const mockContextProvider = { getContext: jest.fn().mockResolvedValue(null) };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+
+    await (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+
+    expect(mockWorkflowService.signalWorkflow).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Job context not found'),
+    );
+  });
+
+  it('retries the action signal on a transient failure before succeeding', async () => {
+    jest.useFakeTimers();
+    const mockContextProvider = { getContext: jest.fn().mockResolvedValue(makeJobContext('MIGRATE')) };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+
+    // First call (action signal) fails once, then succeeds; second call (reporting signal) succeeds
+    mockWorkflowService.signalWorkflow
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue(undefined);
+
+    const p = (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+    await jest.advanceTimersByTimeAsync(1000);
+    await p;
+
+    // 3 total calls: action retry-1 (fail), action retry-2 (ok), reportingSignal (ok)
+    expect(mockWorkflowService.signalWorkflow).toHaveBeenCalledTimes(3);
+  });
+
+  it('logs and continues after exhausting all maxRetries on the action signal', async () => {
+    jest.useFakeTimers();
+    const mockContextProvider = { getContext: jest.fn().mockResolvedValue(makeJobContext('MIGRATE')) };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+    (service as any).maxRetries = 3;
+
+    mockWorkflowService.signalWorkflow.mockImplementation(({ signalName }: { signalName: string }) => {
+      if (signalName === 'action') {
+        return Promise.reject(new Error('persistent error'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const maxRetries = 3;
+    const p = (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+
+    // Attach rejection handler BEFORE advancing timers to prevent unhandled-rejection warnings.
+    const assertion = expect(p).resolves.toBeUndefined();
+
+    for (let i = 0; i < maxRetries; i++) {
+      await jest.advanceTimersByTimeAsync(1000);
+    }
+
+    await assertion;
+    // Action retries are exhausted; function does not throw, and proceeds.
+    expect(mockWorkflowService.signalWorkflow).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`after ${maxRetries} attempts`),
+    );
+  });
+
+  it('logs an error for every failed attempt before throwing', async () => {
+    jest.useFakeTimers();
+    const mockContextProvider = { getContext: jest.fn().mockResolvedValue(makeJobContext('DISCOVER')) };
+    (JobContextFactory.getJobManagerProvider as jest.Mock).mockReturnValue(mockContextProvider);
+
+    mockWorkflowService.signalWorkflow.mockImplementation(({ signalName }: { signalName: string }) => {
+      if (signalName === 'action') {
+        return Promise.reject(new Error('err'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const maxRetries: number = (service as any).maxRetries;
+    const p = (service as any).signalWorkflowDbWriterFailure(JOB_ID);
+
+    // Attach the catch handler BEFORE advancing timers to prevent unhandled-rejection warnings.
+    const caught = p.catch(() => {});
+
+    for (let i = 0; i < maxRetries; i++) {
+      await jest.advanceTimersByTimeAsync(1000);
+    }
+
+    await caught;
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error sending STOPPED action signal'),
+      expect.anything(),
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to send STOPPED action signal for jobId=${JOB_ID} after ${maxRetries} attempts`),
+    );
   });
 });

@@ -15,6 +15,7 @@ const {
 const {
   updateStatus: updateStatusActivity,
   generateJobsReport: generateJobsReportActivity,
+  updateWorkerResponse: updateWorkerResponseActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } });
 
 
@@ -22,7 +23,8 @@ export  enum  JobReportType {
   MIGRATE = 'MIGRATE_REPORTED',
   CUT_OVER = 'CUT_OVER_REPORTED',
   DISCOVER= 'DISCOVER_REPORTED',
-  RETRY = 'RETRY_REPORTED'
+  RETRY = 'RETRY_REPORTED',
+  DB_WRITER_FAILURE = 'DB_WRITER_FAILURE_REPORTED',
 }
 
 const generateReport = async (jobRunId: string, generator: string) => {
@@ -49,7 +51,8 @@ export const handleReporting = async (
             (input === JobReportType.CUT_OVER) ||
             (input === JobReportType.MIGRATE) ||
             (input === JobReportType.DISCOVER) ||
-            (input === JobReportType.RETRY)
+            (input === JobReportType.RETRY) ||
+            (input === JobReportType.DB_WRITER_FAILURE)
         ) {
         reportType = input;
         isBlocked = false;
@@ -80,6 +83,19 @@ export const handleReporting = async (
             await generateCOCReportActivity(traceId)
             break
         }
+        case JobReportType.DB_WRITER_FAILURE: {
+            wf.log.warn(`DB writer worker threads exhausted retries for job ${traceId}, skipping report generation`);
+            await updateWorkerResponseActivity(traceId, 'all', {
+                status: JobRunStatus.Failed,
+                code: 'DB_WRITER_FAILURE',
+                operation: 'DB Writer Failure',
+                occurrence: 1,
+                origin: 'DbWriterService',
+                message: 'Job failed: DB writer worker threads exhausted all retries after repeated crashes. Data writing was aborted.',
+                createdAt: new Date(),
+            });
+            break
+        }
         default:
             throw new Error('Unknown REPORT TYPE')
       }
@@ -96,6 +112,7 @@ export const handleReporting = async (
 
 
 function getMappedJobRunStatus(status: JobRunStatus, jobType: JobReportType): JobRunStatus {
+  if (jobType === JobReportType.DB_WRITER_FAILURE) return JobRunStatus.Failed;
   if(status === JobRunStatus.Completed && jobType === JobReportType.CUT_OVER) 
     return JobRunStatus.BLOCKED;
   return status ;

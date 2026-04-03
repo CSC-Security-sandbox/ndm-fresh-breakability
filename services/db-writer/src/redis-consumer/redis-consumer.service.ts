@@ -626,6 +626,9 @@ export class RedisConsumerService implements OnModuleDestroy {
                             }
                         }
                         this.workerRetryCounts.delete(jobId);
+                        await this.signalWorkflowDbWriterFailure(jobId).catch(sigErr => {
+                            this.logger.error(`projectId: ${projectId} Failed to signal workflow failure for job ${jobId}:`, sigErr);
+                        });
                         continue;
                     }
 
@@ -1014,6 +1017,76 @@ export class RedisConsumerService implements OnModuleDestroy {
                     this.logger.log(`projectId: ${projectId} Retrying workflow signal for jobRunId=${jobRunId} in ${retryDelay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
                 }
+            }
+        }
+    }
+
+    private async signalWorkflowDbWriterFailure(jobId: string): Promise<void> {
+        const projectId = await this.getProjectIdFromCache(jobId);
+        const retryDelay = 1000;
+
+        const contextProvider = JobContextFactory.getJobManagerProvider("redis", this.redisClient);
+        const jobContext = await contextProvider.getContext(jobId);
+
+        if (!jobContext) {
+            this.logger.error(`projectId: ${projectId} Job context not found for jobId=${jobId}, cannot signal workflow failure`);
+            return;
+        }
+
+        const jobType = jobContext.jobConfig.jobType;
+        const isRetryRun = !!jobContext.jobConfig.jobRunId;
+        const workflowId = getWorkflowId(jobId, jobType, isRetryRun);
+
+        // Step 1: Send the 'action' signal with 'STOPPED' so that the child workflows
+        // (ChildScanWorkflow, ChildSyncWorkflow) are cancelled via the actionSignal
+        // handler in executeMigrationChildWorkflows. This allows the parent workflow
+        // to exit executeMigrationChildWorkflows and reach handleReporting.
+        // Without this, the parent is stuck awaiting child results and the
+        // reportingSignal below is buffered but never processed.
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                await this.workflowService.signalWorkflow({
+                    namespace: 'default',
+                    workflowExecution: { workflowId },
+                    signalName: 'action',
+                    input: {
+                        payloads: [defaultDataConverter.payloadConverter.toPayload('STOPPED')]
+                    },
+                });
+                this.logger.log(`projectId: ${projectId} Successfully sent STOPPED action signal for jobId=${jobId} on attempt ${attempt}`);
+                break;
+            } catch (error) {
+                this.logger.error(`projectId: ${projectId} Error sending STOPPED action signal for jobId=${jobId} on attempt ${attempt}/${this.maxRetries}:`, error);
+                if (attempt === this.maxRetries) {
+                    this.logger.error(`projectId: ${projectId} Failed to send STOPPED action signal for jobId=${jobId} after ${this.maxRetries} attempts`);
+                }
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+        }
+
+        // Step 2: Send the reportingSignal so that handleReporting (which is called
+        // after executeMigrationChildWorkflows returns) can unblock and mark the job
+        // as Failed. If handleReporting is already waiting, this fires immediately;
+        // if it hasn't been registered yet, Temporal buffers it and fires it as soon
+        // as setHandler(reportingSignal, ...) is called.
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                await this.workflowService.signalWorkflow({
+                    namespace: 'default',
+                    workflowExecution: { workflowId },
+                    signalName: 'reportingSignal',
+                    input: {
+                        payloads: [defaultDataConverter.payloadConverter.toPayload('DB_WRITER_FAILURE_REPORTED')]
+                    },
+                });
+                this.logger.log(`projectId: ${projectId} Successfully signaled workflow failure for jobId=${jobId} on attempt ${attempt}`);
+                return;
+            } catch (error) {
+                this.logger.error(`projectId: ${projectId} Error signaling workflow failure for jobId=${jobId} on attempt ${attempt}/${this.maxRetries}:`, error);
+                if (attempt === this.maxRetries) {
+                    this.logger.error(`projectId: ${projectId} Failed to signal workflow failure for jobId=${jobId} after ${this.maxRetries} attempts`);
+                }
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
         }
     }
