@@ -21,7 +21,6 @@ export const CSV_FILE_PREFIX = 'worker_env_logs_';
 
 export const CSV_FILE_EXTENSION = '.csv';
 
-import type { Duration } from '@temporalio/common';
 
 export const WORKFLOW_TIMEOUTS = {
   PARENT_WORKFLOW_EXECUTION_TIMEOUT: '24h' as Duration,
