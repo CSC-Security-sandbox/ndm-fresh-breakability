@@ -327,7 +327,17 @@ export class AsupPackagerService {
   }
 
   private toFlatFilename(relativePath: string): string {
-    const safe = relativePath.replace(/[\\/]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+    // Strip the top-level bundle directory (e.g. "ndm_logs_<uuid>/") before flattening.
+    // The zip file extracted from the support bundle always has a single top-level
+    // directory named after the bundle (e.g. "ndm_logs_fb192415-3a7c-46cb-bb05-736d5e1df343").
+    // That prefix is redundant inside the ASUP archive — all files already belong to the
+    // same bundle — so we drop it to keep ASUP filenames short and readable.
+    // e.g. "ndm_logs_<uuid>/Performance_Metrics/cpu-percent.csv"
+    //   →  "Performance_Metrics__cpu-percent.csv"
+    const normalized = relativePath.replace(/\\/g, '/');
+    const parts = normalized.split('/');
+    const trimmed = parts.length > 1 ? parts.slice(1).join('/') : normalized;
+    const safe = trimmed.replace(/[\\/]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
     return safe.length > 0 ? safe : `file-${Date.now()}`;
   }
 

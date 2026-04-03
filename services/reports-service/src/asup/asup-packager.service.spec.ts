@@ -399,10 +399,11 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       ).rejects.toThrow('compression failed');
     });
 
-    it('should flatten nested file paths using double-underscore separator (toFlatFilename)', async () => {
+    it('should flatten nested file paths and strip the top-level bundle directory (toFlatFilename)', async () => {
       // Simulate: root contains a 'logs' subdirectory containing 'app service.log'
       // collectExtractedFiles walks it → relativePath = 'logs/app service.log'
-      // toFlatFilename: '/' → '__', space → '_'  → 'logs__app_service.log'
+      // toFlatFilename strips the first segment ('logs') — it's the top-level bundle dir —
+      // then sanitises the rest: 'app service.log' → 'app_service.log'
       mockedFs.readdir
         .mockResolvedValueOnce([
           { name: 'logs', isDirectory: () => true } as any,
@@ -414,17 +415,17 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
       await service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip'));
 
-      // Manifest entry must use the flattened safe name
+      // Manifest entry must use the trimmed, flattened safe name (no top-level dir prefix)
       expect(xmlGeneratorService.buildSupportBundleManifestXml).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ name: 'logs__app_service.log' }),
+          expect.objectContaining({ name: 'app_service.log' }),
         ]),
         expect.any(Number),
       );
-      // copyFile destination must also use the flattened name
+      // copyFile destination must also use the trimmed name
       const copyFileCalls = mockedFs.copyFile.mock.calls;
       expect(
-        copyFileCalls.some((c: any[]) => String(c[1]).endsWith('logs__app_service.log')),
+        copyFileCalls.some((c: any[]) => String(c[1]).endsWith('app_service.log')),
       ).toBe(true);
     });
 
