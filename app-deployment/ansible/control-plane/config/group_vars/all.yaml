@@ -310,7 +310,7 @@ postgres_data_volume_size: 30Gi
 openbao_version: 0.16.3
 openbao_data_volume_size: 8Gi
 
-keycloak_version: 25.3.2
+keycloak_version: 25.2.0
 
 redis_version: 22.0.4
 redis_data_volume_size: 30Gi
