@@ -125,6 +125,8 @@ describe('DiscoveryScanService', () => {
                   return 50;
                 case 'worker.maxRetryCount':
                   return 5;
+                case 'worker.parallelLstatConcurrency':
+                  return 50;
                 default:
                   return null;
               }
@@ -460,6 +462,165 @@ describe('DiscoveryScanService', () => {
       expect(result.subDirs).toEqual(['Folder', 'folder', 'FOLder']);
       expect(mockJobContext.publishToErrorStream).not.toHaveBeenCalled();
       Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    describe('parallel lstat', () => {
+      beforeEach(() => {
+        (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
+        (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
+        (getFilePermissions as jest.Mock).mockReturnValue('755');
+        (removePrefix as jest.Mock).mockImplementation((fullPath: string, prefix: string) => fullPath.replace(`${prefix}/`, ''));
+        (path.join as jest.Mock).mockImplementation((...args) => args.join('/'));
+      });
+
+      it('should issue lstat calls in parallel chunks rather than sequentially', async () => {
+        // Arrange: Create 5 entries; set concurrency to 2 so we get 3 chunks (2+2+1)
+        (service as any).parallelLstatConcurrency = 2;
+        mockOpendir([
+          { name: 'a.txt' },
+          { name: 'b.txt' },
+          { name: 'c.txt' },
+          { name: 'd.txt' },
+          { name: 'e.txt' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+        });
+
+        // Act
+        const result = await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/mock',
+          sourcePrefix: '/mock',
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        // Assert: All 5 entries were lstat'd
+        expect(fs.promises.lstat).toHaveBeenCalledTimes(5);
+        expect(result.fileCount).toBe(5);
+      });
+
+      it('should collect all entry names before issuing any lstat', async () => {
+        // Arrange: Track call order to prove collect-then-stat pattern
+        const callOrder: string[] = [];
+        const entries = [{ name: 'first.txt' }, { name: 'second.txt' }];
+
+        // Mock opendir to track when entries are consumed
+        const asyncIter = (async function* () {
+          for (const item of entries) {
+            callOrder.push(`opendir:${item.name}`);
+            yield item;
+          }
+        })();
+        (fs.promises.opendir as jest.Mock).mockResolvedValue({
+          [Symbol.asyncIterator]: () => asyncIter,
+          close: jest.fn().mockResolvedValue(undefined),
+        });
+
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) => {
+          callOrder.push(`lstat:${filePath}`);
+          return Promise.resolve({
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          });
+        });
+
+        // Act
+        await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/mock',
+          sourcePrefix: '/mock',
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        // Assert: All opendir reads happen before any lstat calls
+        const firstLstatIndex = callOrder.findIndex(c => c.startsWith('lstat:'));
+        const lastOpendirIndex = callOrder.map((c, i) => c.startsWith('opendir:') ? i : -1).filter(i => i >= 0).pop();
+        expect(lastOpendirIndex).toBeLessThan(firstLstatIndex);
+      });
+
+      it('should handle a single entry with concurrency greater than 1', async () => {
+        (service as any).parallelLstatConcurrency = 50;
+        mockOpendir([{ name: 'only.txt' }]);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+        });
+
+        const result = await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/mock',
+          sourcePrefix: '/mock',
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        expect(fs.promises.lstat).toHaveBeenCalledTimes(1);
+        expect(result.fileCount).toBe(1);
+      });
+
+      it('should propagate lstat error from parallel chunk and publish to error stream', async () => {
+        (service as any).parallelLstatConcurrency = 3;
+        mockOpendir([
+          { name: 'good.txt' },
+          { name: 'bad.txt' },
+          { name: 'other.txt' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) => {
+          if (filePath.includes('bad.txt')) {
+            return Promise.reject(new Error('permission denied'));
+          }
+          return Promise.resolve({
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          });
+        });
+
+        // Act & Assert: Error should propagate
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath: '/mock',
+            sourcePrefix: '/mock',
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).rejects.toThrow('permission denied');
+
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+      });
+
+      it('should correctly mix files and directories across parallel chunks', async () => {
+        (service as any).parallelLstatConcurrency = 2;
+        mockOpendir([
+          { name: 'file1.txt' },
+          { name: 'dir1' },
+          { name: 'file2.txt' },
+          { name: 'dir2' },
+        ]);
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) => {
+          const isDir = filePath.endsWith('dir1') || filePath.endsWith('dir2');
+          return Promise.resolve({
+            isDirectory: () => isDir,
+            isSymbolicLink: () => false,
+          });
+        });
+
+        const result = await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/mock',
+          sourcePrefix: '/mock',
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        expect(result.fileCount).toBe(2);
+        expect(result.dirCount).toBe(2);
+        expect(result.subDirs).toHaveLength(2);
+      });
     });
 
     describe('WindowsAPINotAvailableError handling', () => {

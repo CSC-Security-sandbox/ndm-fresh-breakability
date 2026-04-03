@@ -19,18 +19,20 @@ export class DiscoveryScanService {
     readonly workerId: string;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
+    readonly parallelLstatConcurrency: number;
     private readonly logger: LoggerService;
 
     constructor(
-        @Inject(ConfigService) 
+        @Inject(ConfigService)
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly fileTypeDetectionService: FileTypeDetectionService,
         private readonly winOperationService: WinOperationService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
-        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
-        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3; 
+        this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
+        this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
+        this.parallelLstatConcurrency = this.configService.get<number>('worker.parallelLstatConcurrency') || 50;
         this.logger = loggerFactory.create(DiscoveryScanService.name);
     }
 
@@ -46,49 +48,79 @@ export class DiscoveryScanService {
                 throw new FatalError(`Source directory does not exist: ${sourcePath}`);
             }
 
-            // Stream directory entries using opendir() — O(1) memory per entry
+            // Phase 1: Collect all entry names from the directory.
+            // opendir + iterate is cheap — getdents is kernel-buffered and returns
+            // names in a single syscall batch. We collect into an array so that
+            // Phase 2 can issue lstat calls in parallel rather than one-by-one.
+            const entryNames: string[] = [];
             const dir = await fs.promises.opendir(sourcePath);
             try {
                 for await (const item of dir) {
-                    const sourceContentPath = path.join(sourcePath, item.name);
-                    const sourceStat: fs.Stats = await fs.promises.lstat(sourceContentPath);
+                    entryNames.push(item.name);
+                }
+            } catch (error) {
+                this.logger.error(`Error reading directory entries ${sourcePath}: ${error.message}`);
+                throw error;
+            }
 
-                    if (shouldExcludeOrSkip({
-                        fullPath: sourceContentPath,
-                        stats: sourceStat,
-                        excludePatterns: settings.excludePatterns,
-                        skipTime: settings.skipFile,
-                        olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
-                        jobType: jobContext.jobConfig.jobType
-                    })) continue;
+            // Phase 2: Parallel lstat in controlled chunks.
+            // Instead of awaiting one lstat per loop iteration (sequential, ~5ms each on NFS),
+            // we fire up to `parallelLstatConcurrency` lstats concurrently via Promise.all.
+            // For 1,000 entries on NFS at 5ms/lstat:
+            //   Before: 1,000 × 5ms = 5,000ms (serial)
+            //   After:  1,000 / 50 × 5ms = 100ms (50 concurrent)
+            try {
+                for (let i = 0; i < entryNames.length; i += this.parallelLstatConcurrency) {
+                    const chunk = entryNames.slice(i, i + this.parallelLstatConcurrency);
 
-                    const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                    const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
-                    this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
+                    const statResults = await Promise.all(
+                        chunk.map(async (name) => {
+                            const fullPath = path.join(sourcePath, name);
+                            const stat = await fs.promises.lstat(fullPath);
+                            return { name, fullPath, stat };
+                        })
+                    );
 
-                    await this.publishFileInfo({
-                        stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
-                    });
+                    // Phase 3: Process stat results sequentially.
+                    // Filtering, classification, publishing, and subdirectory collection
+                    // are fast in-memory operations — no need to parallelize these.
+                    for (const { name, fullPath: sourceContentPath, stat: sourceStat } of statResults) {
+                        if (shouldExcludeOrSkip({
+                            fullPath: sourceContentPath,
+                            stats: sourceStat,
+                            excludePatterns: settings.excludePatterns,
+                            skipTime: settings.skipFile,
+                            olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
+                            jobType: jobContext.jobConfig.jobType
+                        })) continue;
 
-                    if (sourceStat.isDirectory()) {
-                        if(sourceStat.isSymbolicLink() ) continue;
-                        output.dirCount++;
-                        if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
-                        if (isSMB){
-                            const hasConflict = await checkCaseSensitiveConflict(
-                                jobContext.jobConfig.jobType,
-                                item.name,
-                                lowerCaseSourceDirs,
-                                relativeSourcePath,
-                                sourceContentPath,
-                                command,
-                                jobContext
-                            );
-                            if (hasConflict) continue;
-                        }
-                        output.subDirs.push(relativeSourcePath);
-                    } else output.fileCount++;
+                        const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
+                        const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
+                        this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
 
+                        await this.publishFileInfo({
+                            stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
+                        });
+
+                        if (sourceStat.isDirectory()) {
+                            if(sourceStat.isSymbolicLink() ) continue;
+                            output.dirCount++;
+                            if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
+                            if (isSMB){
+                                const hasConflict = await checkCaseSensitiveConflict(
+                                    jobContext.jobConfig.jobType,
+                                    name,
+                                    lowerCaseSourceDirs,
+                                    relativeSourcePath,
+                                    sourceContentPath,
+                                    command,
+                                    jobContext
+                                );
+                                if (hasConflict) continue;
+                            }
+                            output.subDirs.push(relativeSourcePath);
+                        } else output.fileCount++;
+                    }
                 }
             } catch (error){
                 this.logger.error(`Error scanning directory ${sourcePath}: ${error.message}`);
