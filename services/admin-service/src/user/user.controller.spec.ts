@@ -138,16 +138,16 @@ describe('UserController', () => {
         id: '1',
         first_name: '',
         last_name: '',
-        name: '',
         email: 'test',
         user_status: 'active',
         created_at: new Date(),
-        created_by: '1',
+        created_by: null,
         updated_at: new Date(),
-        updated_by: '1',
+        updated_by: null,
         projects: [],
         user_roles: [],
-        populateWhoColumns: jest.fn(),
+        isAppAdmin: false,
+        roleName: null,
       },
       {
         id: '2',
@@ -155,16 +155,16 @@ describe('UserController', () => {
         user_status: 'active',
         first_name: '',
         last_name: '',
-        name: '',
         created_at: new Date(),
-        created_by: '1',
+        created_by: null,
         updated_at: new Date(),
-        updated_by: '1',
+        updated_by: null,
         projects: [],
         user_roles: [],
-        populateWhoColumns: jest.fn(),
+        isAppAdmin: false,
+        roleName: null,
       },
-    ];
+    ] as any[];
 
     jest.spyOn(service, 'findAll').mockResolvedValue(users);
 
@@ -180,18 +180,18 @@ describe('UserController', () => {
         id: '1',
         first_name: '',
         last_name: '',
-        name: '',
         email: 'test',
         user_status: 'active',
         created_at: new Date(),
-        created_by: '1',
+        created_by: null,
         updated_at: new Date(),
-        updated_by: '1',
+        updated_by: null,
         projects: [],
         user_roles: [],
-        populateWhoColumns: jest.fn(),
+        isAppAdmin: false,
+        roleName: null,
       },
-    ];
+    ] as any[];
 
     jest.spyOn(service, 'findAll').mockResolvedValue(users);
 
@@ -207,18 +207,18 @@ describe('UserController', () => {
         id: '1',
         first_name: 'John',
         last_name: 'Doe',
-        name: 'John Doe',
         email: 'john@example.com',
         user_status: 'active',
         created_at: new Date(),
-        created_by: '1',
+        created_by: null,
         updated_at: new Date(),
-        updated_by: '1',
+        updated_by: null,
         projects: [],
         user_roles: [],
-        populateWhoColumns: jest.fn(),
+        isAppAdmin: false,
+        roleName: null,
       },
-    ];
+    ] as any[];
 
     jest.spyOn(service, 'findAll').mockResolvedValue(projectUsers);
 

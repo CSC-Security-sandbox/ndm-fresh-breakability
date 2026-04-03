@@ -19,6 +19,21 @@ import {
   LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
 
+/**
+ * User enriched with role context for API responses.
+ * - `isAppAdmin`: true when the user holds a global (projectId-null) role.
+ * - `roleName`: the app-admin role name takes precedence; falls back to the
+ *   project-scoped role name, or null when no role is found.
+ * - `created_by` / `updated_by`: resolved to the full User object when the
+ *   referenced user exists, otherwise null.
+ */
+export interface TransformedUser extends Omit<User, 'created_by' | 'updated_by' | 'populateWhoColumns' | 'name'> {
+  isAppAdmin: boolean;
+  roleName: string | null;
+  created_by: User | null;
+  updated_by: User | null;
+}
+
 @Injectable()
 export class UserService {
   private readonly logger: LoggerService;
@@ -82,7 +97,7 @@ export class UserService {
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateUserDto> = {},
     projectId?: string,
-  ): Promise<User[]> {
+  ): Promise<TransformedUser[]> {
     try {
       this.logger.log('Retrieving users list', {
         page,
@@ -145,7 +160,14 @@ export class UserService {
     const updatedByIds = [...new Set(users.map(u => u.updated_by).filter(Boolean))];
     const userIds = users.map(u => u.id);
 
-    const [createdByUsers, updatedByUsers, userRoles] = await Promise.all([
+    const roleWhereConditions: Array<Record<string, any>> = [
+      { userId: In(userIds), projectId: IsNull() },
+    ];
+    if (projectId) {
+      roleWhereConditions.push({ userId: In(userIds), projectId });
+    }
+
+    const [createdByUsers, updatedByUsers, allRoles] = await Promise.all([
       createdByIds.length > 0 ? this.userRepository.find({
         where: { id: In(createdByIds) },
         select: ['id', 'email', 'user_status'],
@@ -154,35 +176,40 @@ export class UserService {
         where: { id: In(updatedByIds) },
         select: ['id', 'email', 'user_status'],
       }) : [],
-      // If projectId is provided, get roles for that project; otherwise get app admin roles (projectId is null)
       this.userRoleRepository.find({
-        where: { 
-          userId: In(userIds), 
-          ...(projectId ? { projectId } : { projectId: IsNull() })
-        },
+        where: roleWhereConditions,
+        relations: ['role'],
         select: ['userId', 'roleId', 'projectId'],
-      })
+      }),
     ]);
 
-    // Create maps for efficient lookups
     const createdByMap = new Map<string, User>();
     createdByUsers.forEach(user => createdByMap.set(user.id, user));
 
     const updatedByMap = new Map<string, User>();
     updatedByUsers.forEach(user => updatedByMap.set(user.id, user));
 
-    const userRoleMap = new Map<string, boolean>();
-    userRoles.forEach(role => userRoleMap.set(role.userId, true));
+    const appAdminRoleMap = new Map<string, string>();
+    const projectRoleMap = new Map<string, string>();
+    allRoles.forEach(ur => {
+      if (!ur.role?.role_name) return;
+      if (ur.projectId === null) {
+        appAdminRoleMap.set(ur.userId, ur.role.role_name);
+      } else {
+        projectRoleMap.set(ur.userId, ur.role.role_name);
+      }
+    });
 
-    // Transform users with the fetched data
-    const transformedUsers = users.map(user => ({
-      ...user,
-      // When filtering by projectId, show if user has role in that project
-      // When no projectId, show if user is app admin (has role with null projectId)
-      isAppAdmin: userRoleMap.has(user.id),
-      created_by: createdByMap.get(user.created_by) || null,
-      updated_by: updatedByMap.get(user.updated_by) || null,
-    })) as any[];
+    const transformedUsers = users.map((user): TransformedUser => {
+      const { created_by, updated_by, ...rest } = user;
+      return {
+        ...rest,
+        isAppAdmin: appAdminRoleMap.has(user.id),
+        roleName: appAdminRoleMap.get(user.id) ?? projectRoleMap.get(user.id) ?? null,
+        created_by: createdByMap.get(created_by) ?? null,
+        updated_by: updatedByMap.get(updated_by) ?? null,
+      };
+    });
 
     this.logger.log('Successfully retrieved users', {
       count: transformedUsers.length,

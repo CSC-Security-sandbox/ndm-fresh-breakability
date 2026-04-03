@@ -16,6 +16,23 @@ import { UserPermissionResponse } from 'src/auth/user-permission-response-type';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { mockLoggerFactory, resetLoggerMocks } from '../test-utils/logger-mocks';
 
+function buildUserRoleMock(
+  overrides: Omit<Partial<UserRole>, 'role'> & { role?: Partial<Role> } = {},
+): UserRole {
+  const { role: roleOverrides, ...rest } = overrides;
+  const role = {
+    role_name: '',
+    ...roleOverrides,
+  } as Role;
+  return {
+    userId: '',
+    roleId: '',
+    projectId: null,
+    role,
+    ...rest,
+  } as UserRole;
+}
+
 describe('UserService', () => {
   let service: UserService;
   let userRepository: Repository<User>;
@@ -178,7 +195,6 @@ describe('UserService', () => {
         first_name: '',
         last_name: '',
         name: '',
-        isAppAdmin: false,
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -194,7 +210,6 @@ describe('UserService', () => {
         first_name: '',
         last_name: '',
         name: '',
-        isAppAdmin: true,
         created_at: new Date(),
         created_by: randomUUID(),
         updated_at: new Date(),
@@ -207,14 +222,13 @@ describe('UserService', () => {
 
     jest.spyOn(userRepository, 'find')
       .mockResolvedValueOnce(users) // First call - main query
-      .mockResolvedValueOnce([]) // Second call - createdByUsers (empty because no matching IDs)
-      .mockResolvedValueOnce([]); // Third call - updatedByUsers (empty because no matching IDs)
+      .mockResolvedValueOnce([]) // Second call - createdByUsers
+      .mockResolvedValueOnce([]); // Third call - updatedByUsers
 
-    // Mock the UserRole repository find method for the findAll method
-    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([
-      { userId: '1', roleId: '1', projectId: null } as UserRole,
-      { userId: '2', roleId: '2', projectId: null } as UserRole,
-    ]);
+    jest.spyOn(userRoleRepository, 'find')
+      .mockResolvedValueOnce([
+        buildUserRoleMock({ userId: '2', roleId: '2', role: { role_name: 'App Admin' } }),
+      ]);
 
     const result = await service.findAll();
     expect(userRepository.find).toHaveBeenCalled();
@@ -225,11 +239,15 @@ describe('UserService', () => {
           id: '1',
           email: 'test',
           user_status: 'active',
+          isAppAdmin: false,
+          roleName: null,
         }),
         expect.objectContaining({
           id: '2',
           email: 'test2',
           user_status: 'active',
+          isAppAdmin: true,
+          roleName: 'App Admin',
         }),
       ]),
     );
@@ -237,10 +255,10 @@ describe('UserService', () => {
 
   it('should find users by projectId including app admins', async () => {
     const projectId = 'project-123';
-    const userRoles = [
-      { userId: '1', projectId } as UserRole, // Project-specific user
-      { userId: '2', projectId } as UserRole, // Project-specific user
-      { userId: '3', projectId: null } as UserRole, // App admin
+    const initialUserRoles = [
+      { userId: '1', projectId } as UserRole,
+      { userId: '2', projectId } as UserRole,
+      { userId: '3', projectId: null } as UserRole,
     ];
 
     const users = [
@@ -299,51 +317,52 @@ describe('UserService', () => {
       { id: '4', email: 'updater@test.com', user_status: 'active' } as User,
     ];
 
-    const projectUserRoles = [
-      { userId: '1', roleId: 'role-1', projectId } as UserRole,
-      { userId: '2', roleId: 'role-2', projectId } as UserRole,
-      { userId: '3', roleId: 'app-admin-role', projectId } as UserRole,
-    ];
-
     jest.spyOn(userRoleRepository, 'find')
-      .mockResolvedValueOnce(userRoles) // First call - get users for project OR app admins
-      .mockResolvedValueOnce(projectUserRoles); // Second call - get user roles for project
+      .mockResolvedValueOnce(initialUserRoles)
+      .mockResolvedValueOnce([
+        buildUserRoleMock({ userId: '3', roleId: 'app-admin-role', role: { role_name: 'App Admin' } }),
+        buildUserRoleMock({ userId: '1', roleId: 'role-1', projectId, role: { role_name: 'Project Admin' } }),
+        buildUserRoleMock({ userId: '2', roleId: 'role-2', projectId, role: { role_name: 'Project Viewer' } }),
+      ]);
 
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users) // Main query for users
-      .mockResolvedValueOnce(createdByUsers) // createdByUsers query
-      .mockResolvedValueOnce(updatedByUsers); // updatedByUsers query
+      .mockResolvedValueOnce(users)
+      .mockResolvedValueOnce(createdByUsers)
+      .mockResolvedValueOnce(updatedByUsers);
 
     const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
 
     expect(userRoleRepository.find).toHaveBeenCalledWith({
       where: [
-        { projectId }, // Users with roles for the specific project
-        { projectId: IsNull() } // App admins with global access (projectId is null)
+        { projectId },
+        { projectId: IsNull() }
       ],
       relations: ['user'],
       select: ['userId']
-    });
-
-    expect(userRepository.find).toHaveBeenCalledWith({
-      skip: 0,
-      take: 10,
-      order: { id: 'ASC' },
-      where: { id: expect.any(Object) }, // In(['1', '2', '3'])
     });
 
     expect(result).toHaveLength(3);
     expect(result[0]).toEqual(expect.objectContaining({
       id: '1',
       email: 'user1@test.com',
-      isAppAdmin: true,
+      isAppAdmin: false,
+      roleName: 'Project Admin',
+      created_by: createdByUsers[0],
+      updated_by: updatedByUsers[0],
+    }));
+    expect(result[1]).toEqual(expect.objectContaining({
+      id: '2',
+      email: 'user2@test.com',
+      isAppAdmin: false,
+      roleName: 'Project Viewer',
       created_by: createdByUsers[0],
       updated_by: updatedByUsers[0],
     }));
     expect(result[2]).toEqual(expect.objectContaining({
       id: '3',
       email: 'admin@test.com',
-      isAppAdmin: true, // App admin should have isAppAdmin: true
+      isAppAdmin: true,
+      roleName: 'App Admin',
       created_by: createdByUsers[0],
       updated_by: updatedByUsers[0],
     }));
@@ -388,9 +407,9 @@ describe('UserService', () => {
         last_name: 'User',
         name: 'Test User',
         created_at: new Date(),
-        created_by: null, // No creator
+        created_by: null,
         updated_at: new Date(),
-        updated_by: null, // No updater
+        updated_by: null,
         projects: [],
         user_roles: [],
         populateWhoColumns: jest.fn(),
@@ -398,11 +417,12 @@ describe('UserService', () => {
     ];
 
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users) // Main query
-      .mockResolvedValueOnce([]) // createdByUsers (empty)
-      .mockResolvedValueOnce([]); // updatedByUsers (empty)
+      .mockResolvedValueOnce(users)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
-    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([]);
+    jest.spyOn(userRoleRepository, 'find')
+      .mockResolvedValueOnce([]);
 
     const result = await service.findAll();
 
@@ -411,6 +431,7 @@ describe('UserService', () => {
       id: '1',
       email: 'test@example.com',
       isAppAdmin: false,
+      roleName: null,
       created_by: null,
       updated_by: null,
     }));
@@ -436,23 +457,134 @@ describe('UserService', () => {
     ];
 
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users) // Main query
-      .mockResolvedValueOnce([]) // createdByUsers
-      .mockResolvedValueOnce([]); // updatedByUsers
+      .mockResolvedValueOnce(users)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
-    jest.spyOn(userRoleRepository, 'find').mockResolvedValue([]);
+    jest.spyOn(userRoleRepository, 'find')
+      .mockResolvedValueOnce([]);
 
     const filter = { user_status: 'active' };
     const result = await service.findAll(2, 5, 'email', 'DESC', filter);
 
     expect(userRepository.find).toHaveBeenCalledWith({
-      skip: 5, // (page - 1) * limit = (2 - 1) * 5
+      skip: 5,
       take: 5,
       order: { email: 'DESC' },
       where: filter,
     });
 
     expect(result).toHaveLength(1);
+  });
+
+  describe('roleName assignment in findAll', () => {
+    const makeUser = (id: string, email: string) => ({
+      id,
+      email,
+      user_status: 'active',
+      first_name: 'Test',
+      last_name: 'User',
+      name: 'Test User',
+      created_at: new Date(),
+      created_by: null,
+      updated_at: new Date(),
+      updated_by: null,
+      projects: [],
+      user_roles: [],
+      populateWhoColumns: jest.fn(),
+    });
+
+    it('should set roleName to "App Admin" for app admins even when projectId is provided', async () => {
+      const projectId = 'project-123';
+      const users = [makeUser('1', 'admin@test.com')];
+
+      jest.spyOn(userRoleRepository, 'find')
+        .mockResolvedValueOnce([{ userId: '1', projectId: null } as UserRole])
+        .mockResolvedValueOnce([
+          buildUserRoleMock({ userId: '1', roleId: 'r1', role: { role_name: 'App Admin' } }),
+        ]);
+
+      jest.spyOn(userRepository, 'find')
+        .mockResolvedValueOnce(users)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
+
+      expect(result[0]).toEqual(expect.objectContaining({
+        isAppAdmin: true,
+        roleName: 'App Admin',
+      }));
+    });
+
+    it('should set roleName to project role name for non-admin users', async () => {
+      const projectId = 'project-123';
+      const users = [makeUser('1', 'viewer@test.com')];
+
+      jest.spyOn(userRoleRepository, 'find')
+        .mockResolvedValueOnce([{ userId: '1', projectId } as UserRole])
+        .mockResolvedValueOnce([
+          buildUserRoleMock({ userId: '1', roleId: 'r1', projectId, role: { role_name: 'Project Viewer' } }),
+        ]);
+
+      jest.spyOn(userRepository, 'find')
+        .mockResolvedValueOnce(users)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
+
+      expect(result[0]).toEqual(expect.objectContaining({
+        isAppAdmin: false,
+        roleName: 'Project Viewer',
+      }));
+    });
+
+    it('should set roleName to null for users with no matching role', async () => {
+      const users = [makeUser('1', 'norole@test.com')];
+
+      jest.spyOn(userRepository, 'find')
+        .mockResolvedValueOnce(users)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      jest.spyOn(userRoleRepository, 'find')
+        .mockResolvedValueOnce([]);
+
+      const result = await service.findAll();
+
+      expect(result[0]).toEqual(expect.objectContaining({
+        isAppAdmin: false,
+        roleName: null,
+      }));
+    });
+
+    it('should prioritize App Admin roleName over project role when user has both', async () => {
+      const projectId = 'project-123';
+      const users = [makeUser('1', 'superuser@test.com')];
+
+      jest.spyOn(userRoleRepository, 'find')
+        .mockResolvedValueOnce([
+          { userId: '1', projectId: null } as UserRole,
+          { userId: '1', projectId } as UserRole,
+        ])
+        .mockResolvedValueOnce([
+          buildUserRoleMock({ userId: '1', roleId: 'r1', role: { role_name: 'App Admin' } }),
+          buildUserRoleMock({ userId: '1', roleId: 'r2', projectId, role: { role_name: 'Project Admin' } }),
+        ]);
+
+      jest.spyOn(userRepository, 'find')
+        .mockResolvedValueOnce(users)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.findAll(1, 10, 'id', 'ASC', {}, projectId);
+
+      expect(result[0]).toEqual(expect.objectContaining({
+        isAppAdmin: true,
+        roleName: 'App Admin',
+      }));
+    });
   });
 
   it('should throw NotFoundException if user is not found', async () => {

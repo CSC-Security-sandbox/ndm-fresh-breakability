@@ -40,8 +40,8 @@ export class UserRole extends Base {
   @Column({ name: 'user_id' })
   userId: string;
 
-  @Column({ name: 'project_id' })
-  projectId: string;
+  @Column({ name: 'project_id', nullable: true })
+  projectId: string | null;
 
   @Column({ name: 'role_id' })
   roleId: string;

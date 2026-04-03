@@ -27,6 +27,12 @@ export const COL_DEF_FOR_USER = [
     width: 100,
   },
   {
+    header: "Role",
+    accessor: "roleName",
+    id: "column_role",
+    width: 150,
+  },
+  {
     header: "Email",
     accessor: "email",
     id: "column_email",
