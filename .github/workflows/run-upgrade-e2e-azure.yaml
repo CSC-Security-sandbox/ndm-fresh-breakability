@@ -343,56 +343,74 @@ jobs:
 
           echo "All ${TOTAL_CHUNKS} chunks uploaded successfully."
 
-      - name: Process upload (assemble, validate checksums, extract)
+      - name: Initiate upload processing (async)
         run: |
           BASE_URL="https://${CP_IP}/api/v1/upgrade"
 
-          echo "Processing upload ${UPLOAD_ID} (assembling, validating, extracting)..."
-          echo "This may take a few minutes for large bundles..."
+          echo "Initiating processing for upload ${UPLOAD_ID} (assemble, validate checksums, extract)..."
 
-          PROCESS_RESPONSE=$(curl -k --silent --show-error \
-            --max-time 600 \
+          # The endpoint returns HTTP 202 immediately — processing runs in the background.
+          # We poll latest-upload-status in the next step to track completion.
+          HTTP_CODE=$(curl -k --silent --show-error --output /dev/null --write-out "%{http_code}" \
             -X POST "${BASE_URL}/process-upload/${UPLOAD_ID}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${NDM_TOKEN}")
 
-          echo "Process response: $(echo ${PROCESS_RESPONSE} | jq -c .)"
-
-          SUCCESS=$(echo "${PROCESS_RESPONSE}" | jq -r '.success // false')
-          if [ "${SUCCESS}" != "true" ]; then
-            ERRORS=$(echo "${PROCESS_RESPONSE}" | jq -r '.errors // .message // "unknown error"')
-            echo "ERROR: process-upload failed: ${ERRORS}"
+          if [ "${HTTP_CODE}" -ne 202 ]; then
+            echo "ERROR: process-upload returned HTTP ${HTTP_CODE}, expected 202"
             exit 1
           fi
 
-          UPLOAD_VERSION=$(echo "${PROCESS_RESPONSE}" | jq -r '.version // empty')
-          echo "Upload processed successfully! Version: ${UPLOAD_VERSION}"
+          echo "Processing initiated (HTTP 202). Will poll for completion..."
 
-      - name: Get bundleId from latest-upload-status
+      - name: Poll processing status and get bundleId
         run: |
           BASE_URL="https://${CP_IP}/api/v1/upgrade"
 
-          STATUS_RESPONSE=$(curl -k --silent --show-error \
-            "${BASE_URL}/latest-upload-status" \
-            -H "Authorization: Bearer ${NDM_TOKEN}")
+          # uploadStatus transitions: uploading → processing → success / failed
+          # Poll every 5 seconds for up to 10 minutes (120 attempts).
+          MAX_RETRIES=120
+          RETRY=0
+          UPLOAD_STATUS=""
 
-          echo "Upload status: $(echo ${STATUS_RESPONSE} | jq -c '{bundleId,uploadStatus,upgradeStatus,version}')"
+          echo "Polling ${BASE_URL}/latest-upload-status every 5 seconds (max ${MAX_RETRIES} attempts)..."
 
-          BUNDLE_ID=$(echo "${STATUS_RESPONSE}" | jq -r '.bundleId // empty')
-          UPLOAD_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.uploadStatus // empty')
+          while [ "${RETRY}" -lt "${MAX_RETRIES}" ]; do
+            RETRY=$(( RETRY + 1 ))
+            sleep 5
 
-          if [ -z "${BUNDLE_ID}" ]; then
-            echo "ERROR: bundleId not found in latest-upload-status response."
-            exit 1
-          fi
+            STATUS_RESPONSE=$(curl -k --silent --show-error \
+              "${BASE_URL}/latest-upload-status" \
+              -H "Authorization: Bearer ${NDM_TOKEN}")
+
+            UPLOAD_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.uploadStatus // empty')
+            echo "  [${RETRY}/${MAX_RETRIES}] uploadStatus=${UPLOAD_STATUS}"
+
+            case "${UPLOAD_STATUS}" in
+              success)
+                BUNDLE_ID=$(echo "${STATUS_RESPONSE}" | jq -r '.bundleId // empty')
+                UPLOAD_VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
+                echo "✅ Processing complete! version=${UPLOAD_VERSION}, bundleId=${BUNDLE_ID}"
+                echo "BUNDLE_ID=${BUNDLE_ID}" >> $GITHUB_ENV
+                break
+                ;;
+              failed)
+                echo "❌ Processing failed. Response: ${STATUS_RESPONSE}"
+                exit 1
+                ;;
+              processing|uploading)
+                # Still in progress — keep polling
+                ;;
+              *)
+                echo "  Unexpected status '${UPLOAD_STATUS}', continuing..."
+                ;;
+            esac
+          done
 
           if [ "${UPLOAD_STATUS}" != "success" ]; then
-            echo "ERROR: Expected uploadStatus=success, got: ${UPLOAD_STATUS}"
+            echo "❌ Processing timed out after $(( MAX_RETRIES * 5 / 60 )) minutes. Last status: ${UPLOAD_STATUS}"
             exit 1
           fi
-
-          echo "BUNDLE_ID=${BUNDLE_ID}" >> $GITHUB_ENV
-          echo "bundleId: ${BUNDLE_ID}"
 
       - name: Trigger upgrade
         run: |
@@ -484,6 +502,125 @@ jobs:
             exit 1
           fi
 
+      - name: Verify worker multicast completed
+        run: |
+          # Multicast was auto-triggered during process-upload (~5 min before CP upgrade started).
+          # The CP Ansible upgrade takes 20-30 min, so by the time we reach here multicast
+          # should already be done. Just do a single check to confirm before calling /execute.
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          MULTICAST_RESPONSE=$(curl -k --silent --show-error \
+            "${BASE_URL}/multicast/${BUNDLE_ID}" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          MULTICAST_STATUS=$(echo "${MULTICAST_RESPONSE}" | jq -r '.workflowStatus // empty')
+          COMPLETED=$(echo "${MULTICAST_RESPONSE}" | jq -r '.summary.completed // 0')
+          TOTAL=$(echo "${MULTICAST_RESPONSE}" | jq -r '.summary.total // 0')
+          FAILED=$(echo "${MULTICAST_RESPONSE}" | jq -r '.summary.failed // 0')
+
+          echo "Multicast status: ${MULTICAST_STATUS} | workers: ${COMPLETED}/${TOTAL} completed, ${FAILED} failed"
+
+          if [ "${FAILED}" -gt 0 ]; then
+            echo "❌ ${FAILED} worker(s) failed to receive the upgrade bundle."
+            echo "$(echo ${MULTICAST_RESPONSE} | jq .)"
+            exit 1
+          fi
+
+          if [ "${MULTICAST_STATUS}" != "COMPLETED" ]; then
+            echo "❌ Multicast workflow is not COMPLETED (status=${MULTICAST_STATUS}). Workers may not have finished downloading the binary."
+            echo "$(echo ${MULTICAST_RESPONSE} | jq .)"
+            exit 1
+          fi
+
+          echo "✅ All ${COMPLETED}/${TOTAL} workers have staged the upgrade binary."
+
+      - name: Execute worker upgrades
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+
+          echo "Triggering worker upgrade execution for bundleId=${BUNDLE_ID}..."
+          EXECUTE_RESPONSE=$(curl -k --silent --show-error \
+            -X POST "${BASE_URL}/execute" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${NDM_TOKEN}" \
+            -d "{\"bundleId\":\"${BUNDLE_ID}\"}")
+
+          echo "Execute response: $(echo ${EXECUTE_RESPONSE} | jq -c .)"
+
+          WORKFLOW_ID=$(echo "${EXECUTE_RESPONSE}" | jq -r '.workflowId // empty')
+          if [ -z "${WORKFLOW_ID}" ]; then
+            echo "❌ Execute worker upgrade failed — no workflowId returned."
+            echo "Full response: ${EXECUTE_RESPONSE}"
+            exit 1
+          fi
+
+          echo "Worker upgrade execution started. workflowId=${WORKFLOW_ID}"
+
+      - name: Poll worker upgrade execution status
+        run: |
+          BASE_URL="https://${CP_IP}/api/v1/upgrade"
+          NDM_USERNAME="${{ secrets.NDM_APP_USERNAME }}"
+          NDM_PASSWORD="${{ secrets.NDM_APP_PASSWORD }}"
+
+          # Allow up to 15 minutes (90 × 10s) for workers to stop, swap binary and restart.
+          MAX_RETRIES=90
+          RETRY=0
+          WORKER_UPGRADE_STATUS=""
+
+          echo "Polling ${BASE_URL}/execute/${BUNDLE_ID} every 10 seconds (max ${MAX_RETRIES} attempts)..."
+
+          while [ "${RETRY}" -lt "${MAX_RETRIES}" ]; do
+            RETRY=$(( RETRY + 1 ))
+            sleep 10
+
+            CURRENT_TOKEN=$(curl -k --silent \
+              -X POST "${BASE_URL%/api/v1/upgrade}/keycloak/realms/datamigrator/protocol/openid-connect/token" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "client_id=datamigrator-client&grant_type=password&username=${NDM_USERNAME}&password=${NDM_PASSWORD}" \
+              | jq -r '.access_token // empty' 2>/dev/null || true)
+
+            if [ -z "${CURRENT_TOKEN}" ]; then
+              echo "  [${RETRY}/${MAX_RETRIES}] Keycloak not yet reachable — retrying..."
+              continue
+            fi
+
+            EXEC_RESPONSE=$(curl -k --silent \
+              "${BASE_URL}/execute/${BUNDLE_ID}" \
+              -H "Authorization: Bearer ${CURRENT_TOKEN}" 2>/dev/null || true)
+
+            WORKER_UPGRADE_STATUS=$(echo "${EXEC_RESPONSE}" | jq -r '.upgradeStatus // empty' 2>/dev/null || true)
+            UPGRADE_COMPLETED=$(echo "${EXEC_RESPONSE}" | jq -r '.upgradeCompleted // false' 2>/dev/null || echo "false")
+            COMPLETED=$(echo "${EXEC_RESPONSE}" | jq -r '.summary.completed // 0' 2>/dev/null || echo "0")
+            TOTAL=$(echo "${EXEC_RESPONSE}" | jq -r '.summary.total // 0' 2>/dev/null || echo "0")
+            FAILED=$(echo "${EXEC_RESPONSE}" | jq -r '.summary.failed // 0' 2>/dev/null || echo "0")
+            IN_PROGRESS=$(echo "${EXEC_RESPONSE}" | jq -r '.summary.inProgress // 0' 2>/dev/null || echo "0")
+
+            echo "  [${RETRY}/${MAX_RETRIES}] Worker execution: status=${WORKER_UPGRADE_STATUS}, total=${TOTAL}, completed=${COMPLETED}, inProgress=${IN_PROGRESS}, failed=${FAILED}"
+
+            case "${WORKER_UPGRADE_STATUS}" in
+              success)
+                echo "  ✅ All ${COMPLETED}/${TOTAL} workers upgraded successfully."
+                break
+                ;;
+              failure)
+                echo "  ❌ Worker upgrade failed. ${FAILED} worker(s) did not complete."
+                echo "  Not completed: $(echo ${EXEC_RESPONSE} | jq -c '.notCompleted')"
+                exit 1
+                ;;
+              in_progress)
+                # Keep polling
+                ;;
+              *)
+                echo "  ⏳ Waiting... (status=${WORKER_UPGRADE_STATUS:-unknown})"
+                ;;
+            esac
+          done
+
+          if [ "${WORKER_UPGRADE_STATUS}" != "success" ]; then
+            echo "❌ Worker upgrade execution timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${WORKER_UPGRADE_STATUS}"
+            exit 1
+          fi
+
   # ---------------------------------------------------------------------------
   # Job 3: Verify the new version is running via API
   # ---------------------------------------------------------------------------
@@ -563,6 +700,68 @@ jobs:
 
           WORKER_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.workerUpgradeStatus // "unknown"')
           echo "✅ upgradeStatus=success | workerUpgradeStatus=${WORKER_STATUS}"
+
+      - name: Verify CP and worker versions via About NDM
+        run: |
+          BUILD_VERSION="${{ inputs.build_version || github.event.inputs.build_version }}"
+          BASE_URL="https://${CP_IP}/api/v1"
+
+          ABOUT=$(curl -k --silent --show-error \
+            "${BASE_URL}/about-ndm" \
+            -H "Authorization: Bearer ${NDM_TOKEN}")
+
+          echo "about-ndm response: $(echo ${ABOUT} | jq -c '{build}')"
+
+          FAIL=0
+
+          # ── CP version (from Prometheus) ──────────────────────────────────
+          NEW_CP_VERSION=$(echo "${ABOUT}" | jq -r '.build.controlPlane_version.version // empty')
+          if [ -z "${NEW_CP_VERSION}" ] || [ "${NEW_CP_VERSION}" = "N/A" ]; then
+            echo "⚠️  CP version not yet available in Prometheus (may still be starting)"
+          elif [ "${NEW_CP_VERSION}" != "${BUILD_VERSION}" ]; then
+            echo "❌ CP version mismatch: about-ndm reports '${NEW_CP_VERSION}', expected '${BUILD_VERSION}'"
+            FAIL=1
+          else
+            echo "✅ CP version confirmed via about-ndm: ${NEW_CP_VERSION}"
+          fi
+
+          # ── Worker versions (from DB) ─────────────────────────────────────
+          # All registered workers must be on build_version; none should remain on an older version.
+          WORKERS_ON_TARGET=$(echo "${ABOUT}" | jq -r \
+            --arg v "${BUILD_VERSION}" \
+            '(.build.workersByVersion[$v] // []) | length')
+
+          WORKERS_ON_OTHER=$(echo "${ABOUT}" | jq -r \
+            --arg v "${BUILD_VERSION}" \
+            '[.build.workersByVersion // {} | to_entries[] | select(.key != $v) | .value[]] | length')
+
+          TOTAL_WORKERS=$(echo "${ABOUT}" | jq -r \
+            '[.build.workersByVersion // {} | to_entries[] | .value[]] | length')
+
+          echo "Workers on ${BUILD_VERSION} : ${WORKERS_ON_TARGET}"
+          echo "Workers on other versions  : ${WORKERS_ON_OTHER}"
+          echo "Total registered workers   : ${TOTAL_WORKERS}"
+
+          if [ "${TOTAL_WORKERS}" -eq 0 ]; then
+            echo "⚠️  No workers registered — skipping worker version check"
+          else
+            if [ "${WORKERS_ON_OTHER}" -gt 0 ]; then
+              echo "❌ ${WORKERS_ON_OTHER} worker(s) still on an old version:"
+              echo "${ABOUT}" | jq -r \
+                --arg v "${BUILD_VERSION}" \
+                '.build.workersByVersion // {} | to_entries[] | select(.key != $v) | "  [\(.key)] " + (.value | map(.workerName) | join(", "))'
+              FAIL=1
+            fi
+            if [ "${WORKERS_ON_TARGET}" -eq 0 ]; then
+              echo "❌ No workers found on target version ${BUILD_VERSION}"
+              FAIL=1
+            else
+              echo "✅ All ${WORKERS_ON_TARGET} worker(s) confirmed on ${BUILD_VERSION}"
+            fi
+          fi
+
+          [ "${FAIL}" -eq 1 ] && exit 1
+          echo "✅ About NDM version checks passed"
 
   # ---------------------------------------------------------------------------
   # Job 4: Always destroy provisioned VMs
