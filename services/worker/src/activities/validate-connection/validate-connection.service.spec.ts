@@ -143,4 +143,310 @@ describe('ValidateConnectionActivity', () => {
     expect(response.status).toBe('error');
     expect(response.message).toContain('Failed to validate connection for localhost of type HTTP: Error: Fetch versions error');
   });
+
+  // --- Warning propagation ---
+
+  it('should propagate warnings returned by validateConnection into the response', async () => {
+    const traceId = 'trace-warn-1';
+    const protocolType = 'HTTP';
+    const payload = { hostname: 'localhost' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({ warnings: ['BACKUP_OPERATORS_NOT_MEMBER'] }),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.status).toBe('success');
+    expect(response.warnings).toEqual(['BACKUP_OPERATORS_NOT_MEMBER']);
+  });
+
+  it('should propagate multiple warnings returned by validateConnection', async () => {
+    const traceId = 'trace-warn-2';
+    const protocolType = 'HTTP';
+    const payload = { hostname: 'localhost' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({
+        warnings: ['BACKUP_OPERATORS_CHECK_SKIPPED', 'BACKUP_OPERATORS_NOT_MEMBER'],
+      }),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED', 'BACKUP_OPERATORS_NOT_MEMBER']);
+  });
+
+  it('should default warnings to [] when validateConnection returns undefined', async () => {
+    const traceId = 'trace-warn-3';
+    const protocolType = 'HTTP';
+    const payload = { hostname: 'localhost' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue(undefined),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.warnings).toEqual([]);
+  });
+
+  it('should default warnings to [] when validateConnection returns null', async () => {
+    const traceId = 'trace-warn-4';
+    const protocolType = 'HTTP';
+    const payload = { hostname: 'localhost' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue(null),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.warnings).toEqual([]);
+  });
+
+  it('should default warnings to [] when validateConnection returns object with no warnings field', async () => {
+    const traceId = 'trace-warn-5';
+    const protocolType = 'HTTP';
+    const payload = { hostname: 'localhost' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({}),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.warnings).toEqual([]);
+  });
+
+  // --- SMB disconnect ---
+
+  it('should call disconnectSession after successful validation for SMB protocol', async () => {
+    const traceId = 'trace-smb-1';
+    const protocolType = 'SMB';
+    const payload = { hostname: 'smb-host' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+      disconnectSession: jest.fn().mockResolvedValue('disconnected'),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.status).toBe('success');
+    expect(mockProtocol.disconnectSession).toHaveBeenCalledWith(traceId, payload);
+    expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] disconnecting session for SMB`);
+  });
+
+  it('should NOT call disconnectSession for non-SMB protocols', async () => {
+    const traceId = 'trace-nfs-1';
+    const protocolType = 'NFS';
+    const payload = { hostname: 'nfs-host' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+      disconnectSession: jest.fn(),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    await service.validate(traceId, protocolType, payload, feature);
+
+    expect(mockProtocol.disconnectSession).not.toHaveBeenCalled();
+  });
+
+  it('should treat SMB disconnect failure as non-fatal and still return success', async () => {
+    const traceId = 'trace-smb-2';
+    const protocolType = 'SMB';
+    const payload = { hostname: 'smb-host' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+      disconnectSession: jest.fn().mockRejectedValue(new Error('disconnect failed')),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate(traceId, protocolType, payload, feature);
+
+    expect(response.status).toBe('success');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to disconnect SMB session (non-fatal): disconnect failed')
+    );
+  });
+
+  it('should log the disconnect response when SMB disconnect succeeds', async () => {
+    const traceId = 'trace-smb-3';
+    const protocolType = 'SMB';
+    const payload = { hostname: 'smb-host' };
+    const feature = { enablePreListPath: false, enableVersionFetch: false };
+
+    const mockProtocol = {
+      validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+      disconnectSession: jest.fn().mockResolvedValue('session closed'),
+    };
+
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    await service.validate(traceId, protocolType, payload, feature);
+
+    expect(mockLogger.log).toHaveBeenCalledWith(`[${traceId}] Disconnect response: session closed`);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Test plan: SMB Backup Operators check — file server creation scenarios
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('SMB file server creation — Backup Operators group check', () => {
+    const smbPayload = { hostname: 'smb-server.corp.local', username: 'svc-user', password: 'secret' };
+    const smbFeature = { enablePreListPath: true, enableVersionFetch: true };
+
+    // ── Scenario: worker NOT part of domain ────────────────────────────────
+
+    describe('worker is NOT part of a domain', () => {
+      it('should complete file server creation successfully and surface BACKUP_OPERATORS_CHECK_SKIPPED warning', async () => {
+        // smb.protocol returns SKIPPED when machine is not domain-joined
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: ['BACKUP_OPERATORS_CHECK_SKIPPED'] }),
+          listPaths: jest.fn().mockResolvedValue(['/share1', '/share2']),
+          getProtocolVersions: jest.fn().mockResolvedValue(['SMB2', 'SMB3']),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        const response = await service.validate('trace-domain-1', 'SMB', smbPayload, smbFeature);
+
+        // File server creation must succeed — the warning is advisory only
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED']);
+
+        // Paths and versions are still fetched so the file server can be saved
+        expect(response.paths).toEqual(['/share1', '/share2']);
+        expect(response.protocolVersions).toEqual(['SMB2', 'SMB3']);
+      });
+
+      it('should still call disconnectSession even when check was skipped (not domain-joined)', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: ['BACKUP_OPERATORS_CHECK_SKIPPED'] }),
+          listPaths: jest.fn().mockResolvedValue([]),
+          getProtocolVersions: jest.fn().mockResolvedValue([]),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        await service.validate('trace-domain-2', 'SMB', smbPayload, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(mockProtocol.disconnectSession).toHaveBeenCalled();
+      });
+    });
+
+    // ── Scenario: worker IS domain-joined, user is NOT in Backup Operators ──
+
+    describe('worker IS domain-joined — user NOT a Backup Operator', () => {
+      it('should complete file server creation successfully and surface BACKUP_OPERATORS_NOT_MEMBER warning', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: ['BACKUP_OPERATORS_NOT_MEMBER'] }),
+          listPaths: jest.fn().mockResolvedValue(['/share1']),
+          getProtocolVersions: jest.fn().mockResolvedValue(['SMB3']),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        const response = await service.validate('trace-domain-3', 'SMB', smbPayload, smbFeature);
+
+        // File server creation proceeds — user sees warning but is not blocked
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_NOT_MEMBER']);
+        expect(response.paths).toEqual(['/share1']);
+        expect(response.protocolVersions).toEqual(['SMB3']);
+      });
+
+      it('should not return an error status when user is not in Backup Operators', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: ['BACKUP_OPERATORS_NOT_MEMBER'] }),
+          listPaths: jest.fn().mockResolvedValue([]),
+          getProtocolVersions: jest.fn().mockResolvedValue([]),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        const response = await service.validate('trace-domain-4', 'SMB', smbPayload, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(response.status).not.toBe('error');
+        expect(response.message).toContain('validated successfully');
+      });
+    });
+
+    // ── Scenario: worker IS domain-joined, user IS in Backup Operators ──────
+
+    describe('worker IS domain-joined — user IS a Backup Operator (correct setup)', () => {
+      it('should complete file server creation successfully with no warnings when user is a member', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+          listPaths: jest.fn().mockResolvedValue(['/share1', '/share2', '/share3']),
+          getProtocolVersions: jest.fn().mockResolvedValue(['SMB2', 'SMB3']),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        const response = await service.validate('trace-domain-5', 'SMB', smbPayload, smbFeature);
+
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual([]);
+        expect(response.paths).toEqual(['/share1', '/share2', '/share3']);
+        expect(response.protocolVersions).toEqual(['SMB2', 'SMB3']);
+      });
+
+      it('should return all paths and protocol versions when user is correct — nothing is skipped', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+          listPaths: jest.fn().mockResolvedValue(['/data', '/backup']),
+          getProtocolVersions: jest.fn().mockResolvedValue(['SMB3']),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        const response = await service.validate('trace-domain-6', 'SMB', smbPayload, smbFeature);
+
+        expect(mockProtocol.listPaths).toHaveBeenCalledWith('trace-domain-6', smbPayload);
+        expect(mockProtocol.getProtocolVersions).toHaveBeenCalledWith('trace-domain-6', smbPayload);
+        expect(response.paths).toEqual(['/data', '/backup']);
+        expect(response.protocolVersions).toEqual(['SMB3']);
+      });
+
+      it('should call disconnectSession after validation when user is correct', async () => {
+        const mockProtocol = {
+          validateConnection: jest.fn().mockResolvedValue({ warnings: [] }),
+          listPaths: jest.fn().mockResolvedValue([]),
+          getProtocolVersions: jest.fn().mockResolvedValue([]),
+          disconnectSession: jest.fn().mockResolvedValue('ok'),
+        };
+        (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+        await service.validate('trace-domain-7', 'SMB', smbPayload, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(mockProtocol.disconnectSession).toHaveBeenCalledWith('trace-domain-7', smbPayload);
+      });
+    });
+  });
 }); 

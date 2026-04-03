@@ -194,4 +194,136 @@ describe('WindowsPrivilegeService', () => {
             expect(calledWith).not.toContain('-File');
         });
     });
+
+    describe('checkBackupOperatorMembership()', () => {
+        describe('on non-Windows platform', () => {
+            beforeEach(() => {
+                Object.defineProperty(process, 'platform', {
+                    value: 'linux',
+                    configurable: true,
+                });
+            });
+
+            it('should return SKIPPED without executing PowerShell', async () => {
+                const result = await service.checkBackupOperatorMembership('trace-1', 'user', 'pass');
+
+                expect(result).toBe('SKIPPED');
+                expect(mockExecAsync).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('on Windows platform', () => {
+            beforeEach(() => {
+                Object.defineProperty(process, 'platform', {
+                    value: 'win32',
+                    configurable: true,
+                });
+            });
+
+            it('should return IS_MEMBER when user is a Backup Operators member', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                const result = await service.checkBackupOperatorMembership('trace-1', 'user', 'pass');
+
+                expect(result).toBe('IS_MEMBER');
+                expect(mockExecAsync).toHaveBeenCalledTimes(1);
+                expect(mockExecAsync).toHaveBeenCalledWith(
+                    expect.stringContaining('-EncodedCommand'),
+                    expect.objectContaining({ windowsHide: true, timeout: 15000 })
+                );
+            });
+
+            it('should return NOT_MEMBER when user is not in Backup Operators', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'NOT_MEMBER', stderr: '' });
+
+                const result = await service.checkBackupOperatorMembership('trace-2', 'user', 'pass');
+
+                expect(result).toBe('NOT_MEMBER');
+            });
+
+            it('should return SKIPPED when machine is not domain-joined', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'SKIPPED', stderr: '' });
+
+                const result = await service.checkBackupOperatorMembership('trace-3', 'user', 'pass');
+
+                expect(result).toBe('SKIPPED');
+            });
+
+            it('should return SKIPPED when PowerShell throws an error', async () => {
+                mockExecAsync.mockRejectedValue(new Error('PowerShell execution failed'));
+
+                const result = await service.checkBackupOperatorMembership('trace-4', 'user', 'pass');
+
+                expect(result).toBe('SKIPPED');
+                expect(service['logger'].error).toHaveBeenCalledWith(
+                    expect.stringContaining('Error checking Backup Operators membership')
+                );
+            });
+
+            it('should log a warning when stderr is non-empty', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: 'some stderr output' });
+
+                await service.checkBackupOperatorMembership('trace-5', 'user', 'pass');
+
+                expect(service['logger'].warn).toHaveBeenCalledWith(
+                    expect.stringContaining('stderr during group check')
+                );
+            });
+
+            it('should encode the PowerShell script as base64 utf16le', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-6', 'user', 'pass');
+
+                const calledArg = mockExecAsync.mock.calls[0][0] as string;
+                const encodedPart = calledArg.split('-EncodedCommand ')[1];
+                const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
+                expect(decoded).toContain('Backup Operators');
+                expect(decoded).toContain('Win32_ComputerSystem');
+            });
+
+            it('should escape single quotes in username to prevent script injection', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-7', "user'name", "pa'ss");
+
+                const calledArg = mockExecAsync.mock.calls[0][0] as string;
+                const encodedPart = calledArg.split('-EncodedCommand ')[1];
+                const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
+                // Single quotes must be doubled to escape them in PowerShell string literals
+                expect(decoded).toContain("user''name");
+                expect(decoded).toContain("pa''ss");
+            });
+
+            it('should use -NoProfile -NonInteractive flags', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-8', 'user', 'pass');
+
+                expect(mockExecAsync).toHaveBeenCalledWith(
+                    expect.stringContaining('-NoProfile -NonInteractive -EncodedCommand'),
+                    expect.any(Object)
+                );
+            });
+
+            it('should return SKIPPED when stdout contains unexpected output', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'some unexpected output', stderr: '' });
+
+                const result = await service.checkBackupOperatorMembership('trace-9', 'user', 'pass');
+
+                // Falls through to the NOT_MEMBER branch since it doesn't match SKIPPED or IS_MEMBER
+                expect(result).toBe('NOT_MEMBER');
+            });
+
+            it('should log the membership result', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-10', 'user', 'pass');
+
+                expect(service['logger'].log).toHaveBeenCalledWith(
+                    expect.stringContaining('Backup Operators check output: IS_MEMBER')
+                );
+            });
+        });
+    });
 });

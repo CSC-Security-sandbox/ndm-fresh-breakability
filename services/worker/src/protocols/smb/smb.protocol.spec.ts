@@ -60,49 +60,122 @@ describe('SMBProtocol', () => {
   });
 
   describe('validateConnection', () => {
-    it('should establish a connection successfully', async () => {
-      jest
-        .spyOn(smbProtocol as any, 'listPaths')
-        .mockResolvedValue(['share1', 'share2']);
-      const options: ProtocolPayload = {
-        hostname: 'localhost',
-        username: 'user',
-        password: 'pass',
-        protocolVersion: 'SMB2',
-      };
+    const options: ProtocolPayload = {
+      hostname: 'localhost',
+      username: 'user',
+      password: 'pass',
+      protocolVersion: 'SMB2',
+    };
+
+    it('should return { warnings: [] } on success with no privilege service', async () => {
+      (smbProtocol as any).windowsPrivilegeService = null;
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue(['share1']);
+
       const result = await smbProtocol.validateConnection('traceId', options);
 
-      expect(result).toBe(undefined);
+      expect(result).toEqual({ warnings: [] });
       expect(smbProtocol.listPaths).toHaveBeenCalledWith('traceId', options);
     });
 
-    it('should handle connection error', async () => {
-      (handleConnectionError as any).mockImplementation((error) => {
-        if (error.message === 'Connection error') {
-          return 'Handled connection error';
-        } else if (error.message === 'Connection timed out') {
-          return 'Connection timed out';
-        }
-        return 'Unhandled error';
-      });
+    it('should return { warnings: [] } on non-win32 platform even with privilege service present', async () => {
+      (smbProtocol as any).platform = 'linux';
+      (smbProtocol as any).windowsPrivilegeService = { checkBackupOperatorMembership: jest.fn() };
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue([]);
 
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass', protocolVersion: 'SMB2' };
+      const result = await smbProtocol.validateConnection('traceId', options);
 
-      await expect(smbProtocol.validateConnection('traceId', options)).rejects.toThrow('');
-      // expect(mockLogger.error).toHaveBeenCalledWith('Error during connection: Connection error');
+      expect(result).toEqual({ warnings: [] });
+      expect((smbProtocol as any).windowsPrivilegeService.checkBackupOperatorMembership).not.toHaveBeenCalled();
+    });
+
+    it('should add BACKUP_OPERATORS_CHECK_SKIPPED warning when membership check returns SKIPPED', async () => {
+      const mockPrivilegeService = {
+        checkBackupOperatorMembership: jest.fn().mockResolvedValue('SKIPPED'),
+      };
+      (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+      (smbProtocol as any).platform = 'win32';
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue([]);
+
+      const result = await smbProtocol.validateConnection('traceId', options);
+
+      expect(result).toEqual({ warnings: ['BACKUP_OPERATORS_CHECK_SKIPPED'] });
+      expect(mockPrivilegeService.checkBackupOperatorMembership).toHaveBeenCalledWith(
+        'traceId', options.username, options.password
+      );
+    });
+
+    it('should add BACKUP_OPERATORS_NOT_MEMBER warning when membership check returns NOT_MEMBER', async () => {
+      const mockPrivilegeService = {
+        checkBackupOperatorMembership: jest.fn().mockResolvedValue('NOT_MEMBER'),
+      };
+      (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+      (smbProtocol as any).platform = 'win32';
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue([]);
+
+      const result = await smbProtocol.validateConnection('traceId', options);
+
+      expect(result).toEqual({ warnings: ['BACKUP_OPERATORS_NOT_MEMBER'] });
+    });
+
+    it('should return empty warnings when membership check returns IS_MEMBER', async () => {
+      const mockPrivilegeService = {
+        checkBackupOperatorMembership: jest.fn().mockResolvedValue('IS_MEMBER'),
+      };
+      (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+      (smbProtocol as any).platform = 'win32';
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue([]);
+
+      const result = await smbProtocol.validateConnection('traceId', options);
+
+      expect(result).toEqual({ warnings: [] });
+    });
+
+    it('should log the username being checked on win32', async () => {
+      const mockPrivilegeService = {
+        checkBackupOperatorMembership: jest.fn().mockResolvedValue('IS_MEMBER'),
+      };
+      (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+      (smbProtocol as any).platform = 'win32';
+      jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue([]);
+
+      await smbProtocol.validateConnection('traceId', options);
+
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining(`Checking Backup Operators group membership for user: ${options.username}`)
+      );
+    });
+
+    it('should still call listPaths even when privilege service is present', async () => {
+      const mockPrivilegeService = {
+        checkBackupOperatorMembership: jest.fn().mockResolvedValue('IS_MEMBER'),
+      };
+      (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+      (smbProtocol as any).platform = 'win32';
+      const listPathsSpy = jest.spyOn(smbProtocol as any, 'listPaths').mockResolvedValue(['share1']);
+
+      await smbProtocol.validateConnection('traceId', options);
+
+      expect(listPathsSpy).toHaveBeenCalledWith('traceId', options);
+    });
+
+    it('should handle connection error (listPaths failure)', async () => {
+      (smbProtocol as any).windowsPrivilegeService = null;
+      jest.spyOn(smbProtocol as any, 'listPaths').mockRejectedValue(new Error('Connection error'));
+
+      await expect(smbProtocol.validateConnection('traceId', options)).rejects.toThrow('Connection error');
     });
 
     it('should handle connection timeout', async () => {
       jest.useFakeTimers();
-      const options: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass', protocolVersion: 'SMB2' };
+      (smbProtocol as any).windowsPrivilegeService = null;
+      const options2: ProtocolPayload = { hostname: 'localhost', username: 'user', password: 'pass', protocolVersion: 'SMB2' };
 
-      const promise = smbProtocol.validateConnection('traceId', options);
+      const promise = smbProtocol.validateConnection('traceId', options2);
       jest.advanceTimersByTime(2000);
 
       await expect(promise).rejects.toThrow('');
       jest.useRealTimers();
     });
-
   });
 
   describe('listShares', () => {
