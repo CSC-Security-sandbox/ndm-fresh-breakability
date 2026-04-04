@@ -18,7 +18,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
-import { BundleStatus, UserDetails } from 'src/constants/types';
+import { BundleStatus, AsupTransmissionState, UserDetails } from 'src/constants/types';
 import { Response } from 'express';
 import {
   LoggerFactory,
@@ -99,6 +99,16 @@ export class SupportBundleController {
     return await this.supportBundleService.isBundleReady(userDetails.user.id);
   }
 
+  @ApiOperation({ summary: 'Get ASUP transmission status for the current user support bundle' })
+  @ApiResponse({ status: 200, description: 'ASUP transmission state or null if no send has been triggered' })
+  @ApiBearerAuth()
+  @Auth()
+  @Get('asup-status')
+  getAsupStatus(@Request() userDetails: UserDetails): AsupTransmissionState | null {
+    const fileName = `ndm_logs_${userDetails.user.id}.zip`;
+    return this.supportBundleService.getAsupTransmissionStatus(fileName);
+  }
+
   @ApiOperation({ summary: 'Download a support bundle ZIP file by name' })
   @ApiParam({
     name: 'fileName',
@@ -133,17 +143,16 @@ export class SupportBundleController {
     const userId = userDetails?.user?.id;
     const fullFileName = `ndm_logs_${userId}.zip`;
     this.logger.log(`[SendSupportBundle] Request received - userId=${userId}, fileName=${fullFileName}`);
-    try {
-      await this.supportBundleService.sendSupportBundleToAsup(fullFileName);
-      this.logger.log(`[SendSupportBundle] Successfully sent support bundle to ASUP - fileName=${fullFileName}`);
-      return { success: true };
-    } catch (error) {
+
+    this.supportBundleService.sendSupportBundleToAsup(fullFileName).catch((error) => {
       this.logger.error(
-        `[SendSupportBundle] Failed to send support bundle - fileName=${fullFileName}, error=${error?.message}`,
+        `[SendSupportBundle] Background transmission failed - fileName=${fullFileName}, error=${error?.message}`,
         error?.stack,
       );
-      throw error;
-    }
+    });
+
+    this.logger.log(`[SendSupportBundle] Transmission initiated in background - fileName=${fullFileName}`);
+    return { success: true, message: 'Support bundle transmission initiated' };
   }
 
   @ApiOperation({

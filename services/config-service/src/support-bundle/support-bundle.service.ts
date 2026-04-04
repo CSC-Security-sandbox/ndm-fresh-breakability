@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import { SupportBundleStatus, WorkFlows } from 'src/constants/enums';
-import { BundleStatus, UserDetails } from 'src/constants/types';
+import { AsupTransmissionState, BundleStatus, UserDetails } from 'src/constants/types';
 import { SupportBundleEntity } from 'src/entities/support-bundle-log.entity';
 import { Options } from 'src/work-manager/dto/validate-connection.dto';
 import { WorkflowService } from 'src/workflow/workflow.service';
@@ -31,6 +31,12 @@ export class SupportBundleService {
   private logger: LoggerService;
   private bundleOutputPath: string;
   private reportsSupportBundleSendUrl: string;
+
+  // In-memory ASUP transmission state keyed by fileName (e.g. ndm_logs_<userId>.zip).
+  // Overwritten on every new send, so resend always works.
+  // Cleared on service restart — acceptable: UI shows null status and user can resend.
+  private readonly asupTransmissionMap = new Map<string, AsupTransmissionState>();
+
   constructor(
     @InjectRepository(SupportBundleEntity)
     private readonly supportBundleRepo: Repository<SupportBundleEntity>,
@@ -194,6 +200,10 @@ export class SupportBundleService {
     }
   }
 
+  getAsupTransmissionStatus(fileName: string): AsupTransmissionState | null {
+    return this.asupTransmissionMap.get(fileName) ?? null;
+  }
+
   downloadSupportBundle(fileName: string): string {
     const fullPath = path.join(this.bundleOutputPath, fileName);
 
@@ -207,36 +217,40 @@ export class SupportBundleService {
   async sendSupportBundleToAsup(fileName: string): Promise<void> {
     this.logger.log(`[SendSupportBundleToAsup] Looking up file: ${fileName}`);
 
-    const fullPath = this.downloadSupportBundle(fileName);
-    this.logger.log(`[SendSupportBundleToAsup] File found at path: ${fullPath}`);
-
-    const bundleBuffer = await fs.promises.readFile(fullPath);
-    const fileSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
-    this.logger.log(`[SendSupportBundleToAsup] File read successfully - size=${fileSizeMB}MB (${bundleBuffer.length} bytes)`);
-
-    const bundleBase64 = bundleBuffer.toString('base64');
-    const base64SizeMB = (Buffer.byteLength(bundleBase64) / (1024 * 1024)).toFixed(2);
-    this.logger.log(`[SendSupportBundleToAsup] Base64 encoded size=${base64SizeMB}MB - forwarding to reports-service at: ${this.reportsSupportBundleSendUrl}`);
+    // Capture startedAt once and reset state — every send overwrites previous state
+    const startedAt = new Date();
+    this.asupTransmissionMap.set(fileName, { status: 'transmitting', startedAt });
 
     try {
+      const fullPath = this.downloadSupportBundle(fileName);
+      this.logger.log(`[SendSupportBundleToAsup] File found at path: ${fullPath}`);
+
+      const bundleBuffer = await fs.promises.readFile(fullPath);
+      const fileSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
+      this.logger.log(`[SendSupportBundleToAsup] File read successfully - size=${fileSizeMB}MB (${bundleBuffer.length} bytes)`);
+
+      const bundleBase64 = bundleBuffer.toString('base64');
+      const base64SizeMB = (Buffer.byteLength(bundleBase64) / (1024 * 1024)).toFixed(2);
+      this.logger.log(`[SendSupportBundleToAsup] Base64 encoded size=${base64SizeMB}MB - forwarding to reports-service at: ${this.reportsSupportBundleSendUrl}`);
+
       await axios.post(
         this.reportsSupportBundleSendUrl,
-        {
-          fileName,
-          bundleBase64,
-        },
+        { fileName, bundleBase64 },
         {
           timeout: 0,
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
         },
       );
-      this.logger.log(`[SendSupportBundleToAsup] reports-service accepted the bundle successfully`);
+
+      this.asupTransmissionMap.set(fileName, { status: 'completed', startedAt, completedAt: new Date() });
+      this.logger.log(`[SendSupportBundleToAsup] reports-service accepted the bundle successfully - fileName=${fileName}`);
     } catch (error) {
       const status = error?.response?.status;
       const responseData = JSON.stringify(error?.response?.data);
+      this.asupTransmissionMap.set(fileName, { status: 'failed', startedAt, completedAt: new Date(), error: error?.message });
       this.logger.error(
-        `[SendSupportBundleToAsup] reports-service call failed - status=${status}, url=${this.reportsSupportBundleSendUrl}, response=${responseData}, error=${error?.message}`,
+        `[SendSupportBundleToAsup] Transmission failed - status=${status}, url=${this.reportsSupportBundleSendUrl}, response=${responseData}, error=${error?.message}`,
         error?.stack,
       );
       throw error;

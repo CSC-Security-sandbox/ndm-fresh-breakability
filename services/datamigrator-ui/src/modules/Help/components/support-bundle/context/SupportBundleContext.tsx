@@ -1,10 +1,11 @@
-import { BlueXpFormType, isBundleReadyApiType } from "@/types/app.type";
+import { BlueXpFormType, AsupTransmissionState, isBundleReadyApiType } from "@/types/app.type";
 import { formatDateToYMD } from "@/utils/dateFormatter";
 import {
   useFetchProjectWithWorkerQuery,
   useGenerateSupportBundleMutation,
   useLazyDownloadSupportBundleQuery,
   useLazyIsBundleReadyQuery,
+  useLazyGetAsupStatusQuery,
   useSendSupportBundleMutation,
 } from "@api/configApi";
 import { notify } from "@components/notification/NotificationWrapper";
@@ -57,6 +58,7 @@ export const SupportBundleProvider = ({
   const [sendSupportBundle, { isLoading: isSending }] =
     useSendSupportBundleMutation();
   const [isBundleReady] = useLazyIsBundleReadyQuery();
+  const [getAsupStatus] = useLazyGetAsupStatusQuery();
   const { data: projectWorkerData } = useFetchProjectWithWorkerQuery();
 
   const permissionData = useSelector(
@@ -79,7 +81,8 @@ export const SupportBundleProvider = ({
     }`;
   };
 
-  // IS BUNDLE READY POLLING API
+  const [prevAsupStatus, setPrevAsupStatus] = useState<AsupTransmissionState | null>(null);
+
   useEffect(() => {
     const pollingInterval =
       Number(
@@ -159,6 +162,46 @@ export const SupportBundleProvider = ({
     };
   }, [isBundleReady, lastFormChangeTime, sentBundleFingerprint]);
 
+  // ASUP TRANSMISSION STATUS POLLING
+  useEffect(() => {
+    if (prevAsupStatus?.status !== 'transmitting') return;
+
+    const pollingInterval =
+      Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ) || 5000;
+
+    const pollAsupStatus = async () => {
+      try {
+        const asupState = await getAsupStatus().unwrap();
+
+        if (asupState === null) {
+          notify.error("Support bundle transmission status lost. Please retry.");
+          setSentBundleFingerprint(null);
+          setPrevAsupStatus({ status: 'failed', startedAt: prevAsupStatus.startedAt });
+          return;
+        }
+
+        if (asupState?.status === 'completed') {
+          notify.success("Support bundle sent to NetApp Support successfully.");
+          const currentFingerprint = getBundleFingerprint(bundleStatus);
+          if (currentFingerprint) setSentBundleFingerprint(currentFingerprint);
+          setPrevAsupStatus(asupState);
+        } else if (asupState?.status === 'failed') {
+          notify.error(asupState?.error || "Failed to send Support Bundle to NetApp Support.");
+          setSentBundleFingerprint(null);
+          setPrevAsupStatus(asupState);
+        }
+      } catch (error) {
+        console.error("ASUP Status Poll Error:", error);
+      }
+    };
+
+    const intervalId = setInterval(pollAsupStatus, pollingInterval);
+    pollAsupStatus();
+    return () => clearInterval(intervalId);
+  }, [prevAsupStatus?.status]);
+
   // DOWNLOAD SUPPORT BUNDLE
   const handleDownloadReport = async () => {
     try {
@@ -179,11 +222,11 @@ export const SupportBundleProvider = ({
   const handleSendToNetAppSupport = async () => {
     try {
       await sendSupportBundle().unwrap();
+      // Fire-and-forget: backend returns immediately; real outcome comes via ASUP status polling.
       const currentFingerprint = getBundleFingerprint(bundleStatus);
-      if (currentFingerprint) {
-        setSentBundleFingerprint(currentFingerprint);
-      }
-      notify.success("Support bundle sent to NetApp Support successfully.");
+      if (currentFingerprint) setSentBundleFingerprint(currentFingerprint);
+      setPrevAsupStatus({ status: 'transmitting', startedAt: new Date().toISOString() });
+      notify.info("Support bundle transmission started. You will be notified once it completes.");
     } catch (error) {
       console.error("Failed to send Support Bundle:", error?.data?.message);
       notify.error(error?.data?.message || "Failed to send Support Bundle to NetApp Support.");
@@ -256,6 +299,7 @@ export const SupportBundleProvider = ({
     projectWorkerData,
     isDownloading,
     isSending,
+    isTransmitting: prevAsupStatus?.status === 'transmitting',
     isSupportBundleAlreadySent:
       getBundleFingerprint(bundleStatus) !== null &&
       getBundleFingerprint(bundleStatus) === sentBundleFingerprint,

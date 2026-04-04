@@ -17,10 +17,24 @@ import { UpdateStatusDto } from './dto/update-status.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import axios from 'axios';
 
 // Mock dependencies
-jest.mock('fs');
-jest.mock('path');
+// Use factory mocks that spread jest.requireActual() so typeorm internal modules
+// (e.g. path-scurry) continue to see real method implementations they depend on.
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  promises: {
+    readFile: jest.fn(),
+  },
+}));
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  join: jest.fn(),
+}));
+jest.mock('axios');
 jest.mock('uuid', () => ({
   v4: jest.fn(),
 }));
@@ -38,7 +52,7 @@ jest.mock('@netapp-cloud-datamigrate/logger-lib', () => ({
   LoggerService: jest.fn(),
 }));
 
-import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+
 
 describe('SupportBundleService', () => {
   let service: SupportBundleService;
@@ -774,6 +788,146 @@ describe('SupportBundleService', () => {
 
         expect(result).toEqual([]);
       });
+    });
+  });
+
+  describe('getAsupTransmissionStatus', () => {
+    it('should return null when no transmission has been initiated for the given fileName', () => {
+      const result = service.getAsupTransmissionStatus('nonexistent.zip');
+      expect(result).toBeNull();
+    });
+
+    it('should return transmitting state while sendSupportBundleToAsup is still in progress', () => {
+      const fileName = 'ndm_logs_user-123.zip';
+      const fullPath = `/test/bundle/path/${fileName}`;
+      const mockBuffer = Buffer.from('zip content');
+
+      let resolvePost: () => void;
+      const pendingPost = new Promise<void>((resolve) => {
+        resolvePost = resolve;
+      });
+
+      (path.join as jest.Mock).mockReturnValue(fullPath);
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(mockBuffer);
+      (axios.post as jest.Mock).mockReturnValue(pendingPost);
+
+      // Fire without awaiting — async gap before axios resolves
+      service.sendSupportBundleToAsup(fileName);
+
+      const immediateStatus = service.getAsupTransmissionStatus(fileName);
+      expect(immediateStatus).not.toBeNull();
+      expect(immediateStatus?.status).toBe('transmitting');
+      expect(immediateStatus?.startedAt).toBeInstanceOf(Date);
+
+      // Settle the promise to avoid open handles in test runner
+      resolvePost!();
+    });
+  });
+
+  describe('sendSupportBundleToAsup', () => {
+    const fileName = 'ndm_logs_user-123.zip';
+    const fullPath = `/test/bundle/path/${fileName}`;
+    const mockBuffer = Buffer.from('bundle data');
+
+    beforeEach(() => {
+      (path.join as jest.Mock).mockReturnValue(fullPath);
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(mockBuffer);
+    });
+
+    it('should set status to completed after successful transmission', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: {} });
+
+      await service.sendSupportBundleToAsup(fileName);
+
+      const state = service.getAsupTransmissionStatus(fileName);
+      expect(state).not.toBeNull();
+      expect(state?.status).toBe('completed');
+      expect(state?.startedAt).toBeInstanceOf(Date);
+      expect(state?.completedAt).toBeInstanceOf(Date);
+      expect(state?.error).toBeUndefined();
+    });
+
+    it('should set status to failed and re-throw when axios.post rejects', async () => {
+      const axiosError = new Error('network error');
+      (axios.post as jest.Mock).mockRejectedValue(axiosError);
+
+      await expect(
+        service.sendSupportBundleToAsup(fileName),
+      ).rejects.toThrow('network error');
+
+      const state = service.getAsupTransmissionStatus(fileName);
+      expect(state?.status).toBe('failed');
+      expect(state?.error).toBe(axiosError.message);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('network error'),
+        expect.any(String),
+      );
+    });
+
+    it('should set status to failed and re-throw when fs.promises.readFile rejects', async () => {
+      const fsError = new Error('file read error');
+      (fs.promises.readFile as jest.Mock).mockRejectedValue(fsError);
+
+      await expect(
+        service.sendSupportBundleToAsup(fileName),
+      ).rejects.toThrow('file read error');
+
+      const state = service.getAsupTransmissionStatus(fileName);
+      expect(state?.status).toBe('failed');
+      expect(state?.error).toBe(fsError.message);
+    });
+
+    it('should set status to failed and re-throw when downloadSupportBundle throws NotFoundException', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+      await expect(
+        service.sendSupportBundleToAsup(fileName),
+      ).rejects.toThrow(NotFoundException);
+
+      const state = service.getAsupTransmissionStatus(fileName);
+      expect(state?.status).toBe('failed');
+    });
+
+    it('should read the bundle from the correct resolved path', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: {} });
+
+      await service.sendSupportBundleToAsup(fileName);
+
+      expect(path.join).toHaveBeenCalledWith(mockBundlePath, fileName);
+      expect((fs.promises.readFile as jest.Mock)).toHaveBeenCalledWith(fullPath);
+    });
+
+    it('should post to reports-service with base64-encoded bundle and correct body keys', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: {} });
+
+      await service.sendSupportBundleToAsup(fileName);
+
+      expect(axios.post).toHaveBeenCalledWith(
+        mockBundlePath, // reportsSupportBundleSendUrl — configService.get returns mockBundlePath for all keys in test
+        { fileName, bundleBase64: mockBuffer.toString('base64') },
+        expect.objectContaining({
+          timeout: 0,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        }),
+      );
+    });
+
+    it('should allow a re-send overwriting the previous failed state with a new completed state', async () => {
+      const axiosError = new Error('first failure');
+      (axios.post as jest.Mock)
+        .mockRejectedValueOnce(axiosError)
+        .mockResolvedValueOnce({ data: {} });
+
+      await expect(
+        service.sendSupportBundleToAsup(fileName),
+      ).rejects.toThrow('first failure');
+      expect(service.getAsupTransmissionStatus(fileName)?.status).toBe('failed');
+
+      await service.sendSupportBundleToAsup(fileName);
+      expect(service.getAsupTransmissionStatus(fileName)?.status).toBe('completed');
     });
   });
 });
