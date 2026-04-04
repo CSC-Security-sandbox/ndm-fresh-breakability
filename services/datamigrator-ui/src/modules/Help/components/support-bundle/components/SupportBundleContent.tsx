@@ -23,6 +23,7 @@ const SupportBundleContent = () => {
     supportBundleForm,
     isDownloading,
     isSending,
+    isTransmitting,
     isSupportBundleAlreadySent,
     infoMessage,
   } = useContext(SupportBundleContext);
@@ -69,7 +70,7 @@ const SupportBundleContent = () => {
               isSupportBundleAlreadySent
             }
             onClick={handleSendToNetAppSupport}
-            isSubmitting={isSending}
+            isSubmitting={isSending || isTransmitting}
           >
             {SEND_SUPPORT_BUNDLE_LABEL}
           </Button>

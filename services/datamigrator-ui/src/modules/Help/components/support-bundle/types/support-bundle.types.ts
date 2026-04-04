@@ -14,6 +14,7 @@ export type SupportBundleContextType = {
   projectWorkerData: ProjectWorkerMap;
   isDownloading: boolean;
   isSending: boolean;
+  isTransmitting: boolean;
   isSupportBundleAlreadySent: boolean;
   infoMessage: Record<string, string>;
 };
