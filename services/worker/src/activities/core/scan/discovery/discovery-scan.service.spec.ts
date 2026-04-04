@@ -152,6 +152,7 @@ describe('DiscoveryScanService', () => {
     mockJobContext = {
       publishToErrorStream: jest.fn(),
       publishToFileStream: jest.fn(),
+      publishToFileStreamBulk: jest.fn(),
       jobConfig: {
         options: {
           excludeOlderThan: new Date('2022-01-01'),
@@ -232,7 +233,14 @@ describe('DiscoveryScanService', () => {
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(1);
       expect(result.subDirs).toEqual(['subdir']);
-      expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(2);
+      // Bulk publish: all 2 items published in a single bulk call
+      expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledTimes(1);
+      expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ isDirectory: false }),
+          expect.objectContaining({ isDirectory: true }),
+        ])
+      );
     });
 
     it('should skip excluded files', async () => {
@@ -252,7 +260,7 @@ describe('DiscoveryScanService', () => {
       expect(result.fileCount).toBe(0);
       expect(result.dirCount).toBe(0);
       expect(result.subDirs).toEqual([]);
-      expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
+      expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
     });
 
     it('should handle errors and publish to error stream', async () => {
@@ -303,7 +311,9 @@ describe('DiscoveryScanService', () => {
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(0);
       expect(result.subDirs).toEqual([]);
-      expect(mockJobContext.publishToFileStream).toHaveBeenCalledTimes(2);
+      // Bulk publish: 2 items (file + symlink dir) published in single call
+      expect(mockJobContext.publishToFileStreamBulk).toHaveBeenCalledTimes(1);
+      expect(mockJobContext.publishToFileStreamBulk.mock.calls[0][0]).toHaveLength(2);
     });
 
     it('should use TRANSIENT_ERROR if retryCount exceeds maxRetryCount', async () => {
@@ -362,7 +372,7 @@ describe('DiscoveryScanService', () => {
       expect(result.fileCount).toBe(0);
       expect(result.dirCount).toBe(0);
       expect(result.subDirs).toEqual([]);
-      expect(mockJobContext.publishToFileStream).not.toHaveBeenCalled();
+      expect(mockJobContext.publishToFileStreamBulk).not.toHaveBeenCalled();
     });
 
     it('should skip duplicate directories with same name and different case for SMB', async () => {
@@ -651,9 +661,12 @@ describe('DiscoveryScanService', () => {
         (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
         detectFileTypeMock.mockResolvedValue(FileType.FILE);
 
-        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        // Arrange: Enable ADS scanning so collectADSItems is called
+        mockJobContext.jobConfig.options.shouldScanADS = true;
+
+        // Arrange: Mock collectADSItems to throw WindowsAPINotAvailableError
         const windowsAPIError = new WindowsAPINotAvailableError();
-        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+        jest.spyOn(service, 'collectADSItems').mockRejectedValue(windowsAPIError);
 
         // Act & Assert: Should throw the error
         await expect(
@@ -697,9 +710,12 @@ describe('DiscoveryScanService', () => {
         (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
         detectFileTypeMock.mockResolvedValue(FileType.FILE);
 
-        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        // Arrange: Enable ADS scanning so collectADSItems is called
+        mockJobContext.jobConfig.options.shouldScanADS = true;
+
+        // Arrange: Mock collectADSItems to throw WindowsAPINotAvailableError
         const windowsAPIError = new WindowsAPINotAvailableError();
-        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+        jest.spyOn(service, 'collectADSItems').mockRejectedValue(windowsAPIError);
 
         // Act: Execute scanDirectory
         try {
@@ -739,9 +755,12 @@ describe('DiscoveryScanService', () => {
         (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
         detectFileTypeMock.mockResolvedValue(FileType.FILE);
 
-        // Arrange: Mock publishFileInfo to throw WindowsAPINotAvailableError
+        // Arrange: Enable ADS scanning so collectADSItems is called
+        mockJobContext.jobConfig.options.shouldScanADS = true;
+
+        // Arrange: Mock collectADSItems to throw WindowsAPINotAvailableError
         const windowsAPIError = new WindowsAPINotAvailableError();
-        jest.spyOn(service, 'publishFileInfo').mockRejectedValue(windowsAPIError);
+        jest.spyOn(service, 'collectADSItems').mockRejectedValue(windowsAPIError);
 
         // Act & Assert: Should rethrow the error
         await expect(

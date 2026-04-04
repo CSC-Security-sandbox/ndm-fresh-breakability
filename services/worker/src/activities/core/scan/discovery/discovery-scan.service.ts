@@ -1,13 +1,13 @@
-import { Catch, Inject } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, ErrorType, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
 import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { PublishItemInfoInput } from "./discovery-scan.type";
-import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
+import { ScanDirectoryInput, ScanDirectoryOutput, ScanDirectorySettings } from "../scan-activity.type";
 import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileType } from "src/activities/types/tasks";
@@ -32,7 +32,10 @@ export class DiscoveryScanService {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100;
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-        this.parallelLstatConcurrency = this.configService.get<number>('worker.parallelLstatConcurrency') || 50;
+        // Default 2× UV_THREAD_POOL_SIZE (typically 16) to keep libuv threads
+        // saturated with zero idle gaps between chunks. lstat is a lightweight
+        // metadata-only call, so a small queue (~16 items, ~8KB) is cheap.
+        this.parallelLstatConcurrency = this.configService.get<number>('worker.parallelLstatConcurrency') || 32;
         this.logger = loggerFactory.create(DiscoveryScanService.name);
     }
 
@@ -42,87 +45,42 @@ export class DiscoveryScanService {
         const isSMB = process.platform === 'win32';
         const lowerCaseSourceDirs = new Set<string>();
         const shouldScanADS:boolean = jobContext.jobConfig?.options?.shouldScanADS;
+
         try {
             const pathExists = await isPathExists(sourcePath);
             if (!pathExists) {
                 throw new FatalError(`Source directory does not exist: ${sourcePath}`);
             }
 
-            // Phase 1: Collect all entry names from the directory.
-            // opendir + iterate is cheap — getdents is kernel-buffered and returns
-            // names in a single syscall batch. We collect into an array so that
-            // Phase 2 can issue lstat calls in parallel rather than one-by-one.
-            const entryNames: string[] = [];
-            const dir = await fs.promises.opendir(sourcePath);
+            // Streaming chunked scan: read entry names from opendir in chunks of
+            // parallelLstatConcurrency, issue parallel lstat per chunk, process
+            // results, and bulk-publish to Redis — all within the same iteration.
+            //
+            // Memory stays bounded to ~parallelLstatConcurrency entries at every
+            // stage (names, stats, ItemInfo objects). This preserves opendir's
+            // streaming advantage — we never load the full directory into memory.
+            //
+            // For 1,000 entries on NFS at 5ms/lstat with concurrency 50:
+            //   Before (serial):  1,000 × 5ms = 5,000ms
+            //   After (parallel): 1,000 / 50 × 5ms = 100ms
+            const dir = await fs.promises.opendir(sourcePath, { bufferSize: this.parallelLstatConcurrency });
             try {
+                let chunk: string[] = [];
+
                 for await (const item of dir) {
-                    entryNames.push(item.name);
-                }
-            } catch (error) {
-                this.logger.error(`Error reading directory entries ${sourcePath}: ${error.message}`);
-                throw error;
-            }
+                    chunk.push(item.name);
 
-            // Phase 2: Parallel lstat in controlled chunks.
-            // Instead of awaiting one lstat per loop iteration (sequential, ~5ms each on NFS),
-            // we fire up to `parallelLstatConcurrency` lstats concurrently via Promise.all.
-            // For 1,000 entries on NFS at 5ms/lstat:
-            //   Before: 1,000 × 5ms = 5,000ms (serial)
-            //   After:  1,000 / 50 × 5ms = 100ms (50 concurrent)
-            try {
-                for (let i = 0; i < entryNames.length; i += this.parallelLstatConcurrency) {
-                    const chunk = entryNames.slice(i, i + this.parallelLstatConcurrency);
-
-                    const statResults = await Promise.all(
-                        chunk.map(async (name) => {
-                            const fullPath = path.join(sourcePath, name);
-                            const stat = await fs.promises.lstat(fullPath);
-                            return { name, fullPath, stat };
-                        })
-                    );
-
-                    // Phase 3: Process stat results sequentially.
-                    // Filtering, classification, publishing, and subdirectory collection
-                    // are fast in-memory operations — no need to parallelize these.
-                    for (const { name, fullPath: sourceContentPath, stat: sourceStat } of statResults) {
-                        if (shouldExcludeOrSkip({
-                            fullPath: sourceContentPath,
-                            stats: sourceStat,
-                            excludePatterns: settings.excludePatterns,
-                            skipTime: settings.skipFile,
-                            olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
-                            jobType: jobContext.jobConfig.jobType
-                        })) continue;
-
-                        const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
-                        const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
-                        this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
-
-                        await this.publishFileInfo({
-                            stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
-                        });
-
-                        if (sourceStat.isDirectory()) {
-                            if(sourceStat.isSymbolicLink() ) continue;
-                            output.dirCount++;
-                            if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
-                            if (isSMB){
-                                const hasConflict = await checkCaseSensitiveConflict(
-                                    jobContext.jobConfig.jobType,
-                                    name,
-                                    lowerCaseSourceDirs,
-                                    relativeSourcePath,
-                                    sourceContentPath,
-                                    command,
-                                    jobContext
-                                );
-                                if (hasConflict) continue;
-                            }
-                            output.subDirs.push(relativeSourcePath);
-                        } else output.fileCount++;
+                    if (chunk.length >= this.parallelLstatConcurrency) {
+                        await this.processChunk(chunk, sourcePath, sourcePrefix, jobContext, command, settings, isSMB, shouldScanADS, lowerCaseSourceDirs, output);
+                        chunk = [];
                     }
                 }
-            } catch (error){
+
+                // Process remaining entries that didn't fill a complete chunk
+                if (chunk.length > 0) {
+                    await this.processChunk(chunk, sourcePath, sourcePrefix, jobContext, command, settings, isSMB, shouldScanADS, lowerCaseSourceDirs, output);
+                }
+            } catch (error) {
                 this.logger.error(`Error scanning directory ${sourcePath}: ${error.message}`);
                 throw error;
             }
@@ -135,7 +93,87 @@ export class DiscoveryScanService {
         }
         return output;
     }
-    
+
+    /**
+     * Processes a chunk of directory entry names: parallel lstat, filter,
+     * classify, and bulk-publish to Redis. Called once per chunk from scanDirectory.
+     * Memory is bounded to chunk.length entries at each stage.
+     */
+    private async processChunk(
+        chunk: string[],
+        sourcePath: string,
+        sourcePrefix: string,
+        jobContext: JobManagerContext,
+        command: Cmd,
+        settings: ScanDirectorySettings,
+        isSMB: boolean,
+        shouldScanADS: boolean,
+        lowerCaseSourceDirs: Set<string>,
+        output: ScanDirectoryOutput,
+    ): Promise<void> {
+        const chunkItems: ItemInfo[] = [];
+
+        // Parallel lstat for this chunk
+        const statResults = await Promise.all(
+            chunk.map(async (name) => {
+                const fullPath = path.join(sourcePath, name);
+                const stat = await fs.promises.lstat(fullPath);
+                return { name, fullPath, stat };
+            })
+        );
+
+        // Process stat results: filter, classify, collect ItemInfo
+        for (const { name, fullPath: sourceContentPath, stat: sourceStat } of statResults) {
+            if (shouldExcludeOrSkip({
+                fullPath: sourceContentPath,
+                stats: sourceStat,
+                excludePatterns: settings.excludePatterns,
+                skipTime: settings.skipFile,
+                olderThan: new Date(jobContext.jobConfig.options?.excludeOlderThan),
+                jobType: jobContext.jobConfig.jobType
+            })) continue;
+
+            const relativeSourcePath = removePrefix(sourceContentPath, sourcePrefix);
+            const fileType = await this.fileTypeDetectionService.detectFileType(sourceContentPath, sourceStat);
+            this.logger.debug(`FileType for path ${sourceContentPath} is ${fileType}`);
+
+            const isDirectory = sourceStat.isDirectory();
+            const itemInfo = this.getItemInfo(sourceStat, sourceContentPath, relativeSourcePath, fileType, isDirectory, sourceStat.size);
+            chunkItems.push(itemInfo);
+
+            // Collect ADS items into the same chunk array (Windows only)
+            if (isSMB && shouldScanADS) {
+                const adsItems = await this.collectADSItems(jobContext, command, sourceContentPath, relativeSourcePath, sourceStat, isDirectory);
+                chunkItems.push(...adsItems);
+            }
+
+            if (isDirectory) {
+                if(sourceStat.isSymbolicLink() ) continue;
+                output.dirCount++;
+                if (fileType === FileType.VOLUME_MOUNT_POINT) continue;
+                if (isSMB){
+                    const hasConflict = await checkCaseSensitiveConflict(
+                        jobContext.jobConfig.jobType,
+                        name,
+                        lowerCaseSourceDirs,
+                        relativeSourcePath,
+                        sourceContentPath,
+                        command,
+                        jobContext
+                    );
+                    if (hasConflict) continue;
+                }
+                output.subDirs.push(relativeSourcePath);
+            } else output.fileCount++;
+        }
+
+        // Bulk publish this chunk's items to Redis immediately.
+        // chunkItems goes out of scope after this, freeing memory for the next chunk.
+        if (chunkItems.length > 0) {
+            await jobContext.publishToFileStreamBulk(chunkItems);
+        }
+    }
+
     getItemInfo(stats: fs.Stats, fPath: string, relativeSourcePath: string, fileType:FileType , isDirectory: boolean, fileSize: number): ItemInfo{
          const sourceMeta: ItemMeta = {
             accessTime: stats.atime,
@@ -161,13 +199,43 @@ export class DiscoveryScanService {
 
     }
     
+    /**
+     * Collects ADS (Alternate Data Streams) items for a file on Windows.
+     * Returns an array of ItemInfo objects for each ADS stream found.
+     * Returns empty array if no ADS or not on Windows.
+     */
+    async collectADSItems(jobContext: JobManagerContext, command: Cmd, fPath: string, relativeSourcePath: string, stats: fs.Stats, isDirectory: boolean): Promise<ItemInfo[]> {
+        try {
+            const adsInfo = await this.winOperationService.detectADSInfo(jobContext, command, fPath);
+            if (!adsInfo.hasADS) {
+                return [];
+            }
+            const items: ItemInfo[] = [];
+            for (let i = 0; i < adsInfo.streamNames.length; i++) {
+                const streamName = adsInfo.streamNames[i];
+                const streamSize = adsInfo.streamSizes[i];
+                const streamRelativePath = `${relativeSourcePath}:${streamName}`;
+                items.push(this.getItemInfo(stats, fPath, streamRelativePath, FileType.STREAM, isDirectory, streamSize));
+            }
+            return items;
+        } catch (error) {
+            this.logger.error(`Failed to collect ADS info for ${relativeSourcePath}: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Publishes file info to Redis stream one entry at a time.
+     * @deprecated Use bulk publish via collectADSItems + publishToFileStreamBulk instead.
+     * Retained for backward compatibility with migrate scan path.
+     */
     async publishFileInfo({ jobContext, command, stats, fPath, relativeSourcePath, fileType, shouldScanADS }: PublishItemInfoInput): Promise<void> {
         const isDirectory = stats.isDirectory();
-        const itemInfo = this.getItemInfo(stats, fPath, relativeSourcePath, fileType, isDirectory, stats.size);        
+        const itemInfo = this.getItemInfo(stats, fPath, relativeSourcePath, fileType, isDirectory, stats.size);
         try {
             await jobContext.publishToFileStream(itemInfo);
-            if(process.platform === 'win32' && shouldScanADS){           
-                const adsInfo = await this.winOperationService.detectADSInfo(jobContext, command, fPath);            
+            if(process.platform === 'win32' && shouldScanADS){
+                const adsInfo = await this.winOperationService.detectADSInfo(jobContext, command, fPath);
                 if (!adsInfo.hasADS) {
                     return;
                 }
@@ -176,14 +244,14 @@ export class DiscoveryScanService {
                 for (let i = 0; i < adsInfo.streamNames.length; i++) {
                     const streamName = adsInfo.streamNames[i];
                     const streamSize = adsInfo.streamSizes[i];
-                    const streamRelativePath = `${relativeSourcePath}:${streamName}`;                
-                    items.push(this.getItemInfo(stats, fPath, streamRelativePath, FileType.STREAM, isDirectory, streamSize));                
+                    const streamRelativePath = `${relativeSourcePath}:${streamName}`;
+                    items.push(this.getItemInfo(stats, fPath, streamRelativePath, FileType.STREAM, isDirectory, streamSize));
                 }
                 await jobContext.publishToFileStreamBulk(items);
-            }        
-        }catch (error) {              
-                this.logger.error(`Failed to publish file stream info ${relativeSourcePath}: ${error.message}`);                
+            }
+        }catch (error) {
+                this.logger.error(`Failed to publish file stream info ${relativeSourcePath}: ${error.message}`);
                 throw error;
-            } 
+            }
     }
 }
