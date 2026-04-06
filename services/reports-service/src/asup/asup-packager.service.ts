@@ -322,12 +322,21 @@ export class AsupPackagerService {
     // directory named after the bundle (e.g. "ndm_logs_fb192415-3a7c-46cb-bb05-736d5e1df343").
     // That prefix is redundant inside the ASUP archive — all files already belong to the
     // same bundle — so we drop it to keep ASUP filenames short and readable.
-    // e.g. "ndm_logs_<uuid>/Performance_Metrics/cpu-percent.csv"
-    //   →  "Performance_Metrics__cpu-percent.csv"
+    //
+    // Abbreviations applied to shorten filenames:
+    //   - "control-plane"  →  "cp"
+    //   - "service"        →  "svc"  (e.g. admin-service → admin-svc, service-latency → svc-latency)
+    //   - path "/" separator → "_"   (single underscore, not double, to keep names compact)
+    //
+    // e.g. "ndm_logs_<uuid>/ndm_logs/2026-04-05/<projectId>/control-plane/admin-service.log"
+    //   →  "ndm_logs_2026-04-05_<projectId>_cp_admin-svc.log"
     const normalized = relativePath.replace(/\\/g, '/');
     const parts = normalized.split('/');
     const trimmed = parts.length > 1 ? parts.slice(1).join('/') : normalized;
-    const safe = trimmed.replace(/[\\/]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const abbreviated = trimmed
+      .replace(/control-plane/g, 'cp')
+      .replace(/service/g, 'svc');
+    const safe = abbreviated.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
     return safe.length > 0 ? safe : `file-${Date.now()}`;
   }
 
