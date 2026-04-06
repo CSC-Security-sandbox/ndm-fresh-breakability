@@ -6,15 +6,24 @@ import org.keycloak.events.EventListenerProvider;
 import org.keycloak.events.EventType;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.UserModel;
+import org.keycloak.util.JsonSerialization;
 import com.netapp.datamigrate.utils.DatabaseConnectionUtil;
 import com.netapp.datamigrate.utils.ValidationUtil;
  
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.logging.Logger;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
  
 /**
 * An implementation of the Keycloak `EventListenerProvider` interface to handle user events.
@@ -25,7 +34,13 @@ public class UserProfileEventListener implements EventListenerProvider {
  
     private final KeycloakSession session;
     private static final Logger logger = Logger.getLogger(UserProfileEventListener.class.getName());
-    private static final String ASUP_SETTING_KEY = "asup_enabled";
+    private static final String DEFAULT_KEYCLOAK_BASE_URL = "http://keycloak.keycloak.svc.cluster.local/keycloak";
+    private static final String DEFAULT_KEYCLOAK_REALM = "datamigrator";
+    private static final String DEFAULT_KEYCLOAK_CLIENT_ID = "datamigrator-client";
+    private static final String DEFAULT_REPORTS_BASE_URL = "http://reports-service-service:3000/api/v1/report";
+    private static final HttpClient httpClient = HttpClient.newHttpClient();
+    private String accessToken;
+    private long expiresAtEpochSeconds;
  
     /**
      * Constructor for the event listener.
@@ -136,42 +151,124 @@ public class UserProfileEventListener implements EventListenerProvider {
     }
     
     /**
-     * Updates the ASUP settings in the global_settings table.
+     * Updates ASUP settings through the reports-service asup/settings API.
      * This is a system-wide setting - the instance creator's choice applies to all users.
      *
      * @param enabled whether ASUP metrics sharing is enabled
      * @param userId the user ID who made the change
      */
     private void updateAsupSettingsInDatabase(boolean enabled, String userId) {
-        // Use UPSERT to insert or update the ASUP setting
-        String query = """
-            INSERT INTO datamigrator.global_settings (setting_key, setting_value, description, setting_type, updated_by)
-            VALUES (?, ?, 'ASUP metrics sharing consent set by instance creator', 'boolean', ?::uuid)
-            ON CONFLICT (setting_key)
-            DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?::uuid
-        """;
-        
-        try (Connection connection = DatabaseConnectionUtil.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
-            
-            String enabledValue = String.valueOf(enabled);
-            statement.setString(1, ASUP_SETTING_KEY);
-            statement.setString(2, enabledValue);
-            statement.setString(3, userId);
-            statement.setString(4, enabledValue);
-            statement.setString(5, userId);
-            
-            int rowsAffected = statement.executeUpdate();
-            
-            if (rowsAffected > 0) {
-                logger.info(String.format("ASUP settings updated successfully: enabled=%s", enabled));
-            } else {
-                logger.warning("Failed to update ASUP settings in database");
+        String reportsBaseUrl = getEnv("REPORTS_SERVICE_BASE_URL", DEFAULT_REPORTS_BASE_URL);
+        String endpoint = reportsBaseUrl.replaceAll("/+$", "") + "/asup/settings";
+
+        try {
+            String token = getAccessToken();
+            if (!ValidationUtil.isValid(token)) {
+                logger.warning("Unable to update ASUP settings via API: missing access token");
+                return;
             }
-        } catch (SQLException e) {
-            logger.severe(String.format("Database connection error while updating ASUP settings: %s", e.getMessage()));
-            // Don't throw - ASUP is non-critical, don't break the login flow
+
+            String payload = String.format("{\"enabled\":%s}", enabled);
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .PUT(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (isSuccessfulAsupSettingsResponse(response.statusCode())) {
+                logger.info(String.format("ASUP settings updated via reports-service API: enabled=%s, userId=%s", enabled, userId));
+            } else {
+                logger.warning(String.format("ASUP settings API update failed with status=%d body=%s", response.statusCode(), response.body()));
+            }
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logger.warning(String.format("Error while calling asup/settings API: %s", e.getMessage()));
         }
+    }
+
+    private synchronized String getAccessToken() throws IOException, InterruptedException {
+        long now = System.currentTimeMillis() / 1000;
+        if (ValidationUtil.isValid(accessToken) && now < expiresAtEpochSeconds) {
+            return accessToken;
+        }
+
+        String realm = getEnv("KEYCLOAK_REALM", DEFAULT_KEYCLOAK_REALM);
+        String clientId = getEnv("KEYCLOAK_CLIENT_ID", DEFAULT_KEYCLOAK_CLIENT_ID);
+        String clientSecret = getEnv("KEYCLOAK_CLIENT_SECRET", "");
+        if (!ValidationUtil.isValid(clientSecret)) {
+            logger.warning("KEYCLOAK_CLIENT_SECRET not configured; cannot fetch token for asup/settings");
+            return null;
+        }
+
+        String formBody = "client_id=" + urlEncode(clientId)
+            + "&client_secret=" + urlEncode(clientSecret)
+            + "&grant_type=client_credentials";
+
+        for (String tokenUrl : getTokenUrls(getEnv("KEYCLOAK_BASE_URL", DEFAULT_KEYCLOAK_BASE_URL), realm)) {
+            HttpRequest tokenRequest = HttpRequest.newBuilder()
+                .uri(URI.create(tokenUrl))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(formBody))
+                .build();
+
+            HttpResponse<String> tokenResponse = httpClient.send(tokenRequest, HttpResponse.BodyHandlers.ofString());
+            if (!isSuccessfulTokenEndpointResponse(tokenResponse.statusCode())) {
+                logger.warning(String.format("Failed to fetch Keycloak token at %s. status=%d body=%s", tokenUrl, tokenResponse.statusCode(), tokenResponse.body()));
+                continue;
+            }
+
+            TokenResponse tokenData = JsonSerialization.readValue(tokenResponse.body(), TokenResponse.class);
+            if (tokenData == null || !ValidationUtil.isValid(tokenData.access_token) || tokenData.expires_in == null) {
+                logger.warning(String.format("Token response missing access_token or expires_in at %s", tokenUrl));
+                continue;
+            }
+
+            long expiresIn = tokenData.expires_in;
+            accessToken = tokenData.access_token;
+            expiresAtEpochSeconds = now + expiresIn - 10;
+            logger.info(String.format("Fetched new access token from %s, expires at: %d (in %ds)", tokenUrl, expiresAtEpochSeconds, expiresIn));
+            return accessToken;
+        }
+
+        return null;
+    }
+
+    private static String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static boolean isSuccessfulAsupSettingsResponse(int statusCode) {
+        return statusCode == 200 || statusCode == 201 || statusCode == 204;
+    }
+    private static boolean isSuccessfulTokenEndpointResponse(int statusCode) {
+        return statusCode == 200;
+    }
+
+    private static String getEnv(String key, String defaultValue) {
+        String value = System.getenv(key);
+        return ValidationUtil.isValid(value) ? value : defaultValue;
+    }
+
+    private static List<String> getTokenUrls(String baseUrl, String realm) {
+        String trimmed = baseUrl.replaceAll("/+$", "");
+        LinkedHashSet<String> urls = new LinkedHashSet<>();
+        if (trimmed.endsWith("/keycloak")) {
+            urls.add(String.format("%s/realms/%s/protocol/openid-connect/token", trimmed, realm));
+            urls.add(String.format("%s/realms/%s/protocol/openid-connect/token", trimmed.substring(0, trimmed.length() - "/keycloak".length()), realm));
+        } else {
+            urls.add(String.format("%s/realms/%s/protocol/openid-connect/token", trimmed, realm));
+            urls.add(String.format("%s/keycloak/realms/%s/protocol/openid-connect/token", trimmed, realm));
+        }
+        return new ArrayList<>(urls);
+    }
+
+    private static class TokenResponse {
+        public String access_token;
+        public Long expires_in;
     }
 
     /**

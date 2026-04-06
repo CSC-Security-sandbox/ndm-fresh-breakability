@@ -60,6 +60,7 @@ podAnnotations:
     {{`{{- with secret "secrets/keycloak-secrets/keycloak-creds" -}}
     export KEYCLOAK_ADMIN="{{ .Data.KEYCLOAK_ADMIN_USER }}"
     export KEYCLOAK_ADMIN_PASSWORD="{{ .Data.KEYCLOAK_ADMIN_PASSWORD }}"
+    export KEYCLOAK_CLIENT_SECRET="{{ .Data.KEYCLOAK_CLIENT_SECRET }}"
     {{- end -}}`}}
     {% endraw %}
       
@@ -175,6 +176,14 @@ extraEnvVars:
       value: 'keycloak'
     - name: KEYCLOAK_PROXY_HEADERS
       value: xforwarded
+    - name: KEYCLOAK_BASE_URL
+      value: "http://keycloak.keycloak.svc.cluster.local:80/keycloak"
+    - name: KEYCLOAK_REALM
+      value: "datamigrator"
+    - name: KEYCLOAK_CLIENT_ID
+      value: "datamigrator-client"
+    - name: REPORTS_SERVICE_BASE_URL
+      value: "http://reports-service-service:3000/api/v1/report"
     - name: JAVA_OPTS
       value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -Xms512m -Xmx2048m" 
 
