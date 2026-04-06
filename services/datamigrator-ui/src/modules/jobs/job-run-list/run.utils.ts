@@ -82,7 +82,7 @@ export const getReportActions = (
     jobRunId: string,
     reportType?: string
   ) => void,
-  downloadReportApi: (arg: any) => void,
+  _downloadReportApi: (arg: any) => void,
   getPdfReportApi: (arg: any) => void,
   prepareDownloadApi: (arg: any) => void,
   type: "rowMenu" | "button" = "rowMenu"
@@ -106,11 +106,10 @@ export const getReportActions = (
               ? "Download Discovery Report as CSV"
               : "Download as CSV",
           onClick: () => {
-            handleDownloadReport(
-              downloadReportApi,
+            handleDownloadCocReport(
+              prepareDownloadApi,
               row.jobRunId,
-              REPORT_TYPES_ENUM.DISCOVERY,
-              "CSV"
+              REPORT_TYPES_ENUM.DISCOVERY
             );
           },
           disabled: !isReportReady,

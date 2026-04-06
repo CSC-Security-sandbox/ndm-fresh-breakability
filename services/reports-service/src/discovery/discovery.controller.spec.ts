@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscoveryController } from './discovery.controller';
 import { DiscoveryService } from './discovery.service';
 import { BadRequestException } from '@nestjs/common';
-import { StreamableFile } from '@nestjs/common';
 import { RmqContext } from '@nestjs/microservices';
 import { ReportType } from './pattern.enum';
 import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
@@ -16,7 +15,6 @@ describe('DiscoveryController', () => {
   const mockDiscoveryService = {
     getDiscoveryByFileServerId: jest.fn(),
     getDiscoveryByFileServerIdAndParentPath: jest.fn(),
-    getReportsAsZip: jest.fn(),
     createReportFile: jest.fn(),
   };
 
@@ -117,38 +115,6 @@ describe('DiscoveryController', () => {
     it('should throw BadRequestException when fileServerId is missing', async () => {
       await expect(controller.discoverFileServerWithPath('', '/test/path')).rejects.toThrow(
         new BadRequestException('fileServerId query parameter is required')
-      );
-    });
-  });
-
-  describe('downloadReports', () => {
-    it('should download reports successfully', async () => {
-      const jobRunIds = ['job1', 'job2'];
-      const reportType = ReportType.DISCOVERY;
-      const mockBuffer = Buffer.from('test');
-      mockDiscoveryService.getReportsAsZip.mockResolvedValue(mockBuffer);
-
-      const result = await controller.downloadReports(jobRunIds, reportType);
-
-      expect(result).toBeInstanceOf(StreamableFile);
-      expect(service.getReportsAsZip).toHaveBeenCalledWith(jobRunIds, reportType);
-    });
-
-    it('should throw BadRequestException when jobRunIds is empty', async () => {
-      await expect(controller.downloadReports([], ReportType.DISCOVERY)).rejects.toThrow(
-        new BadRequestException('jobRunId array must not be empty')
-      );
-    });
-
-    it('should throw BadRequestException when reportType is invalid', async () => {
-      await expect(controller.downloadReports(['job1'], 'INVALID' as any)).rejects.toThrow(
-        new BadRequestException('Invalid report type. Allowed values are COC or discovery')
-      );
-    });
-
-    it('should throw BadRequestException when jobRunIds is null', async () => {
-      await expect(controller.downloadReports(null, ReportType.DISCOVERY)).rejects.toThrow(
-        new BadRequestException('jobRunId array must not be empty')
       );
     });
   });

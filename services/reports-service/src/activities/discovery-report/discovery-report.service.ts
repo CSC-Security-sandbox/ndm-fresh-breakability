@@ -2,6 +2,8 @@ import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from "fs";
+import * as archiver from "archiver";
+import * as path from "path";
 import { ReportType } from 'src/constants/enums';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 import { ReportsEntity } from 'src/entities/reports.entity';
@@ -149,12 +151,16 @@ export class DiscoveryReportService {
             });
             const csvContent = [headers.join(","), rows.map(escapeCsvValue).join(",")].join("\n");
 
-            // Write CSV to file
+            // Write CSV to a temp file, zip it, then remove the raw CSV
             const csvFilePath = `${this.basePath}/${jobRunId}-discover-report.csv`;
             await fs.promises.writeFile(csvFilePath, csvContent);
 
-            this.logger.log(`projectId: ${projectId} CSV report generated successfully at: ${csvFilePath}`);
-            return { message: 'CSV report generated successfully', path: csvFilePath };
+            const zipFilePath = `${this.basePath}/${jobRunId}-discover-report.zip`;
+            await this.createZipArchive(csvFilePath, zipFilePath);
+            await fs.promises.unlink(csvFilePath);
+
+            this.logger.log(`projectId: ${projectId} CSV report zipped successfully at: ${zipFilePath}`);
+            return { message: 'CSV report generated successfully', path: zipFilePath };
         } catch (error) {
             this.logger.error(`projectId: ${projectId} Error generating CSV report for jobRunId: ${jobRunId}: ${error.message}`, error?.stack || error);
             throw error;
@@ -192,5 +198,19 @@ export class DiscoveryReportService {
             this.logger.error(`projectId: ${projectId} Error in updateJsonReport for jobRunId: ${jobRunId}, updateType: ${updateType}: ${error.message}`, error?.stack || error);
             throw error;
         }
+    }
+
+    private createZipArchive(csvFilePath: string, zipFilePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const output = fs.createWriteStream(zipFilePath);
+            const archive = archiver('zip', { zlib: { level: 9 } });
+
+            output.on('close', resolve);
+            archive.on('error', reject);
+
+            archive.pipe(output);
+            archive.file(csvFilePath, { name: path.basename(csvFilePath) });
+            archive.finalize();
+        });
     }
 }

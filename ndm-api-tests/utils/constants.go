@@ -170,6 +170,8 @@ const (
 	GENERATE_SUPPORT_BUNDLE_URL                      = "/api/v1/support-bundle"
 	DOWNLOAD_SUPPORT_BUNDLE_URL                      = "/api/v1/support-bundle/download"
 	ABOUT_NDM_URL                                    = "/api/v1/about-ndm"
+	INVENTORY_PREPARE_DOWNLOAD_ENDPOINT              = "/api/v1/report/inventory/prepare-download"
+	INVENTORY_DOWNLOAD_BY_TOKEN_ENDPOINT             = "/api/v1/report/inventory/download/"
 	JobTypeDiscovery                JobType          = "DISCOVER"
 	JobTypeCutover                  JobType          = "CUTOVER"
 	JobTypeMigration                JobType          = "MIGRATE"

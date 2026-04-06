@@ -106,6 +106,11 @@ export class DiscoveryService {
         const csvFilePath = path.join(this.reportsDirectory, csvFileName);
         this.formatAndWriteToFile(reportData, csvFilePath);
 
+        const zipFilePath = this.getZipFilePath(jobRunId, reportType);
+        const zipBuffer = await this.createZipArchive([csvFilePath]);
+        fs.writeFileSync(zipFilePath, zipBuffer);
+        fs.unlinkSync(csvFilePath);
+
         const pdfBuffer = await this.generatePdfFromData(reportData);
         fs.writeFileSync(pdfFilePath, pdfBuffer);
 
@@ -215,39 +220,6 @@ export class DiscoveryService {
     ].join("\n");
 
     fs.writeFileSync(filePath, csvContent);
-  }
-
-  async getReportsAsZip(
-    jobRunIds: string[],
-    reportType: string,
-  ): Promise<Buffer> {
-    const filesToZip: string[] = [];
-
-    if (!fs.existsSync(this.reportsDirectory)) {
-      throw new NotFoundException(
-        `Reports directory does not exist: ${this.reportsDirectory}`,
-      );
-    }
-    for (const jobRunId of jobRunIds) {
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
-      const filePath = path.join(this.reportsDirectory, fileName);
-
-      if (fs.existsSync(filePath)) {
-        filesToZip.push(filePath);
-      } else {
-        console.warn(`File not found: ${filePath}`);
-      }
-    }
-
-    if (filesToZip.length === 0) {
-      throw new NotFoundException(
-        "No valid report files found for the given inputs.",
-      );
-    }
-
-    const zipBuffer = await this.createZipArchive(filesToZip);
-
-    return zipBuffer;
   }
 
   async prepareDownload(

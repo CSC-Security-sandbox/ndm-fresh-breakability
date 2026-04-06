@@ -1,4 +1,4 @@
-import { Controller, Query, BadRequestException, Get, Post, Body, Header, StreamableFile, Logger, Inject, Optional, Param, Res } from '@nestjs/common';
+import { Controller, Query, BadRequestException, Get, Post, Body, Header, Logger, Inject, Optional, Param, Res } from '@nestjs/common';
 import { ApiQuery, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscoveryService } from './discovery.service';
 import {
@@ -77,53 +77,6 @@ export class DiscoveryController {
     }
 
     return await this.discoveryService.getDiscoveryByFileServerIdAndParentPath(fileServerId, parentPath);
-  }
-
-  @Auth(Permission.Reports)
-  @ApiBearerAuth()
-  @SkipResponseTransform() // Skip response transformation for binary downloads
-  @Post('/download')
-  @ApiOperation({ summary: 'Download reports based on jobRunId and report type' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        jobRunId: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of jobRunIds',
-        },
-        'report-type': {
-          type: 'string',
-          enum: Object.values(ReportType),
-          description: 'Type of the report to download',
-        },
-      },
-      required: ['jobRunId', 'report-type'],
-    },
-  })
-
-  @ApiResponse({ status: 200, description: 'Files downloaded successfully' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Invalid input' })
-  @Header('Content-Type', 'application/zip') 
-  @Header('Content-Disposition', 'attachment; filename=reports.zip') 
-  async downloadReports(
-    @Body('jobRunId') jobRunIds: string[],
-    @Body('report-type') reportType: ReportType,
-  ): Promise<StreamableFile> {
-    if (!jobRunIds || jobRunIds.length === 0) {
-      throw new BadRequestException('jobRunId array must not be empty');
-    }
-
-    if (!Object.values(ReportType).includes(reportType)) {
-      throw new BadRequestException('Invalid report type. Allowed values are COC or discovery');
-    }
-
-    const zipBuffer = await this.discoveryService.getReportsAsZip(jobRunIds, reportType);
-
-    const stream = new StreamableFile(zipBuffer);
-
-    return stream;
   }
 
   @Auth(Permission.Reports)

@@ -1,6 +1,6 @@
 import { Box } from "@components/container/index";
 import {
-  useDownloadReportsMutation,
+  usePrepareDownloadMutation,
   useGetPdfReportMutation,
   useGetReportDataQuery,
 } from "@api/reportApi";
@@ -17,7 +17,7 @@ import ReportDougnutOverview from "@modules/jobs/discovery-preview/components/Re
 import ReportHeader from "@modules/jobs/discovery-preview/components/ReportHeader";
 import ReportTables from "@modules/jobs/discovery-preview/components/ReportTables";
 import { JOBS_TYPE, ReportDataPayloadType } from "@/types/app.type";
-import { handleDownloadReport } from "@modules/jobs/jobs.utils";
+import { handleDownloadCocReport, handleDownloadReport } from "@modules/jobs/jobs.utils";
 import { notify } from "@components/notification/NotificationWrapper";
 import ChartError from "@components/chartInfo/ChartError";
 import { Card, CardContent } from "@netapp/bxp-design-system-react";
@@ -33,17 +33,12 @@ const DiscoveryPreview = () => {
   const { isFetching: reportDataIsLoading, isError } =
     useGetReportDataQuery(payload);
 
-  const [downloadReports] = useDownloadReportsMutation();
+  const [prepareDownload] = usePrepareDownloadMutation();
   const [getPdfReport] = useGetPdfReportMutation();
 
   const handleCsv = async () => {
     try {
-      await handleDownloadReport(
-        downloadReports,
-        jobRunId,
-        JOBS_TYPE.DISCOVERY,
-        "CSV"
-      );
+      await handleDownloadCocReport(prepareDownload, jobRunId, JOBS_TYPE.DISCOVERY);
     } catch (error) {
       console.error("Error downloading CSV report:", error);
       notify.error("Failed to download the CSV report. Please try again.");
