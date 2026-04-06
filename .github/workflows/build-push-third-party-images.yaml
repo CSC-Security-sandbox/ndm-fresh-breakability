@@ -96,22 +96,21 @@ jobs:
 
       - name: Pull images (linux/amd64)
         run: |
-          KEYCLOAK_TAG="${{ github.event.inputs.keycloak_tag }}"
-          KEYCLOAK_DOCKER="docker.io/bitnami/keycloak:${KEYCLOAK_TAG}"
-          KEYCLOAK_ECR="public.ecr.aws/bitnami/keycloak:${KEYCLOAK_TAG}"
-
+          # Bitnami removed versioned debian tags from Docker Hub (Aug 2025).
+          # For any docker.io/bitnami/* image, fall back to public.ecr.aws/bitnami/*.
           FAILED=()
           while IFS= read -r image; do
             echo "::group::Pulling ${image}"
             if docker pull --platform linux/amd64 "${image}"; then
               echo "✓ ${image}"
-            elif [ "${image}" = "${KEYCLOAK_DOCKER}" ]; then
-              echo "::warning::Docker Hub pull failed for Keycloak, trying ECR fallback..."
-              if docker pull --platform linux/amd64 "${KEYCLOAK_ECR}"; then
-                docker tag "${KEYCLOAK_ECR}" "${KEYCLOAK_DOCKER}"
+            elif [[ "${image}" == docker.io/bitnami/* ]]; then
+              ECR_REF="${image/docker.io/public.ecr.aws}"
+              echo "::warning::Docker Hub pull failed, trying ECR Public fallback: ${ECR_REF}"
+              if docker pull --platform linux/amd64 "${ECR_REF}"; then
+                docker tag "${ECR_REF}" "${image}"
                 echo "✓ ${image} (via ECR fallback)"
               else
-                echo "::error::Both Docker Hub and ECR failed for Keycloak"
+                echo "::error::Both Docker Hub and ECR failed for ${image}"
                 FAILED+=("${image}")
               fi
             else
