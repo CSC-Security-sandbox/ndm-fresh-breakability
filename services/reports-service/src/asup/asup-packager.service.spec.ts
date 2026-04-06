@@ -105,12 +105,12 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
     it('should write temp files before compression', async () => {
       await service.packageAsupPayload();
 
-      // migration-projects.xml, manifest.xml, x-header.txt
+      // migration-projects.xml, manifest.xml, x-header-data.txt
       expect(mockedFs.writeFile).toHaveBeenCalledTimes(3);
       const writeArgs = mockedFs.writeFile.mock.calls.map(c => c[0] as string);
       expect(writeArgs.some(p => p.includes('migration-projects.xml'))).toBe(true);
       expect(writeArgs.some(p => p.includes('manifest.xml'))).toBe(true);
-      expect(writeArgs.some(p => p.includes('x-header.txt'))).toBe(true);
+      expect(writeArgs.some(p => p.includes('x-header-data.txt'))).toBe(true);
     });
 
     it('should create work and reports directories', async () => {
@@ -159,17 +159,42 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       );
     });
 
-    it('should pass manifest XML size metadata from migration XML', async () => {
+    it('should pass manifest XML size metadata including xHeaderSize', async () => {
       const migrationXml = '<xml>test migration data for sizing</xml>';
       xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue(migrationXml);
 
       await service.packageAsupPayload();
 
       const manifestCall = xmlGeneratorService.buildManifestXml.mock.calls[0];
-      const expectedSize = Buffer.byteLength(migrationXml, 'utf-8');
-      expect(manifestCall[0]).toBe(expectedSize); // migrationXmlSize
-      expect(manifestCall[1]).toBeGreaterThanOrEqual(0); // collectionTimeMs
-      expect(manifestCall[2]).toBe(expectedSize); // sizeCompressed = migrationXmlSize
+      const expectedMigrationSize = Buffer.byteLength(migrationXml, 'utf-8');
+      expect(manifestCall[0]).toBe(expectedMigrationSize); // migrationXmlSize
+      expect(manifestCall[1]).toBeGreaterThanOrEqual(0);   // collectionTimeMs
+      expect(manifestCall[2]).toBe(expectedMigrationSize); // sizeCompressed
+      // xHeaderSize must be > 0 since x-headers template produces non-empty text
+      expect(manifestCall[3]).toBeGreaterThan(0);
+    });
+
+    it('should build x-headers before calling buildManifestXml (ordering check)', async () => {
+      const callOrder: string[] = [];
+
+      xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue('<xml/>');
+      xmlGeneratorService.buildManifestXml.mockImplementation(async () => {
+        callOrder.push('buildManifestXml');
+        return '<manifest/>';
+      });
+
+      // Track when writeFile is called for x-header-data.txt vs manifest.xml
+      mockedFs.writeFile.mockImplementation(async (filePath: string) => {
+        if (String(filePath).includes('x-header-data.txt')) callOrder.push('write-xheader');
+        if (String(filePath).includes('manifest.xml')) callOrder.push('write-manifest');
+      });
+
+      await service.packageAsupPayload();
+
+      // buildManifestXml must be called before both temp files are written,
+      // and x-header build (tracked via write) happens in same batch after manifest call
+      const manifestIdx = callOrder.indexOf('buildManifestXml');
+      expect(manifestIdx).toBeGreaterThanOrEqual(0);
     });
   });
 

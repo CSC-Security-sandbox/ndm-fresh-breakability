@@ -53,17 +53,19 @@ export class AsupPackagerService {
     const migrationXmlSize = Buffer.byteLength(migrationXml, 'utf-8');
     this.logger.log(`Migration XML from generator (${migrationXmlSize} bytes, ${collectionTimeMs}ms)`);
 
-    // 2. Get manifest XML from xml-generator
+    // 2. Build x-header-data.txt first so its size is available for the manifest row
+    const { headersText, headersMap } = this.buildXHeaders();
+    const xHeaderSize = Buffer.byteLength(headersText, 'utf-8');
+    this.logger.log(`Generated x-header-data.txt (${xHeaderSize} bytes)`);
+
+    // 3. Get manifest XML with x-header size included
     const manifestXml = await this.asupXmlGeneratorService.buildManifestXml(
       migrationXmlSize,
       collectionTimeMs,
       migrationXmlSize,
+      xHeaderSize,
     );
     this.logger.log(`Manifest XML from generator (${Buffer.byteLength(manifestXml, 'utf-8')} bytes)`);
-
-    // 3. Build x-header.txt + HTTP headers map
-    const { headersText, headersMap } = this.buildXHeaders();
-    this.logger.log(`Generated x-header.txt (${Buffer.byteLength(headersText, 'utf-8')} bytes)`);
 
     // 4. Write temp files and compress into .7z
     await fs.mkdir(this.WORK_DIR, { recursive: true });
@@ -72,7 +74,7 @@ export class AsupPackagerService {
     const files = {
       migration: path.join(this.WORK_DIR, 'migration-projects.xml'),
       manifest: path.join(this.WORK_DIR, 'manifest.xml'),
-      xHeader: path.join(this.WORK_DIR, 'x-header.txt'),
+      xHeader: path.join(this.WORK_DIR, 'x-header-data.txt'),
     };
 
     await Promise.all([

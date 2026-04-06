@@ -45,14 +45,17 @@ describe('AsupXmlGeneratorService', () => {
 </table>
 </asup>`;
 
-  // Minimal manifest template
+  // Minimal manifest template (includes x-header placeholders)
   const manifestTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <manifest>
   <col-time-us>{{COL_TIME_US}}</col-time-us>
   <size-collected>{{SIZE_COLLECTED}}</size-collected>
   <time-collected-ms>{{TIME_COLLECTED_MS}}</time-collected-ms>
   <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
+  <xheader-size>{{XHEADER_SIZE_COLLECTED}}</xheader-size>
+  <xheader-time>{{XHEADER_TIME_COLLECTED_MS}}</xheader-time>
 </manifest>`;
+
 
   beforeEach(async () => {
     asupStatsService = {
@@ -254,9 +257,22 @@ describe('AsupXmlGeneratorService', () => {
     it('should replace COL_TIME_US with a numeric timestamp', async () => {
       const xml = await service.buildManifestXml(100, 50, 80);
 
-      // COL_TIME_US should be replaced with a number (microseconds)
       expect(xml).not.toContain('{{COL_TIME_US}}');
       expect(xml).toContain('<col-time-us>');
+    });
+
+    it('should fill XHEADER_SIZE_COLLECTED and XHEADER_TIME_COLLECTED_MS when provided', async () => {
+      const xml = await service.buildManifestXml(1024, 150, 800, 512, 5);
+
+      expect(xml).toContain('<xheader-size>512</xheader-size>');
+      expect(xml).toContain('<xheader-time>5</xheader-time>');
+    });
+
+    it('should default xHeaderSize and xHeaderTimeMs to 0 when not provided', async () => {
+      const xml = await service.buildManifestXml(1024, 150, 800);
+
+      expect(xml).toContain('<xheader-size>0</xheader-size>');
+      expect(xml).toContain('<xheader-time>0</xheader-time>');
     });
 
     it('should use cached manifest template on second call', async () => {
@@ -265,7 +281,6 @@ describe('AsupXmlGeneratorService', () => {
 
       const xml = await service.buildManifestXml(200, 100, 160);
 
-      // Should not read file again (cached)
       const manifestReads = mockedFs.readFile.mock.calls.filter(
         (call) => String(call[0]).includes('manifest.xml.template'),
       );

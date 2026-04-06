@@ -120,11 +120,14 @@ export class AsupXmlGeneratorService {
   /**
    * Build manifest XML for the ASUP .7z payload.
    * Called by the packager with size metadata. Sequence is hardcoded in template.
+   * xHeaderSize: byte size of x-header-data.txt for its manifest row.
    */
   async buildManifestXml(
     migrationXmlSize: number,
     collectionTimeMs: number,
     sizeCompressed: number,
+    xHeaderSize = 0,
+    xHeaderTimeMs = 0,
   ): Promise<string> {
     const template = await this.getManifestTemplate();
     const colTimeUs = (Date.now() * 1000).toString();
@@ -132,7 +135,9 @@ export class AsupXmlGeneratorService {
       .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
       .replace(/\{\{SIZE_COLLECTED\}\}/g, migrationXmlSize.toString())
       .replace(/\{\{TIME_COLLECTED_MS\}\}/g, collectionTimeMs.toString())
-      .replace(/\{\{SIZE_COMPRESSED\}\}/g, sizeCompressed.toString());
+      .replace(/\{\{SIZE_COMPRESSED\}\}/g, sizeCompressed.toString())
+      .replace(/\{\{XHEADER_SIZE_COLLECTED\}\}/g, xHeaderSize.toString())
+      .replace(/\{\{XHEADER_TIME_COLLECTED_MS\}\}/g, xHeaderTimeMs.toString());
   }
 
   /**
