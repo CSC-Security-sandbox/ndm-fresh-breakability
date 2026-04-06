@@ -25,7 +25,7 @@ permissions:
 jobs:
   build-tarball:
     name: Build ndm-docker-images.tar
-    runs-on: ubuntu-latest
+    runs-on: openlab
     timeout-minutes: 60
 
     env:
@@ -40,7 +40,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Define image list
         id: images
