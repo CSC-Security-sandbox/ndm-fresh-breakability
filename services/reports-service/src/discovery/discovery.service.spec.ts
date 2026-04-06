@@ -98,9 +98,13 @@ describe("DiscoveryService", () => {
     service = module.get<DiscoveryService>(DiscoveryService);
 
     // Mock fs functions
-    jest.spyOn(fs, "existsSync").mockImplementation(() => true);
-    jest.spyOn(fs, "mkdirSync").mockImplementation(() => undefined);
     jest.spyOn(fs, "writeFileSync").mockImplementation(() => undefined);
+    jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined);
+    jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
+    jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+    jest.spyOn(fs, "createWriteStream").mockReturnValue({
+      on: jest.fn((event: string, cb: any) => { if (event === "close") cb(); }),
+    } as any);
   });
 
   afterEach(() => {
@@ -158,11 +162,13 @@ describe("DiscoveryService", () => {
       const result = await service.createReportFile(jobRunId, reportType);
 
       expect(result).toEqual({ message: "Report generated successfully" });
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(2); // Once for CSV, once for PDF
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1); // CSV only (via formatAndWriteToFile); ZIP is streamed, PDF uses fs.promises.writeFile
+      expect(fs.promises.writeFile).toHaveBeenCalledTimes(1); // PDF
+      expect(fs.promises.unlink).toHaveBeenCalledTimes(1);    // raw CSV deleted after zipping
     });
 
     it("should create directory if it does not exist", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValueOnce(false);
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValueOnce(undefined);
 
       const mockReportData = [
         {
@@ -190,7 +196,7 @@ describe("DiscoveryService", () => {
 
       await service.createReportFile(jobRunId, reportType);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ recursive: true })
       );
@@ -310,11 +316,16 @@ describe("DiscoveryService", () => {
   });
 
   describe("createZipArchive", () => {
-    it("should create zip archive successfully", async () => {
-      const mockFilePaths = ["path1", "path2"];
-      const result = await service.createZipArchive(mockFilePaths);
+    it("should stream zip archive to the destination path", async () => {
+      jest.spyOn(fs, "createWriteStream").mockReturnValue({
+        on: jest.fn((event: string, cb: any) => { if (event === "close") cb(); }),
+      } as any);
 
-      expect(result).toBeInstanceOf(Buffer);
+      await expect(
+        service.createZipArchive(["path1", "path2"], "/tmp/out.zip")
+      ).resolves.toBeUndefined();
+
+      expect(fs.createWriteStream).toHaveBeenCalledWith("/tmp/out.zip");
     });
   });
 

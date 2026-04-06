@@ -16,6 +16,9 @@ describe('DiscoveryController', () => {
     getDiscoveryByFileServerId: jest.fn(),
     getDiscoveryByFileServerIdAndParentPath: jest.fn(),
     createReportFile: jest.fn(),
+    createJobsPDFReportData: jest.fn(),
+    prepareDownload: jest.fn(),
+    streamZipToResponse: jest.fn(),
   };
 
   const mockJwtService = {
@@ -163,6 +166,51 @@ describe('DiscoveryController', () => {
     });
   });
 
+  describe('prepareDownload', () => {
+    it('should return a token on success', async () => {
+      mockDiscoveryService.prepareDownload.mockResolvedValue('test-token');
+
+      const result = await controller.prepareDownload('job1', ReportType.DISCOVERY);
+
+      expect(result).toEqual({ token: 'test-token' });
+      expect(mockDiscoveryService.prepareDownload).toHaveBeenCalledWith('job1', ReportType.DISCOVERY);
+    });
+
+    it('should throw BadRequestException when jobRunId is missing', async () => {
+      await expect(
+        controller.prepareDownload('', ReportType.DISCOVERY)
+      ).rejects.toThrow(new BadRequestException('jobRunId is required'));
+    });
+
+    it('should throw BadRequestException when reportType is invalid', async () => {
+      await expect(
+        controller.prepareDownload('job1', 'INVALID' as any)
+      ).rejects.toThrow(new BadRequestException('Invalid report type. Allowed values are COC or discovery'));
+    });
+  });
+
+  describe('downloadByToken', () => {
+    it('should delegate to streamZipToResponse', async () => {
+      const mockRes: any = { set: jest.fn(), end: jest.fn() };
+      mockDiscoveryService.streamZipToResponse.mockResolvedValue(undefined);
+
+      await controller.downloadByToken('my-token', mockRes);
+
+      expect(mockDiscoveryService.streamZipToResponse).toHaveBeenCalledWith('my-token', mockRes);
+    });
+  });
+
+  describe('generateJobsReport', () => {
+    it('should fire createJobsPDFReportData and return OK', async () => {
+      mockDiscoveryService.createJobsPDFReportData.mockResolvedValue(undefined);
+
+      const result = await controller.generateJobsReport('job1');
+
+      expect(result).toBe('OK');
+      expect(mockDiscoveryService.createJobsPDFReportData).toHaveBeenCalledWith('job1');
+    });
+  });
+
   describe('generateDiscoveryReport', () => {
     let mockContext: RmqContext;
     let mockChannel;
@@ -200,6 +248,18 @@ describe('DiscoveryController', () => {
         `Received discovery completed message: ${JSON.stringify(payload)}`
       );
       logSpy.mockRestore();
+    });
+
+    it('should nack the message when createReportFile throws', async () => {
+      const payload = { jobRunId: 'job1' };
+      mockDiscoveryService.createReportFile.mockImplementation(() => {
+        throw new Error('report generation failed');
+      });
+
+      await controller.generateDiscoveryReport(payload, mockContext);
+
+      expect(mockChannel.nack).toHaveBeenCalled();
+      expect(mockChannel.ack).not.toHaveBeenCalled();
     });
   });
 });

@@ -17,8 +17,13 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 jest.mock("fs");
 
 (fs.promises as any) = {
-    writeFile: jest.fn(),
-}
+    writeFile: jest.fn().mockResolvedValue(undefined),
+    unlink: jest.fn().mockResolvedValue(undefined),
+};
+
+(fs.createWriteStream as jest.Mock).mockReturnValue({
+    on: jest.fn((event: string, cb: () => void) => { if (event === "close") cb(); }),
+});
 
 jest.mock("src/utils/group-order");
 jest.mock("src/utils/utils");
@@ -234,9 +239,10 @@ describe("DiscoveryReportService", () => {
                 "/tmp/99-discover-report.csv",
                 expect.stringContaining("Config Name,Path")
             );
+            expect(fs.createWriteStream).toHaveBeenCalledWith("/tmp/99-discover-report.zip");
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/99-discover-report.csv",
+                path: "/tmp/99-discover-report.zip",
             });
         });
 
@@ -257,7 +263,7 @@ describe("DiscoveryReportService", () => {
             const result = await service.generateCsvReport(input as any);
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/555-discover-report.csv",
+                path: "/tmp/555-discover-report.zip",
             });
         });
 
@@ -280,9 +286,10 @@ describe("DiscoveryReportService", () => {
                 "/tmp/888-discover-report.csv",
                 expect.stringContaining("")
             );
+            expect(fs.createWriteStream).toHaveBeenCalledWith("/tmp/888-discover-report.zip");
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/888-discover-report.csv",
+                path: "/tmp/888-discover-report.zip",
             });
         });
 
@@ -306,9 +313,10 @@ describe("DiscoveryReportService", () => {
                 "/tmp/999-discover-report.csv",
                 expect.stringContaining("Config Name")
             );
+            expect(fs.createWriteStream).toHaveBeenCalledWith("/tmp/999-discover-report.zip");
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/999-discover-report.csv",
+                path: "/tmp/999-discover-report.zip",
             });
         });
 
@@ -330,7 +338,7 @@ describe("DiscoveryReportService", () => {
 
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/undefinedTest-discover-report.csv",
+                path: "/tmp/undefinedTest-discover-report.zip",
             });
         });
 
@@ -362,7 +370,7 @@ describe("DiscoveryReportService", () => {
 
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/subCategoryTest-discover-report.csv",
+                path: "/tmp/subCategoryTest-discover-report.zip",
             });
         });
 
@@ -387,7 +395,7 @@ describe("DiscoveryReportService", () => {
 
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/noHeaderMatch-discover-report.csv",
+                path: "/tmp/noHeaderMatch-discover-report.zip",
             });
         });
     });
@@ -461,9 +469,10 @@ describe("DiscoveryReportService", () => {
                 "/tmp/101-discover-report.csv",
                 expect.stringContaining("Path")
             );
+            expect(fs.createWriteStream).toHaveBeenCalledWith("/tmp/101-discover-report.zip");
             expect(result).toEqual({
                 message: "CSV report generated successfully",
-                path: "/tmp/101-discover-report.csv",
+                path: "/tmp/101-discover-report.zip",
             });
         });
 

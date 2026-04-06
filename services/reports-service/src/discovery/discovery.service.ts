@@ -66,10 +66,12 @@ export class DiscoveryService {
       `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
     );
     try {
-      if (!fs.existsSync(this.reportsDirectory)) {
-        fs.mkdirSync(this.reportsDirectory, { recursive: true });
-      }
-      const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
+      // Sanitize user-supplied inputs before using them in any path expression.
+      const safeJobRunId = jobRunId.replace(/[^a-zA-Z0-9-]/g, '');
+      const safeReportType = reportType.replace(/[^a-zA-Z]/g, '');
+
+      await fs.promises.mkdir(this.reportsDirectory, { recursive: true });
+      const pdfFileName = `${safeJobRunId}-${safeReportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
       if (!validateFilePath(pdfFilePath)) {
         this.logger.error(
@@ -102,17 +104,16 @@ export class DiscoveryService {
         throw new Error("No report data found");
       } else {
         const reportData = JSON.parse(latestReport[0]?.reportData);
-        const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
+        const csvFileName = `${safeJobRunId}-${safeReportType.toLowerCase()}-report.csv`;
         const csvFilePath = path.join(this.reportsDirectory, csvFileName);
         this.formatAndWriteToFile(reportData, csvFilePath);
 
         const zipFilePath = this.getZipFilePath(jobRunId, reportType);
-        const zipBuffer = await this.createZipArchive([csvFilePath]);
-        fs.writeFileSync(zipFilePath, zipBuffer);
-        fs.unlinkSync(csvFilePath);
+        await this.createZipArchive([csvFilePath], zipFilePath);
+        await fs.promises.unlink(csvFilePath);
 
         const pdfBuffer = await this.generatePdfFromData(reportData);
-        fs.writeFileSync(pdfFilePath, pdfBuffer);
+        await fs.promises.writeFile(pdfFilePath, pdfBuffer);
 
         return {
           message: "Report generated successfully",
@@ -315,22 +316,18 @@ export class DiscoveryService {
     return path.join(this.reportsDirectory, fileName);
   }
 
-  async createZipArchive(filePaths: string[]): Promise<Buffer> {
+  async createZipArchive(filePaths: string[], destPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(destPath);
       const archive = archiver("zip", { zlib: { level: 9 } });
-      const buffers: Buffer[] = [];
 
+      output.on("close", resolve);
+      archive.on("error", reject);
+
+      archive.pipe(output);
       filePaths.forEach((filePath) => {
-        const fileName = path.basename(filePath);
-        archive.file(filePath, { name: fileName });
+        archive.file(filePath, { name: path.basename(filePath) });
       });
-
-      archive.on("data", (data) => buffers.push(data));
-
-      archive.on("end", () => resolve(Buffer.concat(buffers)));
-
-      archive.on("error", (err) => reject(err));
-
       archive.finalize();
     });
   }
