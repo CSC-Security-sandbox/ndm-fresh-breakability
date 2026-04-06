@@ -17,4 +17,7 @@ export class GlobalSettings extends Base {
 
   @Column({ type: 'text', nullable: true, name: 'setting_type' })
   settingType?: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true, name: 'serial_id' })
+  serialId?: string;
 }

@@ -6,11 +6,14 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ConfigService } from '@nestjs/config';
 import { WorkerEntity } from '../entities/worker.entity';
 import BUILD_VERSION_QUERIES from './about-ndm.constants';
+import { GlobalSettings } from '../entities/global-setting.entity';
+import { promises as fs } from 'fs';
 
 describe('AboutNdmService', () => {
   let service: AboutNdmService;
   let prometheusService: jest.Mocked<PrometheusService>;
   let workerRepository: Record<string, jest.Mock>;
+  let settingsRepository: Record<string, jest.Mock>;
 
   const mockLogger = {
     log: jest.fn(),
@@ -47,6 +50,10 @@ describe('AboutNdmService', () => {
       find: jest.fn().mockResolvedValue([]),
     };
 
+    settingsRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AboutNdmService,
@@ -66,6 +73,10 @@ describe('AboutNdmService', () => {
           provide: getRepositoryToken(WorkerEntity),
           useValue: workerRepository,
         },
+        {
+          provide: getRepositoryToken(GlobalSettings),
+          useValue: settingsRepository,
+        },
       ],
     }).compile();
 
@@ -77,6 +88,7 @@ describe('AboutNdmService', () => {
     mockLogger.error.mockClear();
     mockLogger.warn.mockClear();
     mockLogger.debug.mockClear();
+    jest.restoreAllMocks();
   });
 
   it('should be defined', () => {
@@ -120,6 +132,7 @@ describe('AboutNdmService', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {
@@ -416,6 +429,116 @@ describe('AboutNdmService', () => {
       expect(result.build.workersByVersion).toEqual({
         'unknown': [{ workerName: 'worker-1', ipAddress: '10.0.0.1', platform: 'linux' }],
       });
+    });
+
+    it('should prefer serial ID from global_settings', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockResolvedValueOnce({
+        settingKey: 'ndm_serial_id',
+        settingValue: '97511111111111111111',
+        serialId: '97522222222222222222',
+      });
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('97522222222222222222');
+    });
+
+    it('should fall back to serial_id.conf when DB setting is missing', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockResolvedValueOnce(null);
+      jest.spyOn(fs, 'readFile').mockResolvedValueOnce('serial_id=97533333333333333333\n' as any);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('97533333333333333333');
+    });
+
+    it('should use settingValue when serialId column is empty', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockResolvedValueOnce({
+        settingKey: 'ndm_serial_id',
+        settingValue: '97544444444444444444',
+        serialId: null,
+      });
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('97544444444444444444');
+    });
+
+    it('should return N/A when DB and file serials are invalid', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockResolvedValueOnce({
+        settingKey: 'ndm_serial_id',
+        settingValue: 'INVALID',
+        serialId: 'BAD',
+      });
+      jest.spyOn(fs, 'readFile').mockResolvedValueOnce('serial_id=INVALID\n' as any);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('N/A');
+    });
+
+    it('should fall back to file when DB lookup throws error', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockRejectedValueOnce(new Error('db error'));
+      jest.spyOn(fs, 'readFile').mockResolvedValueOnce('serial_id=97588888888888888888\n' as any);
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('97588888888888888888');
+    });
+
+    it('should return N/A when DB throws and file read also throws', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockRejectedValueOnce(new Error('db timeout'));
+      jest.spyOn(fs, 'readFile').mockRejectedValueOnce(new Error('ENOENT'));
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('N/A');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read serial ID from global_settings'),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read serial ID from serial file'),
+      );
+    });
+
+    it('should return N/A when DB row is missing and file read throws', async () => {
+      prometheusService.queryPrometheus.mockResolvedValueOnce({
+        data: { result: [{ metric: { label_build_version: '2.1.0' } }] },
+      });
+      workerRepository.find.mockResolvedValueOnce([]);
+      settingsRepository.findOne.mockResolvedValueOnce(null);
+      jest.spyOn(fs, 'readFile').mockRejectedValueOnce(new Error('EACCES'));
+
+      const result = await service.getAboutNdm();
+
+      expect(result.product.serialId).toBe('N/A');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read serial ID from serial file'),
+      );
     });
   });
 });

@@ -6,6 +6,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'Preview',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -36,6 +37,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'Preview',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -64,6 +66,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: '',
         version: '',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -92,6 +95,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'Beta',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -120,6 +124,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'v1.0.0-alpha',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -147,6 +152,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'Production',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -177,6 +183,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'GA',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {
@@ -208,6 +215,7 @@ describe('AboutNdmResponse Interface', () => {
       product: {
         name: 'NDM',
         version: 'Release',
+        serialId: 'N/A',
       },
       build: {
         worker_version: {

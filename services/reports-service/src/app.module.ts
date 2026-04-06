@@ -18,6 +18,7 @@ import {
   RequestContextMiddleware,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AsupModule } from './asup/asup.module';
+import { SerialIdSyncService } from './serial-id-sync.service';
 
 @Module({
   imports: [
@@ -40,7 +41,7 @@ import { AsupModule } from './asup/asup.module';
     AsupModule
   ],
   controllers: [],
-  providers: [],
+  providers: [SerialIdSyncService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

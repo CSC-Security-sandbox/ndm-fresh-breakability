@@ -842,6 +842,7 @@ export interface AboutNDMApiRespType {
   product: {
     name: string;
     version: string;
+    serialId?: string | null;
   };
   build: {
     worker_version: {

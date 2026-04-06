@@ -14,6 +14,14 @@ import BUILD_VERSION_QUERIES from './about-ndm.constants';
 import { AboutNdmResponse, WorkerVersionInfo } from './about-ndm.interface';
 import { ConfigService } from '@nestjs/config';
 import { WorkerEntity } from '../entities/worker.entity';
+import { GlobalSettings } from '../entities/global-setting.entity';
+import { promises as fs } from 'fs';
+import {
+  SERIAL_ID_CONF_PATH,
+  SERIAL_ID_SETTING_KEY,
+} from './about-ndm.constants';
+
+const SERIAL_REGEX = /^975[0-9]{17}$/;
 
 @Injectable()
 export class AboutNdmService {
@@ -25,6 +33,8 @@ export class AboutNdmService {
     private readonly configService: ConfigService,
     @InjectRepository(WorkerEntity)
     private readonly workerRepository: Repository<WorkerEntity>,
+    @InjectRepository(GlobalSettings)
+    private readonly settingsRepository: Repository<GlobalSettings>,
   ) {
     this.logger = loggerFactory.create(AboutNdmService.name);
   }
@@ -63,11 +73,13 @@ export class AboutNdmService {
       // Pick latest worker version for backward compatibility
       const versions = Object.keys(workersByVersion).filter(v => v !== 'unknown');
       const latestWorkerVersion = versions.length > 0 ? versions[0] : 'N/A';
+      const serialId = await this.getSerialId();
 
       return {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: serialId || 'N/A',
         },
         build: {
           worker_version: {
@@ -94,6 +106,31 @@ export class AboutNdmService {
       throw new InternalServerErrorException(
         `Failed to get build version, error: ${error.message}`,
       );
+    }
+  }
+
+  private async getSerialId(): Promise<string | null> {
+    try {
+      const setting = await this.settingsRepository.findOne({
+        where: { settingKey: SERIAL_ID_SETTING_KEY },
+      });
+      if (setting?.serialId && SERIAL_REGEX.test(setting.serialId)) {
+        return setting.serialId;
+      }
+      if (setting?.settingValue && SERIAL_REGEX.test(setting.settingValue)) {
+        return setting.settingValue;
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to read serial ID from global_settings: ${error.message}`);
+    }
+
+    try {
+      const content = await fs.readFile(SERIAL_ID_CONF_PATH, 'utf-8');
+      const match = content.match(/^\s*serial_id=(975[0-9]{17})\s*$/m);
+      return match?.[1] ?? null;
+    } catch (error) {
+      this.logger.warn(`Failed to read serial ID from serial file: ${error.message}`);
+      return null;
     }
   }
 

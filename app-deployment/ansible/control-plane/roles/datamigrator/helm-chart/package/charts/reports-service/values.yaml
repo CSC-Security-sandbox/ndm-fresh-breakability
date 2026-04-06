@@ -87,3 +87,6 @@ persistentVolumes:
   - name: error-logs-volume
     mountPath: /error-logs
     hostPath: /data/error-logs
+  - name: datamigrator-conf
+    mountPath: /opt/datamigrator/conf
+    hostPath: /opt/datamigrator/conf

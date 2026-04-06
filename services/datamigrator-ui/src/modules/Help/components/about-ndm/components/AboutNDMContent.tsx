@@ -43,6 +43,10 @@ const AboutNDMContent = () => {
               <Box className="Box-lg font-semibold mr-2">Control Plane:</Box>
               {aboutNdm?.build?.controlPlane_version?.version}
             </Box>
+            <Box className="flex flex-row items-center">
+              <Box className="Box-lg font-semibold mr-2">Serial ID:</Box>
+              {aboutNdm?.product?.serialId || "N/A"}
+            </Box>
 
             {/* Worker Versions — table format: version | worker list */}
             {aboutNdm?.build?.workersByVersion && Object.keys(aboutNdm.build.workersByVersion).length > 0 ? (

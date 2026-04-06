@@ -46,6 +46,9 @@ persistentVolumes:
   - name: upgrade
     mountPath: /upgrade
     hostPath: /upgrade
+  - name: datamigrator-conf
+    mountPath: /opt/datamigrator/conf
+    hostPath: /opt/datamigrator/conf
 
 env:
   - name: MY_HOST_IP

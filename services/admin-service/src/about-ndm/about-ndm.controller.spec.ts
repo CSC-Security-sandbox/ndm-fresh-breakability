@@ -77,6 +77,7 @@ describe('AboutNdmController', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {
@@ -111,6 +112,7 @@ describe('AboutNdmController', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {
@@ -145,6 +147,7 @@ describe('AboutNdmController', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {
@@ -193,6 +196,7 @@ describe('AboutNdmController', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {
@@ -226,6 +230,7 @@ describe('AboutNdmController', () => {
         product: {
           name: 'NDM',
           version: 'Preview',
+          serialId: 'N/A',
         },
         build: {
           worker_version: {

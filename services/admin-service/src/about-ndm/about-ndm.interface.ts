@@ -8,6 +8,7 @@ export interface AboutNdmResponse {
   product: {
     name: string | null;
     version: string | null;
+    serialId: string | null;
   };
   build: {
     worker_version: {

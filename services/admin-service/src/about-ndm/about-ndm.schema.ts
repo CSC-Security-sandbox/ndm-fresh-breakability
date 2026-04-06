@@ -52,6 +52,14 @@ export class ProductSchema {
     example: 'Preview',
   })
   version: string | null;
+
+  @ApiProperty({
+    type: 'string',
+    nullable: true,
+    description: 'Product serial identifier',
+    example: '97517400000000012345',
+  })
+  serialId: string | null;
 }
 
 export class BuildSchema {
