@@ -80,6 +80,11 @@ on:
               "branch": "main"
             }
           }
+      docker_images_version:
+        description: 'Third-party docker images tarball version (e.g. 20260404-143022-a1b2c3d). Use "latest" to auto-resolve.'
+        required: false
+        default: 'latest'
+        type: string
       run_e2e:
         description: 'Run E2E tests'
         required: false
@@ -524,12 +529,44 @@ jobs:
       
       - name: Download Docker images tarball
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
-        run: | 
+        run: |
           cd app-deployment/artifacts
-          TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images/ndm-docker-images.tar"
-          curl -o "ndm-docker-images.tar" \
+          ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images"
+          REQUESTED_VERSION="${{ github.event.inputs.docker_images_version || 'latest' }}"
+
+          if [ "${REQUESTED_VERSION}" = "latest" ]; then
+            echo "Resolving latest version from latest.json..."
+            LATEST_JSON=$(curl -fsSL --retry 3 --retry-delay 5 --retry-all-errors \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-              $TARGET_URL
+              "${ARTIFACTORY_BASE}/latest.json" 2>/dev/null || echo "")
+
+            RESOLVED_VERSION=""
+            if [ -n "${LATEST_JSON}" ]; then
+              RESOLVED_VERSION=$(echo "${LATEST_JSON}" | jq -r '.version // empty')
+            fi
+
+            if [ -n "${RESOLVED_VERSION}" ]; then
+              echo "Resolved version from latest.json: ${RESOLVED_VERSION}"
+              TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar"
+            else
+              echo "::warning::Could not resolve version from latest.json — falling back to unversioned path"
+              RESOLVED_VERSION="unversioned"
+              TARGET_URL="${ARTIFACTORY_BASE}/ndm-docker-images.tar"
+            fi
+          else
+            RESOLVED_VERSION="${REQUESTED_VERSION}"
+            TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar"
+          fi
+
+          echo "Downloading docker images tarball (version: ${RESOLVED_VERSION})..."
+          echo "URL: ${TARGET_URL}"
+          curl -fSL --retry 5 --retry-delay 10 --retry-max-time 600 --retry-all-errors \
+            -o "ndm-docker-images.tar" \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            "${TARGET_URL}"
+
+          echo "docker_images_version=${RESOLVED_VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Downloaded docker images tarball version: ${RESOLVED_VERSION}"
 
       - name: Upload Ansible vars.yaml
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}

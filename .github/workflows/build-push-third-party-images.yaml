@@ -11,8 +11,13 @@ on:
       keycloak_tag:
         description: 'Keycloak image tag (most frequently changed)'
         required: false
-        default: '26.5.6-debian-12-r0'
+        default: '26.5.7-debian-12-r0'
         type: string
+      upload_flat_copy:
+        description: 'Also upload a backward-compatible flat copy at the unversioned path'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -132,23 +137,141 @@ jobs:
           tarball_size=$(du -h "${TARBALL_NAME}" | cut -f1)
           echo "tarball_size=${tarball_size}" >> "$GITHUB_ENV"
 
-      - name: Upload tarball to Artifactory
+      - name: Generate version string
+        id: version
+        run: |
+          VERSION="$(date -u +'%Y%m%d-%H%M%S')-${GITHUB_SHA::7}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Generated version: ${VERSION}"
+
+      - name: Generate manifest.json
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          TARGET_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${TARBALL_NAME}"
-          echo "Uploading ${TARBALL_NAME} (${tarball_size}) to ${TARGET_URL}..."
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          mapfile -t IMAGE_ARRAY < /tmp/images.txt
+          IMAGES_JSON=$(printf '%s\n' "${IMAGE_ARRAY[@]}" | jq -R . | jq -s .)
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg commit "$GITHUB_SHA" \
+            --arg build_time "$BUILD_TIME" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg keycloak_tag "${{ github.event.inputs.keycloak_tag }}" \
+            --argjson images "$IMAGES_JSON" \
+            '{
+              version: $version,
+              commit: $commit,
+              build_time: $build_time,
+              workflow_run_id: $run_id,
+              keycloak_tag: $keycloak_tag,
+              images: $images
+            }' > manifest.json
+
+          echo "manifest.json:"
+          cat manifest.json
+
+      - name: Upload versioned tarball to Artifactory
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSIONED_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}"
+          echo "Uploading ${TARBALL_NAME} (${tarball_size}) to ${VERSIONED_URL}..."
 
           HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
+            --retry 3 --retry-delay 10 --retry-all-errors \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             -T "${TARBALL_NAME}" \
-            "${TARGET_URL}")
+            "${VERSIONED_URL}")
 
           if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
-            echo "✓ Upload successful (HTTP ${HTTP_CODE})"
+            echo "✓ Versioned tarball upload successful (HTTP ${HTTP_CODE})"
           else
-            echo "::error::Upload failed with HTTP ${HTTP_CODE}"
+            echo "::error::Versioned tarball upload failed with HTTP ${HTTP_CODE}"
             cat /tmp/upload_response.txt
             exit 1
+          fi
+
+      - name: Upload manifest.json to Artifactory
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MANIFEST_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${VERSION}/manifest.json"
+          echo "Uploading manifest.json to ${MANIFEST_URL}..."
+
+          HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            -T manifest.json \
+            "${MANIFEST_URL}")
+
+          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
+            echo "✓ manifest.json upload successful (HTTP ${HTTP_CODE})"
+          else
+            echo "::error::manifest.json upload failed with HTTP ${HTTP_CODE}"
+            cat /tmp/upload_response.txt
+            exit 1
+          fi
+
+      - name: Upload latest.json to Artifactory
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg tarball_url "${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}" \
+            --arg image_count "${{ steps.images.outputs.count }}" \
+            --arg tarball_size "${tarball_size}" \
+            --arg commit "$GITHUB_SHA" \
+            --arg updated_at "$BUILD_TIME" \
+            --arg published_by "${{ github.actor }}" \
+            '{
+              version: $version,
+              tarball_url: $tarball_url,
+              image_count: ($image_count | tonumber),
+              tarball_size: $tarball_size,
+              commit: $commit,
+              updated_at: $updated_at,
+              published_by: $published_by
+            }' > latest.json
+
+          LATEST_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/latest.json"
+          echo "Uploading latest.json to ${LATEST_URL}..."
+          cat latest.json
+
+          HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            -T latest.json \
+            "${LATEST_URL}")
+
+          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
+            echo "✓ latest.json upload successful (HTTP ${HTTP_CODE})"
+          else
+            echo "::error::latest.json upload failed with HTTP ${HTTP_CODE}"
+            cat /tmp/upload_response.txt
+            exit 1
+          fi
+
+      - name: Upload backward-compatible flat tarball to Artifactory
+        if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.upload_flat_copy == 'true' }}
+        run: |
+          FLAT_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${TARBALL_NAME}"
+          echo "Uploading backward-compatible copy to ${FLAT_URL}..."
+
+          HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
+            --retry 3 --retry-delay 10 --retry-all-errors \
+            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+            -T "${TARBALL_NAME}" \
+            "${FLAT_URL}")
+
+          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
+            echo "✓ Backward-compatible upload successful (HTTP ${HTTP_CODE})"
+          else
+            echo "::warning::Backward-compatible upload failed with HTTP ${HTTP_CODE} (non-fatal)"
+            cat /tmp/upload_response.txt
           fi
 
       - name: Print summary
@@ -158,6 +281,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image count | ${{ steps.images.outputs.count }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Keycloak tag | ${{ github.event.inputs.keycloak_tag }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
