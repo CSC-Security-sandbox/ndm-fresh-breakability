@@ -1037,7 +1037,7 @@ export class JobRunService {
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
       .select([
-        "oe.errorType AS errorType", 
+        "oe.errorType AS errortype",
         "COUNT(*) AS count"
       ])
       .groupBy("oe.errorType");

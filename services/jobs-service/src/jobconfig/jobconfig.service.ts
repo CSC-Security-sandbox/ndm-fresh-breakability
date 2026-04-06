@@ -2036,7 +2036,7 @@ export class JobConfigService {
       .andWhere("oe.errorType IN (:...errorTypes)", { errorTypes: USER_VISIBLE_ERROR_TYPES })
       .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
       .select([
-        "oe.errorType AS errorType", 
+        "oe.errorType AS errortype",
         "COUNT(*) AS count"
       ])
       .groupBy("oe.errorType");
@@ -2063,13 +2063,13 @@ export class JobConfigService {
 
     if (setupFailedErrors?.length > 0) {
       const fatalError = errorTypeCounts.find(
-        (error) => error.errorType === "FATAL_ERROR"
+        (error) => error.errortype === "FATAL_ERROR"
       );
       if (fatalError) {
-        fatalError.count += setupFailedErrors.length;
+        fatalError.count = Number(fatalError.count) + setupFailedErrors.length;
       } else {
         errorTypeCounts.push({
-          errorType: "FATAL_ERROR",
+          errortype: "FATAL_ERROR",
           count: setupFailedErrors.length,
         });
       }

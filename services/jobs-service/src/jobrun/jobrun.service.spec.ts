@@ -2158,7 +2158,7 @@ describe("JobRunService", () => {
         { jobRunId: mockJobRunId }
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        "oe.errorType AS errorType",
+        "oe.errorType AS errortype",
         "COUNT(*) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
@@ -2205,7 +2205,7 @@ describe("JobRunService", () => {
         { jobRunId: mockJobRunId }
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        "oe.errorType AS errorType",
+        "oe.errorType AS errortype",
         "COUNT(*) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");
@@ -2253,7 +2253,7 @@ describe("JobRunService", () => {
         { jobRunId: mockJobRunId }
       );
       expect(mockQueryBuilder.select).toHaveBeenCalledWith([
-        "oe.errorType AS errorType",
+        "oe.errorType AS errortype",
         "COUNT(*) AS count",
       ]);
       expect(mockQueryBuilder.groupBy).toHaveBeenCalledWith("oe.errorType");

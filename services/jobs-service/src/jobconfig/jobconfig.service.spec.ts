@@ -4810,7 +4810,7 @@ describe("JobConfigService", () => {
         
         // Query result: COUNT(*) groups by error_type
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 3 }
+          { errortype: "FATAL_ERROR", count: 3 }
         ];
 
         const mockQueryBuilder = {
@@ -4846,7 +4846,7 @@ describe("JobConfigService", () => {
         
         // Query result: WHERE filters RECOVERABLE_ERROR, only counts TRANSIENT_ERROR
         const mockErrorCounts = [
-          { errorType: "TRANSIENT_ERROR", count: 1 }
+          { errortype: "TRANSIENT_ERROR", count: 1 }
         ];
 
         const mockQueryBuilder = {
@@ -4881,7 +4881,7 @@ describe("JobConfigService", () => {
         
         // Query result: COUNT(*) counts both origins
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 2 }
+          { errortype: "FATAL_ERROR", count: 2 }
         ];
 
         const mockQueryBuilder = {
@@ -4922,8 +4922,8 @@ describe("JobConfigService", () => {
         
         // Query result: GROUP BY error_type
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 5 },
-          { errorType: "TRANSIENT_ERROR", count: 3 }
+          { errortype: "FATAL_ERROR", count: 5 },
+          { errortype: "TRANSIENT_ERROR", count: 3 }
         ];
 
         const mockQueryBuilder = {
@@ -4945,16 +4945,16 @@ describe("JobConfigService", () => {
         const result = await service.getErrorCounts(mockJobRunId);
         expect(result).toEqual(mockErrorCounts);
         expect(result.length).toBe(2);
-        expect(result.find(e => e.errorType === "FATAL_ERROR")?.count).toBe(5);
-        expect(result.find(e => e.errorType === "TRANSIENT_ERROR")?.count).toBe(3);
+        expect(result.find(e => e.errortype === "FATAL_ERROR")?.count).toBe(5);
+        expect(result.find(e => e.errortype === "TRANSIENT_ERROR")?.count).toBe(3);
       });
 
       it('should count large dataset with hundreds of errors efficiently', async () => {
         const mockJobRunId = "job-run-large";
         
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 245 },
-          { errorType: "TRANSIENT_ERROR", count: 178 }
+          { errortype: "FATAL_ERROR", count: 245 },
+          { errortype: "TRANSIENT_ERROR", count: 178 }
         ];
 
         const mockQueryBuilder = {
@@ -4993,7 +4993,7 @@ describe("JobConfigService", () => {
         
         // Query result: WHERE error_type IN ('FATAL_ERROR', 'TRANSIENT_ERROR')
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 3 }
+          { errortype: "FATAL_ERROR", count: 3 }
         ];
 
         const mockQueryBuilder = {
@@ -5019,14 +5019,14 @@ describe("JobConfigService", () => {
           { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
         );
         expect(result).toEqual(mockErrorCounts);
-        expect(result.find(e => e.errorType === "RECOVERABLE_ERROR")).toBeUndefined();
-        expect(result.find(e => e.errorType === "FATAL_ERROR")?.count).toBe(3);
+        expect(result.find(e => e.errortype === "RECOVERABLE_ERROR")).toBeUndefined();
+        expect(result.find(e => e.errortype === "FATAL_ERROR")?.count).toBe(3);
       });
 
       it('should add worker setup errors to FATAL_ERROR count', async () => {
         const mockJobRunId = "job-run-with-setup-errors";
         const mockErrorCounts = [
-          { errorType: "FATAL_ERROR", count: 3 }
+          { errortype: "FATAL_ERROR", count: "3" }
         ];
 
         const mockQueryBuilder = {
@@ -5052,7 +5052,7 @@ describe("JobConfigService", () => {
 
         const result = await service.getErrorCounts(mockJobRunId);
         
-        expect(result).toEqual([{ errorType: "FATAL_ERROR", count: 5 }]); // 3 + 2
+        expect(result).toEqual([{ errortype: "FATAL_ERROR", count: 5 }]);
       });
 
       it('should create FATAL_ERROR entry if only setup errors exist', async () => {
@@ -5082,7 +5082,7 @@ describe("JobConfigService", () => {
 
         const result = await service.getErrorCounts(mockJobRunId);
         
-        expect(result).toEqual([{ errorType: "FATAL_ERROR", count: 3 }]);
+        expect(result).toEqual([{ errortype: "FATAL_ERROR", count: 3 }]);
       });
     });
   });
@@ -5090,8 +5090,8 @@ describe("JobConfigService", () => {
   it("should count error from setupFailedErrors", async () => {
     const mockError = [
       {
-        errorType: "FATAL_ERROR",
-        count: 0,
+        errortype: "FATAL_ERROR",
+        count: "0",
       },
     ];
     const jobRunId = "12345";
@@ -5115,7 +5115,7 @@ describe("JobConfigService", () => {
     const result = await service.getErrorCounts(jobRunId);
     expect(result).toEqual([
       {
-        errorType: "FATAL_ERROR",
+        errortype: "FATAL_ERROR",
         count: 1,
       },
     ]);
@@ -5124,8 +5124,8 @@ describe("JobConfigService", () => {
   it("should count error from setupFailedErrors", async () => {
     const mockError = [
       {
-        errorType: "ERROR",
-        count: 0,
+        errortype: "ERROR",
+        count: "0",
       },
     ];
     const jobRunId = "12345";
@@ -5151,11 +5151,11 @@ describe("JobConfigService", () => {
     const result = await service.getErrorCounts(jobRunId);
     expect(result).toEqual([
       {
-        errorType: "ERROR",
-        count: 0,
+        errortype: "ERROR",
+        count: "0",
       },
       {
-        errorType: "FATAL_ERROR",
+        errortype: "FATAL_ERROR",
         count: 1,
       },
     ]);
