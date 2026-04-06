@@ -283,7 +283,6 @@ ports_to_open:
   - tcp 443
   - tcp 2379:2381
   - tcp 4318
-  - tcp 5432
   - tcp 6379
   - tcp 6443
   - tcp 6781:6784
