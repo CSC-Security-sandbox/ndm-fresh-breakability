@@ -10,7 +10,7 @@ X-Netapp-Asup-Model-Name: NetApp Data Migrator
 X-Netapp-Asup-Os-Version: 2026.1.1
 X-Netapp-asup-payload-type: trigger-asup
 X-Netapp-asup-sequence: 1
-X-Netapp-Asup-Serial-Num: 97548219305762481930
+X-Netapp-Asup-Serial-Num: {{SERIAL_NUM}}
 X-Netapp-Asup-Subject: NDM Support Bundle Notification from NDM Control Plane (USER_TRIGGERED) INFO
-X-Netapp-Asup-System-Id: 97548219305762481930
+X-Netapp-Asup-System-Id: {{SYSTEM_ID}}
 X-Netapp-Asup-Version: 3

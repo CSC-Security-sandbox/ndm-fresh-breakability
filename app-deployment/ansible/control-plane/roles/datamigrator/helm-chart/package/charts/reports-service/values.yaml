@@ -67,7 +67,7 @@ env:
   - name: ASUP_SUPPORT_BUNDLE_ENDPOINT
     value: "https://stagesupport.netapp.com/put/AsupPut"
   - name: JSON_PAYLOAD_LIMIT
-    value: "500mb"
+    value: "50mb"
 
 service:
   type: ClusterIP

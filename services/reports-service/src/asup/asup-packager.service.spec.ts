@@ -105,8 +105,9 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       );
 
       mockedExecFile.mockImplementation(
-        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-          process.nextTick(() => cb(null, '', ''));
+        (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
+          const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+          if (typeof callback === 'function') process.nextTick(() => callback(null, '', ''));
         },
       );
     });
@@ -254,6 +255,17 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
   // ─── packageSupportBundlePayload ────────────────────────────
 
   describe('packageSupportBundlePayload', () => {
+    afterEach(() => {
+      // Reset execFile to the default success stub so implementations set by
+      // individual tests (e.g. the compression-failure test) do not bleed into
+      // subsequent tests — jest.clearAllMocks() only clears call counts, not impl.
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
+          const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+          if (typeof callback === 'function') callback(null, '', '');
+        },
+      );
+    });
 
     it('should return isLargePayload=false and skip ISF archive update for archive ≤ 200MB', async () => {
       // Default readFile mock returns a tiny buffer, well below 200MB threshold
@@ -476,8 +488,9 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue('<xml/>');
       xmlGeneratorService.buildManifestXml.mockResolvedValue('<manifest/>');
       mockedExecFile.mockImplementation(
-        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-          process.nextTick(() => cb(null, '', ''));
+        (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
+          const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+          if (typeof callback === 'function') process.nextTick(() => callback(null, '', ''));
         },
       );
     });
