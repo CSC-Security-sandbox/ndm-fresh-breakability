@@ -33,7 +33,7 @@ async function bootstrap() {
 
   await app.startAllMicroservices();
 
-  const jsonPayloadLimit = process.env.JSON_PAYLOAD_LIMIT || '500mb';
+  const jsonPayloadLimit = process.env.JSON_PAYLOAD_LIMIT || '50mb';
   app.use(json({ limit: jsonPayloadLimit }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

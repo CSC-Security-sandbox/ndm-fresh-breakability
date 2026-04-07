@@ -167,81 +167,111 @@ export class AsupPackagerService {
     const extractedDir = path.join(this.WORK_DIR, `support-bundle-extracted-${Date.now()}`);
     const stagedPayloadDir = path.join(this.WORK_DIR, `support-bundle-staged-${Date.now()}`);
 
-    await fs.writeFile(files.bundle, bundleBuffer);
-    await this.extractZip(files.bundle, extractedDir);
-    const bundledFiles = await this.collectExtractedFiles(extractedDir);
-    await fs.mkdir(stagedPayloadDir, { recursive: true });
+    let archivePath: string | undefined;
+    let headersMap: Record<string, string> = {};
+    try {
+      await fs.writeFile(files.bundle, bundleBuffer);
+      await this.extractZip(files.bundle, extractedDir);
+      const bundledFiles = await this.collectExtractedFiles(extractedDir);
+      await fs.mkdir(stagedPayloadDir, { recursive: true });
 
-    const manifestEntries: Array<{ name: string; size: number }> = [];
-    for (const file of bundledFiles) {
-      const safeName = this.toFlatFilename(file.relativePath);
-      await fs.copyFile(file.absolutePath, path.join(stagedPayloadDir, safeName));
-      manifestEntries.push({ name: safeName, size: file.size });
-    }
+      const manifestEntries: Array<{ name: string; size: number }> = [];
+      for (const file of bundledFiles) {
+        const safeName = this.toFlatFilename(file.relativePath);
+        await fs.copyFile(file.absolutePath, path.join(stagedPayloadDir, safeName));
+        manifestEntries.push({ name: safeName, size: file.size });
+      }
 
-    const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
-      manifestEntries,
-      Date.now() - startTime,
-    );
-    const { headersText, headersMap } = this.buildXHeaders(
-      this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
-    );
+      const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
+        manifestEntries,
+        Date.now() - startTime,
+      );
+      const xHeaders = this.buildXHeaders(
+        this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
+      );
+      headersMap = xHeaders.headersMap;
 
-    await Promise.all([
-      fs.writeFile(files.manifest, manifestXml, 'utf-8'),
-      fs.writeFile(files.xHeader, headersText, 'utf-8'),
-    ]);
-    await Promise.all([
-      fs.copyFile(files.manifest, path.join(stagedPayloadDir, 'manifest.xml')),
-      fs.copyFile(files.xHeader, path.join(stagedPayloadDir, 'x-header.txt')),
-    ]);
+      await Promise.all([
+        fs.writeFile(files.manifest, manifestXml, 'utf-8'),
+        fs.writeFile(files.xHeader, xHeaders.headersText, 'utf-8'),
+      ]);
+      await Promise.all([
+        fs.copyFile(files.manifest, path.join(stagedPayloadDir, 'manifest.xml')),
+        fs.copyFile(files.xHeader, path.join(stagedPayloadDir, 'x-header.txt')),
+      ]);
 
-    const archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
+      archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
 
     await execFile(sevenBin.path7za, ['a', archivePath, '.'], { cwd: stagedPayloadDir });
 
-    let archiveBuffer = await fs.readFile(archivePath);
-    const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
-    const archiveFilename = path.basename(archivePath);
+      let archiveBuffer = await fs.readFile(archivePath);
+      const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
+      const archiveFilename = path.basename(archivePath);
 
-    // ISF spec: X-Netapp-asup-large and X-Netapp-asup-large-filename must appear
-    // in BOTH the Payload (x-header.txt inside .7z) and Transmission (HTTP headers).
-    // We update x-header.txt inside the existing archive only when the payload is large.
-    if (isLargePayload) {
-      this.logger.log(
-        `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
-        ` > 200MB threshold — appending ISF fields to x-header.txt inside .7z`,
+      // ISF spec: X-Netapp-asup-large and X-Netapp-asup-large-filename must appear
+      // in BOTH the Payload (x-header.txt inside .7z) and Transmission (HTTP headers).
+      // We update x-header.txt inside the existing archive only when the payload is large.
+      if (isLargePayload) {
+        this.logger.log(
+          `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
+          ` > 200MB threshold — appending ISF fields to x-header.txt inside .7z`,
+        );
+        const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
+        const existingXHeader = await fs.readFile(isfXHeaderPath, 'utf-8');
+        const isfLines =
+          `X-Netapp-asup-large: true\n` +
+          `X-Netapp-asup-large-filename: ${archiveFilename}\n`;
+        await fs.writeFile(isfXHeaderPath, existingXHeader.trimEnd() + '\n' + isfLines, 'utf-8');
+
+        // Update only x-header.txt inside the existing .7z (avoids full recompression)
+        await execFile(sevenBin.path7za, ['u', archivePath, 'x-header.txt'], {
+          cwd: stagedPayloadDir,
+        });
+
+        // MD5 must be recomputed over the updated archive
+        archiveBuffer = await fs.readFile(archivePath);
+        this.logger.log(
+          `[packageSupportBundlePayload] x-header.txt updated inside .7z with ISF fields`,
+        );
+      }
+
+      const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
+      headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
+
+      return { archivePath, md5Checksum, headersMap, isLargePayload };
+    } catch (err) {
+      this.logger.error(
+        `[packageSupportBundlePayload] Packaging failed: ${(err as Error).message}`,
+        (err as Error).stack,
       );
-      const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
-      const existingXHeader = await fs.readFile(isfXHeaderPath, 'utf-8');
-      const isfLines =
-        `X-Netapp-asup-large: true\n` +
-        `X-Netapp-asup-large-filename: ${archiveFilename}\n`;
-      await fs.writeFile(isfXHeaderPath, existingXHeader.trimEnd() + '\n' + isfLines, 'utf-8');
-
-      // Update only x-header.txt inside the existing .7z (avoids full recompression)
-      await execFile(sevenBin.path7za, ['u', archivePath, 'x-header.txt'], {
-        cwd: stagedPayloadDir,
-      });
-
-      // MD5 must be recomputed over the updated archive
-      archiveBuffer = await fs.readFile(archivePath);
-      this.logger.log(
-        `[packageSupportBundlePayload] x-header.txt updated inside .7z with ISF fields`,
+      throw err;
+    } finally {
+      // Always clean up temp files and dirs, regardless of success or failure.
+      // Each cleanup is independent — a failure in one must not block the others.
+      await Promise.all(
+        Object.values(files).map((f) =>
+          fs.unlink(f).catch((err: unknown) => {
+            this.logger.warn(
+              `[packageSupportBundlePayload] Failed to delete temp file ${f}: ${(err as Error).message}`,
+            );
+          }),
+        ),
       );
+      try {
+        await fs.rm(extractedDir, { recursive: true, force: true });
+      } catch (err) {
+        this.logger.warn(
+          `[packageSupportBundlePayload] Failed to remove extractedDir ${extractedDir}: ${(err as Error).message}`,
+        );
+      }
+      try {
+        await fs.rm(stagedPayloadDir, { recursive: true, force: true });
+      } catch (err) {
+        this.logger.warn(
+          `[packageSupportBundlePayload] Failed to remove stagedPayloadDir ${stagedPayloadDir}: ${(err as Error).message}`,
+        );
+      }
     }
-
-    const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
-    headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
-
-    // Staged dir must be cleaned up AFTER the ISF update above
-    await Promise.all(
-      Object.values(files).map((f) => fs.unlink(f).catch(() => {})),
-    );
-    await fs.rm(extractedDir, { recursive: true, force: true }).catch(() => {});
-    await fs.rm(stagedPayloadDir, { recursive: true, force: true }).catch(() => {});
-
-    return { archivePath, md5Checksum, headersMap, isLargePayload };
   }
 
   // ─── Templates ───────────────────────────────────────────────
@@ -327,27 +357,108 @@ export class AsupPackagerService {
   }
 
   private toFlatFilename(relativePath: string): string {
-    // Strip the top-level bundle directory (e.g. "ndm_logs_<uuid>/") before flattening.
-    // The zip file extracted from the support bundle always has a single top-level
-    // directory named after the bundle (e.g. "ndm_logs_fb192415-3a7c-46cb-bb05-736d5e1df343").
-    // That prefix is redundant inside the ASUP archive — all files already belong to the
-    // same bundle — so we drop it to keep ASUP filenames short and readable.
+    // Strip the top-level bundle directory (e.g. "ndm_logs_<uuid>/"), then map
+    // each file to a structured short name based on its path type:
     //
-    // Abbreviations applied to shorten filenames:
-    //   - "control-plane"  →  "cp"
-    //   - "service"        →  "svc"  (e.g. admin-service → admin-svc, service-latency → svc-latency)
-    //   - path "/" separator → "_"   (single underscore, not double, to keep names compact)
+    // Log files (under ndm_logs/<date>/):
+    //   control-plane service logs  → cp_<svc>_<YY_MM_DD>_<projectId>.log
+    //   worker logs                 → worker_<workerId>_<YY_MM_DD>_<projectId>.log
+    //   no-project worker logs      → no_project_worker_<workerId>_<YY_MM_DD>.log
     //
-    // e.g. "ndm_logs_<uuid>/ndm_logs/2026-04-05/<projectId>/control-plane/admin-service.log"
-    //   →  "ndm_logs_2026-04-05_<projectId>_cp_admin-svc.log"
+    // CSV files:
+    //   Performance Metrics/  → perf_<metric>_<ts>.csv   (hyphens → underscores)
+    //   State Data/           → state_data_<name>_<ts>.csv
+    //   System Inventory/     → sys_inventory_<type>_<ts>.csv
+    //   configuration data/   → <filename>  (no prefix)
     const normalized = relativePath.replace(/\\/g, '/');
     const parts = normalized.split('/');
+
+    // Strip the top-level UUID bundle directory
     const trimmed = parts.length > 1 ? parts.slice(1).join('/') : normalized;
-    const abbreviated = trimmed
-      .replace(/control-plane/g, 'cp')
-      .replace(/service/g, 'svc');
-    const safe = abbreviated.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
-    return safe.length > 0 ? safe : `file-${Date.now()}`;
+    const tp = trimmed.split('/');
+
+    /** Convert YYYY-MM-DD → YY_MM_DD (2-digit year, underscore separators) */
+    const shortDate = (d: string) => d.replace(/-/g, '_').slice(2);
+
+    /** Sanitize a string for use in a filename */
+    const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    // ── Log files under ndm_logs/<date>/... ─────────────────────────────────
+    if (tp[0] === 'ndm_logs' && tp.length >= 3) {
+      const dd = shortDate(tp[1]);   // YYYY-MM-DD → YY_MM_DD
+      const projectOrNone = tp[2];   // <projectId> or "no-project"
+
+      // no-project: ndm_logs/<date>/no-project/...
+      if (projectOrNone === 'no-project') {
+        const rest = tp.slice(3);
+        if (rest[0] === 'worker' && rest.length >= 3) {
+          const workerId = rest[1];
+          const fname = rest.slice(2).join('/');
+          if (fname === 'worker.log') return `no_project_worker_${workerId}_${dd}.log`;
+          return `${dd}_no_project_worker_${workerId}_${safe(fname)}`;
+        }
+        return `${dd}_no_project_${safe(rest.join('_'))}`;
+      }
+
+      // project: ndm_logs/<date>/<projectId>/...
+      const projectId = projectOrNone;
+      const sub = tp.slice(3); // e.g. ["control-plane", "admin-service.log"]
+      if (sub.length === 0) return safe(trimmed.replace(/\//g, '_'));
+
+      const subDir = sub[0];
+
+      // Control-plane service logs
+      if (subDir === 'control-plane') {
+        const fname = sub.slice(1).join('/');
+        const cpMap: Record<string, string> = {
+          'admin-service.log':   `cp_admin_svc_${dd}_${projectId}.log`,
+          'config-service.log':  `cp_config_svc_${dd}_${projectId}.log`,
+          'datamigrator-ui.log': `cp_datamigrator_ui_${dd}_${projectId}.log`,
+          'db-writer.log':       `cp_db_writer_${dd}_${projectId}.log`,
+          'jobs-service.log':    `cp_jobs_svc_${dd}_${projectId}.log`,
+          'reports-service.log': `cp_reports_svc_${dd}_${projectId}.log`,
+          'support-service.log': `cp_support_svc_${dd}_${projectId}.log`,
+          'error-report.csv':    `cp_error_report_${dd}_${projectId}.csv`,
+        };
+        return cpMap[fname] ?? `cp_${dd}_${projectId}_${safe(fname)}`;
+      }
+
+      // Worker logs: ndm_logs/<date>/<projectId>/worker/<workerId>/...
+      if (subDir === 'worker' && sub.length >= 3) {
+        const workerId = sub[1];
+        const fname = sub.slice(2).join('/');
+        if (fname === 'worker.log') return `worker_${workerId}_${dd}_${projectId}.log`;
+        return `${dd}_${projectId}_worker_${workerId}_${safe(fname)}`;
+      }
+
+      return safe(trimmed.replace(/\//g, '_'));
+    }
+
+    // ── Metrics / State / Inventory / Config CSV files ───────────────────────
+    const dir = (tp[0] ?? '').toLowerCase();
+    const fname = tp.slice(1).join('_');
+
+    if (dir === 'performance metrics') {
+      // "cpu-percent-<ts>.csv" → "perf_cpu_percent_<ts>.csv"
+      return `perf_${safe(fname.replace(/-/g, '_'))}`;
+    }
+    if (dir === 'state data') {
+      // "service_pods_<ts>.csv" → "state_data_service_pods_<ts>.csv"
+      return `state_data_${safe(fname)}`;
+    }
+    if (dir === 'system inventory') {
+      // "system-inventory-disk-usage-<ts>.csv" → "sys_inventory_disk_usage_<ts>.csv"
+      const base = fname.replace(/^system-inventory-/, '').replace(/-/g, '_');
+      return `sys_inventory_${safe(base)}`;
+    }
+    if (dir === 'configuration data') {
+      // No category prefix — just the filename as-is
+      return safe(fname);
+    }
+
+    // Fallback: flatten path separators and sanitize
+    const fallback = trimmed.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return fallback.length > 0 ? fallback : `file-${Date.now()}`;
   }
 
   /** Format date for ASUP x-headers (e.g. "Sun Jan 05 14:30:00 UTC 2025"). */
