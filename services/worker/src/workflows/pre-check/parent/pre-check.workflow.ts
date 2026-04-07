@@ -112,6 +112,7 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 current.errors.push(...sourceFailed.errorCodes);
         }
 
+
         const sourceRes = allPaths.find(path => path.pathId === current.sourcePathId);
         for (let j = 0; j < current.destination.length; j++) {
             const destination = current.destination[j];
@@ -120,17 +121,11 @@ export const PreCheckValidationWorkflow = async (workflowRequest: PreCheckWorkfl
                 destination.status = PreCheckStatus.FAILED;
                 destination.errors.push(...destinationFailed.errorCodes);
             }
-            const destinationRes = allPaths.find(path => path.pathId === destination.destinationPathId);
-            if (destinationRes?.warnings?.length > 0) {
-                destination.warnings.push(...destinationRes.warnings);
-            }
-            if (sourceRes?.warnings?.length > 0) {
-                destination.warnings.push(...sourceRes.warnings);
-            }
-            if (destinationRes?.destinationAvailableSpace < sourceRes?.sourceDataSize) {
-                destination.status =  destination.status != PreCheckStatus.FAILED ?  PreCheckStatus.SUCCESS : PreCheckStatus.FAILED;
-                destination.warnings.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
-            }
+        const destinationRes = allPaths.find(path => path.pathId === destination.destinationPathId);
+        if (destinationRes?.destinationAvailableSpace < sourceRes?.sourceDataSize) {
+            destination.status =  destination.status != PreCheckStatus.FAILED ?  PreCheckStatus.SUCCESS : PreCheckStatus.FAILED;
+            destination.warnings.push(PreCheckErrorCodes.INSUFFICIENT_DESTINATION_SPACE);
+        }
         }
     }
 

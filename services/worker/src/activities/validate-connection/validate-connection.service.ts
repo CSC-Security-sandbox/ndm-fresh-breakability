@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Protocol } from 'src/protocols/protocol/protocol';
 import { Protocols, ProtocolTypes } from 'src/protocols/protocols';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { WindowsPrivilegeService } from 'src/protocols/smb/windows-privilege.service';
 
 @Injectable()
 export class ValidateConnectionActivity {
@@ -12,7 +13,8 @@ export class ValidateConnectionActivity {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly protocols: Protocols
+    private readonly protocols: Protocols,
+    private readonly windowsPrivilegeService: WindowsPrivilegeService,
   ) {
     this.workerId = this.configService.get('worker.workerId');
     this.logger = loggerFactory.create(ValidateConnectionActivity.name);
@@ -35,8 +37,18 @@ export class ValidateConnectionActivity {
     };
     try {
       const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
-      const validateResult = await protocol.validateConnection(traceId, payload);  // ← capture
-      response.warnings = validateResult?.warnings ?? [];
+      await protocol.validateConnection(traceId, payload);
+
+      if (protocolType === ProtocolTypes.SMB) {
+        const membershipResult = await this.windowsPrivilegeService.checkBackupOperatorMembership(
+          traceId, payload.username, payload.password,
+        );
+        if (membershipResult === 'SKIPPED') {
+          response.warnings.push('BACKUP_OPERATORS_CHECK_SKIPPED');
+        } else if (membershipResult === 'NOT_MEMBER') {
+          response.warnings.push('BACKUP_OPERATORS_NOT_MEMBER');
+        }
+      }
       if (feature.enablePreListPath) {
         response.paths = await protocol.listPaths(traceId, payload);
       }

@@ -26,24 +26,8 @@ export class SMBProtocol extends Protocol {
   }
 
   // --------------------------- Validate Connection -------------------------- //
-  async validateConnection(traceId: string, payload: ProtocolPayload): Promise<{ warnings: string[] }> {
-    const warnings: string[] = [];
-
-    if (this.platform === 'win32' && this.windowsPrivilegeService) {
-        this.logger.log(`[${traceId}] Checking Backup Operators group membership for user: ${payload.username}`);
-        const result = await this.windowsPrivilegeService.checkBackupOperatorMembership(
-            traceId, payload.username, payload.password
-        );
-
-        if (result === 'SKIPPED') {
-            warnings.push('BACKUP_OPERATORS_CHECK_SKIPPED');
-        } else if (result === 'NOT_MEMBER') {
-            warnings.push('BACKUP_OPERATORS_NOT_MEMBER');
-        }
-    }
-
+  async validateConnection(traceId: string, payload: ProtocolPayload): Promise<void> {
     await this.listPaths(traceId, payload);
-    return { warnings };
   }
 
   // --------------------------- Get Protocol Versions -------------------------- //

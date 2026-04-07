@@ -48,12 +48,7 @@ export class PrecheckActivity {
 
     let mountSuccess = false;
     try {
-      const validateResult = await protocol.validateConnection(traceId, protocolPayload);
-      if (validateResult?.warnings?.length > 0) {
-        preCheckPathOutput.warnings = validateResult.warnings
-          .filter(w => w in PreCheckErrorCodes)
-          .map(w => w as PreCheckErrorCodes);
-      }
+      await protocol.validateConnection(traceId, protocolPayload);
       await protocol.mountPath(traceId, protocolPayload, false);
       mountSuccess = true;
     } catch (error) {

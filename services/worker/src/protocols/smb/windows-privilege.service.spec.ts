@@ -280,6 +280,8 @@ describe('WindowsPrivilegeService', () => {
                 const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
                 expect(decoded).toContain('Backup Operators');
                 expect(decoded).toContain('Win32_ComputerSystem');
+                expect(decoded).toContain('sAMAccountName=$samUsername');
+                expect(decoded).toContain('distinguishedName');
             });
 
             it('should escape single quotes in username to prevent script injection', async () => {

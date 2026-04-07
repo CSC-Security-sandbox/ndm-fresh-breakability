@@ -8,7 +8,7 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 @Module({
   imports: [LoggerModule.forRoot()],
   providers: [WindowsPrivilegeService, Protocols, NFSProtocol, SMBProtocol],
-  exports: [Protocols, NFSProtocol, SMBProtocol],
+  exports: [Protocols, NFSProtocol, SMBProtocol, WindowsPrivilegeService],
 })
 
 export class ProtocolsModule {}

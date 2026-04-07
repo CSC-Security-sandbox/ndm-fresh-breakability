@@ -33,16 +33,23 @@ if ($cs.PartOfDomain -eq $false) {
 }
 try {
     $domain = $cs.Domain
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher
-    $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domain", "$domain\\${safeUsername}", '${safePassword}')
-    $searcher.Filter = "(&(objectClass=group)(cn=Backup Operators))"
-    $searcher.PropertiesToLoad.Add("member") | Out-Null
-    $result = $searcher.FindOne()
-    $members = $result.Properties["member"]
-    $isMember = $members | Where-Object { $_ -imatch "CN=${safeUsername}," }
+    $samUsername = '${safeUsername}' -replace '^.*\\\\', ''
+    $bindUser = if ('${safeUsername}' -match '\\\\') { '${safeUsername}' } else { "$domain\\${safeUsername}" }
+    $cred = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domain", $bindUser, '${safePassword}')
+    $userSearcher = New-Object System.DirectoryServices.DirectorySearcher($cred)
+    $userSearcher.Filter = "(&(objectClass=user)(sAMAccountName=$samUsername))"
+    $userSearcher.PropertiesToLoad.Add("distinguishedName") | Out-Null
+    $userResult = $userSearcher.FindOne()
+    if ($null -eq $userResult) { Write-Output 'NOT_MEMBER'; exit }
+    $userDN = $userResult.Properties["distinguishedName"][0]
+    $groupSearcher = New-Object System.DirectoryServices.DirectorySearcher($cred)
+    $groupSearcher.Filter = "(&(objectClass=group)(cn=Backup Operators))"
+    $groupSearcher.PropertiesToLoad.Add("member") | Out-Null
+    $groupResult = $groupSearcher.FindOne()
+    $isMember = $groupResult.Properties["member"] | Where-Object { $_ -eq $userDN }
     if ($isMember) { Write-Output 'IS_MEMBER' } else { Write-Output 'NOT_MEMBER' }
 } catch {
-    Write-Output 'SKIPPED'
+    Write-Output 'NOT_MEMBER'
 }
 `;
         try {
