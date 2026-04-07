@@ -64,6 +64,7 @@ const JobRunDetails = () => {
         window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
       ),
       skipPollingIfUnfocused: true,
+      refetchOnMountOrArgChange: true,
     }
   );
 
@@ -452,9 +453,7 @@ const JobRunDetails = () => {
               </Button>
             </CardHeader>
           </Card>}
-          <Box className="items-stretch">
-            <JobErrors />
-          </Box>
+          <JobErrors pollJobRunErrors />
         </Box>
       </Box>
     </Box>

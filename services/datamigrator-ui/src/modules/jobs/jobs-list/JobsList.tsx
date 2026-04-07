@@ -46,6 +46,10 @@ const JobsList = () => {
   } = useGetJobConfigsQuery(
     { projectId: selectedProjectId },
     {
+      pollingInterval: Number(
+        window?.env?.VITE_TIME_INTERVAL || import.meta.env.VITE_TIME_INTERVAL
+      ),
+      skipPollingIfUnfocused: true,
       refetchOnMountOrArgChange: true,
       skip: !selectedProjectId,
     }

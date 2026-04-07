@@ -168,8 +168,9 @@ export class JobRunService {
 
     if (!jobRun)
       throw new NotFoundException(`Job Run does not exist for id: ${id}`);
+    const { options, worker, jobConfig, ...jobRunRest } = jobRun;
     let response: JobRunDetailsResponseDto = {
-      ...jobRun,
+      ...jobRunRest,
       jobConfig: {
         id: jobRun.jobConfig?.id,
         jobType: jobRun.jobConfig?.jobType,
@@ -226,12 +227,7 @@ export class JobRunService {
     if (jobRun?.jobConfig?.jobType === JobType.CutOver)
       response["cutOver"] = jobRunStatus;
 
-    response["task"] = new TaskDto();
     if (jobStatsSummary) {
-      response["task"]["completed"] = Number(jobStatsSummary.completed);
-      response["task"]["pending"] = Number(jobStatsSummary.pending);
-      response["task"]["errored"] = Number(jobStatsSummary.errored);
-      response["task"]["running"] = Number(jobStatsSummary.running);
       response["lastRefreshed"] = jobStatsSummary.lastRefreshed;
     }
     this.logger.log("Job Run Status: " + jobStatsSummary?.jobRunStatus);

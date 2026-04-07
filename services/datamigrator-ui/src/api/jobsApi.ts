@@ -395,6 +395,7 @@ export const {
   useGetSpeedTestDetailsQuery,
   useCreateFileServerForSpeedTestMutation,
   useGetJobRunErrorsQuery,
+  useGetJobRunErrorsOverviewQuery,
   useLazyGetJobRunErrorsOverviewQuery,
   useLazyGetNoticeBoardDetailsQuery,
   useGetFileServerWorkersQuery,

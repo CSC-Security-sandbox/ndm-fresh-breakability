@@ -110,7 +110,8 @@ const MigrationActivity = () => {
 
   const {
     data: inProcessData,
-    isFetching: isLoading,
+    isLoading,
+    isFetching,
     refetch,
     error,
   } = useGetInProcessFilesQuery({ jobRunId: jobRunId! }, {
@@ -157,7 +158,7 @@ const MigrationActivity = () => {
       <Box>
         <Box className="flex items-center justify-between m-2">
           <Box className="text-sm font-medium">
-            Files being migrated: <span style={{ fontWeight: 700 }}>{isLoading ? "…" : totalCount}</span>
+            Files being migrated: <span style={{ fontWeight: 700 }}>{isFetching ? "…" : totalCount}</span>
             {totalCount > IN_PROCESS_FILES_LIMIT && (
               <span className="ml-2" style={{ color: "#6b7280" }}>
                 (Showing top {IN_PROCESS_FILES_LIMIT} files by time elapsed)
@@ -165,12 +166,12 @@ const MigrationActivity = () => {
             )}
           </Box>
           <Box className="flex gap-4">
-            <RefreshButton isLoading={isLoading} onRefresh={refetch} />
+            <RefreshButton isLoading={isFetching} onRefresh={refetch} />
             <Box className="flex">
               <Button
                 variant="icon"
                 className="w-[17px] h-[17px]"
-                disabled={isLoading || isDownloading || totalCount === 0}
+                disabled={isFetching || isDownloading || totalCount === 0}
                 isSubmitting={isDownloading}
                 onClick={handleDownloadCSV}
               >

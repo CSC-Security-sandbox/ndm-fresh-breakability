@@ -319,6 +319,16 @@ const JobDetails = () => {
   const { latestJobRunId: latestNonRetryJobRunId } = useLatestJobRun(
     latestNonRetryRuns
   );
+  
+  const latestNonRetryRunErrors = useMemo(() => {
+    const latestNonRetryRun = latestNonRetryRuns.find(
+      (run) => run.jobRunId === latestNonRetryJobRunId
+    );
+    if (!latestNonRetryRun?.errors || !Array.isArray(latestNonRetryRun.errors)) {
+      return [];
+    }
+    return latestNonRetryRun.errors;
+  }, [latestNonRetryRuns, latestNonRetryJobRunId]);
 
   useEffect(() => {
     if (data?.ready || data?.processing) {
@@ -1198,7 +1208,10 @@ const JobDetails = () => {
           />
         </Box>
         <Box className="grow basis-1/2 items-stretch">
-          <JobErrors latestJobRunId={latestNonRetryJobRunId} />
+          <JobErrors
+            latestJobRunId={latestNonRetryJobRunId}
+            preloadedErrorDetails={latestNonRetryRunErrors}
+          />
         </Box>
       </Box>
       <TableWrapper

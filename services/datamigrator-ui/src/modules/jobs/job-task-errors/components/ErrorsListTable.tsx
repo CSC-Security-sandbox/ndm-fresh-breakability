@@ -67,7 +67,7 @@ const ErrorsListTable = ({ currentErrorType }: ErrorsListTablePropsType) => {
       </Box>
       <Box>
         <Table
-          isLoading={isFetching || isLoading}
+          isLoading={isLoading}
           columns={ERROR_COLUMN_DEF}
           rows={tableRows}
           sortState={sortState || {}}

@@ -89,7 +89,7 @@ export const HEADER_WITH_PATHNAME: HeaderType = {
   "/workers/:jobRunId": WORKERS_HEADER_TAB,
   "/jobs-list": JOB_HEADER_TAB,
   "/job-details/:jobId": JOB_HEADER_TAB,
-  "/job-details/:jobId/errors": JOB_HEADER_TAB,
+  "/job-details/:jobId/:jobRunId/errors": JOB_HEADER_TAB,
   "/job-details/:jobId/run/:jobRunId": JOB_HEADER_TAB,
   "/job-details/:jobId/run/:jobRunId/errors": JOB_HEADER_TAB,
   "/job-details/:jobId/run/:jobRunId/tasks": JOB_HEADER_TAB,

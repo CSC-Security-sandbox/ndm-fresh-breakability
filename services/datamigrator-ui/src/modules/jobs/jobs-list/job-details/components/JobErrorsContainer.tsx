@@ -2,40 +2,45 @@ import {
   JOB_RUN_ERRORS_TYPE_KEY,
   JobRunErrorsOverviewApiType,
 } from "@/types/app.type";
-import { useLazyGetJobRunErrorsOverviewQuery } from "@api/jobsApi";
-import { notify } from "@components/notification/NotificationWrapper";
+import { useGetJobRunErrorsOverviewQuery } from "@api/jobsApi";
 import { CardContent, Notification } from "@netapp/bxp-design-system-react";
 import { memo, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
 
+const JOB_RUN_ERRORS_POLLING_INTERVAL = 5000; // 5 seconds
+
 const JobErrorsContainer = ({
   latestJobRunId,
+  preloadedErrorDetails,
+  pollJobRunErrors,
   errorDetails,
   setErrorDetails,
 }: {
-  latestJobRunId: string;
+  latestJobRunId?: string;
+  preloadedErrorDetails?: JobRunErrorsOverviewApiType[];
+  pollJobRunErrors?: boolean;
   errorDetails: JobRunErrorsOverviewApiType[];
   setErrorDetails: (errorDetails: JobRunErrorsOverviewApiType[]) => void;
 }) => {
   const { jobRunId } = useParams<{ jobRunId: string; jobId: string }>();
-  const [getJobRunErrorsOverviewApi] = useLazyGetJobRunErrorsOverviewQuery();
+  const activeJobRunId = latestJobRunId || jobRunId;
+
+  const { data: polledErrorDetails } = useGetJobRunErrorsOverviewQuery(
+    { jobRunId: activeJobRunId },
+    {
+      pollingInterval: JOB_RUN_ERRORS_POLLING_INTERVAL,
+      skipPollingIfUnfocused: true,
+      refetchOnMountOrArgChange: true,
+      skip: !pollJobRunErrors || !activeJobRunId,
+    }
+  );
 
   useEffect(() => {
-    if (latestJobRunId || jobRunId) {
-      (async () => {
-        try {
-          const _JobErrorsOverview: JobRunErrorsOverviewApiType[] =
-            await getJobRunErrorsOverviewApi({
-              jobRunId: latestJobRunId || jobRunId,
-            }).unwrap();
-          setErrorDetails(_JobErrorsOverview);
-        } catch (error) {
-          notify.error("Failed to fetch job errors.");
-          console.error({ error, level: "Job error card" });
-        }
-      })();
+    const errorDetails = preloadedErrorDetails ?? polledErrorDetails;
+    if (errorDetails) {
+      setErrorDetails(errorDetails);
     }
-  }, [latestJobRunId, getJobRunErrorsOverviewApi]);
+  }, [preloadedErrorDetails, polledErrorDetails, setErrorDetails]);
 
   const getErrorCount = useCallback(
     (errorType: JOB_RUN_ERRORS_TYPE_KEY) => {
@@ -46,9 +51,7 @@ const JobErrorsContainer = ({
   );
 
   const fatalErrorCount = getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR);
-  const transientErrorCount = getErrorCount(
-    JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
-  );
+  const transientErrorCount = getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR);
 
   return (
     <CardContent className="flex flex-col gap-4">

@@ -14,11 +14,21 @@ import { useNavigate } from "react-router-dom";
 import JobErrorsContainer from "@modules/jobs/jobs-list/job-details/components/JobErrorsContainer";
 import { JobRunErrorsOverviewApiType } from "@/types/app.type";
 
-const JobErrors = ({ latestJobRunId }: { latestJobRunId?: string }) => {
+type JobErrorsProps = {
+  latestJobRunId?: string;
+  preloadedErrorDetails?: JobRunErrorsOverviewApiType[];
+  pollJobRunErrors?: boolean;
+};
+
+const JobErrors = ({
+  latestJobRunId,
+  preloadedErrorDetails,
+  pollJobRunErrors,
+}: JobErrorsProps) => {
   const navigate = useNavigate();
   const [errorDetails, setErrorDetails] = useState<
     JobRunErrorsOverviewApiType[]
-  >([]);
+  >(preloadedErrorDetails ?? []);
 
   const handlerErrorNavigation = useCallback(() => {
     if (latestJobRunId) {
@@ -42,13 +52,13 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId?: string }) => {
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle className="flex gap-4">
+        <CardTitle className="flex items-center gap-4">
           {errorDetails?.length > 0 ? (
             <NoticeTriangleIcon color="error" />
           ) : (
             <SuccessIcon color="success" />
           )}
-          <Text>Errors ({totalErrorsCount})</Text>
+          <Text bold>{latestJobRunId ? "Latest Errors" : "Errors"} ({totalErrorsCount})</Text>
         </CardTitle>
         <Button
           onClick={handlerErrorNavigation}
@@ -61,6 +71,8 @@ const JobErrors = ({ latestJobRunId }: { latestJobRunId?: string }) => {
       </CardHeader>
       <JobErrorsContainer
         latestJobRunId={latestJobRunId}
+        preloadedErrorDetails={preloadedErrorDetails}
+        pollJobRunErrors={pollJobRunErrors}
         errorDetails={errorDetails}
         setErrorDetails={setErrorDetails}
       />
