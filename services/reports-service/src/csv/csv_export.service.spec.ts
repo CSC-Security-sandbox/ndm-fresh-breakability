@@ -1,16 +1,23 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { CsvService } from "./csv_export.service";
 import { DataSource } from "typeorm";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import * as fs from "fs";
 import * as fastCsv from "fast-csv";
 import exp from "constants";
 import * as validation from '../utils/utils';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
+import { JobRunEntity } from 'src/entities/jobrun.entity';
 
 jest.mock("fs");
 jest.mock("fast-csv");
-jest.mock("typeorm");
+// Keep actual TypeORM decorators so entity classes load without errors;
+// only mock DataSource to avoid real DB connections.
+jest.mock("typeorm", () => ({
+  ...jest.requireActual("typeorm"),
+  DataSource: jest.fn(),
+}));
 
 describe("CsvService", () => {
   let service: CsvService;
@@ -38,6 +45,7 @@ describe("CsvService", () => {
       providers: [
         CsvService,
         { provide: DataSource, useValue: mockDataSource },
+        { provide: getRepositoryToken(JobRunEntity), useValue: { findOne: jest.fn() } },
         {
           provide: LoggerFactory,
           useValue: {
@@ -102,8 +110,10 @@ describe("CsvService", () => {
 
       const mockWriteStream = {
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       };
 
       jest
@@ -145,8 +155,10 @@ describe("CsvService", () => {
 
       jest.spyOn(fs, "createWriteStream").mockReturnValue({
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       } as any);
 
       jest.spyOn(fastCsv, "format").mockImplementationOnce(() => {
@@ -169,17 +181,19 @@ describe("CsvService", () => {
       await expect(result).rejects.toThrow("Query error");
     });
 
-    it("should call release on queryRunner after completing generateCsv", async () => {
+    it("should complete generateCsv without errors when data is available", async () => {
       const filePath = "test.csv";
       const jobRunId = "12345";
-      const mockData = [{ "source path": "path1", "target path": "path2" }];
+      const mockData = [{ _cursor_path: "/a", "source path": "path1", "target path": "path2" }];
 
-      mockDataSource.query.mockResolvedValueOnce(mockData);
+      mockDataSource.query.mockResolvedValueOnce(mockData).mockResolvedValueOnce([]);
 
       const mockWriteStream = {
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       };
 
       jest
@@ -189,17 +203,21 @@ describe("CsvService", () => {
 
       await service.generateCsv(filePath, jobRunId);
 
-      expect(mockDataSource.createQueryRunner().release).toHaveBeenCalled();
+      expect(mockDataSource.query).toHaveBeenCalled();
     });
     it("should generate CSV and call csvStream.end()", async () => {
       const writeStreamMock = {
         pipe: jest.fn(),
         on: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       };
       const csvStreamMock = {
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn(),
+        destroy: jest.fn(),
       };
       jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStreamMock as any);
       jest.spyOn(fastCsv, "format").mockReturnValue(csvStreamMock as any);
@@ -223,35 +241,35 @@ describe("CsvService", () => {
     it("should return inventory data from the database", async () => {
       const jobRunId = "12345";
       const limit = 10000;
-      const offset = 1;
+      const cursor: string | null = null;
       const mockData = [{ "source path": "path1", "target path": "path2" }];
 
       mockDataSource.query.mockResolvedValue(mockData);
 
-      const result = await service.getInventoryData(jobRunId, limit, offset);
+      const result = await service.getInventoryData(jobRunId, limit, cursor);
 
       expect(result).toEqual(mockData);
       expect(mockDataSource.query).toHaveBeenCalledWith(expect.any(String), [
         jobRunId,
+        cursor,
         limit,
-        offset,
       ]);
     });
 
     it("should handle empty array from mockDataSource.query", async () => {
       const jobRunId = "12345";
       const limit = 10000;
-      const offset = 1;
+      const cursor: string | null = null;
 
       mockDataSource.query.mockResolvedValue([]);
 
-      const result = await service.getInventoryData(jobRunId, limit, offset);
+      const result = await service.getInventoryData(jobRunId, limit, cursor);
 
       expect(result).toEqual([]);
       expect(mockDataSource.query).toHaveBeenCalledWith(expect.any(String), [
         jobRunId,
+        cursor,
         limit,
-        offset,
       ]);
     });
   });
@@ -259,28 +277,29 @@ describe("CsvService", () => {
     it("should build the correct SQL query and values", async () => {
       const jobRunId = "12345";
       const limit = 10000;
-      const offset = 1;
+      const cursor: string | null = null;
 
       const result = await service.getInventoryDataQuery(
         jobRunId,
         limit,
-        offset
+        cursor
       );
 
       expect(result.query).toContain("SELECT");
-      expect(result.values).toEqual([jobRunId, limit, offset]);
+      // values order: [jobRunId, cursor, limit]
+      expect(result.values).toEqual([jobRunId, cursor, limit]);
     });
 
     it("should include the correct schema in the query", async () => {
       const jobRunId = "12345";
       const limit = 10000;
-      const offset = 1;
+      const cursor: string | null = null;
       process.env.SCHEMA = "testSchema";
 
       const result = await service.getInventoryDataQuery(
         jobRunId,
         limit,
-        offset
+        cursor
       );
 
       expect(result.query).toContain("FROM testSchema.inventory");
@@ -293,6 +312,7 @@ describe("CsvService", () => {
         providers: [
           CsvService,
           { provide: DataSource, useValue: mockDataSource },
+          { provide: getRepositoryToken(JobRunEntity), useValue: { findOne: jest.fn() } },
           {
             provide: ProjectIdCacheService,
             useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue('project-123') },
@@ -408,21 +428,22 @@ describe("CsvService", () => {
     it("should include Type column in the query", async () => {
       const jobRunId = "job-123";
       const limit = 100;
-      const offset = 0;
+      const cursor: string | null = null;
       process.env.SCHEMA = "testSchema";
 
-      const result = await service.getCutoverInventoryDataQuery(jobRunId, limit, offset);
+      const result = await service.getCutoverInventoryDataQuery(jobRunId, limit, cursor);
 
       expect(result.query).toContain('"Type"');
       expect(result.query).toContain("softlink");
       expect(result.query).toContain("SYMBOLIC_LINK");
       expect(result.query).toContain("directory");
       expect(result.query).toContain("file");
-      expect(result.values).toEqual([jobRunId, limit, offset]);
+      // values order: [jobRunId, cursor, limit]
+      expect(result.values).toEqual([jobRunId, cursor, limit]);
     });
 
     it("should include Type in the outer SELECT with other cutover columns", async () => {
-      const result = await service.getCutoverInventoryDataQuery("job-1", 10, 0);
+      const result = await service.getCutoverInventoryDataQuery("job-1", 10, null);
 
       expect(result.query).toContain('"Source Path"');
       expect(result.query).toContain('"Destination Path"');
@@ -436,19 +457,19 @@ describe("CsvService", () => {
     it("should call cutover query for CUT_OVER jobType", async () => {
       const jobRunId = "test-job-run-id";
       const limit = 100;
-      const offset = 1;
+      const cursor: string | null = null;
 
       // Spy on getCutoverInventoryDataQuery
       const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
         query: "SELECT * FROM cutover",
-        values: [jobRunId, limit, offset]
+        values: [jobRunId, limit, cursor]
       });
 
       mockDataSource.query.mockResolvedValue([{ test: 'data' }]);
 
-      await service.getInventoryData(jobRunId, limit, offset, 'CUT_OVER');
+      await service.getInventoryData(jobRunId, limit, cursor, 'CUT_OVER');
 
-      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, offset);
+      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, cursor);
       expect(cutoverSpy).toHaveBeenCalledTimes(1);
 
       cutoverSpy.mockRestore();
@@ -457,12 +478,12 @@ describe("CsvService", () => {
     it("should call cutover query for lowercase cutover jobType", async () => {
       const cutoverSpy = jest.spyOn(service as any, 'getCutoverInventoryDataQuery').mockResolvedValue({
         query: "SELECT * FROM cutover",
-        values: ["test-id", 100, 1]
+        values: ["test-id", 100, null]
       });
 
       mockDataSource.query.mockResolvedValue([]);
 
-      await service.getInventoryData("test-id", 100, 1, 'cut_over');
+      await service.getInventoryData("test-id", 100, null, 'cut_over');
 
       expect(cutoverSpy).toHaveBeenCalled();
       cutoverSpy.mockRestore();
@@ -471,28 +492,28 @@ describe("CsvService", () => {
     it("should call regular migration query when jobType is MIGRATE", async () => {
       const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
         query: "SELECT * FROM migration",
-        values: ["test-id", 100, 1]
+        values: ["test-id", 100, null]
       });
 
       mockDataSource.query.mockResolvedValue([]);
 
-      await service.getInventoryData("test-id", 100, 1, 'MIGRATE');
+      await service.getInventoryData("test-id", 100, null, 'MIGRATE');
 
-      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1, "MIGRATE");
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, "MIGRATE", undefined);
       migrationSpy.mockRestore();
     });
 
     it("should call regular migration query when jobType is undefined", async () => {
       const migrationSpy = jest.spyOn(service, 'getInventoryDataQuery').mockResolvedValue({
         query: "SELECT * FROM migration",
-        values: ["test-id", 100, 1]
+        values: ["test-id", 100, null]
       });
 
       mockDataSource.query.mockResolvedValue([]);
 
-      await service.getInventoryData("test-id", 100, 1);
+      await service.getInventoryData("test-id", 100, null);
 
-      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, 1, undefined);
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, undefined, undefined);
       migrationSpy.mockRestore();
     });
 
@@ -500,7 +521,7 @@ describe("CsvService", () => {
       const mockData = [{ path: '/test/file.txt' }];
       mockDataSource.query.mockResolvedValue(mockData);
 
-      const result = await service.getInventoryData("test-id", 100, 1, 'CUT_OVER');
+      const result = await service.getInventoryData("test-id", 100, null, 'CUT_OVER');
 
       expect(result).toEqual(mockData);
       expect(mockDataSource.query).toHaveBeenCalled();
@@ -519,8 +540,10 @@ describe("CsvService", () => {
 
       const mockWriteStream = {
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       };
 
       jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
@@ -529,7 +552,8 @@ describe("CsvService", () => {
 
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
+      // cursor starts as null; protocol resolved to default NFS from jobRunRepository mock
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS');
     });
 
     it("should call regular query when jobType is MIGRATE", async () => {
@@ -539,8 +563,10 @@ describe("CsvService", () => {
 
       const mockWriteStream = {
         pipe: jest.fn(),
-        write: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
         end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => { if (event === 'finish') cb(); }),
+        destroy: jest.fn(),
       };
 
       jest.spyOn(fs, "createWriteStream").mockReturnValue(mockWriteStream as any);
@@ -549,7 +575,8 @@ describe("CsvService", () => {
 
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, 0, jobType);
+      // cursor starts as null; protocol resolved to default NFS from jobRunRepository mock
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS');
     });
   });
 });

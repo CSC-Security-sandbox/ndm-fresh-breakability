@@ -62,6 +62,8 @@ env:
     value: "/error-logs"
   - name: ASUP_ENDPOINT
     value: "https://support.netapp.com/put/AsupPut"
+  - name: CSV_BATCH_SIZE
+    value: "50000"
 
 service:
   type: ClusterIP

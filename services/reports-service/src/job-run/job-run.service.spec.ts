@@ -16,6 +16,11 @@ import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entit
 import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
+import * as firstline from "firstline";
+import * as readLastLines from "read-last-lines";
+
+jest.mock("firstline");
+jest.mock("read-last-lines");
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -173,6 +178,7 @@ describe("JobRunService", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
+
 
   describe("jobRunReportByJobRunId", () => {
     const jobRunId = "12345";
@@ -798,67 +804,56 @@ describe("JobRunService", () => {
 
     it("should return the file path if the report already exists and update DB", async () => {
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      // CSV exists, ZIP exists, and file verification all pass
+      // ZIP exists — short-circuits immediately, no CSV generation or report saving
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(mockJobRunRepo, "findOne").mockResolvedValue(mockJobRun);
-      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
-      mockReportsRepo.create.mockReturnValue({});
-      mockReportsRepo.save.mockResolvedValue({});
 
       const result = await service.getCocReportByJobRunId(jobRunId);
 
       expect(result).toBe(mockFilePath);
-      // DB updates must run even on the backfill path (fix for Temporal retry scenario)
+      // isReportReady must still be set even on short-circuit (crash recovery)
       expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
-      expect(mockReportsRepo.save).toHaveBeenCalled();
+      // report record is NOT re-saved on short-circuit — ZIP was already complete
+      expect(mockReportsRepo.save).not.toHaveBeenCalled();
     });
 
     it("should successfully generate and return the file path", async () => {
-      // Setup mocks
       mockJobRunRepo.findOne.mockResolvedValue({
         ...mockJobRun,
         jobConfig: { jobType: JobType.Migrate },
       });
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
 
-      // CSV does not exist yet (skip early return), file exists after generation
+      // ZIP doesn't exist (1st check), CSV doesn't exist (2nd check),
+      // ZIP verified present after creation (3rd check)
       jest
         .spyOn(fs.promises, "access")
+        .mockRejectedValueOnce(new Error("not found")) // ZIP does not exist
         .mockRejectedValueOnce(new Error("not found")) // CSV does not exist
-        .mockResolvedValueOnce(undefined);             // file exists after generation
+        .mockResolvedValueOnce(undefined);             // ZIP verified after createZipFile
 
-      // Mock CSV generation
       mockCsvService.generateCsv.mockResolvedValue(undefined);
-
-      // Mock ZIP creation (private method)
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
 
-      // Mock file reading
-      const mockBuffer = Buffer.from("test data");
-      jest.spyOn(fs.promises, "readFile").mockResolvedValue(mockBuffer as any);
-
-      // Mock repository operations
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});
 
-      // Call the method
       const result = await service.getCocReportByJobRunId(jobRunId);
 
-      // Verify the result
       expect(result).toBe(mockFilePath);
-
-      // Verify the mocks were called correctly
+      // Fresh CSV generation — no resumeCursor (5th arg omitted)
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         mockFilePath,
         jobRunId,
-        10000,
+        50000,
         'MIGRATE'
       );
       expect(mockJobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },
         { isReportReady: true }
       );
-      expect(fs.promises.readFile).toHaveBeenCalledWith(mockFilePath);
       expect(mockReportsRepo.create).toHaveBeenCalledWith({
         jobRunId,
         reportData: expect.any(String),
@@ -894,17 +889,26 @@ describe("JobRunService", () => {
     it("should create zip if CSV exists but zip does not (backfill path)", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
+      // ZIP doesn't exist (1st check), CSV exists (2nd check),
+      // ZIP verified present after creation (3rd check)
       jest
         .spyOn(fs.promises, "access")
-        .mockResolvedValueOnce(undefined)              // CSV exists
         .mockRejectedValueOnce(new Error("not found")) // ZIP does not exist
-        .mockResolvedValueOnce(undefined);             // file verification after ZIP creation
+        .mockResolvedValueOnce(undefined)              // CSV exists
+        .mockResolvedValueOnce(undefined);             // ZIP verified after createZipFile
+
+      // Skip complex file-read logic in getResumeCursor — treat as fresh start
+      jest.spyOn(service as any, "getResumeCursor").mockResolvedValue(null);
+
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
 
       const createZipSpy = jest
         .spyOn(service as any, "createZipFile")
         .mockResolvedValue(undefined);
 
+      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
+
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});
 
@@ -912,7 +916,6 @@ describe("JobRunService", () => {
 
       expect(createZipSpy).toHaveBeenCalled();
       expect(result).toBe(mockFilePath);
-      // DB updates must run even on the backfill path (fix for Temporal retry scenario)
       expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
       expect(mockReportsRepo.save).toHaveBeenCalled();
     });
@@ -1032,9 +1035,12 @@ describe("JobRunService", () => {
     it("should throw when createZipFile fails during backfill", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
       jest.spyOn(path, "join").mockReturnValue(mockFilePath);
+      // ZIP doesn't exist (1st check), CSV exists (2nd check)
       jest.spyOn(fs.promises, "access")
-        .mockResolvedValueOnce(undefined)             // CSV exists
-        .mockRejectedValueOnce(new Error("no zip"));  // ZIP doesn't exist
+        .mockRejectedValueOnce(new Error("no zip"))   // ZIP doesn't exist
+        .mockResolvedValueOnce(undefined);             // CSV exists
+      jest.spyOn(service as any, "getResumeCursor").mockResolvedValue(null);
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockRejectedValue(new Error("zip creation failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("zip creation failed");
@@ -1071,6 +1077,122 @@ describe("JobRunService", () => {
       jest.spyOn(fs.promises, "readFile").mockRejectedValue(new Error("read failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("read failed");
+    });
+  });
+
+  // ─── getResumeCursor (private) ─────────────────────────────────────────────
+  describe("getResumeCursor (private)", () => {
+    beforeEach(() => {
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 100 } as any);
+      jest.spyOn(fs.promises, "truncate").mockResolvedValue(undefined);
+    });
+
+    it("should return null when file is empty (size === 0)", async () => {
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 0 } as any);
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+
+    it("should return null when stat throws", async () => {
+      jest.spyOn(fs.promises, "stat").mockRejectedValue(new Error("stat failed"));
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+
+    it("should return null and warn when 'Source Path' column is absent from CSV header", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Other","Columns"');
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+
+    it("should return null when CSV contains only the header row", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue('"Source Path"\n');
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+
+    it("should return the cursor path stripped of volumePath prefix", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue('/vol/dir/file.txt\n');
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBe("/dir/file.txt");
+    });
+
+    it("should return sourcePath as-is when it does not start with volumePath", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue('/other/dir/file.txt\n');
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBe("/other/dir/file.txt");
+    });
+
+    it("should correctly parse a quoted path containing a comma as the resume cursor", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path","Destination Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue('"/vol/path,with,comma/file.txt","/dest/path"\n');
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBe("/path,with,comma/file.txt");
+    });
+
+    it("should truncate partial last line and use the previous complete line", async () => {
+      const partialLine = '/vol/dir/partial_row';
+      const prevLine = '/vol/dir/file.txt\n';
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 200 } as any);
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock)
+        .mockResolvedValueOnce(partialLine)   // first call: partial (no \n)
+        .mockResolvedValueOnce(prevLine);      // second call: after truncation
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(fs.promises.truncate).toHaveBeenCalledWith("any.csv", 200 - partialLine.length);
+      expect(result).toBe("/dir/file.txt");
+    });
+
+    it("should return null when only the header remains after truncating a partial last line", async () => {
+      const partialLine = '/vol/dir/partial_row';
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock)
+        .mockResolvedValueOnce(partialLine)        // first call: partial
+        .mockResolvedValueOnce('"Source Path"\n'); // second call: only header left
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+  });
+
+  // ─── error logger ?.stack fallback branches ──────────────────────────────────
+  describe("getCocReportByJobRunId - error logger fallback (?.stack branches)", () => {
+    const jobRunId = "12345";
+    const mockJobRun = { id: jobRunId, jobConfig: { jobType: JobType.Migrate } };
+    const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
+
+    it("should log non-Error csvError (no .stack) and rethrow", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
+      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      // Plain string rejection — no .stack property → exercises the || fallback at line 312
+      mockCsvService.generateCsv.mockRejectedValue("string-csv-error");
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-csv-error");
+    });
+
+    it("should log non-Error zipError (no .stack) and rethrow", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
+      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "createZipFile").mockRejectedValue("string-zip-error");
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-zip-error");
+    });
+
+    it("should log non-Error readError (no .stack) and rethrow", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
+      jest.spyOn(fs.promises, "access")
+        .mockRejectedValueOnce(new Error("not found")) // ZIP doesn't exist
+        .mockRejectedValueOnce(new Error("not found")) // CSV doesn't exist
+        .mockResolvedValueOnce(undefined);             // ZIP verified
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "readFile").mockRejectedValue("string-read-error");
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-read-error");
     });
   });
 

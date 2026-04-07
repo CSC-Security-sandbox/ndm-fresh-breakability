@@ -17,6 +17,9 @@ import { ProjectIdCacheService } from "../utils/project-id-cache.service";
 import { Repository } from "typeorm";
 import { JobRunDetailsResponseDto, JobRunStats, TaskDto, } from "./dto/job-rundetails.dto";
 import * as fs from "fs";
+import { parse as parseCsv } from "csv-parse/sync";
+import * as firstline from "firstline";
+import * as readLastLines from "read-last-lines";
 import * as archiver from "archiver";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -295,7 +298,7 @@ export class JobRunService {
     try {
       const jobRun = await this.jobRunRepo.findOne({
         where: { id: jobRunId },
-        relations: ["jobConfig"],
+        relations: ["jobConfig", "jobConfig.sourcePath"],
       });
       if (!jobRun)
         throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
@@ -318,28 +321,51 @@ export class JobRunService {
         throw new NotAcceptableException(`Invalid file path: ${zipFilePath}`);
       }
 
-      const csvExists = await this.fileExists(filePath);
-      if (!csvExists) {
-        this.logger.log(`projectId: ${projectId} CSV not yet present at: ${filePath}, will generate`);
-        const jobType = jobRun.jobConfig.jobType;
-        try {
-          await this.csvService.generateCsv(filePath, jobRunId, 10000, jobType);
-        } catch (csvError) {
-          this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
-          throw csvError;
+      // Short-circuit: ZIP already on disk means generation previously completed
+      const zipExists = await this.fileExists(zipFilePath);
+      if (zipExists) {
+        this.logger.log(`projectId: ${projectId} ZIP already present at: ${zipFilePath}, skipping generation`);
+        if (jobRun.jobConfig.jobType !== JobType.CutOver) {
+          await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
         }
+        return zipFilePath;
       }
 
-      const zipExists = await this.fileExists(zipFilePath);
-      if (!zipExists) {
-        this.logger.log(`projectId: ${projectId} ZIP not yet present at: ${zipFilePath}, will create`);
-        try {
-          await this.createZipFile([filePath], zipFilePath);
-          this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
-        } catch (zipError) {
-          this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
-          throw zipError;
+      // CSV must be generated (fresh or resumed from last valid entry)
+      const csvExists = await this.fileExists(filePath);
+      const jobType = jobRun.jobConfig.jobType;
+      const batchSize = parseInt(process.env.CSV_BATCH_SIZE) || 50000;
+      try {
+        if (!csvExists) {
+          this.logger.log(`projectId: ${projectId} CSV not present, generating from scratch: ${filePath}`);
+          await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType);
+        } else {
+          const volumePath = jobRun.jobConfig.sourcePath?.volumePath ?? '';
+          this.logger.log(`projectId: ${projectId} CSV exists, resuming from last valid entry: ${filePath}`);
+          const resumeCursor = await this.getResumeCursor(filePath, volumePath, projectId);
+          await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType, resumeCursor);
         }
+      } catch (csvError) {
+        this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
+        throw csvError;
+      }
+
+      // Create ZIP from the CSV
+      this.logger.log(`projectId: ${projectId} Creating ZIP at: ${zipFilePath}`);
+      try {
+        await this.createZipFile([filePath], zipFilePath);
+        this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
+      } catch (zipError) {
+        this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
+        throw zipError;
+      }
+
+      // CSV is no longer needed — ZIP is the canonical artifact
+      try {
+        await fs.promises.unlink(filePath);
+        this.logger.log(`projectId: ${projectId} CSV deleted after ZIP creation: ${filePath}`);
+      } catch (unlinkError) {
+        this.logger.warn(`projectId: ${projectId} Could not delete CSV at: ${filePath}`, unlinkError?.message);
       }
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -348,20 +374,20 @@ export class JobRunService {
       }
 
       try {
-        await fs.promises.access(filePath);
+        await fs.promises.access(zipFilePath);
       } catch {
-        throw new Error(`File not found after generation: ${filePath}`);
+        throw new Error(`ZIP file not found after creation: ${zipFilePath}`);
       }
 
       let fileBuffer: Buffer;
       try {
-        fileBuffer = await fs.promises.readFile(filePath);
+        fileBuffer = await fs.promises.readFile(zipFilePath);
       } catch (readError) {
-        this.logger.error(`projectId: ${projectId} Failed to read file at: ${filePath}`, readError?.stack || readError);
+        this.logger.error(`projectId: ${projectId} Failed to read ZIP at: ${zipFilePath}`, readError?.stack || readError);
         throw readError;
       }
       const reportData = {
-        filePath,
+        filePath: zipFilePath,
         size: fileBuffer.length,
         digest: crypto.createHash("sha256").update(fileBuffer).digest("hex"),
       };
@@ -372,7 +398,7 @@ export class JobRunService {
       });
       await this.reportsRepo.save(report);
       this.logger.log(`projectId: ${projectId} COC Report generated successfully for jobRunId: ${jobRunId}`);
-      return filePath;
+      return zipFilePath;
     } catch (error) {
       this.logger.error(`projectId: ${projectId} Error while generating COC report for jobRunId: ${jobRunId}: ${error.message}`, error?.stack || error);
       throw error;
@@ -384,6 +410,51 @@ export class JobRunService {
       where: { id: jobRunId },
       select: ["subStatus"],
     });
+  }
+
+  private async getResumeCursor(filePath: string, volumePath: string, projectId?: string): Promise<string | null> {
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (stat.size === 0) return null;
+      // Get first line and then find the index of 'Source Path' column in the header
+      const headerLine = await firstline(filePath);
+      const headers: string[] = parseCsv(headerLine)[0] ?? [];
+      const sourcePathIndex = headers.indexOf('Source Path');
+      if (sourcePathIndex === -1) {
+        this.logger.warn(`projectId: ${projectId} "Source Path" column not found in CSV header, cannot resume`);
+        return null;
+      }
+      // Get last line and then parse the line to get the 'Source Path' value
+      let lastLine = await readLastLines.read(filePath, 1);
+
+      if (!lastLine.endsWith('\n')) {
+        // Partial write from a crash — truncate and fall back to the previous complete line
+        const truncateAt = Math.max(0, stat.size - Buffer.byteLength(lastLine, 'utf8'));
+        await fs.promises.truncate(filePath, truncateAt);
+        this.logger.log(`projectId: ${projectId} Removed truncated last line, CSV truncated to ${truncateAt} bytes`);
+        lastLine = await readLastLines.read(filePath, 1);
+      }
+      lastLine = lastLine.trimEnd();
+
+      if (!lastLine || lastLine === headerLine) {
+        this.logger.warn(`projectId: ${projectId} CSV contains only header row, will regenerate from scratch`);
+        return null;
+      }
+
+      const sourcePath = (parseCsv(lastLine)[0] ?? [])[sourcePathIndex];
+      if (!sourcePath) return null;
+
+      // Parse the Source Path to get the i.path value which is the cursor
+      const cursor = volumePath && sourcePath.startsWith(volumePath)
+        ? sourcePath.slice(volumePath.length)
+        : sourcePath;
+
+      this.logger.log(`projectId: ${projectId} CSV resume cursor: ${cursor}`);
+      return cursor;
+    } catch (err) {
+      this.logger.error(`projectId: ${projectId} Failed to determine resume cursor: ${err.message}`);
+      return null;
+    }
   }
 
   private async fileExists(filePath: string): Promise<boolean> {
