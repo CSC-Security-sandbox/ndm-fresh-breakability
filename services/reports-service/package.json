@@ -42,7 +42,6 @@
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.5",
     "7zip-bin": "^5.2.0",
-    "node-7z": "^3.0.0",
     "archiver": "^7.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",

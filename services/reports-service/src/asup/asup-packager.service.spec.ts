@@ -4,11 +4,10 @@ import { AsupXmlGeneratorService } from './asup-xml-generator.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
+import * as child_process from 'child_process';
 
 jest.mock('fs/promises');
-jest.mock('node-7z', () => ({
-  add: jest.fn(),
-}));
+jest.mock('child_process');
 jest.mock('7zip-bin', () => ({
   path7za: '/usr/bin/7za',
 }));
@@ -17,8 +16,7 @@ describe('AsupPackagerService', () => {
   let service: AsupPackagerService;
   let xmlGeneratorService: jest.Mocked<AsupXmlGeneratorService>;
   const mockedFs = fs as jest.Mocked<typeof fs>;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Seven = require('node-7z');
+  const mockedExecFile = child_process.execFile as unknown as jest.Mock;
 
   const mockLogger = {
     log: jest.fn(),
@@ -82,13 +80,11 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         '<xml>manifest data</xml>',
       );
 
-      // Mock Seven.add to emit 'end' event
-      Seven.add.mockImplementation(() => {
-        const EventEmitter = require('events');
-        const emitter = new EventEmitter();
-        process.nextTick(() => emitter.emit('end'));
-        return emitter;
-      });
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          process.nextTick(() => cb(null, '', ''));
+        },
+      );
     });
 
     it('should generate archive with migration XML, manifest, and x-headers', async () => {
@@ -100,6 +96,22 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result.md5Checksum).toBeDefined();
       expect(result.headersMap).toBeDefined();
       expect(result.xmlContent).toBe('<xml>migration data</xml>');
+    });
+
+    it('should invoke 7za binary with correct arguments', async () => {
+      await service.packageAsupPayload();
+
+      expect(mockedExecFile).toHaveBeenCalledWith(
+        '/usr/bin/7za',
+        expect.arrayContaining([
+          'a',
+          expect.stringContaining('asup-payload.7z'),
+          expect.stringContaining('migration-projects.xml'),
+          expect.stringContaining('manifest.xml'),
+          expect.stringContaining('x-header-data.txt'),
+        ]),
+        expect.any(Function),
+      );
     });
 
     it('should write temp files before compression', async () => {
@@ -144,18 +156,35 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(mockedFs.unlink).toHaveBeenCalled();
     });
 
-    it('should throw when 7z compression fails', async () => {
-      Seven.add.mockImplementation(() => {
-        const EventEmitter = require('events');
-        const emitter = new EventEmitter();
-        process.nextTick(() => emitter.emit('error', new Error('7z failed')));
-        return emitter;
-      });
+    it('should throw and log error.message when 7z fails without stderr', async () => {
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          process.nextTick(() => cb(new Error('exit code 2'), '', ''));
+        },
+      );
 
-      await expect(service.packageAsupPayload()).rejects.toThrow('7z failed');
+      await expect(service.packageAsupPayload()).rejects.toThrow(
+        '7za failed: exit code 2',
+      );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to create .7z archive'),
-        expect.any(String),
+        'Failed to create .7z archive: exit code 2',
+        expect.stringContaining('exit code 2'),
+      );
+    });
+
+    it('should throw and log stderr when 7z fails with stderr output', async () => {
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          process.nextTick(() => cb(new Error('exit code 2'), '', 'Permission denied: /tmp/asup-reports/asup-payload.7z'));
+        },
+      );
+
+      await expect(service.packageAsupPayload()).rejects.toThrow(
+        '7za failed: Permission denied: /tmp/asup-reports/asup-payload.7z',
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to create .7z archive: exit code 2',
+        'stderr: Permission denied: /tmp/asup-reports/asup-payload.7z',
       );
     });
 
@@ -205,12 +234,11 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue('<xml/>');
       xmlGeneratorService.buildManifestXml.mockResolvedValue('<manifest/>');
 
-      Seven.add.mockImplementation(() => {
-        const EventEmitter = require('events');
-        const emitter = new EventEmitter();
-        process.nextTick(() => emitter.emit('end'));
-        return emitter;
-      });
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          process.nextTick(() => cb(null, '', ''));
+        },
+      );
 
       const result = await service.packageAsupPayload();
 

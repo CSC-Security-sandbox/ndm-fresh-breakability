@@ -2,13 +2,13 @@ import { Injectable, Inject } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { execFile } from 'child_process';
 import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AsupXmlGeneratorService } from './asup-xml-generator.service';
 
-const Seven = require('node-7z');
 const sevenBin = require('7zip-bin');
 
 /**
@@ -88,18 +88,25 @@ export class AsupPackagerService {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        const stream = Seven.add(archivePath, [
-          files.migration, files.manifest, files.xHeader,
-        ], { $bin: sevenBin.path7za });
-        stream.on('end', () => resolve());
-        stream.on('error', (err: Error) => reject(err));
+        execFile(
+          sevenBin.path7za,
+          ['a', archivePath, files.migration, files.manifest, files.xHeader],
+          (err, _stdout, stderr) => {
+            if (err) {
+              reject({ error: err, stderr: stderr?.trim() });
+            } else {
+              resolve();
+            }
+          },
+        );
       });
-    } catch (err) {
+    } catch (failure: any) {
+      const { error, stderr } = failure;
       this.logger.error(
-        `Failed to create .7z archive: ${(err as Error).message}`,
-        (err as Error).stack,
+        `Failed to create .7z archive: ${error.message}`,
+        stderr ? `stderr: ${stderr}` : error.stack,
       );
-      throw err;
+      throw new Error(`7za failed: ${stderr || error.message}`);
     }
 
     this.logger.log(`Created .7z archive at ${archivePath}`);
