@@ -1701,6 +1701,11 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
     const playbookPath = path.join(bundleDir, 'upgrade-playbook.yaml');
     const logFile = path.join(this.deployPath, `upgrade-${buildVersion}.log`);
 
+    const cleanupCmd =
+      `nsenter -t 1 -m -u -i -n -p -- bash -c ` +
+      `'systemctl reset-failed ndm-upgrade 2>/dev/null; ` +
+      `systemctl stop ndm-upgrade 2>/dev/null'`;
+
     const nsenterCmd =
       `nsenter -t 1 -m -u -i -n -p -- ` +
       `systemd-run --unit=ndm-upgrade --remain-after-exit ` +
@@ -1713,21 +1718,22 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Executing upgrade on host via systemd-run: ${nsenterCmd}`);
 
-    exec(nsenterCmd, (error, _stdout, stderr) => {
-      if (error) {
-        this.logger.error(`Failed to start upgrade process: ${error.message}`);
-        this.logger.error(`stderr: ${stderr}`);
-        this.upgradeBundleRepository.update(bundle.id, {
-          upgradeStatus: UpgradeStatus.FAILED,
-          upgradeCompletedAt: new Date(),
-        }).catch((dbErr) => {
-          this.logger.error(`Failed to update DB after nsenter failure: ${dbErr.message}`);
-        });
-      } else {
-        this.logger.log('Upgrade process started on host successfully');
-      }
+    exec(cleanupCmd, () => {
+      exec(nsenterCmd, (error, _stdout, stderr) => {
+        if (error) {
+          this.logger.error(`Failed to start upgrade process: ${error.message}`);
+          this.logger.error(`stderr: ${stderr}`);
+          this.upgradeBundleRepository.update(bundle.id, {
+            upgradeStatus: UpgradeStatus.FAILED,
+            upgradeCompletedAt: new Date(),
+          }).catch((dbErr) => {
+            this.logger.error(`Failed to update DB after nsenter failure: ${dbErr.message}`);
+          });
+        } else {
+          this.logger.log('Upgrade process started on host successfully');
+        }
+      });
     });
-
     return {
       success: true,
       message: 'Upgrade initiated. The system will restart during the upgrade process.',
