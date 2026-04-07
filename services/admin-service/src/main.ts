@@ -46,6 +46,14 @@ async function bootstrap() {
   const server = await app.listen(3000);
   console.log('[Bootstrap] Admin Service is running on port 3000');
 
+  // Prevent 502 Bad Gateway errors caused by keep-alive idle timeout mismatches between
+  // Node.js and the upstream proxy. Node.js defaults keepAliveTimeout to 5s, while the
+  // admin-service ingress proxy-read-timeout is 1hr. We increase Node's keep-alive idle
+  // timeout to 320s so the connection is not closed after only 5s of idleness, while still
+  // remaining below the proxy timeout. headersTimeout must always be > keepAliveTimeout.
+  server.keepAliveTimeout = 320 * 1000; // 320s (less than istio's proxy-read-timeout but sufficient)
+  server.headersTimeout   = 330 * 1000; // 330s (must be > keepAliveTimeout)
+
   // Handle graceful shutdown - NestJS will handle most of the cleanup
   const gracefulShutdown = async (signal: string) => {
     console.log(`[Bootstrap] Received ${signal}, starting graceful shutdown...`);

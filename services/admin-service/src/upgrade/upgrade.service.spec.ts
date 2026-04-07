@@ -1018,6 +1018,42 @@ describe('UpgradeService', () => {
       );
     });
 
+    it('should immediately return processing started message (fire-and-forget)', async () => {
+      const dto = { fileName: 'upgrade-v2.1.0.tar.gz', fileSize: 15 * 1024 * 1024 }; // 1 chunk
+      const savedBundle = createMockBundle();
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+      upgradeBundleRepository.create.mockReturnValue(savedBundle);
+      upgradeBundleRepository.save.mockResolvedValue(savedBundle);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+
+      const initResult = await service.initUpload(dto);
+
+      // Upload the single chunk
+      const mockWriteStream = new EventEmitter() as any;
+      mockWriteStream.destroy = jest.fn();
+      mockWriteStream.end = jest.fn((cb?: () => void) => { if (cb) cb(); });
+      mockFs.createWriteStream.mockReturnValue(mockWriteStream);
+
+      const mockReq = new EventEmitter() as any;
+      mockReq.pipe = jest.fn().mockReturnValue(mockWriteStream);
+
+      const uploadPromise = service.uploadChunk(initResult.uploadId, 0, mockReq);
+      process.nextTick(() => { mockWriteStream.emit('finish'); });
+      await uploadPromise;
+
+      // Stub doProcessUpload so background processing doesn't pollute other tests
+      jest.spyOn(service as any, 'doProcessUpload').mockResolvedValue(undefined);
+
+      const result = await service.processUpload(initResult.uploadId);
+
+      expect(result.message).toBe('Processing started');
+      expect(result.bundleId).toBe(savedBundle.id);
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.PROCESSING }),
+      );
+    });
+
     it('should assemble chunks and process bundle successfully', async () => {
       // Create a valid session with 1 chunk
       const dto = { fileName: 'upgrade-v2.1.0.tar.gz', fileSize: 15 * 1024 * 1024 }; // 15MB = 1 chunk
@@ -1106,7 +1142,8 @@ describe('UpgradeService', () => {
         return stream;
       });
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       // Simulate tar extraction completion
       process.nextTick(() => {
@@ -1121,11 +1158,13 @@ describe('UpgradeService', () => {
         }
       }, 50);
 
-      // This will fail with checksum mismatch, which is expected
-      const result = await processPromise;
-      
-      expect(result.success).toBe(false);
-      expect(result.errors).toBeDefined();
+      // Checksum mismatch → doProcessUpload catches the failure and marks upload as FAILED
+      await processPromise;
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle chunk assembly stream error', async () => {
@@ -1164,7 +1203,8 @@ describe('UpgradeService', () => {
         return stream;
       });
 
-      await expect(service.processUpload(initResult.uploadId)).rejects.toThrow(InternalServerErrorException);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      await (service as any).doProcessUpload(initResult.uploadId, session);
 
       expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
         savedBundle.id,
@@ -1215,7 +1255,8 @@ describe('UpgradeService', () => {
       mockTarProcess.stderr = new EventEmitter();
       mockSpawn.mockReturnValue(mockTarProcess);
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       // Simulate tar extraction failure
       process.nextTick(() => {
@@ -1223,7 +1264,11 @@ describe('UpgradeService', () => {
         mockTarProcess.emit('close', 1);
       });
 
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle spawn error', async () => {
@@ -1269,13 +1314,18 @@ describe('UpgradeService', () => {
       mockTarProcess.stderr = new EventEmitter();
       mockSpawn.mockReturnValue(mockTarProcess);
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       process.nextTick(() => {
         mockTarProcess.emit('error', new Error('Spawn failed'));
       });
 
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle missing checksums file', async () => {
@@ -1291,6 +1341,7 @@ describe('UpgradeService', () => {
       // Simulate chunk upload
       const mockWriteStream = new EventEmitter() as any;
       mockWriteStream.destroy = jest.fn();
+      mockWriteStream.end = jest.fn((cb?: () => void) => { if (cb) cb(); });
       mockFs.createWriteStream.mockReturnValue(mockWriteStream);
 
       const mockReq = new EventEmitter() as any;
@@ -1305,6 +1356,13 @@ describe('UpgradeService', () => {
 
       mockFsPromises.readFile.mockResolvedValue(Buffer.from('chunk'));
       mockFsPromises.appendFile.mockResolvedValue(undefined);
+
+      // Mock createReadStream for chunk assembly
+      mockFs.createReadStream.mockImplementation(() => {
+        const stream = new EventEmitter() as any;
+        stream.pipe = jest.fn(() => { stream.emit('end'); return mockWriteStream; });
+        return stream;
+      });
 
       const mockTarProcess = new EventEmitter() as any;
       mockTarProcess.stderr = new EventEmitter();
@@ -1330,13 +1388,18 @@ describe('UpgradeService', () => {
         return Promise.resolve(undefined);
       });
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       process.nextTick(() => {
         mockTarProcess.emit('close', 0);
       });
 
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle empty checksum file', async () => {
@@ -1351,6 +1414,7 @@ describe('UpgradeService', () => {
 
       const mockWriteStream = new EventEmitter() as any;
       mockWriteStream.destroy = jest.fn();
+      mockWriteStream.end = jest.fn((cb?: () => void) => { if (cb) cb(); });
       mockFs.createWriteStream.mockReturnValue(mockWriteStream);
 
       const mockReq = new EventEmitter() as any;
@@ -1373,6 +1437,13 @@ describe('UpgradeService', () => {
       mockFsPromises.appendFile.mockResolvedValue(undefined);
       mockFsPromises.access.mockResolvedValue(undefined);
 
+      // Mock createReadStream for chunk assembly
+      mockFs.createReadStream.mockImplementation(() => {
+        const stream = new EventEmitter() as any;
+        stream.pipe = jest.fn(() => { stream.emit('end'); return mockWriteStream; });
+        return stream;
+      });
+
       const mockTarProcess = new EventEmitter() as any;
       mockTarProcess.stderr = new EventEmitter();
       mockSpawn.mockReturnValue(mockTarProcess);
@@ -1388,14 +1459,19 @@ describe('UpgradeService', () => {
         ] as any);
       });
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       process.nextTick(() => {
         mockTarProcess.emit('close', 0);
       });
 
-      // BadRequestException is wrapped in InternalServerErrorException by processUpload
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      // Empty checksum file → BadRequestException caught by doProcessUpload → marks upload FAILED
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle invalid checksum file format', async () => {
@@ -1410,6 +1486,7 @@ describe('UpgradeService', () => {
 
       const mockWriteStream = new EventEmitter() as any;
       mockWriteStream.destroy = jest.fn();
+      mockWriteStream.end = jest.fn((cb?: () => void) => { if (cb) cb(); });
       mockFs.createWriteStream.mockReturnValue(mockWriteStream);
 
       const mockReq = new EventEmitter() as any;
@@ -1432,6 +1509,13 @@ describe('UpgradeService', () => {
       mockFsPromises.appendFile.mockResolvedValue(undefined);
       mockFsPromises.access.mockResolvedValue(undefined);
 
+      // Mock createReadStream for chunk assembly
+      mockFs.createReadStream.mockImplementation(() => {
+        const stream = new EventEmitter() as any;
+        stream.pipe = jest.fn(() => { stream.emit('end'); return mockWriteStream; });
+        return stream;
+      });
+
       const mockTarProcess = new EventEmitter() as any;
       mockTarProcess.stderr = new EventEmitter();
       mockSpawn.mockReturnValue(mockTarProcess);
@@ -1447,14 +1531,19 @@ describe('UpgradeService', () => {
         ] as any);
       });
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       process.nextTick(() => {
         mockTarProcess.emit('close', 0);
       });
 
-      // BadRequestException is wrapped in InternalServerErrorException by processUpload
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      // Invalid checksum format → BadRequestException caught by doProcessUpload → marks upload FAILED
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle empty extraction directory', async () => {
@@ -1469,6 +1558,7 @@ describe('UpgradeService', () => {
 
       const mockWriteStream = new EventEmitter() as any;
       mockWriteStream.destroy = jest.fn();
+      mockWriteStream.end = jest.fn((cb?: () => void) => { if (cb) cb(); });
       mockFs.createWriteStream.mockReturnValue(mockWriteStream);
 
       const mockReq = new EventEmitter() as any;
@@ -1485,6 +1575,13 @@ describe('UpgradeService', () => {
       mockFsPromises.appendFile.mockResolvedValue(undefined);
       mockFsPromises.access.mockResolvedValue(undefined);
 
+      // Mock createReadStream for chunk assembly
+      mockFs.createReadStream.mockImplementation(() => {
+        const stream = new EventEmitter() as any;
+        stream.pipe = jest.fn(() => { stream.emit('end'); return mockWriteStream; });
+        return stream;
+      });
+
       const mockTarProcess = new EventEmitter() as any;
       mockTarProcess.stderr = new EventEmitter();
       mockSpawn.mockReturnValue(mockTarProcess);
@@ -1492,13 +1589,19 @@ describe('UpgradeService', () => {
       // Mock empty extraction directory
       mockFsPromises.readdir.mockResolvedValue([]);
 
-      const processPromise = service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      const processPromise = (service as any).doProcessUpload(initResult.uploadId, session);
 
       process.nextTick(() => {
         mockTarProcess.emit('close', 0);
       });
 
-      await expect(processPromise).rejects.toThrow(InternalServerErrorException);
+      // Empty extraction directory → error caught by doProcessUpload → marks upload FAILED
+      await processPromise;
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        savedBundle.id,
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
     });
 
     it('should handle DB update failure during processUpload error path', async () => {
@@ -1537,7 +1640,13 @@ describe('UpgradeService', () => {
       // Make DB update fail too
       upgradeBundleRepository.update.mockRejectedValue(new Error('DB connection lost'));
 
-      await expect(service.processUpload(initResult.uploadId)).rejects.toThrow(InternalServerErrorException);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      await (service as any).doProcessUpload(initResult.uploadId, session);
+
+      // DB update failure is caught and logged; doProcessUpload does not throw
+      expect(mockLoggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to update DB to FAILED status'),
+      );
     });
   });
 
@@ -2492,10 +2601,9 @@ describe('UpgradeService', () => {
         deployPath: '/upload/v2.1.0',
       });
 
-      const result = await service.processUpload(initResult.uploadId);
+      const session = (service as any).sessions.get(initResult.uploadId);
+      await (service as any).doProcessUpload(initResult.uploadId, session);
 
-      expect(result.success).toBe(true);
-      expect(result.version).toBe('v2.1.0');
       expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
         savedBundle.id,
         expect.objectContaining({ uploadStatus: UploadStatus.SUCCESS }),
@@ -2544,8 +2652,12 @@ describe('UpgradeService', () => {
         new Error('processing failed'),
       );
 
-      await expect(service.processUpload(initResult.uploadId)).rejects.toThrow(
-        InternalServerErrorException,
+      const session = (service as any).sessions.get(initResult.uploadId);
+      await (service as any).doProcessUpload(initResult.uploadId, session);
+
+      // Cleanup error (unlink fails) is caught and logged; upload is still marked FAILED
+      expect(mockLoggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to cleanup assembled file'),
       );
     });
   });

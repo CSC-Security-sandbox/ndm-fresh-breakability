@@ -10,6 +10,7 @@ import {
   Header,
   ParseUUIDPipe,
   BadRequestException,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -102,11 +103,15 @@ export class UpgradeController {
 
   // ═══════════════════════════════════════════════════════════════
   // ENDPOINT 3: Process Upload (Assemble Chunks, Validate, Organize)
+  // Returns 202 immediately; heavy processing runs in the background.
+  // Client polls GET /latest-upload-status to track completion.
   // ═══════════════════════════════════════════════════════════════
   @Auth(Permission.UpgradeManagement)
   @ApiBearerAuth()
   @Post('process-upload/:uploadId')
-  @ApiOperation({ summary: 'Process upload: assemble chunks, validate checksums, organize files' })
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Start async processing: assemble chunks, validate checksums, organize files. Returns 202 immediately; poll /latest-upload-status for result.' })
+  @ApiResponse({ status: 202, description: 'Processing started in background' })
   async processUpload(@Param('uploadId', ParseUUIDPipe) uploadId: string) {
     return this.upgradeService.processUpload(uploadId);
   }

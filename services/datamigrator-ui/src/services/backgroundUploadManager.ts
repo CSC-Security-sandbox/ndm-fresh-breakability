@@ -8,6 +8,7 @@ import {
   setUploadCancelled,
   resetUploadState,
 } from "@store/reducer/uploadSlice";
+import type { LatestUploadStatusResponse } from "@api/upgradeApi";
 
 const CHUNK_SIZE = 15 * 1024 * 1024; // 15MB
 const PARALLEL_UPLOADS = 5;
@@ -50,6 +51,97 @@ function validateFile(file: File): { valid: boolean; error?: string } {
     return { valid: false, error: "File is smaller than 1MB." };
   }
   return { valid: true };
+}
+
+interface PollResult {
+  success: boolean;
+  bundleId?: string;
+  errors?: string[];
+  isValidation?: boolean;
+}
+
+/**
+ * Polls GET /upgrade/latest-upload-status every 5s until the server marks the
+ * bundle SUCCESS or FAILED. Returns the outcome so the caller can dispatch the
+ * appropriate Redux action.
+ *
+ * This replaces the old pattern of awaiting the synchronous process-upload response,
+ * which held an HTTP connection open for several minutes and hit proxy timeouts.
+ */
+async function pollForProcessingResult(
+  baseUrl: string,
+  signal: AbortSignal,
+): Promise<PollResult> {
+  const POLL_INTERVAL_MS = 5000;           // 5 seconds between polls
+  const POLL_TIMEOUT_MS  = 60 * 60 * 1000; // 60 minutes absolute cap
+
+  const startTime = Date.now();
+
+  while (true) {
+    if (signal.aborted) throw new Error("Upload cancelled");
+
+    if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+      throw new Error("Processing timed out after 60 minutes. Please try again.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+    if (signal.aborted) throw new Error("Upload cancelled");
+
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/upgrade/latest-upload-status`, {
+        headers: getAuthHeaders(),
+        signal,
+      });
+    }catch{
+      continue; // network blip — retry
+    }
+
+    if (!res.ok) {
+      // Non-retriable: auth failures, client errors
+      if (res.status === 401 || res.status === 403) {
+        throw new Error("Session expired. Please refresh the page and try again.");
+      }
+      if (res.status === 404) {
+        throw new Error("Upload session not found. The server may have restarted.");
+      }
+      if (res.status >= 400 && res.status < 500) {
+        // Other 4xx: client error, no point retrying
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any)?.message || `Unexpected error: ${res.status}`);
+      }
+      // 5xx / other: transient — keep retrying
+      continue;
+    }
+
+    let rawData: unknown;
+    try {
+      rawData = await res.json();
+    } catch {
+      continue; // parse error — retry
+    }
+
+    const raw = rawData as { data?: { items?: LatestUploadStatusResponse } | LatestUploadStatusResponse } | LatestUploadStatusResponse;
+    const status: LatestUploadStatusResponse =
+      (raw as any)?.data?.items ||
+      (raw as any)?.data ||
+      (raw as LatestUploadStatusResponse);
+
+    if (status?.uploadStatus === "success") {
+      return { success: true, bundleId: status.bundleId };
+    }
+
+    if (status?.uploadStatus === "failed") {
+      return {
+        success: false,
+        errors: status.processingErrors ?? [],
+        isValidation: status.isValidationFailure ?? false,
+      };
+    }
+
+    // Still PROCESSING — keep polling
+  }
 }
 
 export async function startBackgroundUpload(file: File): Promise<void> {
@@ -150,27 +242,34 @@ export async function startBackgroundUpload(file: File): Promise<void> {
 
     store.dispatch(setUploadFinalizing());
 
+    // Kick off server-side processing. The server returns 202 immediately;
+    // the actual assembly/validation runs in the background on the server.
     const processRes = await fetch(`${baseUrl}/upgrade/process-upload/${uploadId}`, {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       signal,
     });
     if (!processRes.ok) {
+      // Synchronous validation error (e.g. missing chunks) — treat as a hard failure
       const body = await processRes.json().catch(() => ({}));
       throw new Error(body?.message || `Processing failed: ${processRes.status}`);
     }
-    const processData = await processRes.json();
-    const result = processData?.data?.items || processData?.data || processData;
 
-    if (result.success === false) {
-      const errors: string[] = result.errors || [];
-      const summary = errors.length > 0 ? errors.join("\n") : result.message || "Processing failed";
-      const isValidation = errors.length > 0 || result.message?.toLowerCase().includes("checksum");
-      store.dispatch(setUploadFailed({ error: summary, status: isValidation ? "validation_failed" : "error" }));
+    // Server is now processing in the background. Poll /latest-upload-status every 3s
+    // until the DB reflects success or failure, then dispatch the appropriate action.
+    const pollResult = await pollForProcessingResult(baseUrl, signal);
+
+    if (!pollResult.success) {
+      const errors: string[] = pollResult.errors ?? [];
+      const summary = errors.length > 0 ? errors.join("\n") : "Processing failed";
+      store.dispatch(setUploadFailed({
+        error: summary,
+        status: pollResult.isValidation ? "validation_failed" : "error",
+      }));
       return;
     }
 
-    store.dispatch(setUploadCompleted({ bundleId: result.bundleId }));
+    store.dispatch(setUploadCompleted({ bundleId: pollResult.bundleId }));
   } catch (err: any) {
     if (uploadId) {
       try {

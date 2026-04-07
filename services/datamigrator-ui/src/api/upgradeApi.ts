@@ -18,6 +18,9 @@ export interface LatestUploadStatusResponse {
   isUpgradeInProgress?: boolean;
   workerUploadStatus?: string;       // IDLE | IN_PROGRESS | COMPLETED - worker binary distribution status
   workerUpgradeStatus?: string;      // IDLE | IN_PROGRESS | COMPLETED - worker upgrade execution status
+  // Processing error fields — populated by doProcessUpload on failure
+  processingErrors?: string[] | null;
+  isValidationFailure?: boolean;
 }
 
 export interface WorkerExecutionItem {

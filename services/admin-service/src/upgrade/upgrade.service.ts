@@ -88,6 +88,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
   private static readonly UPGRADE_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds
 
   private sessions: Map<string, UploadSession> = new Map();
+  private processingErrors: Map<string, { errors: string[]; isValidation: boolean }> = new Map();
   private upgradePoller: ReturnType<typeof setInterval> | null = null;
 
   // MULTICAST (Worker Distribution) fields
@@ -551,9 +552,17 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         latest.uploadStatus === UploadStatus.SUCCESS &&
         latest.upgradeStatus === UpgradeStatus.STAGED;
 
+      // Look up any processing errors stored in-memory (populated by doProcessUpload on failure).
+      // These survive only while the pod is running — long enough for the client to poll once.
+      const processingError = this.processingErrors.get(latest.id);
+      // Clear the entry after reading — it's been delivered to the client.
+      if (processingError) {
+        this.processingErrors.delete(latest.id);
+      }
+
       return {
         hasUpload: true,
-      bundleId: latest.id,       // Use bundleId for triggerUpgrade instead of filePath
+        bundleId: latest.id,       // Use bundleId for triggerUpgrade instead of filePath
         uploadStatus: latest.uploadStatus,
         upgradeStatus: latest.upgradeStatus,
         fileName: latest.fileName,
@@ -567,9 +576,13 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         workerUpgradeStatus: latest.workerUpgradeStatus,  // IDLE | IN_PROGRESS | COMPLETED
         showUploadUI,
         showUpgradeUI,
-      isUploadInProgress,       // true when chunks are being uploaded (can be cancelled)
-      isProcessing,             // true when extracting/validating (should NOT be cancelled)
+        isUploadInProgress,       // true when chunks are being uploaded (can be cancelled)
+        isProcessing,             // true when extracting/validating (should NOT be cancelled)
         isUpgradeInProgress,
+        // Populated when doProcessUpload finishes with a validation/assembly failure.
+        // null when status is not failed or when pod restarted after failure.
+        processingErrors: processingError?.errors ?? null,
+        isValidationFailure: processingError?.isValidation ?? false,
       };
     } catch (error) {
       this.logger.error(`Failed to get latest upload status: ${error.message}`);
@@ -829,7 +842,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════════════════
   // PROCESS UPLOAD: Assemble chunks, validate checksums, organize for deployment
   // ═══════════════════════════════════════════════════════════════════════════
-  async processUpload(uploadId: string) {
+  async processUpload(uploadId: string): Promise<{ message: string; bundleId: string }> {
     const session = this.sessions.get(uploadId);
     if (!session) {
       throw new NotFoundException(`Upload session not found: ${uploadId}`);
@@ -847,19 +860,35 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // Mark as PROCESSING immediately so UI knows work is happening
+    // (prevents "Upload Interrupted" if user refreshes during assembly)
+    await this.upgradeBundleRepository.update(session.bundleId, {
+      uploadStatus: UploadStatus.PROCESSING,
+      processingStartedAt: new Date(),
+    });
+
+    // Fire-and-forget: run the heavy assembly + validation in the background.
+    // The HTTP request returns 202 immediately; the client polls /latest-upload-status.
+    this.doProcessUpload(uploadId, session).catch((err) => {
+      this.logger.error(`Unhandled background processing error for uploadId=${uploadId}: ${err?.message}`);
+    });
+
+    return { message: 'Processing started', bundleId: session.bundleId };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BACKGROUND: Assemble chunks, validate checksums, organise files.
+  // Called without await from processUpload (fire-and-forget).
+  // Errors/results are written to processingErrors Map so the client can
+  // retrieve them via GET /latest-upload-status polling.
+  // ═══════════════════════════════════════════════════════════════════════════
+  private async doProcessUpload(uploadId: string, session: UploadSession): Promise<void> {
     // Assembled bundle goes to /upload/temp/{filename}
     const finalPath = path.join(session.tempDir, session.fileName);
 
-    this.logger.log(`Assembling ${session.totalChunks} chunks into ${finalPath}`);
+    this.logger.log(`[doProcessUpload] Assembling ${session.totalChunks} chunks into ${finalPath}`);
 
     try {
-      // Mark as PROCESSING immediately so UI knows work is happening
-      // (prevents "Upload Interrupted" if user refreshes during assembly)
-      await this.upgradeBundleRepository.update(session.bundleId, {
-        uploadStatus: UploadStatus.PROCESSING,  
-        processingStartedAt: new Date(),
-      });
-
       // Remove existing file if it exists (from a previous failed attempt)
       if (await this.pathExists(finalPath)) {
         await fsPromises.unlink(finalPath);
@@ -908,11 +937,10 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         await fsPromises.rm(chunksDir, { recursive: true, force: true });
       }
 
-      this.logger.log(`Chunks assembled successfully: ${finalPath}`);
+      this.logger.log(`[doProcessUpload] Chunks assembled successfully: ${finalPath}`);
 
       // Step 2: Process the bundle (extract, validate checksums, organize files)
-      // Pass file path directly - no extra DB query needed!
-      this.logger.log('Starting bundle processing (extraction, validation, organization)...');
+      this.logger.log('[doProcessUpload] Starting bundle processing (extraction, validation, organization)...');
       const processingResult = await this.processUploadedBundle(finalPath, session.fileName);
 
       // Now cleanup entire temp directory (archive no longer needed)
@@ -920,19 +948,20 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       this.sessions.delete(uploadId);
 
       if (!processingResult.success) {
+        // Store errors in memory so the client can retrieve them via polling
+        this.processingErrors.set(session.bundleId, {
+          errors: processingResult.errors,
+          isValidation: true,
+        });
+
         // Update DB to failed when validation fails
         await this.upgradeBundleRepository.update(session.bundleId, {
           uploadStatus: UploadStatus.FAILED,
           uploadCompletedAt: new Date(),
         });
-        
-        return {
-          success: false,
-          path: finalPath,
-          fileSize: session.fileSize,
-          errors: processingResult.errors,
-          message: 'Checksum validation failed',
-        };
+
+        this.logger.warn(`[doProcessUpload] Validation failed for bundle ${session.bundleId}: ${processingResult.errors.join(', ')}`);
+        return;
       }
 
       await this.upgradeBundleRepository.update(session.bundleId, {
@@ -941,36 +970,21 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         version: processingResult.version,  // Store version for path derivation
       });
 
-      this.logger.log(`Upload fully complete and validated: ${processingResult.deployPath}`);
+      this.logger.log(`[doProcessUpload] Upload fully complete and validated: ${processingResult.deployPath}`);
 
       // Step 3: Automatically trigger worker binary multicast after successful upload
-      let multicastResult: MulticastResponseDto | null = null;
       try {
-        this.logger.log(`Triggering worker binary multicast for version ${processingResult.version}...`);
-        multicastResult = await this.startMulticast({
+        this.logger.log(`[doProcessUpload] Triggering worker binary multicast for version ${processingResult.version}...`);
+        const multicastResult = await this.startMulticast({
           bundleId: session.bundleId,
           version: processingResult.version,
         });
-        this.logger.log(`Multicast result: ${multicastResult.status} - ${multicastResult.message}`);
+        this.logger.log(`[doProcessUpload] Multicast result: ${multicastResult.status} - ${multicastResult.message}`);
       } catch (multicastError) {
         // Upload succeeded — don't fail it because multicast couldn't start.
         // Multicast can be retried manually via POST /upgrade/multicast
-        this.logger.error(`Multicast failed to start after successful upload: ${multicastError.message}`);
+        this.logger.error(`[doProcessUpload] Multicast failed to start after successful upload: ${multicastError.message}`);
       }
-
-      return {
-        success: true,
-        path: processingResult.deployPath,
-        bundleId: session.bundleId,
-        fileSize: session.fileSize,
-        version: processingResult.version,
-        message: 'Upload and validation successful, files organized for deployment',
-        multicast: multicastResult ? {
-          workflowId: multicastResult.workflowId,
-          status: multicastResult.status,
-          message: multicastResult.message,
-        } : null,
-      };
     } catch (error) {
       // Cleanup assembled file if it exists
       try {
@@ -978,7 +992,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
           await fsPromises.unlink(finalPath);
         }
       } catch (cleanupError) {
-        this.logger.error(`Failed to cleanup assembled file: ${cleanupError.message}`);
+        this.logger.error(`[doProcessUpload] Failed to cleanup assembled file: ${cleanupError.message}`);
       }
 
       // Cleanup entire temp directory on failure
@@ -992,18 +1006,11 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
           uploadCompletedAt: new Date(),
         });
       } catch (dbError) {
-        // The stale UPLOADING record will be handled by timeout mechanism
-        this.logger.error(`Failed to update DB to FAILED status: ${dbError.message}`);
+        // The stale PROCESSING record will be caught by the 60-min timeout in getLatestUploadStatus
+        this.logger.error(`[doProcessUpload] Failed to update DB to FAILED status: ${dbError.message}`);
       }
 
-      this.logger.error(`Process upload failed: ${error.message}`);
-
-      // Preserve known HTTP exceptions so client errors aren't masked as 500s
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to assemble file: ${error.message}`);
+      this.logger.error(`[doProcessUpload] Process upload failed for bundle ${session.bundleId}: ${error?.message}`);
     }
   }
 
