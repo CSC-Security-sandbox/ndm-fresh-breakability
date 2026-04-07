@@ -1939,9 +1939,27 @@ export class JobConfigService {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       relations: ["jobConfig"],
+      select: { id: true, status: true, jobStats: true, endTime: true },
     });
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    const snap = jobRun.jobStats;
+    const hasValidSnapshot = !!snap && (
+      (snap.fileCount != null && snap.fileCount !== '0') ||
+      (snap.directories != null && snap.directories !== '0') ||
+      (snap.totalSize != null && snap.totalSize !== '0')
+    );
+    if (hasValidSnapshot) {
+      return {
+        fileCount: snap.fileCount,
+        directories: snap.directories,
+        totalSize: snap.totalSize,
+        lastRefreshed: jobRun.endTime,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+    }
+
     const inventorySummary = await this.jobStatsSummaryMvRepo.findOne({
       where: { jobRunId },
     });

@@ -2,10 +2,10 @@ import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer"
 import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import ServerPathRenderer from "@components/custom-cell-renderer/ServerPathRenderer";
+import { LiveFilesCell, LiveSizeCell, LiveDirCell } from "@components/custom-cell-renderer/LiveStatCellRenderer";
 import {
   BlueXpTableRowType,
   ColumnFilterType,
-  JOBS_TYPE,
   JobRunApiType,
 } from "@/types/app.type";
 import { getJobType, getJobRunType, toTitleCase } from "@/utils/common.utils";
@@ -130,21 +130,29 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     accessor: "scannedFilesCount",
     id: "files",
     width: 80,
+    Renderer: ({
+      row,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveFilesCell, { row }),
   },
   {
     header: "Directories",
     accessor: "scannedDirectoriesCount",
     id: "directories",
     width: 130,
+    Renderer: ({
+      row,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveDirCell, { row }),
   },
   {
     header: "Size",
     accessor: "totalScannedSize",
     id: "size",
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
-      row.jobType === JOBS_TYPE.DISCOVERY
-        ? row.totalScannedSize
-        : row.totalMigratedSize,
+    Renderer: ({
+      row,
+    }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveSizeCell, { row }),
     width: 80,
   },
   {

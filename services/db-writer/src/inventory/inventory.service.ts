@@ -26,6 +26,8 @@ import * as path from 'path';
 export class InventoryService {
   private static readonly DEFAULT_SCHEMA = 'datamigrator';
   private readonly logger: LoggerService;
+  private readonly schema: string;
+  private readonly schemaName: string;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -57,6 +59,8 @@ export class InventoryService {
       // Fallback to basic NestJS Logger for worker threads
       this.logger = new Logger(InventoryService.name) as any;
     }
+    this.schemaName = process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA;
+    this.schema = this.validateAndQuoteSchema(this.schemaName);
   }
 
   private validateAndQuoteSchema(schema: string): string {
@@ -126,6 +130,55 @@ export class InventoryService {
     }
   }
 
+  async getExistingInventoryKeys(
+    jobRunId: string,
+    paths: Array<{ path: string; isDirectory: boolean }>,
+  ): Promise<Set<string>> {
+    if (!paths?.length) return new Set();
+    const schema = this.schema;
+    const pathArr = paths.map((p) => p.path);
+    const isDirArr = paths.map((p) => p.isDirectory);
+    const rows = await this.dataSource.query(
+      `SELECT i.path, i.is_directory
+       FROM ${schema}.inventory i
+       JOIN unnest($2::text[], $3::boolean[]) AS inp(path, is_directory)
+         ON i.path = inp.path
+        AND i.is_directory = inp.is_directory
+       WHERE i.job_run_id = $1`,
+      [jobRunId, pathArr, isDirArr],
+    );
+    return new Set(rows.map((r: { path: string; is_directory: boolean }) => `${r.path}|${jobRunId}|${r.is_directory}`));
+  }
+
+  async computeInventoryDelta(
+    jobRunId: string,
+    items: Array<{ path: string; isDirectory: boolean; size: number }>,
+  ): Promise<{ fileCount: number; dirCount: number; totalSize: bigint }> {
+    if (!items?.length) return { fileCount: 0, dirCount: 0, totalSize: BigInt(0) };
+    const schema = this.schema;
+    const pathArr = items.map((p) => p.path);
+    const isDirArr = items.map((p) => p.isDirectory);
+    const sizeArr = items.map((p) => p.size ?? 0);
+    const rows = await this.dataSource.query(
+      `SELECT
+         COUNT(*)        FILTER (WHERE i.path IS NULL AND inp.is_directory = false) AS new_file_count,
+         COUNT(*)        FILTER (WHERE i.path IS NULL AND inp.is_directory = true)  AS new_dir_count,
+         COALESCE(SUM(inp.size) FILTER (WHERE i.path IS NULL AND inp.is_directory = false), 0) AS new_total_size
+       FROM unnest($2::text[], $3::boolean[], $4::bigint[]) AS inp(path, is_directory, size)
+       LEFT JOIN ${schema}.inventory i
+         ON i.path = inp.path
+        AND i.is_directory = inp.is_directory
+        AND i.job_run_id = $1`,
+      [jobRunId, pathArr, isDirArr, sizeArr],
+    );
+    const row = rows[0];
+    return {
+      fileCount: Number(row.new_file_count),
+      dirCount:  Number(row.new_dir_count),
+      totalSize: BigInt(row.new_total_size),
+    };
+  }
+
 
   async createInventory(data: ItemInfo[], jobRunId: string, pathId: string) {
     if (!data || data.length === 0) {
@@ -139,7 +192,7 @@ export class InventoryService {
     for (const deletedDir of deletedDirectories) {
       const directoryPath = deletedDir.fileName;
       
-      const schema = this.validateAndQuoteSchema(process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA);
+      const schema = this.schema;
       const existingDir = await this.dataSource.query(`
         SELECT i.is_deleted 
         FROM ${schema}.inventory i
@@ -637,11 +690,9 @@ export class InventoryService {
       throw new ValidationError("JobRunId is required to create partition table", 'jobRunId');
     }
     try {
-      const schemaName = process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA;
-      const safeSchema = this.validateAndQuoteSchema(schemaName);
       await this.dataSource.query(
-        `CALL ${safeSchema}.create_inventory_partition($1, $2);`,
-        [jobRunId, schemaName],
+        `CALL ${this.schema}.create_inventory_partition($1, $2);`,
+        [jobRunId, this.schemaName],
       );
       this.logger.log(`Partition table  created or already exists for job run ID: ${jobRunId}`);
     } catch (error) {

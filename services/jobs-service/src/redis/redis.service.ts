@@ -229,4 +229,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return { message: 'Error while updating the job state : ' + traceId };
     }
   }
+
+  async getLiveStats(jobRunId: string): Promise<{
+    fileCount: string;
+    dirCount: string;
+    totalSize: string;
+    lastUpdated: string | null;
+  }> {
+    await this.ensureClient();
+    const key = `${jobRunId}:liveStats`;
+    const stats = await this.client.hGetAll(key);
+    return {
+      fileCount: stats.fileCount ?? '0',
+      dirCount: stats.dirCount ?? '0',
+      totalSize: stats.totalSize ?? '0',
+      lastUpdated: stats.lastUpdated ?? null,
+    };
+  }
 }

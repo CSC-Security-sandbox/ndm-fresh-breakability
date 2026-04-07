@@ -554,6 +554,7 @@ export class JobRunService {
         "jobRun.status AS status",
         "jobRun.startTime AS startTime",
         "jobRun.endTime AS endTime",
+        "jobRun.jobStats AS jobStats",
       ])
       .getRawMany();
   }
@@ -641,11 +642,21 @@ export class JobRunService {
     errorCountsMap: Record<string, { errortype: string; count: number }[]>,
   ): JobRunsDTO {
     const mvStats = mvStatsMap[jobRun.jobrunid];
+    let snapshot: JobRunStats | null = null;
+    if (typeof jobRun.jobstats === 'string') {
+      try {
+        snapshot = JSON.parse(jobRun.jobstats) as JobRunStats;
+      } catch {
+        this.logger.warn(`Failed to parse job_stats JSON for job run ${jobRun.jobrunid}, falling back to MV stats`);
+      }
+    } else if (jobRun.jobstats) {
+      snapshot = jobRun.jobstats as JobRunStats;
+    }
 
-    const fileCount = mvStats?.fileCount;
-    const directories = mvStats?.directoryCount;
-    const totalSize = mvStats?.totalSize;
-    const lastRefreshed = mvStats?.lastRefreshed;
+    const fileCount = snapshot?.fileCount ?? mvStats?.fileCount;
+    const directories = snapshot?.directories ?? mvStats?.directoryCount;
+    const totalSize = snapshot?.totalSize ?? mvStats?.totalSize;
+    const lastRefreshed = snapshot ? (jobRun.endtime ?? mvStats?.lastRefreshed) : mvStats?.lastRefreshed;
     const errors = errorCountsMap[jobRun.jobrunid] || [];
 
     const sourceServer = {
@@ -810,6 +821,25 @@ export class JobRunService {
       };
       if (TERMINAL_JOB_RUN_STATUSES.includes(status)) {
         updateData.endTime = new Date();
+      }
+      // Snapshot live Redis stats into job_stats for terminal statuses and PAUSED,
+      // so getJobRunLiveStats never has to read from stale Redis for non-running jobs.
+      if (TERMINAL_JOB_RUN_STATUSES.includes(status) || status === JobRunStatus.Paused) {
+        try {
+          const liveStats = await this.redisService.getLiveStats(jobRunId);
+
+          if (liveStats.fileCount !== '0' || liveStats.dirCount !== '0') {
+            updateData.jobStats = {
+              fileCount: liveStats.fileCount,
+              directories: liveStats.dirCount,
+              totalSize: liveStats.totalSize,
+              errors: [],
+            };
+            this.logger.log(`Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}`);
+          }
+        } catch (redisErr: unknown) {
+          this.logger.warn(`Could not snapshot Redis stats for job run ${jobRunId}, job_stats will be null: ${redisErr instanceof Error ? redisErr.message : String(redisErr)}`);
+        }
       }
       // Update job run status and record ASUP stats in a single transaction
       await this.dataSource.transaction(async (manager) => {
@@ -1068,13 +1098,85 @@ export class JobRunService {
     return errorTypeCounts;
   }
 
+  async getJobRunLiveStats(jobRunId: string): Promise<{
+    fileCount: string;
+    dirCount: string;
+    totalMigratedSize: string;
+    totalSizeBytes: string;
+    lastUpdated: string | null;
+    source: 'redis' | 'database';
+  }> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      select: { id: true, status: true, jobStats: true },
+    });
+    if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    if (TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status) || jobRun.status === JobRunStatus.Paused) {
+      // Use job_stats column — snapshotted from Redis at the moment the job reached terminal/paused status.
+      const snap = jobRun.jobStats;
+      const hasValidSnapshot = !!snap && (
+        (snap.fileCount != null && snap.fileCount !== '0') ||
+        (snap.directories != null && snap.directories !== '0') ||
+        (snap.totalSize != null && snap.totalSize !== '0')
+      );
+      if (hasValidSnapshot) {
+        return {
+          fileCount: snap.fileCount,
+          dirCount: snap.directories,
+          totalMigratedSize: formatBytes(Number(snap.totalSize || '0')),
+          totalSizeBytes: snap.totalSize,
+          lastUpdated: null,
+          source: 'database',
+        };
+      }
+      // Fallback: job_stats not populated (job runs before this change) → use MV
+      const dbStats = await this.calculateJobRunStats(jobRunId);
+      return {
+        fileCount: dbStats.fileCount,
+        dirCount: dbStats.directories,
+        totalMigratedSize: formatBytes(Number(dbStats.totalSize || '0')),
+        totalSizeBytes: dbStats.totalSize,
+        lastUpdated: dbStats.lastRefreshed ? String(dbStats.lastRefreshed) : null,
+        source: 'database',
+      };
+    }
+
+    const live = await this.redisService.getLiveStats(jobRunId);
+    return {
+      fileCount: live.fileCount,
+      dirCount: live.dirCount,
+      totalMigratedSize: formatBytes(Number(live.totalSize)),
+      totalSizeBytes: live.totalSize,
+      lastUpdated: live.lastUpdated,
+      source: 'redis',
+    };
+  }
+
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
       relations: ["jobConfig"],
+      select: { id: true, status: true, jobStats: true, endTime: true },
     });
     if (!jobRun)
       throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    const snap = jobRun.jobStats;
+    const hasValidSnapshot = !!snap && (
+      (snap.fileCount != null && snap.fileCount !== '0') ||
+      (snap.directories != null && snap.directories !== '0') ||
+      (snap.totalSize != null && snap.totalSize !== '0')
+    );
+    if (hasValidSnapshot) {
+      return {
+        fileCount: snap.fileCount,
+        directories: snap.directories,
+        totalSize: snap.totalSize,
+        lastRefreshed: jobRun.endTime,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+    }
 
     const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
       where: { jobRunId: jobRunId }});

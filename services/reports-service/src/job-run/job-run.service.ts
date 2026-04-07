@@ -66,12 +66,23 @@ export class JobRunService {
   async getJobStatsId(id: string) {
     const getLatestReportStatus = await this.jobRunRepo.findOne({
       where: { id: id },
-      select: ["isReportReady"],
+      select: { isReportReady: true, jobStats: true, endTime: true },
     });
 
     if (!getLatestReportStatus) {
       throw new NotFoundException(`Job run not found for id ${id}`);
     }
+
+    // job_stats is snapshotted from Redis when the job reaches terminal status.
+    // It is the most accurate source; prefer it over the materialized view.
+    const jobStatsSnapshot = getLatestReportStatus.jobStats;
+    const hasValidSnapshot =
+      !!jobStatsSnapshot &&
+      (
+        (jobStatsSnapshot.fileCount != null && jobStatsSnapshot.fileCount !== '0') ||
+        (jobStatsSnapshot.directories != null && jobStatsSnapshot.directories !== '0') ||
+        (jobStatsSnapshot.totalSize != null && jobStatsSnapshot.totalSize !== '0')
+      );
 
     const saved = await this.reportsRepo.findOne({
       where: { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
@@ -94,6 +105,23 @@ export class JobRunService {
       }
       if (jobStatsSummary) {
         parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
+      }
+      // Cached report may have been built when the MV had zeros.
+      // If we now have a valid job_stats snapshot, override the stats section.
+      if (hasValidSnapshot) {
+        const statsFromSnapshot = {
+          fileCount: jobStatsSnapshot.fileCount,
+          directories: jobStatsSnapshot.directories,
+          totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
+        };
+        if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
+        if (parsedReport.discovery) parsedReport.discovery = statsFromSnapshot;
+        if (parsedReport.cutOver) parsedReport.cutOver = statsFromSnapshot;
+        // Stats came from job_stats snapshot captured at job completion — use endTime as the accurate timestamp.
+        // Only override if endTime is non-null; if missing, keep the MV lastRefreshed already set above.
+        if (getLatestReportStatus.endTime != null) {
+          parsedReport.lastRefreshed = getLatestReportStatus.endTime;
+        }
       }
       return parsedReport;
     }
@@ -204,16 +232,21 @@ export class JobRunService {
     };
     const jobRunStatus = new JobRunStats();
     this.logger.log(
-      `Job Stats Summary for Job Run ID ${id}: ${JSON.stringify(jobStatsSummary)}`
+      `Job Stats Summary for Job Run ID ${id}: snapshot=${JSON.stringify(jobStatsSnapshot)} mv=${JSON.stringify(jobStatsSummary)}`
     );
 
-    if (jobStatsSummary) {
+    if (hasValidSnapshot) {
+      // Prefer the job_stats snapshot — it is written atomically when the job
+      // reaches a terminal state and is always more reliable than the MV.
+      jobRunStatus.fileCount = jobStatsSnapshot.fileCount;
+      jobRunStatus.directories = jobStatsSnapshot.directories;
+      jobRunStatus.totalSize = formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString();
+    } else if (jobStatsSummary) {
       jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
       jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
       jobRunStatus.totalSize = formatBytes(
         Number(jobStatsSummary.totalSize)
       ).toString();
-      // Assign lastRefreshed to top-level property for DTO compatibility
     } else {
       jobRunStatus.fileCount = "0";
       jobRunStatus.directories = "0";
@@ -228,7 +261,12 @@ export class JobRunService {
       response["cutOver"] = jobRunStatus;
 
     if (jobStatsSummary) {
-      response["lastRefreshed"] = jobStatsSummary.lastRefreshed;
+      // When stats come from the job_stats snapshot, use endTime (when snapshot was captured)
+      // rather than the MV refresh timestamp which is unrelated to the snapshot.
+      // Fall back to MV lastRefreshed if endTime is not yet set (older jobs / edge cases).
+      response["lastRefreshed"] = (hasValidSnapshot && getLatestReportStatus.endTime != null)
+        ? getLatestReportStatus.endTime
+        : jobStatsSummary.lastRefreshed;
     }
     this.logger.log("Job Run Status: " + jobStatsSummary?.jobRunStatus);
     if (jobStatsSummary?.jobRunStatus === JobRunStatus.Completed) {

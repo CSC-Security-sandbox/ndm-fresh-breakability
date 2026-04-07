@@ -371,6 +371,22 @@ export const jobsApi = createApi({
         return response?.data?.items || response?.data || response;
       },
     }),
+
+    getJobRunLiveStats: builder.query<{
+      fileCount: string;
+      dirCount: string;
+      totalMigratedSize: string;
+      totalSizeBytes: string;
+      lastUpdated: string | null;
+      source: 'redis' | 'database';
+    }, string>({
+      query: (jobRunId) => `job-run/${jobRunId}/live-stats`,
+      keepUnusedDataFor: 0,
+      transformResponse: (response: any) =>
+        response?.data?.items || response?.data || response,
+    }),
+
+    
   }),
 });
 
@@ -410,4 +426,5 @@ export const {
   useRetryJobRunMutation,
   useGetInProcessFilesQuery,
   useLazyGetInProcessFilesQuery,
+  useGetJobRunLiveStatsQuery,
 } = jobsApi;

@@ -246,6 +246,7 @@ export class JobRunController {
     return this.jobRunService.getJobRunIdentityMappings(jobRunId);
   }
 
+
   @ApiOperation({ summary: "Get in-process files for a job run, sorted by longest elapsed time" })
   @ApiResponse({
     status: 200,
@@ -260,5 +261,19 @@ export class JobRunController {
   ) {
     const fetchAll = all ?? false;
     return this.jobRunService.getInProcessFiles(jobRunId, fetchAll);
+  }
+
+
+  @ApiOperation({ summary: "Get live file count and size for a job run" })
+  @ApiResponse({
+    status: 200,
+    description: "Returns live file count and size from Redis for running jobs, or finalized stats from the database for completed jobs.",
+  })
+  @ApiResponse({ status: 404, description: "Job run not found." })
+  @ApiBearerAuth()
+  @Auth(Permission.ViewJob)
+  @Get(":jobRunId/live-stats")
+  async getJobRunLiveStats(@Param("jobRunId") jobRunId: string) {
+    return this.jobRunService.getJobRunLiveStats(jobRunId);
   }
 }

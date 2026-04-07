@@ -2,7 +2,7 @@ import JobInfoCard from "@modules/jobs/jobs-list/job-details/components/JobInfoC
 import JobInfoReverseCard from "@modules/jobs/jobs-list/job-details/components/JobInfoReverseCard";
 import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
-import { JOBS_TYPE, JobRunHeaderPropType } from "@/types/app.type";
+import { JOB_STATUS_TYPE_ENUM, JOBS_TYPE, JobRunHeaderPropType } from "@/types/app.type";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
 import {
@@ -10,8 +10,33 @@ import {
   getJobType,
   getJobTypeTextForHeader,
 } from "@/utils/common.utils";
+import { useGetJobRunLiveStatsQuery } from "@api/jobsApi";
+import { useEffect, useRef } from "react";
 
-const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
+const LIVE_STATS_POLL_INTERVAL_MS = 5000;
+
+const ACTIVE_JOB_STATUSES = new Set([
+  JOB_STATUS_TYPE_ENUM.RUNNING,
+  JOB_STATUS_TYPE_ENUM.PAUSING,
+  JOB_STATUS_TYPE_ENUM.STOPPING,
+]);
+
+const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
+  const isActive = ACTIVE_JOB_STATUSES.has(jobRunDetails?.status);
+  const prevIsActiveRef = useRef(isActive);
+
+  const { data: liveStats, refetch } = useGetJobRunLiveStatsQuery(jobRunId, {
+    pollingInterval: isActive ? LIVE_STATS_POLL_INTERVAL_MS : 0,
+    skip: !jobRunId || (!isActive && !prevIsActiveRef.current),
+  });
+
+  useEffect(() => {
+    if (prevIsActiveRef.current === true && !isActive && jobRunId) {
+      refetch();
+    }
+    prevIsActiveRef.current = isActive;
+  }, [isActive, jobRunId, refetch]);
+
   if (!jobRunDetails) {
     return (
       <Card className="flex h-full justify-center items-center p-10">
@@ -44,6 +69,21 @@ const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
       };
   }
 
+  const displayFileCount =
+    (liveStats?.fileCount && liveStats.fileCount !== '0')
+      ? liveStats.fileCount
+      : jobStats?.fileCount || "--";
+
+  const displayDirCount =
+    (liveStats?.dirCount && liveStats.dirCount !== '0')
+      ? liveStats.dirCount
+      : jobStats?.directories || "--";
+
+  const displaySize =
+    (liveStats?.totalMigratedSize && liveStats.totalMigratedSize !== '0 B')
+      ? liveStats.totalMigratedSize
+      : jobStats?.totalSize || "--";
+
   return (
     <Card className="flex gap-16 p-10">
       <JobInfoCard
@@ -51,11 +91,11 @@ const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
         value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
       />
       <Divider orientation="vertical" flexItem />
-      <JobInfoReverseCard label="Files" value={jobStats?.fileCount || "--"} />
+      <JobInfoReverseCard label="Files" value={displayFileCount} />
       <Divider orientation="vertical" flexItem />
       <JobInfoReverseCard
         label="Directories"
-        value={jobStats?.directories || "--"}
+        value={displayDirCount}
       />
       <Divider orientation="vertical" flexItem />
       <JobInfoReverseCard
@@ -65,8 +105,7 @@ const JobHeader = ({ jobRunDetails }: JobRunHeaderPropType) => {
       <Divider orientation="vertical" flexItem />
       <JobInfoReverseCard
         label={getJobTypeTextForHeader(jobType)}
-        value={jobStats?.totalSize || "--"}
-        // valueType="gb"
+        value={displaySize}
       />
     </Card>
   );

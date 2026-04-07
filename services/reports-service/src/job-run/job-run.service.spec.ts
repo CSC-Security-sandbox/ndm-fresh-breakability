@@ -529,6 +529,73 @@ describe("JobRunService", () => {
       expect(result.lastRefreshed).toEqual(mockLastRefreshed);
     });
 
+    it("should override cached report stats with snapshot when hasValidSnapshot is true", async () => {
+      const endTime = new Date("2025-06-01T10:00:00Z");
+      mockJobRunRepo.findOne.mockResolvedValueOnce({
+        id: jobId,
+        isReportReady: true,
+        jobStats: { fileCount: "99", directories: "9", totalSize: "8192" },
+        endTime,
+      });
+      const existingReport = {
+        reportData: JSON.stringify({
+          isReportReady: true,
+          migrate: { fileCount: "0", directories: "0", totalSize: "0" },
+        }),
+      };
+      mockReportsRepo.findOne.mockResolvedValue(existingReport);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.migrate.fileCount).toBe("99");
+      expect(result.migrate.directories).toBe("9");
+      expect(result.lastRefreshed).toEqual(endTime);
+    });
+
+    it("should use snapshot stats in fresh-build path when hasValidSnapshot is true", async () => {
+      const endTime = new Date("2025-06-01T11:00:00Z");
+      const mockFullJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        isReportReady: false,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourcePath: {
+            fileServer: { protocol: "nfs", config: { configName: "src" } },
+            volumePath: "/src",
+          },
+          destinationPath: {
+            fileServer: { protocol: "smb", config: { configName: "dst" } },
+            volumePath: "/dst",
+          },
+        },
+        options: null,
+        worker: [],
+        endTime,
+      };
+
+      mockJobRunRepo.findOne
+        .mockResolvedValueOnce({
+          id: jobId,
+          isReportReady: false,
+          jobStats: { fileCount: "77", directories: "7", totalSize: "4096" },
+          endTime,
+        })
+        .mockResolvedValueOnce(mockFullJobRun);
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.migrate.fileCount).toBe("77");
+      expect(result.migrate.directories).toBe("7");
+    });
+
     it("should return job options correctly in the response", async () => {
       const mockJobRun = {
         id: jobId,

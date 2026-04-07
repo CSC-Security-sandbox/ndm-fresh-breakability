@@ -2,7 +2,8 @@ import DateCellRenderer from "@components/custom-cell-renderer/DateCellRenderer"
 import ErrorNumberCellRenderer from "@components/custom-cell-renderer/ErrorNumberCellRenderer";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
 import TimeElapsedRenderer from "@components/custom-cell-renderer/TimeElapsedRenderer";
-import { BlueXpTableRowType, JOBS_TYPE, JobRunApiType } from "@/types/app.type";
+import { LiveFilesCell, LiveSizeCell, LiveDirCell } from "@components/custom-cell-renderer/LiveStatCellRenderer";
+import { BlueXpTableRowType, JobRunApiType } from "@/types/app.type";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 import { getJobRunType } from "@/utils/common.utils";
 
@@ -53,21 +54,26 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     accessor: "scannedFilesCount",
     id: "scannedFilesCount",
     width: 80,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
+      <LiveFilesCell row={row} />
+    ),
   },
   {
     header: "Directories",
     accessor: "scannedDirectoriesCount",
     id: "scannedDirectoriesCount",
     width: 80,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
+      <LiveDirCell row={row} />
+    ),
   },
   {
     header: "Size",
     accessor: "totalScannedSize",
     id: "totalScannedSize",
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
-      row.jobType === JOBS_TYPE.DISCOVERY
-        ? row.totalScannedSize
-        : row.totalMigratedSize,
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
+      <LiveSizeCell row={row} />
+    ),
     width: 80,
   },
   {

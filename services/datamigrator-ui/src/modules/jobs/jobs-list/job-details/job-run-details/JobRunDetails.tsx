@@ -421,7 +421,7 @@ const JobRunDetails = () => {
           </Button>
         </Box>
       </Box>
-      <JobRunHeader jobRunDetails={jobRunDetails} />
+      <JobRunHeader jobRunDetails={jobRunDetails} jobRunId={jobRunId} />
       <Box className="flex gap-6 items-stretch">
         <Box className="grow basis-1/2">
           <JobDescription

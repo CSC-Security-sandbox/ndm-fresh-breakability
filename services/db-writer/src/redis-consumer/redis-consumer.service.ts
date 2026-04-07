@@ -16,6 +16,12 @@ import { SQL_QUERIES } from '../constants/custom-response-message';
 import { AuthService } from '../auth/auth.service';
 import { createClient, RedisClientType } from 'redis';
 
+interface InventoryDelta {
+    fileCount: number;
+    dirCount: number;
+    totalSize: bigint;
+}
+
 @Injectable()
 export class RedisConsumerService implements OnModuleDestroy {
     // Service-scoped cache for jobRunId to projectId mapping
@@ -567,6 +573,8 @@ export class RedisConsumerService implements OnModuleDestroy {
     private activeWorkers: Map<string, number> = new Map(); // jobId -> start timestamp
     private workerRetryCounts: Map<string, number> = new Map(); // jobId -> consecutive failure count
     private readonly maxWorkerRetries: number = parseInt(process.env.MAX_WORKER_RETRIES || '3');
+    private redisCompensationFailureCounts: Map<string, number> = new Map(); // jobId -> consecutive Redis compensation failure count
+    private readonly maxRedisCompensationFailures = 3;
     private readonly workerTimeoutMs: number = parseInt(process.env.WORKER_TIMEOUT_MS || '3600000');
 
     /**
@@ -871,6 +879,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
 
             this.jobConsumerMap.delete(jobRunId);
+            this.redisCompensationFailureCounts.delete(jobRunId);
             await this.removeConsumer(jobRunId, consumerType);
             jobContext = null;
             this.logger.log(`projectId: ${projectId} Consumer ${consumerType} cleanup completed for job ${jobRunId}`);
@@ -1139,7 +1148,16 @@ export class RedisConsumerService implements OnModuleDestroy {
         // Handle last file signal
         if (data.fileName === this.lastFile) {
             this.logger.log(`projectId: ${projectId} Last file detected for job ${jobRunId}, triggering final flush and workflow signal`);
-            await this.flushInventory(jobRunId, jobContext);
+            const flushSucceeded = await this.flushInventory(jobRunId, jobContext);
+            if (!flushSucceeded) {
+                this.logger.error(
+                    `projectId: ${projectId} Final flush failed for job ${jobRunId} — ` +
+                    `skipping completion signal and reporting DB writer failure to prevent snapshot of incomplete stats`,
+                );
+                await this.signalWorkflowDbWriterFailure(jobRunId);
+                await this.stopConsumer(jobRunId, ConsumerType.files);
+                return;
+            }
             try {
                 await this.signalWorkflowKill(jobContext, jobRunId);
             } catch (error) {
@@ -1175,35 +1193,27 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     /**
-     * Flushes accumulated inventory records to database and acknowledges in Redis
-     * 
-     * Working:
-     * 1. Validates context and record availability
-     * 2. Clears any pending flush timers
-     * 3. Creates database inventory records via InventoryService
-     * 4. Extracts stream IDs for acknowledgment
-     * 5. Acknowledges processed files in Redis stream
-     * 6. Handles failures by restoring records for retry
-     * 7. Logs operation status and statistics
-     * 
+     * 1. Compute delta of truly NEW items via getExistingInventoryKeys
+     * 2. Increment Redis live counters FIRST
+     * 3. Write to PostgreSQL only after Redis succeeds
+     * 4. If PostgreSQL fails → decrement Redis (compensating transaction) → restore records for retry
+     *
      * @param jobRunId - The job run identifier
-     * @param jobContext - Job context for Redis operations
-     * @returns 
+     * @param jobContext - Job context for Redis stream operations
      */
-    private async flushInventory(jobRunId: string, jobContext: JobManagerContext) {
+    private async flushInventory(jobRunId: string, jobContext: JobManagerContext): Promise<boolean> {
         const projectId = await this.getProjectIdFromCache(jobRunId);
         const context = this.jobConsumerMap.get(jobRunId);
         if (!context) {
             this.logger.warn(`projectId: ${projectId} No context found for flush operation in job ${jobRunId}`);
-            return;
+            return true;
         }
 
         if (context.records.length === 0) {
-            return;
+            return true;
         }
 
-        const recordCount = context.records.length;
-        this.logger.log(`projectId: ${projectId} Flushing ${recordCount} records to inventory for job ${jobRunId}`);
+        this.logger.log(`projectId: ${projectId} Flushing ${context.records.length} records to inventory for job ${jobRunId}`);
 
         if (context.flushTimer) {
             clearTimeout(context.flushTimer);
@@ -1214,29 +1224,191 @@ export class RedisConsumerService implements OnModuleDestroy {
         context.records.length = 0;
 
         try {
-            await this.inventoryService.createInventory(records, context.jobRunId, context.pathId);
+            const dedupedItems = this.deduplicateRecords(records);
 
-            const streamIds = records
-                .map(r => r.streamId)
-                .filter(id => id);
+            const existingKeys = await this.inventoryService.getExistingInventoryKeys(
+                context.jobRunId,
+                dedupedItems.map(r => ({ path: r.fileName, isDirectory: r.isDirectory ?? false })),
+            );
 
-            if (streamIds.length !== records.length) {
-                this.logger.warn(`projectId: ${projectId} Stream ID count mismatch for job ${jobRunId}! Records: ${records.length}, Stream IDs: ${streamIds.length}`);
+            const delta = this.computeNewItemDelta(context.jobRunId, dedupedItems, existingKeys);
+            const hasNewItems = delta.fileCount > 0 || delta.dirCount > 0;
+            let redisUpdated = false;
+
+            if (hasNewItems) {
+                await this.incrementLiveStats(projectId, jobRunId, delta);
+                redisUpdated = true;
             }
 
-            if (streamIds.length > 0) {
-                await jobContext.groupAckFileStream(streamIds, GroupReaderType.DB_WRITER);
-                this.logger.log(`projectId: ${projectId} Successfully flushed and acknowledged ${streamIds.length} records for job ${jobRunId}`);
-            } else {
-                this.logger.error(`projectId: ${projectId} No stream IDs found for acknowledgment in job ${jobRunId}`);
-            }
+            await this.writeInventoryToPostgres(projectId, records, context, delta, redisUpdated);
+            await this.acknowledgeStreamIds(projectId, jobRunId, records, jobContext);
 
+            return true;
         } catch (err) {
             this.logger.error(`projectId: ${projectId} Batch write failed for job ${jobRunId}:`, err);
-
-            // Put records back for retry
             context.records.unshift(...records);
             this.logger.warn(`projectId: ${projectId} Restored ${records.length} records to queue for retry in job ${jobRunId}`);
+            return false;
+        }
+    }
+
+    /**
+     * Filters out deleted-directory markers and deduplicates remaining records by
+     * (fileName, isDirectory), keeping the last occurrence of each unique path.
+     */
+    private deduplicateRecords(records: any[]): any[] {
+        const regularItems = records.filter(r => !(r.isDirectory && r.isDeleted));
+        const seen = new Map<string, any>();
+        for (const r of regularItems) {
+            seen.set(`${r.fileName}|${r.isDirectory ?? false}`, r);
+        }
+        return Array.from(seen.values());
+    }
+
+    /**
+     * Compares deduplicated items against already-persisted keys and returns the
+     * net-new file/dir counts and total byte size that should be added to Redis.
+     */
+    private computeNewItemDelta(
+        jobRunId: string,
+        dedupedItems: any[],
+        existingKeys: Set<string>,
+    ): InventoryDelta {
+        let fileCount = 0;
+        let dirCount = 0;
+        let totalSize = BigInt(0);
+
+        for (const r of dedupedItems) {
+            if (!existingKeys.has(`${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`)) {
+                if (!r.isDirectory) {
+                    fileCount++;
+                    totalSize += BigInt(r.size || 0);
+                } else {
+                    dirCount++;
+                }
+            }
+        }
+
+        return { fileCount, dirCount, totalSize };
+    }
+
+    /**
+     * Atomically increments the liveStats Redis hash for the job and refreshes its TTL.
+     */
+    private async incrementLiveStats(
+        projectId: string,
+        jobRunId: string,
+        delta: InventoryDelta,
+    ): Promise<void> {
+        const liveStatsKey = `${jobRunId}:liveStats`;
+
+        await this.redisClient
+            .multi()
+            .hIncrBy(liveStatsKey, 'fileCount', delta.fileCount)
+            .hIncrBy(liveStatsKey, 'dirCount', delta.dirCount)
+            .hIncrBy(liveStatsKey, 'totalSize', Number(delta.totalSize))
+            .hSet(liveStatsKey, 'lastUpdated', Date.now().toString())
+            .exec();
+
+        this.redisClient.expire(liveStatsKey, 86400).catch(expireErr =>
+            this.logger.warn(`projectId: ${projectId} Failed to set TTL on liveStats key for job ${jobRunId}: ${expireErr.message}`)
+        );
+
+        this.logger.log(
+            `projectId: ${projectId} Updated liveStats for job ${jobRunId}: ` +
+            `+${delta.fileCount} files, +${delta.dirCount} dirs, +${delta.totalSize} bytes`,
+        );
+    }
+
+    /**
+     * Rolls back a previous Redis liveStats increment after a PostgreSQL write failure.
+     * Tracks consecutive compensation failures and signals a workflow failure when the
+     * threshold is reached so the job is not left with permanently inflated counters.
+     */
+    private async compensateRedisIncrement(
+        projectId: string,
+        jobRunId: string,
+        delta: InventoryDelta,
+    ): Promise<void> {
+        const liveStatsKey = `${jobRunId}:liveStats`;
+
+        try {
+            await this.redisClient
+                .multi()
+                .hIncrBy(liveStatsKey, 'fileCount', -delta.fileCount)
+                .hIncrBy(liveStatsKey, 'dirCount', -delta.dirCount)
+                .hIncrBy(liveStatsKey, 'totalSize', -Number(delta.totalSize))
+                .exec();
+            this.redisCompensationFailureCounts.delete(jobRunId);
+        } catch (compensateErr) {
+            const failCount = (this.redisCompensationFailureCounts.get(jobRunId) || 0) + 1;
+            this.redisCompensationFailureCounts.set(jobRunId, failCount);
+            this.logger.warn(
+                `projectId: ${projectId} Redis compensation failed for job ${jobRunId} ` +
+                `(${failCount}/${this.maxRedisCompensationFailures}): ${compensateErr.message}`,
+            );
+
+            if (failCount >= this.maxRedisCompensationFailures) {
+                this.logger.error(
+                    `projectId: ${projectId} Redis compensation failed ${failCount} consecutive times for job ${jobRunId}. ` +
+                    `liveStats counters are permanently inflated. Signalling workflow failure.`,
+                );
+                this.redisCompensationFailureCounts.delete(jobRunId);
+                this.signalWorkflowDbWriterFailure(jobRunId).catch(sigErr =>
+                    this.logger.error(
+                        `projectId: ${projectId} Failed to signal workflow failure after Redis compensation exhaustion for job ${jobRunId}:`,
+                        sigErr,
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Writes the batch to PostgreSQL. If the write fails and Redis was already updated,
+     * issues a compensating decrement via {@link compensateRedisIncrement}.
+     */
+    private async writeInventoryToPostgres(
+        projectId: string,
+        records: any[],
+        context: FileConsumerContext,
+        delta: InventoryDelta,
+        redisUpdated: boolean,
+    ): Promise<void> {
+        try {
+            await this.inventoryService.createInventory(records, context.jobRunId, context.pathId);
+        } catch (pgErr) {
+            if (redisUpdated) {
+                await this.compensateRedisIncrement(projectId, context.jobRunId, delta);
+            }
+            throw pgErr;
+        }
+    }
+
+    /**
+     * Acknowledges all stream IDs from the flushed batch so the Redis consumer group
+     * does not re-deliver them on the next poll.
+     */
+    private async acknowledgeStreamIds(
+        projectId: string,
+        jobRunId: string,
+        records: any[],
+        jobContext: JobManagerContext,
+    ): Promise<void> {
+        const streamIds = records.map(r => r.streamId).filter(id => id);
+
+        if (streamIds.length !== records.length) {
+            this.logger.warn(
+                `projectId: ${projectId} Stream ID count mismatch for job ${jobRunId}! ` +
+                `Records: ${records.length}, Stream IDs: ${streamIds.length}`,
+            );
+        }
+
+        if (streamIds.length > 0) {
+            await jobContext.groupAckFileStream(streamIds, GroupReaderType.DB_WRITER);
+            this.logger.log(`projectId: ${projectId} Successfully flushed and acknowledged ${streamIds.length} records for job ${jobRunId}`);
+        } else {
+            this.logger.error(`projectId: ${projectId} No stream IDs found for acknowledgment in job ${jobRunId}`);
         }
     }
 
@@ -1294,6 +1466,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                 }
 
                 this.jobConsumerMap.delete(jobRunId);
+                this.redisCompensationFailureCounts.delete(jobRunId);
             }
 
             if (this.activeWorkers.has(jobRunId)) {
