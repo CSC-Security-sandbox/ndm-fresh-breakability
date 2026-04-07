@@ -519,12 +519,205 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
     });
   });
 
-  // ─── toFlatFilename branch: empty safe string ────────────────
+  // ─── toFlatFilename ──────────────────────────────────────────
 
   describe('toFlatFilename', () => {
     it('should return a fallback filename when relativePath is empty string', () => {
       const result = (service as any).toFlatFilename('');
       expect(result).toMatch(/^file-\d+$/);
+    });
+
+    it('should return a sanitised flat fallback for an unrecognised top-level dir', () => {
+      const result = (service as any).toFlatFilename('some_root/unknown-dir/file.txt');
+      expect(result).toBe('unknown-dir_file.txt');
+    });
+
+    it('should handle a single-segment path with no slash', () => {
+      // parts.length === 1 → trimmed = normalized (no slice)
+      const result = (service as any).toFlatFilename('justfilename.log');
+      expect(result).toBe('justfilename.log');
+    });
+
+    // ── ndm_logs / no-project paths ──────────────────────────────────────────
+
+    it('no-project: worker.log exact match → no_project_worker_<id>_<date>.log', () => {
+      const result = (service as any).toFlatFilename(
+        'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123/worker.log',
+      );
+      expect(result).toBe('no_project_worker_wid-123_26_04_07.log');
+    });
+
+    it('no-project: worker other file → <date>_no_project_worker_<id>_<file>', () => {
+      const result = (service as any).toFlatFilename(
+        'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123/debug.log',
+      );
+      expect(result).toBe('26_04_07_no_project_worker_wid-123_debug.log');
+    });
+
+    it('no-project: non-worker entry falls through to generic no-project fallback', () => {
+      const result = (service as any).toFlatFilename(
+        'ndm_logs_user/ndm_logs/2026-04-07/no-project/control-plane/admin.log',
+      );
+      expect(result).toBe('26_04_07_no_project_control-plane_admin.log');
+    });
+
+    it('no-project: worker path with fewer than 3 rest segments falls to generic fallback', () => {
+      // rest = ['worker', 'wid-123'] → rest.length=2 < 3 → fallback branch
+      const result = (service as any).toFlatFilename(
+        'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123',
+      );
+      expect(result).toContain('no_project');
+    });
+
+    // ── ndm_logs / project paths ──────────────────────────────────────────────
+
+    it('project: sub.length === 0 (bare ndm_logs/date/projectId) returns sanitised flat path', () => {
+      // tp = ['ndm_logs', '2026-04-07', 'proj-abc'] → sub = []
+      const result = (service as any).toFlatFilename('bundle/ndm_logs/2026-04-07/proj-abc');
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('project: control-plane known service → cp_<svc>_<date>_<projectId>.log', () => {
+      const result = (service as any).toFlatFilename(
+        'ndm_logs_user/ndm_logs/2026-04-07/proj-abc/control-plane/admin-service.log',
+      );
+      expect(result).toBe('cp_admin_svc_26_04_07_proj-abc.log');
+    });
+
+    it('project: control-plane config-service → cp_config_svc_<date>_<projectId>.log', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/config-service.log',
+      );
+      expect(result).toBe('cp_config_svc_26_04_07_proj-abc.log');
+    });
+
+    it('project: control-plane error-report.csv → cp_error_report_<date>_<projectId>.csv', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/error-report.csv',
+      );
+      expect(result).toBe('cp_error_report_26_04_07_proj-abc.csv');
+    });
+
+    it('project: control-plane unknown service (cpMap miss) → cp_<date>_<projectId>_<safe>', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/custom-service.log',
+      );
+      expect(result).toBe('cp_26_04_07_proj-abc_custom-service.log');
+    });
+
+    it('project: worker worker.log exact match → worker_<id>_<date>_<projectId>.log', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456/worker.log',
+      );
+      expect(result).toBe('worker_wid-456_26_04_07_proj-abc.log');
+    });
+
+    it('project: worker other file → <date>_<projectId>_worker_<id>_<safe>', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456/debug.log',
+      );
+      expect(result).toBe('26_04_07_proj-abc_worker_wid-456_debug.log');
+    });
+
+    it('project: worker path with fewer than 3 sub segments falls to safe flat path', () => {
+      // sub = ['worker', 'wid-456'] → sub.length=2 < 3 → safe(trimmed...)
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456',
+      );
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('project: unknown subDir (not control-plane, not worker) → safe flat path', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/ndm_logs/2026-04-07/proj-abc/other-dir/file.txt',
+      );
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    // ── CSV category paths ────────────────────────────────────────────────────
+
+    it('Performance Metrics csv → perf_<metric_underscored>_<ts>.csv', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/Performance Metrics/cpu-percent-12345.csv',
+      );
+      expect(result).toBe('perf_cpu_percent_12345.csv');
+    });
+
+    it('State Data csv → state_data_<name>_<ts>.csv', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/State Data/service_pods_12345.csv',
+      );
+      expect(result).toBe('state_data_service_pods_12345.csv');
+    });
+
+    it('System Inventory csv → sys_inventory_<type_underscored>_<ts>.csv', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/System Inventory/system-inventory-disk-usage-12345.csv',
+      );
+      expect(result).toBe('sys_inventory_disk_usage_12345.csv');
+    });
+
+    it('configuration data csv → just the filename with no prefix', () => {
+      const result = (service as any).toFlatFilename(
+        'bundle/configuration data/job_config_details_12345.csv',
+      );
+      expect(result).toBe('job_config_details_12345.csv');
+    });
+  });
+
+  // ─── packageSupportBundlePayload: finally cleanup error handling ──────────
+
+  describe('packageSupportBundlePayload finally cleanup error handling', () => {
+    afterEach(() => {
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
+          const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+          if (typeof callback === 'function') callback(null, '', '');
+        },
+      );
+    });
+
+    it('should warn but not throw when fs.unlink fails for temp files in finally', async () => {
+      mockedFs.unlink.mockRejectedValue(new Error('unlink failed'));
+
+      // Should still resolve — unlink failure in finally must not propagate
+      await expect(
+        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+      ).resolves.toBeDefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to delete temp file'),
+      );
+    });
+
+    it('should warn but not throw when fs.rm(extractedDir) fails in finally', async () => {
+      mockedFs.rm.mockRejectedValue(new Error('rm extractedDir failed'));
+
+      await expect(
+        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+      ).resolves.toBeDefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove extractedDir'),
+      );
+    });
+
+    it('should warn but not throw when fs.rm(stagedPayloadDir) fails in finally', async () => {
+      // First rm (extractedDir) succeeds, second (stagedPayloadDir) fails
+      mockedFs.rm
+        .mockResolvedValueOnce(undefined as any)
+        .mockRejectedValueOnce(new Error('rm staged failed'));
+
+      await expect(
+        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+      ).resolves.toBeDefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove stagedPayloadDir'),
+      );
     });
   });
 

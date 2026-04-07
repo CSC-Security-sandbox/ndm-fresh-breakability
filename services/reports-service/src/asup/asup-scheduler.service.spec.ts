@@ -530,5 +530,66 @@ describe('AsupSchedulerService', () => {
         svc.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
       ).rejects.toThrow('ASUP support bundle endpoint is not configured');
     });
+
+    // ── archive cleanup (finally block) ──────────────────────────────────────
+
+    it('should delete the .7z archive after successful single PUT (finally cleanup)', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsMocked = require('fs/promises');
+      mockAxiosPut.mockResolvedValue({ status: 200 });
+
+      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+
+      expect(fsMocked.unlink).toHaveBeenCalledWith(
+        '/tmp/asup-reports/support-bundle-asup-123.7z',
+      );
+    });
+
+    it('should delete the .7z archive even when single PUT transmission fails (finally cleanup)', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsMocked = require('fs/promises');
+      mockAxiosPut.mockRejectedValue(new Error('network error'));
+
+      await expect(
+        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+      ).rejects.toThrow('network error');
+
+      // Despite the error, unlink must still have been called
+      expect(fsMocked.unlink).toHaveBeenCalledWith(
+        '/tmp/asup-reports/support-bundle-asup-123.7z',
+      );
+    });
+
+    it('should warn (not throw) when archive unlink fails during cleanup, and still propagate original transmission error', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsMocked = require('fs/promises');
+      mockAxiosPut.mockRejectedValue(new Error('PUT failed'));
+      fsMocked.unlink.mockRejectedValue(new Error('unlink ENOENT'));
+
+      // The original transmission error must be the one that propagates
+      await expect(
+        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+      ).rejects.toThrow('PUT failed');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to delete support bundle archive'),
+      );
+    });
+
+    it('should warn (not throw) when archive unlink fails after successful transmission', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fsMocked = require('fs/promises');
+      mockAxiosPut.mockResolvedValue({ status: 200 });
+      fsMocked.unlink.mockRejectedValue(new Error('unlink EPERM'));
+
+      // Transmission succeeded — cleanup failure must NOT cause the method to throw
+      await expect(
+        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+      ).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to delete support bundle archive'),
+      );
+    });
   });
 });
