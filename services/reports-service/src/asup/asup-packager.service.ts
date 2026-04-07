@@ -8,6 +8,7 @@ import {
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { AsupXmlGeneratorService } from './asup-xml-generator.service';
+import { SerialIdSyncService } from '../serial-id-sync.service';
 
 const sevenBin = require('7zip-bin');
 
@@ -31,6 +32,7 @@ export class AsupPackagerService {
   constructor(
     private readonly asupXmlGeneratorService: AsupXmlGeneratorService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly serialIdSyncService: SerialIdSyncService,
   ) {
     this.logger = loggerFactory.create(AsupPackagerService.name);
     this.loadTemplates();
@@ -43,8 +45,14 @@ export class AsupPackagerService {
     md5Checksum: string;
     headersMap: Record<string, string>;
     xmlContent: string;
-  }> {
+  } | null> {
     this.logger.log('Starting ASUP payload packaging...');
+
+    const serialId = await this.serialIdSyncService.getSerialId();
+    if (!serialId) {
+      this.logger.error('Serial ID not found — ASUP transmission aborted. Ensure the serial ID is initialised in the database or conf file.');
+      return null;
+    }
 
     // 1. Get migration XML from xml-generator
     const startTime = Date.now();
@@ -54,7 +62,7 @@ export class AsupPackagerService {
     this.logger.log(`Migration XML from generator (${migrationXmlSize} bytes, ${collectionTimeMs}ms)`);
 
     // 2. Build x-header-data.txt first so its size is available for the manifest row
-    const { headersText, headersMap } = this.buildXHeaders();
+    const { headersText, headersMap } = this.buildXHeaders(serialId);
     const xHeaderSize = Buffer.byteLength(headersText, 'utf-8');
     this.logger.log(`Generated x-header-data.txt (${xHeaderSize} bytes)`);
 
@@ -140,14 +148,16 @@ export class AsupPackagerService {
 
   // ─── X-Headers ────────────────────────────────────────────────
 
-  private buildXHeaders(): {
+  private buildXHeaders(serialId: string): {
     headersText: string;
     headersMap: Record<string, string>;
   } {
     const generatedOn = this.formatAsupDate(new Date());
 
     const headersText = this.xHeadersTemplate
-      .replace(/\{\{GENERATED_ON\}\}/g, generatedOn);
+      .replace(/\{\{GENERATED_ON\}\}/g, generatedOn)
+      .replace(/\{\{SERIAL_NUM\}\}/g, serialId)
+      .replace(/\{\{SYSTEM_ID\}\}/g, serialId);
 
     // Parse the text into a key-value map for HTTP headers
     const headersMap: Record<string, string> = {};

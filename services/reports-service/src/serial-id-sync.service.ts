@@ -67,6 +67,11 @@ export class SerialIdSyncService implements OnApplicationBootstrap {
     return `97500${yy}${mm}${dd}${hh}${min}0${rand}`;
   }
 
+  /** Resolves the serial ID from DB first, falling back to the conf file. */
+  async getSerialId(): Promise<string | null> {
+    return (await this.readSerialIdFromDb()) ?? (await this.readSerialIdFromFile());
+  }
+
   private async readSerialIdFromDb(): Promise<string | null> {
     try {
       const rows: Array<{ setting_value: string; serial_id: string }> =

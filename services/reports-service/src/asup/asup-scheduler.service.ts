@@ -154,7 +154,11 @@ export class AsupSchedulerService {
   async transmitAsupMetrics(): Promise<void> {
     this.logger.log('Starting ASUP payload packaging (via asup-packager)...');
 
-    const { archivePath, md5Checksum, headersMap } = await this.asupPackagerService.packageAsupPayload();
+    const payload = await this.asupPackagerService.packageAsupPayload();
+    if (!payload) {
+      return;
+    }
+    const { archivePath, md5Checksum, headersMap } = payload;
     this.logger.log(`Packaged ASUP payload: ${archivePath}, MD5=${md5Checksum}`);
 
     if (!this.asupEndpointUrl) {

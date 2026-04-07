@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AsupPackagerService } from './asup-packager.service';
 import { AsupXmlGeneratorService } from './asup-xml-generator.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { SerialIdSyncService } from '../serial-id-sync.service';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import * as child_process from 'child_process';
@@ -26,6 +27,12 @@ describe('AsupPackagerService', () => {
 
   const mockLoggerFactory = {
     create: jest.fn().mockReturnValue(mockLogger),
+  };
+
+  const MOCK_SERIAL = '97500260331143500123';
+
+  const mockSerialIdSyncService = {
+    getSerialId: jest.fn().mockResolvedValue(MOCK_SERIAL),
   };
 
   const xHeadersTemplate = `X-Netapp-Asup-Subject: NDM ASUP Report
@@ -55,6 +62,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         AsupPackagerService,
         { provide: AsupXmlGeneratorService, useValue: xmlGeneratorService },
         { provide: LoggerFactory, useValue: mockLoggerFactory },
+        { provide: SerialIdSyncService, useValue: mockSerialIdSyncService },
       ],
     }).compile();
 
@@ -251,6 +259,71 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result.headersMap['X-Netapp-Asup-Generated-On']).toBeDefined();
       expect(result.headersMap['X-Netapp-Asup-Generated-On']).not.toContain(
         '{{GENERATED_ON}}',
+      );
+    });
+  });
+
+  // ─── serial ID wiring ────────────────────────────────────────
+
+  describe('serial ID wiring in x-headers', () => {
+    beforeEach(() => {
+      xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue('<xml/>');
+      xmlGeneratorService.buildManifestXml.mockResolvedValue('<manifest/>');
+      mockedExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          process.nextTick(() => cb(null, '', ''));
+        },
+      );
+    });
+
+    it('should delegate to SerialIdSyncService.getSerialId and use the returned serial', async () => {
+      mockSerialIdSyncService.getSerialId.mockResolvedValueOnce(MOCK_SERIAL);
+
+      const result = await service.packageAsupPayload();
+
+      expect(mockSerialIdSyncService.getSerialId).toHaveBeenCalledTimes(1);
+      expect(result.archivePath).toContain('asup-payload.7z');
+    });
+
+    it('should log error and return null when SerialIdSyncService returns null', async () => {
+      mockSerialIdSyncService.getSerialId.mockResolvedValueOnce(null);
+
+      const result = await service.packageAsupPayload();
+
+      expect(result).toBeNull();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Serial ID not found'),
+      );
+      // No packaging work should have started
+      expect(mockedExecFile).not.toHaveBeenCalled();
+      expect(mockedFs.mkdir).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── loadTemplates error branch ──────────────────────────────
+
+  describe('loadTemplates error handling', () => {
+    it('should log error and not throw when template file is missing', async () => {
+      mockedFs.readFile.mockImplementation(((filePath: string) => {
+        if (filePath.includes('x-headers.template')) return Promise.reject(new Error('template missing'));
+        return Promise.resolve(Buffer.from('mock-7z-data'));
+      }) as any);
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AsupPackagerService,
+          { provide: AsupXmlGeneratorService, useValue: xmlGeneratorService },
+          { provide: LoggerFactory, useValue: mockLoggerFactory },
+          { provide: SerialIdSyncService, useValue: mockSerialIdSyncService },
+        ],
+      }).compile();
+
+      const svc = module.get<AsupPackagerService>(AsupPackagerService);
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(svc).toBeDefined();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load ASUP x-headers template'),
       );
     });
   });

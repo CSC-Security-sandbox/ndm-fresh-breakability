@@ -257,4 +257,117 @@ describe('SerialIdSyncService', () => {
     );
     expect(fs.writeFile).not.toHaveBeenCalled();
   });
+
+  it('should treat DB row with invalid serial as absent and fall through to file/generate', async () => {
+    // DB row exists but serial doesn't match ^975[0-9]{17}$ — readSerialIdFromDb returns null
+    dataSource.query
+      .mockResolvedValueOnce([{ setting_value: 'INVALID_SERIAL', serial_id: 'INVALID_SERIAL' }])
+      .mockResolvedValueOnce(undefined); // INSERT
+
+    (fs.readFile as jest.Mock).mockResolvedValueOnce(`serial_id=${VALID_FILE_SERIAL}\n`);
+    (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+    await service.onApplicationBootstrap();
+
+    // SELECT (invalid row → null) + INSERT with file serial
+    expect(dataSource.query).toHaveBeenCalledTimes(2);
+    expect(dataSource.query.mock.calls[1][1]).toEqual(
+      expect.arrayContaining([VALID_FILE_SERIAL]),
+    );
+  });
+
+  it('should generate new serial when file exists but contains no valid serial pattern', async () => {
+    dataSource.query
+      .mockResolvedValueOnce([]) // SELECT — no row
+      .mockResolvedValueOnce(undefined); // INSERT
+
+    // File exists but content doesn't match regex → readSerialIdFromFile returns null
+    (fs.readFile as jest.Mock).mockResolvedValueOnce('serial_id=BADVALUE\n');
+    (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+    await service.onApplicationBootstrap();
+
+    // A new serial should be generated and written
+    const writtenContent: string = (fs.writeFile as jest.Mock).mock.calls[0][1];
+    expect(writtenContent).toMatch(/^serial_id=975[0-9]{17}\n$/);
+  });
+
+  // ─── getSerialId ─────────────────────────────────────────────
+
+  describe('getSerialId', () => {
+    it('returns the DB serial when the DB row is present and valid (DB-first)', async () => {
+      dataSource.query.mockResolvedValueOnce([
+        { setting_value: VALID_DB_SERIAL, serial_id: VALID_DB_SERIAL },
+      ]);
+
+      const result = await service.getSerialId();
+
+      expect(result).toBe(VALID_DB_SERIAL);
+      // File should NOT be read — DB short-circuits the lookup
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it('returns the DB serial from setting_value when serial_id column is null', async () => {
+      dataSource.query.mockResolvedValueOnce([
+        { setting_value: VALID_DB_SERIAL, serial_id: null },
+      ]);
+
+      const result = await service.getSerialId();
+
+      expect(result).toBe(VALID_DB_SERIAL);
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it('falls back to conf file when DB row is absent', async () => {
+      dataSource.query.mockResolvedValueOnce([]); // SELECT — empty
+      (fs.readFile as jest.Mock).mockResolvedValueOnce(`serial_id=${VALID_FILE_SERIAL}\n`);
+
+      const result = await service.getSerialId();
+
+      expect(result).toBe(VALID_FILE_SERIAL);
+    });
+
+    it('falls back to conf file when DB row has an invalid serial (fails regex)', async () => {
+      dataSource.query.mockResolvedValueOnce([
+        { setting_value: 'INVALID', serial_id: 'INVALID' },
+      ]);
+      (fs.readFile as jest.Mock).mockResolvedValueOnce(`serial_id=${VALID_FILE_SERIAL}\n`);
+
+      const result = await service.getSerialId();
+
+      expect(result).toBe(VALID_FILE_SERIAL);
+    });
+
+    it('falls back to conf file when DB query throws', async () => {
+      dataSource.query.mockRejectedValueOnce(new Error('connection refused'));
+      (fs.readFile as jest.Mock).mockResolvedValueOnce(`serial_id=${VALID_FILE_SERIAL}\n`);
+
+      const result = await service.getSerialId();
+
+      expect(result).toBe(VALID_FILE_SERIAL);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read serial ID from DB'),
+      );
+    });
+
+    it('returns null when DB is empty and conf file is missing', async () => {
+      dataSource.query.mockResolvedValueOnce([]);
+      (fs.readFile as jest.Mock).mockRejectedValueOnce(new Error('ENOENT'));
+
+      const result = await service.getSerialId();
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when DB is empty and conf file has no valid serial pattern', async () => {
+      dataSource.query.mockResolvedValueOnce([]);
+      (fs.readFile as jest.Mock).mockResolvedValueOnce('serial_id=BADVALUE\n');
+
+      const result = await service.getSerialId();
+
+      expect(result).toBeNull();
+    });
+  });
 });
