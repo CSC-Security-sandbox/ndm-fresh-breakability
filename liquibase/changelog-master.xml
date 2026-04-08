@@ -664,6 +664,13 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260318_01_alter_upgrade_bundles_add_stopped_job_ids.sql" author="dk49889">
+      <sqlFile path="liquibase/20260318_01_alter_upgrade_bundles_add_stopped_job_ids.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260318_01_alter_upgrade_bundles_add_stopped_job_ids_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
    <changeSet id="20260401_01_update_tag_version.sql" author="si82974">
       <sqlFile path="liquibase/20260401_01_update_tag_version.sql"/>
       <rollback>

@@ -391,6 +391,54 @@ export const jobsApi = createApi({
     }),
 
     
+
+    bulkDeactivateJobs: builder.mutation<
+      { deactivatedCount: number; deactivatedIds: string[] },
+      { ids: string[] }
+    >({
+      query: ({ ids }) => ({
+        url: 'jobs/bulk-deactivate',
+        method: 'POST',
+        body: { ids },
+      }),
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: ['ALL_JOB_CONFIGS'],
+    }),
+
+    bulkActivateJobs: builder.mutation<
+      { activatedCount: number; activatedIds: string[] },
+      { ids: string[] }
+    >({
+      query: ({ ids }) => ({
+        url: 'jobs/bulk-activate',
+        method: 'POST',
+        body: { ids },
+      }),
+      transformResponse: (response: any) => {
+        return response?.data?.items || response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+      invalidatesTags: ['ALL_JOB_CONFIGS'],
+    }),
+
+    getStoppedJobsReport: builder.mutation<
+      { stoppedRuns: any[]; deactivatedConfigs: any[] },
+      { jobRunIds: string[]; jobConfigIds: string[] }
+    >({
+      query: (body) => ({
+        url: 'jobs/stopped-jobs-report',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: any) => {
+        // API wraps data as: { data: { items: { stoppedRuns, deactivatedConfigs } } }
+        return response?.data?.items || response?.data || response;
+      },
+      transformErrorResponse: structuredErrorResponse,
+    }),
   }),
 });
 
@@ -431,4 +479,7 @@ export const {
   useGetInProcessFilesQuery,
   useLazyGetInProcessFilesQuery,
   useGetJobRunLiveStatsQuery,
+  useBulkDeactivateJobsMutation,
+  useBulkActivateJobsMutation,
+  useGetStoppedJobsReportMutation,
 } = jobsApi;

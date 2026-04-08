@@ -21,6 +21,8 @@ export interface LatestUploadStatusResponse {
   // Processing error fields — populated by doProcessUpload on failure
   processingErrors?: string[] | null;
   isValidationFailure?: boolean;
+  deactivatedJobConfigIds?: string[] | null;  // persisted to DB before upgrade — survives CP restart
+  stoppedJobRunIds?: string[] | null;          // persisted to DB before upgrade — survives CP restart
 }
 
 export interface WorkerExecutionItem {
@@ -209,6 +211,22 @@ export const upgradeApi = createApi({
       },
       invalidatesTags: ["UPLOAD_STATUS"],
     }),
+
+    // Save or clear stopped job IDs on the bundle record (persists across CP restart)
+    saveStoppedJobIds: builder.mutation<
+      { success: boolean },
+      { bundleId: string; deactivatedConfigIds: string[]; stoppedRunIds: string[] }
+    >({
+      query: ({ bundleId, deactivatedConfigIds, stoppedRunIds }) => ({
+        url: `/upgrade/bundle/${bundleId}/stopped-job-ids`,
+        method: "PATCH",
+        body: { deactivatedConfigIds, stoppedRunIds },
+      }),
+      transformResponse: (response: any) => {
+        return response?.data || response;
+      },
+      invalidatesTags: ["UPLOAD_STATUS"],
+    }),
   }),
 });
 
@@ -223,4 +241,5 @@ export const {
   useLazyGetMulticastStatusQuery,
   useLazyGetExecutionStatusQuery,
   useResetUpgradeMutation,
+  useSaveStoppedJobIdsMutation,
 } = upgradeApi;

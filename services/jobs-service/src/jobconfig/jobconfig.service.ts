@@ -1002,6 +1002,121 @@ export class JobConfigService {
     );
   }
 
+  // ------------  bulk deactivate all jobs (used before upgrade) ---------------- //
+  async bulkDeactivateAllJobs(ids: string[]): Promise<{ deactivatedCount: number; deactivatedIds: string[] }> {
+    if (!ids || ids.length === 0) {
+      this.logger.log('bulkDeactivateAllJobs: no IDs provided');
+      return { deactivatedCount: 0, deactivatedIds: [] };
+    }
+
+    try {
+      // Single SQL UPDATE — covers ALL projects since jobconfig has no direct projectId column
+      await this.jobConfigRepo.update(
+        { id: In(ids) },
+        { status: JobStatus.InActive },
+      );
+
+      // Verify which IDs were actually set to InActive (guards against missing/already-deleted IDs)
+      const updated = await this.jobConfigRepo.find({
+        where: { id: In(ids), status: JobStatus.InActive },
+        select: ['id'],
+      });
+      const deactivatedIds = updated.map((c) => c.id);
+
+      this.logger.log(`bulkDeactivateAllJobs: deactivated ${deactivatedIds.length} of ${ids.length} job configs across all projects`);
+      return { deactivatedCount: deactivatedIds.length, deactivatedIds };
+    } catch (err) {
+      this.logger.error(`bulkDeactivateAllJobs: failed for ${ids.length} IDs — ${err.message}`);
+      throw err;
+    }
+  }
+
+  // ------------  bulk activate all jobs (used after upgrade) ---------------- //
+  async bulkActivateJobs(ids: string[]): Promise<{ activatedCount: number; activatedIds: string[] }> {
+    if (!ids || ids.length === 0) {
+      this.logger.log('bulkActivateJobs: no IDs provided');
+      return { activatedCount: 0, activatedIds: [] };
+    }
+
+    try {
+      await this.jobConfigRepo.update(
+        { id: In(ids) },
+        { status: JobStatus.Active },
+      );
+
+      // Verify which IDs were actually set to Active (guards against missing/already-deleted IDs)
+      const updated = await this.jobConfigRepo.find({
+        where: { id: In(ids), status: JobStatus.Active },
+        select: ['id'],
+      });
+      const activatedIds = updated.map((c) => c.id);
+
+      this.logger.log(`bulkActivateJobs: activated ${activatedIds.length} of ${ids.length} job configs`);
+      return { activatedCount: activatedIds.length, activatedIds };
+    } catch (err) {
+      this.logger.error(`bulkActivateJobs: failed for ${ids.length} IDs — ${err.message}`);
+      throw err;
+    }
+  }
+
+  // ------------  stopped jobs report (for CSV export pre/post upgrade) ---------------- //
+  async getStoppedJobsReport(
+    jobRunIds: string[],
+    jobConfigIds: string[],
+  ): Promise<{ stoppedRuns: any[]; deactivatedConfigs: any[] }> {
+    // Query job runs with parent config and full src/dest join
+    const runs = jobRunIds.length > 0
+      ? await this.jobRunRepo.find({
+          where: { id: In(jobRunIds) },
+          relations: {
+            jobConfig: {
+              sourcePath: { fileServer: true },
+              targetPath: { fileServer: true },
+            },
+          },
+        })
+      : [];
+
+    // Query job configs with full src/dest join
+    const configs = jobConfigIds.length > 0
+      ? await this.jobConfigRepo.find({
+          where: { id: In(jobConfigIds) },
+          relations: {
+            sourcePath: { fileServer: true },
+            targetPath: { fileServer: true },
+          },
+        })
+      : [];
+
+    const mapSrcDest = (jc: JobConfigEntity) => ({
+      sourceServer: jc.sourcePath?.fileServer?.fileServerName ?? '',
+      sourceVolume: jc.sourcePath?.volumePath ?? '',
+      sourceDir: jc.sourceDirectoryPath ?? '',
+      destServer: jc.targetPath?.fileServer?.fileServerName ?? '',
+      destVolume: jc.targetPath?.volumePath ?? '',
+      destDir: jc.targetDirectoryPath ?? '',
+    });
+
+    return {
+      stoppedRuns: runs.map((r) => ({
+        runId: r.id,
+        status: r.status,
+        startTime: r.startTime,
+        jobConfigId: r.jobConfigId,
+        ...(r.jobConfig ? mapSrcDest(r.jobConfig) : {
+          sourceServer: '', sourceVolume: '', sourceDir: '',
+          destServer: '', destVolume: '', destDir: '',
+        }),
+      })),
+      deactivatedConfigs: configs.map((jc) => ({
+        configId: jc.id,
+        jobType: jc.jobType,
+        status: jc.status,
+        ...mapSrcDest(jc),
+      })),
+    };
+  }
+
   // ------------  update ---------------- //
   async updateJobConfig(
     id: string,

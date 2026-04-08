@@ -6135,5 +6135,378 @@ describe("JobConfigService", () => {
         order: { endTime: 'DESC' },
       });
     });
+
+    it('should return cached stats when fetchLatest=true but statsEntity is already up-to-date (no recalculation needed)', async () => {
+      // statsEntity.lastUpdatedAt is NEWER than latestJobRun.endTime → no recalculation
+      const mockStatsEntity = {
+        id: 'stats-id',
+        jobConfigId: validJobConfigId,
+        fileCount: 200,
+        dirCount: 100,
+        totalSize: 3072000,
+        lastUpdatedAt: new Date('2024-02-01T12:00:00Z'), // newer than job run end
+      };
+      const mockLatestJobRun = {
+        id: 'jobrun-id',
+        jobConfigId: validJobConfigId,
+        status: JobRunStatus.Completed,
+        endTime: new Date('2024-01-01T10:00:00Z'), // older than statsEntity
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJobConfig as any);
+      jest.spyOn(jobConfigInventoryStatsRepo, 'findOne').mockResolvedValue(mockStatsEntity as any);
+      jest.spyOn(jobRunRepo, 'findOne').mockResolvedValue(mockLatestJobRun as any);
+
+      const result = await service.getJobConfigInventoryStats(validJobConfigId, true);
+
+      expect(result).toEqual({
+        totalUniqueFiles: 200,
+        totalUniqueDirectories: 100,
+        totalSize: formatBytes(3072000),
+        lastUpdatedAt: mockStatsEntity.lastUpdatedAt,
+      });
+      // dataSource.query should NOT have been called
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- bulkDeactivateAllJobs ---- //
+  describe('bulkDeactivateAllJobs', () => {
+    it('should return 0 deactivated when no IDs are provided', async () => {
+      const result = await service.bulkDeactivateAllJobs([]);
+      expect(result).toEqual({ deactivatedCount: 0, deactivatedIds: [] });
+      expect(jobConfigRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('should deactivate all provided job config IDs', async () => {
+      const ids = ['id-1', 'id-2', 'id-3'];
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 3 } as any);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(
+        ids.map((id) => ({ id } as any)),
+      );
+
+      const result = await service.bulkDeactivateAllJobs(ids);
+
+      expect(result).toEqual({ deactivatedCount: 3, deactivatedIds: ids });
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { id: In(ids) },
+        { status: JobStatus.InActive },
+      );
+      expect(jobConfigRepo.find).toHaveBeenCalledWith({
+        where: { id: In(ids), status: JobStatus.InActive },
+        select: ['id'],
+      });
+    });
+  });
+
+  // ---- bulkActivateJobs ---- //
+  describe('bulkActivateJobs', () => {
+    it('should return 0 activated when no IDs are provided', async () => {
+      const result = await service.bulkActivateJobs([]);
+      expect(result).toEqual({ activatedCount: 0, activatedIds: [] });
+      expect(jobConfigRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('should activate all provided job config IDs', async () => {
+      const ids = ['id-a', 'id-b'];
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({ affected: 2 } as any);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue(
+        ids.map((id) => ({ id } as any)),
+      );
+
+      const result = await service.bulkActivateJobs(ids);
+
+      expect(result).toEqual({ activatedCount: 2, activatedIds: ids });
+      expect(jobConfigRepo.update).toHaveBeenCalledWith(
+        { id: In(ids) },
+        { status: JobStatus.Active },
+      );
+      expect(jobConfigRepo.find).toHaveBeenCalledWith({
+        where: { id: In(ids), status: JobStatus.Active },
+        select: ['id'],
+      });
+    });
+  });
+
+  // ---- getStoppedJobsReport ---- //
+  describe('getStoppedJobsReport', () => {
+    it('should return empty arrays when both inputs are empty', async () => {
+      const result = await service.getStoppedJobsReport([], []);
+      expect(result).toEqual({ stoppedRuns: [], deactivatedConfigs: [] });
+    });
+
+    it('should return stoppedRuns mapped from job runs with full relations', async () => {
+      const jobRunId = 'run-1';
+      const jobConfigId = 'cfg-1';
+      const mockRun = {
+        id: jobRunId,
+        status: JobRunStatus.Stopped,
+        startTime: new Date('2024-01-01T08:00:00Z'),
+        jobConfigId,
+        jobConfig: {
+          sourcePath: {
+            fileServer: { fileServerName: 'SrcServer' },
+            volumePath: '/vol/src',
+          },
+          sourceDirectoryPath: '/data',
+          targetPath: {
+            fileServer: { fileServerName: 'DstServer' },
+            volumePath: '/vol/dst',
+          },
+          targetDirectoryPath: '/backup',
+        },
+      };
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([mockRun] as any);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+
+      const result = await service.getStoppedJobsReport([jobRunId], []);
+
+      expect(result.stoppedRuns).toEqual([{
+        runId: jobRunId,
+        status: JobRunStatus.Stopped,
+        startTime: mockRun.startTime,
+        jobConfigId,
+        sourceServer: 'SrcServer',
+        sourceVolume: '/vol/src',
+        sourceDir: '/data',
+        destServer: 'DstServer',
+        destVolume: '/vol/dst',
+        destDir: '/backup',
+      }]);
+      expect(result.deactivatedConfigs).toEqual([]);
+    });
+
+    it('should return deactivatedConfigs mapped from job configs', async () => {
+      const cfgId = 'cfg-2';
+      const mockConfig = {
+        id: cfgId,
+        jobType: JobType.MIGRATE,
+        status: JobStatus.InActive,
+        sourcePath: {
+          fileServer: { fileServerName: 'SrcServer2' },
+          volumePath: '/vol/src2',
+        },
+        sourceDirectoryPath: null,
+        targetPath: {
+          fileServer: { fileServerName: 'DstServer2' },
+          volumePath: '/vol/dst2',
+        },
+        targetDirectoryPath: null,
+      };
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([mockConfig] as any);
+
+      const result = await service.getStoppedJobsReport([], [cfgId]);
+
+      expect(result.stoppedRuns).toEqual([]);
+      expect(result.deactivatedConfigs).toEqual([{
+        configId: cfgId,
+        jobType: JobType.MIGRATE,
+        status: JobStatus.InActive,
+        sourceServer: 'SrcServer2',
+        sourceVolume: '/vol/src2',
+        sourceDir: '',
+        destServer: 'DstServer2',
+        destVolume: '/vol/dst2',
+        destDir: '',
+      }]);
+    });
+
+    it('should handle missing jobConfig on run (fallback to empty strings)', async () => {
+      const runId = 'run-2';
+      const mockRun = {
+        id: runId,
+        status: JobRunStatus.Stopped,
+        startTime: new Date(),
+        jobConfigId: 'cfg-orphan',
+        jobConfig: null, // no relation loaded
+      };
+
+      jest.spyOn(jobRunRepo, 'find').mockResolvedValue([mockRun] as any);
+      jest.spyOn(jobConfigRepo, 'find').mockResolvedValue([]);
+
+      const result = await service.getStoppedJobsReport([runId], []);
+
+      expect(result.stoppedRuns[0]).toMatchObject({
+        runId,
+        sourceServer: '',
+        sourceVolume: '',
+        sourceDir: '',
+        destServer: '',
+        destVolume: '',
+        destDir: '',
+      });
+    });
+  });
+
+  // ---- updateJobConfig with futureSchedule ---- //
+  describe('updateJobConfig with futureSchedule mapping', () => {
+    it('should map futureSchedule DTO field to futureScheduleAt entity field', async () => {
+      const jobConfigId = 'cfg-future';
+      const futureDate = new Date('2025-06-01T00:00:00Z');
+      const mockJob: any = {
+        id: jobConfigId,
+        jobType: JobType.MIGRATE,
+        futureScheduleAt: null,
+      };
+
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJob);
+      jest.spyOn(jobConfigRepo, 'save').mockImplementation(async (e: any) => e);
+
+      const result = await service.updateJobConfig(jobConfigId, {
+        futureSchedule: futureDate,
+      } as any);
+
+      expect(result.futureScheduleAt).toEqual(futureDate);
+      expect(jobConfigRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ futureScheduleAt: futureDate }),
+      );
+    });
+  });
+
+  // ---- getJobEntity ---- //
+  describe('getJobEntity', () => {
+    it('should return the job entity when found', async () => {
+      const jobId = 'job-entity-1';
+      const mockJob = { id: jobId, jobType: JobType.MIGRATE } as any;
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(mockJob);
+
+      const result = await service.getJobEntity(jobId);
+
+      expect(result).toEqual(mockJob);
+      expect(jobConfigRepo.findOne).toHaveBeenCalledWith({ where: { id: jobId } });
+    });
+
+    it('should throw NotFoundException when job entity is not found', async () => {
+      const jobId = 'missing-job';
+      jest.spyOn(jobConfigRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(service.getJobEntity(jobId)).rejects.toThrow(
+        new NotFoundException(`Job with id ${jobId} not found`),
+      );
+    });
+  });
+
+  // ---- getAllJobConfig covering fetchLatestRunPerJobConfig & fetchBatchErrorCountsForRuns ---- //
+  describe('getAllJobConfig — fetchLatestRunPerJobConfig & fetchBatchErrorCountsForRuns', () => {
+    it('should populate error counts from operationErrors and workerErrors when runs are found', async () => {
+      const projectId = 'proj-1';
+      const jobConfigId = 'cfg-x';
+      const latestRunId = 'run-x';
+      const date = new Date();
+
+      const mockAllJobsDetails = [{
+        jobconfigid: jobConfigId,
+        jobtype: JobType.MIGRATE,
+        jobconfigstatus: JobStatus.Active,
+        firstrunat: date,
+        futureschedule: null,
+        sourcepath: '/vol/src',
+        targetpath: '/vol/dst',
+        sourceservername: 'Srv1',
+        targetservername: 'Srv2',
+        sourceprotocol: 'NFS',
+        targetprotocol: 'NFS',
+        sourcedirectorypath: null,
+        targetdirectorypath: null,
+        configname: 'cfg',
+        createdAt: date,
+        updated_at: date,
+        totalRuns: 2,
+      }];
+
+      // jobConfigRepo.createQueryBuilder for the main getAllJobConfig query
+      jest.spyOn(jobConfigRepo, 'createQueryBuilder').mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockAllJobsDetails),
+      } as any);
+
+      // jobRunRepo.createQueryBuilder: fetchLatestRunPerJobConfig returns a row
+      jest.spyOn(jobRunRepo, 'createQueryBuilder').mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { jobconfigid: jobConfigId, id: latestRunId },
+        ]),
+      } as any);
+
+      // operationErrorRepo.createQueryBuilder: fetchBatchErrorCountsForRuns
+      jest.spyOn(operationErrorRepo, 'createQueryBuilder').mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { jobrunid: latestRunId, count: '3' },
+        ]),
+      } as any);
+
+      // workerJobRunMapRepo.createQueryBuilder: fetchBatchErrorCountsForRuns
+      jest.spyOn(workerJobRunMapRepo, 'createQueryBuilder').mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { jobrunid: latestRunId },
+        ]),
+      } as any);
+
+      jest.spyOn(require('src/utils/mapper'), 'nextDate').mockReturnValue(date);
+
+      const result = await service.getAllJobConfig(projectId);
+
+      expect(result).toHaveLength(1);
+      // 3 operation errors + 1 worker error = 4
+      expect(result[0].errors).toBe(4);
+    });
+  });
+
+  // ---- deleteIdentityMappingsForJob — no mappings ---- //
+  describe('deleteIdentityMappingsForJob — additional branches', () => {
+    it('should return early with message when no cross-mappings exist', async () => {
+      const jobConfigId = 'cfg-no-mappings';
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue([]);
+
+      const result = await service.deleteIdentityMappingsForJob(jobConfigId);
+
+      expect(result).toEqual({
+        message: 'No identity mappings found for this job configuration',
+      });
+      expect(identityCrossMappingRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- getFileServerById ---- //
+  describe('getFileServerById', () => {
+    it('should return the file server entity when found', async () => {
+      const fsId = 'fs-1';
+      const mockFs = { id: fsId, fileServerName: 'MyServer' } as any;
+      jest.spyOn(fileServerRepo, 'findOne').mockResolvedValue(mockFs);
+
+      const result = await service.getFileServerById(fsId);
+
+      expect(result).toEqual(mockFs);
+      expect(fileServerRepo.findOne).toHaveBeenCalledWith({ where: { id: fsId } });
+    });
+
+    it('should return null when file server is not found', async () => {
+      jest.spyOn(fileServerRepo, 'findOne').mockResolvedValue(null);
+
+      const result = await service.getFileServerById('missing-fs');
+
+      expect(result).toBeNull();
+    });
   });
 });

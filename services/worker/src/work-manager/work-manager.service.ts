@@ -412,9 +412,22 @@ export class WorkManagerService implements OnModuleDestroy{
         }
       });
       
-      while (worker.getState() !== WorkerState.RUNNING) {
+      for (;;) {
+        const currentState = worker.getState();
+
+        if (currentState === WorkerState.RUNNING) {
+          break;
+        }
+
+        if (
+          currentState === WorkerState.FAILED ||
+          currentState === WorkerState.STOPPED
+        ) {
+          throw new Error(`Worker ${id} reached terminal state ${currentState} during startup, aborting.`);
+        }
+
         this.logger.debug(
-          `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${worker.getState()}`,
+          `Waiting for ${worker.options.identity} to be RUNNING. Current state: ${currentState}`,
         );
         //sleep
         await new Promise((resolve) =>
@@ -461,10 +474,21 @@ export class WorkManagerService implements OnModuleDestroy{
     
     if (runPromise) {
       this.logger.debug(`Waiting for ${workerId} run() promise to complete`);
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       try {
-        await runPromise;
+        await Promise.race([
+          runPromise,
+          new Promise<void>((_, reject) => {
+            timeoutHandle = setTimeout(
+              () => reject(new Error(`Worker ${workerId} shutdown timed out after 10s`)),
+              10000,
+            );
+          }),
+        ]);
       } catch (err) {
         this.logger.debug(`${workerId} run() promise completed with: ${err.message || 'shutdown'}`);
+      } finally {
+        clearTimeout(timeoutHandle);
       }
       this.workerRunPromises.delete(workerId);
       this.logger.debug(`${workerId} fully shut down`);

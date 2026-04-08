@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Param,
   Body,
   Req,
@@ -29,6 +30,7 @@ import {
   InitUploadDto,
   InitUploadResponseDto,
   UploadChunkResponseDto,
+  SaveStoppedJobIdsDto,
 } from './dto/upgrade.dto';
 import {
   MulticastRequestDto,
@@ -141,6 +143,31 @@ export class UpgradeController {
   ) {
     const userId = userPermissions?.user?.id;
     return this.upgradeService.triggerUpgrade(body.bundleId, userId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ENDPOINT 6b: Save Stopped Job IDs
+  // Persists deactivated config IDs + stopped run IDs to the bundle
+  // record so they survive CP restart and page reload.
+  // Pass empty arrays to clear (after re-activation).
+  // ═══════════════════════════════════════════════════════════════
+  @Auth(Permission.UpgradeManagement)
+  @ApiBearerAuth()
+  @Patch('bundle/:bundleId/stopped-job-ids')
+  @ApiOperation({
+    summary: 'Save or clear stopped job IDs for a bundle',
+    description: 'Persists deactivated config IDs and stopped run IDs to the upgrade bundle so they survive CP restart. Pass empty arrays to clear after re-activation.',
+  })
+  @ApiResponse({ status: 200, description: 'Stopped job IDs saved' })
+  async saveStoppedJobIds(
+    @Param('bundleId', ParseUUIDPipe) bundleId: string,
+    @Body() body: SaveStoppedJobIdsDto,
+  ) {
+    return this.upgradeService.saveStoppedJobIds(
+      bundleId,
+      body.deactivatedConfigIds ?? [],
+      body.stoppedRunIds ?? [],
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════

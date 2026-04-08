@@ -21,11 +21,23 @@ import {
 } from "@api/upgradeApi";
 import { notify } from "@components/notification/NotificationWrapper";
 import {
+  useUpdateJobRunStatusMutation,
+  useBulkDeactivateJobsMutation,
+  useBulkActivateJobsMutation,
+  useGetStoppedJobsReportMutation,
+} from "@api/jobsApi";
+import {
+  useSaveStoppedJobIdsMutation,
+} from "@api/upgradeApi";
+import { JOB_ACTION_STATUS_ENUM } from "@/types/app.type";
+import {
   startBackgroundUpload,
   cancelBackgroundUpload,
 } from "@/services/backgroundUploadManager";
 import { RootStateType } from "@store/store";
 import { BackgroundUploadState } from "@store/reducer/uploadSlice";
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 // Helper to get user-friendly error message
 const getErrorMessage = (error: any, defaultMessage: string): string => {
@@ -120,8 +132,16 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   const [cancelUpload] = useCancelUploadMutation();
   const [triggerUpgrade] = useTriggerUpgradeMutation();
   const [skipUpgrade] = useSkipUpgradeMutation();
+  const [updateJobRunStatus] = useUpdateJobRunStatusMutation();
+  const [bulkDeactivateJobs] = useBulkDeactivateJobsMutation();
+  const [bulkActivateJobs] = useBulkActivateJobsMutation();
+  const [getStoppedJobsReport] = useGetStoppedJobsReportMutation();
+  const [saveStoppedJobIds] = useSaveStoppedJobIdsMutation();
 
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isStoppingJobs, setIsStoppingJobs] = useState(false);
+  const [isReactivatingJobs, setIsReactivatingJobs] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [blockingJobs, setBlockingJobs] = useState<BlockingJobs>(null);
   const [upgradeStatus, setUpgradeStatus] = useState<string | null>(null);
 
@@ -392,6 +412,165 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
   // Calls triggerUpgrade API endpoint
   // ═══════════════════════════════════════════════════════════════
 
+  const handleStopAllJobs = async () => {
+    try {
+      setIsStoppingJobs(true);
+
+      // Step 1: Stop all running/pending job runs using the existing bulk stop API
+      const runningIds = blockingJobs?.runningJobs?.map((j) => j.id) ?? [];
+      if (runningIds.length > 0) {
+        await updateJobRunStatus({
+          ids: runningIds,
+          status: JOB_ACTION_STATUS_ENUM.STOP,
+        }).unwrap();
+      }
+
+      // Step 2: Deactivate all active configs — IDs already known from triggerUpgrade response
+      // Also covers scheduled jobs (cron ignores IN_ACTIVE configs)
+      const activeConfigIds = blockingJobs?.activeJobConfigs?.map((c) => c.id) ?? [];
+      const result = await bulkDeactivateJobs({ ids: activeConfigIds }).unwrap();
+
+      // Step 3: Persist both ID arrays to the upgrade_bundles DB record
+      // This ensures the data survives CP restart and page reload
+      const bundleId = uploadProgress.bundleId;
+      if (bundleId) {
+        await saveStoppedJobIds({
+          bundleId,
+          deactivatedConfigIds: result.deactivatedIds,
+          stoppedRunIds: runningIds,
+        }).unwrap();
+      }
+
+      notify.success(
+        `Stopped ${runningIds.length} running job(s) and deactivated ${result.deactivatedCount} job config(s).`
+      );
+
+      // Clear the blocking jobs warning so user can click Upgrade
+      setBlockingJobs(null);
+    } catch (error: any) {
+      notify.error('Failed to stop all jobs. Please try again.');
+      console.error('handleStopAllJobs error:', error);
+    } finally {
+      setIsStoppingJobs(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // DOWNLOAD REPORT: 2 CSV files bundled into a single ZIP
+  // Works at any time — IDs come from DB via latestStatus
+  // ═══════════════════════════════════════════════════════════════
+  const deactivatedConfigIds = latestStatus?.deactivatedJobConfigIds ?? [];
+  const stoppedRunIds = latestStatus?.stoppedJobRunIds ?? [];
+
+  const todayStr = () => new Date().toISOString().split('T')[0];
+
+  /** Escape a cell value for CSV (quotes if needed) */
+  const escapeCsv = (val: string | null | undefined): string => {
+    if (val == null) return '';
+    const s = String(val);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+
+  /** Build a CSV string from a header row + data rows */
+  const buildCsv = (headers: string[], rows: (string | null | undefined)[][]): string =>
+    [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+
+  const handleDownloadReport = async () => {
+    try {
+      setIsDownloadingReport(true);
+
+      const report = await getStoppedJobsReport({
+        jobRunIds: stoppedRunIds,
+        jobConfigIds: deactivatedConfigIds,
+      }).unwrap();
+
+      // ── CSV 1: Stopped Job Runs ──────────────────────────────
+      const runsCsv = buildCsv(
+        ['Run ID', 'Status', 'Start Time', 'Job Config ID',
+         'Source Server', 'Source Volume', 'Source Dir',
+         'Dest Server', 'Dest Volume', 'Dest Dir'],
+        report.stoppedRuns.map((r) => [
+          r.runId,
+          r.status,
+          r.startTime ? new Date(r.startTime).toISOString().replace('T', ' ').substring(0, 19) : '',
+          r.jobConfigId,
+          r.sourceServer,
+          r.sourceVolume,
+          r.sourceDir,
+          r.destServer,
+          r.destVolume,
+          r.destDir,
+        ]),
+      );
+
+      // ── CSV 2: Deactivated Job Configs ───────────────────────
+      const cfgCsv = buildCsv(
+        ['Config ID', 'Job Type', 'Status',
+         'Source Server', 'Source Volume', 'Source Dir',
+         'Dest Server', 'Dest Volume', 'Dest Dir'],
+        report.deactivatedConfigs.map((c) => [
+          c.configId,
+          c.jobType,
+          c.status,
+          c.sourceServer,
+          c.sourceVolume,
+          c.sourceDir,
+          c.destServer,
+          c.destVolume,
+          c.destDir,
+        ]),
+      );
+
+      // ── Bundle both CSVs into a ZIP and download ─────────────
+      const zip = new JSZip();
+      zip.file('stopped-job-runs.csv', runsCsv);
+      zip.file('deactivated-job-configs.csv', cfgCsv);
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      saveAs(blob, `ndm-upgrade-report-${todayStr()}.zip`);
+
+    } catch (error: any) {
+      notify.error('Failed to generate report. Please try again.');
+      console.error('handleDownloadReport error:', error);
+    } finally {
+      setIsDownloadingReport(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // RE-ACTIVATE JOBS: Sets job configs back to ACTIVE after upgrade
+  // Then clears the DB columns so buttons disappear
+  // ═══════════════════════════════════════════════════════════════
+  const handleReactivateJobs = async () => {
+    try {
+      setIsReactivatingJobs(true);
+
+      await bulkActivateJobs({ ids: deactivatedConfigIds }).unwrap();
+
+      // Clear the persisted IDs from DB — buttons will disappear after refetch
+      const bundleId = latestStatus?.bundleId;
+      if (bundleId) {
+        await saveStoppedJobIds({
+          bundleId,
+          deactivatedConfigIds: [],
+          stoppedRunIds: [],
+        }).unwrap();
+      }
+
+      // Refresh latestStatus — deactivatedJobConfigIds becomes null → buttons hide
+      await refetchStatus();
+
+      notify.success(`${deactivatedConfigIds.length} job config(s) re-activated successfully.`);
+    } catch (error: any) {
+      notify.error('Failed to re-activate job configs. Please try again.');
+      console.error('handleReactivateJobs error:', error);
+    } finally {
+      setIsReactivatingJobs(false);
+    }
+  };
+
   const handleUpgrade = async () => {
 
     // Guard: Check if file is uploaded and bundleId exists
@@ -448,6 +627,8 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     handleUpgrade,
     isUpgrading,
     blockingJobs,
+    handleStopAllJobs,
+    isStoppingJobs,
     handleReset,
     showUploadUI,
     showUpgradeUI,
@@ -461,6 +642,13 @@ export const UpgradeProvider = ({ children }: React.PropsWithChildren) => {
     workerUpgradeStatus,      // IDLE | IN_PROGRESS | COMPLETED
     isUpgradeExecuting,
     executionStatus,
+    // CSV report + re-activation
+    deactivatedConfigIds,
+    stoppedRunIds,
+    handleDownloadReport,
+    isDownloadingReport,
+    handleReactivateJobs,
+    isReactivatingJobs,
   };
 
   return (

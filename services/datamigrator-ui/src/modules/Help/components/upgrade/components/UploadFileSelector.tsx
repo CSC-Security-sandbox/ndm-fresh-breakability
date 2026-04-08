@@ -1,5 +1,4 @@
 import { useContext, useRef } from "react";
-import { Button } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { UpgradeContext } from "../context/context";
 import {
@@ -65,12 +64,26 @@ const UploadFileSelector = () => {
       <Box className="flex items-center gap-4">
         {/* Show Select File button only when no file is selected */}
         {!selectedFile && (
-          <Button
+          <button
             onClick={handleClick}
             disabled={isDisabled}
+            style={{
+              padding: "8px 20px",
+              borderRadius: "8px",
+              border: "none",
+              backgroundColor: isDisabled ? "#e0e0e0" : "#0067C5",
+              color: isDisabled ? "#A7A7A7" : "white",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: isDisabled ? "not-allowed" : "pointer",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+              transition: "background-color 0.15s ease",
+            }}
+            onMouseEnter={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1E4A93"; }}
+            onMouseLeave={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#0067C5"; }}
           >
             {SELECT_FILE_LABEL}
-          </Button>
+          </button>
         )}
 
         {/* Show file info and Clear button when file is selected */}
@@ -83,11 +96,25 @@ const UploadFileSelector = () => {
               </p>
             </Box>
             {!isDisabled && (
-              <Button
+              <button
                 onClick={handleClear}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  border: "1px solid #A7A7A7",
+                  backgroundColor: "white",
+                  color: "#404040",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                  transition: "background-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f5f5f5"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "white"; }}
               >
                 {CLEAR_FILE_LABEL}
-              </Button>
+              </button>
             )}
           </>
         )}

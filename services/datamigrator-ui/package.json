@@ -26,6 +26,7 @@
     "dayjs": "^1.11.13",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
+    "jszip": "3.10.1",
     "formik": "^2.4.6",
     "nanoid": "^3.3.11",
     "nprogress": "^0.2.0",

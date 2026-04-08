@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { Button, Card } from "@netapp/bxp-design-system-react";
+import { Card } from "@netapp/bxp-design-system-react";
 import { Box } from "@components/container";
 import { Show } from "@components/show/Show";
 import { UpgradeContext } from "../context/context";
@@ -27,6 +27,8 @@ const UpgradeContent = () => {
     handleUpgrade,
     isUpgrading,
     blockingJobs,
+    handleStopAllJobs,
+    isStoppingJobs,
     handleReset,
     showUploadUI,
     showUpgradeUI,
@@ -36,6 +38,10 @@ const UpgradeContent = () => {
     workerUploadStatus,
     multicastStatus,
     workerUpgradeStatus,
+    deactivatedConfigIds,
+    stoppedRunIds,
+    handleDownloadReport,
+    isDownloadingReport,
     isUpgradeExecuting,
     executionStatus,
     upgradeStatus,
@@ -45,6 +51,11 @@ const UpgradeContent = () => {
   const showExecutionUI =
     workerUpgradeStatus === 'IN_PROGRESS' ||
     workerUpgradeStatus === 'COMPLETED';
+
+  // When upgrade has failed/rolled back, hide all mid-flow UI — show only the error banner + Start Over.
+  // Auto-clears once a new upload begins so the failure banner doesn't linger during re-upload.
+  const isUpgradeFailed =
+    (upgradeStatus === 'failed' || upgradeStatus === 'rolled_back') && !isUploading;
 
   const showResetButton =
     !isUploading && (  // Hide during upload
@@ -76,14 +87,14 @@ const UpgradeContent = () => {
       {/* Processing In Progress (extraction/validation - DO NOT CANCEL) */}
       <Show>
         <Show.When isTrue={isProcessing && !isUploading}>
-          <Box className="mb-4 p-4 bg-blue-50 border border-blue-300 rounded">
+          <Box className="mb-4 p-4 bg-white border-l-4 border border-gray-200 rounded" style={{ borderLeftColor: "#3b82f6" }}>
             <Box className="flex items-center gap-3">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
               <p className="font-medium text-blue-800">
                 Processing Bundle
               </p>
             </Box>
-            <p className="text-sm text-blue-700 mt-2">
+            <p className="text-sm text-gray-600 mt-2">
               {inProgressFileName ? `"${inProgressFileName}" is` : 'A bundle is'} being extracted and validated.
               This may take a few minutes for large bundles. Please do not close this page.
             </p>
@@ -94,11 +105,11 @@ const UpgradeContent = () => {
       {/* Upload Interrupted (pod restart during upload) */}
       <Show>
         <Show.When isTrue={isUploadInProgress && !isUploading && !isProcessing}>
-          <Box className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded">
+          <Box className="mb-4 p-4 bg-white border-l-4 border border-gray-200 rounded" style={{ borderLeftColor: "#d97706" }}>
             <p className="font-medium text-amber-800">
               Upload Interrupted
             </p>
-            <p className="text-sm text-amber-700 mt-2">
+            <p className="text-sm text-gray-600 mt-2">
               {inProgressFileName ? `A previous upload of "${inProgressFileName}" was` : 'A previous upload was'} interrupted.
               Click "Start Over" below to clear it and start a new upload.
             </p>
@@ -108,10 +119,10 @@ const UpgradeContent = () => {
 
       {/* CP Upgrade Failed / Rolled Back */}
       <Show>
-        <Show.When isTrue={upgradeStatus === 'rolled_back' || upgradeStatus === 'failed'}>
-          <Box className="mb-4 p-4 rounded border" style={{
-            backgroundColor: upgradeStatus === 'rolled_back' ? '#fef2f2' : '#fef2f2',
-            borderColor: '#fca5a5',
+        <Show.When isTrue={isUpgradeFailed}>
+          <Box className="mb-4 p-4 rounded border-l-4 border border-gray-200" style={{
+            backgroundColor: "white",
+            borderLeftColor: '#dc2626',
           }}>
             <Box className="flex items-center gap-3">
               <svg className="h-5 w-5" style={{ color: '#dc2626' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -123,7 +134,7 @@ const UpgradeContent = () => {
                   : 'Control Plane Upgrade Failed'}
               </p>
             </Box>
-            <p className="text-sm mt-2" style={{ color: '#b91c1c' }}>
+            <p className="text-sm mt-2 text-gray-600">
               {upgradeStatus === 'rolled_back'
                 ? 'The upgrade was unsuccessful and the system has been rolled back to the previous version. Please check the upgrade logs and try again with a new bundle.'
                 : 'The upgrade process failed. Please check the upgrade logs and try again with a new bundle.'}
@@ -141,7 +152,7 @@ const UpgradeContent = () => {
 
       {/* Upload Progress — hidden during execution */}
       <Show>
-        <Show.When isTrue={(isUploading || isUploaded || uploadProgress.status === "error") && !showExecutionUI}>
+        <Show.When isTrue={(isUploading || isUploaded || uploadProgress.status === "error") && !showExecutionUI && !isUpgradeFailed}>
           <UploadProgress />
         </Show.When>
       </Show>
@@ -155,12 +166,12 @@ const UpgradeContent = () => {
 
       {/* Blocking Jobs Warning */}
       <Show>
-        <Show.When isTrue={!!blockingJobs && (blockingJobs.runningJobs.length > 0 || blockingJobs.scheduledJobs.length > 0 || blockingJobs.activeJobConfigs.length > 0)}>
-          <Box className="mb-4 p-4 bg-red-50 border border-red-300 rounded">
+        <Show.When isTrue={!isUpgradeFailed && !!blockingJobs && (blockingJobs.runningJobs.length > 0 || blockingJobs.scheduledJobs.length > 0 || blockingJobs.activeJobConfigs.length > 0)}>
+          <Box className="mb-4 p-4 bg-white border-l-4 border border-gray-200 rounded" style={{ borderLeftColor: "#dc2626" }}>
             <p className="font-medium text-red-800 mb-2">
               Cannot upgrade while jobs are active
             </p>
-            <p className="text-sm text-red-700 mb-3">
+            <p className="text-sm text-gray-600 mb-3">
               Please stop all running migrations and deactivate all job configurations before upgrading.
             </p>
 
@@ -257,6 +268,66 @@ const UpgradeContent = () => {
             <p className="text-xs text-red-600 mt-2">
               Deactivate all job configurations, then click Upgrade again.
             </p>
+
+            {/* Stop All Jobs action button */}
+            <Box className="flex justify-end mt-3 pt-3 border-t border-red-200">
+              <button
+                onClick={handleStopAllJobs}
+                disabled={isStoppingJobs}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: isStoppingJobs ? "#e0e0e0" : "#dc2626",
+                  color: isStoppingJobs ? "#A7A7A7" : "white",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: isStoppingJobs ? "not-allowed" : "pointer",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                  transition: "background-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => { if (!isStoppingJobs) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#991b1b"; }}
+                onMouseLeave={(e) => { if (!isStoppingJobs) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#dc2626"; }}
+              >
+                {isStoppingJobs ? 'Stopping All Jobs...' : 'Stop All Jobs & Deactivate'}
+              </button>
+            </Box>
+          </Box>
+        </Show.When>
+      </Show>
+
+      {/* Download Report Panel — shown once jobs have been stopped */}
+      <Show>
+        <Show.When isTrue={!isUpgradeFailed && !showExecutionUI && (deactivatedConfigIds?.length > 0 || stoppedRunIds?.length > 0) && !blockingJobs}>
+          <Box className="mb-4 p-4 bg-white border-l-4 border border-gray-200 rounded" style={{ borderLeftColor: "#3b82f6" }}>
+            <p className="font-medium text-blue-800 mb-1">Jobs Stopped</p>
+            <p className="text-sm text-gray-600 mb-3">
+              {stoppedRunIds?.length ?? 0} job run(s) stopped &amp; {deactivatedConfigIds?.length ?? 0} job config(s) deactivated before upgrade.
+              Download the report for your records.
+            </p>
+            <Box className="flex justify-end">
+              <button
+                onClick={handleDownloadReport}
+                disabled={isDownloadingReport}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "1px solid #A7A7A7",
+                  backgroundColor: "white",
+                  color: isDownloadingReport ? "#A7A7A7" : "#404040",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: isDownloadingReport ? "not-allowed" : "pointer",
+                  opacity: isDownloadingReport ? 0.6 : 1,
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                  transition: "background-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => { if (!isDownloadingReport) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f5f5f5"; }}
+                onMouseLeave={(e) => { if (!isDownloadingReport) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "white"; }}
+              >
+                {isDownloadingReport ? 'Generating...' : 'Download Report (CSV)'}
+              </button>
+            </Box>
           </Box>
         </Show.When>
       </Show>
@@ -266,43 +337,95 @@ const UpgradeContent = () => {
         {/* Upload Button - Only show if allowed and no in-progress upload */}
         <Show>
           <Show.When isTrue={canShowFileSelector && !isUploaded && !showResetButton}>
-            <Button
-              onClick={handleUpload}
-              disabled={!selectedFile || isUploading}
-              isSubmitting={isUploading}
-            >
-              {UPLOAD_LABEL}
-            </Button>
+            {(() => {
+              const isDisabled = !selectedFile || isUploading;
+              return (
+                <button
+                  onClick={handleUpload}
+                  disabled={isDisabled}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    border: "none",
+                    backgroundColor: isDisabled ? "#e0e0e0" : "#0067C5",
+                    color: isDisabled ? "#A7A7A7" : "white",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    cursor: isDisabled ? "not-allowed" : "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                    transition: "background-color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1E4A93"; }}
+                  onMouseLeave={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#0067C5"; }}
+                >
+                  {isUploading ? 'Uploading...' : UPLOAD_LABEL}
+                </button>
+              );
+            })()}
           </Show.When>
         </Show>
 
         {/* Upgrade Button - Hidden during/after execution, disabled once clicked */}
         <Show>
-          <Show.When isTrue={(isUploaded || showUpgradeUI) && workerUploadStatus === 'COMPLETED' && !showExecutionUI}>
-            <Button
-              onClick={handleUpgrade}
-              disabled={isUpgrading || isUpgradeExecuting}
-              isSubmitting={isUpgrading}
-            >
-              {UPGRADE_LABEL}
-            </Button>
+          <Show.When isTrue={(isUploaded || showUpgradeUI) && workerUploadStatus === 'COMPLETED' && !showExecutionUI && !isUpgradeFailed}>
+            {(() => {
+              const isDisabled = isUpgrading || isUpgradeExecuting;
+              return (
+                <button
+                  onClick={handleUpgrade}
+                  disabled={isDisabled}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: "8px",
+                    border: "none",
+                    backgroundColor: isDisabled ? "#e0e0e0" : "#0067C5",
+                    color: isDisabled ? "#A7A7A7" : "white",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    cursor: isDisabled ? "not-allowed" : "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                    transition: "background-color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1E4A93"; }}
+                  onMouseLeave={(e) => { if (!isDisabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#0067C5"; }}
+                >
+                  {isUpgrading ? 'Upgrading...' : UPGRADE_LABEL}
+                </button>
+              );
+            })()}
           </Show.When>
         </Show>
 
         {/* Reset Button */}
         <Show>
           <Show.When isTrue={showResetButton}>
-            <Button onClick={handleReset} variant="outline">
+            <button
+              onClick={handleReset}
+              style={{
+                padding: "8px 20px",
+                borderRadius: "8px",
+                border: "1px solid #A7A7A7",
+                backgroundColor: "white",
+                color: "#404040",
+                fontSize: "14px",
+                fontWeight: 500,
+                cursor: "pointer",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                transition: "background-color 0.15s ease",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f5f5f5"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "white"; }}
+            >
               {RESET_LABEL}
-            </Button>
+            </button>
           </Show.When>
         </Show>
       </Box>
 
       {/* Upload success info — hidden during execution */}
       <Show>
-        <Show.When isTrue={(isUploaded || showUpgradeUI) && !showExecutionUI}>
-          <Box className="mt-4 p-3 bg-primary/10 rounded border border-primary/30">
+        <Show.When isTrue={(isUploaded || showUpgradeUI) && !showExecutionUI && !isUpgradeFailed}>
+          <Box className="mt-4 p-3 bg-white rounded border-l-4 border border-gray-200" style={{ borderLeftColor: "#6366f1" }}>
             <p className="text-sm text-gray-800">
               <span className="font-medium">Upload Complete:</span>{" "}
               <code className="font-mono text-gray-900">
@@ -322,7 +445,7 @@ const UpgradeContent = () => {
 
       {/* Worker binary staging progress — hidden during execution and on upload screen */}
       <Show>
-        <Show.When isTrue={!showExecutionUI && !canShowFileSelector && (isUploaded || showUpgradeUI)}>
+        <Show.When isTrue={!showExecutionUI && !canShowFileSelector && (isUploaded || showUpgradeUI) && !isUpgradeFailed}>
           <StagingProgress />
         </Show.When>
       </Show>

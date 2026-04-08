@@ -1,5 +1,5 @@
-import { IsString, IsNumber, Min, Matches, Max } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNumber, Min, Matches, Max, IsArray, IsUUID, ArrayMaxSize, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // ═══════════════════════════════════════════════════════════════
 // INIT UPLOAD DTOs
@@ -50,4 +50,24 @@ export class UploadChunkResponseDto {
 
   @ApiProperty({ description: 'Bytes received for this chunk' })
   bytesReceived: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE STOPPED JOB IDs DTO
+// ═══════════════════════════════════════════════════════════════
+
+export class SaveStoppedJobIdsDto {
+  @ApiPropertyOptional({ description: 'Deactivated job config IDs', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMaxSize(1000)
+  deactivatedConfigIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Stopped job run IDs', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMaxSize(1000)
+  stoppedRunIds?: string[];
 }

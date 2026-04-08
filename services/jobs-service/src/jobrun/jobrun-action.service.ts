@@ -52,7 +52,7 @@ export class JobRunActionService {
             case JobRunActions.STOP: {
                  const jobRuns = await this.jobRunRepo.find({ where: {
                     id: In(jobRunActions.jobRuns), 
-                    status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready])
+                    status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Pending, JobRunStatus.Stopping])
                 }, select: ["id", "workFlowId"]});
                 return await this.signalJobRuns({
                     jobRuns,

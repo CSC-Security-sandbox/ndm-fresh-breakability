@@ -87,6 +87,8 @@ describe('UpgradeService', () => {
     upgradeWorkerTriggeredAt: null,
     workerUploadStatus: WorkerAggregateStatus.IDLE,
     workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+    deactivatedJobConfigIds: null,
+    stoppedJobRunIds: null,
     created_at: new Date(),
     created_by: 'user-123',
     updated_at: new Date(),
@@ -2905,6 +2907,656 @@ describe('UpgradeService', () => {
 
       const result = await service.streamBundle('1.0.0', 'windows');
       expect(result).toBeInstanceOf(StreamableFile);
+    });
+
+    it('should wrap unexpected non-NestJS errors in InternalServerErrorException', async () => {
+      // access resolves (directory found), but readdir throws an unexpected error
+      mockFsPromises.access.mockResolvedValue(undefined);
+      mockFsPromises.readdir.mockRejectedValue(new Error('unexpected IO error'));
+
+      await expect(service.streamBundle('1.0.0', 'linux')).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // GET UPGRADE STATUS
+  // ═══════════════════════════════════════════════════════════════
+  describe('getUpgradeStatus', () => {
+    it('should return none when no bundle exists', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result).toEqual({ upgradeStatus: 'none' });
+    });
+
+    it('should return none when latest bundle upgrade status is PENDING', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.PENDING });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result).toEqual({ upgradeStatus: 'none' });
+    });
+
+    it('should return SUCCESS status with worker paths populated', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        version: '2026.02.23',
+        upgradeCompletedAt: new Date(),
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result.upgradeStatus).toBe(UpgradeStatus.SUCCESS);
+      expect(result.workerUpgradeReady).toBe(true);
+      expect(result.workerLinuxPath).toContain('2026.02.23');
+      expect(result.workerLinuxPath).toContain('worker/linux');
+      expect(result.workerWindowsPath).toContain('worker/windows');
+    });
+
+    it('should return STAGED status with workerUpgradeReady=false and null paths', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.STAGED });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result.upgradeStatus).toBe(UpgradeStatus.STAGED);
+      expect(result.workerUpgradeReady).toBe(false);
+      expect(result.workerLinuxPath).toBeNull();
+      expect(result.workerWindowsPath).toBeNull();
+    });
+
+    it('should return FAILED status with workerUpgradeReady=false', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.FAILED });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result.upgradeStatus).toBe(UpgradeStatus.FAILED);
+      expect(result.workerUpgradeReady).toBe(false);
+    });
+
+    it('should return ROLLED_BACK status with workerUpgradeReady=false', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.ROLLED_BACK });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      const result = await service.getUpgradeStatus();
+
+      expect(result.upgradeStatus).toBe(UpgradeStatus.ROLLED_BACK);
+      expect(result.workerUpgradeReady).toBe(false);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // SAVE STOPPED JOB IDS
+  // ═══════════════════════════════════════════════════════════════
+  describe('saveStoppedJobIds', () => {
+    it('should throw BadRequestException for empty bundleId', async () => {
+      await expect(service.saveStoppedJobIds('', [], [])).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for whitespace bundleId', async () => {
+      await expect(service.saveStoppedJobIds('   ', [], [])).rejects.toThrow(BadRequestException);
+    });
+
+    it('should save deactivated config IDs and stopped run IDs', async () => {
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+
+      const result = await service.saveStoppedJobIds(
+        'bundle-uuid-123',
+        ['cfg-1', 'cfg-2'],
+        ['run-1'],
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'bundle-uuid-123',
+        expect.objectContaining({
+          deactivatedJobConfigIds: ['cfg-1', 'cfg-2'],
+          stoppedJobRunIds: ['run-1'],
+        }),
+      );
+    });
+
+    it('should store null when empty arrays are passed', async () => {
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+
+      await service.saveStoppedJobIds('bundle-uuid-123', [], []);
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'bundle-uuid-123',
+        expect.objectContaining({
+          deactivatedJobConfigIds: null,
+          stoppedJobRunIds: null,
+        }),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // RESET UPGRADE (direct tests)
+  // ═══════════════════════════════════════════════════════════════
+  describe('resetUpgrade', () => {
+    const setupWorkerQueryBuilder = () => {
+      workerRepository.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+    };
+
+    it('should return success when bundle not found', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.resetUpgrade('non-existent-id');
+
+      expect(result).toEqual({ success: true, message: 'Bundle not found, nothing to reset' });
+    });
+
+    it('should reset workers and bundle without calling terminateWorkflow when no workflows exist', async () => {
+      const bundle = createMockBundle({
+        multicastWorkflowId: null,
+        executionWorkflowId: null,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      setupWorkerQueryBuilder();
+
+      const result = await service.resetUpgrade(bundle.id) as any;
+
+      expect(result.success).toBe(true);
+      expect(workflowService.terminateWorkflow).not.toHaveBeenCalled();
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        bundle.id,
+        expect.objectContaining({ upgradeStatus: UpgradeStatus.SKIPPED }),
+      );
+    });
+
+    it('should terminate multicastWorkflowId when present', async () => {
+      const bundle = createMockBundle({
+        multicastWorkflowId: 'BinaryMulticast-abc123',
+        executionWorkflowId: null,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      workflowService.terminateWorkflow.mockResolvedValue(undefined);
+      setupWorkerQueryBuilder();
+
+      await service.resetUpgrade(bundle.id);
+
+      expect(workflowService.terminateWorkflow).toHaveBeenCalledWith('BinaryMulticast-abc123');
+    });
+
+    it('should terminate executionWorkflowId when present', async () => {
+      const bundle = createMockBundle({
+        multicastWorkflowId: null,
+        executionWorkflowId: 'UpgradeExecution-abc123',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      workflowService.terminateWorkflow.mockResolvedValue(undefined);
+      setupWorkerQueryBuilder();
+
+      await service.resetUpgrade(bundle.id);
+
+      expect(workflowService.terminateWorkflow).toHaveBeenCalledWith('UpgradeExecution-abc123');
+    });
+
+    it('should continue resetting even if terminateWorkflow throws', async () => {
+      const bundle = createMockBundle({
+        multicastWorkflowId: 'BinaryMulticast-abc123',
+        executionWorkflowId: 'UpgradeExecution-abc123',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      workflowService.terminateWorkflow.mockRejectedValue(new Error('Temporal unavailable'));
+      setupWorkerQueryBuilder();
+
+      const result = await service.resetUpgrade(bundle.id) as any;
+
+      // Should still complete despite terminate failures
+      expect(result.success).toBe(true);
+      expect(mockLoggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Could not terminate'),
+      );
+    });
+
+    it('should throw InternalServerErrorException when DB update fails', async () => {
+      const bundle = createMockBundle({ multicastWorkflowId: null, executionWorkflowId: null });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      setupWorkerQueryBuilder();
+      upgradeBundleRepository.update.mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(service.resetUpgrade(bundle.id)).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // GET MULTICAST STATUS — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('getMulticastStatus — additional branches', () => {
+    it('should throw NotFoundException when bundle not found', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getMulticastStatus('non-existent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when no multicastWorkflowId and status is not COMPLETED', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(
+        createMockBundle({
+          multicastWorkflowId: null,
+          workerUploadStatus: WorkerAggregateStatus.IN_PROGRESS,
+        }),
+      );
+
+      await expect(service.getMulticastStatus('b1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return zero-worker completed summary when no workflow ID but status is COMPLETED', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(
+        createMockBundle({
+          multicastWorkflowId: null,
+          workerUploadStatus: WorkerAggregateStatus.COMPLETED,
+        }),
+      );
+
+      const result = await service.getMulticastStatus('b1');
+
+      expect(result.workflowStatus).toBe('COMPLETED');
+      expect(result.summary.total).toBe(0);
+      expect(result.workers).toHaveLength(0);
+    });
+
+    it('should handle multicast timeout — terminate workflow and mark remaining workers as FAILED', async () => {
+      const triggeredAt = new Date(Date.now() - 61 * 60 * 1000); // 61 minutes ago
+      upgradeBundleRepository.findOne.mockResolvedValue(
+        createMockBundle({
+          multicastWorkflowId: 'BinaryMulticast-timeout',
+          workerUploadStatus: WorkerAggregateStatus.IN_PROGRESS,
+          workerUploadTriggeredAt: triggeredAt,
+        }),
+      );
+      workflowService.terminateWorkflow.mockResolvedValue(undefined);
+      workerRepository.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'RUNNING' });
+      workerRepository.find.mockResolvedValue([]);
+
+      await service.getMulticastStatus('b1');
+
+      expect(workflowService.terminateWorkflow).toHaveBeenCalledWith('BinaryMulticast-timeout');
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'b1',
+        expect.objectContaining({ workerUploadStatus: WorkerAggregateStatus.COMPLETED }),
+      );
+    });
+
+    it('should throw InternalServerErrorException on unexpected error', async () => {
+      upgradeBundleRepository.findOne.mockRejectedValue(new Error('DB error'));
+
+      await expect(service.getMulticastStatus('b1')).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // GET EXECUTION STATUS — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('getExecutionStatus — additional branches', () => {
+    it('should timeout in-progress workers after 5-minute window and mark bundle COMPLETED', async () => {
+      const triggeredAt = new Date(Date.now() - 6 * 60 * 1000); // 6 minutes ago
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        executionWorkflowId: 'exec-wf-timeout',
+        upgradeWorkerTriggeredAt: triggeredAt,
+        workerUpgradeStatus: WorkerAggregateStatus.IN_PROGRESS,
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'RUNNING' });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', upgradeExecutionStatus: 'IN_PROGRESS', workerName: 'worker-1', ipAddress: '10.0.0.1', platform: 'linux', workerVersion: '1.0.0', upgradeCompletedAt: null },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.getExecutionStatus('b1');
+
+      expect(workerRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({ workerId: expect.anything() }),
+        expect.objectContaining({ upgradeExecutionStatus: 'FAILED' }),
+      );
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'b1',
+        expect.objectContaining({ workerUpgradeStatus: WorkerAggregateStatus.COMPLETED }),
+      );
+      expect(result.upgradeCompleted).toBe(true);
+    });
+
+    it('should return upgradeStatus=success when all workers are COMPLETED', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        executionWorkflowId: 'exec-wf-success',
+        upgradeWorkerTriggeredAt: new Date(), // recent — not timed out
+        workerUpgradeStatus: WorkerAggregateStatus.IN_PROGRESS,
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'COMPLETED' });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', upgradeExecutionStatus: 'COMPLETED', workerName: 'w1', ipAddress: '10.0.0.1', platform: 'linux', workerVersion: '2.0.0', upgradeCompletedAt: new Date() },
+        { workerId: 'w2', upgradeExecutionStatus: 'COMPLETED', workerName: 'w2', ipAddress: '10.0.0.2', platform: 'windows', workerVersion: '2.0.0', upgradeCompletedAt: new Date() },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.getExecutionStatus('b1');
+
+      expect(result.upgradeStatus).toBe('success');
+      expect(result.summary.completed).toBe(2);
+      expect(result.summary.failed).toBe(0);
+    });
+
+    it('should return upgradeStatus=failure when some workers failed after window elapsed', async () => {
+      const triggeredAt = new Date(Date.now() - 6 * 60 * 1000);
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        executionWorkflowId: 'exec-wf-fail',
+        upgradeWorkerTriggeredAt: triggeredAt,
+        workerUpgradeStatus: WorkerAggregateStatus.COMPLETED,
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'COMPLETED' });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', upgradeExecutionStatus: 'COMPLETED', workerName: 'w1', ipAddress: '10.0.0.1', platform: 'linux', workerVersion: '2.0.0', upgradeCompletedAt: new Date() },
+        { workerId: 'w2', upgradeExecutionStatus: 'FAILED', workerName: 'w2', ipAddress: '10.0.0.2', platform: 'windows', workerVersion: '1.0.0', upgradeCompletedAt: null },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.getExecutionStatus('b1');
+
+      expect(result.upgradeStatus).toBe('failure');
+      expect(result.summary.failed).toBe(1);
+    });
+
+    it('should treat upgradeWorkerTriggeredAt=null as "now" — upgradeStatus=in_progress', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue({
+        executionWorkflowId: 'exec-wf-null-time',
+        upgradeWorkerTriggeredAt: null, // <── null
+        workerUpgradeStatus: WorkerAggregateStatus.IN_PROGRESS,
+      } as any);
+      workflowService.getWorkflowStatus.mockResolvedValue({ status: 'RUNNING' });
+      workerRepository.find.mockResolvedValue([
+        { workerId: 'w1', upgradeExecutionStatus: 'IN_PROGRESS', workerName: 'w1', ipAddress: '10.0.0.1', platform: 'linux', workerVersion: '1.0.0', upgradeCompletedAt: null },
+      ]);
+      workerRepository.update.mockResolvedValue({});
+      upgradeBundleRepository.update.mockResolvedValue({} as any);
+
+      const result = await service.getExecutionStatus('b1');
+
+      // Window hasn't elapsed (triggered ~now), so still in_progress
+      expect(result.upgradeStatus).toBe('in_progress');
+      expect(result.upgradeCompleted).toBe(false);
+    });
+
+    it('should throw InternalServerErrorException on unexpected DB error', async () => {
+      upgradeBundleRepository.findOne.mockRejectedValue(new Error('unexpected DB failure'));
+
+      await expect(service.getExecutionStatus('b1')).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ACKNOWLEDGE WORKER DOWNLOAD — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('acknowledgeWorkerDownload — additional branches', () => {
+    it('should NOT update bundle when remaining IN_PROGRESS workers still exist', async () => {
+      workerRepository.update.mockResolvedValue({});
+      // remaining > 0 means other workers still in progress
+      workerRepository.count = jest.fn().mockResolvedValue(2);
+
+      await service.acknowledgeWorkerDownload({
+        workerId: 'w1', bundleId: 'b1', version: '1.0.0', status: 'success',
+      });
+
+      // bundle should NOT be updated to COMPLETED
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException when workerRepository.update throws', async () => {
+      workerRepository.update.mockRejectedValue(new Error('DB error'));
+
+      await expect(
+        service.acknowledgeWorkerDownload({
+          workerId: 'w1', bundleId: 'b1', version: '1.0.0', status: 'success',
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ACKNOWLEDGE EXECUTION — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('acknowledgeExecution — additional branches', () => {
+    it('should return acknowledged=true with "Already completed" for duplicate ACK', async () => {
+      workerRepository.findOne.mockResolvedValue({
+        workerId: 'w1',
+        stagedVersion: '1.0.0',
+        upgradeExecutionStatus: 'COMPLETED', // already done
+      });
+
+      const result = await service.acknowledgeExecution({
+        workerId: 'w1', bundleId: 'b1', version: '1.0.0',
+      });
+
+      expect(result.acknowledged).toBe(true);
+      expect(result.message).toBe('Already completed');
+      // No DB update should happen for duplicate
+      expect(workerRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException when DB update throws', async () => {
+      workerRepository.findOne.mockResolvedValue({
+        workerId: 'w1',
+        stagedVersion: '1.0.0',
+        upgradeExecutionStatus: 'IN_PROGRESS',
+      });
+      workerRepository.update.mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(
+        service.acknowledgeExecution({ workerId: 'w1', bundleId: 'b1', version: '1.0.0' }),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // START MULTICAST — missing validateBundlesExist branch
+  // ═══════════════════════════════════════════════════════════════
+  describe('startMulticast — validateBundlesExist failure', () => {
+    it('should throw BadRequestException when both linux and windows bundles are unavailable', async () => {
+      // access rejects for both platform directories — no bundles found
+      mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
+
+      await expect(
+        service.startMulticast({ bundleId: 'b1', version: '1.0.0' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ON MODULE INIT — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('onModuleInit — additional branches', () => {
+    it('should log warning and not update when latest bundle is ROLLED_BACK', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.ROLLED_BACK, version: '2026.02.23' });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      await service.onModuleInit();
+
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+      expect(mockLoggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('failed and was rolled back'),
+      );
+    });
+
+    it('should log error and not update when latest bundle is FAILED', async () => {
+      const bundle = createMockBundle({ upgradeStatus: UpgradeStatus.FAILED, version: '2026.02.23' });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      await service.onModuleInit();
+
+      expect(upgradeBundleRepository.update).not.toHaveBeenCalled();
+      expect(mockLoggerService.error).toHaveBeenCalledWith(
+        expect.stringContaining('failed'),
+      );
+    });
+
+    it('should skip autoTriggerWorkerUpgrade when worker upload/upgrade already in progress or completed', async () => {
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        version: '2026.02.23',
+        workerUploadStatus: WorkerAggregateStatus.IN_PROGRESS,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+
+      await service.onModuleInit();
+
+      // No workflow or bundle update triggered (already in progress)
+      expect(workflowService.startWorkflow).not.toHaveBeenCalled();
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('already in progress or completed'),
+      );
+    });
+
+    it('should find orphaned UPLOADING/PROCESSING records on startup and mark them FAILED', async () => {
+      // First findOne call is for checkUpgradeOutcomeAndTriggerWorkers
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      const orphan1 = createMockBundle({ id: 'orphan-1', uploadStatus: UploadStatus.UPLOADING });
+      const orphan2 = createMockBundle({ id: 'orphan-2', uploadStatus: UploadStatus.PROCESSING });
+      upgradeBundleRepository.find.mockResolvedValue([orphan1, orphan2]);
+      upgradeBundleRepository.update.mockResolvedValue(undefined);
+
+      await service.onModuleInit();
+
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'orphan-1',
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
+      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
+        'orphan-2',
+        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
+      );
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('Cleaned up 2 orphaned upload(s)'),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // IS UPLOAD STALE — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('isUploadStale (private) — additional branches', () => {
+    it('should return false for UPLOADING status when still within timeout window', async () => {
+      const bundle = createMockBundle({
+        uploadStatus: UploadStatus.UPLOADING,
+        uploadStartedAt: new Date(), // just started — not stale
+        fileSize: 100 * 1024 * 1024, // 100MB → ~30 min timeout
+      });
+
+      const result = (service as any).isUploadStale(bundle);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false for PROCESSING status when still within 60-minute timeout', async () => {
+      const bundle = createMockBundle({
+        uploadStatus: UploadStatus.PROCESSING,
+        processingStartedAt: new Date(), // just started
+      });
+
+      const result = (service as any).isUploadStale(bundle);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return true when uploadStartedAt is null', async () => {
+      const bundle = createMockBundle({
+        uploadStatus: UploadStatus.UPLOADING,
+        uploadStartedAt: null,
+      });
+
+      const result = (service as any).isUploadStale(bundle);
+
+      expect(result).toBe(true);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // POLL UPGRADE COMPLETION — missing branches
+  // ═══════════════════════════════════════════════════════════════
+  describe('pollUpgradeCompletion — additional branches', () => {
+    const callPoll = (bundleId: string) =>
+      (service as any).pollUpgradeCompletion(bundleId);
+
+    it('should stop poller when bundle is not found', async () => {
+      upgradeBundleRepository.findOne.mockResolvedValue(null);
+
+      await callPoll('missing-bundle-id');
+
+      expect(mockLoggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('not found'),
+      );
+    });
+
+    it('should stop poller and trigger autoTriggerWorkerUpgrade when bundle changed to SUCCESS externally', async () => {
+      // Bundle was STAGED but another process updated it to SUCCESS
+      const successBundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.SUCCESS,
+        version: '2026.02.23',
+        workerUploadStatus: WorkerAggregateStatus.IDLE,
+        workerUpgradeStatus: WorkerAggregateStatus.IDLE,
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(successBundle);
+      workerRepository.find.mockResolvedValue([]);
+
+      await callPoll(successBundle.id);
+
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('no longer STAGED'),
+      );
+      // autoTriggerWorkerUpgrade should run since status is SUCCESS
+      expect(mockLoggerService.log).toHaveBeenCalledWith(
+        expect.stringContaining('auto-triggering worker binary multicast'),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // START UPGRADE POLLER — duplicate guard
+  // ═══════════════════════════════════════════════════════════════
+  describe('startUpgradePoller (private) — duplicate guard', () => {
+    it('should warn and not create a second interval when poller is already running', async () => {
+      // Start poller for the first time via onModuleInit with STAGED bundle
+      const bundle = createMockBundle({
+        upgradeStatus: UpgradeStatus.STAGED,
+        version: '2026.02.23',
+      });
+      upgradeBundleRepository.findOne.mockResolvedValue(bundle);
+      await service.onModuleInit();
+
+      // Clear the logger mock calls to isolate the second call
+      mockLoggerService.warn.mockClear();
+
+      // Attempt to start the poller again directly
+      (service as any).startUpgradePoller('some-other-bundle-id');
+
+      expect(mockLoggerService.warn).toHaveBeenCalledWith(
+        expect.stringContaining('already running'),
+      );
+
+      // Cleanup
+      service.onModuleDestroy();
     });
   });
 });

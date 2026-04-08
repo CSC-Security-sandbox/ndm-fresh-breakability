@@ -19,6 +19,7 @@ describe('UpgradeController', () => {
     processUpload: jest.fn(),
     cancelUpload: jest.fn(),
     triggerUpgrade: jest.fn(),
+    saveStoppedJobIds: jest.fn(),
     skipUpgrade: jest.fn(),
     startMulticast: jest.fn(),
     streamBundle: jest.fn(),
@@ -212,6 +213,16 @@ describe('UpgradeController', () => {
         '53d5f0cd-bdf8-4e59-86d2-2b4443670586',
       );
     });
+
+    it('should propagate NotFoundException when no multicast workflow found', async () => {
+      mockUpgradeService.getMulticastStatus.mockRejectedValue(
+        new NotFoundException('No multicast workflow found for this bundle'),
+      );
+
+      await expect(
+        controller.getMulticastStatus('53d5f0cd-bdf8-4e59-86d2-2b4443670586'),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   // ===========================================================================
@@ -249,6 +260,21 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.initUpload).toHaveBeenCalledWith(
         { fileName: 'upgrade-1.0.0.tar.gz', fileSize: 1024 },
         'user-1',
+      );
+    });
+
+    it('should pass undefined userId when userPermissions has no user', async () => {
+      // Covers the optional-chain branch: userPermissions?.user?.id → undefined
+      mockUpgradeService.initUpload.mockResolvedValue({ uploadId: 'uuid-1', status: 'initialized' });
+
+      await controller.initUpload(
+        { fileName: 'upgrade-1.0.0.tar.gz', fileSize: 1024 },
+        undefined as any,
+      );
+
+      expect(mockUpgradeService.initUpload).toHaveBeenCalledWith(
+        { fileName: 'upgrade-1.0.0.tar.gz', fileSize: 1024 },
+        undefined,
       );
     });
   });
@@ -296,6 +322,14 @@ describe('UpgradeController', () => {
       expect(result).toEqual(expected);
       expect(mockUpgradeService.processUpload).toHaveBeenCalledWith('uuid-1');
     });
+
+    it('should propagate NotFoundException when upload session not found', async () => {
+      mockUpgradeService.processUpload.mockRejectedValue(
+        new NotFoundException('Upload session not found'),
+      );
+
+      await expect(controller.processUpload('missing-uuid')).rejects.toThrow(NotFoundException);
+    });
   });
 
   // ===========================================================================
@@ -328,6 +362,69 @@ describe('UpgradeController', () => {
 
       expect(result).toEqual(expected);
       expect(mockUpgradeService.triggerUpgrade).toHaveBeenCalledWith('bundle-1', 'user-1');
+    });
+
+    it('should pass undefined userId when userPermissions has no user', async () => {
+      // Covers the optional-chain branch: userPermissions?.user?.id → undefined
+      mockUpgradeService.triggerUpgrade.mockResolvedValue({ status: 'success' });
+
+      await controller.triggerUpgrade({ bundleId: 'bundle-1' }, undefined as any);
+
+      expect(mockUpgradeService.triggerUpgrade).toHaveBeenCalledWith('bundle-1', undefined);
+    });
+  });
+
+  // ===========================================================================
+  // PATCH /bundle/:bundleId/stopped-job-ids
+  // ===========================================================================
+
+  describe('saveStoppedJobIds', () => {
+    it('should delegate to service with provided arrays', async () => {
+      mockUpgradeService.saveStoppedJobIds.mockResolvedValue({ success: true });
+
+      const result = await controller.saveStoppedJobIds('bundle-uuid-123', {
+        deactivatedConfigIds: ['cfg-1', 'cfg-2'],
+        stoppedRunIds: ['run-1'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockUpgradeService.saveStoppedJobIds).toHaveBeenCalledWith(
+        'bundle-uuid-123',
+        ['cfg-1', 'cfg-2'],
+        ['run-1'],
+      );
+    });
+
+    it('should default deactivatedConfigIds to [] when undefined in body', async () => {
+      // Covers the `body.deactivatedConfigIds ?? []` nullish-coalescing branch
+      mockUpgradeService.saveStoppedJobIds.mockResolvedValue({ success: true });
+
+      await controller.saveStoppedJobIds('bundle-uuid-123', {
+        deactivatedConfigIds: undefined as any,
+        stoppedRunIds: ['run-1'],
+      });
+
+      expect(mockUpgradeService.saveStoppedJobIds).toHaveBeenCalledWith(
+        'bundle-uuid-123',
+        [],       // defaulted from undefined
+        ['run-1'],
+      );
+    });
+
+    it('should default stoppedRunIds to [] when undefined in body', async () => {
+      // Covers the `body.stoppedRunIds ?? []` nullish-coalescing branch
+      mockUpgradeService.saveStoppedJobIds.mockResolvedValue({ success: true });
+
+      await controller.saveStoppedJobIds('bundle-uuid-123', {
+        deactivatedConfigIds: ['cfg-1'],
+        stoppedRunIds: undefined as any,
+      });
+
+      expect(mockUpgradeService.saveStoppedJobIds).toHaveBeenCalledWith(
+        'bundle-uuid-123',
+        ['cfg-1'],
+        [],       // defaulted from undefined
+      );
     });
   });
 
@@ -431,6 +528,16 @@ describe('UpgradeController', () => {
       expect(mockUpgradeService.getExecutionStatus).toHaveBeenCalledWith(
         '53d5f0cd-bdf8-4e59-86d2-2b4443670586',
       );
+    });
+
+    it('should propagate NotFoundException when bundle not found', async () => {
+      mockUpgradeService.getExecutionStatus.mockRejectedValue(
+        new NotFoundException('Bundle not found'),
+      );
+
+      await expect(
+        controller.getExecutionStatus('53d5f0cd-bdf8-4e59-86d2-2b4443670586'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

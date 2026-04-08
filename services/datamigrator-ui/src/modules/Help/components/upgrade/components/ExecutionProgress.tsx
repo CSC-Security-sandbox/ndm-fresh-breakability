@@ -64,8 +64,16 @@ const WorkerTable = ({
 };
 
 const ExecutionProgress = () => {
-  const { isUpgradeExecuting, executionStatus, workerUpgradeStatus } =
-    useContext(UpgradeContext);
+  const {
+    isUpgradeExecuting,
+    executionStatus,
+    workerUpgradeStatus,
+    deactivatedConfigIds,
+    handleDownloadReport,
+    isDownloadingReport,
+    handleReactivateJobs,
+    isReactivatingJobs,
+  } = useContext(UpgradeContext);
 
   // Determine if we should show this component at all
   const showExecution =
@@ -91,8 +99,8 @@ const ExecutionProgress = () => {
     <Box className="mt-4 space-y-4">
       {/* CP Upgrade Success Banner — always shown */}
       <Box
-        className="p-4 rounded border"
-        style={{ backgroundColor: "#f0fdf4", borderColor: "#86efac" }}
+        className="p-4 rounded border-l-4 border border-gray-200"
+        style={{ backgroundColor: "white", borderLeftColor: "#16a34a" }}
       >
         <Box className="flex items-center gap-3">
           <svg
@@ -118,8 +126,8 @@ const ExecutionProgress = () => {
       {/* No Workers Case */}
       {noWorkers && (
         <Box
-          className="p-4 rounded border"
-          style={{ backgroundColor: "#f0fdf4", borderColor: "#86efac" }}
+          className="p-4 rounded border-l-4 border border-gray-200"
+          style={{ backgroundColor: "white", borderLeftColor: "#16a34a" }}
         >
           <Box className="flex items-center gap-3">
             <svg
@@ -146,18 +154,14 @@ const ExecutionProgress = () => {
       {/* Worker Execution Section */}
       {!noWorkers && (
         <Box
-          className="p-4 rounded border"
+          className="p-4 rounded border-l-4 border border-gray-200"
           style={{
-            backgroundColor: upgradeCompleted
+            backgroundColor: "white",
+            borderLeftColor: upgradeCompleted
               ? upgradeStatus === "success"
-                ? "#f0fdf4"
-                : "#fffbeb"
-              : "#eff6ff",
-            borderColor: upgradeCompleted
-              ? upgradeStatus === "success"
-                ? "#86efac"
-                : "#fde68a"
-              : "#93c5fd",
+                ? "#16a34a"
+                : "#d97706"
+              : "#3b82f6",
           }}
         >
           {/* Header */}
@@ -262,11 +266,8 @@ const ExecutionProgress = () => {
             <Box className="space-y-3">
               {completed.length > 0 && (
                 <Box
-                  className="p-3 rounded border"
-                  style={{
-                    backgroundColor: STATUS_BG.COMPLETED,
-                    borderColor: "#bbf7d0",
-                  }}
+                  className="p-3 rounded border-l-4 border border-gray-200"
+                  style={{ backgroundColor: "white", borderLeftColor: "#16a34a" }}
                 >
                   <p
                     className="text-sm font-medium mb-2"
@@ -282,11 +283,8 @@ const ExecutionProgress = () => {
 
               {notCompleted.length > 0 && (
                 <Box
-                  className="p-3 rounded border"
-                  style={{
-                    backgroundColor: STATUS_BG.FAILED,
-                    borderColor: "#fecaca",
-                  }}
+                  className="p-3 rounded border-l-4 border border-gray-200"
+                  style={{ backgroundColor: "white", borderLeftColor: "#dc2626" }}
                 >
                   <p
                     className="text-sm font-medium mb-2"
@@ -302,11 +300,8 @@ const ExecutionProgress = () => {
 
               {notStaged.length > 0 && (
                 <Box
-                  className="p-3 rounded border"
-                  style={{
-                    backgroundColor: STATUS_BG.IDLE,
-                    borderColor: "#d1d5db",
-                  }}
+                  className="p-3 rounded border-l-4 border border-gray-200"
+                  style={{ backgroundColor: "white", borderLeftColor: "#9ca3af" }}
                 >
                   <p
                     className="text-sm font-medium mb-2"
@@ -321,6 +316,65 @@ const ExecutionProgress = () => {
               )}
             </Box>
           )}
+        </Box>
+      )}
+      {/* Re-activate Jobs Panel — shown after upgrade completes if configs were deactivated */}
+      {(upgradeCompleted || noWorkers) && deactivatedConfigIds?.length > 0 && (
+        <Box
+          className="p-4 rounded-lg border-l-4 border border-gray-200"
+          style={{ backgroundColor: "white", borderLeftColor: "#d97706" }}
+        >
+          <Box className="flex items-center gap-2 mb-1">
+            <svg className="h-5 w-5 flex-shrink-0" style={{ color: "#d97706" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+            </svg>
+            <p className="font-semibold text-base" style={{ color: "#92400e" }}>
+              Re-activate Job Configurations
+            </p>
+          </Box>
+          <p className="text-sm mb-4 ml-7" style={{ color: "#6F6F6F" }}>
+            {deactivatedConfigIds.length} job config(s) were deactivated before upgrade.
+            Re-activate them to resume migrations.You can also download the report of all stopped job runs and deactivated job configs.
+          </p>
+          <Box className="flex justify-end gap-3">
+            <button
+              onClick={handleDownloadReport}
+              disabled={isDownloadingReport}
+              style={{
+                padding: "8px 18px",
+                borderRadius: "8px",
+                border: "1px solid #A7A7A7",
+                backgroundColor: "white",
+                color: "#404040",
+                fontSize: "14px",
+                fontWeight: 500,
+                cursor: isDownloadingReport ? "not-allowed" : "pointer",
+                opacity: isDownloadingReport ? 0.6 : 1,
+              }}
+            >
+              {isDownloadingReport ? 'Generating...' : 'Download Report (CSV)'}
+            </button>
+            <button
+              onClick={handleReactivateJobs}
+              disabled={isReactivatingJobs}
+              style={{
+                padding: "8px 20px",
+                borderRadius: "8px",
+                backgroundColor: isReactivatingJobs ? "#e0e0e0" : "#0067C5",
+                color: isReactivatingJobs ? "#A7A7A7" : "white",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: isReactivatingJobs ? "not-allowed" : "pointer",
+                border: "none",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                transition: "background-color 0.15s ease",
+              }}
+              onMouseEnter={(e) => { if (!isReactivatingJobs) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1E4A93"; }}
+              onMouseLeave={(e) => { if (!isReactivatingJobs) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#0067C5"; }}
+            >
+              {isReactivatingJobs ? 'Re-activating...' : `Re-activate ${deactivatedConfigIds.length} Config(s)`}
+            </button>
+          </Box>
         </Box>
       )}
     </Box>

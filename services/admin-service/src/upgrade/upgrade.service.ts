@@ -583,6 +583,8 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         // null when status is not failed or when pod restarted after failure.
         processingErrors: processingError?.errors ?? null,
         isValidationFailure: processingError?.isValidation ?? false,
+        deactivatedJobConfigIds: latest.deactivatedJobConfigIds ?? null,
+        stoppedJobRunIds: latest.stoppedJobRunIds ?? null,
       };
     } catch (error) {
       this.logger.error(`Failed to get latest upload status: ${error.message}`);
@@ -1777,6 +1779,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
                 JobRunStatus.Ready,
                 JobRunStatus.Pausing,
                 JobRunStatus.Stopping,
+                JobRunStatus.Paused,
               ]),
             },
           })
@@ -1824,6 +1827,32 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         ? path.join(this.uploadPath, latest.version, 'worker', 'windows')
         : null,
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SAVE STOPPED JOB IDS: Persists deactivated config IDs and stopped run IDs
+  // to the upgrade bundle record so they survive CP restart.
+  // Pass empty arrays to clear (after re-activation).
+  // ═══════════════════════════════════════════════════════════════════════════
+  async saveStoppedJobIds(
+    bundleId: string,
+    deactivatedConfigIds: string[],
+    stoppedRunIds: string[],
+  ): Promise<{ success: boolean }> {
+    if (!bundleId || bundleId.trim() === '') {
+      throw new BadRequestException('Bundle ID is required');
+    }
+
+    await this.upgradeBundleRepository.update(bundleId, {
+      deactivatedJobConfigIds: deactivatedConfigIds.length > 0 ? deactivatedConfigIds : null,
+      stoppedJobRunIds: stoppedRunIds.length > 0 ? stoppedRunIds : null,
+    });
+
+    this.logger.log(
+      `saveStoppedJobIds: bundle=${bundleId}, deactivatedConfigs=${deactivatedConfigIds.length}, stoppedRuns=${stoppedRunIds.length}`,
+    );
+
+    return { success: true };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

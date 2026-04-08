@@ -21,6 +21,7 @@ import {
 import { JobConfigInventoryStatsRequestDto, JobConfigInventoryStatsResponseDto } from './dto/jobconfig-inventory-stats.dto';
 import { GetDirsDto } from './dto/get-dirs.dto';
 import { MountTrackerService } from './mount-tracker.service';
+import { BulkJobIdsDto, StoppedJobsReportDto } from './dto/bulk-job-ids.dto';
 
 @ApiTags('jobs')
 @Controller('jobs')
@@ -191,6 +192,42 @@ export class JobConfigController {
   @Get('notice-board/:projectId')
   async getNoticeBoardDetailsByProjectId(@Param('projectId') projectId: string) {
     return await this.jobConfigService.getNoticeBoardDetailsByProjectId(projectId);
+  }
+
+  @Auth(Permission.ManageConfig)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Deactivate specified job configs by IDs (used before upgrade)' })
+  @ApiResponse({ status: 201, description: 'Job configs have been deactivated.' })
+  @Post('/bulk-deactivate')
+  async bulkDeactivateAllJobs(
+    @Body() body: BulkJobIdsDto,
+  ): Promise<{ deactivatedCount: number; deactivatedIds: string[] }> {
+    return this.jobConfigService.bulkDeactivateAllJobs(body.ids);
+  }
+
+  @Auth(Permission.ManageConfig)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Re-activate specified job configs by IDs (used after upgrade)' })
+  @ApiResponse({ status: 201, description: 'Job configs have been re-activated.' })
+  @Post('/bulk-activate')
+  async bulkActivateJobs(
+    @Body() body: BulkJobIdsDto,
+  ): Promise<{ activatedCount: number; activatedIds: string[] }> {
+    return this.jobConfigService.bulkActivateJobs(body.ids);
+  }
+
+  @Auth(Permission.ManageConfig)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get stopped job runs and deactivated configs for CSV report' })
+  @ApiResponse({ status: 201, description: 'Report data returned.' })
+  @Post('/stopped-jobs-report')
+  async getStoppedJobsReport(
+    @Body() body: StoppedJobsReportDto,
+  ): Promise<{ stoppedRuns: any[]; deactivatedConfigs: any[] }> {
+    return this.jobConfigService.getStoppedJobsReport(
+      body.jobRunIds,
+      body.jobConfigIds,
+    );
   }
 
   @Auth(Permission.ManageConfig)

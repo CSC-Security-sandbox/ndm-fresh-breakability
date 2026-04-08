@@ -64,7 +64,23 @@ export type UpgradeContextType = {
   handleUpgrade: () => Promise<void>;
   isUpgrading: boolean;
   blockingJobs: BlockingJobs;
-  
+
+  // Stop All Jobs (pre-upgrade)
+  handleStopAllJobs: () => Promise<void>;
+  isStoppingJobs: boolean;
+
+  // Stopped job IDs persisted in DB — available after page refresh / CP restart
+  deactivatedConfigIds: string[];
+  stoppedRunIds: string[];
+
+  // CSV report download
+  handleDownloadReport: () => Promise<void>;
+  isDownloadingReport: boolean;
+
+  // Re-activate job configs (post-upgrade)
+  handleReactivateJobs: () => Promise<void>;
+  isReactivatingJobs: boolean;
+
   // Reset
   handleReset: () => Promise<void>;
   

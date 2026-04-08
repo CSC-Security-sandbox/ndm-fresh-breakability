@@ -59,4 +59,10 @@ export class UpgradeBundle extends Base {
 
   @Column({ type: 'varchar', length: 20, default: WorkerAggregateStatus.IDLE, name: 'worker_upgrade_status' })
   workerUpgradeStatus: WorkerAggregateStatus;
+
+  @Column({ type: 'jsonb', nullable: true, name: 'deactivated_job_config_ids' })
+  deactivatedJobConfigIds: string[] | null;
+
+  @Column({ type: 'jsonb', nullable: true, name: 'stopped_job_run_ids' })
+  stoppedJobRunIds: string[] | null;
 }
