@@ -122,7 +122,6 @@ source "googlecompute" "gcp_ubuntu" {
     "createdby" = "packer"
     "project"   = var.project_name
     "cloud"     = "gcp"
-    "creator"   = "vasudev"
   }
 
   temporary_key_pair_type      = var.temporary_key_pair_type

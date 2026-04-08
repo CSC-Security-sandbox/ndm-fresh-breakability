@@ -232,7 +232,6 @@ source "azure-arm" "azure_ubuntu" {
     "createdby" = "packer"
     "project"   = var.project_name
     "cloud"     = "azure"
-    "creator"   = "vasudev"
   }
 }
 
