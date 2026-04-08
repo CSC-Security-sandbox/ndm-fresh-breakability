@@ -15,9 +15,9 @@ import {
 
 const ASUP_ENABLED_KEY = 'asup_enabled';
 const ASUP_TRANSMIT_MAX_RETRIES = 3;
-const ASUP_TRANSMIT_RETRY_DELAY_MS = 3000;
-const ASUP_ISF_THRESHOLD_BYTES = 200 * 1024 * 1024;
-const ASUP_ISF_CHUNK_BYTES = 100 * 1024 * 1024;
+const ASUP_TRANSMIT_RETRY_DELAY_MS = 30000;
+const ASUP_ISF_THRESHOLD_BYTES = 100 * 1024 * 1024;
+const ASUP_ISF_CHUNK_BYTES = 50 * 1024 * 1024;
 
 export interface AsupSettingsData {
   enabled: boolean;
@@ -256,22 +256,34 @@ export class AsupSchedulerService {
 
       if (archiveBuffer.length <= ASUP_ISF_THRESHOLD_BYTES) {
         this.logger.log(`[TransmitSupportBundle] Archive <= 200MB — sending as single PUT to ${requestUrl}`);
-        try {
-          const response = await axios.put(requestUrl, archiveBuffer, {
-            headers: baseHeaders,
-            timeout: 60000,
-            maxContentLength: Infinity,
-            maxBodyLength: Infinity,
-          });
-          this.logger.log(`[TransmitSupportBundle] Single PUT succeeded - status=${response.status} to ${requestUrl}`);
-        } catch (err) {
-          const status = (err as any)?.response?.status;
-          const responseData = JSON.stringify((err as any)?.response?.data);
-          this.logger.error(
-            `[TransmitSupportBundle] Single PUT failed - status=${status}, url=${requestUrl}, response=${responseData}, error=${(err as Error).message}`,
-            (err as Error).stack,
-          );
-          throw err;
+        let lastSingleErr: Error | null = null;
+        for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
+          try {
+            const response = await axios.put(requestUrl, archiveBuffer, {
+              headers: baseHeaders,
+              timeout: 60000,
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity,
+            });
+            this.logger.log(`[TransmitSupportBundle] Single PUT succeeded - status=${response.status} to ${requestUrl}`);
+            lastSingleErr = null;
+            break;
+          } catch (err) {
+            lastSingleErr = err as Error;
+            const status = (err as any)?.response?.status;
+            const responseData = JSON.stringify((err as any)?.response?.data);
+            this.logger.error(
+              `[TransmitSupportBundle] Single PUT attempt ${attempt}/${ASUP_TRANSMIT_MAX_RETRIES} failed - status=${status}, url=${requestUrl}, response=${responseData}, error=${lastSingleErr.message}`,
+              lastSingleErr.stack,
+            );
+            if (attempt < ASUP_TRANSMIT_MAX_RETRIES) {
+              this.logger.log(`[TransmitSupportBundle] Retrying in ${ASUP_TRANSMIT_RETRY_DELAY_MS}ms...`);
+              await new Promise((resolve) => setTimeout(resolve, ASUP_TRANSMIT_RETRY_DELAY_MS));
+            }
+          }
+        }
+        if (lastSingleErr) {
+          throw lastSingleErr;
         }
         return;
       }

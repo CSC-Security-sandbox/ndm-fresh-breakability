@@ -186,8 +186,10 @@ export class AsupPackagerService {
         manifestEntries,
         Date.now() - startTime,
       );
+      const serialId = (await this.serialIdSyncService.getSerialId()) ?? '';
       const xHeaders = this.buildXHeaders(
         this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
+        serialId,
       );
       headersMap = xHeaders.headersMap;
 
