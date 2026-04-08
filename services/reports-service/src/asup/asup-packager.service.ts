@@ -360,18 +360,21 @@ export class AsupPackagerService {
 
   private toFlatFilename(relativePath: string): string {
     // Strip the top-level bundle directory (e.g. "ndm_logs_<uuid>/"), then map
-    // each file to a structured short name based on its path type:
+    // each file to a structured short name based on its path type.
+    //
+    // All output filenames begin with <YY_MM_DD>_ (date-first ordering).
     //
     // Log files (under ndm_logs/<date>/):
-    //   control-plane service logs  → cp_<svc>_<YY_MM_DD>_<projectId>.log
-    //   worker logs                 → worker_<workerId>_<YY_MM_DD>_<projectId>.log
-    //   no-project worker logs      → no_project_worker_<workerId>_<YY_MM_DD>.log
+    //   control-plane service logs  → <YY_MM_DD>_cp_<svc>_<projectId>.log
+    //   worker logs                 → <YY_MM_DD>_worker_<workerId>_<projectId>.log
+    //   no-project worker logs      → <YY_MM_DD>_no_project_worker_<workerId>.log
+    //   no-project cp logs          → <YY_MM_DD>_no_project_cp_<svc>.log
     //
-    // CSV files:
-    //   Performance Metrics/  → perf_<metric>_<ts>.csv   (hyphens → underscores)
-    //   State Data/           → state_data_<name>_<ts>.csv
-    //   System Inventory/     → sys_inventory_<type>_<ts>.csv
-    //   configuration data/   → <filename>  (no prefix)
+    // CSV files (epoch-ms timestamp converted to <YY_MM_DD>, stripped from end):
+    //   Performance Metrics/  → <YY_MM_DD>_perf_<metric>.csv
+    //   State Data/           → <YY_MM_DD>_state_data_<name>.csv
+    //   System Inventory/     → <YY_MM_DD>_sys_inventory_<type>.csv
+    //   configuration data/   → <YY_MM_DD>_<filename>.csv
     const normalized = relativePath.replace(/\\/g, '/');
     const parts = normalized.split('/');
 
@@ -385,6 +388,24 @@ export class AsupPackagerService {
     /** Sanitize a string for use in a filename */
     const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '_');
 
+    /**
+     * Strip a trailing 13-digit epoch-ms timestamp from a bare stem (no extension),
+     * convert it to YY_MM_DD, and return both the cleaned stem and the date.
+     * e.g. "cpu_percent_1775624021419" → { stem: "cpu_percent", date: "26_04_08" }
+     * Falls back to today's UTC date when no timestamp is found.
+     */
+    const stripTimestamp = (stem: string): { stem: string; date: string } => {
+      const toYYMMDD = (d: Date) => {
+        const yy = String(d.getUTCFullYear()).slice(2);
+        const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dy = String(d.getUTCDate()).padStart(2, '0');
+        return `${yy}_${mo}_${dy}`;
+      };
+      const m = stem.match(/^(.*?)_(\d{13})$/);
+      if (m) return { stem: m[1], date: toYYMMDD(new Date(parseInt(m[2], 10))) };
+      return { stem, date: toYYMMDD(new Date()) };
+    };
+
     // ── Log files under ndm_logs/<date>/... ─────────────────────────────────
     if (tp[0] === 'ndm_logs' && tp.length >= 3) {
       const dd = shortDate(tp[1]);   // YYYY-MM-DD → YY_MM_DD
@@ -393,12 +414,32 @@ export class AsupPackagerService {
       // no-project: ndm_logs/<date>/no-project/...
       if (projectOrNone === 'no-project') {
         const rest = tp.slice(3);
+
+        // no-project worker logs
         if (rest[0] === 'worker' && rest.length >= 3) {
           const workerId = rest[1];
           const fname = rest.slice(2).join('/');
-          if (fname === 'worker.log') return `no_project_worker_${workerId}_${dd}.log`;
+          if (fname === 'worker.log') return `${dd}_no_project_worker_${workerId}.log`;
           return `${dd}_no_project_worker_${workerId}_${safe(fname)}`;
         }
+
+        // no-project control-plane logs
+        if (rest[0] === 'control-plane' && rest.length >= 2) {
+          const fname = rest.slice(1).join('/');
+          const cpMap: Record<string, string> = {
+            'admin-service.log':   `${dd}_no_project_cp_admin_svc.log`,
+            'config-service.log':  `${dd}_no_project_cp_config_svc.log`,
+            'datamigrator-ui.log': `${dd}_no_project_cp_datamigrator_ui.log`,
+            'db-migrations.log':   `${dd}_no_project_cp_db_migrations.log`,
+            'db-writer.log':       `${dd}_no_project_cp_db_writer.log`,
+            'jobs-service.log':    `${dd}_no_project_cp_jobs_svc.log`,
+            'reports-service.log': `${dd}_no_project_cp_reports_svc.log`,
+            'support-service.log': `${dd}_no_project_cp_support_svc.log`,
+            'error-report.csv':    `${dd}_no_project_cp_error_report.csv`,
+          };
+          return cpMap[fname] ?? `${dd}_no_project_cp_${safe(fname)}`;
+        }
+
         return `${dd}_no_project_${safe(rest.join('_'))}`;
       }
 
@@ -413,23 +454,24 @@ export class AsupPackagerService {
       if (subDir === 'control-plane') {
         const fname = sub.slice(1).join('/');
         const cpMap: Record<string, string> = {
-          'admin-service.log':   `cp_admin_svc_${dd}_${projectId}.log`,
-          'config-service.log':  `cp_config_svc_${dd}_${projectId}.log`,
-          'datamigrator-ui.log': `cp_datamigrator_ui_${dd}_${projectId}.log`,
-          'db-writer.log':       `cp_db_writer_${dd}_${projectId}.log`,
-          'jobs-service.log':    `cp_jobs_svc_${dd}_${projectId}.log`,
-          'reports-service.log': `cp_reports_svc_${dd}_${projectId}.log`,
-          'support-service.log': `cp_support_svc_${dd}_${projectId}.log`,
-          'error-report.csv':    `cp_error_report_${dd}_${projectId}.csv`,
+          'admin-service.log':   `${dd}_cp_admin_svc_${projectId}.log`,
+          'config-service.log':  `${dd}_cp_config_svc_${projectId}.log`,
+          'datamigrator-ui.log': `${dd}_cp_datamigrator_ui_${projectId}.log`,
+          'db-migrations.log':   `${dd}_cp_db_migrations_${projectId}.log`,
+          'db-writer.log':       `${dd}_cp_db_writer_${projectId}.log`,
+          'jobs-service.log':    `${dd}_cp_jobs_svc_${projectId}.log`,
+          'reports-service.log': `${dd}_cp_reports_svc_${projectId}.log`,
+          'support-service.log': `${dd}_cp_support_svc_${projectId}.log`,
+          'error-report.csv':    `${dd}_cp_error_report_${projectId}.csv`,
         };
-        return cpMap[fname] ?? `cp_${dd}_${projectId}_${safe(fname)}`;
+        return cpMap[fname] ?? `${dd}_cp_${projectId}_${safe(fname)}`;
       }
 
       // Worker logs: ndm_logs/<date>/<projectId>/worker/<workerId>/...
       if (subDir === 'worker' && sub.length >= 3) {
         const workerId = sub[1];
         const fname = sub.slice(2).join('/');
-        if (fname === 'worker.log') return `worker_${workerId}_${dd}_${projectId}.log`;
+        if (fname === 'worker.log') return `${dd}_worker_${workerId}_${projectId}.log`;
         return `${dd}_${projectId}_worker_${workerId}_${safe(fname)}`;
       }
 
@@ -437,25 +479,36 @@ export class AsupPackagerService {
     }
 
     // ── Metrics / State / Inventory / Config CSV files ───────────────────────
+    // Epoch-ms timestamps embedded in filenames are converted to YY_MM_DD and
+    // moved to the front; the raw epoch is stripped from the end.
     const dir = (tp[0] ?? '').toLowerCase();
-    const fname = tp.slice(1).join('_');
+    const rawFname = tp.slice(1).join('_');
 
     if (dir === 'performance metrics') {
-      // "cpu-percent-<ts>.csv" → "perf_cpu_percent_<ts>.csv"
-      return `perf_${safe(fname.replace(/-/g, '_'))}`;
+      // "cpu-percent-1775624021419.csv" → "26_04_08_perf_cpu_percent.csv"
+      const { stem, date } = stripTimestamp(
+        rawFname.replace(/-/g, '_').replace(/\.csv$/i, ''),
+      );
+      return `${date}_perf_${safe(stem)}.csv`;
     }
     if (dir === 'state data') {
-      // "service_pods_<ts>.csv" → "state_data_service_pods_<ts>.csv"
-      return `state_data_${safe(fname)}`;
+      // "service_pods_1775624017567.csv" → "26_04_08_state_data_service_pods.csv"
+      const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
+      return `${date}_state_data_${safe(stem)}.csv`;
     }
     if (dir === 'system inventory') {
-      // "system-inventory-disk-usage-<ts>.csv" → "sys_inventory_disk_usage_<ts>.csv"
-      const base = fname.replace(/^system-inventory-/, '').replace(/-/g, '_');
-      return `sys_inventory_${safe(base)}`;
+      // "system-inventory-disk-usage-1775624022171.csv" → "26_04_08_sys_inventory_disk_usage.csv"
+      const base = rawFname
+        .replace(/^system-inventory-/i, '')
+        .replace(/-/g, '_')
+        .replace(/\.csv$/i, '');
+      const { stem, date } = stripTimestamp(base);
+      return `${date}_sys_inventory_${safe(stem)}.csv`;
     }
     if (dir === 'configuration data') {
-      // No category prefix — just the filename as-is
-      return safe(fname);
+      // "job_config_details_1775624017276.csv" → "26_04_08_job_config_details.csv"
+      const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
+      return `${date}_${safe(stem)}.csv`;
     }
 
     // Fallback: flatten path separators and sanitize

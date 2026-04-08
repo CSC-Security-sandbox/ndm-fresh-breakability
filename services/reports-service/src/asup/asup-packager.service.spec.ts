@@ -639,32 +639,34 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     // ── CSV category paths ────────────────────────────────────────────────────
 
-    it('Performance Metrics csv → perf_<metric_underscored>_<ts>.csv', () => {
+    // Epoch 1744070400000 = 2025-04-08T00:00:00.000Z → date prefix "25_04_08"
+    // Epoch is stripped from output; only the derived YY_MM_DD prefix is kept.
+    it('Performance Metrics csv → <YY_MM_DD>_perf_<metric_underscored>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
-        'bundle/Performance Metrics/cpu-percent-12345.csv',
+        'bundle/Performance Metrics/cpu-percent-1744070400000.csv',
       );
-      expect(result).toBe('perf_cpu_percent_12345.csv');
+      expect(result).toBe('25_04_08_perf_cpu_percent.csv');
     });
 
-    it('State Data csv → state_data_<name>_<ts>.csv', () => {
+    it('State Data csv → <YY_MM_DD>_state_data_<name>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
-        'bundle/State Data/service_pods_12345.csv',
+        'bundle/State Data/service_pods_1744070400000.csv',
       );
-      expect(result).toBe('state_data_service_pods_12345.csv');
+      expect(result).toBe('25_04_08_state_data_service_pods.csv');
     });
 
-    it('System Inventory csv → sys_inventory_<type_underscored>_<ts>.csv', () => {
+    it('System Inventory csv → <YY_MM_DD>_sys_inventory_<type_underscored>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
-        'bundle/System Inventory/system-inventory-disk-usage-12345.csv',
+        'bundle/System Inventory/system-inventory-disk-usage-1744070400000.csv',
       );
-      expect(result).toBe('sys_inventory_disk_usage_12345.csv');
+      expect(result).toBe('25_04_08_sys_inventory_disk_usage.csv');
     });
 
-    it('configuration data csv → just the filename with no prefix', () => {
+    it('configuration data csv → <YY_MM_DD>_<filename>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
-        'bundle/configuration data/job_config_details_12345.csv',
+        'bundle/configuration data/job_config_details_1744070400000.csv',
       );
-      expect(result).toBe('job_config_details_12345.csv');
+      expect(result).toBe('25_04_08_job_config_details.csv');
     });
   });
 

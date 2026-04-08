@@ -554,6 +554,10 @@ describe('AsupSchedulerService', () => {
     });
 
     it('should delete the .7z archive even when single PUT transmission fails (finally cleanup)', async () => {
+      // Bypass the 30s retry delay so the test does not time out
+      const originalSetTimeout = global.setTimeout;
+      global.setTimeout = ((fn: () => void) => { fn(); return 0; }) as any;
+
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
       mockAxiosPut.mockRejectedValue(new Error('network error'));
@@ -566,9 +570,15 @@ describe('AsupSchedulerService', () => {
       expect(fsMocked.unlink).toHaveBeenCalledWith(
         '/tmp/asup-reports/support-bundle-asup-123.7z',
       );
+
+      global.setTimeout = originalSetTimeout;
     });
 
     it('should warn (not throw) when archive unlink fails during cleanup, and still propagate original transmission error', async () => {
+      // Bypass the 30s retry delay so the test does not time out
+      const originalSetTimeout = global.setTimeout;
+      global.setTimeout = ((fn: () => void) => { fn(); return 0; }) as any;
+
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
       mockAxiosPut.mockRejectedValue(new Error('PUT failed'));
@@ -582,6 +592,8 @@ describe('AsupSchedulerService', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to delete support bundle archive'),
       );
+
+      global.setTimeout = originalSetTimeout;
     });
 
     it('should warn (not throw) when archive unlink fails after successful transmission', async () => {
