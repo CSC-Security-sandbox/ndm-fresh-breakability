@@ -11,7 +11,7 @@ export default registerAs(
     asup: {
       asupEndpoint: process.env.ASUP_ENDPOINT || "https://support.netapp.com/put/AsupPut",
       supportBundleEndpoint:
-        process.env.ASUP_SUPPORT_BUNDLE_ENDPOINT || "https://stagesupport.netapp.com/put/AsupPut",
+        process.env.ASUP_SUPPORT_BUNDLE_ENDPOINT || "https://support.netapp.com/put/AsupPut",
     },
   }),
 );
