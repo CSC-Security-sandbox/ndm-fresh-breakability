@@ -45,6 +45,6 @@ worker_disks = {
 
 control_plane_disks = {
   label       = "disk0"
-  size        = 200
+  size        = 1024
   unit_number = 0
 }

@@ -157,7 +157,7 @@ variable "control_plane_disks" {
   })
   default = {
     label       = "disk0"
-    size        = 200
+    size        = 1024
     unit_number = 0
   }
 }
