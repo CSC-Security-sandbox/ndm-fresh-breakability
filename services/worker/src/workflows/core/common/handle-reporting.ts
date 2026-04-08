@@ -16,6 +16,7 @@ const {
   updateStatus: updateStatusActivity,
   generateJobsReport: generateJobsReportActivity,
   updateWorkerResponse: updateWorkerResponseActivity,
+  addExcludedSkippedEntries: addExcludedSkippedEntriesActivity,
 } = wf.proxyActivities<CommonActivityService>({ startToCloseTimeout: '10m', retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } });
 
 
@@ -37,9 +38,18 @@ const generateReport = async (jobRunId: string, generator: string) => {
   });
 };
 
+export interface WorkflowStats {
+    fileCount?: number;
+    dirCount?: number;
+    totalSize?: string;
+    excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+    skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
+}
+
 export const handleReporting = async (
     traceId: string,
     status: JobRunStatus,
+    stats?: WorkflowStats,
   ): Promise<string> => {
     let isBlocked = true;
     let reportType : JobReportType | null = null;
@@ -63,7 +73,17 @@ export const handleReporting = async (
     try {
       await wf.condition(() => !isBlocked);
       const jobRunStatus = getMappedJobRunStatus(status, reportType);
-      await updateStatusActivity({jobRunId: traceId, status: jobRunStatus})
+      if (stats?.excludedPaths?.length || stats?.skippedPaths?.length) {
+        await addExcludedSkippedEntriesActivity(
+          traceId,
+          stats.excludedPaths ?? [],
+          stats.skippedPaths ?? [],
+        );
+      }
+      await updateStatusActivity({
+        jobRunId: traceId,
+        status: jobRunStatus,
+      });
       switch(reportType) {
         case JobReportType.CUT_OVER: {            
             await generateCOCReportActivity(traceId);

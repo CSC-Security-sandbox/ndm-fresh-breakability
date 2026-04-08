@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as path from "path";
+import * as os from "os";
 import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
@@ -61,13 +62,25 @@ export class DiscoveryService {
   private readonly reportsDirectory =
     process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
 
+  /** Async path existence check (replaces fs.existsSync for I/O-bound checks). */
+  private async pathExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.promises.access(filePath);
+      return true;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return false;
+      throw err;
+    }
+  }
+
   async createReportFile(jobRunId: string, reportType: string): Promise<any> {
     this.logger.log(
       `Creating report for jobRunId: ${jobRunId} and reportType: ${reportType}`,
     );
     try {
-      if (!fs.existsSync(this.reportsDirectory)) {
-        fs.mkdirSync(this.reportsDirectory, { recursive: true });
+      if (!(await this.pathExists(this.reportsDirectory))) {
+        await fs.promises.mkdir(this.reportsDirectory, { recursive: true });
       }
       const pdfFileName = `${jobRunId}-${reportType.toLowerCase()}-report.pdf`;
       const pdfFilePath = path.join(this.reportsDirectory, pdfFileName);
@@ -217,25 +230,118 @@ export class DiscoveryService {
     fs.writeFileSync(filePath, csvContent);
   }
 
+  /**
+   * Same search order as JobRunService.ensureWritableReportsBaseDir so COC CSV files
+   * is found whether it was written under REPORT_DOWNLOAD_LOCATION, ./reports, or /tmp/ndm-reports.
+   */
+  private getCandidateReportBaseDirs(): string[] {
+    const candidates: string[] = [];
+    const configured = process.env.REPORT_DOWNLOAD_LOCATION?.trim();
+    if (configured) {
+      candidates.push(path.resolve(configured));
+    }
+    candidates.push(path.resolve(process.cwd(), "reports"));
+    candidates.push(path.join(os.tmpdir(), "ndm-reports"));
+    return candidates;
+  }
+
+  private normalizeJobRunId(jobRunId: string): string {
+    if (!isUUID(jobRunId)) {
+      throw new BadRequestException("Invalid jobRunId format");
+    }
+    return jobRunId.toLowerCase();
+  }
+
+  private resolvePathInsideBase(baseDir: string, fileName: string): string {
+    const resolvedBase = path.resolve(baseDir);
+    const resolvedPath = path.resolve(resolvedBase, fileName);
+    if (!resolvedPath.startsWith(`${resolvedBase}${path.sep}`)) {
+      throw new BadRequestException("Invalid file path");
+    }
+    return resolvedPath;
+  }
+
+  private async findCocReportZipPath(jobRunId: string): Promise<string | null> {
+    if (!isUUID(jobRunId)) return null;
+    const safeJobRunId = this.normalizeJobRunId(jobRunId);
+    const zipName = `${safeJobRunId}-coc-report.zip`;
+
+    for (const base of this.getCandidateReportBaseDirs()) {
+      if (!(await this.pathExists(base))) continue;
+      const zipPath = this.resolvePathInsideBase(base, zipName);
+      if (await this.pathExists(zipPath)) {
+        return zipPath;
+      }
+    }
+    return null;
+  }
+
+  private async findCocReportCsvBundlePaths(jobRunId: string): Promise<string[]> {
+    if (!isUUID(jobRunId)) return [];
+    const safeJobRunId = this.normalizeJobRunId(jobRunId);
+    const bundleFileNames = [
+      "coc-report.csv",
+      "excluded-report.csv",
+      "skipped-report.csv",
+      "deleted-report.csv",
+    ];
+
+    for (const base of this.getCandidateReportBaseDirs()) {
+      if (!(await this.pathExists(base))) continue;
+      const bundleDir = this.resolvePathInsideBase(base, `${safeJobRunId}-coc-report`);
+      const paths = bundleFileNames.map((name) =>
+        this.resolvePathInsideBase(bundleDir, name),
+      );
+      const existsFlags = await Promise.all(
+        paths.map((p) => this.pathExists(p)),
+      );
+      if (existsFlags.every(Boolean)) return paths;
+    }
+    return [];
+  }
+
   async getReportsAsZip(
     jobRunIds: string[],
     reportType: string,
   ): Promise<Buffer> {
     const filesToZip: string[] = [];
+    const isCoc = reportType.toUpperCase() === ReportType.COC;
 
-    if (!fs.existsSync(this.reportsDirectory)) {
-      throw new NotFoundException(
-        `Reports directory does not exist: ${this.reportsDirectory}`,
-      );
+    if (!isCoc) {
+      if (!(await this.pathExists(this.reportsDirectory))) {
+        throw new NotFoundException(
+          `Reports directory does not exist: ${this.reportsDirectory}`,
+        );
+      }
     }
-    for (const jobRunId of jobRunIds) {
-      const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
-      const filePath = path.join(this.reportsDirectory, fileName);
 
-      if (fs.existsSync(filePath)) {
-        filesToZip.push(filePath);
+    for (const jobRunId of jobRunIds) {
+      if (isCoc) {
+        const cocZipPath = await this.findCocReportZipPath(jobRunId);
+        if (cocZipPath) {
+          filesToZip.push(cocZipPath);
+        } else {
+          const cocBundlePaths = await this.findCocReportCsvBundlePaths(jobRunId);
+          if (cocBundlePaths.length > 0) {
+            this.logger.log(
+              `COC zip not found for ${jobRunId}; falling back to existing CSV bundle for on-demand zip`,
+            );
+            filesToZip.push(...cocBundlePaths);
+          } else {
+            this.logger.warn(
+              `COC report zip and CSV bundle not found for jobRunId ${jobRunId}`,
+            );
+          }
+        }
       } else {
-        console.warn(`File not found: ${filePath}`);
+        const fileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
+        const filePath = path.join(this.reportsDirectory, fileName);
+
+        if (await this.pathExists(filePath)) {
+          filesToZip.push(filePath);
+        } else {
+          console.warn(`File not found: ${filePath}`);
+        }
       }
     }
 
@@ -243,6 +349,12 @@ export class DiscoveryService {
       throw new NotFoundException(
         "No valid report files found for the given inputs.",
       );
+    }
+
+    // COC artifacts are already zip files generated by job-run service.
+    // For a single COC report, return that zip directly (avoid zip-in-zip).
+    if (isCoc && filesToZip.length === 1) {
+      return fs.promises.readFile(filesToZip[0]);
     }
 
     const zipBuffer = await this.createZipArchive(filesToZip);
@@ -254,11 +366,10 @@ export class DiscoveryService {
     jobRunId: string,
     reportType: string,
   ): Promise<string> {
-    if (!isUUID(jobRunId)) {
-      throw new BadRequestException('Invalid jobRunId format');
-    }
+    const safeJobRunId = this.normalizeJobRunId(jobRunId);
+    const safeReportType = reportType.replace(/[^a-zA-Z]/g, "");
 
-    const zipFilePath = this.getZipFilePath(jobRunId, reportType);
+    const zipFilePath = this.getZipFilePath(safeJobRunId, safeReportType);
 
     if (!zipFilePath.startsWith(this.reportsDirectory)) {
       throw new BadRequestException('Invalid file path');
@@ -266,9 +377,50 @@ export class DiscoveryService {
 
     const zipExists = await fs.promises.access(zipFilePath).then(() => true).catch(() => false);
     if (!zipExists) {
-      throw new NotFoundException(
-        `Report not found for jobRunId: ${jobRunId}. Report may not be generated yet.`,
-      );
+      const reportTypeUpper = reportType.toUpperCase();
+      const isCoc = reportTypeUpper === ReportType.COC;
+      let sourcePath: string | null = null;
+
+      if (isCoc) {
+        const cocZipPath = await this.findCocReportZipPath(safeJobRunId);
+        if (cocZipPath) {
+          await fs.promises.mkdir(path.dirname(zipFilePath), { recursive: true });
+          if (path.resolve(cocZipPath) !== path.resolve(zipFilePath)) {
+            await fs.promises.copyFile(cocZipPath, zipFilePath);
+          }
+          this.logger.log(`Prepared existing COC ZIP at ${zipFilePath} from ${cocZipPath}`);
+          sourcePath = zipFilePath;
+        } else {
+          const cocBundlePaths = await this.findCocReportCsvBundlePaths(safeJobRunId);
+          if (cocBundlePaths.length > 0) {
+            const zipBuffer = await this.createZipArchive(cocBundlePaths);
+            await fs.promises.mkdir(path.dirname(zipFilePath), { recursive: true });
+            await fs.promises.writeFile(zipFilePath, zipBuffer);
+            this.logger.log(`Generated on-demand COC ZIP at ${zipFilePath} from ${cocBundlePaths.length} CSV files`);
+            sourcePath = zipFilePath;
+          }
+        }
+      } else {
+        const csvPath = this.resolvePathInsideBase(
+          this.reportsDirectory,
+          `${safeJobRunId}-${safeReportType.toLowerCase()}-report.csv`,
+        );
+        const csvExists = await fs.promises.access(csvPath).then(() => true).catch(() => false);
+        sourcePath = csvExists ? csvPath : null;
+      }
+
+      if (!sourcePath) {
+        throw new NotFoundException(
+          `Report not found for jobRunId: ${jobRunId}. Report may not be generated yet.`,
+        );
+      }
+
+      if (!isCoc) {
+        const zipBuffer = await this.createZipArchive([sourcePath]);
+        await fs.promises.mkdir(path.dirname(zipFilePath), { recursive: true });
+        await fs.promises.writeFile(zipFilePath, zipBuffer);
+        this.logger.log(`Generated on-demand ZIP at ${zipFilePath} from ${sourcePath}`);
+      }
     }
 
     const token = randomUUID();

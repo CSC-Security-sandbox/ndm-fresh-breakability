@@ -12,6 +12,34 @@ import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { JobType } from 'src/constants/enums';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
 
+export const CSV_FILE_NAMES = {
+    COC: 'coc-report.csv',
+    EXCLUDED: 'excluded-report.csv',
+    SKIPPED: 'skipped-report.csv',
+    DELETED: 'deleted-report.csv',
+} as const;
+
+export type CocBundleFileEntry =
+    | { readonly fileName: string; readonly kind: 'inventory' }
+    | {
+        readonly fileName: string;
+        readonly kind: 'list';
+        readonly listType: 'excluded' | 'skipped' | 'deleted';
+    };
+
+export const COC_BUNDLE_ENTRIES: readonly CocBundleFileEntry[] = [
+    { fileName: CSV_FILE_NAMES.COC, kind: 'inventory' },
+    { fileName: CSV_FILE_NAMES.EXCLUDED, kind: 'list', listType: 'excluded' },
+    { fileName: CSV_FILE_NAMES.SKIPPED, kind: 'list', listType: 'skipped' },
+    { fileName: CSV_FILE_NAMES.DELETED, kind: 'list', listType: 'deleted' },
+];
+
+interface CsvStrategy {
+    fetchBatch: (limit: number, cursor: string | null) => Promise<any[]>;
+    nextCursor: (lastRow: any) => string | null;
+    toRow: (raw: any) => Record<string, any>;
+}
+
 @Injectable()
 export class CsvService {
     private static readonly DEFAULT_PROTOCOL = 'NFS';
@@ -31,34 +59,66 @@ export class CsvService {
         if (loggerFactory) {
             this.logger = loggerFactory.create(CsvService.name);
         } else {
-            // Fallback to basic NestJS Logger for worker threads
             this.logger = new Logger(CsvService.name);
         }
     }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 50000, jobType?: string, resumeCursor?: string | null) {
+        const protocol = await this.getProtocolForJobRun(jobRunId);
+        const strategy: CsvStrategy = {
+            fetchBatch: (limit, cursor) => this.getInventoryData(jobRunId, limit, cursor, jobType, protocol),
+            nextCursor: (lastRow) => lastRow['_cursor_path'],
+            toRow: ({ _cursor_path, ...csvRow }) => csvRow,
+        };
+        await this.generateCsvCore(filePath, jobRunId, batchSize, resumeCursor, strategy);
+    }
+
+    async generateListCsv(
+        filePath: string,
+        jobRunId: string,
+        type: 'excluded' | 'skipped' | 'deleted',
+        batchSize: number = 10000,
+        resumeCursor?: string | null,
+    ) {
+        const strategy: CsvStrategy = {
+            fetchBatch: async (limit, cursor) => {
+                const q = await this.getListEntriesQuery(jobRunId, limit, cursor, type);
+                return this.dataSource.query(q.query, q.values);
+            },
+            nextCursor: (lastRow) => lastRow?.Path ?? null,
+            toRow: (row) => ({ 'Source Path': row['Source Path'] }),
+        };
+        await this.generateCsvCore(filePath, jobRunId, batchSize, resumeCursor, strategy);
+    }
+
+    private async generateCsvCore(
+        filePath: string,
+        jobRunId: string,
+        batchSize: number,
+        resumeCursor: string | null | undefined,
+        strategy: CsvStrategy,
+    ) {
         const projectId = await this.projectIdCacheService.getProjectIdFromCache(jobRunId);
         const isResume = resumeCursor !== null && resumeCursor !== undefined && resumeCursor !== '';
-        this.logger.log(`projectId: ${projectId} ${isResume ? 'Resuming' : 'Starting'} CSV generation for jobRunId: ${jobRunId}, filePath: ${filePath}, jobType: ${jobType}${isResume ? `, cursor: ${resumeCursor}` : ''}`);
-        
+        this.logger.log(
+            `projectId: ${projectId} ${isResume ? 'Resuming' : 'Starting'} CSV generation for jobRunId: ${jobRunId}, filePath: ${filePath}${isResume ? `, cursor: ${resumeCursor}` : ''}`,
+        );
+
         if (!validateFilePath(filePath)) {
             this.logger.error(`projectId: ${projectId} File path contains invalid characters: ${filePath}`);
             throw new Error('File path contains invalid characters.');
         } else {
             this.logger.log(`projectId: ${projectId} File path validation passed: ${filePath}`);
         }
-        // Hoisted outside try so finally can access them for cleanup
+
         let fileStream: fs.WriteStream | undefined;
         let csvStream: ReturnType<typeof fastCsv.format> | undefined;
         try {
-            // Append mode when resuming so existing rows are preserved; write mode for fresh start
             fileStream = isResume
                 ? fs.createWriteStream(filePath, { flags: 'a' })
                 : fs.createWriteStream(filePath);
-            // Skip writing headers again when appending to an existing CSV
             csvStream = fastCsv.format({ headers: !isResume });
 
-            // Register error/finish listeners before piping so no events are missed
             const streamDone = new Promise<void>((resolve, reject) => {
                 fileStream!.once('finish', resolve);
                 fileStream!.once('error', reject);
@@ -69,21 +129,19 @@ export class CsvService {
 
             let totalRecords = 0;
             let cursor: string | null = resumeCursor ?? null;
-            const protocol = await this.getProtocolForJobRun(jobRunId);
 
             while (true) {
-                const result = await this.getInventoryData(jobRunId, batchSize, cursor, jobType, protocol);
+                const result = await strategy.fetchBatch(batchSize, cursor);
                 if (!result || result.length === 0) break;
                 for (const row of result) {
-                    const { _cursor_path, ...csvRow } = row;
-                    // Honor backpressure: pause writes until the internal buffer drains
+                    const csvRow = strategy.toRow(row);
                     if (!csvStream.write(csvRow)) {
                         await new Promise<void>(resolve => csvStream!.once('drain', resolve));
                     }
                 }
 
                 totalRecords += result.length;
-                cursor = result[result.length - 1]['_cursor_path'];
+                cursor = strategy.nextCursor(result[result.length - 1]);
 
                 if (totalRecords % (batchSize * 10) === 0) {
                     this.logger.log(`projectId: ${projectId} Processed ${totalRecords} records so far for jobRunId: ${jobRunId}`);
@@ -91,13 +149,12 @@ export class CsvService {
             }
 
             csvStream.end();
-            await streamDone; // Wait for all bytes to flush to disk before returning
+            await streamDone;
             this.logger.log(`projectId: ${projectId} CSV generation completed for jobRunId: ${jobRunId}, total records: ${totalRecords}`);
         } catch (err) {
             this.logger.error(`projectId: ${projectId} Error generating CSV for jobRunId: ${jobRunId}: ${err.message}`, err?.stack || err);
             throw err;
         } finally {
-            // destroy() is a no-op on already-finished streams; guards FD leaks on any error path
             csvStream?.destroy();
             fileStream?.destroy();
         }
@@ -117,7 +174,7 @@ export class CsvService {
             query = await this.getCutoverInventoryDataQuery(jobRunId, limit, cursor);
         } else {
             query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol);
-        }
+        } 
         return this.dataSource.query(query.query, query.values);
     }
 
@@ -127,23 +184,67 @@ export class CsvService {
         const columns = this.getMigrationCoCColumns(protocol, isMigrate);
 
         const query = `
-            SELECT DISTINCT ON (i.path)
-                i.path AS _cursor_path,
-                COALESCE(v_source.volume_path, '') || i.path as "Source Path",
-                v_target.volume_path || i.path as "Destination Path",
-                ${columns}
-            FROM ${dbSchema}.inventory i
-            LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
-            LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
-            LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
-            LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
-            WHERE i.job_run_id = $1
-              AND (i.is_deleted = false OR i.is_deleted IS NULL)
-              AND ($2::text IS NULL OR i.path > $2)
+        SELECT DISTINCT ON (i.path)
+            i.path AS _cursor_path,
+            COALESCE(v_source.volume_path, '') || i.path as "Source Path",
+            v_target.volume_path || i.path as "Destination Path",
+            ${columns}
+        FROM ${dbSchema}.inventory i
+        LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
+        LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jobrun.job_config_id
+        LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
+        LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
+        WHERE i.job_run_id = $1
+          AND (i.is_deleted = false OR i.is_deleted IS NULL)
+          AND (i.entry_type IS NULL OR i.entry_type = 'inventory')
+        AND ($2::text IS NULL OR i.path > $2::text)
             ORDER BY i.path
             LIMIT $3;
     `;
         return { query, values: [jobRunId, cursor, limit] };
+    }
+
+    async getListEntriesQuery(jobRunId: string, limit: number, cursor: string | null, kind: 'excluded' | 'skipped' | 'deleted') {
+        const dbSchema = process.env.SCHEMA;
+        let filter: string;
+        switch (kind) {
+            case 'excluded':
+                filter = `i.entry_type = 'excluded'`;
+                break;
+            case 'skipped':
+                filter = `i.entry_type = 'skipped'`;
+                break;
+            case 'deleted':
+                filter = `(i.is_deleted = true)`;
+                break;
+        }
+        const query = `
+            SELECT
+                COALESCE(v_source.volume_path, '') || i.path AS "Source Path",
+                i.path AS "Path"
+            FROM ${dbSchema}.inventory i
+            LEFT JOIN ${dbSchema}.jobrun jr ON jr.id = i.job_run_id
+            LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jr.job_config_id
+            LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
+            WHERE i.job_run_id = $1
+              AND ${filter}
+              AND ($2::text IS NULL OR i.path > $2::text)
+            ORDER BY i.path
+            LIMIT $3
+        `;
+        return { query, values: [jobRunId, cursor, limit] };
+    }
+
+    async getExcludedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
+        return this.getListEntriesQuery(jobRunId, limit, cursor, 'excluded');
+    }
+
+    async getSkippedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
+        return this.getListEntriesQuery(jobRunId, limit, cursor, 'skipped');
+    }
+
+    async getDeletedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
+        return this.getListEntriesQuery(jobRunId, limit, cursor, 'deleted');
     }
 
     async getCutoverInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null) {
@@ -189,7 +290,8 @@ export class CsvService {
                 LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
                 LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
                 WHERE i.is_directory = false
-                  AND ($2::text IS NULL OR i.path > $2)
+                  AND (i.entry_type IS NULL OR i.entry_type = 'inventory')
+                  AND ($2::text IS NULL OR i.path > $2::text)
                 ORDER BY i.path, 
                          CASE WHEN i.is_deleted = true THEN 1 ELSE 0 END,
                          CASE WHEN i.source_checksum IS NOT NULL AND i.target_checksum IS NOT NULL THEN 0 ELSE 1 END,
@@ -211,6 +313,8 @@ export class CsvService {
         `;
         return { query, values: [jobRunId, cursor, limit] };
     }
+
+ 
 
     getMigrationCoCColumns(protocol: string, includeCocStatusColumns: boolean = false): string {
         const statusColumns = includeCocStatusColumns

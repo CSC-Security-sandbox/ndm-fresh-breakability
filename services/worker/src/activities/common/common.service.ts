@@ -89,6 +89,45 @@ export class CommonActivityService{
     }
   }
 
+  async addExcludedSkippedEntries(
+    jobRunId: string,
+    excluded: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>,
+    skipped: Array<{ path: string; isDirectory?: boolean }>,
+  ): Promise<{ added: number }> {
+    try {
+      if (excluded.length === 0 && skipped.length === 0) return { added: 0 };
+      const accessToken = await this.authService.getAccessToken();
+      if (!accessToken) throw new Error('Failed to get access token');
+      const url = `${this.workerJobServiceUrl}/api/v1/job-run/${jobRunId}/inventory-entries`;
+      const { data } = await axios.post<{ added: number }>(
+        url,
+        { excluded, skipped },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            projectId: this.projectId,
+          },
+        },
+      );
+      this.logger.log(`[${jobRunId}] Added ${data?.added ?? 0} excluded/skipped inventory entries`);
+      return data ?? { added: 0 };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const responseData = error?.response?.data;
+      const message = error?.message ?? String(error);
+      this.logger.error(
+        `[${jobRunId}] Failed to add excluded/skipped entries: ${message}` +
+          (status != null ? ` status=${status}` : '') +
+          (responseData != null ? ` response=${JSON.stringify(responseData)}` : ''),
+      );
+      throw new Error(
+        `Error while adding excluded/skipped entries for job id: ${jobRunId}: ${message}` +
+          (status != null ? ` (HTTP ${status})` : '') +
+          (responseData != null && typeof responseData === 'object' && responseData?.message ? ` - ${responseData.message}` : ''),
+      );
+    }
+  }
+
   async generateJobsReport(jobRunId: string) {
     try {
       this.logger.log(`[${jobRunId}] reportServiceUrl to URL ${this.reportServiceUrl}/api/v1/report`);

@@ -20,6 +20,10 @@ interface InventoryDelta {
     fileCount: number;
     dirCount: number;
     totalSize: bigint;
+    newlyCopiedCount: number;
+    recopiedCount: number;
+    skippedCount: number;
+    deletedCount: number;
 }
 
 @Injectable()
@@ -1193,10 +1197,11 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     /**
-     * 1. Compute delta of truly NEW items via getExistingInventoryKeys
-     * 2. Increment Redis live counters FIRST
-     * 3. Write to PostgreSQL only after Redis succeeds
-     * 4. If PostgreSQL fails → decrement Redis (compensating transaction) → restore records for retry
+     * 1. Dedupe batch; load prior entry_type per path via getInventoryEntryTypesForPaths
+     * 2. Compute file/dir/size delta (MV-aligned) plus newlyCopied / recopied / skipped / deleted counters
+     * 3. Increment Redis liveStats FIRST (when any delta is non-zero)
+     * 4. Write to PostgreSQL; on failure compensate Redis and rethrow
+     * 5. Ack stream IDs; on outer failure restore records for retry
      *
      * @param jobRunId - The job run identifier
      * @param jobContext - Job context for Redis stream operations
@@ -1226,16 +1231,21 @@ export class RedisConsumerService implements OnModuleDestroy {
         try {
             const dedupedItems = this.deduplicateRecords(records);
 
-            const existingKeys = await this.inventoryService.getExistingInventoryKeys(
+            const inventoryEntryByKey = await this.inventoryService.getInventoryEntryTypesForPaths(
                 context.jobRunId,
                 dedupedItems.map(r => ({ path: r.fileName, isDirectory: r.isDirectory ?? false })),
             );
 
-            const delta = this.computeNewItemDelta(context.jobRunId, dedupedItems, existingKeys);
+            const delta = this.computeLiveStatsDelta(context.jobRunId, dedupedItems, inventoryEntryByKey);
             const hasNewItems = delta.fileCount > 0 || delta.dirCount > 0;
+            const hasAdditionalCounters =
+                delta.newlyCopiedCount > 0 ||
+                delta.recopiedCount > 0 ||
+                delta.skippedCount > 0 ||
+                delta.deletedCount > 0;
             let redisUpdated = false;
 
-            if (hasNewItems) {
+            if (hasNewItems || hasAdditionalCounters) {
                 await this.incrementLiveStats(projectId, jobRunId, delta);
                 redisUpdated = true;
             }
@@ -1266,20 +1276,29 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     /**
-     * Compares deduplicated items against already-persisted keys and returns the
-     * net-new file/dir counts and total byte size that should be added to Redis.
+     * MV-aligned file/dir/size delta (excludes excluded; new rows only; skips deleted for totals)
+     * plus copy/skipped/deleted counters aligned with job_stats_summary / createInventory updateType rules.
      */
-    private computeNewItemDelta(
+    private computeLiveStatsDelta(
         jobRunId: string,
         dedupedItems: any[],
-        existingKeys: Set<string>,
+        inventoryEntryByKey: Map<string, string | null>,
     ): InventoryDelta {
+        const existingKeys = new Set(inventoryEntryByKey.keys());
+
         let fileCount = 0;
         let dirCount = 0;
         let totalSize = BigInt(0);
-
         for (const r of dedupedItems) {
-            if (!existingKeys.has(`${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`)) {
+            const entryType = String(r.entryType || '').toLowerCase();
+            if (entryType === 'excluded') {
+                continue;
+            }
+            const key = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
+            if (!existingKeys.has(key)) {
+                if (r.isDeleted === true) {
+                    continue;
+                }
                 if (!r.isDirectory) {
                     fileCount++;
                     totalSize += BigInt(r.size || 0);
@@ -1289,7 +1308,53 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
         }
 
-        return { fileCount, dirCount, totalSize };
+        let newlyCopiedCount = 0;
+        let recopiedCount = 0;
+        let skippedCount = 0;
+        let deletedCount = 0;
+        for (const r of dedupedItems) {
+            const entryType = String(r.entryType || '').toLowerCase();
+            if (entryType === 'skipped') {
+                const skipKey = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
+                const prior = inventoryEntryByKey.get(skipKey);
+                if (String(prior ?? '').toLowerCase() !== 'skipped') {
+                    skippedCount++;
+                }
+            }
+            if (!r.isDirectory && r.isDeleted === true) {
+                deletedCount++;
+            }
+            if (r.isDirectory) {
+                continue;
+            }
+            if (entryType === 'excluded' || entryType === 'skipped') {
+                continue;
+            }
+            if (r.isDeleted === true) {
+                continue;
+            }
+            const key = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
+            const ut = r.updateType != null ? String(r.updateType).toLowerCase() : '';
+            if (ut === 'new') {
+                newlyCopiedCount++;
+            } else if (ut === 'content_updated' || ut === 'metadata_updated') {
+                recopiedCount++;
+            } else if (existingKeys.has(key)) {
+                recopiedCount++;
+            } else {
+                newlyCopiedCount++;
+            }
+        }
+
+        return {
+            fileCount,
+            dirCount,
+            totalSize,
+            newlyCopiedCount,
+            recopiedCount,
+            skippedCount,
+            deletedCount,
+        };
     }
 
     /**
@@ -1307,6 +1372,10 @@ export class RedisConsumerService implements OnModuleDestroy {
             .hIncrBy(liveStatsKey, 'fileCount', delta.fileCount)
             .hIncrBy(liveStatsKey, 'dirCount', delta.dirCount)
             .hIncrBy(liveStatsKey, 'totalSize', Number(delta.totalSize))
+            .hIncrBy(liveStatsKey, 'newlyCopiedCount', delta.newlyCopiedCount)
+            .hIncrBy(liveStatsKey, 'recopiedCount', delta.recopiedCount)
+            .hIncrBy(liveStatsKey, 'skippedCount', delta.skippedCount)
+            .hIncrBy(liveStatsKey, 'deletedCount', delta.deletedCount)
             .hSet(liveStatsKey, 'lastUpdated', Date.now().toString())
             .exec();
 
@@ -1316,7 +1385,9 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         this.logger.log(
             `projectId: ${projectId} Updated liveStats for job ${jobRunId}: ` +
-            `+${delta.fileCount} files, +${delta.dirCount} dirs, +${delta.totalSize} bytes`,
+            `+${delta.fileCount} files, +${delta.dirCount} dirs, +${delta.totalSize} bytes, ` +
+            `+${delta.newlyCopiedCount} newlyCopied, +${delta.recopiedCount} recopied, ` +
+            `+${delta.skippedCount} skipped, +${delta.deletedCount} deleted`,
         );
     }
 
@@ -1338,6 +1409,10 @@ export class RedisConsumerService implements OnModuleDestroy {
                 .hIncrBy(liveStatsKey, 'fileCount', -delta.fileCount)
                 .hIncrBy(liveStatsKey, 'dirCount', -delta.dirCount)
                 .hIncrBy(liveStatsKey, 'totalSize', -Number(delta.totalSize))
+                .hIncrBy(liveStatsKey, 'newlyCopiedCount', -delta.newlyCopiedCount)
+                .hIncrBy(liveStatsKey, 'recopiedCount', -delta.recopiedCount)
+                .hIncrBy(liveStatsKey, 'skippedCount', -delta.skippedCount)
+                .hIncrBy(liveStatsKey, 'deletedCount', -delta.deletedCount)
                 .exec();
             this.redisCompensationFailureCounts.delete(jobRunId);
         } catch (compensateErr) {

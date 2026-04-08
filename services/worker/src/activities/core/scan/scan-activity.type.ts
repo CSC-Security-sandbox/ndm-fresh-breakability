@@ -14,6 +14,8 @@ export interface ScanActivityOutput {
     dirCount: number;
     subDirs: string[];
     batchDirs: string[];
+    excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+    skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 export interface ScanDirectoryInput {
@@ -36,6 +38,8 @@ export interface ScanDirectoryOutput {
     fileCount: number;
     dirCount: number;
     subDirs: string[];
+    excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+    skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 

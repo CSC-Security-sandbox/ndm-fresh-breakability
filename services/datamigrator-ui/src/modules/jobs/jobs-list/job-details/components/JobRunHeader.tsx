@@ -1,5 +1,6 @@
 import JobInfoCard from "@modules/jobs/jobs-list/job-details/components/JobInfoCard";
 import JobInfoReverseCard from "@modules/jobs/jobs-list/job-details/components/JobInfoReverseCard";
+import { Box } from "@components/container/index";
 import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
 import { JOB_STATUS_TYPE_ENUM, JOBS_TYPE, JobRunHeaderPropType } from "@/types/app.type";
@@ -14,6 +15,16 @@ import { useGetJobRunLiveStatsQuery } from "@api/jobsApi";
 import { useEffect, useRef } from "react";
 
 const LIVE_STATS_POLL_INTERVAL_MS = 5000;
+
+const MIGRATION_BREAKDOWN_LABEL_TOOLTIPS = {
+  newlyCopied:
+    "Files copied for the first time.",
+  recopied:
+    "Files whose content or metadata was updated.",
+  skipped:
+    "Files modified within the job's configured time window (for example, the last few minutes) and therefore skipped.",
+  deleted: "Files deleted on the source.",
+} as const;
 
 const ACTIVE_JOB_STATUSES = new Set([
   JOB_STATUS_TYPE_ENUM.RUNNING,
@@ -84,30 +95,97 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
       ? liveStats.totalMigratedSize
       : jobStats?.totalSize || "--";
 
+  const showMigrationStats =
+    (jobType === JOBS_TYPE.MIGRATE || jobType === JOBS_TYPE.CUT_OVER) &&
+    jobStats;
+
+    const pickLiveOrJobStat = (
+      liveVal: string | undefined,
+      jobVal: string | undefined,
+    ) => {
+      if (liveVal != null && liveVal !== "") {
+        return liveVal;
+      }
+      if (jobVal != null && jobVal !== "") {
+        return jobVal;
+      }
+      return "--";
+    };
+  
+    const displayNewlyCopied = pickLiveOrJobStat(
+      liveStats?.newlyCopiedCount,
+      jobStats?.newlyCopiedCount,
+    );
+    const displayRecopied = pickLiveOrJobStat(
+      liveStats?.modifiedCount,
+      jobStats?.modifiedCount,
+    );
+    const displaySkipped = pickLiveOrJobStat(
+      liveStats?.skippedCount,
+      jobStats?.skippedCount,
+    );
+    const displayDeleted = pickLiveOrJobStat(
+      liveStats?.deletedCount,
+      jobStats?.deletedCount,
+    );
+
   return (
-    <Card className="flex gap-16 p-10">
-      <JobInfoCard
-        label={getJobType(jobType)}
-        value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
-      />
-      <Divider orientation="vertical" flexItem />
-      <JobInfoReverseCard label="Files" value={displayFileCount} />
-      <Divider orientation="vertical" flexItem />
-      <JobInfoReverseCard
-        label="Directories"
-        value={displayDirCount}
-      />
-      <Divider orientation="vertical" flexItem />
-      <JobInfoReverseCard
-        label="Time Elapsed"
-        value={<TimeElapsedRenderer value={timeElapsed} />}
-      />
-      <Divider orientation="vertical" flexItem />
-      <JobInfoReverseCard
-        label={getJobTypeTextForHeader(jobType)}
-        value={displaySize}
-      />
-    </Card>
+    <Box className="flex flex-col gap-4">
+      <Card className="flex gap-16 p-10 min-h-[170px]">
+        <JobInfoCard
+          label={getJobType(jobType)}
+          value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
+        />
+        <Divider orientation="vertical" flexItem />
+        <JobInfoReverseCard label="Files" value={displayFileCount} />
+        <Divider orientation="vertical" flexItem />
+        <JobInfoReverseCard
+          label="Directories"
+          value={displayDirCount}
+        />
+        <Divider orientation="vertical" flexItem />
+        <JobInfoReverseCard
+          label="Time Elapsed"
+          value={<TimeElapsedRenderer value={timeElapsed} />}
+        />
+        <Divider orientation="vertical" flexItem />
+        <JobInfoReverseCard
+          label={getJobTypeTextForHeader(jobType)}
+          value={displaySize}
+        />
+      </Card>
+      {showMigrationStats && (
+        <Card className="p-10 min-h-[170px]">
+          <Box className="text-l font-medium mb-6">Migrated Files Breakdown</Box>
+          <Box className="flex gap-16 flex-wrap">
+            <JobInfoReverseCard
+              label="Newly Copied"
+              value={displayNewlyCopied}
+              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.newlyCopied}
+            />
+            <Divider orientation="vertical" flexItem />
+            <JobInfoReverseCard
+              label="Recopied"
+              value={displayRecopied}
+              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.recopied}
+            />
+            <Divider orientation="vertical" flexItem />
+            <JobInfoReverseCard
+              label="Skipped"
+              value={displaySkipped}
+              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.skipped}
+            />
+            <Divider orientation="vertical" flexItem />
+            <JobInfoReverseCard
+              label="Deleted"
+              value={displayDeleted}
+              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.deleted}
+            />
+            <Divider orientation="vertical" flexItem />
+          </Box>
+        </Card>
+      )}
+    </Box>
   );
 };
 

@@ -10,9 +10,11 @@ interface DiscoveryWorkflowExecutorInput {
 }
 
 interface DiscoveryWorkflowExecutorOutput {
-    status: JobRunStatus,
-    fileCount : number;
-    dirCount : number;
+    status: JobRunStatus;
+    fileCount: number;
+    dirCount: number;
+    excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+    skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 
@@ -40,6 +42,8 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
         status: JobRunStatus.Running,
         fileCount: 0,
         dirCount: 0,
+        excludedPaths: [],
+        skippedPaths: [],
     };
 
 
@@ -64,10 +68,12 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
         isScanIsRunning = true;
 
         try{
-            const scanWorkflowResult:ChildScanWorkflowOutput = await scanWorkflow.result()
+            const scanWorkflowResult: ChildScanWorkflowOutput = await scanWorkflow.result();
             output.status = scanWorkflowResult.status;
             output.fileCount = scanWorkflowResult.fileCount;
             output.dirCount = scanWorkflowResult.dirCount;
+            output.excludedPaths = scanWorkflowResult.excludedPaths ?? [];
+            output.skippedPaths = scanWorkflowResult.skippedPaths ?? [];
         }catch(error) {
             if (wf.isCancellation(error.cause)) {
                 // The workflow was cancelled

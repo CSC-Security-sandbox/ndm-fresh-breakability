@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { Logger, NotAcceptableException, NotFoundException } from "@nestjs/common";
+import { InternalServerErrorException, Logger, NotAcceptableException, NotFoundException } from "@nestjs/common";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { JobRunService } from "./job-run.service";
 import { JobRunEntity } from "src/entities/jobrun.entity";
@@ -121,6 +121,7 @@ describe("JobRunService", () => {
 
     mockCsvService = {
       generateCsv: jest.fn(),
+      generateListCsv: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockLogger = {
@@ -145,10 +146,6 @@ describe("JobRunService", () => {
           useValue: mockReportsRepo,
         },
         { provide: CsvService, useValue: mockCsvService },
-        {
-          provide: getRepositoryToken(ReportsEntity),
-          useValue: mockReportsRepo,
-        },
         {
           provide: getRepositoryToken(JobStatsSummaryMvEntity),
           useValue: mockJobSummaryMvRepo,
@@ -566,6 +563,7 @@ describe("JobRunService", () => {
         startTime: new Date(),
         status: JobRunStatus.Completed,
         isReportReady: false,
+        jobStats: { fileCount: "77", directories: "7", totalSize: "4096" },
         jobConfig: {
           id: "configId",
           jobType: JobType.Migrate,
@@ -755,7 +753,155 @@ describe("JobRunService", () => {
     });
   });
 
+  describe("getJobStatsId - persisted jobStats branches", () => {
+    const jobId = "12345";
+
+    const buildMockJobRun = (overrides: any = {}) => ({
+      id: jobId,
+      startTime: new Date(),
+      status: JobRunStatus.Completed,
+      jobConfig: {
+        id: "configId",
+        jobType: JobType.Discover,
+        sourcePath: {
+          fileServer: { protocol: "http", config: { configName: "sourceServer" } },
+          volumePath: "/source",
+        },
+        destinationPath: {
+          fileServer: { protocol: "ftp", config: { configName: "destServer" } },
+          volumePath: "/destination",
+        },
+      },
+      options: {
+        preserveAccessTime: false,
+        excludeOlderThan: null,
+        excludeFilePatterns: null,
+        skipFile: null,
+        identityMappingId: null,
+      },
+      worker: [],
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockReportsRepo.findOne.mockResolvedValue(null);
+    });
+
+    it("should use persisted jobStats for terminal job runs with jobStats", async () => {
+      const mockJobRun = buildMockJobRun({
+        status: JobRunStatus.Completed,
+        jobStats: { fileCount: "42", directories: "7", totalSize: "102400" },
+      });
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.discovery.fileCount).toBe("42");
+      expect(result.discovery.directories).toBe("7");
+      expect(result.discovery.totalSize).toBe("100 KiB");
+    });
+
+    it("should fall back to MV stats for non-terminal job runs", async () => {
+      const mockJobRun = buildMockJobRun({
+        status: JobRunStatus.Running,
+        jobStats: null,
+      });
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 30,
+        directoryCount: 6,
+        totalSize: 2048,
+        jobRunStatus: JobRunStatus.Running,
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.discovery.fileCount).toBe("30");
+      expect(result.discovery.directories).toBe("6");
+    });
+
+    it("should save report when jobStatsSummary.jobRunStatus is Completed", async () => {
+      const mockJobRun = buildMockJobRun({ status: JobRunStatus.Running });
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 10,
+        directoryCount: 2,
+        totalSize: 512,
+        jobRunStatus: JobRunStatus.Completed,
+        completed: 5,
+        pending: 0,
+        errored: 0,
+        running: 0,
+        lastRefreshed: new Date(),
+      });
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
+      await service.getJobStatsId(jobId);
+
+      expect(mockReportsRepo.create).toHaveBeenCalledWith({
+        jobRunId: jobId,
+        reportData: expect.any(String),
+        reportType: ReportType.JOB_RUN_STATS,
+      });
+      expect(mockReportsRepo.save).toHaveBeenCalled();
+    });
+
+    it("should include lastRefreshed from jobStatsSummary in saved report path", async () => {
+      const lastRefreshed = new Date("2025-09-01T10:00:00Z");
+      const existingReport = {
+        reportData: JSON.stringify({ isReportReady: true }),
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobId, isReportReady: true });
+      mockReportsRepo.findOne.mockResolvedValue(existingReport);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({ lastRefreshed });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.lastRefreshed).toEqual(lastRefreshed);
+    });
+
+    it("should return saved report without lastRefreshed when no jobStatsSummary", async () => {
+      const existingReport = {
+        reportData: JSON.stringify({ isReportReady: true }),
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobId, isReportReady: true });
+      mockReportsRepo.findOne.mockResolvedValue(existingReport);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.isReportReady).toBe(true);
+      expect(result.lastRefreshed).toBeUndefined();
+    });
+  });
+
   describe("getCocReportByJobRunId", () => {
+    const cocReportsBaseDir = path.resolve(process.cwd(), "reports");
+    const cocReportPathForJob = (id: string) =>
+      path.resolve(cocReportsBaseDir, `${id}-coc-report.zip`);
+    const cocCsvBundleForJob = (id: string) => ([
+      path.resolve(cocReportsBaseDir, `${id}-coc-report/coc-report.csv`),
+      path.resolve(cocReportsBaseDir, `${id}-coc-report/excluded-report.csv`),
+      path.resolve(cocReportsBaseDir, `${id}-coc-report/skipped-report.csv`),
+      path.resolve(cocReportsBaseDir, `${id}-coc-report/deleted-report.csv`),
+    ]);
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
+        .mockResolvedValue(cocReportsBaseDir);
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+    });
+
     it("should throw NotFoundException if jobRun not found in getCocReportByJobRunId", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(null);
       await expect(service.getCocReportByJobRunId("bad-id")).rejects.toThrow(
@@ -776,23 +922,13 @@ describe("JobRunService", () => {
       mockJobRunRepo.findOne.mockResolvedValue({
         jobConfig: { jobType: JobType.Migrate },
       });
-      jest.spyOn(path, "join").mockReturnValue("/invalid/path.csv");
-      await expect(service.getCocReportByJobRunId("id")).rejects.toThrow();
+      jest.spyOn(path, "relative").mockReturnValueOnce("..");
+      await expect(service.getCocReportByJobRunId("id")).rejects.toThrow(
+        NotAcceptableException
+      );
+      (path.relative as jest.Mock).mockRestore();
     });
 
-    it("should throw error if file not found after generation in getCocReportByJobRunId", async () => {
-      mockJobRunRepo.findOne.mockResolvedValue({
-        jobConfig: { jobType: JobType.Migrate },
-      });
-      jest.spyOn(path, "join").mockReturnValue("./reports/id-coc-report.csv");
-      jest
-        .spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found"))  // CSV does not exist (skip early return)
-        .mockRejectedValueOnce(new Error("not found")); // file not found after generation
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
-      jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
-      await expect(service.getCocReportByJobRunId("id")).rejects.toThrow();
-    });
     const jobRunId = "12345";
     const mockJobRun = {
       id: jobRunId,
@@ -800,18 +936,21 @@ describe("JobRunService", () => {
         jobType: JobType.Migrate,
       },
     };
-    const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
+    const expectedCocPath = cocReportPathForJob(jobRunId);
 
     it("should return the file path if the report already exists and update DB", async () => {
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
       // ZIP exists — short-circuits immediately, no CSV generation or report saving
-      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(service as any, "fileExists").mockResolvedValueOnce(true);
       jest.spyOn(mockJobRunRepo, "findOne").mockResolvedValue(mockJobRun);
+      jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
 
       const result = await service.getCocReportByJobRunId(jobRunId);
 
-      expect(result).toBe(mockFilePath);
-      // isReportReady must still be set even on short-circuit (crash recovery)
+      expect(result).toBe(expectedCocPath);
       expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
       // report record is NOT re-saved on short-circuit — ZIP was already complete
       expect(mockReportsRepo.save).not.toHaveBeenCalled();
@@ -822,19 +961,20 @@ describe("JobRunService", () => {
         ...mockJobRun,
         jobConfig: { jobType: JobType.Migrate },
       });
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
 
-      // ZIP doesn't exist (1st check), CSV doesn't exist (2nd check),
-      // ZIP verified present after creation (3rd check)
+      // ZIP not found, all 4 CSVs not found (fresh generation)
       jest
-        .spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found")) // ZIP does not exist
-        .mockRejectedValueOnce(new Error("not found")) // CSV does not exist
-        .mockResolvedValueOnce(undefined);             // ZIP verified after createZipFile
+        .spyOn(service as any, "fileExists")
+        .mockResolvedValueOnce(false)  // ZIP does not exist
+        .mockResolvedValueOnce(false)  // coc-report.csv
+        .mockResolvedValueOnce(false)  // excluded-report.csv
+        .mockResolvedValueOnce(false)  // skipped-report.csv
+        .mockResolvedValueOnce(false); // deleted-report.csv
+      // ZIP verified present after creation
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
 
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
       jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
 
       mockReportsRepo.create.mockReturnValue({});
@@ -842,18 +982,19 @@ describe("JobRunService", () => {
 
       const result = await service.getCocReportByJobRunId(jobRunId);
 
-      expect(result).toBe(mockFilePath);
-      // Fresh CSV generation — no resumeCursor (5th arg omitted)
+      expect(result).toBe(expectedCocPath);
+
+      // All four CSVs generated via unified per-file loop (no generateCocCsvBundle)
+      expect(mockCsvService.generateCsv).toHaveBeenCalledTimes(1);
+      expect(mockCsvService.generateListCsv).toHaveBeenCalledTimes(3);
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
-        mockFilePath,
-        jobRunId,
-        50000,
-        'MIGRATE'
+        expect.stringContaining("coc-report.csv"), jobRunId, 50000, JobType.Migrate, null,
       );
       expect(mockJobRunRepo.update).toHaveBeenCalledWith(
         { id: jobRunId },
         { isReportReady: true }
       );
+      expect(fs.promises.readFile).toHaveBeenCalledWith(expectedCocPath);
       expect(mockReportsRepo.create).toHaveBeenCalledWith({
         jobRunId,
         reportData: expect.any(String),
@@ -867,14 +1008,14 @@ describe("JobRunService", () => {
         ...mockJobRun,
         jobConfig: { jobType: JobType.CutOver },
       });
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
       jest
-        .spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found")) // CSV does not exist
-        .mockResolvedValueOnce(undefined);             // file exists after generation
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
+        .spyOn(service as any, "fileExists")
+        .mockResolvedValueOnce(false)  // ZIP
+        .mockResolvedValue(false);     // all CSV files
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});
 
@@ -886,27 +1027,19 @@ describe("JobRunService", () => {
       );
     });
 
-    it("should create zip if CSV exists but zip does not (backfill path)", async () => {
+    it("should create zip from generated csv bundle", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      // ZIP doesn't exist (1st check), CSV exists (2nd check),
-      // ZIP verified present after creation (3rd check)
       jest
-        .spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found")) // ZIP does not exist
-        .mockResolvedValueOnce(undefined)              // CSV exists
-        .mockResolvedValueOnce(undefined);             // ZIP verified after createZipFile
-
-      // Skip complex file-read logic in getResumeCursor — treat as fresh start
-      jest.spyOn(service as any, "getResumeCursor").mockResolvedValue(null);
-
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
+        .spyOn(service as any, "fileExists")
+        .mockResolvedValueOnce(false)  // ZIP
+        .mockResolvedValue(false);     // all CSV files
 
       const createZipSpy = jest
         .spyOn(service as any, "createZipFile")
         .mockResolvedValue(undefined);
 
-      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("test data") as any);
 
       mockReportsRepo.create.mockReturnValue({});
@@ -914,8 +1047,9 @@ describe("JobRunService", () => {
 
       const result = await service.getCocReportByJobRunId(jobRunId);
 
-      expect(createZipSpy).toHaveBeenCalled();
-      expect(result).toBe(mockFilePath);
+      const bundlePaths = cocCsvBundleForJob(jobRunId);
+      expect(createZipSpy).toHaveBeenCalledWith(bundlePaths, expectedCocPath);
+      expect(result).toBe(expectedCocPath);
       expect(mockJobRunRepo.update).toHaveBeenCalledWith({ id: jobRunId }, { isReportReady: true });
       expect(mockReportsRepo.save).toHaveBeenCalled();
     });
@@ -1021,26 +1155,32 @@ describe("JobRunService", () => {
   describe("getCocReportByJobRunId - error branch coverage", () => {
     const jobRunId = "12345";
     const mockJobRun = { id: jobRunId, jobConfig: { jobType: JobType.Migrate } };
-    const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
+    const mockBase = path.resolve(process.cwd(), "reports");
+    const mockZipPath = path.resolve(mockBase, `${jobRunId}-coc-report.zip`);
+    const mockBundle = [
+      path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
+    ];
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
+        .mockResolvedValue(mockBase);
+    });
 
     it("should throw NotAcceptableException for invalid zip file path", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join")
-        .mockReturnValueOnce("./reports/id-coc-report.csv") // valid csv path
-        .mockReturnValueOnce("/invalid/path.zip");           // invalid zip path
+      jest.spyOn(path, "relative").mockReturnValueOnce("..");
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(NotAcceptableException);
+      (path.relative as jest.Mock).mockRestore();
     });
 
     it("should throw when createZipFile fails during backfill", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      // ZIP doesn't exist (1st check), CSV exists (2nd check)
-      jest.spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("no zip"))   // ZIP doesn't exist
-        .mockResolvedValueOnce(undefined);             // CSV exists
-      jest.spyOn(service as any, "getResumeCursor").mockResolvedValue(null);
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
       jest.spyOn(service as any, "createZipFile").mockRejectedValue(new Error("zip creation failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("zip creation failed");
@@ -1048,8 +1188,7 @@ describe("JobRunService", () => {
 
     it("should throw when generateCsv fails", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
       mockCsvService.generateCsv.mockRejectedValue(new Error("csv generation failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("csv generation failed");
@@ -1057,8 +1196,7 @@ describe("JobRunService", () => {
 
     it("should throw when createZipFile fails after CSV generation", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
       mockCsvService.generateCsv.mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockRejectedValue(new Error("zip failed"));
 
@@ -1067,13 +1205,10 @@ describe("JobRunService", () => {
 
     it("should throw when readFile fails after generation", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found")) // CSV doesn't exist
-        .mockRejectedValueOnce(new Error("not found")) // ZIP doesn't exist
-        .mockResolvedValueOnce(undefined);              // file exists after generation
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "readFile").mockRejectedValue(new Error("read failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("read failed");
@@ -1160,47 +1295,63 @@ describe("JobRunService", () => {
   // ─── error logger ?.stack fallback branches ──────────────────────────────────
   describe("getCocReportByJobRunId - error logger fallback (?.stack branches)", () => {
     const jobRunId = "12345";
-    const mockJobRun = { id: jobRunId, jobConfig: { jobType: JobType.Migrate } };
-    const mockFilePath = `./reports/${jobRunId}-coc-report.csv`;
+    const mockBase = path.resolve(process.cwd(), "reports");
+    const mockJobRun = {
+      id: jobRunId,
+      jobConfig: { jobType: JobType.Migrate, sourcePath: { volumePath: "/vol" } },
+    };
+    const mockBundle = [
+      path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
+    ];
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
+        .mockResolvedValue(mockBase);
+    });
 
     it("should log non-Error csvError (no .stack) and rethrow", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
-      // Plain string rejection — no .stack property → exercises the || fallback at line 312
+      jest
+        .spyOn(service as any, "fileExists")
+        .mockResolvedValueOnce(false)   // ZIP
+        .mockResolvedValueOnce(true);   // first CSV file
+      jest.spyOn(service as any, "getResumeCursor").mockResolvedValue("/cursor");
       mockCsvService.generateCsv.mockRejectedValue("string-csv-error");
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-csv-error");
     });
 
     it("should log non-Error zipError (no .stack) and rethrow", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest
+        .spyOn(service as any, "fileExists")
+        .mockResolvedValueOnce(false)   // ZIP
+        .mockResolvedValue(false);      // all CSV files
       mockCsvService.generateCsv.mockResolvedValue(undefined);
+      mockCsvService.generateListCsv.mockResolvedValue(undefined);
       jest.spyOn(service as any, "createZipFile").mockRejectedValue("string-zip-error");
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-zip-error");
     });
 
     it("should log non-Error readError (no .stack) and rethrow", async () => {
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      jest.spyOn(path, "join").mockReturnValue(mockFilePath);
-      jest.spyOn(fs.promises, "access")
-        .mockRejectedValueOnce(new Error("not found")) // ZIP doesn't exist
-        .mockRejectedValueOnce(new Error("not found")) // CSV doesn't exist
-        .mockResolvedValueOnce(undefined);             // ZIP verified
-      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "unlink").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "readFile").mockRejectedValue("string-read-error");
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-read-error");
     });
   });
 
   describe("createZipFile (private)", () => {
-    it("should reject when output path escapes reports directory", async () => {
+    it("should reject when source path escapes base directory", async () => {
       await expect(
         (service as any).createZipFile(["./reports/file.csv"], "/etc/passwd")
-      ).rejects.toThrow("Output path escapes the reports directory");
+      ).rejects.toThrow("Source path escapes the reports directory");
     });
 
     it("should reject when source path escapes reports directory", async () => {
@@ -1233,6 +1384,153 @@ describe("JobRunService", () => {
         await fs.promises.unlink(sourceFile).catch(() => {});
         await fs.promises.unlink(outputZip).catch(() => {});
       }
+    });
+  });
+
+  describe("fileExists (private)", () => {
+    it("should return true when file access succeeds", async () => {
+      jest.spyOn(fs.promises, "access").mockResolvedValueOnce(undefined as any);
+      await expect((service as any).fileExists("/tmp/exists.zip")).resolves.toBe(true);
+    });
+
+    it("should return false when file access fails", async () => {
+      jest.spyOn(fs.promises, "access").mockRejectedValueOnce(new Error("not found"));
+      await expect((service as any).fileExists("/tmp/missing.zip")).resolves.toBe(false);
+    });
+  });
+
+  describe("getCocReportByJobRunId - cleanup branches", () => {
+    const jobRunId = "cleanup-1";
+    const reportsBase = path.resolve(process.cwd(), "reports");
+    const bundleDir = path.resolve(reportsBase, `${jobRunId}-coc-report`);
+    const bundlePaths = [
+      path.resolve(bundleDir, "coc-report.csv"),
+      path.resolve(bundleDir, "excluded-report.csv"),
+      path.resolve(bundleDir, "skipped-report.csv"),
+      path.resolve(bundleDir, "deleted-report.csv"),
+    ];
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
+        .mockResolvedValue(reportsBase);
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobRunId, jobConfig: { jobType: JobType.Migrate } });
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      mockCsvService.generateListCsv.mockResolvedValue(undefined);
+      jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("zip") as any);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+    });
+
+    it("should continue successfully when temporary bundle cleanup fails", async () => {
+      jest.spyOn(fs.promises, "rm").mockRejectedValueOnce(new Error("rm failed"));
+
+      const result = await service.getCocReportByJobRunId(jobRunId);
+      expect(result).toContain(`${jobRunId}-coc-report.zip`);
+    });
+
+    it("should skip cleanup when bundle directory is outside reports base", async () => {
+      const originalRelative = path.relative;
+      const relativeSpy = jest.spyOn(path, "relative");
+      relativeSpy.mockImplementation((from: string, to: string) => {
+        const value = originalRelative(from, to);
+        if (String(to).includes(`${jobRunId}-coc-report`) && !String(to).endsWith('.zip')) {
+          return '..';
+        }
+        return value;
+      });
+
+      await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow(NotAcceptableException);
+
+      relativeSpy.mockRestore();
+    });
+  });
+
+  describe("getJobStatsId - snapshot override behavior", () => {
+    it("should override cached report stats from snapshot when snapshot is valid", async () => {
+      const jobId = "override-1";
+      const endTime = new Date("2025-06-01T12:00:00Z");
+      mockJobRunRepo.findOne.mockResolvedValueOnce({
+        id: jobId,
+        isReportReady: true,
+        endTime,
+        jobStats: {
+          fileCount: "11",
+          directories: "2",
+          totalSize: "2048",
+          newlyCopiedCount: "3",
+          modifiedCount: "4",
+          skippedCount: "5",
+          deletedCount: "6",
+        },
+      });
+      mockReportsRepo.findOne.mockResolvedValueOnce({
+        reportData: JSON.stringify({
+          isReportReady: true,
+          migrate: { fileCount: "0", directories: "0", totalSize: "0 B" },
+        }),
+      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValueOnce(null);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.migrate.fileCount).toBe("11");
+      expect(result.migrate.directories).toBe("2");
+      expect(result.migrate.totalSize).toBe("2 KiB");
+      expect(result.migrate.modifiedCount).toBe("4");
+      expect(result.lastRefreshed).toEqual(endTime);
+    });
+  });
+
+  describe("ensureWritableReportsBaseDir (private)", () => {
+    const originalEnv = process.env.REPORT_DOWNLOAD_LOCATION;
+
+    afterEach(() => {
+      process.env.REPORT_DOWNLOAD_LOCATION = originalEnv;
+      jest.restoreAllMocks();
+    });
+
+    it("should use configured REPORT_DOWNLOAD_LOCATION when writable", async () => {
+      process.env.REPORT_DOWNLOAD_LOCATION = '/tmp/reports-custom';
+      jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, 'unlink').mockResolvedValue(undefined as any);
+
+      const dir = await (service as any).ensureWritableReportsBaseDir();
+      expect(dir).toContain('/tmp/reports-custom');
+    });
+
+    it("should fall back to next candidate when configured directory is not writable", async () => {
+      process.env.REPORT_DOWNLOAD_LOCATION = '/tmp/not-writable';
+      const mkdirSpy = jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined as any);
+      const writeSpy = jest
+        .spyOn(fs.promises, 'writeFile')
+        .mockRejectedValueOnce(new Error('EACCES'))
+        .mockResolvedValueOnce(undefined as any)
+        .mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, 'unlink').mockResolvedValue(undefined as any);
+
+      const dir = await (service as any).ensureWritableReportsBaseDir();
+      expect(mkdirSpy).toHaveBeenCalled();
+      expect(writeSpy).toHaveBeenCalled();
+      expect(dir).toBeDefined();
+      expect(dir).not.toContain('/tmp/not-writable');
+    });
+
+    it("should throw when no candidate reports directory is writable", async () => {
+      process.env.REPORT_DOWNLOAD_LOCATION = '/tmp/not-writable';
+      jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, 'writeFile').mockRejectedValue(new Error('EACCES'));
+      jest.spyOn(fs.promises, 'unlink').mockRejectedValue(new Error('EACCES'));
+
+      await expect((service as any).ensureWritableReportsBaseDir()).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
     });
   });
 });

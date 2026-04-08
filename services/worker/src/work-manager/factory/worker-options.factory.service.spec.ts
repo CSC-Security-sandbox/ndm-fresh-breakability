@@ -65,6 +65,7 @@ const commonActivityServiceMock = {
   generateCOCReport: bindMock,
   updateCutOverStatus: bindMock,
   generateDiscoveryReport: bindMock,
+  addExcludedSkippedEntries: bindMock,
 };
 
 const speedTestReadActivityMock = {

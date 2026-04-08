@@ -57,7 +57,14 @@ describe('MigrationWorkflow', () => {
         expect(executeMigrationChildWorkflows).toHaveBeenCalledWith({
             jobRunId: traceId,
         });
-        expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
+        expect(handleReporting).toHaveBeenCalledWith(
+            traceId,
+            JobRunStatus.Completed,
+            expect.objectContaining({
+                excludedPaths: [],
+                skippedPaths: [],
+            }),
+        );
         expect(executeCleanup).toHaveBeenCalledWith({
             jobRunId: traceId,
             workerIds: ['worker1'],
@@ -71,6 +78,8 @@ describe('MigrationWorkflow', () => {
             fileCount: 10,
             dirCount: 2,
             status: JobRunStatus.Completed,
+            excludedPaths: [],
+            skippedPaths: [],
         });
     });
 
@@ -97,6 +106,8 @@ describe('MigrationWorkflow', () => {
             fileCount: 0,
             dirCount: 0,
             status: JobRunStatus.Ready,
+            excludedPaths: [],
+            skippedPaths: [],
         });
     });
 

@@ -15,7 +15,11 @@ export interface JobRunStats {
   fileCount: string;
   directories: string;
   totalSize: string;
-  errors: JobRunErrorCount[];
-  sourceServer?: ServerSnapshot;
-  destinationServer?: ServerSnapshot;
+  errors: [];
+  newlyCopiedCount?: string;
+  modifiedCount?: string;
+  deletedCount?: string;
+  excludedCount?: string;
+  skippedCount?: string;
+  totalCopiedSize?: string;
 }

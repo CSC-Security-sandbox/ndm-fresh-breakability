@@ -678,4 +678,18 @@
       </rollback>
    </changeSet>
    
+   <changeSet id="20260313_01_alter_inventory_add_entry_type_and_update_type.sql" author="dm">
+      <sqlFile path="liquibase/20260313_01_alter_inventory_add_entry_type_and_update_type.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260313_01_alter_inventory_add_entry_type_and_update_type_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20260313_02_job_stats_summary_mv_add_counts.sql" author="dm">
+      <sqlFile path="liquibase/20260313_02_job_stats_summary_mv_add_counts.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260313_02_job_stats_summary_mv_add_counts_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

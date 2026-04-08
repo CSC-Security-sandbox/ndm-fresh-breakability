@@ -29,11 +29,13 @@ interface MigrationWorkflowExecutorInput {
 }
 
 interface MigrationWorkflowExecutorOutput {
-    status: JobRunStatus,
-    fileCount : number;
-    dirCount : number;
+    status: JobRunStatus;
+    fileCount: number;
+    dirCount: number;
     scanJobStatus: JobRunStatus;
     syncJobStatus: JobRunStatus;
+    excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+    skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 
@@ -46,6 +48,8 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         dirCount: 0,
         scanJobStatus: JobRunStatus.Running,
         syncJobStatus: JobRunStatus.Running,
+        excludedPaths: [],
+        skippedPaths: [],
     };
 
     wf.setHandler(actionSignal, async (action:string) => {  
@@ -80,12 +84,14 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         });
 
 
-        try{
-            const scanWorkflowOutput = await scanWorkflow.result(); 
+        try {
+            const scanWorkflowOutput = await scanWorkflow.result();
             output.fileCount = scanWorkflowOutput.fileCount;
             output.dirCount = scanWorkflowOutput.dirCount;
-            output.scanJobStatus = scanWorkflowOutput.status;    
-        }catch(error){  
+            output.scanJobStatus = scanWorkflowOutput.status;
+            output.excludedPaths = scanWorkflowOutput.excludedPaths ?? [];
+            output.skippedPaths = scanWorkflowOutput.skippedPaths ?? [];
+        } catch (error) {  
             if (wf.isCancellation(error.cause)) {
                 // The workflow was cancelled
                 output.scanJobStatus = JobRunStatus.Stopped;

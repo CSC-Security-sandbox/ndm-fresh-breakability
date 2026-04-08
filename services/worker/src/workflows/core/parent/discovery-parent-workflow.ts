@@ -21,7 +21,9 @@ interface DiscoveryWorkflowOutput {
   failedWorkers:string[];
   fileCount : number;
   dirCount : number;
-  status: JobRunStatus
+  status: JobRunStatus;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 
@@ -37,6 +39,8 @@ export const DiscoveryWorkflow = async ({
       fileCount: 0,
       failedWorkers: [],
       status: JobRunStatus.Ready,
+      excludedPaths: [],
+      skippedPaths: [],
     };
 
     // setup workers output
@@ -49,14 +53,18 @@ export const DiscoveryWorkflow = async ({
     await waitUntilRedisMemoryOk(traceId);
 
     // start core scan workflow
-    const discoveryWorkflowExecResult = await executeDiscoveryChildWorkflows({jobRunId: traceId})
+    const discoveryWorkflowExecResult = await executeDiscoveryChildWorkflows({ jobRunId: traceId });
     output.fileCount = discoveryWorkflowExecResult.fileCount;
     output.dirCount = discoveryWorkflowExecResult.dirCount;
     output.status = discoveryWorkflowExecResult.status;
-
+    output.excludedPaths = discoveryWorkflowExecResult.excludedPaths ?? [];
+    output.skippedPaths = discoveryWorkflowExecResult.skippedPaths ?? [];
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status);
+    await handleReporting(traceId, output.status, {
+      excludedPaths: output.excludedPaths,
+      skippedPaths: output.skippedPaths,
+    });
 
     // Cleanup
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });

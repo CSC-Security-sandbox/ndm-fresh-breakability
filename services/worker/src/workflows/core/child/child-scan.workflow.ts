@@ -75,6 +75,8 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     dirCount: dirCount,
     status: JobRunStatus.Running,
     error: undefined,
+    excludedPaths: [],
+    skippedPaths: [],
   };
 
   wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
@@ -105,6 +107,8 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;
     scanWorkflowOutput.dirCount += batchExecResults.dirCount;
+    if (batchExecResults.excludedPaths?.length) scanWorkflowOutput.excludedPaths!.push(...batchExecResults.excludedPaths);
+    if (batchExecResults.skippedPaths?.length) scanWorkflowOutput.skippedPaths!.push(...batchExecResults.skippedPaths);
     dirBatchIds = batchExecResults.batchDirs;
 
     if(batchExecResults.error){
@@ -135,6 +139,8 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
     dirCount: 0,
     batchDirs: [],
     error: undefined,
+    excludedPaths: [],
+    skippedPaths: [],
   };
 
 
@@ -154,11 +160,13 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
       })
     );
 
-    for(const result of batchResults){
+    for (const result of batchResults) {
       output.fileCount += result.fileCount;
       output.dirCount += result.dirCount; 
       output.batchDirs.push(...result.batchDirs);
-    }  
+      if (result.excludedPaths?.length) output.excludedPaths!.push(...result.excludedPaths);
+      if (result.skippedPaths?.length) output.skippedPaths!.push(...result.skippedPaths);
+    }
   }
 
   return output;

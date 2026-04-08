@@ -164,12 +164,13 @@ export class CommandExecService {
                 output.shouldUpdateItemInfo = true;
                 
                 // Check for checksum mismatch before setting final status
+                const existingParams = command.ops[OPS_CMD.COPY_FILE].params ?? {};
                 if(checksums?.targetChecksum !== checksums?.sourceChecksum) {
-                    command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.ERROR, params: { checksums, checksumTime } };
+                    command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.ERROR, params: { ...existingParams, checksums, checksumTime } };
                     throw new Error(`Checksum mismatch detected, source: ${checksums?.sourceChecksum}, target: ${checksums?.targetChecksum}`);
                 }
-                // Checksums match - mark as completed
-                command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.COMPLETED, params: { checksums, checksumTime } };
+                // Checksums match - mark as completed (preserve targetExisted for updateType in publishFileInfo)
+                command.ops[OPS_CMD.COPY_FILE] = { status: OPS_STATUS.COMPLETED, params: { ...existingParams, checksums, checksumTime } };
                 output.shouldStampMeta = true;
             }catch(error){
                 command.ops[OPS_CMD.COPY_FILE] = {  ... command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR }; 
@@ -403,6 +404,27 @@ export class CommandExecService {
         );
         (itemInfo as any).copyContentStatus = input.copyContentStatus ?? 'not_applicable';
         (itemInfo as any).stampMetaDataStatus = input.stampMetaDataStatus ?? 'not_applicable';
+        const copyOp = command.ops?.[OPS_CMD.COPY_FILE] ?? command.ops?.[OPS_CMD.COPY_DIR] ?? command.ops?.[OPS_CMD.COPY_SYMLINK];
+        const copyParams = copyOp?.params as { targetExisted?: boolean; checksums?: unknown } | undefined;
+        const targetExisted = copyParams?.targetExisted === true;
+        /**
+         * - Real file copy sets checksums on COPY_FILE params → new vs content_updated from targetExisted.
+         * - Metadata-only path: buildCommand marks COPY_FILE COMPLETED with no checksums (content matched; stamp only)
+         *   → metadata_updated when target existed, not content_updated (recopy stats).
+         * - Dirs/symlinks do not use checksums; keep targetExisted → content_updated | new.
+         */
+        if (command.ops?.[OPS_CMD.COPY_FILE]) {
+            const hadContentCopy = copyParams?.checksums != null;
+            if (hadContentCopy) {
+                (itemInfo as any).updateType = targetExisted ? 'content_updated' : 'new';
+            } else if (copyOp?.status === OPS_STATUS.COMPLETED) {
+                (itemInfo as any).updateType = targetExisted ? 'metadata_updated' : 'new';
+            } else {
+                (itemInfo as any).updateType = targetExisted ? 'content_updated' : 'new';
+            }
+        } else {
+            (itemInfo as any).updateType = targetExisted ? 'content_updated' : 'new';
+        }
 
         await this.validateCommand({ cmd: command, item: itemInfo, jobContext, errorType,targetPath});
         return itemInfo;

@@ -27,6 +27,26 @@ export class JobStatsSummaryMvEntity {
   @ViewColumn({ name: "total_items" })
   totalItems: number;
 
+  @ApiProperty({ description: "Number of deleted items" })
+  @ViewColumn({ name: "deleted_count" })
+  deletedCount: number;
+
+  @ApiProperty({ description: "Number of excluded items" })
+  @ViewColumn({ name: "excluded_count" })
+  excludedCount: number;
+
+  @ApiProperty({ description: "Number of skipped items" })
+  @ViewColumn({ name: "skipped_count" })
+  skippedCount: number;
+
+  @ApiProperty({ description: "Number of newly copied files only (update_type = new, not directories)" })
+  @ViewColumn({ name: "newly_copied_count" })
+  newlyCopiedCount: number;
+
+  @ApiProperty({ description: "Number of recopied files only (update_type = content_updated, not directories)" })
+  @ViewColumn({ name: "recopied_count" })
+  recopiedCount: number;
+
   @ApiProperty({ description: "Last time inventory was updated" })
   @ViewColumn({ name: "last_inventory_update" })
   lastInventoryUpdate: Date;

@@ -303,6 +303,9 @@ describe("CsvService", () => {
       );
 
       expect(result.query).toContain("FROM testSchema.inventory");
+      expect(result.query).toContain(
+        "(i.entry_type IS NULL OR i.entry_type = 'inventory')"
+      );
     });
   });
 
@@ -450,6 +453,9 @@ describe("CsvService", () => {
       expect(result.query).toContain('"Checksum Generated Timestamp (UTC)"');
       expect(result.query).toContain('"Type"');
       expect(result.query).toContain("FROM latest_file_versions");
+      expect(result.query).toContain(
+        "(i.entry_type IS NULL OR i.entry_type = 'inventory')"
+      );
     });
   });
 
@@ -577,6 +583,114 @@ describe("CsvService", () => {
 
       // cursor starts as null; protocol resolved to default NFS from jobRunRepository mock
       expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS');
+    });
+  });
+
+  describe('generateListCsv', () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+      const mockStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish' || event === 'drain') queueMicrotask(() => cb());
+        }),
+        destroy: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockStream as any);
+      jest.spyOn(fastCsv, 'format').mockReturnValue(mockStream as any);
+    });
+
+    it('should throw on invalid file path', async () => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(false);
+
+      await expect(
+        service.generateListCsv('/bad/path.csv', 'job-1', 'excluded', 10),
+      ).rejects.toThrow('File path contains invalid characters.');
+    });
+
+    it('should generate excluded list csv with cursor pagination', async () => {
+      mockDataSource.query
+        .mockResolvedValueOnce([{ 'Source Path': '/vol/a', Path: '/a' }])
+        .mockResolvedValueOnce([]);
+
+      await service.generateListCsv('/tmp/excluded.csv', 'job-1', 'excluded', 1);
+
+      expect(mockDataSource.query).toHaveBeenCalledTimes(2);
+      expect(mockDataSource.query.mock.calls[0][0]).toContain("entry_type = 'excluded'");
+      expect(mockDataSource.query.mock.calls[0][1]).toEqual(['job-1', null, 1]);
+      expect(mockDataSource.query.mock.calls[1][1]).toEqual(['job-1', '/a', 1]);
+    });
+
+    it('should select skipped query type', async () => {
+      mockDataSource.query.mockResolvedValueOnce([]);
+
+      await service.generateListCsv('/tmp/skipped.csv', 'job-2', 'skipped', 5);
+      expect(mockDataSource.query.mock.calls[0][0]).toContain("entry_type = 'skipped'");
+    });
+
+    it('should select deleted query type', async () => {
+      mockDataSource.query.mockResolvedValueOnce([]);
+
+      await service.generateListCsv('/tmp/deleted.csv', 'job-3', 'deleted', 5);
+      expect(mockDataSource.query.mock.calls[0][0]).toContain('(i.is_deleted = true)');
+    });
+  });
+
+  describe('getListEntriesQuery', () => {
+    beforeEach(() => { process.env.SCHEMA = 'testSchema'; });
+
+    it('should build excluded query with correct filter and values', async () => {
+      const result = await service.getListEntriesQuery('job-1', 50, '/cursor', 'excluded');
+      expect(result.query).toContain('FROM testSchema.inventory');
+      expect(result.query).toContain("entry_type = 'excluded'");
+      expect(result.query).toContain('"Source Path"');
+      expect(result.query).toContain('AS "Path"');
+      expect(result.query).toContain('v_source.volume_path');
+      expect(result.values).toEqual(['job-1', '/cursor', 50]);
+    });
+
+    it('should build skipped query with correct filter', async () => {
+      const result = await service.getListEntriesQuery('job-1', 25, null, 'skipped');
+      expect(result.query).toContain("entry_type = 'skipped'");
+      expect(result.values).toEqual(['job-1', null, 25]);
+    });
+
+    it('should build deleted query with is_deleted filter', async () => {
+      const result = await service.getListEntriesQuery('job-1', 10, '/p', 'deleted');
+      expect(result.query).toContain('(i.is_deleted = true)');
+      expect(result.values).toEqual(['job-1', '/p', 10]);
+    });
+  });
+
+  describe('legacy list query builders (delegates to getListEntriesQuery)', () => {
+    beforeEach(() => { process.env.SCHEMA = 'testSchema'; });
+
+    it('should build excluded query with expected values', async () => {
+      const result = await service.getExcludedEntriesQuery('job-1', 50, '/cursor');
+      expect(result.query).toContain("entry_type = 'excluded'");
+      expect(result.values).toEqual(['job-1', '/cursor', 50]);
+    });
+
+    it('should build skipped query with expected values', async () => {
+      const result = await service.getSkippedEntriesQuery('job-1', 25, null);
+      expect(result.query).toContain("entry_type = 'skipped'");
+      expect(result.values).toEqual(['job-1', null, 25]);
+    });
+
+    it('should build deleted query with expected values', async () => {
+      const result = await service.getDeletedEntriesQuery('job-1', 10, '/p');
+      expect(result.query).toContain('(i.is_deleted = true)');
+      expect(result.values).toEqual(['job-1', '/p', 10]);
+    });
+  });
+
+  describe('getMigrationCoCColumns include status columns', () => {
+    it('should include CopyContentStatus and StampMetaDataStatus columns when enabled', () => {
+      const result = service.getMigrationCoCColumns('NFS', true);
+      expect(result).toContain('"CopyContentStatus"');
+      expect(result).toContain('"StampMetaDataStatus"');
     });
   });
 });

@@ -1,9 +1,10 @@
-import { CsvService } from "./../csv/csv_export.service"; 
+import { CsvService, COC_BUNDLE_ENTRIES } from "./../csv/csv_export.service";
 import {
   Injectable,
   Logger,
   NotFoundException,
   NotAcceptableException,
+  InternalServerErrorException,
   Optional,
   Inject
 } from "@nestjs/common";
@@ -24,8 +25,15 @@ import * as archiver from "archiver";
 import * as crypto from "crypto";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as path from "path";
+import * as os from "os";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+
+const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
+  JobRunStatus.Completed,
+  JobRunStatus.Failed,
+  JobRunStatus.Stopped,
+];
 
 @Injectable()
 export class JobRunService {
@@ -84,7 +92,11 @@ export class JobRunService {
       (
         (jobStatsSnapshot.fileCount != null && jobStatsSnapshot.fileCount !== '0') ||
         (jobStatsSnapshot.directories != null && jobStatsSnapshot.directories !== '0') ||
-        (jobStatsSnapshot.totalSize != null && jobStatsSnapshot.totalSize !== '0')
+        (jobStatsSnapshot.totalSize != null && jobStatsSnapshot.totalSize !== '0') ||
+        (jobStatsSnapshot.newlyCopiedCount != null && jobStatsSnapshot.newlyCopiedCount !== '0') ||
+        (jobStatsSnapshot.modifiedCount != null && jobStatsSnapshot.modifiedCount !== '0') ||
+        (jobStatsSnapshot.skippedCount != null && jobStatsSnapshot.skippedCount !== '0') ||
+        (jobStatsSnapshot.deletedCount != null && jobStatsSnapshot.deletedCount !== '0')
       );
 
     const saved = await this.reportsRepo.findOne({
@@ -108,6 +120,7 @@ export class JobRunService {
       }
       if (jobStatsSummary) {
         parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
+        
       }
       // Cached report may have been built when the MV had zeros.
       // If we now have a valid job_stats snapshot, override the stats section.
@@ -116,6 +129,31 @@ export class JobRunService {
           fileCount: jobStatsSnapshot.fileCount,
           directories: jobStatsSnapshot.directories,
           totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
+          newlyCopiedCount: jobStatsSnapshot.newlyCopiedCount,
+          modifiedCount: jobStatsSnapshot.modifiedCount,
+          skippedCount: jobStatsSnapshot.skippedCount,
+          deletedCount: jobStatsSnapshot.deletedCount,
+        };
+        if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
+        if (parsedReport.discovery) parsedReport.discovery = statsFromSnapshot;
+        if (parsedReport.cutOver) parsedReport.cutOver = statsFromSnapshot;
+        // Stats came from job_stats snapshot captured at job completion — use endTime as the accurate timestamp.
+        // Only override if endTime is non-null; if missing, keep the MV lastRefreshed already set above.
+        if (getLatestReportStatus.endTime != null) {
+          parsedReport.lastRefreshed = getLatestReportStatus.endTime;
+        }
+      }
+      // Cached report may have been built when the MV had zeros.
+      // If we now have a valid job_stats snapshot, override the stats section.
+      if (hasValidSnapshot) {
+        const statsFromSnapshot = {
+          fileCount: jobStatsSnapshot.fileCount,
+          directories: jobStatsSnapshot.directories,
+          totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
+          newlyCopiedCount: jobStatsSnapshot.newlyCopiedCount,
+          modifiedCount: jobStatsSnapshot.modifiedCount,
+          skippedCount: jobStatsSnapshot.skippedCount,
+          deletedCount: jobStatsSnapshot.deletedCount,
         };
         if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
         if (parsedReport.discovery) parsedReport.discovery = statsFromSnapshot;
@@ -234,26 +272,40 @@ export class JobRunService {
       worker: jobRun?.worker?.length ?? 0,
     };
     const jobRunStatus = new JobRunStats();
-    this.logger.log(
-      `Job Stats Summary for Job Run ID ${id}: snapshot=${JSON.stringify(jobStatsSnapshot)} mv=${JSON.stringify(jobStatsSummary)}`
-    );
-
-    if (hasValidSnapshot) {
-      // Prefer the job_stats snapshot — it is written atomically when the job
-      // reaches a terminal state and is always more reliable than the MV.
-      jobRunStatus.fileCount = jobStatsSnapshot.fileCount;
-      jobRunStatus.directories = jobStatsSnapshot.directories;
-      jobRunStatus.totalSize = formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString();
+    
+    // For completed jobs, use persisted jobStats from jobRun (accurate at completion time)
+    // For running jobs, fall back to materialized view
+    const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status as JobRunStatus);
+    
+    if (isTerminal && jobRun.jobStats) {
+      this.logger.log(`Job Run ${id} using persisted jobStats: ${JSON.stringify(jobRun.jobStats)}`);
+      jobRunStatus.fileCount = jobRun.jobStats.fileCount?.toString() ?? jobStatsSummary?.fileCount?.toString() ?? "0";
+      jobRunStatus.directories = jobRun.jobStats.directories?.toString() ?? jobStatsSummary?.directoryCount?.toString() ?? "0";
+      jobRunStatus.totalSize = formatBytes(Number(jobRun.jobStats.totalSize ?? jobStatsSummary?.totalSize ?? 0)).toString();
+      jobRunStatus.deletedCount = (jobRun.jobStats as any).deletedCount ?? jobStatsSummary?.deletedCount?.toString() ?? "0";
+      jobRunStatus.excludedCount = (jobRun.jobStats as any).excludedCount ?? jobStatsSummary?.excludedCount?.toString() ?? "0";
+      jobRunStatus.skippedCount = (jobRun.jobStats as any).skippedCount ?? jobStatsSummary?.skippedCount?.toString() ?? "0";
+      jobRunStatus.newlyCopiedCount = (jobRun.jobStats as any).newlyCopiedCount ?? jobStatsSummary?.newlyCopiedCount?.toString() ?? "0";
+      jobRunStatus.modifiedCount = (jobRun.jobStats as any).modifiedCount ?? jobStatsSummary?.recopiedCount?.toString() ?? "0";
     } else if (jobStatsSummary) {
-      jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString();
-      jobRunStatus.directories = jobStatsSummary.directoryCount?.toString();
-      jobRunStatus.totalSize = formatBytes(
-        Number(jobStatsSummary.totalSize)
-      ).toString();
+      this.logger.log(`Job Run ${id} using MV stats: ${JSON.stringify(jobStatsSummary)}`);
+      jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString() ?? "0";
+      jobRunStatus.directories = jobStatsSummary.directoryCount?.toString() ?? "0";
+      jobRunStatus.totalSize = formatBytes(Number(jobStatsSummary.totalSize)).toString();
+      jobRunStatus.deletedCount = jobStatsSummary.deletedCount?.toString() ?? "0";
+      jobRunStatus.excludedCount = jobStatsSummary.excludedCount?.toString() ?? "0";
+      jobRunStatus.skippedCount = jobStatsSummary.skippedCount?.toString() ?? "0";
+      jobRunStatus.newlyCopiedCount = jobStatsSummary.newlyCopiedCount?.toString() ?? "0";
+      jobRunStatus.modifiedCount = jobStatsSummary.recopiedCount?.toString() ?? "0";
     } else {
       jobRunStatus.fileCount = "0";
       jobRunStatus.directories = "0";
       jobRunStatus.totalSize = "0";
+      jobRunStatus.deletedCount = "0";
+      jobRunStatus.excludedCount = "0";
+      jobRunStatus.skippedCount = "0";
+      jobRunStatus.newlyCopiedCount = "0";
+      jobRunStatus.modifiedCount = "0";
     }
 
     if (jobRun?.jobConfig?.jobType === JobType.Discover)
@@ -287,8 +339,41 @@ export class JobRunService {
     return response;
   }
 
+  
   get getReportsDirectory(): string {
     return process.env.REPORT_DOWNLOAD_LOCATION || "./reports";
+  }
+
+  /**
+   * Picks a directory where we can actually create files (mkdir + write + unlink test).
+   * Falls back from REPORT_DOWNLOAD_LOCATION → ./reports (cwd) → os.tmpdir()/ndm-reports
+   * to avoid EACCES on cloud-synced or read-only paths (e.g. OneDrive).
+   */
+  private async ensureWritableReportsBaseDir(): Promise<string> {
+    const configured = process.env.REPORT_DOWNLOAD_LOCATION?.trim();
+    const candidates: string[] = [];
+    if (configured) {
+      candidates.push(path.resolve(configured));
+    }
+    candidates.push(path.resolve(process.cwd(), "reports"));
+    candidates.push(path.join(os.tmpdir(), "ndm-reports"));
+
+    for (const dir of candidates) {
+      try {
+        await fs.promises.mkdir(dir, { recursive: true });
+        const testFile = path.join(dir, `.ndm-write-test-${process.pid}-${Date.now()}`);
+        await fs.promises.writeFile(testFile, "ok", { flag: "w" });
+        await fs.promises.unlink(testFile);
+        this.logger.log(`Using writable reports directory: ${dir}`);
+        return dir;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Reports directory not usable (${msg}), trying next: ${dir}`);
+      }
+    }
+    throw new InternalServerErrorException(
+      "No writable directory for reports. Set REPORT_DOWNLOAD_LOCATION to a local folder (e.g. /tmp/ndm-reports) with write permission."
+    );
   }
 
   async getCocReportByJobRunId(jobRunId: string) {
@@ -306,18 +391,18 @@ export class JobRunService {
         throw new NotFoundException(
           `Job Run with id ${jobRunId} is not a migration job`
         );
-      const sanitizedFileName = `${jobRunId}-coc-report.csv`.replace(
+      const sanitizedBaseName = `${jobRunId}-coc-report`.replace(
         /[^a-zA-Z0-9-_.]/g,
         ""
       );
-      const filePath = path.join(this.getReportsDirectory, sanitizedFileName);
-      if (!filePath.startsWith(this.getReportsDirectory)) {
-        throw new NotAcceptableException(`Invalid file path: ${filePath}`);
+      if (!sanitizedBaseName) {
+        throw new NotAcceptableException(`Invalid jobRunId for COC report path: ${jobRunId}`);
       }
-
-      const sanitizedZipFileName = sanitizedFileName.replace('.csv', '.zip');
-      const zipFilePath = path.join(this.getReportsDirectory, sanitizedZipFileName);
-      if (!zipFilePath.startsWith(this.getReportsDirectory)) {
+      const reportsBaseDir = await this.ensureWritableReportsBaseDir();
+      const resolvedReportsBase = path.resolve(reportsBaseDir);
+      const zipFilePath = path.resolve(resolvedReportsBase, `${sanitizedBaseName}.zip`);
+      const relativeZipPath = path.relative(resolvedReportsBase, zipFilePath);
+      if (relativeZipPath.startsWith("..") || path.isAbsolute(relativeZipPath) || relativeZipPath === "") {
         throw new NotAcceptableException(`Invalid file path: ${zipFilePath}`);
       }
 
@@ -331,41 +416,80 @@ export class JobRunService {
         return zipFilePath;
       }
 
-      // CSV must be generated (fresh or resumed from last valid entry)
-      const csvExists = await this.fileExists(filePath);
+      const bundleDir = path.resolve(resolvedReportsBase, sanitizedBaseName);
+      const relativeBundleDir = path.relative(resolvedReportsBase, bundleDir);
+      if (
+        relativeBundleDir.startsWith("..") ||
+        path.isAbsolute(relativeBundleDir) ||
+        relativeBundleDir === ""
+      ) {
+        throw new NotAcceptableException(`Invalid bundle directory path: ${bundleDir}`);
+      }
+      await fs.promises.mkdir(bundleDir, { recursive: true });
+
+      const bundleCsvPaths = COC_BUNDLE_ENTRIES.map((entry) =>
+        path.join(bundleDir, entry.fileName),
+      );
+
       const jobType = jobRun.jobConfig.jobType;
-      const batchSize = parseInt(process.env.CSV_BATCH_SIZE) || 50000;
+      const batchSize = parseInt(process.env.CSV_BATCH_SIZE || "", 10) || 50000;
+      const volumePath = jobRun.jobConfig.sourcePath?.volumePath ?? "";
+
+      const resumeCursorForFile = async (filePath: string): Promise<string | null> =>
+        (await this.fileExists(filePath))
+          ? await this.getResumeCursor(filePath, volumePath, projectId)
+          : null;
+
       try {
-        if (!csvExists) {
-          this.logger.log(`projectId: ${projectId} CSV not present, generating from scratch: ${filePath}`);
-          await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType);
-        } else {
-          const volumePath = jobRun.jobConfig.sourcePath?.volumePath ?? '';
-          this.logger.log(`projectId: ${projectId} CSV exists, resuming from last valid entry: ${filePath}`);
-          const resumeCursor = await this.getResumeCursor(filePath, volumePath, projectId);
-          await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType, resumeCursor);
+        for (let i = 0; i < COC_BUNDLE_ENTRIES.length; i++) {
+          const entry = COC_BUNDLE_ENTRIES[i];
+          const filePath = bundleCsvPaths[i];
+          const resume = await resumeCursorForFile(filePath);
+          this.logger.log(
+            `projectId: ${projectId} ${resume ? 'Resuming' : 'Generating'} ${entry.fileName} for jobRunId: ${jobRunId}${resume ? `, cursor: ${resume}` : ''}`
+          );
+          if (entry.kind === "inventory") {
+            await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType, resume);
+          } else {
+            await this.csvService.generateListCsv(filePath, jobRunId, entry.listType, batchSize, resume);
+          }
         }
       } catch (csvError) {
-        this.logger.error(`projectId: ${projectId} Failed to generate CSV at: ${filePath}`, csvError?.stack || csvError);
+        this.logger.error(
+          `projectId: ${projectId} Failed to generate COC CSV bundle at: ${bundleDir}`,
+          csvError?.stack || csvError
+        );
         throw csvError;
       }
 
-      // Create ZIP from the CSV
+      // Create ZIP from the four CSV files under the bundle folder
       this.logger.log(`projectId: ${projectId} Creating ZIP at: ${zipFilePath}`);
       try {
-        await this.createZipFile([filePath], zipFilePath);
+        await this.createZipFile(bundleCsvPaths, zipFilePath);
         this.logger.log(`projectId: ${projectId} COC ZIP created at: ${zipFilePath}`);
       } catch (zipError) {
         this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
         throw zipError;
       }
 
-      // CSV is no longer needed — ZIP is the canonical artifact
-      try {
-        await fs.promises.unlink(filePath);
-        this.logger.log(`projectId: ${projectId} CSV deleted after ZIP creation: ${filePath}`);
-      } catch (unlinkError) {
-        this.logger.warn(`projectId: ${projectId} Could not delete CSV at: ${filePath}`, unlinkError?.message);
+      // Bundle directory is no longer needed — ZIP is the canonical artifact
+      const relativeBundle = path.relative(resolvedReportsBase, bundleDir);
+      if (
+        !relativeBundle.startsWith("..") &&
+        !path.isAbsolute(relativeBundle) &&
+        relativeBundle !== ""
+      ) {
+        try {
+          await fs.promises.rm(bundleDir, { recursive: true, force: true });
+          this.logger.log(`projectId: ${projectId} Bundle directory removed after ZIP creation: ${bundleDir}`);
+        } catch (rmError: unknown) {
+          const msg = rmError instanceof Error ? rmError.message : String(rmError);
+          this.logger.warn(`projectId: ${projectId} Could not remove bundle directory at: ${bundleDir}`, msg);
+        }
+      } else {
+        this.logger.warn(
+          `projectId: ${projectId} Skipping bundle cleanup — path outside reports base: ${bundleDir}`
+        );
       }
 
       if (jobRun.jobConfig.jobType !== JobType.CutOver) {
@@ -445,9 +569,10 @@ export class JobRunService {
       if (!sourcePath) return null;
 
       // Parse the Source Path to get the i.path value which is the cursor
-      const cursor = volumePath && sourcePath.startsWith(volumePath)
-        ? sourcePath.slice(volumePath.length)
-        : sourcePath;
+      const cursor =
+        volumePath && sourcePath.startsWith(volumePath)
+          ? sourcePath.slice(volumePath.length)
+          : sourcePath;
 
       this.logger.log(`projectId: ${projectId} CSV resume cursor: ${cursor}`);
       return cursor;
@@ -470,8 +595,8 @@ export class JobRunService {
     return new Promise((resolve, reject) => {
       // Resolve and validate all paths at the point of use so CodeQL (and any
       // runtime check) can see that tainted input never reaches fs calls raw.
-      const baseDir = path.resolve(this.getReportsDirectory);
       const resolvedOutput = path.resolve(outputPath);
+      const baseDir = path.dirname(resolvedOutput);
       if (!resolvedOutput.startsWith(baseDir + path.sep)) {
         return reject(new Error(`Output path escapes the reports directory: ${outputPath}`));
       }
@@ -494,7 +619,7 @@ export class JobRunService {
 
       archive.pipe(output);
       for (const resolved of resolvedSources) {
-        archive.file(resolved, { name: path.basename(resolved) });
+        archive.file(resolved, { name: path.relative(baseDir, resolved) });
       }
       archive.finalize().catch(reject);
     });

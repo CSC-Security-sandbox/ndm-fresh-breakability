@@ -924,6 +924,60 @@ describe('CommandExecService', () => {
 
             expect(result.checksumTime).toBeNull();
             });
+
+            it('should set updateType to content_updated when file copy ran (checksums) and targetExisted', async () => {
+            const command = {
+                ...createMockCommand(),
+                ops: {
+                    [OPS_CMD.COPY_FILE]: {
+                        status: OPS_STATUS.COMPLETED,
+                        params: {
+                            targetExisted: true,
+                            checksums: {
+                                sourceChecksum: 'src-checksum',
+                                targetChecksum: 'tgt-checksum',
+                            },
+                        },
+                    },
+                    [OPS_CMD.STAMP_META]: createMockCommand().ops[OPS_CMD.STAMP_META],
+                },
+            };
+            const input = {
+                command,
+                jobContext: mockJobContext,
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+            const result = await service.buildFileInfo(input as any);
+
+            expect((result as any).updateType).toBe('content_updated');
+            });
+
+            it('should set updateType to metadata_updated when copy was skipped (no checksums) and targetExisted', async () => {
+            const command = {
+                ...createMockCommand(),
+                ops: {
+                    [OPS_CMD.COPY_FILE]: {
+                        status: OPS_STATUS.COMPLETED,
+                        params: { targetExisted: true },
+                    },
+                    [OPS_CMD.STAMP_META]: createMockCommand().ops[OPS_CMD.STAMP_META],
+                },
+            };
+            const input = {
+                command,
+                jobContext: mockJobContext,
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+            jest.spyOn(service, 'validateCommand').mockResolvedValue();
+            const result = await service.buildFileInfo(input as any);
+
+            expect((result as any).updateType).toBe('metadata_updated');
+            });
         });
 
         describe('validateCommand', () => {

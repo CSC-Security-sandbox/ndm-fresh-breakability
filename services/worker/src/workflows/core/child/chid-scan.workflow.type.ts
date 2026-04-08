@@ -20,6 +20,8 @@ export interface ChildScanWorkflowOutput {
   fileCount : number;
   dirCount : number;
   error?: string;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 export enum ScanWorkflowStatus{    
@@ -29,12 +31,14 @@ export enum ScanWorkflowStatus{
 }
 
 
-export interface ScanWorkflowOutput{
+export interface ScanWorkflowOutput {
   jobRunId: string;
   status: JobRunStatus;
   fileCount : number;
   dirCount : number;
   error?: string;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 export interface SyncWorkflowOutput{
@@ -50,6 +54,8 @@ export interface ExecuteBatchScansOutput{
   dirCount: number;
   batchDirs: string[];
   error?: string;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 export interface CreateBatchInput {

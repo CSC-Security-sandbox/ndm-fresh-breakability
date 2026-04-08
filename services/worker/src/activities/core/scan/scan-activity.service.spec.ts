@@ -278,6 +278,54 @@ describe('ScanService', () => {
             expect(result.result.dirCount).toBe(0);
             expect(task.commands[0].status).toBe(CommandStatus.ERROR);
         });
+
+        it('should use TRANSIENT_ERROR when retry threshold is reached', async () => {
+            const task = {
+                ...mockTask,
+                retryCount: 1,
+                commands: [{ fPath: '/foo', retryCount: 1, status: CommandStatus.READY }],
+            };
+            const jobContext = { ...mockJobContext, setTask: jest.fn() };
+            jest.spyOn(utils, 'getScanSettings').mockReturnValue({
+                skipFile: '2d',
+                excludePatterns: ['node_modules', '.git'],
+            });
+            jest.spyOn(scanService, 'batchSubDirs').mockResolvedValue({ subDirs: [], batchDirs: [] });
+
+            await scanService.executeTask({
+                activityId: 'activity-1',
+                jobContext: jobContext as any,
+                jobRunId: 'job-1',
+                task: task as any,
+                isMigration: true,
+                batchSize: 10,
+            } as any);
+
+            const callInput = migrateScanService.scanDirectory.mock.calls[0][0];
+            expect(callInput.errorType).toBe('TRANSIENT_ERROR');
+        });
+
+        it('should throw CancelledFailure when activity cancellation signal is aborted', async () => {
+            (Context.current as jest.Mock).mockReturnValue({
+                info: { activityId: 'activity-1' },
+                heartbeat: jest.fn(),
+                cancellationSignal: { aborted: true },
+            });
+
+            await expect(
+                scanService.executeTask({
+                    activityId: 'activity-1',
+                    jobContext: { ...mockJobContext, setTask: jest.fn() } as any,
+                    jobRunId: 'job-1',
+                    task: {
+                        ...mockTask,
+                        commands: [{ fPath: '/foo', retryCount: 0, status: CommandStatus.READY }],
+                    } as any,
+                    isMigration: true,
+                    batchSize: 10,
+                } as any),
+            ).rejects.toThrow('Activity cancelled');
+        });
         });
 
         describe('handleDirsReturn', () => {
@@ -330,6 +378,68 @@ describe('ScanService', () => {
             expect(result).toEqual(scanResult.result);
             expect(scanService.executeTask).toHaveBeenCalled();
             expect(scanService.updateAndReportTaskStatus).toHaveBeenCalled();
+        });
+
+        it('should return default output when scan task has no commands', async () => {
+            const executeTaskSpy = jest.spyOn(scanService, 'executeTask');
+            commonTaskService.buildOrGetValidScanTask.mockResolvedValueOnce({
+                ...mockTask,
+                commands: [],
+            } as any);
+
+            const result = await scanService.scanDirectories({
+                jobRunId: 'job-1',
+                isMigration: false,
+                batchSize: 10,
+                batchId: undefined,
+            });
+
+            expect(result).toEqual({
+                dirCount: 0,
+                fileCount: 0,
+                subDirs: [],
+                jobRunId: 'job-1',
+                batchDirs: [],
+                excludedPaths: [],
+                skippedPaths: [],
+            });
+            expect(executeTaskSpy).not.toHaveBeenCalled();
+        });
+
+        it('should heartbeat while scan activity is running', async () => {
+            jest.useFakeTimers();
+            const heartbeat = jest.fn();
+            (Context.current as jest.Mock).mockReturnValue({
+                info: { activityId: 'activity-1' },
+                heartbeat,
+            });
+
+            jest.spyOn(scanService, 'executeTask').mockImplementation(async () => {
+                jest.advanceTimersByTime(2100);
+                return {
+                    result: {
+                        dirCount: 0,
+                        fileCount: 0,
+                        subDirs: [],
+                        jobRunId: 'job-1',
+                        batchDirs: [],
+                        excludedPaths: [],
+                        skippedPaths: [],
+                    },
+                    errors: [],
+                    retryCount: 0,
+                } as any;
+            });
+            jest.spyOn(scanService, 'updateAndReportTaskStatus').mockResolvedValue(undefined);
+
+            await scanService.scanDirectories({
+                jobRunId: 'job-1',
+                isMigration: false,
+                batchSize: 10,
+                batchId: undefined,
+            });
+
+            expect(heartbeat).toHaveBeenCalled();
         });
 
         it('should delete batch dir if preBatchedId is provided', async () => {

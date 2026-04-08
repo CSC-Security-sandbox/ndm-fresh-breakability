@@ -180,8 +180,27 @@ export class JobRunController {
     @Param("status") status: JobRunStatus,
     @Headers("projectId") projectId?: string
   ) {
-    console.log("updatingStatus" + "jobRunId", jobRunId, "status", status);
+    this.logger.log(`Updating job run status: jobRunId=${jobRunId}, status=${status}`);
     return await this.jobRunService.updateJobRunStatus(jobRunId, status, projectId);
+  }
+
+  @ApiOperation({ summary: "Add excluded/skipped inventory entries for a job run" })
+  @ApiResponse({ status: 200, description: "Entries added successfully." })
+  @AuthWorker()
+  @Post("/:jobRunId/inventory-entries")
+  async addExcludedSkippedEntries(
+    @Param("jobRunId") jobRunId: string,
+    @Body()
+    body: {
+      excluded?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+      skipped?: Array<{ path: string; isDirectory?: boolean }>;
+    },
+  ) {
+    return this.jobRunService.addExcludedSkippedEntries(
+      jobRunId,
+      body?.excluded ?? [],
+      body?.skipped ?? [],
+    );
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })

@@ -65,6 +65,7 @@ describe('JobRunController', () => {
             approveCutoverRequest: jest.fn(),
             addHocRun: jest.fn(),
             updateJobRunStatus: jest.fn(),
+            addExcludedSkippedEntries: jest.fn(),
             cutOverApproval: jest.fn(),
             getErrorOverview: jest.fn(),
             checkWorkerHealth: jest.fn(),
@@ -183,6 +184,19 @@ describe('JobRunController', () => {
         250
       );
     });
+
+    it('should treat empty cursor as null', async () => {
+      const jobRunId = 'run1';
+      const result = { data: [], nextCursor: null };
+      jobRunService.getFailedOperations.mockResolvedValue(result);
+
+      expect(await controller.getFailedOperations(jobRunId, '', '100')).toBe(result);
+      expect(jobRunService.getFailedOperations).toHaveBeenCalledWith(
+        jobRunId,
+        null,
+        100
+      );
+    });
   });
 
   describe('getJobById', () => {
@@ -212,6 +226,7 @@ describe('JobRunController', () => {
       jobRunService.approveCutoverRequest.mockResolvedValue(result as any);
       expect(await controller.cutoverApprove(approval)).toBe(result);
       expect(jobRunService.approveCutoverRequest).toHaveBeenCalledWith(approval);
+      expect(mockLogger.log).toHaveBeenCalledWith(JSON.stringify(approval));
     });
   });
 
@@ -231,6 +246,15 @@ describe('JobRunController', () => {
       expect(await controller.adhocRun(adhoc)).toBe(result);
       expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', undefined, 'run1');
     });
+
+    it('should pass projectId header to ad hoc run creation', async () => {
+      const adhoc: AdHocRunDTO = { jobConfigId: 'cfg1' } as any;
+      const result = { runId: 'run3' };
+      jobRunService.addHocRun.mockResolvedValue(result as any);
+
+      expect(await controller.adhocRun(adhoc, 'project-1')).toBe(result);
+      expect(jobRunService.addHocRun).toHaveBeenCalledWith('cfg1', 'project-1', undefined);
+    });
   });
 
   describe('updateJobRunStatus', () => {
@@ -241,6 +265,45 @@ describe('JobRunController', () => {
       jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
       expect(await controller.updateJobRunStatus(jobRunId, status)).toBe(result);
       expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, undefined);
+    });
+
+    it('should update job run status with projectId and log details', async () => {
+      const jobRunId = 'run2';
+      const status = JobRunStatus.Paused;
+      const result = { updated: true };
+      jobRunService.updateJobRunStatus.mockResolvedValue(result as any);
+
+      expect(await controller.updateJobRunStatus(jobRunId, status, 'project-2')).toBe(result);
+      expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith(jobRunId, status, 'project-2');
+      expect(mockLogger.log).toHaveBeenCalledWith(`Updating job run status: jobRunId=${jobRunId}, status=${status}`);
+    });
+  });
+
+  describe('addExcludedSkippedEntries', () => {
+    it('should add excluded and skipped entries', async () => {
+      const jobRunId = 'run1';
+      const payload = {
+        excluded: [{ path: '/a', isDirectory: false }],
+        skipped: [{ path: '/b', isDirectory: true }],
+      };
+      const result = { added: 2 };
+      jobRunService.addExcludedSkippedEntries.mockResolvedValue(result as any);
+
+      expect(await controller.addExcludedSkippedEntries(jobRunId, payload)).toBe(result);
+      expect(jobRunService.addExcludedSkippedEntries).toHaveBeenCalledWith(
+        jobRunId,
+        payload.excluded,
+        payload.skipped,
+      );
+    });
+
+    it('should default excluded and skipped arrays when body is empty', async () => {
+      const jobRunId = 'run2';
+      const result = { added: 0 };
+      jobRunService.addExcludedSkippedEntries.mockResolvedValue(result as any);
+
+      expect(await controller.addExcludedSkippedEntries(jobRunId, {} as any)).toBe(result);
+      expect(jobRunService.addExcludedSkippedEntries).toHaveBeenCalledWith(jobRunId, [], []);
     });
   });
 

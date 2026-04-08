@@ -48,7 +48,9 @@ export class ScanService {
             fileCount: 0,
             subDirs: [],
             jobRunId: jobRunId,
-            batchDirs: []
+            batchDirs: [],
+            excludedPaths: [],
+            skippedPaths: [],
         };
         try{                           
             const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);            
@@ -99,7 +101,7 @@ export class ScanService {
     async executeTask({activityId, jobContext, jobRunId, task, isMigration, batchSize}: TaskExecInput): Promise<TaskExecOutput>{
         const baseSourcePrefixPath = basePrefix(jobRunId, task.sPathId, jobContext.jobConfig?.sourceDirectoryPath);
         const baseTargetPrefixPath = basePrefix(jobRunId, task.tPathId, jobContext.jobConfig?.destinationDirectoryPath);
-        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [] };    
+        const output: ScanActivityOutput = { dirCount: 0, fileCount: 0, subDirs: [], jobRunId: jobRunId, batchDirs: [], excludedPaths: [], skippedPaths: [] };    
         let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
         const settings = getScanSettings(jobContext);
@@ -131,6 +133,8 @@ export class ScanService {
                         output.fileCount += result.fileCount;
                         output.dirCount += result.dirCount;
                         output.subDirs.push(...result.subDirs);
+                        if (result.excludedPaths?.length) output.excludedPaths!.push(...result.excludedPaths);
+                        if (result.skippedPaths?.length) output.skippedPaths!.push(...result.skippedPaths);
                         command.status = CommandStatus.COMPLETED;
                     }catch(error) {
                         command.status = CommandStatus.ERROR;

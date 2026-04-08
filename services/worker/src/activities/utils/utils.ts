@@ -82,6 +82,14 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 }
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
+
+/** Returns 'excluded' | 'skipped' | null so callers can distinguish and record paths. */
+export const getExcludeOrSkipReason = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): 'excluded' | 'skipped' | null => {
+  if (shouldExclude(fullPath, excludePatterns) || shouldExcludeOlderThan(stats, olderThan)) return 'excluded';
+  if (shouldSkipFile(stats, skipTime, jobType)) return 'skipped';
+  return null;
+};
+
 export const shouldExcludeForDelete = ({ fullPath, excludePatterns }: ExcludeForDelete): boolean => (shouldExclude(fullPath, excludePatterns));
 
 export const checkCaseSensitiveConflict = async (jobType: string, itemName: string, lowerCaseSourceData: Set<string>, relativeSourcePath: string, sourceContentPath: string, command: Cmd, jobContext: JobManagerContext, lowerCaseTargetData?: Set<string>, targetContent?: Set<string>, isDirectory?: boolean): Promise<boolean> => {

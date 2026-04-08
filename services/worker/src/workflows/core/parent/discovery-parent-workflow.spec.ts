@@ -54,7 +54,14 @@ describe('DiscoveryWorkflow', () => {
             jobRunId: traceId,
         });
 
-        expect(reporting.handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
+        expect(reporting.handleReporting).toHaveBeenCalledWith(
+            traceId,
+            JobRunStatus.Completed,
+            expect.objectContaining({
+                excludedPaths: [],
+                skippedPaths: [],
+            }),
+        );
 
         expect(cleanupWorkflow.executeCleanup).toHaveBeenCalledWith({
             jobRunId: traceId,
@@ -69,6 +76,8 @@ describe('DiscoveryWorkflow', () => {
             fileCount: 10,
             dirCount: 2,
             status: JobRunStatus.Completed,
+            excludedPaths: [],
+            skippedPaths: [],
         });
     });
 
@@ -88,6 +97,8 @@ describe('DiscoveryWorkflow', () => {
 
         expect(result.setupCompletedWorkers).toEqual([]);
         expect(result.failedWorkers).toEqual([]);
+        expect(result.excludedPaths).toEqual([]);
+        expect(result.skippedPaths).toEqual([]);
     });
 
     it('should propagate errors from setup', async () => {

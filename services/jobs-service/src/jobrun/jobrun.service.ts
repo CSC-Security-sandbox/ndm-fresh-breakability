@@ -5,6 +5,7 @@ import {
   NotFoundException,
   InternalServerErrorException
 } from "@nestjs/common";
+import * as path from "path";
 import { ConfigService } from "@nestjs/config";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
 import { formatBytes } from "@netapp-cloud-datamigrate/jobs-lib";
@@ -383,11 +384,7 @@ export class JobRunService {
         endTime: true,
         jobConfigId: true,
         jobRunType: true,
-        jobStats: {
-          fileCount: true,
-          directories: true,
-          totalSize: true,
-        },
+        jobStats: true,
         tasks: {
           id: true,
           status: true,
@@ -749,7 +746,26 @@ export class JobRunService {
           { scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED }
         );
       }
-      const jobRunStats: JobRunStats = await this.calculateJobRunStats(jobRunId);
+      
+      let jobRunStats: JobRunStats = await this.calculateJobRunStats(jobRunId);
+      const isCopyJobType =
+        jobConfig &&
+        (jobConfig.jobType === JobType.MIGRATE ||
+          jobConfig.jobType === JobType.CUT_OVER);
+      if (TERMINAL_JOB_RUN_STATUSES.includes(status) && isCopyJobType) {
+        const freshInventoryStats = await this.calculateInventoryStatsFromBaseTable(jobRunId);
+        jobRunStats = {
+          ...jobRunStats,
+          fileCount: freshInventoryStats.fileCount,
+          directories: freshInventoryStats.directories,
+          totalSize: freshInventoryStats.totalSize,
+          deletedCount: freshInventoryStats.deletedCount,
+          excludedCount: freshInventoryStats.excludedCount,
+          skippedCount: freshInventoryStats.skippedCount,
+          newlyCopiedCount: freshInventoryStats.newlyCopiedCount,
+          modifiedCount: freshInventoryStats.modifiedCount,
+        };
+      }
       if (
         jobConfig &&
         (jobConfig.jobType === JobType.MIGRATE ||
@@ -818,6 +834,7 @@ export class JobRunService {
       this.logger.log("job Run Stats", JSON.stringify(jobRunStats));
       const updateData: Partial<JobRunEntity> = {
         status: status,
+        jobStats: jobRunStats,
       };
       if (TERMINAL_JOB_RUN_STATUSES.includes(status)) {
         updateData.endTime = new Date();
@@ -828,14 +845,29 @@ export class JobRunService {
         try {
           const liveStats = await this.redisService.getLiveStats(jobRunId);
 
-          if (liveStats.fileCount !== '0' || liveStats.dirCount !== '0') {
+          const hasRedisLiveStatsSnapshot =
+            liveStats.fileCount !== "0" ||
+            liveStats.dirCount !== "0" ||
+            liveStats.totalSize !== "0" ||
+            liveStats.newlyCopiedCount !== "0" ||
+            liveStats.recopiedCount !== "0" ||
+            liveStats.skippedCount !== "0" ||
+            liveStats.deletedCount !== "0";
+
+          if (hasRedisLiveStatsSnapshot) {
             updateData.jobStats = {
               fileCount: liveStats.fileCount,
               directories: liveStats.dirCount,
               totalSize: liveStats.totalSize,
+              newlyCopiedCount: liveStats.newlyCopiedCount,
+              modifiedCount: liveStats.recopiedCount,
+              skippedCount: liveStats.skippedCount,
+              deletedCount: liveStats.deletedCount,
               errors: [],
             };
-            this.logger.log(`Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}`);
+            this.logger.log(
+              `Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}, newlyCopied=${liveStats.newlyCopiedCount}, recopied=${liveStats.recopiedCount}, skipped=${liveStats.skippedCount}, deleted=${liveStats.deletedCount}`,
+            );
           }
         } catch (redisErr: unknown) {
           this.logger.warn(`Could not snapshot Redis stats for job run ${jobRunId}, job_stats will be null: ${redisErr instanceof Error ? redisErr.message : String(redisErr)}`);
@@ -1103,6 +1135,10 @@ export class JobRunService {
     dirCount: string;
     totalMigratedSize: string;
     totalSizeBytes: string;
+    newlyCopiedCount: string;
+    modifiedCount: string;
+    skippedCount: string;
+    deletedCount: string;
     lastUpdated: string | null;
     source: 'redis' | 'database';
   }> {
@@ -1118,14 +1154,29 @@ export class JobRunService {
       const hasValidSnapshot = !!snap && (
         (snap.fileCount != null && snap.fileCount !== '0') ||
         (snap.directories != null && snap.directories !== '0') ||
-        (snap.totalSize != null && snap.totalSize !== '0')
-      );
+        (snap.totalSize != null && snap.totalSize !== '0')||
+        (snap.newlyCopiedCount != null &&
+          snap.newlyCopiedCount !== "" &&
+          snap.newlyCopiedCount !== '0') ||
+        (snap.modifiedCount != null &&
+          snap.modifiedCount !== "" &&
+          snap.modifiedCount !== '0') ||
+        (snap.skippedCount != null &&
+          snap.skippedCount !== "" &&
+          snap.skippedCount !== '0') ||
+        (snap.deletedCount != null &&
+          snap.deletedCount !== "" &&
+          snap.deletedCount !== '0'));
       if (hasValidSnapshot) {
         return {
           fileCount: snap.fileCount,
           dirCount: snap.directories,
           totalMigratedSize: formatBytes(Number(snap.totalSize || '0')),
           totalSizeBytes: snap.totalSize,
+          newlyCopiedCount: snap.newlyCopiedCount,
+          modifiedCount: snap.modifiedCount,
+          skippedCount: snap.skippedCount,
+          deletedCount: snap.deletedCount,
           lastUpdated: null,
           source: 'database',
         };
@@ -1137,6 +1188,10 @@ export class JobRunService {
         dirCount: dbStats.directories,
         totalMigratedSize: formatBytes(Number(dbStats.totalSize || '0')),
         totalSizeBytes: dbStats.totalSize,
+        newlyCopiedCount: dbStats.newlyCopiedCount,
+        modifiedCount: dbStats.modifiedCount,
+        skippedCount: dbStats.skippedCount,
+        deletedCount: dbStats.deletedCount,
         lastUpdated: dbStats.lastRefreshed ? String(dbStats.lastRefreshed) : null,
         source: 'database',
       };
@@ -1148,6 +1203,10 @@ export class JobRunService {
       dirCount: live.dirCount,
       totalMigratedSize: formatBytes(Number(live.totalSize)),
       totalSizeBytes: live.totalSize,
+      newlyCopiedCount: live.newlyCopiedCount,
+      modifiedCount: live.recopiedCount,
+      skippedCount: live.skippedCount,
+      deletedCount: live.deletedCount,
       lastUpdated: live.lastUpdated,
       source: 'redis',
     };
@@ -1166,13 +1225,29 @@ export class JobRunService {
     const hasValidSnapshot = !!snap && (
       (snap.fileCount != null && snap.fileCount !== '0') ||
       (snap.directories != null && snap.directories !== '0') ||
-      (snap.totalSize != null && snap.totalSize !== '0')
-    );
+      (snap.totalSize != null && snap.totalSize !== '0') ||
+      (snap.newlyCopiedCount != null &&
+        snap.newlyCopiedCount !== "" &&
+        snap.newlyCopiedCount !== "0") ||
+      (snap.modifiedCount != null &&
+        snap.modifiedCount !== "" &&
+        snap.modifiedCount !== "0") ||
+      (snap.skippedCount != null &&
+        snap.skippedCount !== "" &&
+        snap.skippedCount !== "0") ||
+      (snap.deletedCount != null &&
+        snap.deletedCount !== "" &&
+        snap.deletedCount !== "0"));
     if (hasValidSnapshot) {
       return {
         fileCount: snap.fileCount,
         directories: snap.directories,
         totalSize: snap.totalSize,
+        newlyCopiedCount: snap.newlyCopiedCount,
+        modifiedCount: snap.modifiedCount,
+        skippedCount: snap.skippedCount,
+        deletedCount: snap.deletedCount,
+        excludedCount: snap.excludedCount,
         lastRefreshed: jobRun.endTime,
         errors: await this.getErrorCounts(jobRunId),
       };
@@ -1185,18 +1260,227 @@ export class JobRunService {
       `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
     );
 
-    const jobRunStatus = {
-      fileCount: jobStatsSummary?.fileCount || "0",
-      directories: jobStatsSummary?.directoryCount || "0",
-      totalSize: jobStatsSummary?.totalSize || "0",
-    lastRefreshed: jobStatsSummary?.lastRefreshed || null,
+    const errors = await this.getErrorCounts(jobRunId);
+    const toCount = (v: unknown): string =>
+      v === null || v === undefined || v === "" ? "0" : String(v);
+    const jobRunStatus: JobRunStats = {
+      fileCount: toCount(jobStatsSummary?.fileCount),
+      directories: toCount(jobStatsSummary?.directoryCount),
+      totalSize: toCount(jobStatsSummary?.totalSize),
+      lastRefreshed: jobStatsSummary?.lastRefreshed ?? null,
+      errors,
+    };
+    if (jobStatsSummary?.deletedCount != null) jobRunStatus.deletedCount = String(jobStatsSummary.deletedCount);
+    if (jobStatsSummary?.excludedCount != null) jobRunStatus.excludedCount = String(jobStatsSummary.excludedCount);
+    if (jobStatsSummary?.skippedCount != null) jobRunStatus.skippedCount = String(jobStatsSummary.skippedCount);
+    if (jobStatsSummary?.newlyCopiedCount != null) jobRunStatus.newlyCopiedCount = String(jobStatsSummary.newlyCopiedCount);
+    if (jobStatsSummary?.recopiedCount != null) jobRunStatus.modifiedCount = String(jobStatsSummary.recopiedCount);
+    return jobRunStatus;
+  }
+
+  /**
+   * Calculates latest counters directly from inventory table so terminal job stats
+   * are immediately accurate, independent of materialized view refresh cadence.
+   */
+  private async calculateInventoryStatsFromBaseTable(jobRunId: string): Promise<{
+    fileCount: string;
+    directories: string;
+    totalSize: string;
+    deletedCount: string;
+    excludedCount: string;
+    skippedCount: string;
+    newlyCopiedCount: string;
+    modifiedCount: string;
+  }> {
+    const dbSchema = process.env.SCHEMA || "datamigrator";
+    const queryResult = await this.dataSource.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND NOT is_directory AND NOT COALESCE(is_deleted, false)) AS file_count,
+         COUNT(*) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND is_directory AND NOT COALESCE(is_deleted, false)) AS directory_count,
+         COALESCE(SUM(file_size) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND NOT is_directory AND NOT COALESCE(is_deleted, false)), 0) AS total_size,
+         COUNT(*) FILTER (WHERE COALESCE(is_deleted, false) AND NOT COALESCE(is_directory, false)) AS deleted_count,
+         COUNT(*) FILTER (WHERE entry_type = 'excluded') AS excluded_count,
+         COUNT(*) FILTER (WHERE entry_type = 'skipped') AS skipped_count,
+         COUNT(*) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND update_type = 'new' AND NOT is_directory AND NOT COALESCE(is_deleted, false)) AS newly_copied_count,
+         COUNT(*) FILTER (
+           WHERE (entry_type IS NULL OR entry_type = 'inventory')
+             AND update_type IN ('content_updated', 'metadata_updated')
+             AND NOT is_directory
+             AND NOT COALESCE(is_deleted, false)
+         ) AS recopied_count
+       FROM ${dbSchema}.inventory
+       WHERE job_run_id = $1`,
+      [jobRunId],
+    );
+    const row = Array.isArray(queryResult) ? queryResult[0] : undefined;
+
+    return {
+      fileCount: String(row?.file_count ?? 0),
+      directories: String(row?.directory_count ?? 0),
+      totalSize: String(row?.total_size ?? 0),
+      deletedCount: String(row?.deleted_count ?? 0),
+      excludedCount: String(row?.excluded_count ?? 0),
+      skippedCount: String(row?.skipped_count ?? 0),
+      newlyCopiedCount: String(row?.newly_copied_count ?? 0),
+      modifiedCount: String(row?.recopied_count ?? 0),
+    };
+  }
+
+  async addExcludedSkippedEntries(
+    jobRunId: string,
+    excluded: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>,
+    skipped: Array<{ path: string; isDirectory?: boolean }>,
+  ): Promise<{ added: number }> {
+    const jobRun = await this.jobRunRepo.findOne({ where: { id: jobRunId }, select: { id: true } });
+    if (!jobRun) throw new NotFoundException(`Job run ${jobRunId} not found`);
+
+    const schema = process.env.SCHEMA || "datamigrator";
+    const now = new Date();
+    const rowsByKey = new Map<string, {
+      job_run_id: string;
+      path: string;
+      is_directory: boolean;
+      entry_type: string;
+      parent_path: string;
+      depth: number;
+      file_name: string;
+      uid: string;
+      gid: string;
+      file_size: number;
+      file_type: string;
+      modified_time: Date;
+      access_time: Date;
+      file_permission: string;
+    }>();
+
+    const toRow = (
+      p: string,
+      isDir: boolean,
+      entryType: "excluded" | "skipped",
+    ) => {
+      const normalizedPath = p.replace(/\\/g, "/");
+      const segments = normalizedPath.split("/").filter(Boolean);
+      const depth = Math.max(0, segments.length - 1);
+      const parentPath = path.dirname(normalizedPath) || (normalizedPath.startsWith("/") ? "/" : ".");
+      const fileName = path.basename(normalizedPath) || normalizedPath || ".";
+      return {
+        job_run_id: jobRunId,
+        path: normalizedPath,
+        is_directory: isDir,
+        entry_type: entryType,
+        parent_path: parentPath,
+        depth,
+        file_name: fileName,
+        uid: "",
+        gid: "",
+        file_size: 0,
+        file_type: isDir ? "directory" : "file",
+        modified_time: now,
+        access_time: now,
+        file_permission: "",
+      };
     };
 
-    const response = {
-      ...jobRunStatus,
-      errors: await this.getErrorCounts(jobRunId),
-    };
-    return response;
+    for (const e of excluded) {
+      const row = toRow(e.path, e.isDirectory ?? false, "excluded");
+      rowsByKey.set(`${row.path}|${row.is_directory}`, row);
+    }
+    for (const s of skipped) {
+      const row = toRow(s.path, s.isDirectory ?? false, "skipped");
+      // Keep skipped as final state if path appears in both lists.
+      rowsByKey.set(`${row.path}|${row.is_directory}`, row);
+    }
+    const rows = Array.from(rowsByKey.values());
+
+    if (rows.length === 0) return { added: 0 };
+
+    const skippedRows = rows.filter((r) => r.entry_type === "skipped");
+    const skippedRedisDelta = await this.countSkippedRedisDelta(
+      jobRunId,
+      skippedRows.map((r) => ({ path: r.path, is_directory: r.is_directory })),
+      schema,
+    );
+
+    const colsPerRow = 14;
+    const values = rows
+      .map(
+        (_, i) =>
+          `($${i * colsPerRow + 1}::uuid, $${i * colsPerRow + 2}, $${i * colsPerRow + 3}::boolean, $${i * colsPerRow + 4}, $${i * colsPerRow + 5}, $${i * colsPerRow + 6}, $${i * colsPerRow + 7}, $${i * colsPerRow + 8}, $${i * colsPerRow + 9}, $${i * colsPerRow + 10}::bigint, $${i * colsPerRow + 11}, $${i * colsPerRow + 12}::timestamp, $${i * colsPerRow + 13}::timestamp, $${i * colsPerRow + 14})`,
+      )
+      .join(", ");
+    const params = rows.flatMap((r) => [
+      r.job_run_id,
+      r.path,
+      r.is_directory,
+      r.entry_type,
+      r.parent_path,
+      r.depth,
+      r.file_name,
+      r.uid,
+      r.gid,
+      r.file_size,
+      r.file_type,
+      r.modified_time,
+      r.access_time,
+      r.file_permission,
+    ]);
+
+    await this.dataSource.query(
+      `INSERT INTO ${schema}.inventory (job_run_id, path, is_directory, entry_type, parent_path, depth, file_name, uid, gid, file_size, file_type, modified_time, access_time, file_permission)
+       VALUES ${values}
+       ON CONFLICT (path, job_run_id, is_directory) DO UPDATE SET
+         entry_type = EXCLUDED.entry_type,
+         parent_path = EXCLUDED.parent_path,
+         depth = EXCLUDED.depth,
+         file_name = EXCLUDED.file_name,
+         file_type = EXCLUDED.file_type,
+         modified_time = EXCLUDED.modified_time,
+         access_time = EXCLUDED.access_time`,
+      params,
+    );
+    this.logger.log(`Added ${rows.length} excluded/skipped entries for job run ${jobRunId}`);
+    if (skippedRedisDelta > 0) {
+      await this.redisService.incrementLiveSkippedCount(jobRunId, skippedRedisDelta);
+    }
+    return { added: rows.length };
+  }
+
+  private async countSkippedRedisDelta(
+    jobRunId: string,
+    skippedPaths: Array<{ path: string; is_directory: boolean }>,
+    schema: string,
+  ): Promise<number> {
+    if (skippedPaths.length === 0) {
+      return 0;
+    }
+    const pathArr = skippedPaths.map((p) => p.path);
+    const isDirArr = skippedPaths.map((p) => p.is_directory);
+    const existing = await this.dataSource.query(
+      `SELECT i.path, i.is_directory, i.entry_type
+       FROM ${schema}.inventory i
+       JOIN unnest($2::text[], $3::boolean[]) AS inp(path, is_directory)
+         ON i.path = inp.path
+        AND i.is_directory = inp.is_directory
+       WHERE i.job_run_id = $1`,
+      [jobRunId, pathArr, isDirArr],
+    );
+    const priorByKey = new Map<string, string | null>();
+    for (const r of existing as Array<{
+      path: string;
+      is_directory: boolean;
+      entry_type: string | null;
+    }>) {
+      priorByKey.set(`${r.path}|${r.is_directory}`, r.entry_type);
+    }
+    let delta = 0;
+    for (const s of skippedPaths) {
+      const k = `${s.path}|${s.is_directory}`;
+      const et = priorByKey.get(k);
+      if (String(et ?? "").toLowerCase() !== "skipped") {
+        delta++;
+      }
+    }
+    return delta;
   }
 
   async sendErrorRemedyEmail({
@@ -1469,4 +1753,5 @@ export class JobRunService {
       );
     }
   }
+
 }

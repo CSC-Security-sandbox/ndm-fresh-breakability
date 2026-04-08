@@ -409,6 +409,11 @@ export type JobStatsType = {
   fileCount: string;
   totalSize: string;
   directories: string;
+  deletedCount?: string;
+  excludedCount?: string;
+  skippedCount?: string;
+  newlyCopiedCount?: string;
+  modifiedCount?: string;
 };
 
 export interface JobRunDetailsApiType {
@@ -557,6 +562,7 @@ export type JobInfoReverseCardPropType = {
   label: string;
   value: string | number | ReactNode;
   valueType?: string;
+  labelTooltip?: string;
 };
 
 export type JobInfoCardPropType = {

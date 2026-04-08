@@ -16,11 +16,13 @@ interface MigrationWorkflowInput {
 }
 interface MigrationWorkflowOutput {
   traceId: string;
-  setupCompletedWorkers:string[];
-  failedWorkers:string[];
-  fileCount : number;
-  dirCount : number;
-  status: JobRunStatus
+  setupCompletedWorkers: string[];
+  failedWorkers: string[];
+  fileCount: number;
+  dirCount: number;
+  status: JobRunStatus;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 
@@ -48,14 +50,18 @@ export const MigrationWorkflow = async ({
     await waitUntilRedisMemoryOk(traceId);
 
     // start core scan workflow
-    const migrationWorkflowExecResult = await executeMigrationChildWorkflows({jobRunId: traceId})
+    const migrationWorkflowExecResult = await executeMigrationChildWorkflows({ jobRunId: traceId });
     output.fileCount = migrationWorkflowExecResult.fileCount;
     output.dirCount = migrationWorkflowExecResult.dirCount;
     output.status = migrationWorkflowExecResult.status;
-
+    output.excludedPaths = migrationWorkflowExecResult.excludedPaths ?? [];
+    output.skippedPaths = migrationWorkflowExecResult.skippedPaths ?? [];
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status);
+    await handleReporting(traceId, output.status, {
+      excludedPaths: output.excludedPaths,
+      skippedPaths: output.skippedPaths,
+    });
 
     // Cleanup
     await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });

@@ -85,5 +85,13 @@ export class InventoryEntity extends Base {
 
     @ManyToOne(() => VolumeEntity, volume => volume.inventory, { onDelete:'CASCADE', orphanedRowAction : 'delete'})
     @JoinColumn({ name: 'volume_id'})
-    volume:VolumeEntity
+    volume:VolumeEntity;
+
+    @ApiProperty({ description: 'Entry type: null or inventory = normal row; excluded = excluded path; skipped = skipped path', nullable: true })
+    @Column({ name: 'entry_type', type: 'text', nullable: true })
+    entryType: string | null;
+
+    @ApiProperty({ description: 'Copy reason: new = newly copied, content_updated = recopied, metadata_updated = metadata only', nullable: true })
+    @Column({ name: 'update_type', type: 'text', nullable: true })
+    updateType: string | null;
 }

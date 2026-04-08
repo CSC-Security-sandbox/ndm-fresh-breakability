@@ -95,6 +95,8 @@ export class MigrateScanService {
         output.fileCount = processResult.fileCount;
         output.dirCount = processResult.dirCount;
         output.subDirs = processResult.subDirs;
+        output.excludedPaths = processResult.excludedPaths ?? [];
+        output.skippedPaths = processResult.skippedPaths ?? [];
         commands = processResult.commands;
         
         if (jobContext?.jobConfig?.skipDelete === false) {

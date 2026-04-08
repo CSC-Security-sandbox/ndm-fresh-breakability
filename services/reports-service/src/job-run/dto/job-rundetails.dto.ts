@@ -107,16 +107,45 @@ export class TaskDto {
 
 export class JobRunStats {
   @ApiProperty()
+  @IsOptional()
   @IsNumber()
   fileCount?: string = "0";
 
   @ApiProperty()
+  @IsOptional()
   @IsString()
   totalSize?: string = "0";
 
   @ApiProperty()
+  @IsOptional()
   @IsString()
   directories?: string = "0";
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  deletedCount?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  excludedCount?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  skippedCount?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  newlyCopiedCount?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  modifiedCount?: string;
+
 }
 
 export class JobReportResponseDto {

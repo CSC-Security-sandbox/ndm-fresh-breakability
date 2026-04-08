@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, CommandStatus, ErrorType, FileInfo, JobManagerContext, OP
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, getExcludeOrSkipReason } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists } from "../utils/utils";
@@ -111,6 +111,8 @@ export interface ProcessItemsResult {
   dirCount: number;
   totalSize: number;
   subDirs: string[];
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 @Injectable()
@@ -153,7 +155,9 @@ export class CommandGenerationService {
       fileCount: 0,
       dirCount: 0,
       totalSize: 0,
-      subDirs: []
+      subDirs: [],
+      excludedPaths: [],
+      skippedPaths: [],
     };
 
     const isSMB = process.platform === 'win32';
@@ -205,8 +209,8 @@ export class CommandGenerationService {
         const sourceStat = await fs.promises.lstat(sourceContentPath);
         const relativeSourcePath = itemData.fPath || removePrefix(sourceContentPath, sourcePrefix);
 
-        // Check exclude/skip patterns
-        if (shouldExcludeOrSkip({
+        // Check exclude/skip patterns and record path for reporting
+        const excludeOrSkipReason = getExcludeOrSkipReason({
           fullPath: sourceContentPath,
           stats: sourceStat,
           excludePatterns: settings.excludePatterns,
@@ -214,9 +218,14 @@ export class CommandGenerationService {
           olderThan: jobContext.jobConfig.options?.excludeOlderThan
             ? new Date(jobContext.jobConfig.options.excludeOlderThan)
             : undefined,
-          jobType: jobContext.jobConfig.jobType
-        })) {
-          // For retry items, resolve the original error since the file is now intentionally excluded
+          jobType: jobContext.jobConfig.jobType,
+        });
+        if (excludeOrSkipReason !== null) {
+          if (excludeOrSkipReason === 'excluded') {
+            result.excludedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
+          } else if (excludeOrSkipReason === 'skipped') {
+            result.skippedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
+          }
           if (itemData.originalCommandId) {
             const resolvedCommand: Cmd = this.buildResolvedCommand(relativePath, sourceStat.isDirectory(), itemData.originalCommandId);
             result.commands.push(resolvedCommand);
@@ -454,6 +463,7 @@ export class CommandGenerationService {
       isSymLink: sFile.isSymbolicLink()
     };
 
+    const targetExisted = !!dFile;
     if (isContentUpdate(sFile, dFile)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
@@ -462,7 +472,7 @@ export class CommandGenerationService {
         CommandStatus.READY,
         isDirectory,
         {
-          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.READY, params: {} },
+          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.READY, params: { targetExisted } },
           [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
         },
         metadata,
@@ -478,7 +488,7 @@ export class CommandGenerationService {
         CommandStatus.READY,
         isDirectory,
         {
-          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: {} },
+          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: { targetExisted } },
           [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
         },
         metadata,

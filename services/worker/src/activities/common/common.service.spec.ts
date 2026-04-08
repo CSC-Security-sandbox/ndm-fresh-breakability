@@ -477,6 +477,63 @@ describe('CommonActivityService', () => {
     });
   });
 
+  describe('addExcludedSkippedEntries', () => {
+    it('should return added=0 when excluded and skipped are empty', async () => {
+      const result = await service.addExcludedSkippedEntries(jobRunId, [], []);
+
+      expect(result).toEqual({ added: 0 });
+      expect(authService.getAccessToken).not.toHaveBeenCalled();
+      expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    it('should post payload and return response data when entries are provided', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: { added: 3 } });
+
+      const excluded = [{ path: '/a', isDirectory: false, matchedPattern: '*.tmp' }];
+      const skipped = [{ path: '/b', isDirectory: true }];
+      const result = await service.addExcludedSkippedEntries(jobRunId, excluded, skipped);
+
+      expect(axios.post).toHaveBeenCalledWith(
+        `http://job/api/v1/job-run/${jobRunId}/inventory-entries`,
+        { excluded, skipped },
+        { headers: { Authorization: 'Bearer token', projectId: undefined } },
+      );
+      expect(result).toEqual({ added: 3 });
+    });
+
+    it('should return default added=0 when API responds with no data', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: undefined });
+
+      const result = await service.addExcludedSkippedEntries(jobRunId, [{ path: '/x' }], []);
+      expect(result).toEqual({ added: 0 });
+    });
+
+    it('should throw when access token is missing', async () => {
+      (authService.getAccessToken as jest.Mock).mockResolvedValueOnce('');
+
+      await expect(
+        service.addExcludedSkippedEntries(jobRunId, [{ path: '/x' }], []),
+      ).rejects.toThrow(`Error while adding excluded/skipped entries for job id: ${jobRunId}: Failed to get access token`);
+    });
+
+    it('should include HTTP status and response message in thrown error', async () => {
+      (axios.post as jest.Mock).mockRejectedValueOnce({
+        message: 'Request failed',
+        response: {
+          status: 400,
+          data: { message: 'Bad payload' },
+        },
+      });
+
+      await expect(
+        service.addExcludedSkippedEntries(jobRunId, [{ path: '/x' }], []),
+      ).rejects.toThrow(
+        `Error while adding excluded/skipped entries for job id: ${jobRunId}: Request failed (HTTP 400) - Bad payload`,
+      );
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+
   describe('Configuration scenarios', () => {
     it('should handle missing config values gracefully', async () => {
       // Test with a service that has missing config values

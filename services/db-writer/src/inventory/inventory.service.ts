@@ -113,7 +113,15 @@ export class InventoryService {
       checksumTime: (file as any)?.checksumTime ?? null,
       copyContentStatus: (file as any)?.copyContentStatus ?? null,
       stampMetaDataStatus: (file as any)?.stampMetaDataStatus ?? null,
+      entryType: this.normalizeEntryType((file as any)?.entryType),
+      updateType: (file as any)?.updateType ?? null,
     };
+  }
+
+  /** entry_type: 'excluded' | 'skipped' from payload, otherwise 'inventory'. */
+  private normalizeEntryType(entryType: string | null | undefined): string {
+    if (entryType === 'excluded' || entryType === 'skipped') return entryType;
+    return 'inventory';
   }
 
   async saveSpeedLogsEntries(data: any) {
@@ -130,16 +138,20 @@ export class InventoryService {
     }
   }
 
-  async getExistingInventoryKeys(
+  async getInventoryEntryTypesForPaths(
     jobRunId: string,
     paths: Array<{ path: string; isDirectory: boolean }>,
-  ): Promise<Set<string>> {
-    if (!paths?.length) return new Set();
-    const schema = this.schema;
+    schemaOverride?: string,
+  ): Promise<Map<string, string | null>> {
+    const result = new Map<string, string | null>();
+    if (!paths?.length) return result;
+    const schema =
+      schemaOverride ??
+      this.validateAndQuoteSchema(process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA);
     const pathArr = paths.map((p) => p.path);
     const isDirArr = paths.map((p) => p.isDirectory);
     const rows = await this.dataSource.query(
-      `SELECT i.path, i.is_directory
+      `SELECT i.path, i.is_directory, i.entry_type
        FROM ${schema}.inventory i
        JOIN unnest($2::text[], $3::boolean[]) AS inp(path, is_directory)
          ON i.path = inp.path
@@ -147,7 +159,11 @@ export class InventoryService {
        WHERE i.job_run_id = $1`,
       [jobRunId, pathArr, isDirArr],
     );
-    return new Set(rows.map((r: { path: string; is_directory: boolean }) => `${r.path}|${jobRunId}|${r.is_directory}`));
+    for (const r of rows as Array<{ path: string; is_directory: boolean; entry_type: string | null }>) {
+      const k = `${r.path}|${jobRunId}|${r.is_directory}`;
+      result.set(k, r.entry_type ?? null);
+    }
+    return result;
   }
 
   async computeInventoryDelta(
@@ -218,21 +234,37 @@ export class InventoryService {
 
     const batchSize = 500; // Adjust batch size as needed
     const failedRecords: ItemInfo[] = [];
+    /** Keys written in this call so later batches see them as existing (content_updated). */
+    const writtenInThisCall = new Set<string>();
+
+    const schema = this.validateAndQuoteSchema(process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA);
 
     for (let i = 0; i < regularItems.length; i += batchSize) {
       const batch = regularItems.slice(i, i + batchSize);
       try {
-        const mappedData = Object.values(
-          batch
-            .map(item => this.mapSourceToTarget(item, jobRunId, pathId))
-            .reduce((acc, curr) => {
-              const key = `${curr.path}|${curr.jobRunId}|${curr.isDirectory}`;
-              acc[key] = curr;
-              return acc;
-            }, {} as Record<string, any>)
-        );
-        
+        const mapped = batch
+          .map(item => this.mapSourceToTarget(item, jobRunId, pathId))
+          .reduce((acc, curr) => {
+            const key = `${curr.path}|${curr.jobRunId}|${curr.isDirectory}`;
+            acc[key] = curr;
+            return acc;
+          }, {} as Record<string, any>);
+
+        const paths = Object.values(mapped) as Array<{ path: string; isDirectory: boolean }>;
+        const entryTypesByKey = await this.getInventoryEntryTypesForPaths(jobRunId, paths, schema);
+        const existingInDb = new Set(entryTypesByKey.keys());
+        writtenInThisCall.forEach(k => existingInDb.add(k));
+
+        const mappedData = Object.values(mapped).map((row: any) => {
+          const key = `${row.path}|${row.jobRunId}|${row.isDirectory}`;
+          if (row.entryType !== 'excluded' && row.entryType !== 'skipped' && row.updateType == null) {
+            row.updateType = existingInDb.has(key) ? 'content_updated' : 'new';
+          }
+          return row;
+        });
+
         await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
+        mappedData.forEach((row: any) => writtenInThisCall.add(`${row.path}|${row.jobRunId}|${row.isDirectory}`));
       } catch (err) {
         this.logger.error(`Failed to save inventory batch: ${err.message}`, err?.stack || err);
         failedRecords.push(...batch);

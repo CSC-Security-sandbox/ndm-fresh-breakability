@@ -816,6 +816,237 @@ describe("JobRunService", () => {
         expect(error.options.cause).toEqual(mockCircularDependency);
       }
     });
+
+    it("should throw BadRequestException with grouped conflict types for multiple migration conflicts", async () => {
+      const mockJobConfigId = "job-config-id";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      const mockConflicts = [
+        { conflictType: "circular" },
+        { conflictType: "path_overlap" },
+      ];
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue(mockConflicts);
+
+      await expect(service.addHocRun(mockJobConfigId)).rejects.toThrow(
+        new BadRequestException(
+          `Migration conflicts detected (circular, path_overlap) for job config ${mockJobConfigId}`
+        )
+      );
+    });
+
+    it("should create retry run when jobRunId is provided and validation passes", async () => {
+      const mockJobConfigId = "job-config-id";
+      const projectId = "project-1";
+      const jobRunId = "run-1";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue([]);
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: jobRunId } as any);
+      const latestRunQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: jobRunId,
+          jobConfig: { jobType: JobType.MIGRATE },
+        }),
+      };
+      jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue(latestRunQb);
+
+      const errorCountQb: any = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(3),
+      };
+      jest
+        .spyOn(operationErrorRepo, "createQueryBuilder")
+        .mockReturnValue(errorCountQb);
+
+      jest
+        .spyOn(jobRunInitService, "createJobRun")
+        .mockResolvedValue("retry run created" as any);
+
+      const result = await service.addHocRun(mockJobConfigId, projectId, jobRunId);
+
+      expect(result).toBe("retry run created");
+      expect(jobRunRepo.findOne).toHaveBeenCalledWith({
+        where: { id: jobRunId, jobConfigId: mockJobConfigId },
+      });
+      expect(jobRunInitService.createJobRun).toHaveBeenCalledWith(
+        mockJobConfigId,
+        expect.any(Date),
+        projectId,
+        jobRunId
+      );
+    });
+
+    it("should throw NotFoundException when retry job run does not exist for job config", async () => {
+      const mockJobConfigId = "job-config-id";
+      const jobRunId = "run-404";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue([]);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
+
+      await expect(service.addHocRun(mockJobConfigId, undefined, jobRunId)).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("should throw BadRequestException when provided retry job run is not latest", async () => {
+      const mockJobConfigId = "job-config-id";
+      const jobRunId = "run-old";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue([]);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: jobRunId } as any);
+
+      const latestRunQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: "run-latest",
+          jobConfig: { jobType: JobType.MIGRATE },
+        }),
+      };
+      jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue(latestRunQb);
+
+      await expect(service.addHocRun(mockJobConfigId, undefined, jobRunId)).rejects.toThrow(
+        BadRequestException
+      );
+    });
+
+    it("should throw BadRequestException when retry run job type is not supported", async () => {
+      const mockJobConfigId = "job-config-id";
+      const jobRunId = "run-1";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue([]);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: jobRunId } as any);
+
+      const latestRunQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: jobRunId,
+          jobConfig: { jobType: JobType.DISCOVER },
+        }),
+      };
+      jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue(latestRunQb);
+
+      await expect(service.addHocRun(mockJobConfigId, undefined, jobRunId)).rejects.toThrow(
+        BadRequestException
+      );
+    });
+
+    it("should throw BadRequestException when there are no failed operations for retry", async () => {
+      const mockJobConfigId = "job-config-id";
+      const jobRunId = "run-1";
+      const mockJobConfig = {
+        id: mockJobConfigId,
+        scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+        status: JobStatus.Active,
+        jobType: JobType.MIGRATE,
+        sourcePathId: "source-path-id",
+        targetPathId: "target-path-id",
+        sourceDirectoryPath: "/src",
+        targetDirectoryPath: "/dst",
+      };
+
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
+      const conflictServiceMock = module.get(MigrationConflictService) as any;
+      conflictServiceMock.checkMigrationConflicts.mockResolvedValue([]);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue({ id: jobRunId } as any);
+
+      const latestRunQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: jobRunId,
+          jobConfig: { jobType: JobType.MIGRATE },
+        }),
+      };
+      jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue(latestRunQb);
+
+      const errorCountQb: any = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      jest
+        .spyOn(operationErrorRepo, "createQueryBuilder")
+        .mockReturnValue(errorCountQb);
+
+      await expect(service.addHocRun(mockJobConfigId, undefined, jobRunId)).rejects.toThrow(
+        BadRequestException
+      );
+    });
   });
 
   describe("scheduleAJob", () => {
@@ -2888,11 +3119,7 @@ describe("JobRunService", () => {
         startTime: true,
         status: true,
         subStatus: true,
-        jobStats: {
-          fileCount: true,
-          directories: true,
-          totalSize: true,
-        },
+        jobStats: true,
         tasks: {
           createdAt: true,
           id: true,
@@ -2911,6 +3138,70 @@ describe("JobRunService", () => {
 
 
   describe("updateJobRunStatus", () => {
+    it("should persist fresh terminal counters in jobStats for completed runs", async () => {
+      const jobRunId = "job-1";
+      const status = JobRunStatus.Completed;
+      const jobRunDetails = { id: jobRunId, jobConfigId: "cfg-1" };
+      const jobConfigDetails = {
+        id: "cfg-1",
+        futureScheduleAt: null,
+        jobType: JobType.MIGRATE,
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(jobRunDetails as any);
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(jobConfigDetails as any);
+      jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined as any);
+      jest.spyOn(errorRemedyService, "getDistinctErrorCodes").mockResolvedValue([] as any);
+      jest.spyOn(service, "calculateJobRunStats").mockResolvedValue({
+        fileCount: "10",
+        directories: "2",
+        totalSize: "1024",
+        errors: [],
+      } as any);
+      jest.spyOn(dataSource, "query").mockResolvedValueOnce([
+        {
+          file_count: "4",
+          directory_count: "1",
+          total_size: "2048",
+          deleted_count: "3",
+          excluded_count: "5",
+          skipped_count: "6",
+          excluded_file_count: "2",
+          skipped_file_count: "1",
+          newly_copied_count: "7",
+          recopied_count: "8",
+        },
+      ] as any);
+
+      const updateSpy = jest.fn().mockResolvedValue(undefined);
+      jest.spyOn(dataSource, "transaction").mockImplementation(async (cb: any) => {
+        const manager = {
+          update: updateSpy,
+          findOne: jest.fn().mockResolvedValue({}),
+          query: jest.fn().mockResolvedValue(undefined),
+        };
+        await cb(manager);
+      });
+
+      await service.updateJobRunStatus(jobRunId, status);
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        JobRunEntity,
+        { id: jobRunId },
+        expect.objectContaining({
+          status: JobRunStatus.Completed,
+          endTime: expect.any(Date),
+          jobStats: expect.objectContaining({
+            newlyCopiedCount: "7",
+            modifiedCount: "8",
+            deletedCount: "3",
+            excludedCount: "5",
+            skippedCount: "6",
+          }),
+        }),
+      );
+    });
+
     it("should update the job run status and job config scheduler when status is not running", async () => {
       const jobRunId = "1";
       const status = JobRunStatus.Completed;
@@ -4591,6 +4882,13 @@ describe("JobRunService", () => {
     });
   });
 
+  /**
+   * getJobRunLiveStats:
+   * - Terminal / Paused: use persisted job_stats snapshot when any snapshot field is non-empty;
+    *   missing newlyCopiedCount / modifiedCount / skippedCount / deletedCount remain undefined.
+   * - Else same statuses: fall back to calculateJobRunStats (MV / DB).
+   * - Running: Redis liveStats; modifiedCount maps from recopiedCount.
+   */
   describe("getJobRunLiveStats", () => {
     it("should return snapshot stats from job_stats when job is in terminal status with snapshot data", async () => {
       const jobRunId = "run1";
@@ -4609,6 +4907,10 @@ describe("JobRunService", () => {
         dirCount: "5",
         totalMigratedSize: expect.any(String),
         totalSizeBytes: "1024",
+        newlyCopiedCount: undefined,
+        modifiedCount: undefined,
+        skippedCount: undefined,
+        deletedCount: undefined,
         lastUpdated: null,
         source: "database",
       });
@@ -4632,10 +4934,48 @@ describe("JobRunService", () => {
         dirCount: "10",
         totalMigratedSize: expect.any(String),
         totalSizeBytes: "8192",
+        newlyCopiedCount: undefined,
+        modifiedCount: undefined,
+        skippedCount: undefined,
+        deletedCount: undefined,
         lastUpdated: null,
         source: "database",
       });
       expect(redisService.getLiveStats).not.toHaveBeenCalled();
+    });
+
+    it("should pass through extended snapshot fields from job_stats when present", async () => {
+      const jobRunId = "run-snap-extended";
+      const mockJobRun = {
+        id: jobRunId,
+        status: JobRunStatus.Completed,
+        jobStats: {
+          fileCount: "1",
+          directories: "0",
+          totalSize: "100",
+          newlyCopiedCount: "10",
+          modifiedCount: "2",
+          skippedCount: "3",
+          deletedCount: "1",
+        },
+      };
+
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+
+      const result = await service.getJobRunLiveStats(jobRunId);
+
+      expect(result).toEqual({
+        fileCount: "1",
+        dirCount: "0",
+        totalMigratedSize: expect.any(String),
+        totalSizeBytes: "100",
+        newlyCopiedCount: "10",
+        modifiedCount: "2",
+        skippedCount: "3",
+        deletedCount: "1",
+        lastUpdated: null,
+        source: "database",
+      });
     });
 
     it("should fall back to calculateJobRunStats for a Paused job without job_stats snapshot", async () => {
@@ -4656,6 +4996,10 @@ describe("JobRunService", () => {
       expect(redisService.getLiveStats).not.toHaveBeenCalled();
       expect(result.fileCount).toBe("150");
       expect(result.source).toBe("database");
+      expect(result.newlyCopiedCount).toBeUndefined();
+      expect(result.modifiedCount).toBeUndefined();
+      expect(result.skippedCount).toBeUndefined();
+      expect(result.deletedCount).toBeUndefined();
     });
 
     it("should return snapshot stats when fileCount is 0 but directories is non-zero", async () => {
@@ -4716,6 +5060,10 @@ describe("JobRunService", () => {
         dirCount: "2",
         totalMigratedSize: expect.any(String),
         totalSizeBytes: "256",
+        newlyCopiedCount: undefined,
+        modifiedCount: undefined,
+        skippedCount: undefined,
+        deletedCount: undefined,
         lastUpdated: null,
         source: "database",
       });
@@ -4732,6 +5080,10 @@ describe("JobRunService", () => {
         fileCount: "30",
         dirCount: "3",
         totalSize: "512",
+        newlyCopiedCount: "1",
+        recopiedCount: "2",
+        skippedCount: "3",
+        deletedCount: "4",
         lastUpdated: "2025-06-01T12:00:00Z",
       };
 
@@ -4746,6 +5098,10 @@ describe("JobRunService", () => {
         dirCount: "3",
         totalMigratedSize: expect.any(String),
         totalSizeBytes: "512",
+        newlyCopiedCount: "1",
+        modifiedCount: "2",
+        skippedCount: "3",
+        deletedCount: "4",
         lastUpdated: "2025-06-01T12:00:00Z",
         source: "redis",
       });
@@ -4755,6 +5111,162 @@ describe("JobRunService", () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(null);
 
       await expect(service.getJobRunLiveStats("missing")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("additional branch coverage - pagination and excluded/skipped flows", () => {
+    it("should return paginated failed operations with nextCursor when hasMore is true", async () => {
+      const qb = {
+        innerJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { operationId: "op-1", filePath: "/a" },
+          { operationId: "op-2", filePath: "/b" },
+          { operationId: "op-3", filePath: "/c" },
+        ]),
+      };
+      jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(qb as any);
+
+      const result = await service.getFailedOperations("run-1", null, 2);
+
+      expect(result).toEqual({
+        data: [
+          { id: "op-1", fPath: "/a" },
+          { id: "op-2", fPath: "/b" },
+        ],
+        nextCursor: "/b|undefined",
+      });
+      expect(qb.take).toHaveBeenCalledWith(3);
+    });
+
+    it("should apply cursor filter and return null nextCursor when no extra rows", async () => {
+      const qb = {
+        innerJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { operationId: "op-22", filePath: "/z", operationErrorId: "22" },
+        ]),
+      };
+      jest.spyOn(operationErrorRepo, "createQueryBuilder").mockReturnValue(qb as any);
+
+      const result = await service.getFailedOperations("run-1", "/x|10", 5);
+
+      expect(result).toEqual({
+        data: [{ id: "op-22", fPath: "/z" }],
+        nextCursor: null,
+      });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        "(o.fPath > :cursorPath OR (o.fPath = :cursorPath AND oe.id > :cursorId))",
+        { cursorPath: "/x", cursorId: "10" }
+      );
+    });
+
+    it("should throw NotFoundException in addExcludedSkippedEntries when jobRun is missing", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(null as any);
+
+      await expect(
+        service.addExcludedSkippedEntries("missing", [{ path: "/a" }], [{ path: "/b" }])
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should return added 0 when excluded and skipped are empty", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ id: "run-2" } as any);
+      const querySpy = jest.spyOn(dataSource, "query");
+
+      const result = await service.addExcludedSkippedEntries("run-2", [], []);
+
+      expect(result).toEqual({ added: 0 });
+      expect(querySpy).not.toHaveBeenCalled();
+    });
+
+    it("should upsert rows, prefer skipped for duplicates, and increment skipped count", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ id: "run-3" } as any);
+      jest.spyOn(service as any, "countSkippedRedisDelta").mockResolvedValueOnce(2);
+      jest.spyOn(dataSource, "query").mockResolvedValueOnce([] as any);
+      const incrementSpy = jest.fn().mockResolvedValue(undefined);
+      (redisService as any).incrementLiveSkippedCount = incrementSpy;
+
+      const result = await service.addExcludedSkippedEntries(
+        "run-3",
+        [{ path: "/same", isDirectory: false }, { path: "C:\\temp\\x", isDirectory: false }],
+        [{ path: "/same", isDirectory: false }, { path: "/dir", isDirectory: true }]
+      );
+
+      expect(result).toEqual({ added: 3 });
+      expect(dataSource.query).toHaveBeenCalled();
+      expect(incrementSpy).toHaveBeenCalledWith("run-3", 2);
+    });
+
+    it("should not increment skipped count when skipped delta is 0", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ id: "run-4" } as any);
+      jest.spyOn(service as any, "countSkippedRedisDelta").mockResolvedValueOnce(0);
+      jest.spyOn(dataSource, "query").mockResolvedValueOnce([] as any);
+      const incrementSpy = jest.fn().mockResolvedValue(undefined);
+      (redisService as any).incrementLiveSkippedCount = incrementSpy;
+
+      const result = await service.addExcludedSkippedEntries(
+        "run-4",
+        [{ path: "/excluded-only", isDirectory: false }],
+        []
+      );
+
+      expect(result).toEqual({ added: 1 });
+      expect(incrementSpy).not.toHaveBeenCalled();
+    });
+
+    it("should return 0 delta for empty skipped path list", async () => {
+      const delta = await (service as any).countSkippedRedisDelta("run-5", [], "datamigrator");
+      expect(delta).toBe(0);
+    });
+
+    it("should calculate delta only for paths not previously skipped", async () => {
+      jest.spyOn(dataSource, "query").mockResolvedValueOnce([
+        { path: "/p1", is_directory: false, entry_type: "skipped" },
+        { path: "/p2", is_directory: false, entry_type: "excluded" },
+      ] as any);
+
+      const delta = await (service as any).countSkippedRedisDelta(
+        "run-6",
+        [
+          { path: "/p1", is_directory: false },
+          { path: "/p2", is_directory: false },
+          { path: "/p3", is_directory: true },
+        ],
+        "datamigrator"
+      );
+
+      expect(delta).toBe(2);
+    });
+
+    it("should rethrow error from getWorkerSetupErrors query builder", async () => {
+      const qb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockRejectedValue(new Error("db-fail")),
+      };
+      jest.spyOn(workerJobRunMapRepo, "createQueryBuilder").mockReturnValue(qb as any);
+
+      await expect(service.getWorkerSetupErrors("run-err")).rejects.toThrow("db-fail");
+    });
+
+    it("should throw internal server error when getJobRunIdentityMappings has unexpected error", async () => {
+      jest.spyOn(jobRunRepo, "findOne").mockRejectedValueOnce(new Error("db down"));
+
+      await expect(service.getJobRunIdentityMappings("run-7")).rejects.toThrow(
+        "Failed to fetch identity mappings for job run run-7"
+      );
     });
   });
 });

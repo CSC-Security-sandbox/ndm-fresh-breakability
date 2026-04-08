@@ -119,4 +119,12 @@ export class InventoryEntity {
     @ApiProperty({ description: 'COC report: stamp metadata status (success / failed / not_applicable)', nullable: true })
     @Column({ name: 'stamp_meta_data_status', type: 'text', nullable: true })
     stampMetaDataStatus: string | null;
+
+    @ApiProperty({ description: 'Entry type: null or inventory = normal row; excluded = excluded path; skipped = skipped path', nullable: true })
+    @Column({ name: 'entry_type', type: 'text', nullable: true })
+    entryType: string | null;
+
+    @ApiProperty({ description: 'Copy reason: new = newly copied, content_updated = recopied, metadata_updated = metadata only', nullable: true })
+    @Column({ name: 'update_type', type: 'text', nullable: true })
+    updateType: string | null;
 }

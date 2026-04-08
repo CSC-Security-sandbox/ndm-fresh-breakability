@@ -4,6 +4,8 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { ReportsEntity } from "../entities/reports.entity";
 import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -162,7 +164,10 @@ describe("DiscoveryService", () => {
     });
 
     it("should create directory if it does not exist", async () => {
-      jest.spyOn(fs, "existsSync").mockReturnValueOnce(false);
+      jest
+        .spyOn(fs.promises, "access")
+        .mockRejectedValueOnce(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+      const mkdirSpy = jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
 
       const mockReportData = [
         {
@@ -190,7 +195,7 @@ describe("DiscoveryService", () => {
 
       await service.createReportFile(jobRunId, reportType);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(
+      expect(mkdirSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ recursive: true })
       );
@@ -238,9 +243,9 @@ describe("DiscoveryService", () => {
       const mockZipBuffer = Buffer.from("mock zip content");
 
       jest
-        .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true) // Reports directory exists
-        .mockReturnValueOnce(true); // File exists
+        .spyOn(fs.promises, "access")
+        .mockResolvedValueOnce(undefined) // reports directory
+        .mockResolvedValueOnce(undefined); // report CSV file
 
       jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
 
@@ -249,17 +254,63 @@ describe("DiscoveryService", () => {
       expect(result).toEqual(mockZipBuffer);
     });
 
+    it("should return existing COC zip directly", async () => {
+      const jobRunIds = ["550e8400-e29b-41d4-a716-446655440000"];
+      const reportType = "COC";
+      const mockZipBuffer = Buffer.from("mock zip content");
+      const savedLoc = process.env.REPORT_DOWNLOAD_LOCATION;
+      delete process.env.REPORT_DOWNLOAD_LOCATION;
+
+      const reportsDir = path.resolve(process.cwd(), "reports");
+      const cocZipPath = path.join(
+        reportsDir,
+        "550e8400-e29b-41d4-a716-446655440000-coc-report.zip",
+      );
+
+      try {
+        jest.spyOn(fs.promises, "access").mockImplementation((filepath: fs.PathLike) => {
+          const s = path.resolve(String(filepath));
+          if (s === path.resolve(cocZipPath) || s === path.resolve(reportsDir)) {
+            return Promise.resolve(undefined);
+          }
+          return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+        });
+        const readFileSpy = jest.spyOn(fs.promises, "readFile").mockResolvedValue(mockZipBuffer as any);
+
+        const result = await service.getReportsAsZip(jobRunIds, reportType);
+
+        expect(result).toEqual(mockZipBuffer);
+        expect(readFileSpy).toHaveBeenCalledWith(cocZipPath);
+      } finally {
+        if (savedLoc === undefined) {
+          delete process.env.REPORT_DOWNLOAD_LOCATION;
+        } else {
+          process.env.REPORT_DOWNLOAD_LOCATION = savedLoc;
+        }
+      }
+    });
+
     it("should throw error when no files found", async () => {
       const jobRunIds = ["job123"];
       const reportType = "discovery";
 
       jest
-        .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true) // Reports directory exists
-        .mockReturnValueOnce(false); // File doesn't exist
+        .spyOn(fs.promises, "access")
+        .mockResolvedValueOnce(undefined) // reports directory
+        .mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" })); // CSV missing
 
       await expect(
         service.getReportsAsZip(jobRunIds, reportType)
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should throw error when COC csv bundle files are not found", async () => {
+      jest
+        .spyOn(fs.promises, "access")
+        .mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+
+      await expect(
+        service.getReportsAsZip(["job123"], "COC")
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -272,10 +323,10 @@ describe("DiscoveryService", () => {
       const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
 
       jest
-        .spyOn(fs, "existsSync")
-        .mockReturnValueOnce(true) // Reports directory exists
-        .mockReturnValueOnce(true) // First file exists
-        .mockReturnValueOnce(false); // Second file doesn't exist
+        .spyOn(fs.promises, "access")
+        .mockResolvedValueOnce(undefined) // reports directory
+        .mockResolvedValueOnce(undefined) // first CSV exists
+        .mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" })); // second CSV missing
 
       jest.spyOn(service, "createZipArchive").mockResolvedValue(mockZipBuffer);
 
@@ -293,10 +344,10 @@ describe("DiscoveryService", () => {
       const jobRunIds = ["job123"];
       const reportType = "discovery";
 
-      // Mock reports directory not existing
-      jest.spyOn(fs, "existsSync").mockReturnValueOnce(false);
+      jest
+        .spyOn(fs.promises, "access")
+        .mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
 
-      // Use a more specific matcher to check both the error type and message in one assertion
       await expect(
         service.getReportsAsZip(jobRunIds, reportType)
       ).rejects.toThrowError("Reports directory does not exist: ./reports");
@@ -620,6 +671,89 @@ describe("DiscoveryService", () => {
       expect(typeof token).toBe("string");
       expect(token.length).toBeGreaterThan(0);
     });
+
+    it("should prepare COC download by copying existing COC zip when target zip is missing", async () => {
+      jest
+        .spyOn(service, "getZipFilePath")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-coc-report.zip");
+      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest.spyOn(service as any, "findCocReportZipPath").mockResolvedValue("./reports/source-coc.zip");
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      const copySpy = jest.spyOn(fs.promises, "copyFile").mockResolvedValue(undefined as any);
+
+      const token = await service.prepareDownload(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "COC",
+      );
+
+      expect(token).toBeDefined();
+      expect(copySpy).toHaveBeenCalled();
+    });
+
+    it("should skip copy when discovered COC zip already equals target zip path", async () => {
+      const zipPath = "./reports/550e8400-e29b-41d4-a716-446655440000-coc-report.zip";
+      jest.spyOn(service, "getZipFilePath").mockReturnValue(zipPath);
+      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest.spyOn(service as any, "findCocReportZipPath").mockResolvedValue(zipPath);
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      const copySpy = jest.spyOn(fs.promises, "copyFile").mockResolvedValue(undefined as any);
+
+      const token = await service.prepareDownload(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "COC",
+      );
+
+      expect(token).toBeDefined();
+      expect(copySpy).not.toHaveBeenCalled();
+    });
+
+    it("should generate on-demand COC zip from CSV bundle when no COC zip exists", async () => {
+      jest
+        .spyOn(service, "getZipFilePath")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-coc-report.zip");
+      jest.spyOn(fs.promises, "access").mockRejectedValue(new Error("not found"));
+      jest.spyOn(service as any, "findCocReportZipPath").mockResolvedValue(null);
+      jest.spyOn(service as any, "findCocReportCsvBundlePaths").mockResolvedValue(["./reports/a.csv", "./reports/b.csv"]);
+      const createZipSpy = jest.spyOn(service, "createZipArchive").mockResolvedValue(Buffer.from("zip"));
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      const writeSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined as any);
+
+      const token = await service.prepareDownload(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "COC",
+      );
+
+      expect(token).toBeDefined();
+      expect(createZipSpy).toHaveBeenCalledWith(["./reports/a.csv", "./reports/b.csv"]);
+      expect(writeSpy).toHaveBeenCalled();
+    });
+
+    it("should generate non-COC zip on demand from CSV file", async () => {
+      jest
+        .spyOn(service, "getZipFilePath")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-discovery-report.zip");
+      jest
+        .spyOn(service as any, "resolvePathInsideBase")
+        .mockReturnValue("./reports/550e8400-e29b-41d4-a716-446655440000-discovery-report.csv");
+      jest
+        .spyOn(fs.promises, "access")
+        .mockRejectedValueOnce(new Error("zip not found"))
+        .mockResolvedValueOnce(undefined as any);
+      const zipSpy = jest.spyOn(service, "createZipArchive").mockResolvedValue(Buffer.from("zip"));
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+      const writeSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined as any);
+
+      const token = await service.prepareDownload(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "discovery",
+      );
+
+      expect(token).toBeDefined();
+      expect(zipSpy).toHaveBeenCalledWith([
+        "./reports/550e8400-e29b-41d4-a716-446655440000-discovery-report.csv",
+      ]);
+      expect(writeSpy).toHaveBeenCalled();
+    });
   });
 
   describe("getAndConsumeDownloadToken", () => {
@@ -800,6 +934,40 @@ describe("DiscoveryService", () => {
       closeHandler!();
 
       expect(mockStream.destroy).toHaveBeenCalled();
+    });
+
+    it("should not destroy stream when response closes and stream is already destroyed", async () => {
+      const mockStat = { size: 1024 };
+      let closeHandler: () => void;
+      const mockStream = {
+        on: jest.fn().mockReturnThis(),
+        pipe: jest.fn(),
+        destroyed: true,
+        destroy: jest.fn(),
+      };
+      const mockRes: any = {
+        set: jest.fn(),
+        on: jest.fn((event: string, cb: any) => {
+          if (event === "close") closeHandler = cb;
+        }),
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+
+      jest.spyOn(fs.promises, "stat").mockResolvedValue(mockStat as any);
+      jest.spyOn(fs, "createReadStream").mockReturnValue(mockStream as any);
+
+      (service as any).downloadTokens.set("close-token-2", {
+        filePath: "./reports/test.zip",
+        fileName: "test.zip",
+        expiresAt: Date.now() + 60000,
+      });
+
+      await service.streamZipToResponse("close-token-2", mockRes);
+      closeHandler!();
+
+      expect(mockStream.destroy).not.toHaveBeenCalled();
     });
   });
 

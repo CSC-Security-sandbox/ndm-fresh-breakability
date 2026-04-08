@@ -108,4 +108,12 @@ export class InventoryEntity extends Base {
   @ApiProperty({ description: "Checksum generated timestamp" })
   @Column({ name: "checksum_time", type: "timestamptz", nullable: true })
   checksumTime: Date | null;
+
+  @ApiProperty({ description: "Entry type: null or inventory = normal row; excluded = excluded path; skipped = skipped path" })
+  @Column({ name: "entry_type", type: "text", nullable: true })
+  entryType: string | null;
+
+  @ApiProperty({ description: "Copy reason: new = newly copied, content_updated = recopied, metadata_updated = metadata only" })
+  @Column({ name: "update_type", type: "text", nullable: true })
+  updateType: string | null;
 }

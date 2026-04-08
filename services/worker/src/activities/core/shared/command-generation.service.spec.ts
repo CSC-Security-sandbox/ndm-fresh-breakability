@@ -9,7 +9,7 @@ import { FileType } from 'src/activities/types/tasks';
 
 const mockGetFileInfo = jest.fn();
 const mockRemovePrefix = jest.fn();
-const mockShouldExcludeOrSkip = jest.fn();
+const mockGetExcludeOrSkipReason = jest.fn();
 const mockIsContentUpdate = jest.fn();
 const mockIsMetaUpdated = jest.fn();
 const mockDmError = jest.fn();
@@ -20,7 +20,7 @@ jest.mock('src/activities/utils/utils', () => ({
     isContentUpdate: (...args: unknown[]) => mockIsContentUpdate(...args),
     isMetaUpdated: (...args: unknown[]) => mockIsMetaUpdated(...args),
     removePrefix: (full: string, prefix: string) => mockRemovePrefix(full, prefix),
-    shouldExcludeOrSkip: (params: unknown) => mockShouldExcludeOrSkip(params),
+    getExcludeOrSkipReason: (params: unknown) => mockGetExcludeOrSkipReason(params),
 }));
 
 const mockIsExists = jest.fn();
@@ -83,7 +83,7 @@ describe('CommandGenerationService', () => {
         mockIsExists.mockResolvedValue(true);
         mockGetFileInfo.mockResolvedValue({ path: 'rel/path' });
         mockRemovePrefix.mockImplementation((full: string, prefix: string) => (full.startsWith(prefix) ? full.slice(prefix.length) : full));
-        mockShouldExcludeOrSkip.mockReturnValue(false);
+        mockGetExcludeOrSkipReason.mockReturnValue(null);
         mockIsContentUpdate.mockReturnValue(true);
         mockIsMetaUpdated.mockReturnValue(false);
         mockDmError.mockImplementation((type: string, _origin: unknown, _op: unknown, errorType: string, _id: string, _err: unknown, _file?: unknown) => ({ type, errorType }));
@@ -150,8 +150,8 @@ describe('CommandGenerationService', () => {
             expect(result.commands).toHaveLength(0);
         });
 
-        it('should add resolved command when shouldExcludeOrSkip returns true and item has originalCommandId', async () => {
-            mockShouldExcludeOrSkip.mockReturnValue(true);
+        it('should add resolved command when getExcludeOrSkipReason returns excluded and item has originalCommandId', async () => {
+            mockGetExcludeOrSkipReason.mockReturnValue('excluded');
             (fs.promises.lstat as jest.Mock).mockResolvedValue({
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -172,6 +172,36 @@ describe('CommandGenerationService', () => {
             expect(result.commands).toHaveLength(1);
             expect(result.commands[0].originalCmdId).toBe('orig-1');
             expect(String(result.commands[0].status)).toBe('COMPLETED');
+            expect(result.excludedPaths).toEqual([
+                { path: '/dir/excluded.txt', isDirectory: false },
+            ]);
+        });
+
+        it('should track skippedPaths when getExcludeOrSkipReason returns skipped', async () => {
+            mockGetExcludeOrSkipReason.mockReturnValue('skipped');
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            });
+
+            const result = await service.processItems({
+                ...baseInput,
+                items: [{ name: 'skipped.txt' }],
+            });
+
+            expect(result.commands).toHaveLength(0);
+            expect(result.skippedPaths).toEqual([
+                { path: '/dir/skipped.txt', isDirectory: false },
+            ]);
         });
 
         it('should add directory command when target does not have item', async () => {
@@ -675,6 +705,28 @@ describe('CommandGenerationService', () => {
             } as fs.Stats;
             const result = service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: false });
+        });
+
+        it('should set targetExisted true when target file was provided (content_updated)', () => {
+            mockIsContentUpdate.mockReturnValue(true);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
         });
 
         it('should return command when isMetaUpdated is true and isContentUpdate false', () => {

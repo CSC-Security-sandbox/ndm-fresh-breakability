@@ -79,6 +79,7 @@ export class WorkerOptionsService {
           generateDiscoveryReport: this.commonActivityService.generateDiscoveryReport.bind(this.commonActivityService),
           updateCutOverStatus: this.commonActivityService.updateCutOverStatus.bind(this.commonActivityService),
           generateCOCReport: this.commonActivityService.generateCOCReport.bind(this.commonActivityService),
+          addExcludedSkippedEntries: this.commonActivityService.addExcludedSkippedEntries.bind(this.commonActivityService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {

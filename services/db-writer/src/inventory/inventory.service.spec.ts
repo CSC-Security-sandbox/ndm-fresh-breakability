@@ -49,9 +49,10 @@ describe("InventoryService", () => {
       },
     } as any;
 
-    // Create mocked data source
+    // Create mocked data source (query used by getInventoryEntryTypesForPaths for update_type)
     dataSource = {
       createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+      query: jest.fn().mockResolvedValue([]),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -249,7 +250,9 @@ describe("InventoryService", () => {
             isDeleted: false,
             checksumTime: null,
             copyContentStatus: null,
-            stampMetaDataStatus: null
+            stampMetaDataStatus: null,
+            entryType: 'inventory',
+            updateType: null
         });
     });
 
@@ -295,6 +298,16 @@ describe("InventoryService", () => {
     it('should throw an error if file is null or undefined', () => {
         expect(() => service.mapSourceToTarget(null, jobRunId, pathId)).toThrow('Invalid file object: Cannot map undefined or null file');
         expect(() => service.mapSourceToTarget(undefined, jobRunId, pathId)).toThrow('Invalid file object: Cannot map undefined or null file');
+    });
+
+    it('should set entryType from payload when excluded or skipped', () => {
+      const fileExcluded = createMockItemInfo();
+      (fileExcluded as any).entryType = 'excluded';
+      expect(service.mapSourceToTarget(fileExcluded, jobRunId, pathId).entryType).toBe('excluded');
+
+      const fileSkipped = createMockItemInfo();
+      (fileSkipped as any).entryType = 'skipped';
+      expect(service.mapSourceToTarget(fileSkipped, jobRunId, pathId).entryType).toBe('skipped');
     });
   });
 
