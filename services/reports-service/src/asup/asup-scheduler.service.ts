@@ -255,7 +255,7 @@ export class AsupSchedulerService {
       };
 
       if (archiveBuffer.length <= ASUP_ISF_THRESHOLD_BYTES) {
-        this.logger.log(`[TransmitSupportBundle] Archive <= 200MB — sending as single PUT to ${requestUrl}`);
+        this.logger.log(`[TransmitSupportBundle] Archive <= 100MB — sending as single PUT to ${requestUrl}`);
         let lastSingleErr: Error | null = null;
         for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
           try {
@@ -290,7 +290,7 @@ export class AsupSchedulerService {
 
       const totalChunks = Math.ceil(archiveBuffer.length / ASUP_ISF_CHUNK_BYTES);
       this.logger.log(
-        `[TransmitSupportBundle] Archive > 200MB (${archiveSizeMB}MB) — ISF chunked send: totalChunks=${totalChunks}, chunkSize=100MB, url=${requestUrl}`,
+        `[TransmitSupportBundle] Archive > 100MB (${archiveSizeMB}MB) — ISF chunked send: totalChunks=${totalChunks}, chunkSize=50MB, url=${requestUrl}`,
       );
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {

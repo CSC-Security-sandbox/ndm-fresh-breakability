@@ -14,7 +14,7 @@ import { SerialIdSyncService } from '../serial-id-sync.service';
 const sevenBin = require('7zip-bin');
 const execFile = promisify(execFileCb);
 
-const ISF_THRESHOLD_BYTES = 200 * 1024 * 1024; // 200 MB
+const ISF_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * AsupPackagerService
@@ -216,7 +216,7 @@ export class AsupPackagerService {
       if (isLargePayload) {
         this.logger.log(
           `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
-          ` > 200MB threshold — appending ISF fields to x-header.txt inside .7z`,
+          ` > 100MB threshold — appending ISF fields to x-header.txt inside .7z`,
         );
         const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
         const existingXHeader = await fs.readFile(isfXHeaderPath, 'utf-8');

@@ -267,8 +267,8 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       );
     });
 
-    it('should return isLargePayload=false and skip ISF archive update for archive ≤ 200MB', async () => {
-      // Default readFile mock returns a tiny buffer, well below 200MB threshold
+    it('should return isLargePayload=false and skip ISF archive update for archive ≤ 100MB', async () => {
+      // Default readFile mock returns a tiny buffer, well below 100MB threshold
       const result = await service.packageSupportBundlePayload(
         'ndm_support_bundle.zip',
         Buffer.from('mock-zip'),
@@ -287,7 +287,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(isf7zaUpdateCalls).toHaveLength(0);
     });
 
-    it('should append ISF fields to x-header.txt inside .7z and return isLargePayload=true when archive > 200MB', async () => {
+    it('should append ISF fields to x-header.txt inside .7z and return isLargePayload=true when archive > 100MB', async () => {
       const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
       const existingXHeaderText = 'X-Netapp-Asup-Subject: NDM Support Bundle\n';
 

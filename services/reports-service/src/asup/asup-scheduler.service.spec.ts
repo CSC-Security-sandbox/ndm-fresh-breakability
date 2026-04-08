@@ -350,15 +350,15 @@ describe('AsupSchedulerService', () => {
         headersMap: { 'X-Netapp-Asup-Subject': 'NDM Support Bundle' },
         isLargePayload: false,
       });
-      // Guarantee readFile returns a tiny buffer (< 200MB) by default for each test in
+      // Guarantee readFile returns a tiny buffer (< 100MB) by default for each test in
       // this describe block.  Tests that need a large archive override this inline.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
       fsMocked.readFile.mockResolvedValue(Buffer.from('mock-archive-data'));
     });
 
-    it('should send a single PUT for archive ≤ 200MB with no ISF chunk headers', async () => {
-      // Default fs.readFile mock returns tiny buffer (< 200MB threshold)
+    it('should send a single PUT for archive ≤ 100MB with no ISF chunk headers', async () => {
+      // Default fs.readFile mock returns tiny buffer (< 100MB threshold)
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
       await service.transmitSupportBundle('bundle.zip', Buffer.from('zip-data'));
@@ -376,31 +376,31 @@ describe('AsupSchedulerService', () => {
       expect(options.headers['X-Netapp-asup-large']).toBeUndefined();
     });
 
-    it('should send ISF chunked PUTs for archive > 200MB with retransmit=false on first attempt per chunk', async () => {
+    it('should send ISF chunked PUTs for archive > 100MB with retransmit=false on first attempt per chunk', async () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      // 201MB → Math.ceil(201/100) = 3 chunks
+      // 201MB → Math.ceil(201/50) = 5 chunks (chunk size = 50MB)
       const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
       fsMocked.readFile.mockResolvedValue(largeBuffer);
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
       await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
 
-      expect(mockAxiosPut).toHaveBeenCalledTimes(3);
+      expect(mockAxiosPut).toHaveBeenCalledTimes(5);
 
       // First chunk
       const [, , opts0] = mockAxiosPut.mock.calls[0];
       expect(opts0.headers['X-Netapp-asup-chunk-number']).toBe('1');
-      expect(opts0.headers['X-Netapp-asup-chunk-total']).toBe('3');
+      expect(opts0.headers['X-Netapp-asup-chunk-total']).toBe('5');
       expect(opts0.headers['X-Netapp-asup-large']).toBe('true');
       expect(opts0.headers['X-Netapp-asup-large-filename']).toBe('support-bundle-asup-123.7z');
       expect(opts0.headers['X-Netapp-asup-large-size']).toBe(String(largeBuffer.length));
       expect(opts0.headers['X-Netapp-asup-retransmit']).toBe('false');
 
       // Last chunk
-      const [, , opts2] = mockAxiosPut.mock.calls[2];
-      expect(opts2.headers['X-Netapp-asup-chunk-number']).toBe('3');
-      expect(opts2.headers['X-Netapp-asup-retransmit']).toBe('false');
+      const [, , opts4] = mockAxiosPut.mock.calls[4];
+      expect(opts4.headers['X-Netapp-asup-chunk-number']).toBe('5');
+      expect(opts4.headers['X-Netapp-asup-retransmit']).toBe('false');
     });
 
     it('should set X-Netapp-asup-retransmit=true on retry attempts for a chunk (Bug 4 fix)', async () => {
@@ -409,20 +409,22 @@ describe('AsupSchedulerService', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      // 201MB → 3 chunks
+      // 201MB → Math.ceil(201/50) = 5 chunks (chunk size = 50MB)
       const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
       fsMocked.readFile.mockResolvedValue(largeBuffer);
 
-      // Chunk 1: attempt 1 fails, attempt 2 (retry) succeeds; chunks 2 & 3 pass on first try
+      // Chunk 1: attempt 1 fails, attempt 2 (retry) succeeds; chunks 2–5 pass on first try
       mockAxiosPut
         .mockRejectedValueOnce(new Error('network error'))   // chunk 1, attempt 1
         .mockResolvedValueOnce({ status: 200 })              // chunk 1, attempt 2 (retry)
         .mockResolvedValueOnce({ status: 200 })              // chunk 2, attempt 1
-        .mockResolvedValueOnce({ status: 200 });             // chunk 3, attempt 1
+        .mockResolvedValueOnce({ status: 200 })              // chunk 3, attempt 1
+        .mockResolvedValueOnce({ status: 200 })              // chunk 4, attempt 1
+        .mockResolvedValueOnce({ status: 200 });             // chunk 5, attempt 1
 
       await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
 
-      expect(mockAxiosPut).toHaveBeenCalledTimes(4);
+      expect(mockAxiosPut).toHaveBeenCalledTimes(6);
 
       // First attempt for chunk 1: retransmit must be false
       const [, , firstAttempt] = mockAxiosPut.mock.calls[0];
@@ -463,14 +465,20 @@ describe('AsupSchedulerService', () => {
       global.setTimeout = originalSetTimeout;
     });
 
-    it('should throw when single PUT fails for archive ≤ 200MB', async () => {
+    it('should throw when single PUT fails for archive ≤ 100MB', async () => {
+      const originalSetTimeout = global.setTimeout;
+      global.setTimeout = ((fn: () => void) => { fn(); return 0; }) as any;
+
       mockAxiosPut.mockRejectedValue(new Error('connection refused'));
 
       await expect(
         service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
       ).rejects.toThrow('connection refused');
 
-      expect(mockAxiosPut).toHaveBeenCalledTimes(1);
+      // Retry logic makes 3 attempts before throwing
+      expect(mockAxiosPut).toHaveBeenCalledTimes(3);
+
+      global.setTimeout = originalSetTimeout;
     });
 
     it('should merge packager headersMap and include standard ASUP headers in single PUT', async () => {
@@ -491,25 +499,25 @@ describe('AsupSchedulerService', () => {
     it('should set correct X-Netapp-asup-chunk-size for each chunk including the smaller last chunk', async () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      // 201MB → 3 chunks: [100MB, 100MB, 1MB]
+      // 201MB → Math.ceil(201/50) = 5 chunks: [50MB, 50MB, 50MB, 50MB, 1MB]
       const TOTAL = 201 * 1024 * 1024;
-      const CHUNK = 100 * 1024 * 1024;
-      const lastSize = TOTAL - 2 * CHUNK; // 1MB
+      const CHUNK = 50 * 1024 * 1024;
+      const lastSize = TOTAL - 4 * CHUNK; // 1MB
       fsMocked.readFile.mockResolvedValue(Buffer.allocUnsafe(TOTAL));
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
       await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
 
-      expect(mockAxiosPut).toHaveBeenCalledTimes(3);
+      expect(mockAxiosPut).toHaveBeenCalledTimes(5);
       const [, , opts0] = mockAxiosPut.mock.calls[0];
       const [, , opts1] = mockAxiosPut.mock.calls[1];
-      const [, , opts2] = mockAxiosPut.mock.calls[2];
+      const [, , opts4] = mockAxiosPut.mock.calls[4];
       expect(opts0.headers['X-Netapp-asup-chunk-size']).toBe(String(CHUNK));
       expect(opts1.headers['X-Netapp-asup-chunk-size']).toBe(String(CHUNK));
-      expect(opts2.headers['X-Netapp-asup-chunk-size']).toBe(String(lastSize));
+      expect(opts4.headers['X-Netapp-asup-chunk-size']).toBe(String(lastSize));
       // X-Netapp-asup-chunk-filename must be present on every chunk
       expect(opts0.headers['X-Netapp-asup-chunk-filename']).toBe('support-bundle-asup-123.7z');
-      expect(opts2.headers['X-Netapp-asup-chunk-filename']).toBe('support-bundle-asup-123.7z');
+      expect(opts4.headers['X-Netapp-asup-chunk-filename']).toBe('support-bundle-asup-123.7z');
     });
 
     it('should throw when ASUP support bundle endpoint is not configured', async () => {
