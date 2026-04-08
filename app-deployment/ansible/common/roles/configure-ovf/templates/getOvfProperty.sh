@@ -42,7 +42,7 @@ get_ovf_property() {
     local property_exists
     property_exists=$(echo "$xml_data" | \
         xmlstarlet sel -N oe="http://schemas.dmtf.org/ovf/environment/1" \
-        -t -v "count(//oe:Property[@oe:key='$property_name'])" 2>/dev/null || echo "0")
+        -t -v "count(/oe:Environment/oe:PropertySection/oe:Property[@oe:key='$property_name'])" 2>/dev/null || echo "0")
 
     if [[ "$property_exists" == "0" ]]; then
         debug "ovfProperty not found: $property_name"
@@ -56,7 +56,7 @@ get_ovf_property() {
     local property_value
     property_value=$(echo "$xml_data" | \
         xmlstarlet sel -N oe="http://schemas.dmtf.org/ovf/environment/1" \
-        -t -v "//oe:Property[@oe:key='$property_name']/@oe:value" 2>/dev/null || true)
+        -t -v "/oe:Environment/oe:PropertySection/oe:Property[@oe:key='$property_name']/@oe:value" 2>/dev/null || true)
 
     # If the property exists but value is empty, show a debug message
     if [[ -z "$property_value" ]]; then
