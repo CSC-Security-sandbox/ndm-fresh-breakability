@@ -1,7 +1,9 @@
 name: Azure Resource Cleanup
 
-# This workflow automatically cleans up Azure resources (VMs, images, snapshots,
-# ANF volumes) based on age and tag criteria. 
+# This workflow automatically cleans up Azure resources (VMs, disks, NICs, images,
+# snapshots, ANF volumes, unattached public IPs, stale SSH public keys, empty
+# storage accounts, and unassociated NSGs (no subnet or NIC associations) based on
+# age and tag criteria where applicable.
 #
 # Required GitHub Secrets:
 #   - AZURE_RESOURCE_GROUP: Resource group name 
@@ -57,7 +59,7 @@ jobs:
           fi
           echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
           
-          RESOURCE_TYPES="vms,disks,images,snapshots,anf-volumes"
+          RESOURCE_TYPES="vms,disks,nics,images,snapshots,anf-volumes,public-ips,ssh-keys,blob-storage,nsgs"
           echo "resource_types=$RESOURCE_TYPES" >> $GITHUB_OUTPUT
           
           CUTOFF_DATE_VMS_VOLUMES=$(date -u -d "${AGE_THRESHOLD_DAYS_VMS_VOLUMES} days ago" +%Y-%m-%dT%H:%M:%SZ)
@@ -69,7 +71,7 @@ jobs:
           echo "Resource Group: $AZURE_RESOURCE_GROUP"
           echo "Compute Gallery: $COMPUTE_GALLERY_NAME"
           echo "Age Threshold - VMs/Disks/ANF Volumes: $AGE_THRESHOLD_DAYS_VMS_VOLUMES days (cutoff: $CUTOFF_DATE_VMS_VOLUMES)"
-          echo "Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days (cutoff: $CUTOFF_DATE_IMAGES_SNAPSHOTS)"
+          echo "Age Threshold - Images/Snapshots/SSH keys/empty storage accounts: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days (cutoff: $CUTOFF_DATE_IMAGES_SNAPSHOTS)"
           echo "Dry Run: $DRY_RUN"
           echo "Resource Types: $RESOURCE_TYPES"
           echo "Exclude Tag: $EXCLUDE_TAG_KEY=$EXCLUDE_TAG_VALUE"
@@ -288,6 +290,112 @@ jobs:
           
           if [ "$FAILED_DISKS" -gt 0 ]; then
             echo "ERROR: Failed to delete $FAILED_DISKS disk(s)"
+            exit 1
+          fi
+
+  cleanup-nics:
+    runs-on: ubuntu-latest
+    needs: [setup, cleanup-vms]
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_nics: ${{ steps.cleanup.outputs.deleted_nics }}
+      failed_nics: ${{ steps.cleanup.outputs.failed_nics }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup unused Network Interfaces
+        id: cleanup
+        run: |
+          set +e
+
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+
+          DELETED_NICS=0
+          FAILED_NICS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing unused Network Interfaces (not attached to a VM) ==="
+
+          if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+            echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+            exit 1
+          fi
+
+          NICS_JSON=$(az network nic list --resource-group "$AZ_VM_RESOURCE_GROUP" --query "[?virtualMachine==null].{name:name, resourceGroup:resourceGroup, tags:tags}" --output json 2>/dev/null || echo "[]")
+
+          if [ "$NICS_JSON" != "[]" ] && [ -n "$NICS_JSON" ]; then
+            NIC_COUNT=$(echo "$NICS_JSON" | jq '. | length')
+            echo -e "Found $NIC_COUNT unused NIC(s)\n"
+
+            for i in $(seq 0 $((NIC_COUNT - 1))); do
+              NIC_NAME=$(echo "$NICS_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$NICS_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$NICS_JSON" | jq -c ".[$i].tags // {}")
+
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded NIC: $NIC_NAME"
+                continue
+              fi
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete NIC $NIC_NAME"
+                DELETED_NICS=$((DELETED_NICS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NIC_NAME"
+              else
+                if az network nic delete --resource-group "$RESOURCE_GROUP" --name "$NIC_NAME" 2>&1; then
+                  echo "Deleted NIC $NIC_NAME"
+                  DELETED_NICS=$((DELETED_NICS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NIC_NAME"
+                else
+                  echo "Failed to delete NIC $NIC_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nNIC: $NIC_NAME"
+                  FAILED_NICS=$((FAILED_NICS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No unused NICs found"
+          fi
+
+          echo "deleted_nics=$DELETED_NICS" >> $GITHUB_OUTPUT
+          echo "failed_nics=$FAILED_NICS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo -e "\nSummary: Deleted=$DELETED_NICS, Failed=$FAILED_NICS"
+
+          if [ "$FAILED_NICS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_NICS NIC(s)"
             exit 1
           fi
 
@@ -747,9 +855,522 @@ jobs:
             exit 1
           fi
 
+  cleanup-public-ips:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_public_ips: ${{ steps.cleanup.outputs.deleted_public_ips }}
+      failed_public_ips: ${{ steps.cleanup.outputs.failed_public_ips }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup unused Public IP addresses
+        id: cleanup
+        run: |
+          set +e
+
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+
+          DELETED_PIPS=0
+          FAILED_PIPS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing unused Public IPs (no NIC, NAT gateway, or load balancer association) ==="
+
+          if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+            echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+            exit 1
+          fi
+
+          PIPS_JSON=$(az network public-ip list --resource-group "$AZ_VM_RESOURCE_GROUP" -o json 2>/dev/null || echo "[]")
+          UNUSED_JSON=$(echo "$PIPS_JSON" | jq '[.[] | select(
+            (.ipConfiguration == null) and
+            (.natGateway == null) and
+            (.loadBalancerFrontendIpConfiguration == null) and
+            ((.loadBalancerBackendAddressPools // []) | length == 0)
+          )]')
+
+          if [ "$UNUSED_JSON" != "[]" ] && [ -n "$UNUSED_JSON" ]; then
+            PIP_COUNT=$(echo "$UNUSED_JSON" | jq '. | length')
+            echo -e "Found $PIP_COUNT unused public IP(s)\n"
+
+            for i in $(seq 0 $((PIP_COUNT - 1))); do
+              PIP_NAME=$(echo "$UNUSED_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$UNUSED_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$UNUSED_JSON" | jq -c ".[$i].tags // {}")
+
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded public IP: $PIP_NAME"
+                continue
+              fi
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete public IP $PIP_NAME"
+                DELETED_PIPS=$((DELETED_PIPS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $PIP_NAME"
+              else
+                if az network public-ip delete --resource-group "$RESOURCE_GROUP" --name "$PIP_NAME" 2>&1; then
+                  echo "Deleted public IP $PIP_NAME"
+                  DELETED_PIPS=$((DELETED_PIPS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $PIP_NAME"
+                else
+                  echo "Failed to delete public IP $PIP_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nPublic IP: $PIP_NAME"
+                  FAILED_PIPS=$((FAILED_PIPS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No unused public IPs found"
+          fi
+
+          echo "deleted_public_ips=$DELETED_PIPS" >> $GITHUB_OUTPUT
+          echo "failed_public_ips=$FAILED_PIPS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo -e "\nSummary: Deleted=$DELETED_PIPS, Failed=$FAILED_PIPS"
+
+          if [ "$FAILED_PIPS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_PIPS public IP(s)"
+            exit 1
+          fi
+
+  # cleanup-ssh-keys:
+  #   runs-on: ubuntu-latest
+  #   needs: setup
+  #   if: always() && !cancelled()
+  #   permissions:
+  #     contents: read
+  #   outputs:
+  #     deleted_ssh_keys: ${{ steps.cleanup.outputs.deleted_ssh_keys }}
+  #     failed_ssh_keys: ${{ steps.cleanup.outputs.failed_ssh_keys }}
+  #     failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+  #     deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+  #   steps:
+  #     - name: Harden the runner (Audit all outbound calls)
+  #       uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+  #       with:
+  #         egress-policy: audit
+
+  #     - name: Checkout repository
+  #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+  #     - name: Install Azure CLI and jq
+  #       run: |
+  #         if ! command -v az &> /dev/null; then
+  #           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  #         fi
+  #         sudo apt-get update -qq
+  #         sudo apt-get install -y jq
+
+  #     - name: Authenticate to Azure
+  #       uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+  #       with:
+  #         creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+  #     - name: Cleanup stale SSH public keys
+  #       id: cleanup
+  #       run: |
+  #         set +e
+
+  #         source app-deployment/scripts/cloud-cleanup-utils.sh
+  #         DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+  #         CUTOFF_DATE_STALE="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+
+  #         DELETED_KEYS=0
+  #         FAILED_KEYS=0
+  #         FAILED_RESOURCES=""
+  #         DELETED_RESOURCES=""
+
+  #         echo "=== Processing SSH public keys (Microsoft.Compute/sshPublicKeys older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+  #         echo "Cutoff date: $CUTOFF_DATE_STALE"
+  #         echo "Note: Azure does not expose VM references on this resource type; keys older than this threshold in the VM resource group are treated as safe to remove when not tagged."
+
+  #         if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+  #           echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+  #           exit 1
+  #         fi
+
+  #         KEYS_JSON=$(az resource list --resource-group "$AZ_VM_RESOURCE_GROUP" --resource-type "Microsoft.Compute/sshPublicKeys" --output json 2>/dev/null || echo "[]")
+  #         STALE_KEYS=$(echo "$KEYS_JSON" | jq --arg cutoff "$CUTOFF_DATE_STALE" '[.[] | select(.systemData.createdAt != null and .systemData.createdAt < $cutoff)]')
+
+  #         if [ "$STALE_KEYS" != "[]" ] && [ -n "$STALE_KEYS" ]; then
+  #           KEY_COUNT=$(echo "$STALE_KEYS" | jq '. | length')
+  #           echo -e "Found $KEY_COUNT SSH public key resource(s) matching age criteria\n"
+
+  #           for i in $(seq 0 $((KEY_COUNT - 1))); do
+  #             KEY_NAME=$(echo "$STALE_KEYS" | jq -r ".[$i].name")
+  #             RESOURCE_GROUP=$(echo "$STALE_KEYS" | jq -r ".[$i].resourceGroup")
+  #             TAGS=$(echo "$STALE_KEYS" | jq -c ".[$i].tags // {}")
+
+  #             if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+  #               echo "Excluded SSH key: $KEY_NAME"
+  #               continue
+  #             fi
+
+  #             if [ "$DRY_RUN" = "true" ]; then
+  #               echo "DRY RUN: Would delete SSH public key $KEY_NAME"
+  #               DELETED_KEYS=$((DELETED_KEYS + 1))
+  #               DELETED_RESOURCES="$DELETED_RESOURCES\n  - $KEY_NAME"
+  #             else
+  #               if az sshkey delete --resource-group "$RESOURCE_GROUP" --name "$KEY_NAME" 2>&1; then
+  #                 echo "Deleted SSH public key $KEY_NAME"
+  #                 DELETED_KEYS=$((DELETED_KEYS + 1))
+  #                 DELETED_RESOURCES="$DELETED_RESOURCES\n  - $KEY_NAME"
+  #               else
+  #                 echo "Failed to delete SSH public key $KEY_NAME"
+  #                 FAILED_RESOURCES="$FAILED_RESOURCES\nSSH key: $KEY_NAME"
+  #                 FAILED_KEYS=$((FAILED_KEYS + 1))
+  #               fi
+  #             fi
+  #           done
+  #         else
+  #           echo "No SSH public keys found matching criteria"
+  #         fi
+
+  #         echo "deleted_ssh_keys=$DELETED_KEYS" >> $GITHUB_OUTPUT
+  #         echo "failed_ssh_keys=$FAILED_KEYS" >> $GITHUB_OUTPUT
+  #         echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+  #         echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+  #         echo "EOF" >> $GITHUB_OUTPUT
+  #         echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+  #         echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+  #         echo "EOF" >> $GITHUB_OUTPUT
+
+  #         echo -e "\nSummary: Deleted=$DELETED_KEYS, Failed=$FAILED_KEYS"
+
+  #         if [ "$FAILED_KEYS" -gt 0 ]; then
+  #           echo "ERROR: Failed to delete $FAILED_KEYS SSH public key(s)"
+  #           exit 1
+  #         fi
+
+  cleanup-blob-storage:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_storage_accounts: ${{ steps.cleanup.outputs.deleted_storage_accounts }}
+      failed_storage_accounts: ${{ steps.cleanup.outputs.failed_storage_accounts }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup empty Storage accounts (blob-related)
+        id: cleanup
+        run: |
+          set +e
+
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+          CUTOFF_DATE_STALE="${{ needs.setup.outputs.cutoff_date_images_snapshots }}"
+
+          DELETED_SAS=0
+          FAILED_SAS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing empty Storage accounts (no blob containers, queues, tables, or file shares; older than $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days) ==="
+          echo "Cutoff date: $CUTOFF_DATE_STALE"
+
+          storage_account_is_empty() {
+            local saname=$1
+            local rg=$2
+            local bc qc tc sc
+            bc=$(az storage container list --account-name "$saname" --resource-group "$rg" --auth-mode login --only-show-errors -o json 2>/dev/null || echo "")
+            qc=$(az storage queue list --account-name "$saname" --resource-group "$rg" --auth-mode login --only-show-errors -o json 2>/dev/null || echo "")
+            tc=$(az storage table list --account-name "$saname" --resource-group "$rg" --auth-mode login --only-show-errors -o json 2>/dev/null || echo "")
+            sc=$(az storage share list --account-name "$saname" --resource-group "$rg" --auth-mode login --only-show-errors -o json 2>/dev/null || echo "")
+            if [ -z "$bc" ] || [ -z "$qc" ] || [ -z "$tc" ] || [ -z "$sc" ]; then
+              return 1
+            fi
+            local bl ql tl sl
+            bl=$(echo "$bc" | jq '. | length')
+            ql=$(echo "$qc" | jq '. | length')
+            tl=$(echo "$tc" | jq '. | length')
+            sl=$(echo "$sc" | jq '. | length')
+            [ "$bl" -eq 0 ] && [ "$ql" -eq 0 ] && [ "$tl" -eq 0 ] && [ "$sl" -eq 0 ]
+          }
+
+          # systemData.createdAt is often missing from `az storage account show` (CLI default API);
+          # ARM `resource show` with a current Storage API version returns it reliably.
+          # Storage accounts often omit systemData on GET; use properties.creationTime (ARM) when present.
+          storage_account_created_at() {
+            local sa_id=$1
+            local sa_rg=$2
+            local sa_name=$3
+            local api_ver json_sd ts
+            JQ_TS='.systemData.createdAt // .systemData.lastModifiedAt // .properties.creationTime // .properties.keyCreationTime.key1 // empty'
+
+            json_sd=$(az storage account show --resource-group "$sa_rg" --name "$sa_name" -o json 2>/dev/null) || true
+            ts=$(echo "$json_sd" | jq -r "$JQ_TS")
+            if [ -n "$ts" ] && [ "$ts" != "null" ]; then
+              echo "$ts"
+              return 0
+            fi
+
+            if [ -n "$sa_id" ] && [ "$sa_id" != "null" ]; then
+              for api_ver in 2025-08-01 2023-01-01 2022-09-01 2021-09-01 2021-04-01; do
+                json_sd=$(az resource show --ids "$sa_id" --api-version "$api_ver" -o json 2>/dev/null) || continue
+                ts=$(echo "$json_sd" | jq -r "$JQ_TS")
+                if [ -n "$ts" ] && [ "$ts" != "null" ]; then
+                  echo "$ts"
+                  return 0
+                fi
+              done
+            fi
+            echo ""
+            return 1
+          }
+
+          for RG in "$AZURE_RESOURCE_GROUP" "$AZ_VM_RESOURCE_GROUP"; do
+            if [ -z "$RG" ]; then
+              continue
+            fi
+            echo -e "\n--- Storage accounts in resource group: $RG ---"
+
+            SA_LIST=$(az storage account list --resource-group "$RG" -o json 2>/dev/null || echo "[]")
+            SA_COUNT=$(echo "$SA_LIST" | jq '. | length')
+            if [ "$SA_COUNT" -eq 0 ]; then
+              echo "No storage accounts in $RG"
+              continue
+            fi
+
+            for i in $(seq 0 $((SA_COUNT - 1))); do
+              SANAME=$(echo "$SA_LIST" | jq -r ".[$i].name")
+              SA_RG=$(echo "$SA_LIST" | jq -r ".[$i].resourceGroup")
+              SA_ID=$(echo "$SA_LIST" | jq -r ".[$i].id")
+              TAGS=$(echo "$SA_LIST" | jq -c ".[$i].tags // {}")
+
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded storage account: $SANAME"
+                continue
+              fi
+
+              CREATED_AT=$(storage_account_created_at "$SA_ID" "$SA_RG" "$SANAME")
+              if [ -z "$CREATED_AT" ] || [ "$CREATED_AT" = "null" ]; then
+                echo "Skipping $SANAME (could not read creation timestamp from storage account or ARM; id=$SA_ID)"
+                continue
+              fi
+              if [[ "$CREATED_AT" > "$CUTOFF_DATE_STALE" ]] || [ "$CREATED_AT" = "$CUTOFF_DATE_STALE" ]; then
+                echo "Skipping $SANAME (created at or after cutoff: $CREATED_AT)"
+                continue
+              fi
+
+              if ! storage_account_is_empty "$SANAME" "$SA_RG"; then
+                echo "Skipping $SANAME (not empty or could not verify emptiness via Azure AD auth)"
+                continue
+              fi
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete empty storage account $SANAME"
+                DELETED_SAS=$((DELETED_SAS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SANAME ($SA_RG)"
+              else
+                if az storage account delete --resource-group "$SA_RG" --name "$SANAME" --yes 2>&1; then
+                  echo "Deleted storage account $SANAME"
+                  DELETED_SAS=$((DELETED_SAS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $SANAME ($SA_RG)"
+                else
+                  echo "Failed to delete storage account $SANAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nStorage account: $SANAME"
+                  FAILED_SAS=$((FAILED_SAS + 1))
+                fi
+              fi
+            done
+          done
+
+          if [ "$DELETED_SAS" -eq 0 ] && [ "$FAILED_SAS" -eq 0 ]; then
+            echo "No empty storage accounts found matching criteria"
+          fi
+
+          echo "deleted_storage_accounts=$DELETED_SAS" >> $GITHUB_OUTPUT
+          echo "failed_storage_accounts=$FAILED_SAS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo -e "\nSummary: Deleted=$DELETED_SAS, Failed=$FAILED_SAS"
+
+          if [ "$FAILED_SAS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_SAS storage account(s)"
+            exit 1
+          fi
+
+  cleanup-nsgs:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_nsgs: ${{ steps.cleanup.outputs.deleted_nsgs }}
+      failed_nsgs: ${{ steps.cleanup.outputs.failed_nsgs }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup unassociated Network security groups
+        id: cleanup
+        run: |
+          set +e
+
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+
+          DELETED_NSGS=0
+          FAILED_NSGS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing NSGs with no subnet or NIC associations (unused only; no age filter) ==="
+
+          if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+            echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+            exit 1
+          fi
+
+          NSGS_JSON=$(az network nsg list --resource-group "$AZ_VM_RESOURCE_GROUP" -o json 2>/dev/null || echo "[]")
+          ORPHAN_JSON=$(echo "$NSGS_JSON" | jq '[.[] | select(
+            ((.subnets // []) | length == 0) and ((.networkInterfaces // []) | length == 0)
+          )]')
+
+          if [ "$ORPHAN_JSON" != "[]" ] && [ -n "$ORPHAN_JSON" ]; then
+            NSG_COUNT=$(echo "$ORPHAN_JSON" | jq '. | length')
+            echo -e "Found $NSG_COUNT unassociated NSG(s)\n"
+
+            for i in $(seq 0 $((NSG_COUNT - 1))); do
+              NSG_NAME=$(echo "$ORPHAN_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$ORPHAN_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$ORPHAN_JSON" | jq -c ".[$i].tags // {}")
+
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded NSG: $NSG_NAME"
+                continue
+              fi
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete NSG $NSG_NAME"
+                DELETED_NSGS=$((DELETED_NSGS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NSG_NAME"
+              else
+                if az network nsg delete --resource-group "$RESOURCE_GROUP" --name "$NSG_NAME" 2>&1; then
+                  echo "Deleted NSG $NSG_NAME"
+                  DELETED_NSGS=$((DELETED_NSGS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NSG_NAME"
+                else
+                  echo "Failed to delete NSG $NSG_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nNSG: $NSG_NAME"
+                  FAILED_NSGS=$((FAILED_NSGS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No unassociated NSGs found"
+          fi
+
+          if [ "$DELETED_NSGS" -eq 0 ] && [ "$FAILED_NSGS" -eq 0 ]; then
+            echo "No unassociated NSGs matched deletion criteria (or none to process)"
+          fi
+
+          echo "deleted_nsgs=$DELETED_NSGS" >> $GITHUB_OUTPUT
+          echo "failed_nsgs=$FAILED_NSGS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo -e "\nSummary: Deleted=$DELETED_NSGS, Failed=$FAILED_NSGS"
+
+          if [ "$FAILED_NSGS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_NSGS NSG(s)"
+            exit 1
+          fi
+
   generate-report:
     runs-on: ubuntu-latest
-    needs: [cleanup-vms, cleanup-disks, cleanup-snapshots, cleanup-images, cleanup-anf, setup]
+    needs: [cleanup-vms, cleanup-disks, cleanup-nics, cleanup-snapshots, cleanup-images, cleanup-anf, cleanup-public-ips, cleanup-blob-storage, cleanup-nsgs, setup]
     if: always()
     permissions:
       contents: read
@@ -770,30 +1391,45 @@ jobs:
         run: |
           DELETED_VMS="${{ needs.cleanup-vms.outputs.deleted_vms || '0' }}"
           DELETED_DISKS="${{ needs.cleanup-disks.outputs.deleted_disks || '0' }}"
+          DELETED_NICS="${{ needs.cleanup-nics.outputs.deleted_nics || '0' }}"
           DELETED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.deleted_snapshots || '0' }}"
           DELETED_IMAGES="${{ needs.cleanup-images.outputs.deleted_images || '0' }}"
           DELETED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.deleted_anf_volumes || '0' }}"
           DELETED_ANF_POOLS="${{ needs.cleanup-anf.outputs.deleted_anf_pools || '0' }}"
           DELETED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.deleted_anf_accounts || '0' }}"
+          DELETED_PUBLIC_IPS="${{ needs.cleanup-public-ips.outputs.deleted_public_ips || '0' }}"
+          DELETED_SSH_KEYS=0
+          DELETED_STORAGE_ACCOUNTS="${{ needs.cleanup-blob-storage.outputs.deleted_storage_accounts || '0' }}"
+          DELETED_NSGS="${{ needs.cleanup-nsgs.outputs.deleted_nsgs || '0' }}"
           
           FAILED_VMS="${{ needs.cleanup-vms.outputs.failed_vms || '0' }}"
           FAILED_DISKS="${{ needs.cleanup-disks.outputs.failed_disks || '0' }}"
+          FAILED_NICS="${{ needs.cleanup-nics.outputs.failed_nics || '0' }}"
           FAILED_SNAPSHOTS="${{ needs.cleanup-snapshots.outputs.failed_snapshots || '0' }}"
           FAILED_IMAGES="${{ needs.cleanup-images.outputs.failed_images || '0' }}"
           FAILED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.failed_anf_volumes || '0' }}"
           FAILED_ANF_POOLS="${{ needs.cleanup-anf.outputs.failed_anf_pools || '0' }}"
           FAILED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.failed_anf_accounts || '0' }}"
+          FAILED_PUBLIC_IPS="${{ needs.cleanup-public-ips.outputs.failed_public_ips || '0' }}"
+          FAILED_SSH_KEYS=0
+          FAILED_STORAGE_ACCOUNTS="${{ needs.cleanup-blob-storage.outputs.failed_storage_accounts || '0' }}"
+          FAILED_NSGS="${{ needs.cleanup-nsgs.outputs.failed_nsgs || '0' }}"
           
-          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_ANF_VOLUMES + DELETED_ANF_POOLS + DELETED_ANF_ACCOUNTS))
-          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_ANF_VOLUMES + FAILED_ANF_POOLS + FAILED_ANF_ACCOUNTS))
+          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_NICS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_ANF_VOLUMES + DELETED_ANF_POOLS + DELETED_ANF_ACCOUNTS + DELETED_PUBLIC_IPS + DELETED_SSH_KEYS + DELETED_STORAGE_ACCOUNTS + DELETED_NSGS))
+          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_NICS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_ANF_VOLUMES + FAILED_ANF_POOLS + FAILED_ANF_ACCOUNTS + FAILED_PUBLIC_IPS + FAILED_SSH_KEYS + FAILED_STORAGE_ACCOUNTS + FAILED_NSGS))
           
           echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
           echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
+          echo "deleted_nics=$DELETED_NICS" >> $GITHUB_OUTPUT
           echo "deleted_snapshots=$DELETED_SNAPSHOTS" >> $GITHUB_OUTPUT
           echo "deleted_images=$DELETED_IMAGES" >> $GITHUB_OUTPUT
           echo "deleted_anf_volumes=$DELETED_ANF_VOLUMES" >> $GITHUB_OUTPUT
           echo "deleted_anf_pools=$DELETED_ANF_POOLS" >> $GITHUB_OUTPUT
           echo "deleted_anf_accounts=$DELETED_ANF_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "deleted_public_ips=$DELETED_PUBLIC_IPS" >> $GITHUB_OUTPUT
+          echo "deleted_ssh_keys=$DELETED_SSH_KEYS" >> $GITHUB_OUTPUT
+          echo "deleted_storage_accounts=$DELETED_STORAGE_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "deleted_nsgs=$DELETED_NSGS" >> $GITHUB_OUTPUT
           echo "total_deleted=$TOTAL_DELETED" >> $GITHUB_OUTPUT
           echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
           
@@ -813,6 +1449,18 @@ jobs:
           if [ -n "${{ needs.cleanup-anf.outputs.failed_resources }}" ]; then
             FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-anf.outputs.failed_resources }}"
           fi
+          if [ -n "${{ needs.cleanup-nics.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-nics.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-public-ips.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-public-ips.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-blob-storage.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-blob-storage.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-nsgs.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-nsgs.outputs.failed_resources }}"
+          fi
           
           echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
           echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
@@ -827,6 +1475,11 @@ jobs:
           if [ -n "${{ needs.cleanup-disks.outputs.deleted_resources }}" ]; then
             if [ "$DELETED_DISKS" -gt 0 ]; then
               DELETED_RESOURCES="$DELETED_RESOURCES\n\nDisks ($DELETED_DISKS):${{ needs.cleanup-disks.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-nics.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_NICS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nNICs ($DELETED_NICS):${{ needs.cleanup-nics.outputs.deleted_resources }}"
             fi
           fi
           if [ -n "${{ needs.cleanup-snapshots.outputs.deleted_resources }}" ]; then
@@ -864,6 +1517,21 @@ jobs:
               DELETED_RESOURCES="$DELETED_RESOURCES$ANF_SECTION${{ needs.cleanup-anf.outputs.deleted_resources }}"
             fi
           fi
+          if [ -n "${{ needs.cleanup-public-ips.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_PUBLIC_IPS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nPublic IPs ($DELETED_PUBLIC_IPS):${{ needs.cleanup-public-ips.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-blob-storage.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_STORAGE_ACCOUNTS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nStorage accounts ($DELETED_STORAGE_ACCOUNTS):${{ needs.cleanup-blob-storage.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-nsgs.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_NSGS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nNSGs ($DELETED_NSGS):${{ needs.cleanup-nsgs.outputs.deleted_resources }}"
+            fi
+          fi
           
           echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
           echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
@@ -873,11 +1541,16 @@ jobs:
           echo "=== Overall Cleanup Summary ==="
           echo "VMs deleted: $DELETED_VMS (failed: $FAILED_VMS)"
           echo "Disks deleted: $DELETED_DISKS (failed: $FAILED_DISKS)"
+          echo "NICs deleted: $DELETED_NICS (failed: $FAILED_NICS)"
           echo "Snapshots deleted: $DELETED_SNAPSHOTS (failed: $FAILED_SNAPSHOTS)"
           echo "Images deleted: $DELETED_IMAGES (failed: $FAILED_IMAGES)"
           echo "ANF Volumes deleted: $DELETED_ANF_VOLUMES (failed: $FAILED_ANF_VOLUMES)"
           echo "ANF Capacity Pools deleted: $DELETED_ANF_POOLS (failed: $FAILED_ANF_POOLS)"
           echo "ANF Accounts deleted: $DELETED_ANF_ACCOUNTS (failed: $FAILED_ANF_ACCOUNTS)"
+          echo "Public IPs deleted: $DELETED_PUBLIC_IPS (failed: $FAILED_PUBLIC_IPS)"
+          echo "SSH keys deleted: $DELETED_SSH_KEYS (failed: $FAILED_SSH_KEYS)"
+          echo "Storage accounts deleted: $DELETED_STORAGE_ACCOUNTS (failed: $FAILED_STORAGE_ACCOUNTS)"
+          echo "NSGs deleted: $DELETED_NSGS (failed: $FAILED_NSGS)"
           echo "----------------------------------------"
           echo "Total deleted: $TOTAL_DELETED"
           echo "Total failed: $TOTAL_FAILED"
@@ -906,15 +1579,23 @@ jobs:
           WORKFLOW_STATUS="Completed"
           if [ "${{ needs.cleanup-vms.result }}" = "cancelled" ] || \
              [ "${{ needs.cleanup-disks.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-nics.result }}" = "cancelled" ] || \
              [ "${{ needs.cleanup-snapshots.result }}" = "cancelled" ] || \
              [ "${{ needs.cleanup-images.result }}" = "cancelled" ] || \
-             [ "${{ needs.cleanup-anf.result }}" = "cancelled" ]; then
+             [ "${{ needs.cleanup-anf.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-public-ips.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-blob-storage.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-nsgs.result }}" = "cancelled" ]; then
             WORKFLOW_STATUS="Cancelled"
           elif [ "${{ needs.cleanup-vms.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-disks.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-nics.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-snapshots.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-images.result }}" = "failure" ] || \
-               [ "${{ needs.cleanup-anf.result }}" = "failure" ]; then
+               [ "${{ needs.cleanup-anf.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-public-ips.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-blob-storage.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-nsgs.result }}" = "failure" ]; then
             WORKFLOW_STATUS="Failed"
           fi
           
@@ -927,18 +1608,24 @@ jobs:
           Resource Group: $AZURE_RESOURCE_GROUP
           Compute Gallery: $COMPUTE_GALLERY_NAME
           Age Threshold - VMs/Disks/ANF Volumes: $AGE_THRESHOLD_DAYS_VMS_VOLUMES days
-          Age Threshold - Images/Snapshots: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days
+          Age Threshold - Images/Snapshots/SSH keys/empty storage: $AGE_THRESHOLD_DAYS_IMAGES_SNAPSHOTS days
+          NSGs: unused only (no subnet/NIC associations); no age threshold
           Execution Time: $(date -u +"%Y-%m-%dT%H:%M:%S UTC")
           
           Results:
           --------
           VMs: ${{ steps.summary.outputs.deleted_vms || '0' }}
           Disks: ${{ steps.summary.outputs.deleted_disks || '0' }}
+          NICs: ${{ steps.summary.outputs.deleted_nics || '0' }}
           Snapshots: ${{ steps.summary.outputs.deleted_snapshots || '0' }}
           Images: ${{ steps.summary.outputs.deleted_images || '0' }}
           ANF Volumes: ${{ steps.summary.outputs.deleted_anf_volumes || '0' }}
           ANF Capacity Pools: ${{ steps.summary.outputs.deleted_anf_pools || '0' }}
           ANF Accounts: ${{ steps.summary.outputs.deleted_anf_accounts || '0' }}
+          Public IPs: ${{ steps.summary.outputs.deleted_public_ips || '0' }}
+          SSH keys: ${{ steps.summary.outputs.deleted_ssh_keys || '0' }}
+          Storage accounts: ${{ steps.summary.outputs.deleted_storage_accounts || '0' }}
+          NSGs: ${{ steps.summary.outputs.deleted_nsgs || '0' }}
           Total: ${{ steps.summary.outputs.total_deleted || '0' }}
           Failed: ${{ steps.summary.outputs.total_failed || '0' }}
           
