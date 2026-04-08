@@ -6,7 +6,7 @@ import {
   UploadExportPathSourceFileProps,
 } from "@/modules/storage-servers/file-server/file-server-overview/bulk-manual-upload/bulk-manual-upload-file.types";
 import { SupportBundlePayloadType } from "@modules/Help/components/support-bundle/types/support-bundle.types";
-import { isBundleReadyApiType } from "@/types/app.type";
+import { isBundleReadyApiType, AsupTransmissionState } from "@/types/app.type";
 
 export const configApi = createApi({
   reducerPath: "configApi",
@@ -177,11 +177,25 @@ export const configApi = createApi({
       }),
     }),
 
+    sendSupportBundle: builder.mutation<{ success: boolean }, void>({
+      query: () => ({
+        url: "support-bundle/send",
+        method: "POST",
+      }),
+    }),
+
     isBundleReady: builder.query<isBundleReadyApiType, void>({
       query: () => "support-bundle/is-bundle-ready",
       providesTags: ["IS_BUNDLE_READY"],
       transformResponse: (response) => {
         return response?.data?.items || response?.data || response || [];
+      },
+    }),
+
+    getAsupStatus: builder.query<AsupTransmissionState | null, void>({
+      query: () => "support-bundle/asup-status",
+      transformResponse: (response) => {
+        return response?.data?.items || response?.data || response || null;
       },
     }),
 
@@ -317,6 +331,8 @@ export const {
   useGenerateSupportBundleMutation,
   useLazyIsBundleReadyQuery,
   useLazyDownloadSupportBundleQuery,
+  useSendSupportBundleMutation,
+  useLazyGetAsupStatusQuery,
   useFetchProjectWithWorkerQuery,
   useFetchCertificateMutation,
   useCreateManagementServerMutation,

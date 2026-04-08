@@ -18,7 +18,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
-import { BundleStatus, UserDetails } from 'src/constants/types';
+import { BundleStatus, AsupTransmissionState, UserDetails } from 'src/constants/types';
 import { Response } from 'express';
 import {
   LoggerFactory,
@@ -99,6 +99,16 @@ export class SupportBundleController {
     return await this.supportBundleService.isBundleReady(userDetails.user.id);
   }
 
+  @ApiOperation({ summary: 'Get ASUP transmission status for the current user support bundle' })
+  @ApiResponse({ status: 200, description: 'ASUP transmission state or null if no send has been triggered' })
+  @ApiBearerAuth()
+  @Auth()
+  @Get('asup-status')
+  getAsupStatus(@Request() userDetails: UserDetails): AsupTransmissionState | null {
+    const fileName = `ndm_logs_${userDetails.user.id}.zip`;
+    return this.supportBundleService.getAsupTransmissionStatus(fileName);
+  }
+
   @ApiOperation({ summary: 'Download a support bundle ZIP file by name' })
   @ApiParam({
     name: 'fileName',
@@ -122,6 +132,27 @@ export class SupportBundleController {
         );
       }
     });
+  }
+
+  @ApiOperation({ summary: 'Send generated support bundle to ASUP' })
+  @ApiResponse({ status: 200, description: 'Support bundle sent to ASUP' })
+  @ApiBearerAuth()
+  @Auth()
+  @Post('send')
+  async sendSupportBundle(@Request() userDetails: UserDetails) {
+    const userId = userDetails?.user?.id;
+    const fullFileName = `ndm_logs_${userId}.zip`;
+    this.logger.log(`[SendSupportBundle] Request received - userId=${userId}, fileName=${fullFileName}`);
+
+    this.supportBundleService.sendSupportBundleToAsup(fullFileName).catch((error) => {
+      this.logger.error(
+        `[SendSupportBundle] Background transmission failed - fileName=${fullFileName}, error=${error?.message}`,
+        error?.stack,
+      );
+    });
+
+    this.logger.log(`[SendSupportBundle] Transmission initiated in background - fileName=${fullFileName}`);
+    return { success: true, message: 'Support bundle transmission initiated' };
   }
 
   @ApiOperation({

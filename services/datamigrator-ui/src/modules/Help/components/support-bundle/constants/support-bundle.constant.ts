@@ -74,6 +74,8 @@ export const INITIAL_FORM_STATE = {
 };
 
 export const DOWNLOAD_REPORT_LABEL = "Download Report";
+export const SEND_SUPPORT_BUNDLE_LABEL = "Send Support Bundle";
+export const SEND_SUPPORT_BUNDLE_TOOLTIP = "Send diagnostic logs to NetApp for troubleshooting.";
 export const METRICS_OPTIONS = [
   { label: "State Data", value: 1 },
   { label: "System Inventory Data", value: 2 },

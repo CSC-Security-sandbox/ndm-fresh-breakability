@@ -830,6 +830,15 @@ export interface ErrorNumberCellRendererProps {
   value: ErrorType[];
 }
 
+export type AsupTransmissionStatus = 'transmitting' | 'completed' | 'failed';
+
+export type AsupTransmissionState = {
+  status: AsupTransmissionStatus;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+};
+
 export type isBundleReadyApiType = {
   isBundleReady: boolean;
   isProcessing: boolean;

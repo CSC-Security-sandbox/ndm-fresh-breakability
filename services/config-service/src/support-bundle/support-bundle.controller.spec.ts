@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { CreateSupportBundleDTO } from './dto/create-support-bundle.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
-import { BundleStatus, UserDetails } from 'src/constants/types';
+import { AsupTransmissionState, BundleStatus, UserDetails } from 'src/constants/types';
 import { SupportBundleStatus } from 'src/constants/enums';
 import { Response } from 'express';
 
@@ -33,6 +33,8 @@ describe('SupportBundleController', () => {
     getProjects: jest.fn(),
     isBundleReady: jest.fn(),
     downloadSupportBundle: jest.fn(),
+    sendSupportBundleToAsup: jest.fn(),
+    getAsupTransmissionStatus: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -385,6 +387,160 @@ describe('SupportBundleController', () => {
 
       expect(service.downloadSupportBundle).toHaveBeenCalledWith(
         expectedFileName,
+      );
+    });
+  });
+
+  describe('sendSupportBundle', () => {
+    const mockUserDetails: UserDetails = {
+      traceId: 'trace-123',
+      user: {
+        id: 'user-123',
+        roles: [
+          {
+            role_name: 'admin',
+            projects: ['project-1'],
+            permissions: ['read', 'write'],
+          },
+        ],
+      },
+    };
+
+    it('should return success message immediately without waiting for transmission to complete', async () => {
+      let resolvePost: () => void;
+      const pendingPost = new Promise<void>((resolve) => {
+        resolvePost = resolve;
+      });
+      mockSupportBundleService.sendSupportBundleToAsup.mockReturnValue(
+        pendingPost,
+      );
+
+      const result = await controller.sendSupportBundle(mockUserDetails);
+
+      expect(result).toEqual({
+        success: true,
+        message: 'Support bundle transmission initiated',
+      });
+      expect(service.sendSupportBundleToAsup).toHaveBeenCalledWith(
+        `ndm_logs_${mockUserDetails.user.id}.zip`,
+      );
+
+      resolvePost!();
+    });
+
+    it('should not throw if sendSupportBundleToAsup rejects — errors are swallowed via .catch()', async () => {
+      mockSupportBundleService.sendSupportBundleToAsup.mockRejectedValue(
+        new Error('ASUP transmission failed'),
+      );
+
+      await expect(
+        controller.sendSupportBundle(mockUserDetails),
+      ).resolves.toEqual({
+        success: true,
+        message: 'Support bundle transmission initiated',
+      });
+    });
+
+    it('should derive fileName from userId', async () => {
+      const otherUser: UserDetails = {
+        traceId: 'trace-xyz',
+        user: { id: 'other-user', roles: [] },
+      };
+      mockSupportBundleService.sendSupportBundleToAsup.mockResolvedValue(
+        undefined,
+      );
+
+      await controller.sendSupportBundle(otherUser);
+
+      expect(service.sendSupportBundleToAsup).toHaveBeenCalledWith(
+        'ndm_logs_other-user.zip',
+      );
+    });
+  });
+
+  describe('getAsupStatus', () => {
+    const mockUserDetails: UserDetails = {
+      traceId: 'trace-123',
+      user: {
+        id: 'user-123',
+        roles: [
+          {
+            role_name: 'admin',
+            projects: ['project-1'],
+            permissions: ['read', 'write'],
+          },
+        ],
+      },
+    };
+
+    it('should return null when no transmission has been initiated', () => {
+      mockSupportBundleService.getAsupTransmissionStatus.mockReturnValue(null);
+
+      const result = controller.getAsupStatus(mockUserDetails);
+
+      expect(service.getAsupTransmissionStatus).toHaveBeenCalledWith(
+        `ndm_logs_${mockUserDetails.user.id}.zip`,
+      );
+      expect(result).toBeNull();
+    });
+
+    it('should return transmitting state while ASUP upload is in progress', () => {
+      const transmittingState: AsupTransmissionState = {
+        status: 'transmitting',
+        startedAt: new Date('2024-01-01T10:00:00Z'),
+      };
+      mockSupportBundleService.getAsupTransmissionStatus.mockReturnValue(
+        transmittingState,
+      );
+
+      const result = controller.getAsupStatus(mockUserDetails);
+
+      expect(result).toEqual(transmittingState);
+    });
+
+    it('should return completed state after successful ASUP transmission', () => {
+      const completedState: AsupTransmissionState = {
+        status: 'completed',
+        startedAt: new Date('2024-01-01T10:00:00Z'),
+        completedAt: new Date('2024-01-01T10:05:00Z'),
+      };
+      mockSupportBundleService.getAsupTransmissionStatus.mockReturnValue(
+        completedState,
+      );
+
+      const result = controller.getAsupStatus(mockUserDetails);
+
+      expect(result).toEqual(completedState);
+    });
+
+    it('should return failed state with error message on ASUP transmission failure', () => {
+      const failedState: AsupTransmissionState = {
+        status: 'failed',
+        startedAt: new Date('2024-01-01T10:00:00Z'),
+        completedAt: new Date('2024-01-01T10:01:00Z'),
+        error: 'Connection refused',
+      };
+      mockSupportBundleService.getAsupTransmissionStatus.mockReturnValue(
+        failedState,
+      );
+
+      const result = controller.getAsupStatus(mockUserDetails);
+
+      expect(result).toEqual(failedState);
+      expect(result?.error).toBe('Connection refused');
+    });
+
+    it('should derive the fileName from the requesting userId', () => {
+      const otherUser: UserDetails = {
+        traceId: 'trace-xyz',
+        user: { id: 'another-user', roles: [] },
+      };
+      mockSupportBundleService.getAsupTransmissionStatus.mockReturnValue(null);
+
+      controller.getAsupStatus(otherUser);
+
+      expect(service.getAsupTransmissionStatus).toHaveBeenCalledWith(
+        'ndm_logs_another-user.zip',
       );
     });
   });

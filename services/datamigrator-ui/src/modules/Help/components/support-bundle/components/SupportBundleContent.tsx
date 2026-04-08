@@ -8,6 +8,8 @@ import {
   DOWNLOAD_REPORT_LABEL,
   GENERATE_SUPPORT_BUNDLE_LABEL,
   GENERATING_SUPPORT_BUNDLE_LABEL,
+  SEND_SUPPORT_BUNDLE_LABEL,
+  SEND_SUPPORT_BUNDLE_TOOLTIP,
 } from "@modules/Help/components/support-bundle/constants/support-bundle.constant";
 import SupportBundleForm from "@modules/Help/components/support-bundle/components/SupportBundleForm";
 import { formatDateToYMD } from "@/utils/dateFormatter";
@@ -15,10 +17,14 @@ import { formatDateToYMD } from "@/utils/dateFormatter";
 const SupportBundleContent = () => {
   const {
     handleDownloadReport,
+    handleSendToNetAppSupport,
     handleGenerateBundle,
     bundleStatus,
     supportBundleForm,
     isDownloading,
+    isSending,
+    isTransmitting,
+    isSupportBundleAlreadySent,
     infoMessage,
   } = useContext(SupportBundleContext);
 
@@ -46,14 +52,29 @@ const SupportBundleContent = () => {
           </Box>
         )}
 
-        <Button
-          className="w-44"
-          disabled={!isDateSame || !bundleStatus.isBundleReady}
-          onClick={handleDownloadReport}
-          isSubmitting={isDownloading}
-        >
-          {DOWNLOAD_REPORT_LABEL}
-        </Button>
+        <Box className="flex gap-2 items-center">
+          <Button
+            className="w-44"
+            disabled={!isDateSame || !bundleStatus.isBundleReady}
+            onClick={handleDownloadReport}
+            isSubmitting={isDownloading}
+          >
+            {DOWNLOAD_REPORT_LABEL}
+          </Button>
+          <Button
+            className="w-48"
+            title={SEND_SUPPORT_BUNDLE_TOOLTIP}
+            disabled={
+              !isDateSame ||
+              !bundleStatus.isBundleReady ||
+              isSupportBundleAlreadySent
+            }
+            onClick={handleSendToNetAppSupport}
+            isSubmitting={isSending || isTransmitting}
+          >
+            {SEND_SUPPORT_BUNDLE_LABEL}
+          </Button>
+        </Box>
       </Box>
 
       <SupportBundleForm />
