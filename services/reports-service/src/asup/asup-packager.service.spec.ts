@@ -540,11 +540,11 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     // ── ndm_logs / no-project paths ──────────────────────────────────────────
 
-    it('no-project: worker.log exact match → no_project_worker_<id>_<date>.log', () => {
+    it('no-project: worker.log exact match → <date>_no_project_worker_<id>.log', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123/worker.log',
       );
-      expect(result).toBe('no_project_worker_wid-123_26_04_07.log');
+      expect(result).toBe('26_04_07_no_project_worker_wid-123.log');
     });
 
     it('no-project: worker other file → <date>_no_project_worker_<id>_<file>', () => {
@@ -554,11 +554,11 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result).toBe('26_04_07_no_project_worker_wid-123_debug.log');
     });
 
-    it('no-project: non-worker entry falls through to generic no-project fallback', () => {
+    it('no-project: non-worker control-plane entry → <date>_no_project_cp_<safe>', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/no-project/control-plane/admin.log',
       );
-      expect(result).toBe('26_04_07_no_project_control-plane_admin.log');
+      expect(result).toBe('26_04_07_no_project_cp_admin.log');
     });
 
     it('no-project: worker path with fewer than 3 rest segments falls to generic fallback', () => {
@@ -578,39 +578,39 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result.length).toBeGreaterThan(0);
     });
 
-    it('project: control-plane known service → cp_<svc>_<date>_<projectId>.log', () => {
+    it('project: control-plane known service → <date>_cp_<svc>_<projectId>.log', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/proj-abc/control-plane/admin-service.log',
       );
-      expect(result).toBe('cp_admin_svc_26_04_07_proj-abc.log');
+      expect(result).toBe('26_04_07_cp_admin_svc_proj-abc.log');
     });
 
-    it('project: control-plane config-service → cp_config_svc_<date>_<projectId>.log', () => {
+    it('project: control-plane config-service → <date>_cp_config_svc_<projectId>.log', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/config-service.log',
       );
-      expect(result).toBe('cp_config_svc_26_04_07_proj-abc.log');
+      expect(result).toBe('26_04_07_cp_config_svc_proj-abc.log');
     });
 
-    it('project: control-plane error-report.csv → cp_error_report_<date>_<projectId>.csv', () => {
+    it('project: control-plane error-report.csv → <date>_cp_error_report_<projectId>.csv', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/error-report.csv',
       );
-      expect(result).toBe('cp_error_report_26_04_07_proj-abc.csv');
+      expect(result).toBe('26_04_07_cp_error_report_proj-abc.csv');
     });
 
-    it('project: control-plane unknown service (cpMap miss) → cp_<date>_<projectId>_<safe>', () => {
+    it('project: control-plane unknown service (cpMap miss) → <date>_cp_<projectId>_<safe>', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/custom-service.log',
       );
-      expect(result).toBe('cp_26_04_07_proj-abc_custom-service.log');
+      expect(result).toBe('26_04_07_cp_proj-abc_custom-service.log');
     });
 
-    it('project: worker worker.log exact match → worker_<id>_<date>_<projectId>.log', () => {
+    it('project: worker worker.log exact match → <date>_worker_<id>_<projectId>.log', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456/worker.log',
       );
-      expect(result).toBe('worker_wid-456_26_04_07_proj-abc.log');
+      expect(result).toBe('26_04_07_worker_wid-456_proj-abc.log');
     });
 
     it('project: worker other file → <date>_<projectId>_worker_<id>_<safe>', () => {
