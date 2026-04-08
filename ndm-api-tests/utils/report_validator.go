@@ -47,7 +47,7 @@ func ValidateReport(
 	spec string,
 	volumeReplacements ...map[string]string,
 ) (map[Format][]error, error) {
-	
+
 	var volReplace map[string]string
 	if len(volumeReplacements) > 0 {
 		volReplace = volumeReplacements[0]
@@ -130,94 +130,231 @@ func fetchReport(
 	fmtType Format,
 	reportType string,
 ) ([]byte, error) {
-	// 1) pick endpoint and payload
-	var (
-		url     string
-		payload interface{}
-	)
 	switch fmtType {
 	case FormatCSV:
-		url = ADMIN_SERVICE_URL + "/api/v1/report/inventory/download"
-		jobRun := []string{jobRunID}
-		reportTypeVal := "COC"
-		if reportType == string(JobTypeDiscovery) {
-			reportTypeVal = reportType
-		}
-		payload = map[string]interface{}{
-			"jobRunId":    jobRun,
-			"report-type": reportTypeVal,
-		}
-
+		return fetchCSVReport(jobRunID, reportType)
 	case FormatPDF:
-		url = ADMIN_SERVICE_URL + "/api/v1/report/pdf/generate"
-		payload = map[string]interface{}{
-			"jobRunId":    jobRunID,
-			"report-type": reportType,
-		}
-
+		return fetchPDFReport(jobRunID, reportType)
 	default:
 		return nil, fmt.Errorf("unsupported format %q", fmtType)
 	}
-	Wait(20)
+}
 
-	// 2) marshal JSON body
+// fetchCSVReport dispatches to the correct download strategy based on job type:
+//   - Discovery: uses POST /inventory/download (on-the-fly ZIP from CSV on disk).
+//     Discovery reports are never pre-zipped by the worker, only a CSV is created.
+//   - Migration / Cutover: uses the two-step prepare-download → GET /download/:token
+//     flow. The worker deletes the CSV after creating the ZIP, so the legacy
+//     POST endpoint (which looks for the CSV) always 404s after the job finishes.
+func fetchCSVReport(jobRunID string, reportType string) ([]byte, error) {
+	if reportType == string(JobTypeDiscovery) {
+		return fetchDiscoveryCSV(jobRunID)
+	}
+	return fetchCocCSV(jobRunID)
+}
+
+// fetchDiscoveryCSV fetches a discovery CSV via POST /inventory/download, which
+// zips the CSV file on the fly. The discovery report type sent to the service is
+// "DISCOVERY" (matching the filename the service writes) not "DISCOVER" (the
+// internal JobType constant value).
+func fetchDiscoveryCSV(jobRunID string) ([]byte, error) {
+	url := ADMIN_SERVICE_URL + INVENTORY_DOWNLOAD_ENDPOINT
+	payload := map[string]interface{}{
+		"jobRunId":    []string{jobRunID},
+		"report-type": "DISCOVER", // matches ReportType.DISCOVERY enum value in the service
+	}
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request JSON: %w", err)
+		return nil, fmt.Errorf("marshal discovery download request: %w", err)
 	}
 
-	// 3) get token from env and prepare headers
 	headers := GetHeaders(AuthToken, ContentTypeJSON)
 
 	const maxRetries = MaxPollRetries
-	const retryDelay = DefaultPollInterval // adjust as needed
+	const retryDelay = DefaultPollInterval
+
+	Wait(20)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// 4) send POST
-		LogDebug(fmt.Sprintf("Getting %s reports for %s ID %s, attempt %d", fmtType, reportType, jobRunID, attempt))
+		LogDebug(fmt.Sprintf("Downloading discovery CSV for ID %s, attempt %d", jobRunID, attempt))
+
 		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
 		if err != nil {
 			return nil, fmt.Errorf("POST %s: %w", url, err)
 		}
-		defer resp.Body.Close()
-
-		// 5) read response
-		respBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("read response body: %w", err)
+		respBytes, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read discovery download response: %w", readErr)
 		}
 
-		// 6) expect 200 OK or 201 CREATED
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			return respBytes, nil
+		}
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError {
+			if attempt < maxRetries {
+				Wait(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("discovery download HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, string(respBytes))
+		}
+		return nil, fmt.Errorf("discovery download unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	return nil, fmt.Errorf("failed to fetch discovery CSV after %d retries", maxRetries)
+}
+
+// fetchCocCSV fetches a migration or cutover CSV using the two-step
+// prepare-download → GET /download/:token flow. The worker deletes the raw CSV
+// after zipping it, so prepare-download (which resolves the ZIP artifact) must
+// be used instead of the legacy POST /inventory/download endpoint.
+func fetchCocCSV(jobRunID string) ([]byte, error) {
+	prepareURL := ADMIN_SERVICE_URL + INVENTORY_PREPARE_DOWNLOAD_ENDPOINT
+	payload := map[string]interface{}{
+		"jobRunId":    jobRunID, // single string, not an array
+		"report-type": "COC",
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal prepare-download request: %w", err)
+	}
+
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+
+	const maxRetries = MaxPollRetries
+	const retryDelay = DefaultPollInterval
+
+	Wait(20)
+
+	// Step 1: POST prepare-download — retry until the worker's ZIP is ready.
+	var token string
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		LogDebug(fmt.Sprintf("Preparing COC CSV download for ID %s, attempt %d", jobRunID, attempt))
+
+		resp, err := SendAPIRequest(http.MethodPost, prepareURL, bodyBytes, headers)
+		if err != nil {
+			return nil, fmt.Errorf("POST %s: %w", prepareURL, err)
+		}
+		respBytes, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read prepare-download response: %w", readErr)
+		}
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+			// Standard NDM envelope: { "data": { "items": { "token": "..." } } }
+			var result struct {
+				Data struct {
+					Items struct {
+						Token string `json:"token"`
+					} `json:"items"`
+					Token string `json:"token"`
+				} `json:"data"`
+				Token string `json:"token"`
+			}
+			if err := json.Unmarshal(respBytes, &result); err != nil {
+				return nil, fmt.Errorf("parse prepare-download response: %w", err)
+			}
+			token = result.Data.Items.Token
+			if token == "" {
+				token = result.Data.Token
+			}
+			if token == "" {
+				token = result.Token
+			}
+			if token == "" {
+				return nil, fmt.Errorf("prepare-download returned empty token, body: %s", string(respBytes))
+			}
+			break
+		}
+
+		// 404 = ZIP not ready yet; 500 = transient — retry both.
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError {
+			if attempt < maxRetries {
+				Wait(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("prepare-download HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, string(respBytes))
+		}
+
+		return nil, fmt.Errorf("prepare-download unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	if token == "" {
+		return nil, fmt.Errorf("failed to obtain download token after %d retries", maxRetries)
+	}
+
+	// Step 2: GET /inventory/download/:token — one-time use, no auth required.
+	downloadURL := ADMIN_SERVICE_URL + INVENTORY_DOWNLOAD_BY_TOKEN_ENDPOINT + token
+	LogDebug(fmt.Sprintf("Downloading COC CSV for ID %s via token", jobRunID))
+
+	resp, err := SendAPIRequest(http.MethodGet, downloadURL, nil, map[string]string{})
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", downloadURL, err)
+	}
+	defer resp.Body.Close()
+
+	zipBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read download response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download-by-token unexpected HTTP %d: %s", resp.StatusCode, string(zipBytes))
+	}
+
+	return zipBytes, nil
+}
+
+// fetchPDFReport POSTs to the PDF generate endpoint and returns the raw PDF bytes.
+func fetchPDFReport(jobRunID string, reportType string) ([]byte, error) {
+	url := ADMIN_SERVICE_URL + "/api/v1/report/pdf/generate"
+	payload := map[string]interface{}{
+		"jobRunId":    jobRunID,
+		"report-type": reportType,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal PDF request: %w", err)
+	}
+
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+
+	Wait(20)
+
+	const maxRetries = MaxPollRetries
+	const retryDelay = DefaultPollInterval
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		LogDebug(fmt.Sprintf("Getting PDF report for %s ID %s, attempt %d", reportType, jobRunID, attempt))
+
+		resp, err := SendAPIRequest(http.MethodPost, url, bodyBytes, headers)
+		if err != nil {
+			return nil, fmt.Errorf("POST %s: %w", url, err)
+		}
+
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read PDF response: %w", err)
+		}
+
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 			return respBytes, nil
 		}
 
-		// Retry on 500 Internal Server Error
-		if resp.StatusCode == http.StatusInternalServerError {
+		if resp.StatusCode == http.StatusInternalServerError || resp.StatusCode == http.StatusNotFound {
 			if attempt < maxRetries {
 				Wait(retryDelay)
 				continue
 			}
-			return nil, fmt.Errorf("received HTTP 500 after %d retries: %s", maxRetries, string(respBytes))
+			return nil, fmt.Errorf("PDF report HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, string(respBytes))
 		}
 
-		// Retry on 404 with specific message
-		if resp.StatusCode == http.StatusNotFound {
-			// Try to parse the response body as JSON to check the message
-
-			if attempt < maxRetries {
-				Wait(retryDelay)
-				continue
-			}
-			return nil, fmt.Errorf("received HTTP 404 after %d retries: %s", maxRetries, string(respBytes))
-
-		}
-
-		// For other status codes, return error immediately
-		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
+		return nil, fmt.Errorf("PDF report unexpected HTTP %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return nil, fmt.Errorf("failed to fetch report after %d retries", maxRetries)
+	return nil, fmt.Errorf("failed to fetch PDF report after %d retries", maxRetries)
 }
 
 // --- PDF & CSV Validator Helpers ------------------------------------------
@@ -244,7 +381,7 @@ func validateCSVAgainstJSON(csvPath, jsonPath string, volumeReplacements map[str
 		sort.Slice(keys, func(i, j int) bool {
 			return len(keys[i]) > len(keys[j])
 		})
-		
+
 		// Perform replacements in order (longest keys first)
 		for _, oldVol := range keys {
 			newVol := volumeReplacements[oldVol]
