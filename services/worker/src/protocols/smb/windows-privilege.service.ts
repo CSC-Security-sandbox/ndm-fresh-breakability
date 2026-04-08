@@ -14,30 +14,34 @@ export class WindowsPrivilegeService {
         traceId: string,
         username: string,
         password: string
-    ): Promise<'IS_MEMBER' | 'NOT_MEMBER' | 'SKIPPED'> {
+    ): Promise<'IS_MEMBER' | 'NOT_MEMBER' | 'NOT_DOMAIN_JOINED' | 'ERROR'> {
         if (process.platform !== 'win32') {
-            return 'SKIPPED';
+            return 'NOT_DOMAIN_JOINED';
         }
 
         this.logger.log(`[${traceId}] Checking Backup Operators group membership for user: ${username}`);
 
-        // Escape single quotes in credentials to avoid breaking the PS script string literals
+        // Escape single quotes in username to avoid breaking PS script string literals.
+        // Password is passed via NDM_SMB_PASSWORD env var so it never appears in the command line.
         const safeUsername = username.replace(/'/g, "''");
-        const safePassword = password.replace(/'/g, "''");
 
+        // Escape LDAP filter metacharacters (* ( ) \ NUL) in the sAMAccountName value.
         const psScript = `
 $cs = Get-WmiObject Win32_ComputerSystem
 if ($cs.PartOfDomain -eq $false) {
-    Write-Output 'SKIPPED'
+    Write-Output 'NOT_DOMAIN_JOINED'
     exit
 }
 try {
     $domain = $cs.Domain
-    $samUsername = '${safeUsername}' -replace '^.*\\\\', ''
-    $bindUser = if ('${safeUsername}' -match '\\\\') { '${safeUsername}' } else { "$domain\\${safeUsername}" }
-    $cred = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domain", $bindUser, '${safePassword}')
+    $rawUsername = '${safeUsername}'
+    $samUsername = $rawUsername -replace '^.*\\\\', ''
+    $escapedSam = [Regex]::Replace($samUsername, '[\\\\*()\\x00]', { param($m) '\\' + [Convert]::ToString([byte][char]$m.Value, 16).PadLeft(2, '0') })
+    $bindUser = if ($rawUsername -match '\\\\') { $rawUsername } else { "$domain\\$rawUsername" }
+    $bindPassword = $env:NDM_SMB_PASSWORD
+    $cred = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domain", $bindUser, $bindPassword)
     $userSearcher = New-Object System.DirectoryServices.DirectorySearcher($cred)
-    $userSearcher.Filter = "(&(objectClass=user)(sAMAccountName=$samUsername))"
+    $userSearcher.Filter = "(&(objectClass=user)(sAMAccountName=$escapedSam))"
     $userSearcher.PropertiesToLoad.Add("distinguishedName") | Out-Null
     $userResult = $userSearcher.FindOne()
     if ($null -eq $userResult) { Write-Output 'NOT_MEMBER'; exit }
@@ -49,14 +53,14 @@ try {
     $isMember = $groupResult.Properties["member"] | Where-Object { $_ -eq $userDN }
     if ($isMember) { Write-Output 'IS_MEMBER' } else { Write-Output 'NOT_MEMBER' }
 } catch {
-    Write-Output 'NOT_MEMBER'
+    Write-Output 'ERROR'
 }
 `;
         try {
             const encodedCommand = Buffer.from(psScript, 'utf16le').toString('base64');
             const { stdout, stderr } = await execAsync(
                 `powershell -NoProfile -NonInteractive -EncodedCommand ${encodedCommand}`,
-                { windowsHide: true, timeout: 15000 }
+                { windowsHide: true, timeout: 15000, env: { ...process.env, NDM_SMB_PASSWORD: password } }
             );
 
             if (stderr) {
@@ -66,9 +70,9 @@ try {
             const result = stdout.trim();
             this.logger.log(`[${traceId}] Backup Operators check output: ${result}`);
 
-            if (result.includes('SKIPPED')) {
+            if (result.includes('NOT_DOMAIN_JOINED')) {
                 this.logger.log(`[${traceId}] Worker is not domain-joined. Skipping Backup Operators check.`);
-                return 'SKIPPED';
+                return 'NOT_DOMAIN_JOINED';
             }
 
             if (result.includes('IS_MEMBER')) {
@@ -76,12 +80,18 @@ try {
                 return 'IS_MEMBER';
             }
 
+            if (result.includes('ERROR')) {
+                this.logger.error(`[${traceId}] Backup Operators check script reported an error (LDAP/AD failure).`);
+                return 'ERROR';
+            }
+
             this.logger.warn(`[${traceId}] User is NOT a member of Backup Operators.`);
             return 'NOT_MEMBER';
 
-        } catch (error) {
-            this.logger.error(`[${traceId}] Error checking Backup Operators membership: ${error.message}`);
-            return 'SKIPPED';
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${traceId}] Error checking Backup Operators membership: ${errorMessage}`);
+            return 'ERROR';
         }
     }
 

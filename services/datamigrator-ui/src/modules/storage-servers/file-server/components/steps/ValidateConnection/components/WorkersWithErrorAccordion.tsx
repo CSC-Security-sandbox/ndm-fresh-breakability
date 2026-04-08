@@ -8,7 +8,6 @@ import {
 } from "@netapp/bxp-design-system-react";
 import { CommonFileServerContext } from "@modules/storage-servers/file-server/context/CommonFileServerContextProvider";
 import { Box } from "@components/container/index";
-import { nanoid } from "@reduxjs/toolkit";
 
 const WARNING_MESSAGES: Record<string, string> = {
   BACKUP_OPERATORS_CHECK_SKIPPED:
@@ -39,7 +38,7 @@ const WorkersWithErrorAccordion = () => {
 
         if (isWarningOnly) {
           return (
-            <AccordionController key={nanoid()}>
+            <AccordionController key={workerWithError.workerId}>
               <AccordionCard
                 title={workerWithError.workerName}
                 value={<Box className="text-yellow-600 text-lg">Warning</Box>}
@@ -59,7 +58,7 @@ const WorkersWithErrorAccordion = () => {
         }
 
         return (
-          <AccordionController key={nanoid()}>
+          <AccordionController key={workerWithError.workerId}>
             <AccordionCard
               title={workerWithError.workerName}
               value={<Box className="text-red-500 text-lg">Error</Box>}

@@ -29,6 +29,7 @@ const NextAndSubmitButton = () => {
     validateConnectionLoader,
     disableNextButton,
     nfsValidatedWorkersIds,
+    smbValidatedWorkersIds,
     editingFileServerDetails,
     selectedProtocol,
     // Dell Isilon Certificate
@@ -276,7 +277,9 @@ const NextAndSubmitButton = () => {
       }
     } else if (currentStepIndex === 2) {
       const selectedSet = new Set(selectedWorkerIds);
-      const validatedSet = new Set(nfsValidatedWorkersIds);
+      // Use the validated set that matches the currently selected protocol
+      const validatedIds = selectedProtocol === 'SMB' ? smbValidatedWorkersIds : nfsValidatedWorkersIds;
+      const validatedSet = new Set(validatedIds);
 
       const areIdsEqual =
         selectedSet.size === validatedSet.size &&
@@ -287,6 +290,10 @@ const NextAndSubmitButton = () => {
         handleFinish();
       } else {
         const resp = await handleValidateConnection();
+        // Stay on the page if there are any errors or warnings so the user can
+        // read them. On the next Finish click, areIdsEqual will be true (the
+        // workers are now in the validated set) and handleFinish() is called
+        // directly without re-running validation.
         if (resp.errorMessageList.length === 0) {
           // Remove handleFinish and enable goToNextStep once speed test is enabled
           // goToNextStep();

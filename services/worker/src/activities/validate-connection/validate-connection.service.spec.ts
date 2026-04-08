@@ -85,6 +85,7 @@ describe('ValidateConnectionActivity', () => {
     const response = await service.validate('trace-123', 'NFS', { hostname: 'localhost' }, { enablePreListPath: false, enableVersionFetch: false });
 
     expect(response.status).toBe('error');
+    expect(response.warnings).toEqual([]);
     expect(response.message).toContain('Failed to validate connection for localhost of type NFS: Error: Validation error');
   });
 
@@ -193,7 +194,7 @@ describe('ValidateConnectionActivity', () => {
 
     describe('worker is NOT part of a domain', () => {
       it('should surface BACKUP_OPERATORS_CHECK_SKIPPED warning and still succeed', async () => {
-        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('SKIPPED');
+        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('NOT_DOMAIN_JOINED');
 
         const response = await service.validate('trace-d1', 'SMB', smbPayload, feature);
 
@@ -204,7 +205,7 @@ describe('ValidateConnectionActivity', () => {
       });
 
       it('should pass username and password to the membership check', async () => {
-        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('SKIPPED');
+        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('NOT_DOMAIN_JOINED');
 
         await service.validate('trace-d2', 'SMB', smbPayload, { enablePreListPath: false, enableVersionFetch: false });
 
@@ -213,8 +214,17 @@ describe('ValidateConnectionActivity', () => {
         );
       });
 
+      it('should surface BACKUP_OPERATORS_CHECK_SKIPPED warning when ERROR is returned (LDAP failure)', async () => {
+        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('ERROR');
+
+        const response = await service.validate('trace-d1b', 'SMB', smbPayload, feature);
+
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED']);
+      });
+
       it('should still call disconnectSession even when check was skipped', async () => {
-        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('SKIPPED');
+        mockWindowsPrivilegeService.checkBackupOperatorMembership.mockResolvedValue('NOT_DOMAIN_JOINED');
 
         await service.validate('trace-d3', 'SMB', smbPayload, { enablePreListPath: false, enableVersionFetch: false });
 

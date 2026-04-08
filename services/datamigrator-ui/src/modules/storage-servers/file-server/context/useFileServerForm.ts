@@ -395,14 +395,14 @@ export const useFileServerForm = () => {
             errorMessage: '',
             warnings: row.warnings,
             workerId: row?.workerId,
-            workerName: workerIdWithName?.[row?.workerId] || 'workerName',
+            workerName: workerIdWithName?.[row?.workerId] || row?.workerId || 'Unknown worker',
           });
         }
       } else if (row.status === WorkerConnectionStatus.ERROR) {
         newErrorMessageList.push({
           errorMessage: row?.message || "Unknown-Error",
           workerId: row?.workerId,
-          workerName: workerIdWithName?.[row?.workerId] || "workerName ",
+          workerName: workerIdWithName?.[row?.workerId] || row?.workerId || 'Unknown worker',
         });
         if (row?.protocolType === ProtocolType.NFS)
           nfsFailedWorkers.push(row?.workerId);

@@ -35,15 +35,15 @@ export class ValidateConnectionActivity {
       warnings: [],
       message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
+    const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
     try {
-      const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
       await protocol.validateConnection(traceId, payload);
 
       if (protocolType === ProtocolTypes.SMB) {
         const membershipResult = await this.windowsPrivilegeService.checkBackupOperatorMembership(
           traceId, payload.username, payload.password,
         );
-        if (membershipResult === 'SKIPPED') {
+        if (membershipResult === 'NOT_DOMAIN_JOINED' || membershipResult === 'ERROR') {
           response.warnings.push('BACKUP_OPERATORS_CHECK_SKIPPED');
         } else if (membershipResult === 'NOT_MEMBER') {
           response.warnings.push('BACKUP_OPERATORS_NOT_MEMBER');
@@ -54,20 +54,6 @@ export class ValidateConnectionActivity {
       }
       if (feature.enableVersionFetch) {
         response.protocolVersions = await protocol.getProtocolVersions(traceId, payload);
-      }
-      // if(protocolType === ProtocolTypes.SMB) {
-      //   this.logger.log(`[${traceId}] disconnecting session for SMB`);
-      //   const disconnectResponse = await protocol.disconnectSession(traceId, payload);
-      //   this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
-      // }
-      if (protocolType === ProtocolTypes.SMB) {
-        try {
-          this.logger.log(`[${traceId}] disconnecting session for SMB`);
-          const disconnectResponse = await protocol.disconnectSession(traceId, payload);
-          this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
-        } catch (disconnectError) {
-          this.logger.warn(`[${traceId}] Failed to disconnect SMB session (non-fatal): ${disconnectError.message}`);
-        }
       }
       this.logger.log(`[${traceId}] Paths: ${response.paths}`);
       return response;
@@ -80,8 +66,19 @@ export class ValidateConnectionActivity {
         workerId: this.workerId,
         paths: [],
         protocolVersions: [],
+        warnings: [],
         message: `Failed to validate connection for ${payload.hostname} of type ${protocolType}: ${error}`,
       };
+    } finally {
+      if (protocolType === ProtocolTypes.SMB) {
+        try {
+          this.logger.log(`[${traceId}] disconnecting session for SMB`);
+          const disconnectResponse = await protocol.disconnectSession(traceId, payload);
+          this.logger.log(`[${traceId}] Disconnect response: ${disconnectResponse}`);
+        } catch (disconnectError) {
+          this.logger.warn(`[${traceId}] Failed to disconnect SMB session (non-fatal): ${disconnectError.message}`);
+        }
+      }
     }
   }
 }

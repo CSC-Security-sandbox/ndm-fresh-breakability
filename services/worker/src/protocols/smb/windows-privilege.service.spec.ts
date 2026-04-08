@@ -204,10 +204,10 @@ describe('WindowsPrivilegeService', () => {
                 });
             });
 
-            it('should return SKIPPED without executing PowerShell', async () => {
+            it('should return NOT_DOMAIN_JOINED without executing PowerShell', async () => {
                 const result = await service.checkBackupOperatorMembership('trace-1', 'user', 'pass');
 
-                expect(result).toBe('SKIPPED');
+                expect(result).toBe('NOT_DOMAIN_JOINED');
                 expect(mockExecAsync).not.toHaveBeenCalled();
             });
         });
@@ -229,7 +229,7 @@ describe('WindowsPrivilegeService', () => {
                 expect(mockExecAsync).toHaveBeenCalledTimes(1);
                 expect(mockExecAsync).toHaveBeenCalledWith(
                     expect.stringContaining('-EncodedCommand'),
-                    expect.objectContaining({ windowsHide: true, timeout: 15000 })
+                    expect.objectContaining({ windowsHide: true, timeout: 15000, env: expect.objectContaining({ NDM_SMB_PASSWORD: 'pass' }) })
                 );
             });
 
@@ -241,22 +241,33 @@ describe('WindowsPrivilegeService', () => {
                 expect(result).toBe('NOT_MEMBER');
             });
 
-            it('should return SKIPPED when machine is not domain-joined', async () => {
-                mockExecAsync.mockResolvedValue({ stdout: 'SKIPPED', stderr: '' });
+            it('should return NOT_DOMAIN_JOINED when machine is not domain-joined', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'NOT_DOMAIN_JOINED', stderr: '' });
 
                 const result = await service.checkBackupOperatorMembership('trace-3', 'user', 'pass');
 
-                expect(result).toBe('SKIPPED');
+                expect(result).toBe('NOT_DOMAIN_JOINED');
             });
 
-            it('should return SKIPPED when PowerShell throws an error', async () => {
+            it('should return ERROR when PowerShell throws an error', async () => {
                 mockExecAsync.mockRejectedValue(new Error('PowerShell execution failed'));
 
                 const result = await service.checkBackupOperatorMembership('trace-4', 'user', 'pass');
 
-                expect(result).toBe('SKIPPED');
+                expect(result).toBe('ERROR');
                 expect(service['logger'].error).toHaveBeenCalledWith(
                     expect.stringContaining('Error checking Backup Operators membership')
+                );
+            });
+
+            it('should return ERROR when PS script outputs ERROR (LDAP failure)', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'ERROR', stderr: '' });
+
+                const result = await service.checkBackupOperatorMembership('trace-4b', 'user', 'pass');
+
+                expect(result).toBe('ERROR');
+                expect(service['logger'].error).toHaveBeenCalledWith(
+                    expect.stringContaining('LDAP/AD failure')
                 );
             });
 
@@ -280,7 +291,7 @@ describe('WindowsPrivilegeService', () => {
                 const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
                 expect(decoded).toContain('Backup Operators');
                 expect(decoded).toContain('Win32_ComputerSystem');
-                expect(decoded).toContain('sAMAccountName=$samUsername');
+                expect(decoded).toContain('sAMAccountName=$escapedSam');
                 expect(decoded).toContain('distinguishedName');
             });
 
@@ -292,9 +303,14 @@ describe('WindowsPrivilegeService', () => {
                 const calledArg = mockExecAsync.mock.calls[0][0] as string;
                 const encodedPart = calledArg.split('-EncodedCommand ')[1];
                 const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
-                // Single quotes must be doubled to escape them in PowerShell string literals
+                // Username single quotes are doubled in the PS script
                 expect(decoded).toContain("user''name");
-                expect(decoded).toContain("pa''ss");
+                // Password is passed via env var — must NOT appear in the encoded script
+                expect(decoded).not.toContain("pa'ss");
+                expect(decoded).not.toContain("pa''ss");
+                // Password is in the env var instead
+                const callOptions = mockExecAsync.mock.calls[0][1] as any;
+                expect(callOptions.env.NDM_SMB_PASSWORD).toBe("pa'ss");
             });
 
             it('should use -NoProfile -NonInteractive flags', async () => {
@@ -308,12 +324,11 @@ describe('WindowsPrivilegeService', () => {
                 );
             });
 
-            it('should return SKIPPED when stdout contains unexpected output', async () => {
+            it('should return NOT_MEMBER when stdout contains unexpected output', async () => {
                 mockExecAsync.mockResolvedValue({ stdout: 'some unexpected output', stderr: '' });
 
                 const result = await service.checkBackupOperatorMembership('trace-9', 'user', 'pass');
 
-                // Falls through to the NOT_MEMBER branch since it doesn't match SKIPPED or IS_MEMBER
                 expect(result).toBe('NOT_MEMBER');
             });
 
