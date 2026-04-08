@@ -28,5 +28,10 @@ export default registerAs(
         process.env.PROMETHEUS_BASE_URL ||
         'http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/query',
     },
+    reports: {
+      supportBundleSendUrl:
+        process.env.SUPPORT_BUNDLE_SEND_URL ||
+        'http://reports-service-service:3000/api/v1/report/asup/support-bundle/send',
+    },
   }),
 );

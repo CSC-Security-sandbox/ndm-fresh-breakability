@@ -4,6 +4,7 @@ export type SupportBundleContextType = {
   supportBundleForm: BlueXpFormType<SupportBundleFormType>;
   handleDateChange: (value: any) => void;
   handleDownloadReport: () => void;
+  handleSendToNetAppSupport: () => void;
   handleGenerateBundle: () => void;
   bundleStatus: isBundleReadyApiType;
   selectedItems: string[];
@@ -12,6 +13,9 @@ export type SupportBundleContextType = {
   wrapperClass: string;
   projectWorkerData: ProjectWorkerMap;
   isDownloading: boolean;
+  isSending: boolean;
+  isTransmitting: boolean;
+  isSupportBundleAlreadySent: boolean;
   infoMessage: Record<string, string>;
 };
 

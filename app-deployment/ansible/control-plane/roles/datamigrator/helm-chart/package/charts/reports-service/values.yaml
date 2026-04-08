@@ -64,6 +64,10 @@ env:
     value: "https://support.netapp.com/put/AsupPut"
   - name: CSV_BATCH_SIZE
     value: "50000"
+  - name: ASUP_SUPPORT_BUNDLE_ENDPOINT
+    value: "https://support.netapp.com/put/AsupPut"
+  - name: JSON_PAYLOAD_LIMIT
+    value: "50mb"
 
 service:
   type: ClusterIP

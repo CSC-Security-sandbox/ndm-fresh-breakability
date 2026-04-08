@@ -2,7 +2,8 @@ import { Injectable, Inject } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { execFile as execFileCb } from 'child_process';
 import {
   LoggerFactory,
   LoggerService,
@@ -11,6 +12,9 @@ import { AsupXmlGeneratorService } from './asup-xml-generator.service';
 import { SerialIdSyncService } from '../serial-id-sync.service';
 
 const sevenBin = require('7zip-bin');
+const execFile = promisify(execFileCb);
+
+const ISF_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * AsupPackagerService
@@ -27,7 +31,13 @@ export class AsupPackagerService {
   private readonly WORK_DIR = '/tmp/asup-packaging';
   private readonly ASUP_REPORTS_DIR = process.env.ASUP_REPORTS_DIR || '/tmp/asup-reports';
   private readonly XHEADERS_TEMPLATE_PATH = path.join(__dirname, 'templates', 'x-headers.template');
+  private readonly SUPPORT_BUNDLE_XHEADERS_TEMPLATE_PATH = path.join(
+    __dirname,
+    'templates',
+    'support-bundle-x-headers.template',
+  );
   private xHeadersTemplate = '';
+  private supportBundleXHeadersTemplate = '';
 
   constructor(
     private readonly asupXmlGeneratorService: AsupXmlGeneratorService,
@@ -62,7 +72,7 @@ export class AsupPackagerService {
     this.logger.log(`Migration XML from generator (${migrationXmlSize} bytes, ${collectionTimeMs}ms)`);
 
     // 2. Build x-header-data.txt first so its size is available for the manifest row
-    const { headersText, headersMap } = this.buildXHeaders(serialId);
+    const { headersText, headersMap } = this.buildXHeaders(this.xHeadersTemplate, serialId);
     const xHeaderSize = Buffer.byteLength(headersText, 'utf-8');
     this.logger.log(`Generated x-header-data.txt (${xHeaderSize} bytes)`);
 
@@ -96,7 +106,7 @@ export class AsupPackagerService {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        execFile(
+        execFileCb(
           sevenBin.path7za,
           ['a', archivePath, files.migration, files.manifest, files.xHeader],
           (err, _stdout, stderr) => {
@@ -134,6 +144,138 @@ export class AsupPackagerService {
     return { archivePath, md5Checksum, headersMap, xmlContent: migrationXml };
   }
 
+  async packageSupportBundlePayload(
+    bundleFilename: string,
+    bundleBuffer: Buffer,
+  ): Promise<{
+    archivePath: string;
+    md5Checksum: string;
+    headersMap: Record<string, string>;
+    isLargePayload: boolean;
+  }> {
+    this.logger.log(`Starting support bundle ASUP packaging for ${bundleFilename}...`);
+    const startTime = Date.now();
+    await fs.mkdir(this.WORK_DIR, { recursive: true });
+    await fs.mkdir(this.ASUP_REPORTS_DIR, { recursive: true });
+
+    const safeBundleName = path.basename(bundleFilename || 'support-bundle.zip');
+    const files = {
+      bundle: path.join(this.WORK_DIR, safeBundleName),
+      manifest: path.join(this.WORK_DIR, 'manifest.xml'),
+      xHeader: path.join(this.WORK_DIR, 'x-header.txt'),
+    };
+    const extractedDir = path.join(this.WORK_DIR, `support-bundle-extracted-${Date.now()}`);
+    const stagedPayloadDir = path.join(this.WORK_DIR, `support-bundle-staged-${Date.now()}`);
+
+    let archivePath: string | undefined;
+    let headersMap: Record<string, string> = {};
+    try {
+      await fs.writeFile(files.bundle, bundleBuffer);
+      await this.extractZip(files.bundle, extractedDir);
+      const bundledFiles = await this.collectExtractedFiles(extractedDir);
+      await fs.mkdir(stagedPayloadDir, { recursive: true });
+
+      const manifestEntries: Array<{ name: string; size: number }> = [];
+      for (const file of bundledFiles) {
+        const safeName = this.toFlatFilename(file.relativePath);
+        await fs.copyFile(file.absolutePath, path.join(stagedPayloadDir, safeName));
+        manifestEntries.push({ name: safeName, size: file.size });
+      }
+
+      const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
+        manifestEntries,
+        Date.now() - startTime,
+      );
+      const serialId = (await this.serialIdSyncService.getSerialId()) ?? '';
+      const xHeaders = this.buildXHeaders(
+        this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
+        serialId,
+      );
+      headersMap = xHeaders.headersMap;
+
+      await Promise.all([
+        fs.writeFile(files.manifest, manifestXml, 'utf-8'),
+        fs.writeFile(files.xHeader, xHeaders.headersText, 'utf-8'),
+      ]);
+      await Promise.all([
+        fs.copyFile(files.manifest, path.join(stagedPayloadDir, 'manifest.xml')),
+        fs.copyFile(files.xHeader, path.join(stagedPayloadDir, 'x-header.txt')),
+      ]);
+
+      archivePath = path.join(this.ASUP_REPORTS_DIR, `support-bundle-asup-${Date.now()}.7z`);
+
+    await execFile(sevenBin.path7za, ['a', archivePath, '.'], { cwd: stagedPayloadDir });
+
+      let archiveBuffer = await fs.readFile(archivePath);
+      const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
+      const archiveFilename = path.basename(archivePath);
+
+      // ISF spec: X-Netapp-asup-large and X-Netapp-asup-large-filename must appear
+      // in BOTH the Payload (x-header.txt inside .7z) and Transmission (HTTP headers).
+      // We update x-header.txt inside the existing archive only when the payload is large.
+      if (isLargePayload) {
+        this.logger.log(
+          `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
+          ` > 100MB threshold — appending ISF fields to x-header.txt inside .7z`,
+        );
+        const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
+        const existingXHeader = await fs.readFile(isfXHeaderPath, 'utf-8');
+        const isfLines =
+          `X-Netapp-asup-large: true\n` +
+          `X-Netapp-asup-large-filename: ${archiveFilename}\n`;
+        await fs.writeFile(isfXHeaderPath, existingXHeader.trimEnd() + '\n' + isfLines, 'utf-8');
+
+        // Update only x-header.txt inside the existing .7z (avoids full recompression)
+        await execFile(sevenBin.path7za, ['u', archivePath, 'x-header.txt'], {
+          cwd: stagedPayloadDir,
+        });
+
+        // MD5 must be recomputed over the updated archive
+        archiveBuffer = await fs.readFile(archivePath);
+        this.logger.log(
+          `[packageSupportBundlePayload] x-header.txt updated inside .7z with ISF fields`,
+        );
+      }
+
+      const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
+      headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
+
+      return { archivePath, md5Checksum, headersMap, isLargePayload };
+    } catch (err) {
+      this.logger.error(
+        `[packageSupportBundlePayload] Packaging failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw err;
+    } finally {
+      // Always clean up temp files and dirs, regardless of success or failure.
+      // Each cleanup is independent — a failure in one must not block the others.
+      await Promise.all(
+        Object.values(files).map((f) =>
+          fs.unlink(f).catch((err: unknown) => {
+            this.logger.warn(
+              `[packageSupportBundlePayload] Failed to delete temp file ${f}: ${(err as Error).message}`,
+            );
+          }),
+        ),
+      );
+      try {
+        await fs.rm(extractedDir, { recursive: true, force: true });
+      } catch (err) {
+        this.logger.warn(
+          `[packageSupportBundlePayload] Failed to remove extractedDir ${extractedDir}: ${(err as Error).message}`,
+        );
+      }
+      try {
+        await fs.rm(stagedPayloadDir, { recursive: true, force: true });
+      } catch (err) {
+        this.logger.warn(
+          `[packageSupportBundlePayload] Failed to remove stagedPayloadDir ${stagedPayloadDir}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
   // ─── Templates ───────────────────────────────────────────────
 
   /** Load x-headers template once at startup. Manifest is built by xml-generator. */
@@ -144,17 +286,29 @@ export class AsupPackagerService {
     } catch (error) {
       this.logger.error(`Failed to load ASUP x-headers template: ${(error as Error).message}`);
     }
+
+    try {
+      this.supportBundleXHeadersTemplate = await fs.readFile(
+        this.SUPPORT_BUNDLE_XHEADERS_TEMPLATE_PATH,
+        'utf-8',
+      );
+      this.logger.log('Loaded support bundle ASUP x-headers template');
+    } catch (error) {
+      this.logger.error(
+        `Failed to load support bundle ASUP x-headers template: ${(error as Error).message}`,
+      );
+    }
   }
 
   // ─── X-Headers ────────────────────────────────────────────────
 
-  private buildXHeaders(serialId: string): {
+  private buildXHeaders(template: string, serialId = ''): {
     headersText: string;
     headersMap: Record<string, string>;
   } {
     const generatedOn = this.formatAsupDate(new Date());
 
-    const headersText = this.xHeadersTemplate
+    const headersText = template
       .replace(/\{\{GENERATED_ON\}\}/g, generatedOn)
       .replace(/\{\{SERIAL_NUM\}\}/g, serialId)
       .replace(/\{\{SYSTEM_ID\}\}/g, serialId);
@@ -169,6 +323,197 @@ export class AsupPackagerService {
     }
 
     return { headersText, headersMap };
+  }
+
+  private async extractZip(zipPath: string, outputDir: string): Promise<void> {
+    await fs.mkdir(outputDir, { recursive: true });
+    // Use 7za (already bundled via 7zip-bin) instead of unzip to avoid the
+    // "overlapped components (possible zip bomb)" false-positive from unzip 6.0
+    // which rejects zip files created by Java/Node.js zip libraries.
+    const sevenZaPath: string = sevenBin.path7za;
+    await execFile(sevenZaPath, ['x', zipPath, `-o${outputDir}`, '-y']);
+  }
+
+  private async collectExtractedFiles(
+    rootDir: string,
+  ): Promise<Array<{ relativePath: string; absolutePath: string; size: number }>> {
+    const files: Array<{ relativePath: string; absolutePath: string; size: number }> = [];
+    const walk = async (dir: string) => {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const absolutePath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(absolutePath);
+          continue;
+        }
+        const stat = await fs.stat(absolutePath);
+        files.push({
+          relativePath: path.relative(rootDir, absolutePath).replace(/\\/g, '/'),
+          absolutePath,
+          size: stat.size,
+        });
+      }
+    };
+    await walk(rootDir);
+    return files;
+  }
+
+  private toFlatFilename(relativePath: string): string {
+    // Strip the top-level bundle directory (e.g. "ndm_logs_<uuid>/"), then map
+    // each file to a structured short name based on its path type.
+    //
+    // All output filenames begin with <YY_MM_DD>_ (date-first ordering).
+    //
+    // Log files (under ndm_logs/<date>/):
+    //   control-plane service logs  → <YY_MM_DD>_cp_<svc>_<projectId>.log
+    //   worker logs                 → <YY_MM_DD>_worker_<workerId>_<projectId>.log
+    //   no-project worker logs      → <YY_MM_DD>_no_project_worker_<workerId>.log
+    //   no-project cp logs          → <YY_MM_DD>_no_project_cp_<svc>.log
+    //
+    // CSV files (epoch-ms timestamp converted to <YY_MM_DD>, stripped from end):
+    //   Performance Metrics/  → <YY_MM_DD>_perf_<metric>.csv
+    //   State Data/           → <YY_MM_DD>_state_data_<name>.csv
+    //   System Inventory/     → <YY_MM_DD>_sys_inventory_<type>.csv
+    //   configuration data/   → <YY_MM_DD>_<filename>.csv
+    const normalized = relativePath.replace(/\\/g, '/');
+    const parts = normalized.split('/');
+
+    // Strip the top-level UUID bundle directory
+    const trimmed = parts.length > 1 ? parts.slice(1).join('/') : normalized;
+    const tp = trimmed.split('/');
+
+    /** Convert YYYY-MM-DD → YY_MM_DD (2-digit year, underscore separators) */
+    const shortDate = (d: string) => d.replace(/-/g, '_').slice(2);
+
+    /** Sanitize a string for use in a filename */
+    const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    /**
+     * Strip a trailing 13-digit epoch-ms timestamp from a bare stem (no extension),
+     * convert it to YY_MM_DD, and return both the cleaned stem and the date.
+     * e.g. "cpu_percent_1775624021419" → { stem: "cpu_percent", date: "26_04_08" }
+     * Falls back to today's UTC date when no timestamp is found.
+     */
+    const stripTimestamp = (stem: string): { stem: string; date: string } => {
+      const toYYMMDD = (d: Date) => {
+        const yy = String(d.getUTCFullYear()).slice(2);
+        const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dy = String(d.getUTCDate()).padStart(2, '0');
+        return `${yy}_${mo}_${dy}`;
+      };
+      const m = stem.match(/^(.*?)_(\d{13})$/);
+      if (m) return { stem: m[1], date: toYYMMDD(new Date(parseInt(m[2], 10))) };
+      return { stem, date: toYYMMDD(new Date()) };
+    };
+
+    // ── Log files under ndm_logs/<date>/... ─────────────────────────────────
+    if (tp[0] === 'ndm_logs' && tp.length >= 3) {
+      const dd = shortDate(tp[1]);   // YYYY-MM-DD → YY_MM_DD
+      const projectOrNone = tp[2];   // <projectId> or "no-project"
+
+      // no-project: ndm_logs/<date>/no-project/...
+      if (projectOrNone === 'no-project') {
+        const rest = tp.slice(3);
+
+        // no-project worker logs
+        if (rest[0] === 'worker' && rest.length >= 3) {
+          const workerId = rest[1];
+          const fname = rest.slice(2).join('/');
+          if (fname === 'worker.log') return `${dd}_no_project_worker_${workerId}.log`;
+          return `${dd}_no_project_worker_${workerId}_${safe(fname)}`;
+        }
+
+        // no-project control-plane logs
+        if (rest[0] === 'control-plane' && rest.length >= 2) {
+          const fname = rest.slice(1).join('/');
+          const cpMap: Record<string, string> = {
+            'admin-service.log':   `${dd}_no_project_cp_admin_svc.log`,
+            'config-service.log':  `${dd}_no_project_cp_config_svc.log`,
+            'datamigrator-ui.log': `${dd}_no_project_cp_datamigrator_ui.log`,
+            'db-migrations.log':   `${dd}_no_project_cp_db_migrations.log`,
+            'db-writer.log':       `${dd}_no_project_cp_db_writer.log`,
+            'jobs-service.log':    `${dd}_no_project_cp_jobs_svc.log`,
+            'reports-service.log': `${dd}_no_project_cp_reports_svc.log`,
+            'support-service.log': `${dd}_no_project_cp_support_svc.log`,
+            'error-report.csv':    `${dd}_no_project_cp_error_report.csv`,
+          };
+          return cpMap[fname] ?? `${dd}_no_project_cp_${safe(fname)}`;
+        }
+
+        return `${dd}_no_project_${safe(rest.join('_'))}`;
+      }
+
+      // project: ndm_logs/<date>/<projectId>/...
+      const projectId = projectOrNone;
+      const sub = tp.slice(3); // e.g. ["control-plane", "admin-service.log"]
+      if (sub.length === 0) return safe(trimmed.replace(/\//g, '_'));
+
+      const subDir = sub[0];
+
+      // Control-plane service logs
+      if (subDir === 'control-plane') {
+        const fname = sub.slice(1).join('/');
+        const cpMap: Record<string, string> = {
+          'admin-service.log':   `${dd}_cp_admin_svc_${projectId}.log`,
+          'config-service.log':  `${dd}_cp_config_svc_${projectId}.log`,
+          'datamigrator-ui.log': `${dd}_cp_datamigrator_ui_${projectId}.log`,
+          'db-migrations.log':   `${dd}_cp_db_migrations_${projectId}.log`,
+          'db-writer.log':       `${dd}_cp_db_writer_${projectId}.log`,
+          'jobs-service.log':    `${dd}_cp_jobs_svc_${projectId}.log`,
+          'reports-service.log': `${dd}_cp_reports_svc_${projectId}.log`,
+          'support-service.log': `${dd}_cp_support_svc_${projectId}.log`,
+          'error-report.csv':    `${dd}_cp_error_report_${projectId}.csv`,
+        };
+        return cpMap[fname] ?? `${dd}_cp_${projectId}_${safe(fname)}`;
+      }
+
+      // Worker logs: ndm_logs/<date>/<projectId>/worker/<workerId>/...
+      if (subDir === 'worker' && sub.length >= 3) {
+        const workerId = sub[1];
+        const fname = sub.slice(2).join('/');
+        if (fname === 'worker.log') return `${dd}_worker_${workerId}_${projectId}.log`;
+        return `${dd}_${projectId}_worker_${workerId}_${safe(fname)}`;
+      }
+
+      return safe(trimmed.replace(/\//g, '_'));
+    }
+
+    // ── Metrics / State / Inventory / Config CSV files ───────────────────────
+    // Epoch-ms timestamps embedded in filenames are converted to YY_MM_DD and
+    // moved to the front; the raw epoch is stripped from the end.
+    const dir = (tp[0] ?? '').toLowerCase();
+    const rawFname = tp.slice(1).join('_');
+
+    if (dir === 'performance metrics') {
+      // "cpu-percent-1775624021419.csv" → "26_04_08_perf_cpu_percent.csv"
+      const { stem, date } = stripTimestamp(
+        rawFname.replace(/-/g, '_').replace(/\.csv$/i, ''),
+      );
+      return `${date}_perf_${safe(stem)}.csv`;
+    }
+    if (dir === 'state data') {
+      // "service_pods_1775624017567.csv" → "26_04_08_state_data_service_pods.csv"
+      const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
+      return `${date}_state_data_${safe(stem)}.csv`;
+    }
+    if (dir === 'system inventory') {
+      // "system-inventory-disk-usage-1775624022171.csv" → "26_04_08_sys_inventory_disk_usage.csv"
+      const base = rawFname
+        .replace(/^system-inventory-/i, '')
+        .replace(/-/g, '_')
+        .replace(/\.csv$/i, '');
+      const { stem, date } = stripTimestamp(base);
+      return `${date}_sys_inventory_${safe(stem)}.csv`;
+    }
+    if (dir === 'configuration data') {
+      // "job_config_details_1775624017276.csv" → "26_04_08_job_config_details.csv"
+      const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
+      return `${date}_${safe(stem)}.csv`;
+    }
+
+    // Fallback: flatten path separators and sanitize
+    const fallback = trimmed.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return fallback.length > 0 ? fallback : `file-${Date.now()}`;
   }
 
   /** Format date for ASUP x-headers (e.g. "Sun Jan 05 14:30:00 UTC 2025"). */

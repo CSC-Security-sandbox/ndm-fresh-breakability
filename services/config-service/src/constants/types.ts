@@ -19,6 +19,15 @@ export type Role = {
     permissions: string[];
 };
 
+export type AsupTransmissionStatus = 'transmitting' | 'completed' | 'failed';
+
+export interface AsupTransmissionState {
+  status: AsupTransmissionStatus;
+  startedAt: Date;
+  completedAt?: Date;
+  error?: string;
+}
+
 export interface BundleStatus {
   isProcessing: boolean;
   isBundleReady: boolean;
