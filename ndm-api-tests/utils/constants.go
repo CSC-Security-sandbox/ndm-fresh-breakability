@@ -17,6 +17,7 @@ type FileServerStatus string
 var (
 	PROTOCOL_TYPE            Protocol
 	CLOUD_ENVIRONMENT        CloudEnvironment
+	VOLUME_CLONE_PROVIDER    VolumeCloneProvider
 	JOB_SERVICE_URL          string
 	CONFIG_SERVICE_URL       string
 	ADMIN_SERVICE_URL        string
@@ -40,6 +41,7 @@ var (
 	NDM_WORKERS_PASSWORD     string
 	PROTOCOL_USERNAME        string
 	PROTOCOL_PASSWORD        string
+	PROTOCOL_DOMAIN_NAME     string
 	BUILD_VERSION            string
 	REF_TYPE                 string
 	NDM_NEXUS_USERNAME       string
@@ -64,7 +66,7 @@ var (
 	AZURE_NFS_NDM_WORKERS_PORT      string
 	AZURE_NFS_NDM_WORKERS_PASSWORD  string
 	AZURE_NFS_SOURCE_VOLUMES        string
-	AZURE_NFS_DESTINATION_VOLUMES   string
+	AZURE_NFS_DEST_VOLUMES          string
 	AZURE_NFS_SOURCE_HOST_IP        string
 	AZURE_NFS_DESTINATION_HOST_IP   string
 	AZURE_NFS_PROTOCOL_USERNAME     string
@@ -88,7 +90,7 @@ var (
 	AZURE_SMB_NDM_WORKERS_PORT      string
 	AZURE_SMB_NDM_WORKERS_PASSWORD  string
 	AZURE_SMB_SOURCE_VOLUMES        string
-	AZURE_SMB_DESTINATION_VOLUMES   string
+	AZURE_SMB_DEST_VOLUMES          string
 	AZURE_SMB_SOURCE_HOST_IP        string
 	AZURE_SMB_DESTINATION_HOST_IP   string
 	AZURE_SMB_PROTOCOL_USERNAME     string
@@ -240,6 +242,7 @@ func init() {
 	REF_TYPE = os.Getenv("REF_TYPE")
 	NDM_NEXUS_USERNAME = os.Getenv("NDM_NEXUS_USERNAME")
 	NDM_NEXUS_PASSWORD = os.Getenv("NDM_NEXUS_PASSWORD")
+	VOLUME_CLONE_PROVIDER = ResolveVolumeCloneProvider()
 
 	// ONTAP Configuration for parallel testing with volume cloning
 	// Source ONTAP
@@ -275,6 +278,8 @@ func init() {
 func UpdateConfVariables(protocolType, environment string) {
 	PROTOCOL_TYPE = Protocol(protocolType)
 	CLOUD_ENVIRONMENT = CloudEnvironment(environment)
+	VOLUME_CLONE_PROVIDER = ResolveVolumeCloneProvider()
+	PROTOCOL_DOMAIN_NAME = ""
 
 	switch PROTOCOL_TYPE {
 	case ProtocolSMB:
@@ -285,16 +290,21 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("AZURE_SMB_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("AZURE_SMB_NDM_WORKERS_PASSWORD")
 
-			// Use ONTAP volumes for parallel testing with volume cloning
-			SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_SMB_SOURCE_VOLUMES")
-			DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_SMB_DEST_VOLUMES")
-
-			// Use SMB-specific ONTAP host IPs for mounting volumes
-			SOURCE_HOST_IP = os.Getenv("ONTAP_SMB_SRC_HOST_IP")
-			DESTINATION_HOST_IP = os.Getenv("ONTAP_SMB_DST_HOST_IP")
+			if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+				SOURCE_VOLUMES_LIST = os.Getenv("AZURE_SMB_SOURCE_VOLUMES")
+				DESTINATION_VOLUMES_LIST = os.Getenv("AZURE_SMB_DEST_VOLUMES")
+				SOURCE_HOST_IP = os.Getenv("AZURE_SMB_SOURCE_HOST_IP")
+				DESTINATION_HOST_IP = os.Getenv("AZURE_SMB_DESTINATION_HOST_IP")
+			} else {
+				SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_SMB_SOURCE_VOLUMES")
+				DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_SMB_DEST_VOLUMES")
+				SOURCE_HOST_IP = os.Getenv("ONTAP_SMB_SRC_HOST_IP")
+				DESTINATION_HOST_IP = os.Getenv("ONTAP_SMB_DST_HOST_IP")
+			}
 
 			PROTOCOL_USERNAME = os.Getenv("AZURE_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_SMB_PROTOCOL_PASSWORD")
+			PROTOCOL_DOMAIN_NAME = os.Getenv("AZURE_SMB_DOMAIN_NAME")
 
 			SMB_EXECUTABLE_FILENAME = os.Getenv("SMB_EXECUTABLE_FILENAME")
 			ProtocolVersion3 = ProtocolVersionSMB_V3
@@ -305,7 +315,7 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("VSPHERE_SMB_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("VSPHERE_SMB_NDM_WORKERS_PASSWORD")
 
-			// Use ONTAP volumes for parallel testing with volume cloning
+			// vSphere continues to use ONTAP clone volumes.
 			SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_SMB_SOURCE_VOLUMES")
 			DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_SMB_DEST_VOLUMES")
 
@@ -315,6 +325,7 @@ func UpdateConfVariables(protocolType, environment string) {
 
 			PROTOCOL_USERNAME = os.Getenv("VSPHERE_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("VSPHERE_SMB_PROTOCOL_PASSWORD")
+			PROTOCOL_DOMAIN_NAME = os.Getenv("AZURE_SMB_DOMAIN_NAME")
 
 			SMB_EXECUTABLE_FILENAME = os.Getenv("SMB_EXECUTABLE_FILENAME")
 			ProtocolVersion3 = ProtocolVersionSMB_V3
@@ -331,13 +342,17 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("AZURE_NFS_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("AZURE_NFS_NDM_WORKERS_PASSWORD")
 
-			// Use ONTAP volumes for parallel testing with volume cloning
-			SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_NFS_SOURCE_VOLUMES")
-			DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_NFS_DEST_VOLUMES")
-
-			// Use NFS-specific ONTAP host IPs for mounting volumes
-			SOURCE_HOST_IP = os.Getenv("ONTAP_NFS_SRC_HOST_IP")
-			DESTINATION_HOST_IP = os.Getenv("ONTAP_NFS_DST_HOST_IP")
+			if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+				SOURCE_VOLUMES_LIST = os.Getenv("AZURE_NFS_SOURCE_VOLUMES")
+				DESTINATION_VOLUMES_LIST = os.Getenv("AZURE_NFS_DEST_VOLUMES")
+				SOURCE_HOST_IP = os.Getenv("AZURE_NFS_SOURCE_HOST_IP")
+				DESTINATION_HOST_IP = os.Getenv("AZURE_NFS_DESTINATION_HOST_IP")
+			} else {
+				SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_NFS_SOURCE_VOLUMES")
+				DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_NFS_DEST_VOLUMES")
+				SOURCE_HOST_IP = os.Getenv("ONTAP_NFS_SRC_HOST_IP")
+				DESTINATION_HOST_IP = os.Getenv("ONTAP_NFS_DST_HOST_IP")
+			}
 
 			PROTOCOL_USERNAME = os.Getenv("AZURE_NFS_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_NFS_PROTOCOL_PASSWORD")
@@ -350,7 +365,7 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("VSPHERE_NFS_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("VSPHERE_NFS_NDM_WORKERS_PASSWORD")
 
-			// Use ONTAP volumes for parallel testing with volume cloning
+			// vSphere continues to use ONTAP clone volumes.
 			SOURCE_VOLUMES_LIST = os.Getenv("ONTAP_NFS_SOURCE_VOLUMES")
 			DESTINATION_VOLUMES_LIST = os.Getenv("ONTAP_NFS_DEST_VOLUMES")
 

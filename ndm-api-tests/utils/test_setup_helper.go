@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 )
@@ -10,6 +11,7 @@ import (
 // TestVolumeSetup holds configuration for test volume setup
 type TestVolumeSetup struct {
 	EnableCloning       bool
+	CloneProvider       VolumeCloneProvider
 	SourceOntapURL      string
 	SourceOntapUsername string
 	SourceOntapPassword string
@@ -18,6 +20,8 @@ type TestVolumeSetup struct {
 	DestOntapUsername   string
 	DestOntapPassword   string
 	DestSVMName         string
+	SourceANFConfig     *ANFEndpointConfig
+	DestANFConfig       *ANFEndpointConfig
 	MasterSourceVolumes []string
 	MasterDestVolumes   []string
 	SourceVolumeManager *TestVolumeManager
@@ -64,10 +68,116 @@ func validateOntapConfiguration(client *OntapClient, svmName string, volumes []s
 	return nil
 }
 
+func initializeANFTestVolumeSetup(sourceVolumesEnv, destVolumesEnv, protocolLabel string) (*TestVolumeSetup, error) {
+	sourceConfig := resolveANFEndpointConfig(protocolLabel, "SOURCE")
+	destConfig := resolveANFEndpointConfig(protocolLabel, "DEST")
+	protocolKey := strings.ToUpper(strings.TrimSpace(protocolLabel))
+
+	setup := &TestVolumeSetup{
+		EnableCloning:   true,
+		CloneProvider:   VolumeCloneProviderANF,
+		SourceANFConfig: sourceConfig,
+		DestANFConfig:   destConfig,
+	}
+
+	if setup.SourceANFConfig.ResourceGroup == "" || setup.SourceANFConfig.AccountName == "" || setup.SourceANFConfig.PoolName == "" {
+		return nil, fmt.Errorf(
+			"ANF source configuration incomplete. Required: AZURE_ANF_%s_SOURCE_RESOURCE_GROUP, AZURE_ANF_%s_SOURCE_ACCOUNT_NAME, AZURE_ANF_%s_SOURCE_POOL_NAME",
+			protocolKey, protocolKey, protocolKey,
+		)
+	}
+
+	if setup.DestANFConfig.ResourceGroup == "" || setup.DestANFConfig.AccountName == "" || setup.DestANFConfig.PoolName == "" {
+		return nil, fmt.Errorf(
+			"ANF destination configuration incomplete. Required: AZURE_ANF_%s_DEST_RESOURCE_GROUP, AZURE_ANF_%s_DEST_ACCOUNT_NAME, AZURE_ANF_%s_DEST_POOL_NAME",
+			protocolKey, protocolKey, protocolKey,
+		)
+	}
+
+	if sourceVolumesEnv == "" || destVolumesEnv == "" {
+		return nil, fmt.Errorf("%s ANF master volumes must be set before running ANF clone tests", protocolLabel)
+	}
+
+	setup.MasterSourceVolumes = ParseVolumeNames(sourceVolumesEnv)
+	setup.MasterDestVolumes = ParseVolumeNames(destVolumesEnv)
+
+	if len(setup.MasterSourceVolumes) == 0 {
+		return nil, fmt.Errorf("%s ANF source volumes are empty or invalid", protocolLabel)
+	}
+	if len(setup.MasterDestVolumes) == 0 {
+		return nil, fmt.Errorf("%s ANF destination volumes are empty or invalid", protocolLabel)
+	}
+
+	LogDebug(fmt.Sprintf("%s ANF cloning initialized", protocolLabel))
+	LogDebug(fmt.Sprintf("Source ANF account: %s/%s/%s", setup.SourceANFConfig.ResourceGroup, setup.SourceANFConfig.AccountName, setup.SourceANFConfig.PoolName))
+	LogDebug(fmt.Sprintf("Destination ANF account: %s/%s/%s", setup.DestANFConfig.ResourceGroup, setup.DestANFConfig.AccountName, setup.DestANFConfig.PoolName))
+	LogDebug(fmt.Sprintf("%s ANF source volumes to clone: %v", protocolLabel, setup.MasterSourceVolumes))
+	LogDebug(fmt.Sprintf("%s ANF destination volumes to clone: %v", protocolLabel, setup.MasterDestVolumes))
+
+	return setup, nil
+}
+
+func resolveANFEndpointConfig(protocolLabel, endpoint string) *ANFEndpointConfig {
+	protocolKey := strings.ToUpper(strings.TrimSpace(protocolLabel))
+	endpointKey := strings.ToUpper(strings.TrimSpace(endpoint))
+
+	return &ANFEndpointConfig{
+		ResourceGroup: strings.TrimSpace(os.Getenv(fmt.Sprintf("AZURE_ANF_%s_%s_RESOURCE_GROUP", protocolKey, endpointKey))),
+		AccountName:   strings.TrimSpace(os.Getenv(fmt.Sprintf("AZURE_ANF_%s_%s_ACCOUNT_NAME", protocolKey, endpointKey))),
+		PoolName:      strings.TrimSpace(os.Getenv(fmt.Sprintf("AZURE_ANF_%s_%s_POOL_NAME", protocolKey, endpointKey))),
+	}
+}
+
+func currentTestIdentifier() string {
+	report := CurrentSpecReport()
+	parts := make([]string, 0, len(report.ContainerHierarchyTexts)+1)
+
+	for _, text := range report.ContainerHierarchyTexts {
+		trimmed := strings.TrimSpace(text)
+		if trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+
+	if trimmedLeaf := strings.TrimSpace(report.LeafNodeText); trimmedLeaf != "" {
+		parts = append(parts, trimmedLeaf)
+	}
+
+	if len(parts) == 0 {
+		return "test"
+	}
+
+	return strings.Join(parts, " / ")
+}
+
+func countCreatedClones(cloneNames []string) int {
+	count := 0
+	for _, cloneName := range cloneNames {
+		if strings.TrimSpace(cloneName) != "" {
+			count++
+		}
+	}
+
+	return count
+}
+
+func logCreatedClones(title string, cloneNames, masterVolumes []string) {
+	fmt.Printf("\n========================================\n")
+	fmt.Printf("%s\n", title)
+	for i, cloneName := range cloneNames {
+		if strings.TrimSpace(cloneName) == "" {
+			continue
+		}
+		fmt.Printf("  [%d] %s (from %s)\n", i+1, cloneName, masterVolumes[i])
+	}
+	fmt.Printf("========================================\n\n")
+}
+
 // InitializeNFSTestVolumeSetup reads NFS-specific configuration from environment variables
 func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 	setup := &TestVolumeSetup{
 		EnableCloning:       true, // Always enable cloning
+		CloneProvider:       VOLUME_CLONE_PROVIDER,
 		SourceOntapURL:      ONTAP_SRC_API_URL,
 		SourceOntapUsername: ONTAP_SYSTEM_MANAGER_SRC_USERNAME,
 		SourceOntapPassword: ONTAP_SYSTEM_MANAGER_SRC_PASSWORD,
@@ -76,6 +186,14 @@ func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 		DestOntapUsername:   ONTAP_SYSTEM_MANAGER_DST_USERNAME,
 		DestOntapPassword:   ONTAP_SYSTEM_MANAGER_DST_PASSWORD,
 		DestSVMName:         ONTAP_DST_SVM_NAME,
+	}
+
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+		return initializeANFTestVolumeSetup(
+			os.Getenv("AZURE_NFS_SOURCE_VOLUMES"),
+			os.Getenv("AZURE_NFS_DEST_VOLUMES"),
+			"NFS",
+		)
 	}
 
 	// Validate required source configuration
@@ -129,6 +247,7 @@ func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 func InitializeSMBTestVolumeSetup() (*TestVolumeSetup, error) {
 	setup := &TestVolumeSetup{
 		EnableCloning:       true, // Always enable cloning
+		CloneProvider:       VOLUME_CLONE_PROVIDER,
 		SourceOntapURL:      ONTAP_SRC_API_URL,
 		SourceOntapUsername: ONTAP_SYSTEM_MANAGER_SRC_USERNAME,
 		SourceOntapPassword: ONTAP_SYSTEM_MANAGER_SRC_PASSWORD,
@@ -137,6 +256,14 @@ func InitializeSMBTestVolumeSetup() (*TestVolumeSetup, error) {
 		DestOntapUsername:   ONTAP_SYSTEM_MANAGER_DST_USERNAME,
 		DestOntapPassword:   ONTAP_SYSTEM_MANAGER_DST_PASSWORD,
 		DestSVMName:         ONTAP_DST_SVM_NAME,
+	}
+
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+		return initializeANFTestVolumeSetup(
+			os.Getenv("AZURE_SMB_SOURCE_VOLUMES"),
+			os.Getenv("AZURE_SMB_DEST_VOLUMES"),
+			"SMB",
+		)
 	}
 
 	// Validate required source configuration
@@ -211,70 +338,66 @@ func SetupTestVolumesBeforeEach() ([]string, []string, *TestVolumeManager, *Test
 		GlobalVolumeSetup = setup
 	}
 
-	// Auto-detect test case ID from Ginkgo context
-	testCaseID := "test"
-	if CurrentSpecReport().LeafNodeText != "" {
-		testCaseID = CurrentSpecReport().LeafNodeText
-	}
-	// Try to extract from parent context if available
-	if CurrentSpecReport().ContainerHierarchyTexts != nil && len(CurrentSpecReport().ContainerHierarchyTexts) > 0 {
-		// Use the first Describe block name which typically contains TC-XXX
-		testCaseID = CurrentSpecReport().ContainerHierarchyTexts[0]
-	}
+	// Auto-detect test case ID from Ginkgo context.
+	testCaseID := currentTestIdentifier()
 
 	// Set current test case in environment for volume naming
 	os.Setenv("CURRENT_TEST_CASE", testCaseID)
 	GlobalVolumeSetup.CurrentTestCase = testCaseID
 
-	LogDebug(fmt.Sprintf("Setting up test volumes for test case: %s", testCaseID))
+	LogDebug(fmt.Sprintf("Setting up %s test volumes for test case: %s", GlobalVolumeSetup.CloneProvider, testCaseID))
 
 	// Create NEW volume managers for THIS test (not stored in global state to avoid race conditions)
-	sourceVolumeManager := NewTestVolumeManager(
-		GlobalVolumeSetup.SourceOntapURL,
-		GlobalVolumeSetup.SourceOntapUsername,
-		GlobalVolumeSetup.SourceOntapPassword,
-		GlobalVolumeSetup.SourceSVMName,
-		"", // runnerID not needed anymore
-	)
+	var sourceVolumeManager *TestVolumeManager
+	var destVolumeManager *TestVolumeManager
 
-	// Create destination volume manager
-	destVolumeManager := NewTestVolumeManager(
-		GlobalVolumeSetup.DestOntapURL,
-		GlobalVolumeSetup.DestOntapUsername,
-		GlobalVolumeSetup.DestOntapPassword,
-		GlobalVolumeSetup.DestSVMName,
-		"", // runnerID not needed anymore
-	)
+	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
+		sourceVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.SourceANFConfig)
+		destVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.DestANFConfig)
+	} else {
+		sourceVolumeManager = NewTestVolumeManager(
+			GlobalVolumeSetup.SourceOntapURL,
+			GlobalVolumeSetup.SourceOntapUsername,
+			GlobalVolumeSetup.SourceOntapPassword,
+			GlobalVolumeSetup.SourceSVMName,
+			"", // runnerID not needed anymore
+		)
 
-	// Create source volume clones on source ONTAP
-	LogDebug(fmt.Sprintf("[%s] Creating %d source volume clone(s) from base volumes: %v", testCaseID, len(GlobalVolumeSetup.MasterSourceVolumes), GlobalVolumeSetup.MasterSourceVolumes))
-	sourceClones, err := sourceVolumeManager.CreateMultipleClones(GlobalVolumeSetup.MasterSourceVolumes)
+		destVolumeManager = NewTestVolumeManager(
+			GlobalVolumeSetup.DestOntapURL,
+			GlobalVolumeSetup.DestOntapUsername,
+			GlobalVolumeSetup.DestOntapPassword,
+			GlobalVolumeSetup.DestSVMName,
+			"", // runnerID not needed anymore
+		)
+	}
+
+	selection := CloneSelection{
+		SourceIndices: allIndices(len(GlobalVolumeSetup.MasterSourceVolumes)),
+		DestIndices:   allIndices(len(GlobalVolumeSetup.MasterDestVolumes)),
+	}
+	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
+		selection = RequiredCloneSelectionForTest(testCaseID, PROTOCOL_TYPE)
+		LogDebug(fmt.Sprintf("[%s] Using selective ANF cloning. Source indices: %v Destination indices: %v", testCaseID, selection.SourceIndices, selection.DestIndices))
+	}
+
+	LogDebug(fmt.Sprintf("[%s] Creating source volume clone(s) from base volumes: %v", testCaseID, GlobalVolumeSetup.MasterSourceVolumes))
+	sourceClones, err := sourceVolumeManager.CreateSelectedClones(GlobalVolumeSetup.MasterSourceVolumes, selection.SourceIndices)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create source volume clones: %w", err)
 	}
 	LogDebug(fmt.Sprintf("[%s] Source clones created: %v", testCaseID, sourceClones))
-	fmt.Printf("\n========================================\n")
-	fmt.Printf("SOURCE VOLUME CLONES CREATED:\n")
-	for i, cloneName := range sourceClones {
-		fmt.Printf("  [%d] %s (from %s)\n", i+1, cloneName, GlobalVolumeSetup.MasterSourceVolumes[i])
-	}
-	fmt.Printf("========================================\n\n")
+	logCreatedClones("SOURCE VOLUME CLONES CREATED:", sourceClones, GlobalVolumeSetup.MasterSourceVolumes)
 
-	// Create destination volume clones on destination ONTAP
-	LogDebug(fmt.Sprintf("[%s] Creating %d destination volume clone(s) from base volumes: %v", testCaseID, len(GlobalVolumeSetup.MasterDestVolumes), GlobalVolumeSetup.MasterDestVolumes))
-	destClones, err := destVolumeManager.CreateMultipleClones(GlobalVolumeSetup.MasterDestVolumes)
+	LogDebug(fmt.Sprintf("[%s] Creating destination volume clone(s) from base volumes: %v", testCaseID, GlobalVolumeSetup.MasterDestVolumes))
+	destClones, err := destVolumeManager.CreateSelectedClones(GlobalVolumeSetup.MasterDestVolumes, selection.DestIndices)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create destination volume clones: %w", err)
 	}
 	LogDebug(fmt.Sprintf("[%s] Destination clones created: %v", testCaseID, destClones))
-	fmt.Printf("\n========================================\n")
-	fmt.Printf("DESTINATION VOLUME CLONES CREATED:\n")
-	for i, cloneName := range destClones {
-		fmt.Printf("  [%d] %s (from %s)\n", i+1, cloneName, GlobalVolumeSetup.MasterDestVolumes[i])
-	}
-	fmt.Printf("========================================\n\n")
+	logCreatedClones("DESTINATION VOLUME CLONES CREATED:", destClones, GlobalVolumeSetup.MasterDestVolumes)
 
-	LogDebug(fmt.Sprintf("[%s] Successfully configured %d source and %d destination volumes", testCaseID, len(sourceClones), len(destClones)))
+	LogDebug(fmt.Sprintf("[%s] Successfully configured %d source and %d destination volumes", testCaseID, countCreatedClones(sourceClones), countCreatedClones(destClones)))
 
 	// Return the cloned volume names AND managers for this specific test
 	// Each test maintains its own managers to avoid race conditions in parallel execution

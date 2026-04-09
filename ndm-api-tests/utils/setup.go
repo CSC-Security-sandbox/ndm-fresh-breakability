@@ -155,6 +155,33 @@ func InitTestEnvWithoutWorkers() {
 	LogDebug("Test environment initialized (auth tokens and configs only, no global workers)")
 }
 
+func ensureSMBWorkersDomainJoinedIfNeeded() error {
+	if PROTOCOL_TYPE != "SMB" {
+		return nil
+	}
+
+	domainUser := PROTOCOL_USERNAME
+	domainPassword := PROTOCOL_PASSWORD
+	if domainUser == "" || domainPassword == "" {
+		LogDebug("Skipping Windows worker domain join because SMB domain credentials are not configured")
+		return nil
+	}
+
+	domainName := PROTOCOL_DOMAIN_NAME
+	if domainName == "" {
+		return fmt.Errorf("SMB domain name is not configured. Set AZURE_SMB_DOMAIN_NAME")
+	}
+
+	LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
+
+	if err := EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword); err != nil {
+		return fmt.Errorf("error joining Windows workers to domain: %w", err)
+	}
+
+	LogDebug("Windows workers are domain-joined and ready for AD operations")
+	return nil
+}
+
 func SetupTestEnv(workerCount int) (string, string, map[string]SSHConfig, error) {
 	// Create the project first.
 	projectId, projectName, err := CreateProject(AuthToken, AccountId)
@@ -186,13 +213,16 @@ func SetupTestEnv(workerCount int) (string, string, map[string]SSHConfig, error)
 		}
 		if onlineWorkers == len(workerIds) {
 			LogDebug("All workers are Online")
+			if err := ensureSMBWorkersDomainJoinedIfNeeded(); err != nil {
+				return "", "", nil, err
+			}
 			LogDebug("Test environment setup complete and all workers are Online")
 			return projectId, projectName, attachedWorkersConfig, nil
 		}
 		LogDebug(fmt.Sprintf("Workers online: %d/%d (attempt %d/%d)", onlineWorkers, len(workerIds), i+1, MaxWorkerStatusRetries))
 		Wait(DefaultPollInterval)
 	}
-	
+
 	// If we exit the loop, workers didn't come online in time
 	return "", "", nil, fmt.Errorf("timeout waiting for workers to come online after %d seconds", MaxWorkerStatusRetries*DefaultPollInterval)
 }

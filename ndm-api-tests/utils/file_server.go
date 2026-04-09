@@ -220,12 +220,13 @@ func UpdateFileServer(fileConfigID string, fileServerID string, payload map[stri
 	return nil
 }
 
-// checkFileServerStatus polls the file server status until it becomes ACTIVE
-// If status is IN_PROGRESS, it will wait and retry
-// If status is ERRORED, it will return an error
-// Returns the file server ID and nil error when status becomes ACTIVE
+// checkFileServerStatus polls the file server status until it becomes ACTIVE.
+// If status is IN_PROGRESS, it will wait and retry.
+// If status is ERRORED, it will return an error.
+// Returns the last seen file server ID so callers can still use it for retry flows.
 func checkFileServerStatus(fileConfigID string, headers map[string]string) (string, error) {
 	getFileServerURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, fileConfigID)
+	lastSeenFileServerID := ""
 
 	for attempt := 1; attempt <= MaxFileServerStatusRetries; attempt++ {
 		LogDebug(fmt.Sprintf("Checking FileServer status, attempt: %d", attempt))
@@ -255,19 +256,28 @@ func checkFileServerStatus(fileConfigID string, headers map[string]string) (stri
 		if len(fileServerDetails.Data.Items.FileServers) > 0 {
 			fileServerID = fileServerDetails.Data.Items.FileServers[0].ID
 			LogDebug(fmt.Sprintf("FileServer ID from response: %s", fileServerID))
+			if fileServerID != "" {
+				lastSeenFileServerID = fileServerID
+			}
 		}
 
 		switch FileServerStatus(status) {
 		case FileServerStatusActive:
 			LogDebug("FileServer is now ACTIVE")
-			return fileServerID, nil
+			if fileServerID != "" {
+				return fileServerID, nil
+			}
+			return lastSeenFileServerID, nil
 		case FileServerStatusInProgress:
 			LogDebug("FileServer is still IN_PROGRESS, waiting...")
 			if attempt < MaxFileServerStatusRetries {
 				Wait(DefaultPollInterval)
 			}
 		case FileServerStatusErrored:
-			return fileServerID, fmt.Errorf("FileServer is in ERRORED state: %s", status)
+			if fileServerID != "" {
+				return fileServerID, fmt.Errorf("FileServer is in ERRORED state: %s", status)
+			}
+			return lastSeenFileServerID, fmt.Errorf("FileServer is in ERRORED state: %s", status)
 		default:
 			LogDebug(fmt.Sprintf("FileServer has unknown status: %s, continuing to wait...", status))
 			if attempt < MaxFileServerStatusRetries {
@@ -276,7 +286,7 @@ func checkFileServerStatus(fileConfigID string, headers map[string]string) (stri
 		}
 	}
 
-	return "", fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxFileServerStatusRetries)
+	return lastSeenFileServerID, fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxFileServerStatusRetries)
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,
@@ -312,7 +322,7 @@ func GetExportPathID(
 		// Wait for refresh to complete - the refresh triggers an async background scan
 		// We need to wait longer on first attempt to allow full re-scan
 		if attempt == 1 {
-			LogDebug("First refresh - waiting 10 seconds for full ONTAP re-scan...")
+			LogDebug("First refresh - waiting 10 seconds for full file server re-scan...")
 			time.Sleep(10 * time.Second)
 		} else {
 			LogDebug("FileServer refresh triggered, waiting for discovery scan to complete...")
@@ -583,7 +593,7 @@ func RemoveDeltaFromVolumeForNFS(export string, deltaFolderName string) string {
 	sudo mount -t nfs "%s" "%s"
 
 	# Remove delta directory if it exists in the export
-	if [ -d "%s/%s" ]; then
+	if sudo test -d "%s/%s"; then
 		sudo rm -rf "%s/%s"
 	fi
 
@@ -820,7 +830,7 @@ func GetFileUserGroupId(export, fileName string) (uid, gid int, err error) {
 	trap 'sudo umount "$MP" || true; rm -rf "$MP"' EXIT
 
 	sudo mount -t nfs "%[1]s" "$MP"
-	stat -c "%%u %%g" "$MP/%[2]s"
+	sudo stat -c "%%u %%g" "$MP/%[2]s"
 	`, export, fileName)
 
 	out, err := sshRunScript(sshCfg, script)

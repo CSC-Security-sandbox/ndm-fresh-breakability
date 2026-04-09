@@ -93,6 +93,14 @@ on:
         options:
           - 'true'
           - 'false'
+      volume_clone_provider:
+        description: 'Select volume clone backend for Azure API tests'
+        required: false
+        type: choice
+        default: 'ontap'
+        options:
+          - 'anf'
+          - 'ontap'
   schedule:
     - cron: '30 18 * * *'
   workflow_call:
@@ -100,6 +108,11 @@ on:
       build:
         description: 'Build to release'
         required: true
+        type: string
+      volume_clone_provider:
+        description: 'Select volume clone backend for Azure API tests (anf/ontap)'
+        required: false
+        default: 'ontap'
         type: string
 
 permissions: 
@@ -1814,4 +1827,6 @@ jobs:
       windows_worker_installer_url: ${{ needs.upload-windows-installer.outputs.windows_worker_installer_url }}
       build_version: ${{ needs.package-artifacts.outputs.build_version }}
       ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
+      volume_clone_provider: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
+      trigger_type: ${{ github.event_name }}
     secrets: inherit

@@ -1,7 +1,7 @@
 # Control Plane (Linux) — no accelerated networking needed, not on the data path
 module "control_plane" {
   source                          = "../../modules/linux"
-  vm_name                         = "${var.vm_owner}-cp-api"
+  vm_name                         = "${var.vm_owner}cp"
   resource_group                  = var.resource_group
   gallery_resource_group          = var.gallery_resource_group
   vnet_name                       = var.vnet_name
@@ -28,7 +28,7 @@ module "control_plane" {
 module "linux_workers" {
   count                           = var.linux_worker_count
   source                          = "../../modules/linux"
-  vm_name                         = "${var.vm_owner}-worker-linux-${count.index + 1}-api"
+  vm_name                         = "${var.vm_owner}lnx${count.index + 1}"
   resource_group                  = var.resource_group
   gallery_resource_group          = var.gallery_resource_group
   vnet_name                       = var.vnet_name
@@ -57,8 +57,8 @@ module "linux_workers" {
 module "windows_workers" {
   count                    = var.deploy_windows_workers ? var.windows_worker_count : 0
   source                   = "../../modules/windows"
-  vm_name                  = "${var.vm_owner}-worker-windows-${count.index + 1}-api"
-  computer_name            = "win-worker-${count.index + 1}"
+  vm_name                  = "${var.vm_owner}win${count.index + 1}"
+  computer_name            = "win-wrkr-${count.index + 1}"
   resource_group           = var.resource_group
   vm_size                  = var.windows_worker_vm_size
   admin_username           = var.admin_username

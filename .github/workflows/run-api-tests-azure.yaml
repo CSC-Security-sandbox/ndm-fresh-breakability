@@ -38,6 +38,14 @@ on:
           - 'Both'
           - 'SMB'
           - 'NFS'
+      volume_clone_provider:
+        description: 'Select volume clone backend'
+        required: false
+        default: 'ontap'
+        type: choice
+        options:
+          - 'anf'
+          - 'ontap'
       run_smoke_tests:
         description: 'Run smoke tests'
         required: false
@@ -79,6 +87,16 @@ on:
         description: 'Select protocol to test (Both/SMB/NFS)'
         required: false
         default: 'Both'
+        type: string
+      volume_clone_provider:
+        description: 'Select volume clone backend (anf/ontap)'
+        required: false
+        default: 'ontap'
+        type: string
+      trigger_type:
+        description: 'Original trigger type (schedule/workflow_dispatch/workflow_call)'
+        required: false
+        default: ''
         type: string
       run_smoke_tests:
         description: 'Whether to run smoke tests (true/false)'
@@ -153,14 +171,14 @@ jobs:
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
 
-          # Determine VM owner based on trigger type
+          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
-          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-            VM_OWNER="NDM-Nightly-$TIMESTAMP"
+            VM_OWNER="ntly${TIME_SUFFIX}"
             echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
-            VM_OWNER="${{ github.actor }}-$TIMESTAMP"
+            VM_OWNER="adhc${TIME_SUFFIX}"
             echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           fi
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
@@ -316,10 +334,15 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
@@ -329,6 +352,17 @@ jobs:
 
       AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
       AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      AZURE_SMB_DEST_VOLUMES: ${{ vars.AZURE_SMB_DEST_VOLUMES }}
+      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      AZURE_SMB_DOMAIN_NAME: ${{ vars.AZURE_SMB_DOMAIN_NAME }}
+      AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_POOL_NAME }}
+      AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
       ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
       ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
       ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
@@ -425,10 +459,15 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
     env:
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
@@ -438,6 +477,16 @@ jobs:
 
       AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      AZURE_NFS_DEST_VOLUMES: ${{ vars.AZURE_NFS_DEST_VOLUMES }}
+      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_POOL_NAME }}
+      AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
       ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
       ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
       ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
@@ -1103,14 +1152,14 @@ jobs:
           # Azure Terraform Variables
           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          # Determine VM owner based on trigger type
+          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
-          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-            VM_OWNER="NDM-Nightly-$TIMESTAMP"
+            VM_OWNER="ntly${TIME_SUFFIX}"
             echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
-            VM_OWNER="${{ github.actor }}-$TIMESTAMP"
+            VM_OWNER="adhc${TIME_SUFFIX}"
             echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           fi
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
