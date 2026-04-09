@@ -1296,9 +1296,6 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
             const key = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
             if (!existingKeys.has(key)) {
-                if (r.isDeleted === true) {
-                    continue;
-                }
                 if (!r.isDirectory) {
                     fileCount++;
                     totalSize += BigInt(r.size || 0);
