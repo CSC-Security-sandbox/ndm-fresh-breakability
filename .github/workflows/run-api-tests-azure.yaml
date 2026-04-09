@@ -581,7 +581,7 @@ jobs:
   send-workflow-card:
     name: Parse Test Results & Send Notifications
     runs-on: openlab
-    if: ${{ github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' || inputs.trigger_type == 'schedule' }}
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
     outputs:
       test_status: ${{ steps.workflow_outputs.outputs.test_status }}
@@ -731,8 +731,10 @@ jobs:
         TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
         TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
         TEST_STATUS="${{ steps.parser.outputs.test_status }}"
+        CLONE_PROVIDER="${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}"
+        PROVIDER_LABEL=$(echo "$CLONE_PROVIDER" | tr '[:lower:]' '[:upper:]')
         
-        CARD_TITLE="NDM Test Results"
+        CARD_TITLE="NDM Test Results - ${PROVIDER_LABEL}"
         
         # Build the unified Teams card with conditional failure sections
         cat > teams_card.json << EOF
@@ -768,6 +770,10 @@ jobs:
                 {
                   "title": "Status:",
                   "value": "${TEST_STATUS}"
+                },
+                {
+                  "title": "Clone Backend:",
+                  "value": "${PROVIDER_LABEL}"
                 }
               ]
             },
@@ -966,7 +972,7 @@ jobs:
       run: |
         # Create GitHub Actions Job Summary
         cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        ## Nightly Test Results Summary
+        ## Nightly Test Results Summary (${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }})
         
         ### Test Metrics
         | Metric | Count |
@@ -976,6 +982,7 @@ jobs:
         | Failed | ${{ steps.parser.outputs.total_failed }} |
         | Skipped | ${{ steps.parser.outputs.total_skipped }} |
         | Status | ${{ steps.parser.outputs.test_status }} |
+        | Clone Backend | ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }} |
         
         ### Test Results
         
