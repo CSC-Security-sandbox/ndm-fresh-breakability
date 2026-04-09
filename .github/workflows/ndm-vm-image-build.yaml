@@ -1171,6 +1171,36 @@ jobs:
           cd ${{ steps.packer-path.outputs.path }}
           packer init .
 
+      - name: Set disk size override
+        id: disk-size
+        run: |
+          # Use 200 GB on non-release branches to save storage; keep 1 TB for releases
+          if [[ "${GITHUB_REF}" == refs/heads/release/* ]]; then
+            echo "Release branch — using production disk size (1 TB)"
+            DISK_VAR_FLAG=""
+          else
+            echo "Non-release branch — overriding disk size to 200 GB"
+            case "${{ matrix.provider }}" in
+              vsphere)
+                DISK_VAR_FLAG='-var "vm_disk_size=204800"'
+                ;;
+              gcp)
+                DISK_VAR_FLAG='-var "gcp_disk_size=200"'
+                ;;
+              azure)
+                DISK_VAR_FLAG='-var "os_disk_size_gb=200"'
+                ;;
+              aws)
+                DISK_VAR_FLAG='-var "aws_block_device_volume_size=200"'
+                ;;
+              *)
+                DISK_VAR_FLAG=""
+                ;;
+            esac
+          fi
+          echo "disk_var_flag=$DISK_VAR_FLAG" >> $GITHUB_OUTPUT
+          echo "Disk override flag: $DISK_VAR_FLAG"
+
       - name: Packer Validate
         id: validate
         run: |
@@ -1178,13 +1208,15 @@ jobs:
 
           if [ "${{ matrix.component }}" == "worker" ]; then
             echo "Validating worker configuration with binary path..."
-            packer validate \
+            eval packer validate \
               -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
+              ${{ steps.disk-size.outputs.disk_var_flag }} \
               -var-file="variables.pkrvars.hcl" \
               linux-ubuntu.pkr.hcl
           else
             echo "Validating control-plane configuration..."
-            packer validate \
+            eval packer validate \
+              ${{ steps.disk-size.outputs.disk_var_flag }} \
               -var-file="variables.pkrvars.hcl" \
               linux-ubuntu.pkr.hcl
           fi
@@ -1210,13 +1242,15 @@ jobs:
 
             if [ "${{ matrix.component }}" == "worker" ]; then
               echo "Building worker image with binary path..."
-              packer build \
+              eval packer build \
                 -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
+                ${{ steps.disk-size.outputs.disk_var_flag }} \
                 -var-file="variables.pkrvars.hcl" \
                 linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
             else
               echo "Building control-plane image..."
-              packer build \
+              eval packer build \
+                ${{ steps.disk-size.outputs.disk_var_flag }} \
                 -var-file="variables.pkrvars.hcl" \
                 linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
             fi
