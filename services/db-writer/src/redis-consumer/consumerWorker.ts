@@ -42,7 +42,7 @@ async function performCleanup(projectId?: string | null) {
     try {
         // Clean up RedisConsumerService
         if (redisConsumerService) {
-            logger.log(`projectId: ${projectId} Cleaning up RedisConsumerService`);
+            logger.debug(`projectId: ${projectId} Cleaning up RedisConsumerService`);
             try {
                 await redisConsumerService.cleanupResources();
             } catch (error) {
@@ -62,7 +62,7 @@ async function performCleanup(projectId?: string | null) {
 
         // Release database connection
         if (dataSource) {
-            logger.log(`projectId: ${projectId} Releasing database connection`);
+            logger.debug(`projectId: ${projectId} Releasing database connection`);
             await dbPool.releaseConnection();
             dataSource = null;
         }
@@ -136,15 +136,13 @@ process.on('unhandledRejection', async (reason, promise) => {
         }
 
         const jobRunId = workerData.jobRunId;
-        logger.log(`projectId: ${projectId} Processing job: ${jobRunId}`);
+        logger.debug(`projectId: ${projectId} Processing job: ${jobRunId}`);
 
-        // Acquire database connection
-        logger.log(`projectId: ${projectId} Acquiring database connection`);
+        logger.debug(`projectId: ${projectId} Acquiring database connection`);
         dataSource = await dbPool.getConnection();
-        logger.log(`projectId: ${projectId} Database connection acquired`);
+        logger.debug(`projectId: ${projectId} Database connection acquired`);
 
-        // Initialize repositories
-        logger.log(`projectId: ${projectId} Initializing repositories`);
+        logger.debug(`projectId: ${projectId} Initializing repositories`);
         const inventoryRepo = dataSource.getRepository(InventoryEntity);
         const taskRepo = dataSource.getRepository(TaskEntity);
         const operationRepo = dataSource.getRepository(OperationsEntity);
@@ -153,8 +151,7 @@ process.on('unhandledRejection', async (reason, promise) => {
         const speedLogRepo = dataSource.getRepository(SpeedLogEntity);
         const speedLogEntryRepo = dataSource.getRepository(SpeedLogEntryEntity);
 
-        // Initialize services
-        logger.log(`projectId: ${projectId} Initializing services`);
+        logger.debug(`projectId: ${projectId} Initializing services`);
         inventoryService = new InventoryService(
             dataSource,
             inventoryRepo,
@@ -186,8 +183,8 @@ process.on('unhandledRejection', async (reason, promise) => {
 
         // Explicitly await Redis connection before proceeding
         // The constructor fires initializeRedisConnection() without awaiting it
-        logger.log(`projectId: ${projectId} Waiting for Redis connection in worker thread`);
-        await redisConsumerService.initializeRedisConnection(); //  redisConsumerService.redisclient is set here
+        logger.debug(`projectId: ${projectId} Waiting for Redis connection in worker thread`);
+        await redisConsumerService.initializeRedisConnection();
         if (!redisConsumerService.isValidRedisClient()) {
             throw new Error('Worker thread failed to establish Redis connection');
         }
@@ -195,11 +192,10 @@ process.on('unhandledRejection', async (reason, promise) => {
         
         logger.log(`Services initialized successfully`);
 
-        logger.log(`started creating the inventory partition by job run id`);
+        logger.debug(`started creating the inventory partition by job run id`);
         await inventoryService.createPartitionInventoryTableByJobRunId(jobRunId);
-        logger.log(`completed creating the inventory partition by job run id`);
+        logger.debug(`completed creating the inventory partition by job run id`);
 
-        // Start consumer
         logger.log(`Starting Redis consumer for job ${jobRunId}`);
         await redisConsumerService.executeConsumersInParallel(jobRunId);
         logger.log(`Redis consumer completed for job ${jobRunId}`);
