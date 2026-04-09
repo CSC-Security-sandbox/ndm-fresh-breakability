@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -88,24 +89,75 @@ func ValidateReport(
 			ferr = validatePDFAgainstJSON(tmpPDF.Name(), spec)
 
 		case FormatCSV:
-			// 1) Extract CSV bytes from the ZIP response
-			csvBytes, _, err := extractCSVFromZip(data)
+			// Extract all CSV files from the ZIP. Reports may be packaged as a single folder
+			// (e.g. <jobRunId>-coc-report/*.csv) rather than CSVs at the archive root.
+			csvFiles, err := extractCSVFilesFromZip(data)
 			if err != nil {
 				return nil, fmt.Errorf("extract CSV from ZIP: %w", err)
 			}
 
-			// 2) Write CSV bytes to a temp file
-			tmpCSV, err := os.CreateTemp("", "report-*.csv")
-			if err != nil {
-				return nil, fmt.Errorf("create temp CSV: %w", err)
-			}
-			defer cleanup(tmpCSV)
-			if _, err := tmpCSV.Write(csvBytes); err != nil {
-				return nil, fmt.Errorf("write temp CSV: %w", err)
+			specInfo, statErr := os.Stat(spec)
+			if statErr != nil {
+				return nil, fmt.Errorf("stat spec path %q: %w", spec, statErr)
 			}
 
-			// 3) validate CSV against JSON spec (with optional volume replacements)
-			ferr = validateCSVAgainstJSON(tmpCSV.Name(), spec, volReplace)
+			if specInfo.IsDir() {
+				// Folder-based validation:
+				// for each CSV in ZIP, try matching <csv-file-base>.json in spec folder.
+				validatedCount := 0
+				for zipCSVPath, csvBytes := range csvFiles {
+					baseCSV := path.Base(normalizeZipEntryPath(zipCSVPath))
+					jsonName := strings.TrimSuffix(baseCSV, filepath.Ext(baseCSV)) + ".json"
+					jsonSpecPath := filepath.Join(spec, jsonName)
+
+					if _, err := os.Stat(jsonSpecPath); err != nil {
+						if os.IsNotExist(err) {
+							LogDebug(fmt.Sprintf("No JSON spec found for CSV %q at %q, skipping", zipCSVPath, jsonSpecPath))
+							continue
+						}
+						return nil, fmt.Errorf("stat JSON spec %q: %w", jsonSpecPath, err)
+					}
+
+					tmpCSV, err := os.CreateTemp("", "report-*.csv")
+					if err != nil {
+						return nil, fmt.Errorf("create temp CSV: %w", err)
+					}
+					defer cleanup(tmpCSV)
+					if _, err := tmpCSV.Write(csvBytes); err != nil {
+						return nil, fmt.Errorf("write temp CSV: %w", err)
+					}
+
+					if err := validateCSVAgainstJSON(tmpCSV.Name(), jsonSpecPath, volReplace); err != nil {
+						return nil, fmt.Errorf("validate CSV %q against %q: %w", zipCSVPath, jsonSpecPath, err)
+					}
+					validatedCount++
+				}
+
+				if validatedCount == 0 {
+					return nil, fmt.Errorf("no matching JSON specs found in folder %q for any CSV in ZIP", spec)
+				}
+				ferr = nil
+			} else {
+				// Single JSON spec file:
+				// pick the most relevant CSV from ZIP based on job type / filename.
+				selectedCSVPath, selectedCSVBytes, err := pickCSVForValidation(csvFiles, jobType)
+				if err != nil {
+					return nil, fmt.Errorf("select CSV for validation: %w", err)
+				}
+
+				LogDebug(fmt.Sprintf("Selected CSV %q for validation against %q", selectedCSVPath, spec))
+
+				tmpCSV, err := os.CreateTemp("", "report-*.csv")
+				if err != nil {
+					return nil, fmt.Errorf("create temp CSV: %w", err)
+				}
+				defer cleanup(tmpCSV)
+				if _, err := tmpCSV.Write(selectedCSVBytes); err != nil {
+					return nil, fmt.Errorf("write temp CSV: %w", err)
+				}
+
+				ferr = validateCSVAgainstJSON(tmpCSV.Name(), spec, volReplace)
+			}
 
 		default:
 			ferr = fmt.Errorf("unsupported format %s", fmtType)
@@ -140,12 +192,11 @@ func fetchReport(
 	}
 }
 
-// fetchCSVReport dispatches to the correct download strategy based on job type:
-//   - Discovery: uses POST /inventory/download (on-the-fly ZIP from CSV on disk).
-//     Discovery reports are never pre-zipped by the worker, only a CSV is created.
-//   - Migration / Cutover: uses the two-step prepare-download → GET /download/:token
-//     flow. The worker deletes the CSV after creating the ZIP, so the legacy
-//     POST endpoint (which looks for the CSV) always 404s after the job finishes.
+// fetchCSVReport dispatches to the correct download strategy based on job type.
+// Both flows return ZIP bytes; CSVs may live inside a folder in the archive (not at the root).
+//   - Discovery: POST /inventory/download — ZIP often contains e.g. .../discovery-report.csv
+//   - Migration / Cutover: prepare-download → GET /download/:token — ZIP contains e.g.
+//     <jobRunId>-coc-report/coc-report.csv (and list CSVs). Legacy POST without prepare 404s after zip.
 func fetchCSVReport(jobRunID string, reportType string) ([]byte, error) {
 	if reportType == string(JobTypeDiscovery) {
 		return fetchDiscoveryCSV(jobRunID)
@@ -153,10 +204,8 @@ func fetchCSVReport(jobRunID string, reportType string) ([]byte, error) {
 	return fetchCocCSV(jobRunID)
 }
 
-// fetchDiscoveryCSV fetches a discovery CSV via POST /inventory/download, which
-// zips the CSV file on the fly. The discovery report type sent to the service is
-// "DISCOVERY" (matching the filename the service writes) not "DISCOVER" (the
-// internal JobType constant value).
+// fetchDiscoveryCSV fetches a discovery report ZIP via POST /inventory/download.
+// The archive may contain a folder with discovery-report.csv inside.
 func fetchDiscoveryCSV(jobRunID string) ([]byte, error) {
 	url := ADMIN_SERVICE_URL + INVENTORY_DOWNLOAD_ENDPOINT
 	payload := map[string]interface{}{
@@ -204,10 +253,8 @@ func fetchDiscoveryCSV(jobRunID string) ([]byte, error) {
 	return nil, fmt.Errorf("failed to fetch discovery CSV after %d retries", maxRetries)
 }
 
-// fetchCocCSV fetches a migration or cutover CSV using the two-step
-// prepare-download → GET /download/:token flow. The worker deletes the raw CSV
-// after zipping it, so prepare-download (which resolves the ZIP artifact) must
-// be used instead of the legacy POST /inventory/download endpoint.
+// fetchCocCSV fetches a migration or cutover report ZIP (prepare-download → GET by token).
+// The ZIP typically contains a bundle folder (e.g. coc-report.csv and list CSVs), not a lone root file.
 func fetchCocCSV(jobRunID string) ([]byte, error) {
 	prepareURL := ADMIN_SERVICE_URL + INVENTORY_PREPARE_DOWNLOAD_ENDPOINT
 	payload := map[string]interface{}{
@@ -523,27 +570,161 @@ func extractTextFromPDF(pdfPath string) (string, error) {
 	return buf.String(), nil
 }
 
-// extractCSVFromZip takes ZIP bytes and returns the first CSV file's bytes.
-func extractCSVFromZip(zipData []byte) ([]byte, string, error) {
-	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
-	if err != nil {
-		return nil, "", fmt.Errorf("open zip: %w", err)
+// normalizeZipEntryPath converts ZIP internal names to forward slashes and trims
+// "./" so nested paths (folder/file.csv) match consistently across OS zip tools.
+func normalizeZipEntryPath(name string) string {
+	s := strings.ReplaceAll(name, "\\", "/")
+	s = strings.TrimPrefix(s, "./")
+	return strings.TrimSpace(s)
+}
+
+// safeZipEntryRelativePath returns a lexical path for a ZIP member with ".." and "."
+// resolved, or ok=false if the entry attempts Zip Slip (traversal above the archive root)
+// or uses an absolute / unsafe name. Keys used for in-memory maps must not contain raw "..".
+func safeZipEntryRelativePath(name string) (rel string, ok bool) {
+	s := normalizeZipEntryPath(name)
+	if s == "" {
+		return "", false
 	}
-	for _, f := range zr.File {
-		if strings.HasSuffix(strings.ToLower(f.Name), ".csv") {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, "", fmt.Errorf("open csv in zip: %w", err)
+	if path.IsAbs(s) {
+		return "", false
+	}
+	// Reject Windows-style roots in member names (e.g. C:/...)
+	if strings.Contains(s, ":") {
+		return "", false
+	}
+	var stack []string
+	for _, p := range strings.Split(s, "/") {
+		if p == "" || p == "." {
+			continue
+		}
+		if p == ".." {
+			if len(stack) == 0 {
+				return "", false
 			}
-			defer rc.Close()
-			csvBytes, err := io.ReadAll(rc)
-			if err != nil {
-				return nil, "", fmt.Errorf("read csv in zip: %w", err)
-			}
-			return csvBytes, f.Name, nil
+			stack = stack[:len(stack)-1]
+		} else {
+			stack = append(stack, p)
 		}
 	}
-	return nil, "", fmt.Errorf("no CSV file found in zip")
+	if len(stack) == 0 {
+		return "", false
+	}
+	return strings.Join(stack, "/"), true
+}
+
+// readValidatedZipCSVEntry reads one ZIP member's body only after the entry name is validated as
+// Zip Slip–safe (see safeZipEntryRelativePath). The archive/zip reader does not write to f.Name
+// on disk, but we must not use unsanitized names as map keys or in path logic.
+func readValidatedZipCSVEntry(f *zip.File) (rel string, data []byte, skip bool, err error) {
+	// Defense in depth for CodeQL go/zipslip: documented pattern is to reject ".." in the raw
+	// entry name before any use (https://codeql.github.com/codeql-query-help/go/go-zipslip/).
+	if strings.Contains(f.Name, "..") {
+		return "", nil, true, nil
+	}
+	rel, ok := safeZipEntryRelativePath(f.Name)
+	if !ok {
+		return "", nil, true, nil
+	}
+	if zipEntryIsSkippable(rel) {
+		return "", nil, true, nil
+	}
+	if !strings.HasSuffix(strings.ToLower(rel), ".csv") {
+		return "", nil, true, nil
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return "", nil, false, fmt.Errorf("open csv in zip: %w", err)
+	}
+	defer rc.Close()
+	data, err = io.ReadAll(rc)
+	if err != nil {
+		return "", nil, false, fmt.Errorf("read csv in zip: %w", err)
+	}
+	return rel, data, false, nil
+}
+
+// zipEntryIsSkippable returns true for directory placeholders and macOS metadata trees.
+func zipEntryIsSkippable(normalizedName string) bool {
+	if normalizedName == "" {
+		return true
+	}
+	lower := strings.ToLower(normalizedName)
+	if strings.HasSuffix(lower, "/") {
+		return true
+	}
+	if strings.HasPrefix(lower, "__macosx/") {
+		return true
+	}
+	return false
+}
+
+// extractCSVFilesFromZip takes ZIP bytes and returns all CSV file bytes keyed by normalized ZIP path.
+// CSVs may live under a single folder inside the archive (e.g. jobRunId-coc-report/coc-report.csv).
+func extractCSVFilesFromZip(zipData []byte) (map[string][]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return nil, fmt.Errorf("open zip: %w", err)
+	}
+	csvFiles := make(map[string][]byte)
+	for _, f := range zr.File {
+		rel, csvBytes, skip, err := readValidatedZipCSVEntry(f)
+		if skip {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		csvFiles[rel] = csvBytes
+	}
+	if len(csvFiles) == 0 {
+		return nil, fmt.Errorf("no CSV file found in zip")
+	}
+	return csvFiles, nil
+}
+
+// pickCSVForValidation selects the best CSV file from a ZIP for single-spec validation.
+// ZIP paths may include a parent folder (e.g. uuid-coc-report/coc-report.csv); matching uses path.Base.
+// Preference order:
+//   1) Discovery: *discovery-report.csv
+//   2) Migration/Cutover: *coc-report.csv
+//   3) Fallback: lexicographically first CSV path in ZIP
+func pickCSVForValidation(csvFiles map[string][]byte, jobType JobType) (string, []byte, error) {
+	if len(csvFiles) == 0 {
+		return "", nil, fmt.Errorf("no CSV files available")
+	}
+
+	keys := make([]string, 0, len(csvFiles))
+	for k := range csvFiles {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	containsName := func(name string) (string, bool) {
+		needle := strings.ToLower(name)
+		for _, k := range keys {
+			base := path.Base(normalizeZipEntryPath(k))
+			if strings.Contains(strings.ToLower(base), needle) {
+				return k, true
+			}
+		}
+		return "", false
+	}
+
+	if jobType == JobTypeDiscovery {
+		if k, ok := containsName("discovery-report.csv"); ok {
+			return k, csvFiles[k], nil
+		}
+	}
+
+	if jobType == JobTypeMigration || jobType == JobTypeCutover {
+		if k, ok := containsName("coc-report.csv"); ok {
+			return k, csvFiles[k], nil
+		}
+	}
+
+	fallback := keys[0]
+	return fallback, csvFiles[fallback], nil
 }
 
 // cleanup closes the file and removes it from disk.
