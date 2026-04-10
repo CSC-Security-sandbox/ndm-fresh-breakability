@@ -35,7 +35,7 @@
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.6",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@temporalio/client": "^1.11.7",
-    "axios": "^1.7.0",
+    "axios": "1.15.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "crypto": "^1.0.1",
