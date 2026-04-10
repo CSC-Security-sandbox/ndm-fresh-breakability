@@ -149,9 +149,9 @@ describe('MetricsService', () => {
 
     describe('collectMemoryMetrics', () => {
       it.each([
-        ['normal memory info', { total: 1000, free: 400, used: 600 }, 60],
-        ['zero memory info', { total: 0, free: 0, used: 0 }, 0],
-        ['missing used/total', {}, 0],
+        ['normal memory info', { total: 1000, free: 200, used: 800, active: 600, available: 400 }, 60],
+        ['zero memory info',   { total: 0,    free: 0,   used: 0,   active: 0,   available: 0   }, 0],
+        ['missing used/total', {},0],
       ])('should handle %s', async (_, memInfo, expectedPercent) => {
         mockSystemInfo('mem', memInfo);
         await (service as any).collectMemoryMetrics();

@@ -434,17 +434,17 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       );
       this.memoryUsageGauge.set(
         { worker_id: this.workerId, type: 'free' },
-        memInfo.free,
+        memInfo.available,
       );
       this.memoryUsageGauge.set(
         { worker_id: this.workerId, type: 'used' },
-        memInfo.used,
+        memInfo.active,
       );
 
       if (memInfo.total > 0) {
         this.memoryUsageGauge.set(
           { worker_id: this.workerId, type: 'usage_percent' },
-          (memInfo.used / memInfo.total) * 100,
+          (memInfo.active / memInfo.total) * 100,
         );
       } else {
         this.memoryUsageGauge.set(
