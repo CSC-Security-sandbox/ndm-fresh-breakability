@@ -85,6 +85,10 @@ env:
     value: "http://jobs-service-service:3000/api/v1/job-run"
   - name: TEMPORAL_ADDRESS
     value: "temporaltest-frontend.temporal.svc.cluster.local:7233"
+  - name: BATCH_SIZE
+    value: "1000"
+  - name: DB_UPSERT_BATCH_SIZE
+    value: "1000"
 
 service:
   type: ClusterIP
