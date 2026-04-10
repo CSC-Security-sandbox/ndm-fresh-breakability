@@ -699,4 +699,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260409_01_storage_overview_mv_use_stats_mv.sql" author="dm">
+      <sqlFile path="liquibase/20260409_01_storage_overview_mv_use_stats_mv.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260409_01_storage_overview_mv_use_stats_mv_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
