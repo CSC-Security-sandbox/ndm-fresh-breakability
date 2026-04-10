@@ -116,6 +116,9 @@ jobs:
           node-version: "${{ env.NODE_VERSION }}"
           registry-url: "https://npm.pkg.github.com"
 
+      - name: Ensure Maven local repo directory exists
+        run: mkdir -p ~/.m2
+
       - name: Set up Java
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
         with:
