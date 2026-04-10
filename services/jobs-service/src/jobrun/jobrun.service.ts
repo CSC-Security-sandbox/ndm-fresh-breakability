@@ -767,6 +767,7 @@ export class JobRunService {
           skippedCount: freshInventoryStats.skippedCount,
           newlyCopiedCount: freshInventoryStats.newlyCopiedCount,
           modifiedCount: freshInventoryStats.modifiedCount,
+          totalCopiedSize: freshInventoryStats.migratedSize,
         };
       }
       if (
@@ -879,7 +880,7 @@ export class JobRunService {
       // Update job run status and record ASUP stats in a single transaction
       await this.dataSource.transaction(async (manager) => {
         await manager.update(JobRunEntity, { id: jobRunId }, updateData);
-        await this.recordAsupStatsForJobRun(manager, jobRunId, status, projectId, jobRunDetails.jobConfigId, jobRunStats);
+        await this.recordAsupStatsForJobRun(manager, jobRunId, status, projectId, jobRunDetails.jobConfigId, (updateData.jobStats ?? jobRunStats) as JobRunStats);
       });
     } else {
       if (
@@ -1294,6 +1295,7 @@ export class JobRunService {
     skippedCount: string;
     newlyCopiedCount: string;
     modifiedCount: string;
+    migratedSize: string;
   }> {
     const dbSchema = process.env.SCHEMA || "datamigrator";
     const queryResult = await this.dataSource.query(
@@ -1310,7 +1312,13 @@ export class JobRunService {
              AND update_type IN ('content_updated', 'metadata_updated')
              AND NOT is_directory
              AND NOT COALESCE(is_deleted, false)
-         ) AS recopied_count
+         ) AS recopied_count,
+         COALESCE(SUM(file_size) FILTER (
+           WHERE (entry_type IS NULL OR entry_type = 'inventory')
+             AND update_type IN ('new', 'content_updated', 'metadata_updated')
+             AND NOT is_directory
+             AND NOT COALESCE(is_deleted, false)
+         ), 0) AS migrated_size
        FROM ${dbSchema}.inventory
        WHERE job_run_id = $1`,
       [jobRunId],
@@ -1326,6 +1334,7 @@ export class JobRunService {
       skippedCount: String(row?.skipped_count ?? 0),
       newlyCopiedCount: String(row?.newly_copied_count ?? 0),
       modifiedCount: String(row?.recopied_count ?? 0),
+      migratedSize: String(row?.migrated_size ?? 0),
     };
   }
 
@@ -1724,6 +1733,14 @@ export class JobRunService {
 
       const dbSchema = process.env.SCHEMA || 'datamigrator';
 
+      const isMigrationType = jobType === 'migration' || jobType === 'cutover';
+      const fileCountForAsup = isMigrationType
+        ? parseInt(jobRunStats.newlyCopiedCount || '0', 10) + parseInt(jobRunStats.modifiedCount || '0', 10)
+        : parseInt(jobRunStats.fileCount || '0', 10);
+      const sizeForAsup = isMigrationType
+        ? parseInt(jobRunStats.totalCopiedSize || '0', 10)
+        : parseInt(jobRunStats.totalSize || '0', 10);
+
       await manager.query(
         `INSERT INTO ${dbSchema}.asup_stats (
           job_run_id, job_config_id,
@@ -1743,8 +1760,8 @@ export class JobRunService {
           protocol,
           sourceServerType,
           destinationServerType,
-          parseInt(jobRunStats.fileCount || '0', 10),
-          parseInt(jobRunStats.totalSize || '0', 10),
+          fileCountForAsup,
+          sizeForAsup,
         ],
       );
 

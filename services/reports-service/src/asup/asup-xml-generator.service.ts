@@ -81,26 +81,22 @@ export class AsupXmlGeneratorService {
 
     let rows = '';
     for (const project of projectStats) {
-      const firstJob = project.jobs[0];
-      const source = firstJob?.sourceServerType || '';
-      const destination = firstJob?.destinationServerType || '';
-      const protocol = firstJob?.protocol || '';
-      const hasDiscovery = project.jobs.some(j => j.jobType === 'discovery');
-      const hasMigration = project.jobs.some(j => j.jobType === 'migration');
-      const jobType = hasDiscovery && hasMigration ? 'mixed' : (firstJob?.jobType || 'unknown');
+      for (const job of project.jobs) {
+        const isDiscovery = job.jobType === 'discovery';
 
-      rows += rowTemplate
-        .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
-        .replace(/\{\{PROJECT_ID\}\}/g, this.escapeXml(project.projectId))
-        .replace(/\{\{SOURCE\}\}/g, this.escapeXml(source))
-        .replace(/\{\{DESTINATION\}\}/g, this.escapeXml(destination))
-        .replace(/\{\{PROTOCOL\}\}/g, this.escapeXml(protocol))
-        .replace(/\{\{JOB_TYPE\}\}/g, this.escapeXml(jobType))
-        .replace(/\{\{DISCOVERED_SIZE\}\}/g, String(project.totals.discoveredSizeBytes))
-        .replace(/\{\{MIGRATED_SIZE\}\}/g, String(project.totals.migratedSizeBytes))
-        .replace(/\{\{DISCOVERED_FILECOUNT\}\}/g, String(project.totals.discoveredFileCount))
-        .replace(/\{\{MIGRATED_FILECOUNT\}\}/g, String(project.totals.migratedFileCount ?? ''))
-        .replace(/\{\{JOBRUN_COUNT\}\}/g, String(project.totals.totalJobRuns)) + '\n';
+        rows += rowTemplate
+          .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
+          .replace(/\{\{PROJECT_ID\}\}/g, this.escapeXml(project.projectId))
+          .replace(/\{\{SOURCE\}\}/g, this.escapeXml(job.sourceServerType || ''))
+          .replace(/\{\{DESTINATION\}\}/g, this.escapeXml(job.destinationServerType || ''))
+          .replace(/\{\{PROTOCOL\}\}/g, this.escapeXml(job.protocol || ''))
+          .replace(/\{\{JOB_TYPE\}\}/g, this.escapeXml(job.jobType))
+          .replace(/\{\{DISCOVERED_SIZE\}\}/g, isDiscovery ? String(job.totalSizeBytes) : '0')
+          .replace(/\{\{MIGRATED_SIZE\}\}/g, !isDiscovery ? String(job.totalSizeBytes) : '0')
+          .replace(/\{\{DISCOVERED_FILECOUNT\}\}/g, isDiscovery ? String(job.totalFileCount) : '0')
+          .replace(/\{\{MIGRATED_FILECOUNT\}\}/g, !isDiscovery ? String(job.totalFileCount) : '0')
+          .replace(/\{\{JOBRUN_COUNT\}\}/g, String(job.jobRunCount)) + '\n';
+      }
     }
 
     const xml = filledPrefix + '\n' + rows + suffix + '\n';

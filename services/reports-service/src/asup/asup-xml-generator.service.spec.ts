@@ -154,8 +154,11 @@ describe('AsupXmlGeneratorService', () => {
       expect(xml).toContain('<project-id>proj-1</project-id>');
       expect(xml).toContain('<source>ONTAP</source>');
       expect(xml).toContain('<protocol>NFS</protocol>');
+      expect(xml).toContain('<job-type>discovery</job-type>');
       expect(xml).toContain('<discovered-size>25000</discovered-size>');
       expect(xml).toContain('<discovered-filecount>500</discovered-filecount>');
+      expect(xml).toContain('<migrated-size>0</migrated-size>');
+      expect(xml).toContain('<migrated-filecount>0</migrated-filecount>');
       expect(xml).toContain('<jobrun-count>2</jobrun-count>');
       expect(xml).toContain('<?xml version="1.0"');
     });
@@ -210,7 +213,7 @@ describe('AsupXmlGeneratorService', () => {
       expect(xml).not.toContain('<project-id>proj<>');
     });
 
-    it('should set job_type to mixed when project has discovery and migration', async () => {
+    it('should emit separate rows per job when project has discovery and migration', async () => {
       const mockStats: ProjectStats[] = [
         {
           projectId: 'proj-1',
@@ -256,7 +259,17 @@ describe('AsupXmlGeneratorService', () => {
 
       const xml = await service.buildMigrationProjectXml();
 
-      expect(xml).toContain('<job-type>mixed</job-type>');
+      expect(xml).not.toContain('<job-type>mixed</job-type>');
+      expect(xml).toContain('<job-type>discovery</job-type>');
+      expect(xml).toContain('<job-type>migration</job-type>');
+
+      // Discovery row: discovered columns populated, migrated = 0
+      expect(xml).toContain('<discovered-size>5000</discovered-size>');
+      expect(xml).toContain('<discovered-filecount>100</discovered-filecount>');
+
+      // Migration row: migrated columns populated, discovered = 0
+      expect(xml).toContain('<migrated-size>2000</migrated-size>');
+      expect(xml).toContain('<migrated-filecount>50</migrated-filecount>');
     });
   });
 
@@ -435,17 +448,17 @@ describe('AsupXmlGeneratorService', () => {
       expect(xml).toContain('<job-type>discovery</job-type>');
     });
 
-    it('should use "unknown" job type when firstJob has no jobType and no discovery/migration', async () => {
+    it('should use job type from each job directly', async () => {
       const mockStats: ProjectStats[] = [
         {
-          projectId: 'proj-unknown',
-          projectName: 'Unknown Type',
+          projectId: 'proj-cutover',
+          projectName: 'Cutover Project',
           jobs: [
             {
               jobConfigId: 'jc-1',
-              projectId: 'proj-unknown',
-              projectName: 'Unknown Type',
-              jobType: '' as any,
+              projectId: 'proj-cutover',
+              projectName: 'Cutover Project',
+              jobType: 'cutover',
               protocol: 'NFS',
               sourceServerType: 'ONTAP',
               destinationServerType: 'ANF',
@@ -467,7 +480,11 @@ describe('AsupXmlGeneratorService', () => {
 
       const xml = await service.buildMigrationProjectXml();
 
-      expect(xml).toContain('<job-type>unknown</job-type>');
+      expect(xml).toContain('<job-type>cutover</job-type>');
+      expect(xml).toContain('<migrated-size>500</migrated-size>');
+      expect(xml).toContain('<migrated-filecount>5</migrated-filecount>');
+      expect(xml).toContain('<discovered-size>0</discovered-size>');
+      expect(xml).toContain('<discovered-filecount>0</discovered-filecount>');
     });
 
     it('should use discovery job type when project has only discovery jobs', async () => {
