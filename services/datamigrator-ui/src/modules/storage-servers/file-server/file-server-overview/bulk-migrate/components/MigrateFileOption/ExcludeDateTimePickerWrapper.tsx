@@ -43,10 +43,7 @@ const DateTimePickerWrapper = ({
           }}
           onError={(newError) => setError(newError)}
           onChange={(newValue) => {
-            form.resetForm({
-              ...form.formState,
-              migrate_file_option_exclude: newValue,
-            });
+            form.wrappedHandleFormChange("migrate_file_option_exclude")(newValue, null);
           }}
           format="DD/MM/YYYY hh:mm:A UTC"
           disableFuture
