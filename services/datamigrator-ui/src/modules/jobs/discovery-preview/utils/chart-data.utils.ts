@@ -455,6 +455,11 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
       (item: DataItemType) =>
         item.sub_category === FileSystemSubCategory.TOTAL_SPACE_USED
     )?.value || 0;
+  const totalSpaceRegularFiles =
+    data?.find(
+      (item: DataItemType) =>
+        item.sub_category === FileSystemSubCategory.TOTAL_SPACE_FOR_REGULAR_FILES
+    )?.value || 0;
   const directories =
     data?.find(
       (item: DataItemType) =>
@@ -529,6 +534,7 @@ export function extractSystemFileStatAndDirectories(data: DataItemType[]) {
     volumeMountCount,
     totalCount,
     totalSpaceUsed,
+    totalSpaceRegularFiles,
     directories,
     jobRunStatus,
     scanTime,

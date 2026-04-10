@@ -65,6 +65,7 @@ const ReportDougnutOverview = () => {
     hardLinks,
     totalCount,
     totalSpaceUsed,
+    totalSpaceRegularFiles,
     directories,
     fileServerProtocol,
     adsFiles,
@@ -90,8 +91,14 @@ const ReportDougnutOverview = () => {
     {
       Icon: ExpandIcon,
       iconBgColor: "i6",
-      label: "Total Size",
+      label: "Total Space Used",
       value: formatBytes(totalSpaceUsed as number),
+    },
+    {
+      Icon: ExpandIcon,
+      iconBgColor: "i7",
+      label: "Discovered File Size",
+      value: formatBytes(totalSpaceRegularFiles as number),
     },
   ];
  
