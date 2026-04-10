@@ -6,129 +6,73 @@ import (
 	"strings"
 )
 
-var (
-	windowsCurrentDomainScript = `powershell.exe -Command "(Get-WmiObject Win32_ComputerSystem).Domain"`
-	windowsDomainJoinStatusScript = `powershell.exe -Command "Get-WmiObject Win32_ComputerSystem | Select-Object -Property PartOfDomain,Domain | ConvertTo-Json"`
-)
+// This function will cause the VM to restart, so it should be called early in test setup
+func JoinWindowsWorkerToDomain(domainName, domainUser, domainPassword string, restartTimeout int) error {
+	LogDebug(fmt.Sprintf("Joining Windows worker to domain: %s", domainName))
 
-func orderedAttachedWorkerConfigsForDomainJoin() []SSHConfig {
-	attachedWorkers := GetAttachedWorkersConfig()
-	ordered := []SSHConfig{}
-	seenHosts := make(map[string]bool)
-
-	for _, workerConfig := range EnvWorkersConfigList {
-		for _, attachedConfig := range attachedWorkers {
-			if attachedConfig.Host == workerConfig.Host && !seenHosts[attachedConfig.Host] {
-				ordered = append(ordered, attachedConfig)
-				seenHosts[attachedConfig.Host] = true
-				break
-			}
-		}
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
 	}
 
-	for _, attachedConfig := range attachedWorkers {
-		if !seenHosts[attachedConfig.Host] {
-			ordered = append(ordered, attachedConfig)
-			seenHosts[attachedConfig.Host] = true
-		}
-	}
-
-	return ordered
-}
-
-func checkDomainJoinStatusForWorker(sshConfig SSHConfig) (bool, string, error) {
-	output, err := sshRunScript(sshConfig, windowsDomainJoinStatusScript)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to check domain join status: %w\noutput: %s", err, output)
-	}
-
-	var result struct {
-		PartOfDomain bool   `json:"PartOfDomain"`
-		Domain       string `json:"Domain"`
-	}
-
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		if strings.Contains(output, "True") {
-			domainOutput, _ := sshRunScript(sshConfig, windowsCurrentDomainScript)
-			return true, strings.TrimSpace(domainOutput), nil
-		}
-		return false, "", nil
-	}
-
-	return result.PartOfDomain, strings.TrimSpace(result.Domain), nil
-}
-
-func joinWindowsWorkerToDomainWithConfig(sshConfig SSHConfig, domainName, domainUser, domainPassword string, restartTimeout int) error {
-	LogDebug(fmt.Sprintf("Joining Windows worker %s to domain: %s", sshConfig.Host, domainName))
-
-	isJoined, currentDomain, err := checkDomainJoinStatusForWorker(sshConfig)
-	if err == nil {
-		if isJoined && strings.EqualFold(currentDomain, domainName) {
-			LogDebug(fmt.Sprintf("Worker %s is already joined to domain: %s", sshConfig.Host, currentDomain))
+	// First check if already domain-joined
+	checkScript := `powershell.exe -Command "(Get-WmiObject Win32_ComputerSystem).PartOfDomain"`
+	output, err := sshRunScript(sshConfig, checkScript)
+	if err == nil && strings.Contains(output, "True") {
+		LogDebug("Windows worker is already domain-joined, checking domain name...")
+		checkDomainScript := `powershell.exe -Command "(Get-WmiObject Win32_ComputerSystem).Domain"`
+		domainOutput, err := sshRunScript(sshConfig, checkDomainScript)
+		if err == nil && strings.Contains(strings.ToLower(domainOutput), strings.ToLower(domainName)) {
+			LogDebug(fmt.Sprintf("Worker is already joined to domain: %s", strings.TrimSpace(domainOutput)))
 			return nil
 		}
-
-		if isJoined && !strings.EqualFold(currentDomain, domainName) {
-			LogDebug(fmt.Sprintf("Worker %s is already domain-joined, but to %s (expected: %s)", sshConfig.Host, currentDomain, domainName))
-		}
 	}
 
+	// Create credentials and join domain
 	script := joinDomainScript(domainName, domainUser, domainPassword)
-	LogDebug(fmt.Sprintf("Executing domain join command on worker %s...", sshConfig.Host))
+	LogDebug("Executing domain join command...")
 
-	output, err := sshRunScript(sshConfig, script)
-	LogDebug(fmt.Sprintf("Domain join output for worker %s: %s", sshConfig.Host, output))
+	output, err = sshRunScript(sshConfig, script)
+	LogDebug(fmt.Sprintf("Domain join output: %s", output))
 
 	if err != nil {
 		// Check if the error is due to restart (expected behavior)
 		if strings.Contains(err.Error(), "connection") || strings.Contains(err.Error(), "EOF") {
-			LogDebug(fmt.Sprintf("Connection to worker %s lost during restart (expected) - waiting for VM to come back online...", sshConfig.Host))
+			LogDebug("Connection lost during restart (expected) - waiting for VM to come back online...")
 		} else {
-			return fmt.Errorf("domain join failed for worker %s: %w\noutput: %s", sshConfig.Host, err, output)
+			return fmt.Errorf("domain join failed: %w\noutput: %s", err, output)
 		}
 	}
 
+	// Wait for restart
 	if restartTimeout == 0 {
 		restartTimeout = 180 // Default 3 minutes
 	}
 
-	LogDebug(fmt.Sprintf("Waiting %d seconds for worker %s to restart and rejoin network...", restartTimeout, sshConfig.Host))
+	LogDebug(fmt.Sprintf("Waiting %d seconds for VM to restart and rejoin network...", restartTimeout))
 	Wait(restartTimeout)
 
-	LogDebug(fmt.Sprintf("Verifying domain join status for worker %s...", sshConfig.Host))
+	// Verify domain join was successful
+	LogDebug("Verifying domain join status...")
 	for attempts := 0; attempts < 5; attempts++ {
-		isJoined, currentDomain, err = checkDomainJoinStatusForWorker(sshConfig)
-		if err == nil && isJoined {
-			LogDebug(fmt.Sprintf("Domain join verification successful for worker %s!", sshConfig.Host))
-			LogDebug(fmt.Sprintf("Worker %s is now part of domain: %s", sshConfig.Host, currentDomain))
+		output, err = sshRunScript(sshConfig, checkScript)
+		if err == nil && strings.Contains(output, "True") {
+			LogDebug("Domain join verification successful!")
+
+			// Get domain name for confirmation
+			domainOutput, _ := sshRunScript(sshConfig, `powershell.exe -Command "(Get-WmiObject Win32_ComputerSystem).Domain"`)
+			LogDebug(fmt.Sprintf("Worker is now part of domain: %s", strings.TrimSpace(domainOutput)))
 			return nil
 		}
 
-		if err != nil {
-			LogDebug(fmt.Sprintf("Domain join verification attempt %d/5 failed for worker %s: %v", attempts+1, sshConfig.Host, err))
-		} else {
-			LogDebug(fmt.Sprintf("Domain join verification attempt %d/5 failed for worker %s, retrying...", attempts+1, sshConfig.Host))
-		}
+		LogDebug(fmt.Sprintf("Domain join verification attempt %d/5 failed, retrying...", attempts+1))
 		Wait(30)
 	}
 
-	return fmt.Errorf("domain join verification failed after restart for worker %s - worker may not be fully joined", sshConfig.Host)
-}
-
-// This function will cause the VM(s) to restart, so it should be called early in test setup.
-func JoinWindowsWorkerToDomain(domainName, domainUser, domainPassword string, restartTimeout int) error {
-	workerConfigs := orderedAttachedWorkerConfigsForDomainJoin()
-	if len(workerConfigs) == 0 {
-		return fmt.Errorf("no attached workers available for domain join")
-	}
-
-	for _, sshConfig := range workerConfigs {
-		if err := joinWindowsWorkerToDomainWithConfig(sshConfig, domainName, domainUser, domainPassword, restartTimeout); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return fmt.Errorf("domain join verification failed after restart - worker may not be fully joined")
 }
 
 func joinDomainScript(domainName, domainUser, domainPassword string) string {
@@ -153,81 +97,65 @@ func joinDomainScript(domainName, domainUser, domainPassword string) string {
 	return script
 }
 
-// CheckDomainJoinStatus checks if all attached Windows workers are joined to the same domain.
-// Returns true only when every attached worker is domain-joined.
+// CheckDomainJoinStatus checks if the Windows worker is joined to a domain
+// Returns: (isJoined bool, domainName string, error)
 func CheckDomainJoinStatus() (bool, string, error) {
-	workerConfigs := orderedAttachedWorkerConfigsForDomainJoin()
-	if len(workerConfigs) == 0 {
-		return false, "", fmt.Errorf("no attached workers available for domain join status check")
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
 	}
 
-	allJoined := true
-	commonDomain := ""
-
-	for _, sshConfig := range workerConfigs {
-		isJoined, currentDomain, err := checkDomainJoinStatusForWorker(sshConfig)
-		if err != nil {
-			return false, "", fmt.Errorf("worker %s: %w", sshConfig.Host, err)
-		}
-
-		if !isJoined {
-			allJoined = false
-			continue
-		}
-
-		if currentDomain == "" {
-			continue
-		}
-
-		if commonDomain == "" {
-			commonDomain = currentDomain
-			continue
-		}
-
-		if !strings.EqualFold(commonDomain, currentDomain) {
-			allJoined = false
-		}
+	checkScript := `powershell.exe -Command "Get-WmiObject Win32_ComputerSystem | Select-Object -Property PartOfDomain,Domain | ConvertTo-Json"`
+	output, err := sshRunScript(sshConfig, checkScript)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to check domain join status: %w\noutput: %s", err, output)
 	}
 
-	return allJoined, commonDomain, nil
+	// Parse JSON output
+	var result struct {
+		PartOfDomain bool   `json:"PartOfDomain"`
+		Domain       string `json:"Domain"`
+	}
+
+	err = json.Unmarshal([]byte(output), &result)
+	if err != nil {
+		// Try alternate parsing if JSON fails
+		if strings.Contains(output, "True") {
+			domainScript := `powershell.exe -Command "(Get-WmiObject Win32_ComputerSystem).Domain"`
+			domainOutput, _ := sshRunScript(sshConfig, domainScript)
+			return true, strings.TrimSpace(domainOutput), nil
+		}
+		return false, "", nil
+	}
+
+	return result.PartOfDomain, result.Domain, nil
 }
 
-// EnsureWindowsWorkerDomainJoined ensures all attached Windows workers are domain-joined before running AD-dependent tests.
+// EnsureWindowsWorkerDomainJoined ensures the Windows worker is domain-joined before running AD-dependent tests
+// This is a convenience wrapper that checks status and joins if needed
 func EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword string) error {
-	LogDebug("Checking Windows workers domain join status...")
+	LogDebug("Checking Windows worker domain join status...")
 
-	workerConfigs := orderedAttachedWorkerConfigsForDomainJoin()
-	if len(workerConfigs) == 0 {
-		return fmt.Errorf("no attached workers available for domain join")
+	isJoined, currentDomain, err := CheckDomainJoinStatus()
+	if err != nil {
+		LogDebug(fmt.Sprintf("Warning: Could not check domain status: %v", err))
+		LogDebug("Attempting domain join anyway...")
+		return JoinWindowsWorkerToDomain(domainName, domainUser, domainPassword, 180)
 	}
 
-	for _, sshConfig := range workerConfigs {
-		isJoined, currentDomain, err := checkDomainJoinStatusForWorker(sshConfig)
-		if err != nil {
-			LogDebug(fmt.Sprintf("Warning: Could not check domain status for worker %s: %v", sshConfig.Host, err))
-			LogDebug(fmt.Sprintf("Attempting domain join for worker %s anyway...", sshConfig.Host))
-			if err := joinWindowsWorkerToDomainWithConfig(sshConfig, domainName, domainUser, domainPassword, 180); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if isJoined && strings.EqualFold(currentDomain, domainName) {
-			LogDebug(fmt.Sprintf("Worker %s is already joined to domain: %s", sshConfig.Host, currentDomain))
-			continue
-		}
-
-		if isJoined && !strings.EqualFold(currentDomain, domainName) {
-			LogDebug(fmt.Sprintf("Worker %s is joined to different domain: %s (expected: %s)", sshConfig.Host, currentDomain, domainName))
-			LogDebug("Note: Rejoining to a different domain may require manual intervention")
-		} else {
-			LogDebug(fmt.Sprintf("Worker %s is not domain-joined (workgroup mode), joining to: %s", sshConfig.Host, domainName))
-		}
-
-		if err := joinWindowsWorkerToDomainWithConfig(sshConfig, domainName, domainUser, domainPassword, 180); err != nil {
-			return err
-		}
+	if isJoined && strings.EqualFold(currentDomain, domainName) {
+		LogDebug(fmt.Sprintf("Worker is already joined to domain: %s", currentDomain))
+		return nil
 	}
 
-	return nil
+	if isJoined && !strings.EqualFold(currentDomain, domainName) {
+		LogDebug(fmt.Sprintf("Worker is joined to different domain: %s (expected: %s)", currentDomain, domainName))
+		LogDebug("Note: Rejoining to a different domain may require manual intervention")
+	}
+
+	LogDebug(fmt.Sprintf("Worker is not domain-joined (workgroup mode), joining to: %s", domainName))
+	return JoinWindowsWorkerToDomain(domainName, domainUser, domainPassword, 180)
 }

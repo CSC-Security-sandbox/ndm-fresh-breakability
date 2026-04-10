@@ -117,14 +117,10 @@ run_tests() {
     print_log_banner "Starting" | tee -a "$report_file"
 
     # Run Ginkgo test and log output
-    local clone_provider="${VOLUME_CLONE_PROVIDER:-ontap}"
-    clone_provider=$(echo "$clone_provider" | tr '[:upper:]' '[:lower:]')
-
-    # ANF runs stay sequential, and smoke should also stay sequential to avoid
-    # clone contention. ONTAP keeps parallel execution only for end-to-end runs.
-    if [[ "$clone_provider" == "anf" ]]; then
-        echo "Running sequentially for ANF clone provider..." | tee -a "$report_file"
-        ginkgo run -v --timeout="$timeout" "$test_path" -- \
+    # Use parallel execution for smoke and e2e tests (5 cores), sequential for regression
+    if [[ "$test_type" == "smoke" ]]; then
+        echo "Running with parallel execution (5 cores)..." | tee -a "$report_file"
+        ginkgo run -v -p -procs=5 --timeout="$timeout" "$test_path" -- \
             --protocol_type="$protocol_type" \
             --environment="$environment" | tee -a "$report_file"
     elif [[ "$test_type" == "end-to-end" ]]; then
