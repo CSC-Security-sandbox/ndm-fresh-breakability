@@ -32,6 +32,9 @@ export enum JobRunStatus {
   Completed = "COMPLETED",
   Failed = "FAILED",
   Errored = "ERRORED",
+  Blocked = "BLOCKED",
+  Approved = "APPROVED",
+  Rejected = "REJECTED",
 }
 
 export enum JobStatus {

@@ -21,7 +21,9 @@ interface CutOverWorkflowOutput {
   failedWorkers:string[];
   fileCount : number;
   dirCount : number;
-  status: JobRunStatus
+  status: JobRunStatus;
+  excludedPaths?: Array<{ path: string; isDirectory?: boolean; matchedPattern?: string }>;
+  skippedPaths?: Array<{ path: string; isDirectory?: boolean }>;
 }
 
 
@@ -53,10 +55,14 @@ export const CutOverWorkFlow = async ({
     output.fileCount = discoveryWorkflowExecResult.fileCount;
     output.dirCount = discoveryWorkflowExecResult.dirCount;
     output.status = discoveryWorkflowExecResult.status;
-
+    output.excludedPaths = discoveryWorkflowExecResult.excludedPaths ?? [];
+    output.skippedPaths = discoveryWorkflowExecResult.skippedPaths ?? [];
 
     // Reporting and Report Generation
-    await handleReporting(traceId, output.status);
+    await handleReporting(traceId, output.status, {
+      excludedPaths: output.excludedPaths,
+      skippedPaths: output.skippedPaths,
+    });
 
 
     // Waiting for approval  

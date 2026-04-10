@@ -804,6 +804,35 @@ describe("JobRunService", () => {
       expect(result.discovery.totalSize).toBe("100 KiB");
     });
 
+    it("should use persisted jobStats for BLOCKED cutover runs (scan finished, review pending)", async () => {
+      const mockJobRun = buildMockJobRun({
+        status: JobRunStatus.Blocked,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.CutOver,
+          sourcePath: {
+            fileServer: { protocol: "http", config: { configName: "sourceServer" } },
+            volumePath: "/source",
+          },
+          destinationPath: {
+            fileServer: { protocol: "ftp", config: { configName: "destServer" } },
+            volumePath: "/destination",
+          },
+        },
+        jobStats: { fileCount: "100", directories: "10", totalSize: "2048000" },
+      });
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.cutOver).toBeDefined();
+      expect(result.cutOver?.fileCount).toBe("100");
+      expect(result.cutOver?.directories).toBe("10");
+      expect(result.cutOver?.totalSize).toBe("1.95 MiB");
+    });
+
     it("should fall back to MV stats for non-terminal job runs", async () => {
       const mockJobRun = buildMockJobRun({
         status: JobRunStatus.Running,

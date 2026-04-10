@@ -33,6 +33,8 @@ beforeEach(() => {
         fileCount: 10,
         dirCount: 2,
         status: JobRunStatus.Completed,
+        excludedPaths: [],
+        skippedPaths: [],
     });
 
     (handleReporting as jest.Mock).mockResolvedValue(undefined);
@@ -54,7 +56,10 @@ it('should execute the workflow and return expected output', async () => {
     });
     expect(waitUntilRedisMemoryOk).toHaveBeenCalledWith(traceId);
     expect(executeMigrationChildWorkflows).toHaveBeenCalledWith({ jobRunId: traceId });
-    expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed);
+    expect(handleReporting).toHaveBeenCalledWith(traceId, JobRunStatus.Completed, {
+        excludedPaths: [],
+        skippedPaths: [],
+    });
     expect(waitForApproval).toHaveBeenCalledWith(traceId);
     expect(executeCleanup).toHaveBeenCalledWith({
         jobRunId: traceId,
@@ -69,6 +74,8 @@ it('should execute the workflow and return expected output', async () => {
         fileCount: 10,
         dirCount: 2,
         status: JobRunStatus.Completed,
+        excludedPaths: [],
+        skippedPaths: [],
     });
 });
 

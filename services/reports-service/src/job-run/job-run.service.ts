@@ -29,10 +29,14 @@ import * as os from "os";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
+/** Job run states where persisted job_stats snapshot should drive UI counts (incl. cutover review states). */
 const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
   JobRunStatus.Completed,
   JobRunStatus.Failed,
   JobRunStatus.Stopped,
+  JobRunStatus.Blocked,
+  JobRunStatus.Approved,
+  JobRunStatus.Rejected,
 ];
 
 @Injectable()
