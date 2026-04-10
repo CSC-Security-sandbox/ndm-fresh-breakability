@@ -212,6 +212,22 @@ jobs:
         with:
           egress-policy: audit
 
+      - name: Fix home directory permissions
+        run: |
+          if [ "$(stat -c '%u' "$HOME")" != "$(id -u)" ]; then
+            sudo chown "$(id -u):$(id -g)" "$HOME"
+          fi
+
+      - name: Free disk space
+        run: |
+          echo "=== Disk usage before cleanup ==="
+          df -h "$HOME" /
+          rm -rf "$HOME/.npm/_cacache" "$HOME/.npm/_logs"
+          rm -rf "$HOME/detect/download"
+          docker system prune -af --volumes 2>/dev/null || true
+          echo "=== Disk usage after cleanup ==="
+          df -h "$HOME" /
+
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -240,12 +256,6 @@ jobs:
           SIZE=$(du -h "$TAR_FILE" | cut -f1)
           echo "Docker image verified: $SIZE"
           ls -la "$TAR_FILE"
-
-      - name: Ensure Maven local repo directory exists
-        run: |
-          if [ ! -d "$HOME/.m2" ]; then
-            mkdir -p "$HOME/.m2" || sudo mkdir -p "$HOME/.m2" && sudo chown "$(id -u):$(id -g)" "$HOME/.m2"
-          fi
 
       - name: Set up Java
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
