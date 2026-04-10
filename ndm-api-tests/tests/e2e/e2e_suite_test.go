@@ -34,6 +34,20 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	LogDebug(fmt.Sprintf("[Process #1] Global project created: %s (ID: %s) with %d workers", 
 		GlobalProjectName, GlobalProjectId, len(GlobalAttachedWorkersConfig)))
 
+	// Domain join for SMB tests (runs once to avoid worker restarts)
+	if ProtocolType == "SMB" {
+		domainName := "rootdomain.local"
+		domainUser := PROTOCOL_USERNAME
+		domainPassword := PROTOCOL_PASSWORD
+		
+		if domainUser != "" && domainPassword != "" {
+			LogDebug(fmt.Sprintf("Domain join parameters: domain=%s, user=%s", domainName, domainUser))
+			err := EnsureWindowsWorkerDomainJoined(domainName, domainUser, domainPassword)
+			Expect(err).NotTo(HaveOccurred(), "Error joining Windows worker to domain")
+			LogDebug("Windows worker is domain-joined and ready for AD operations")
+		}
+	}
+
 	// Serialize shared data for other processes
 	sharedData := SharedSuiteData{
 		AuthToken:                   AuthToken,

@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -11,15 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxANFCloneVolumeNameLength = 64
-
-var testCaseIDPattern = regexp.MustCompile(`(?i)\b[a-z]+-\d+\b`)
-
 // TestVolumeManager manages creation and cleanup of test volumes
 type TestVolumeManager struct {
-	CloneProvider  VolumeCloneProvider
 	OntapClient    *OntapClient
-	ANFConfig      *ANFEndpointConfig
 	SVMName        string
 	RunnerID       string
 	CreatedVolumes []VolumeCleanupInfo
@@ -37,7 +30,6 @@ type VolumeCleanupInfo struct {
 // NewTestVolumeManager creates a new test volume manager
 func NewTestVolumeManager(ontapBaseURL, username, password, svmName, runnerID string) *TestVolumeManager {
 	return &TestVolumeManager{
-		CloneProvider:  VolumeCloneProviderONTAP,
 		OntapClient:    NewOntapClient(ontapBaseURL, username, password),
 		SVMName:        svmName,
 		RunnerID:       runnerID,
@@ -45,36 +37,17 @@ func NewTestVolumeManager(ontapBaseURL, username, password, svmName, runnerID st
 	}
 }
 
-// NewANFTestVolumeManager creates a test volume manager backed by Azure NetApp Files.
-func NewANFTestVolumeManager(config ANFEndpointConfig) *TestVolumeManager {
-	return &TestVolumeManager{
-		CloneProvider:  VolumeCloneProviderANF,
-		ANFConfig:      &config,
-		CreatedVolumes: []VolumeCleanupInfo{},
-	}
-}
-
-// GenerateVolumeName creates a unique volume name for the test run.
-// ONTAP format: {baseVolumeName}_{testCase_truncated_10chars}_{uniqueID}
-// ANF format: {baseVolumeName}-{testCaseID}-{uniqueID}
+// GenerateVolumeName creates a unique volume name for the test run
+// Format: {baseVolumeName}_{testCase_truncated_10chars}_{uniqueID}
 func (tm *TestVolumeManager) GenerateVolumeName(baseVolumeName string) string {
+	// Remove leading/trailing slashes and spaces
+	cleanBaseName := strings.Trim(baseVolumeName, "/ ")
+
 	// Get test case from environment if set by BeforeEach
 	testCase := os.Getenv("CURRENT_TEST_CASE")
 	if testCase == "" {
 		testCase = "test"
 	}
-
-	// Generate short unique ID (8 characters from UUID)
-	// This is more reliable than timestamps and avoids timing issues
-	uuid := uuid.New().String()
-	uniqueID := strings.ReplaceAll(uuid[:8], "-", "")
-
-	if tm.CloneProvider == VolumeCloneProviderANF {
-		return buildANFCloneVolumeName(baseVolumeName, testCase, uniqueID)
-	}
-
-	// Remove leading/trailing slashes and spaces
-	cleanBaseName := strings.Trim(baseVolumeName, "/ ")
 
 	// Clean test case name (remove special characters, keep only alphanumeric and underscores)
 	// ONTAP volume names can only contain alphanumeric characters and underscores
@@ -95,6 +68,11 @@ func (tm *TestVolumeManager) GenerateVolumeName(baseVolumeName string) string {
 		cleanTestCase = cleanTestCase[:10]
 	}
 
+	// Generate short unique ID (8 characters from UUID)
+	// This is more reliable than timestamps and avoids timing issues
+	uuid := uuid.New().String()
+	uniqueID := strings.ReplaceAll(uuid[:8], "-", "")
+
 	// Create volume name: baseName_testCase(max10)_uniqueID(8)
 	volumeName := fmt.Sprintf("%s_%s_%s", cleanBaseName, cleanTestCase, uniqueID)
 
@@ -111,44 +89,10 @@ func (tm *TestVolumeManager) GenerateVolumeName(baseVolumeName string) string {
 	return volumeName
 }
 
-func buildANFCloneVolumeName(baseVolumeName, testCase, uniqueID string) string {
-	testCaseSlug := anfTestCaseSlug(testCase)
-
-	remainingBaseLen := maxANFCloneVolumeNameLength - len(uniqueID) - 1 // hyphen before uniqueID
-	if testCaseSlug != "" {
-		remainingBaseLen -= len(testCaseSlug) + 1 // hyphen before test case id
-	}
-	if remainingBaseLen < 1 {
-		remainingBaseLen = 1
-	}
-
-	cleanBaseName := sanitizeANFIdentifier(baseVolumeName, remainingBaseLen)
-	return strings.Join([]string{cleanBaseName, testCaseSlug, uniqueID}, "-")
-}
-
-func anfTestCaseSlug(testCase string) string {
-	if match := testCaseIDPattern.FindString(testCase); match != "" {
-		return sanitizeANFIdentifier(match, 16)
-	}
-
-	return sanitizeANFIdentifier(testCase, 12)
-}
-
 // CreateCloneVolume creates a clone of the master volume for testing
 func (tm *TestVolumeManager) CreateCloneVolume(masterVolumeName string) (string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-
-	if tm.CloneProvider == VolumeCloneProviderANF {
-		volInfo, err := tm.createANFCloneVolume(masterVolumeName)
-		if err != nil {
-			return "", err
-		}
-
-		tm.CreatedVolumes = append(tm.CreatedVolumes, volInfo)
-		LogDebug(fmt.Sprintf("Successfully created ANF clone volume '%s' from master '%s'", volInfo.Name, masterVolumeName))
-		return volInfo.Name, nil
-	}
 
 	cloneName := tm.GenerateVolumeName(masterVolumeName)
 
@@ -227,33 +171,16 @@ func (tm *TestVolumeManager) CreateCloneVolume(masterVolumeName string) (string,
 
 // CreateMultipleClones creates clones for multiple master volumes
 func (tm *TestVolumeManager) CreateMultipleClones(masterVolumeNames []string) ([]string, error) {
-	return tm.CreateSelectedClones(masterVolumeNames, allIndices(len(masterVolumeNames)))
-}
+	cloneNames := make([]string, 0, len(masterVolumeNames))
 
-// CreateSelectedClones creates clones only for the requested indices and returns
-// a slice aligned to the master volume list so existing tests can keep their
-// current index lookups.
-func (tm *TestVolumeManager) CreateSelectedClones(masterVolumeNames []string, requiredIndices []int) ([]string, error) {
-	cloneNames := make([]string, len(masterVolumeNames))
-	seen := make(map[int]struct{}, len(requiredIndices))
-
-	for _, index := range requiredIndices {
-		if index < 0 || index >= len(masterVolumeNames) {
-			tm.CleanupAllVolumes()
-			return nil, fmt.Errorf("requested clone index %d is out of range for %d master volumes", index, len(masterVolumeNames))
-		}
-		if _, exists := seen[index]; exists {
-			continue
-		}
-		seen[index] = struct{}{}
-
-		cloneName, err := tm.CreateCloneVolume(masterVolumeNames[index])
+	for _, masterName := range masterVolumeNames {
+		cloneName, err := tm.CreateCloneVolume(masterName)
 		if err != nil {
 			// Cleanup any volumes created so far
 			tm.CleanupAllVolumes()
-			return nil, fmt.Errorf("failed to create clone for '%s': %w", masterVolumeNames[index], err)
+			return nil, fmt.Errorf("failed to create clone for '%s': %w", masterName, err)
 		}
-		cloneNames[index] = cloneName
+		cloneNames = append(cloneNames, cloneName)
 	}
 
 	return cloneNames, nil
@@ -272,17 +199,6 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 	LogDebug(fmt.Sprintf("Cleaning up %d test volume(s)", len(tm.CreatedVolumes)))
 
 	for _, volInfo := range tm.CreatedVolumes {
-		if tm.CloneProvider == VolumeCloneProviderANF {
-			LogDebug(fmt.Sprintf("[CLEANUP] Deleting ANF clone '%s'", volInfo.Name))
-			if err := tm.deleteANFCloneResources(volInfo); err != nil {
-				LogError(fmt.Sprintf("[CLEANUP] Failed to delete ANF clone '%s': %v (continuing)", volInfo.Name, err))
-				continue
-			}
-
-			LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted ANF clone '%s'", volInfo.Name))
-			continue
-		}
-
 		// Step 1: Delete SMB share first (only for SMB protocol) before deleting volume
 		// SMB shares must be removed before the volume can be deleted
 		if PROTOCOL_TYPE == ProtocolSMB {
@@ -309,7 +225,7 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 	// Clear the list
 	tm.CreatedVolumes = []VolumeCleanupInfo{}
 
-	LogDebug("[CLEANUP] Cleanup completed")
+	LogDebug(fmt.Sprintf("[CLEANUP] Cleanup completed"))
 	return nil
 }
 

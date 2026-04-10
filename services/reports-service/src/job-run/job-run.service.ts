@@ -147,6 +147,27 @@ export class JobRunService {
           parsedReport.lastRefreshed = getLatestReportStatus.endTime;
         }
       }
+      // Cached report may have been built when the MV had zeros.
+      // If we now have a valid job_stats snapshot, override the stats section.
+      if (hasValidSnapshot) {
+        const statsFromSnapshot = {
+          fileCount: jobStatsSnapshot.fileCount,
+          directories: jobStatsSnapshot.directories,
+          totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
+          newlyCopiedCount: jobStatsSnapshot.newlyCopiedCount,
+          modifiedCount: jobStatsSnapshot.modifiedCount,
+          skippedCount: jobStatsSnapshot.skippedCount,
+          deletedCount: jobStatsSnapshot.deletedCount,
+        };
+        if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
+        if (parsedReport.discovery) parsedReport.discovery = statsFromSnapshot;
+        if (parsedReport.cutOver) parsedReport.cutOver = statsFromSnapshot;
+        // Stats came from job_stats snapshot captured at job completion — use endTime as the accurate timestamp.
+        // Only override if endTime is non-null; if missing, keep the MV lastRefreshed already set above.
+        if (getLatestReportStatus.endTime != null) {
+          parsedReport.lastRefreshed = getLatestReportStatus.endTime;
+        }
+      }
       return parsedReport;
     }
 
@@ -189,7 +210,6 @@ export class JobRunService {
         isReportReady: true,
         status: true,
         endTime: true,
-        jobStats: true,
         // worker: {workerId: true},
         jobConfig: {
           id: true,

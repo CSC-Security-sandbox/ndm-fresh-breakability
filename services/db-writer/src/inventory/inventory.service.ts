@@ -217,7 +217,7 @@ export class InventoryService {
       `, [jobRunId, directoryPath]);
       
       if (existingDir.length > 0 && existingDir[0].is_deleted) {
-        this.logger.debug(`Directory ${directoryPath} is already marked as deleted, skipping tree deletion`);
+        this.logger.log(`Directory ${directoryPath} is already marked as deleted, skipping tree deletion`);
         continue;
       }
       
@@ -307,7 +307,7 @@ export class InventoryService {
           ? `${escapedDirectoryPath}\\\\%`  
           : `${escapedDirectoryPath}/%`;  
         
-        this.logger.debug(`Checking for items to mark as deleted under directory: ${directoryPath} for current job run: ${jobRunId}`);
+        this.logger.log(`Checking for items to mark as deleted under directory: ${directoryPath} for current job run: ${jobRunId}`);
         const batchSize = 1000;
         let processedCount = 0;
         let lastProcessedPath: string | null = null;  
@@ -346,13 +346,13 @@ export class InventoryService {
               LIMIT $4
             `, queryParams);
 
-            this.logger.debug(`Batch ${batchNumber}: Retrieved ${filesToMarkDeleted?.length || 0} files from database`);
+            this.logger.log(`Batch ${batchNumber}: Retrieved ${filesToMarkDeleted?.length || 0} files from database`);
             if (!filesToMarkDeleted || filesToMarkDeleted.length === 0) {
               break;
             }
             
             lastProcessedPath = filesToMarkDeleted[filesToMarkDeleted.length - 1].path;
-            this.logger.debug(`Processing files: ${filesToMarkDeleted.map(f => f.path).join(', ')}`);
+            this.logger.log(`Processing files: ${filesToMarkDeleted.map(f => f.path).join(', ')}`);
         
             const deletedEntries = filesToMarkDeleted.map(file => {
               const isWindowsPath = file.path.startsWith('\\');
@@ -385,10 +385,10 @@ export class InventoryService {
               };
             });
       
-          this.logger.debug(`About to upsert ${deletedEntries.length} entries`);
+          this.logger.log(`About to upsert ${deletedEntries.length} entries`);
           await this.inventoryRepo.upsert(deletedEntries, ['path', 'jobRunId', 'isDirectory']);
           processedCount += deletedEntries.length;
-          this.logger.debug(`Batch ${batchNumber} processed: ${deletedEntries.length} items marked as deleted (${processedCount} total) for directory: ${directoryPath}`);
+          this.logger.log(`Batch ${batchNumber} processed: ${deletedEntries.length} items marked as deleted (${processedCount} total) for directory: ${directoryPath}`);
           } catch (batchError) {
             this.logger.error(`Failed to process batch ${batchNumber} for directory ${directoryPath}: ${batchError.message}`, batchError.stack);
           }
