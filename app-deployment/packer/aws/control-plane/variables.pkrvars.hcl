@@ -22,6 +22,6 @@ aws_packer_instance_type     = "t3a.2xlarge"
 
 // AWS Block Device Configuration
 aws_block_device_name                  = "/dev/sda1"
-aws_block_device_volume_size           = 1024
+aws_block_device_volume_size           = 200
 aws_block_device_volume_type           = "gp2"
 aws_block_device_delete_on_termination = true

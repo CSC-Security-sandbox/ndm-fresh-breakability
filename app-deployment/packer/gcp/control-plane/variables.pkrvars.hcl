@@ -10,6 +10,6 @@ gcp_region                   = "us-east1"
 gcp_zone                     = "us-east1-b"
 gcp_packer_machine_type      = "e2-standard-8"
 gcp_source_image             = "ubuntu-2404-noble-amd64-v20250228"
-gcp_disk_size                = 1024
+gcp_disk_size                = 200
 gcp_network                  = "appmicro-vpc1"
 gcp_subnetwork               = "appmicro-vpc-subnet-01"
