@@ -74,6 +74,9 @@ export class JobConfigEntity extends Base {
   @JoinColumn({ name: 'target_path_id' }) 
   destinationPath: VolumeEntity;
 
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;
 }

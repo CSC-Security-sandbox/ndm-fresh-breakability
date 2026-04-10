@@ -8,7 +8,6 @@ import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/
 
 import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
-import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
@@ -35,19 +34,19 @@ import { AuthKeycloakModule } from '@netapp-cloud-datamigrate/auth-lib';import {
 import { MigrationConflictModule } from 'src/migration-conflict/migration-conflict.module';
 import { JobStatsSummaryMvEntity } from 'src/entities/job-stats-summary-mv.entity';
 import { JobConfigInventoryStatsEntity } from 'src/entities/job-config-inventory-stats.entity';
+import { SoftDeleteJobConfigRepository } from 'src/repositories/soft-delete-jobconfig.repository';
 
 
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        ScheduleModule.forRoot(),
         TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity,JobStatsSummaryMvEntity, JobConfigInventoryStatsEntity]),
         WorkerModule,
         RedisModule,
         AuthKeycloakModule,
         MigrationConflictModule
     ],
-    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService],
+    providers: [JobRunService, JobConfigService,WorkflowService,WorkflowService, JobRunInitService, WorkerEntity,SendMailService, ErrorRemedyService,WorkersService, JobRunActionService, SoftDeleteJobConfigRepository],
     controllers: [JobRunController]
 })
 export class JobRunModule {}

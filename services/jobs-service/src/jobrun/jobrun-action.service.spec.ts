@@ -284,6 +284,7 @@ describe("JobRunActionService", () => {
                     migrateConfig: {},
                     createdBy: "user1",
                     updatedBy: "user1",
+                    isDeleted: false,
                     skipFile: null,
                     createdAt: new Date(),
                     updatedAt: new Date(),

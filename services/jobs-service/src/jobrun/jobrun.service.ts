@@ -34,7 +34,7 @@ import { SendMailService } from "src/utils/send-email";
 import { WorkersService } from "src/workers/workers.service";
 import { WorkflowService } from "src/workflow/workflow.service";
 import { SignalWorkFlowPayload } from "src/workflow/workflow.types";
-import { DataSource, EntityManager, FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
+import { Brackets, DataSource, EntityManager, FindManyOptions, Raw, Repository, UpdateResult } from "typeorm";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunDetailsDTO, JobRunDto, JobRunsDTO } from "./dto/jobrun.dto";
 import { ApprovalRequestDTO } from "./dto/jobrunactions.dto";
@@ -52,6 +52,7 @@ import {
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { ProjectEntity } from "src/entities/project.entity";
+import { SoftDeleteJobConfigRepository } from "src/repositories/soft-delete-jobconfig.repository";
 
 @Injectable()
 export class JobRunService {
@@ -62,8 +63,7 @@ export class JobRunService {
   constructor(
     @InjectRepository(JobRunEntity)
     private jobRunRepo: Repository<JobRunEntity>,
-    @InjectRepository(JobConfigEntity)
-    private jobConfigRepo: Repository<JobConfigEntity>,
+    private readonly jobConfigRepo: SoftDeleteJobConfigRepository,
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
     @InjectRepository(InventoryEntity)
@@ -526,8 +526,11 @@ export class JobRunService {
       .leftJoinAndSelect("targetVolume.fileServer", "targetFileServer")
       .leftJoinAndSelect("sourceFileServer.config", "sourceConfig")
       .leftJoinAndSelect("targetFileServer.config", "targetConfig")
-      .where("sourceConfig.projectId = :projectId", { projectId })
-      .orWhere("targetConfig.projectId = :projectId", { projectId })
+      .where(new Brackets(qb => {
+        qb.where("sourceConfig.projectId = :projectId", { projectId })
+          .orWhere("targetConfig.projectId = :projectId", { projectId });
+      }))
+      .andWhere("jobConfig.isDeleted = :isDeleted", { isDeleted: false })
       .select([
         "jobRun.id AS jobRunId",
         "jobRun.isReportReady AS isReportReady",

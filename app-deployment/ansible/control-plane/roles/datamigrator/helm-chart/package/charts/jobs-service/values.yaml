@@ -119,6 +119,8 @@ env:
     value: "http://admin-service-service:3000"
   - name: HEALTHCHECK_STATUS_TIMEOUT_SEC
     value: "180"
+  - name: PURGE_BATCH_SIZE
+    value: "50000"
 
 service:
   type: ClusterIP

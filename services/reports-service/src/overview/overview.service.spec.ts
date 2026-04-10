@@ -445,6 +445,13 @@ describe("OverviewService", () => {
         where: {
           configs: {
             id: "config1",
+            fileServers: {
+              volumes: {
+                sourceConfig: {
+                  isDeleted: false,
+                },
+              },
+            },
           },
         },
         relations: [
@@ -477,6 +484,7 @@ describe("OverviewService", () => {
               volumes: {
                 sourceConfig: {
                   id: "job1",
+                  isDeleted: false,
                   jobRuns: {
                     status: JobRunStatus.Completed,
                   },
@@ -516,6 +524,15 @@ describe("OverviewService", () => {
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           id: "project1",
+          configs: {
+            fileServers: {
+              volumes: {
+                sourceConfig: {
+                  isDeleted: false,
+                },
+              },
+            },
+          },
         },
         relations: [
           "configs",
@@ -541,7 +558,17 @@ describe("OverviewService", () => {
       await service.getStorageAndJobsOverview(null, null, null);
 
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {},
+        where: {
+          configs: {
+            fileServers: {
+              volumes: {
+                sourceConfig: {
+                  isDeleted: false,
+                },
+              },
+            },
+          },
+        },
         relations: [
           "configs",
           "configs.fileServers",

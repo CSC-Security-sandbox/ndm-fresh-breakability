@@ -68,6 +68,7 @@ import { SuccessEmailType } from "src/utils/send-email.type";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
 import { DataSource } from "typeorm";
+import { SoftDeleteJobConfigRepository } from "src/repositories/soft-delete-jobconfig.repository";
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -109,6 +110,7 @@ describe("JobRunService", () => {
         WorkflowService,
         JobRunInitService,
         JobConfigService,
+        SoftDeleteJobConfigRepository,
         RedisService,
         SendMailService,
         ErrorRemedyService,
@@ -667,7 +669,7 @@ describe("JobRunService", () => {
 
       expect(result).toBe("job run created");
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId, isDeleted: false },
       });
       expect(jobRunInitService.createJobRun).toHaveBeenCalledWith(
         mockJobConfig.id,
@@ -685,7 +687,7 @@ describe("JobRunService", () => {
         NotFoundException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId, isDeleted: false },
       });
     });
 
@@ -705,7 +707,7 @@ describe("JobRunService", () => {
         BadRequestException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId, isDeleted: false },
       });
     });
 
@@ -725,7 +727,7 @@ describe("JobRunService", () => {
         BadRequestException
       );
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: mockJobConfigId },
+        where: { id: mockJobConfigId, isDeleted: false },
       });
     });
 
@@ -1187,7 +1189,7 @@ describe("JobRunService", () => {
       const result = await initService.getJobConfig("123");
 
       expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
-        where: { id: "123" },
+        where: { id: "123", isDeleted: false },
         relations: {
           sourcePath: {
             fileServer: { config: true, workers: { stats: true } },
@@ -1315,7 +1317,7 @@ describe("JobRunService", () => {
       const result = await initService.getJobConfig("123");
 
       expect(jest.spyOn(jobConfigRepo, "findOne")).toHaveBeenCalledWith({
-        where: { id: "123" },
+        where: { id: "123", isDeleted: false },
         relations: {
           sourcePath: {
             fileServer: { config: true, workers: { stats: true } },
@@ -1625,6 +1627,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1701,6 +1704,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1742,6 +1746,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue([]),
@@ -1775,6 +1780,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1810,6 +1816,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1852,6 +1859,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1881,6 +1889,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -1912,6 +1921,7 @@ describe("JobRunService", () => {
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue(mockJobRuns),
@@ -3247,7 +3257,7 @@ describe("JobRunService", () => {
         where: { id: jobRunId },
       });
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: jobRunDetails.jobConfigId },
+        where: { id: jobRunDetails.jobConfigId, isDeleted: false },
         relations: {
           sourcePath: { fileServer: true },
           targetPath: { fileServer: true },
@@ -3326,7 +3336,7 @@ describe("JobRunService", () => {
         where: { id: jobRunId },
       });
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
-        where: { id: jobRunDetails.jobConfigId },
+        where: { id: jobRunDetails.jobConfigId, isDeleted: false },
         relations: {
           sourcePath: { fileServer: true },
           targetPath: { fileServer: true },

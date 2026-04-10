@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MigrationConflictService } from './migration-conflict.service';
 import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobRunEntity } from '../entities/jobrun.entity';
+import { SoftDeleteJobConfigRepository } from '../repositories/soft-delete-jobconfig.repository';
 
 @Module({
     imports: [
@@ -11,7 +12,7 @@ import { JobRunEntity } from '../entities/jobrun.entity';
             JobRunEntity,
         ]),
     ],
-    providers: [MigrationConflictService],
+    providers: [MigrationConflictService, SoftDeleteJobConfigRepository],
     exports: [MigrationConflictService],
 })
 export class MigrationConflictModule { }

@@ -6,6 +6,7 @@ import { JobConfigEntity } from '../entities/jobconfig.entity';
 import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunStatus, JobStatus, JobType } from '../constants/enums';
 import { MigrationConflictCheckData } from './types';
+import { SoftDeleteJobConfigRepository } from '../repositories/soft-delete-jobconfig.repository';
 
 /**
  * MigrationConflictService checks migrate configs for three conflict types:
@@ -43,7 +44,7 @@ describe('MigrationConflictService', () => {
             providers: [
                 MigrationConflictService,
                 {
-                    provide: getRepositoryToken(JobConfigEntity),
+                    provide: SoftDeleteJobConfigRepository,
                     useValue: mockJobConfigRepository,
                 },
                 {
@@ -54,9 +55,9 @@ describe('MigrationConflictService', () => {
         }).compile();
 
         service = module.get<MigrationConflictService>(MigrationConflictService);
-        jobConfigRepository = module.get<Repository<JobConfigEntity>>(
-            getRepositoryToken(JobConfigEntity),
-        );
+        jobConfigRepository = module.get<SoftDeleteJobConfigRepository>(
+            SoftDeleteJobConfigRepository,
+        ) as any;
         jobRunRepository = module.get<Repository<JobRunEntity>>(
             getRepositoryToken(JobRunEntity),
         );

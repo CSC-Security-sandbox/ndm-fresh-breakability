@@ -46,6 +46,7 @@ import { WorkflowService } from "src/workflow/workflow.service";
 import { StartWorkFlowPayload } from "src/workflow/workflow.types";
 import { Readable } from "stream";
 import { In, LessThan, Repository } from "typeorm";
+import { SoftDeleteJobConfigRepository } from "src/repositories/soft-delete-jobconfig.repository";
 import { v4 as uuid4 } from "uuid";
 import { JobRunEntity } from "../entities/jobrun.entity";
 import { JobRunConfig } from "./jobrun.types";
@@ -61,8 +62,7 @@ export class JobRunInitService {
     private jobRunRepo: Repository<JobRunEntity>,
     @InjectRepository(SpeedTestConfigEntity)
     private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
-    @InjectRepository(JobConfigEntity)
-    private jobConfigRepo: Repository<JobConfigEntity>,
+    private jobConfigRepo: SoftDeleteJobConfigRepository,
     @InjectRepository(FileServerEntity)
     private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(WorkerJobRunMap)

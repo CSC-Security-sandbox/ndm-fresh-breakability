@@ -324,6 +324,10 @@ export class JobConfigController {
     return await this.jobConfigService.deleteJobConfig(id);
   }
 
+  async purgeDeletedJobConfigs() {
+    await this.jobConfigService.purgeDeletedJobConfigs();
+  }
+
   @ApiOperation({ summary: 'Get identity mappings for a job by ID' })
   @Get(':id/mappings-fetch')
   @Auth(Permission.ViewJob)

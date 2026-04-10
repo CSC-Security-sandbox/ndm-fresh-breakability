@@ -202,6 +202,7 @@ async checkMigrationConflicts(data: JobConfigPreCheck): Promise<PreCheckCircular
             .innerJoinAndSelect("jobRun.jobConfig", "jobConfig")
             .where("jobConfig.source_path_id = :pathId", { pathId })
             .andWhere("jobConfig.job_type = :jobType", { jobType: JobType.DISCOVER })
+            .andWhere("jobConfig.is_deleted = :isDeleted", { isDeleted: false })
             .andWhere("jobRun.status = :status", { status: JobRunStatus.Completed })
             .orderBy("jobRun.created_at", "DESC")
             .getOne();

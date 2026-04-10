@@ -62,6 +62,7 @@ import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entit
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
 import { DataSource } from "typeorm";
 import { MountTrackerService } from "./mount-tracker.service";
+import { SoftDeleteJobConfigRepository } from "src/repositories/soft-delete-jobconfig.repository";
 
 jest.mock('typeorm', () => {
   const actual = jest.requireActual('typeorm');
@@ -141,7 +142,7 @@ describe("JobConfigService", () => {
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: "winston", useValue: winston },
         {
-          provide: getRepositoryToken(JobConfigEntity),
+          provide: SoftDeleteJobConfigRepository,
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
@@ -425,9 +426,9 @@ describe("JobConfigService", () => {
 
     service = module.get<JobConfigService>(JobConfigService);
     workFlowService = module.get<WorkflowService>(WorkflowService);
-    jobConfigRepo = module.get<Repository<JobConfigEntity>>(
-      getRepositoryToken(JobConfigEntity)
-    );
+    jobConfigRepo = module.get<SoftDeleteJobConfigRepository>(
+      SoftDeleteJobConfigRepository
+    ) as any;
     (jobConfigRepo as any).manager = {
       transaction: jest.fn(),
     };
@@ -2259,23 +2260,25 @@ describe("JobConfigService", () => {
   });
 
   describe("deleteJobConfig", () => {
-    it("should delete job config successfully when no active job runs exist", async () => {
+    it("should soft-delete job config successfully when no active job runs exist", async () => {
       const mockJobConfigId = "jobConfigId";
       const mockJobConfig = {
         id: mockJobConfigId,
+        isDeleted: false,
+        status: JobStatus.Active,
       };
 
       jest
         .spyOn(jobConfigRepo, "findOne")
         .mockResolvedValue(mockJobConfig as any);
       jest.spyOn(jobRunRepo, "find").mockResolvedValue([]);
-      jest.spyOn(jobConfigRepo, "remove").mockResolvedValue(undefined);
+      jest.spyOn(jobConfigRepo, "save").mockResolvedValue(undefined);
       const loggerSpy = jest.spyOn(service["logger"], "log");
 
       const result = await service.deleteJobConfig(mockJobConfigId);
 
       expect(result).toEqual({
-        message: `Job with id ${mockJobConfigId} has been deleted`,
+        message: `Job with id ${mockJobConfigId} has been marked for deletion`,
       });
       expect(jobConfigRepo.findOne).toHaveBeenCalledWith({
         where: { id: mockJobConfigId }
@@ -2286,8 +2289,10 @@ describe("JobConfigService", () => {
           status: expect.any(Object)
         }
       });
-      expect(jobConfigRepo.remove).toHaveBeenCalledWith(mockJobConfig);
-      expect(loggerSpy).toHaveBeenCalledWith(`Job with id ${mockJobConfigId} has been deleted successfully`);
+      expect(mockJobConfig.isDeleted).toBe(true);
+      expect(mockJobConfig.status).toBe(JobStatus.InActive);
+      expect(jobConfigRepo.save).toHaveBeenCalledWith(mockJobConfig);
+      expect(loggerSpy).toHaveBeenCalledWith(`Job with id ${mockJobConfigId} has been marked as deleted`);
     });
 
     it("should throw NotFoundException if job config is not found", async () => {
@@ -2337,7 +2342,7 @@ describe("JobConfigService", () => {
           status: expect.any(Object)
         }
       });
-      expect(jobConfigRepo.remove).not.toHaveBeenCalled();
+      expect(jobConfigRepo.save).not.toHaveBeenCalled();
       expect(loggerSpy).toHaveBeenCalledWith(
         `Failed to delete job with id ${mockJobConfigId}`,
         expect.any(String)
@@ -2348,11 +2353,13 @@ describe("JobConfigService", () => {
       const mockJobConfigId = "jobConfigId";
       const mockJobConfig = {
         id: mockJobConfigId,
+        isDeleted: false,
+        status: JobStatus.Active,
       };
 
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(mockJobConfig as any);
       jest.spyOn(jobRunRepo, "find").mockResolvedValue([]);
-      jest.spyOn(jobConfigRepo, "remove").mockRejectedValue(new Error("Database connection error"));
+      jest.spyOn(jobConfigRepo, "save").mockRejectedValue(new Error("Database connection error"));
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
       await expect(service.deleteJobConfig(mockJobConfigId)).rejects.toThrow(
@@ -2365,6 +2372,240 @@ describe("JobConfigService", () => {
         `Failed to delete job with id ${mockJobConfigId}`,
         expect.any(String)
       );
+    });
+  });
+
+  describe("purgeDeletedJobConfigs", () => {
+    beforeEach(() => {
+      process.env.SCHEMA = 'datamigrator';
+    });
+
+    it("should log and return when no soft-deleted job configs exist", async () => {
+      (dataSource.query as jest.Mock).mockResolvedValueOnce([]);
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+
+      await service.purgeDeletedJobConfigs();
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT id FROM "datamigrator".jobconfig WHERE is_deleted = true')
+      );
+      expect(loggerSpy).toHaveBeenCalledWith('No soft-deleted job configs to purge');
+    });
+
+    it("should purge a soft-deleted job config with no job runs", async () => {
+      const configId = 'config-1';
+      // 1. SELECT deleted configs
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: configId }])
+        // 2. SELECT job runs → none
+        .mockResolvedValueOnce([])
+        // 3. DELETE identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined)
+        // 4. DELETE job_config_inventory_stats
+        .mockResolvedValueOnce(undefined)
+        // 5. DELETE jobconfig RETURNING id
+        .mockResolvedValueOnce([{ id: configId }]);
+
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+      await service.purgeDeletedJobConfigs();
+
+      expect(loggerSpy).toHaveBeenCalledWith(`Purged deleted job config and all children: ${configId}`);
+      expect(loggerSpy).toHaveBeenCalledWith('Purge complete: 1/1 job configs removed');
+    });
+
+    it("should purge a soft-deleted job config with job runs, including inventory partition DROP and batched deletes", async () => {
+      const configId = 'config-2';
+      const runId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const partitionName = 'inventory_aaaaaaaa_bbbb_cccc_dddd_eeeeeeeeeeee';
+
+      (dataSource.query as jest.Mock)
+        // 1. SELECT deleted configs
+        .mockResolvedValueOnce([{ id: configId }])
+        // 2. SELECT job runs
+        .mockResolvedValueOnce([{ id: runId }])
+        // 3. DETACH partition
+        .mockResolvedValueOnce(undefined)
+        // 4. DROP partition table
+        .mockResolvedValueOnce(undefined)
+        // 5. DELETE operation_errors batch 1 (returns < ROW_BATCH → done)
+        .mockResolvedValueOnce([[], 0])
+        // 6. DELETE operations batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 7. DELETE task_errors batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 8. DELETE tasks batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 9. DELETE worker_jobrun_mapping
+        .mockResolvedValueOnce(undefined)
+        // 10. DELETE job_options
+        .mockResolvedValueOnce(undefined)
+        // 11. DELETE jobrun
+        .mockResolvedValueOnce(undefined)
+        // 12. DELETE identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined)
+        // 13. DELETE job_config_inventory_stats
+        .mockResolvedValueOnce(undefined)
+        // 14. DELETE jobconfig RETURNING id
+        .mockResolvedValueOnce([{ id: configId }]);
+
+      await service.purgeDeletedJobConfigs();
+
+      // Verify partition detach
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(`DETACH PARTITION "datamigrator"."${partitionName}"`)
+      );
+      // Verify partition drop
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(`DROP TABLE IF EXISTS "datamigrator"."${partitionName}"`)
+      );
+      // Verify final jobconfig delete
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM "datamigrator".jobconfig WHERE id = $1 RETURNING id'),
+        [configId]
+      );
+    });
+
+    it("should handle batched deletes when rows exceed ROW_BATCH", async () => {
+      const configId = 'config-3';
+      const runId = 'run-id-1';
+
+      (dataSource.query as jest.Mock)
+        // 1. SELECT deleted configs
+        .mockResolvedValueOnce([{ id: configId }])
+        // 2. SELECT job runs
+        .mockResolvedValueOnce([{ id: runId }])
+        // 3. DETACH partition → partition doesn't exist
+        .mockRejectedValueOnce({ code: '42P01', message: 'does not exist' })
+        // 4. DELETE operation_errors batch 1 → returns ROW_BATCH (50000), needs another round
+        .mockResolvedValueOnce([[], 50000])
+        // 5. DELETE operation_errors batch 2 → returns < ROW_BATCH, done
+        .mockResolvedValueOnce([[], 1000])
+        // 6. DELETE operations batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 7. DELETE task_errors batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 8. DELETE tasks batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 9. DELETE worker_jobrun_mapping
+        .mockResolvedValueOnce(undefined)
+        // 10. DELETE job_options
+        .mockResolvedValueOnce(undefined)
+        // 11. DELETE jobrun
+        .mockResolvedValueOnce(undefined)
+        // 12. DELETE identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined)
+        // 13. DELETE job_config_inventory_stats
+        .mockResolvedValueOnce(undefined)
+        // 14. DELETE jobconfig RETURNING id
+        .mockResolvedValueOnce([{ id: configId }]);
+
+      await service.purgeDeletedJobConfigs();
+
+      // operation_errors should have been called twice (batched)
+      const operationErrorsCalls = (dataSource.query as jest.Mock).mock.calls.filter(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('operation_errors')
+      );
+      expect(operationErrorsCalls.length).toBe(2);
+    });
+
+    it("should warn when DELETE jobconfig returns 0 rows", async () => {
+      const configId = 'config-4';
+
+      (dataSource.query as jest.Mock)
+        .mockResolvedValueOnce([{ id: configId }])
+        .mockResolvedValueOnce([]) // no runs
+        .mockResolvedValueOnce(undefined) // identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined) // job_config_inventory_stats
+        .mockResolvedValueOnce([]); // DELETE jobconfig returns empty
+
+      const loggerSpy = jest.spyOn(service["logger"], "warn");
+      await service.purgeDeletedJobConfigs();
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`DELETE returned 0 rows for job config ${configId}`)
+      );
+    });
+
+    it("should continue purging remaining configs when one fails", async () => {
+      const config1 = 'config-fail';
+      const config2 = 'config-ok';
+
+      (dataSource.query as jest.Mock)
+        // 1. SELECT deleted configs
+        .mockResolvedValueOnce([{ id: config1 }, { id: config2 }])
+        // config1: SELECT runs → throw error
+        .mockRejectedValueOnce(new Error('DB error'))
+        // config2: SELECT runs → none
+        .mockResolvedValueOnce([])
+        // config2: identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined)
+        // config2: job_config_inventory_stats
+        .mockResolvedValueOnce(undefined)
+        // config2: DELETE jobconfig
+        .mockResolvedValueOnce([{ id: config2 }]);
+
+      const loggerSpy = jest.spyOn(service["logger"], "log");
+      const errorSpy = jest.spyOn(service["logger"], "error");
+      await service.purgeDeletedJobConfigs();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        `Failed to purge job config ${config1}`,
+        expect.any(String)
+      );
+      expect(loggerSpy).toHaveBeenCalledWith(`Purged deleted job config and all children: ${config2}`);
+      expect(loggerSpy).toHaveBeenCalledWith('Purge complete: 1/2 job configs removed');
+    });
+
+    it("should use app.purge.batchSize from configService when set", async () => {
+      const configId = 'config-batch-env';
+      const runId = 'run-batch-1';
+      const customBatchSize = 10000;
+
+      configService.get.mockReturnValueOnce(customBatchSize);
+
+      (dataSource.query as jest.Mock)
+        // 1. SELECT deleted configs
+        .mockResolvedValueOnce([{ id: configId }])
+        // 2. SELECT job runs
+        .mockResolvedValueOnce([{ id: runId }])
+        // 3. DETACH partition → doesn't exist
+        .mockRejectedValueOnce({ code: '42P01', message: 'does not exist' })
+        // 4. DELETE operation_errors batch 1 → returns customBatchSize, needs another round
+        .mockResolvedValueOnce([[], customBatchSize])
+        // 5. DELETE operation_errors batch 2 → done
+        .mockResolvedValueOnce([[], 0])
+        // 6. DELETE operations batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 7. DELETE task_errors batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 8. DELETE tasks batch 1
+        .mockResolvedValueOnce([[], 0])
+        // 9. DELETE worker_jobrun_mapping
+        .mockResolvedValueOnce(undefined)
+        // 10. DELETE job_options
+        .mockResolvedValueOnce(undefined)
+        // 11. DELETE jobrun
+        .mockResolvedValueOnce(undefined)
+        // 12. DELETE identity_config_cross_mapping
+        .mockResolvedValueOnce(undefined)
+        // 13. DELETE job_config_inventory_stats
+        .mockResolvedValueOnce(undefined)
+        // 14. DELETE jobconfig RETURNING id
+        .mockResolvedValueOnce([{ id: configId }]);
+
+      await service.purgeDeletedJobConfigs();
+
+      // Verify configService.get was called with 'app.purge.batchSize'
+      expect(configService.get).toHaveBeenCalledWith('app.purge.batchSize');
+
+      // Verify the LIMIT parameter uses the custom batch size
+      const operationErrorsCalls = (dataSource.query as jest.Mock).mock.calls.filter(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('operation_errors')
+      );
+      expect(operationErrorsCalls.length).toBe(2);
+      // Each batched DELETE should pass customBatchSize as LIMIT parameter
+      expect(operationErrorsCalls[0][1]).toEqual([['run-batch-1'], customBatchSize]);
+      expect(operationErrorsCalls[1][1]).toEqual([['run-batch-1'], customBatchSize]);
     });
   });
 
@@ -3323,26 +3564,15 @@ describe("JobConfigService", () => {
         "jobConfig"
       );
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        `(jobConfig.sourcePathId = :sourcePathId_0 AND jobConfig.sourceDirectoryPath = :sourceDirectoryPath_0 AND jobConfig.targetPathId = :destinationPathId_0 AND jobConfig.targetDirectoryPath = :destinationDirectoryPath_0)`,
-        {
-          sourcePathId_0: "sourcePath1",
-          sourceDirectoryPath_0: "/src/dir1",
-          destinationPathId_0: "destinationPath1",
-          destinationDirectoryPath_0: "/dest/dir1",
-        }
-      );
-      expect(mockQueryBuilder.orWhere).toHaveBeenCalledWith(
-        `(jobConfig.sourcePathId = :sourcePathId_1 AND jobConfig.sourceDirectoryPath = :sourceDirectoryPath_1 AND jobConfig.targetPathId = :destinationPathId_1 AND jobConfig.targetDirectoryPath = :destinationDirectoryPath_1)`,
-        {
-          sourcePathId_1: "sourcePath2",
-          sourceDirectoryPath_1: "/src/dir2",
-          destinationPathId_1: "destinationPath2",
-          destinationDirectoryPath_1: "/dest/dir2",
-        }
+        expect.objectContaining({ "@instanceof": Symbol.for("Brackets") })
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         "jobConfig.jobType = :jobType",
         { jobType: 'MIGRATE' }
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        "jobConfig.isDeleted = :isDeleted",
+        { isDeleted: false }
       );
       expect(mockQueryBuilder.getMany).toHaveBeenCalled();
     });
@@ -3430,6 +3660,7 @@ describe("JobConfigService", () => {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         addGroupBy: jest.fn().mockReturnThis(),
@@ -3480,6 +3711,7 @@ describe("JobConfigService", () => {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         addGroupBy: jest.fn().mockReturnThis(),
@@ -3522,6 +3754,7 @@ describe("JobConfigService", () => {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         addGroupBy: jest.fn().mockReturnThis(),
@@ -3683,6 +3916,7 @@ describe("JobConfigService", () => {
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       addGroupBy: jest.fn().mockReturnThis(),
@@ -3726,6 +3960,7 @@ describe("JobConfigService", () => {
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       addGroupBy: jest.fn().mockReturnThis(),
@@ -6423,6 +6658,7 @@ describe("JobConfigService", () => {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         orWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         addGroupBy: jest.fn().mockReturnThis(),

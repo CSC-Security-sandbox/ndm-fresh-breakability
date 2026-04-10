@@ -25,6 +25,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { JobRunInitService } from './jobrun.init.service';
 import { JobRunConfig } from './jobrun.types';
 import { NotFoundException } from '@nestjs/common';
+import { SoftDeleteJobConfigRepository } from '../repositories/soft-delete-jobconfig.repository';
 
 // Mock the filterUnhealthyWorkers function
 jest.mock('../utils/worker-filter', () => ({
@@ -64,10 +65,6 @@ describe('JobRunInitService', () => {
           useClass: Repository,
         },
         {
-          provide: getRepositoryToken(JobConfigEntity),
-          useClass: Repository,
-        },
-        {
           provide: getRepositoryToken(FileServerEntity),
           useClass: Repository,
         },
@@ -95,7 +92,7 @@ describe('JobRunInitService', () => {
           }
         },
         {
-          provide: getRepositoryToken(JobConfigEntity),
+          provide: SoftDeleteJobConfigRepository,
           useValue: {
             update: jest.fn(),
             find: jest.fn(),
@@ -165,9 +162,9 @@ describe('JobRunInitService', () => {
     speedTestConfigRepo = module.get<Repository<SpeedTestConfigEntity>>(
       getRepositoryToken(SpeedTestConfigEntity)
     );
-    jobConfigRepo = module.get<Repository<JobConfigEntity>>(
-      getRepositoryToken(JobConfigEntity)
-    );
+    jobConfigRepo = module.get<SoftDeleteJobConfigRepository>(
+      SoftDeleteJobConfigRepository
+    ) as any;
     fileServerRepo = module.get<Repository<FileServerEntity>>(
       getRepositoryToken(FileServerEntity)
     );

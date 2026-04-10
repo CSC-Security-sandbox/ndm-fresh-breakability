@@ -699,4 +699,18 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260409_01_alter_jobconfig_add_soft_delete.sql" author="achyutas">
+      <sqlFile path="liquibase/20260409_01_alter_jobconfig_add_soft_delete.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260409_01_alter_jobconfig_add_soft_delete_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
+   <changeSet id="20260409_02_storage_overview_mv_exclude_deleted.sql" author="achyutas">
+      <sqlFile path="liquibase/20260409_02_storage_overview_mv_exclude_deleted.sql" splitStatements="false"/>
+      <rollback>
+         <sqlFile path="liquibase/20260409_02_storage_overview_mv_exclude_deleted_rollback.sql" splitStatements="false"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

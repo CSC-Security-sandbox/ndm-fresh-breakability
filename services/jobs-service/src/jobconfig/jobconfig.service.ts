@@ -31,7 +31,8 @@ import { ProjectEntity } from "src/entities/project.entity";
 import { VolumeEntity } from "src/entities/volume.entity";
 import { nextDate } from "src/utils/mapper";
 import { WorkflowService } from "src/workflow/workflow.service";
-import { DataSource, EntityManager, In, Not, Raw, Repository } from "typeorm";
+import { Brackets, DataSource, EntityManager, In, Not, Raw, Repository } from "typeorm";
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { validate as isUUID, v4 as uuidv4 } from "uuid";
 import { JobConfigEntity } from "../entities/jobconfig.entity";
 import {
@@ -92,6 +93,7 @@ import { WorkFlowFailureReason } from "src/jobrun/jobrun.types";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { JobConfigInventoryStatsResponseDto } from "./dto/jobconfig-inventory-stats.dto";
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
+import { SoftDeleteJobConfigRepository } from "src/repositories/soft-delete-jobconfig.repository";
 
 @Injectable()
 export class JobConfigService {
@@ -102,8 +104,7 @@ export class JobConfigService {
     private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(SyncEmailEntity)
     private syncEmailRepo: Repository<SyncEmailEntity>,
-    @InjectRepository(JobConfigEntity)
-    private jobConfigRepo: Repository<JobConfigEntity>,
+    private readonly jobConfigRepo: SoftDeleteJobConfigRepository,
     @InjectRepository(SpeedTestConfigEntity)
     private SpeedTestConfigRepo: Repository<SpeedTestConfigEntity>,
     @InjectRepository(SpeedLogEntity)
@@ -1123,7 +1124,7 @@ export class JobConfigService {
     data: Partial<JobConfigDto>,
     manager?: EntityManager
   ): Promise<JobConfigEntity> {
-    const jobRepo = manager ? manager.getRepository(JobConfigEntity) : this.jobConfigRepo;
+    const jobRepo: any = manager ? manager.getRepository(JobConfigEntity) : this.jobConfigRepo;
     const job = await jobRepo.findOne({ where: { id } });
     if (!job) {
       throw new NotFoundException(`Job with id ${id} not found`);
@@ -1219,9 +1220,11 @@ export class JobConfigService {
         );
       }
 
-      await this.jobConfigRepo.remove(job);
-      this.logger.log(`Job with id ${id} has been deleted successfully`);
-      return { message: `Job with id ${id} has been deleted` };
+      job.isDeleted = true;
+      job.status = JobStatus.InActive;
+      await this.jobConfigRepo.save(job);
+      this.logger.log(`Job with id ${id} has been marked as deleted`);
+      return { message: `Job with id ${id} has been marked for deletion` };
     } catch (error) {
       this.logger.error(`Failed to delete job with id ${id}`, error.stack);
       if (error instanceof HttpException) {
@@ -1234,6 +1237,159 @@ export class JobConfigService {
         },
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async purgeDeletedJobConfigs(): Promise<void> {
+    const dbSchema = process.env.SCHEMA || 'datamigrator';
+    const ROW_BATCH = this.configService.get<number>('app.purge.batchSize') ?? 50000;
+
+    try {
+      this.logger.log('Starting purge of soft-deleted job configs');
+
+      const deletedConfigs: { id: string }[] = await this.dataSource.query(
+        `SELECT id FROM "${dbSchema}".jobconfig WHERE is_deleted = true`
+      );
+
+      if (deletedConfigs.length === 0) {
+        this.logger.log('No soft-deleted job configs to purge');
+        return;
+      }
+
+      this.logger.log(`Found ${deletedConfigs.length} soft-deleted job configs to purge`);
+      let purgedCount = 0;
+
+      for (const config of deletedConfigs) {
+        try {
+          // 1. Collect all job run IDs for this config
+          const runs: { id: string }[] = await this.dataSource.query(
+            `SELECT id FROM "${dbSchema}".jobrun WHERE job_config_id = $1`, [config.id]
+          );
+          const runIds = runs.map(r => r.id);
+
+          if (runIds.length > 0) {
+            // 2a. inventory — DROP partitions instead of row-level DELETE.
+            //     Each job_run_id has its own partition: inventory_<uuid_underscored>.
+            //     DETACH + DROP is O(1) metadata-only, regardless of row count.
+            for (const runId of runIds) {
+              const partitionName = `inventory_${runId.replace(/-/g, '_')}`;
+              try {
+                await this.dataSource.query(
+                  `ALTER TABLE "${dbSchema}".inventory DETACH PARTITION "${dbSchema}"."${partitionName}"`
+                );
+                await this.dataSource.query(
+                  `DROP TABLE IF EXISTS "${dbSchema}"."${partitionName}"`
+                );
+              } catch (partErr: any) {
+                // Partition may not exist if the job run never reached inventory creation
+                if (partErr?.code === '42P01' || partErr?.message?.includes('does not exist') || partErr?.code === '42P17') {
+                  this.logger.debug(`Partition ${partitionName} does not exist, skipping`);
+                } else {
+                  this.logger.warn(`Failed to drop inventory partition ${partitionName}: ${partErr.message}`);
+                }
+              }
+            }
+
+            // 2b. operation_errors — FK to operations was DROPPED, won't cascade.
+            //     Row-level batched: delete up to ROW_BATCH rows per statement.
+            let deleted: number;
+            do {
+              const result = await this.dataSource.query(
+                `DELETE FROM "${dbSchema}".operation_errors WHERE id IN (
+                   SELECT oe.id FROM "${dbSchema}".operation_errors oe
+                   INNER JOIN "${dbSchema}".operations o ON o.id = oe.operation_id
+                   WHERE o.job_run_id = ANY($1)
+                   LIMIT $2
+                 )`, [runIds, ROW_BATCH]
+              );
+              deleted = result?.[1] ?? 0;
+            } while (deleted >= ROW_BATCH);
+
+            // 2c. operations — large table, row-level batched
+            do {
+              const result = await this.dataSource.query(
+                `DELETE FROM "${dbSchema}".operations WHERE id IN (
+                   SELECT id FROM "${dbSchema}".operations
+                   WHERE job_run_id = ANY($1)
+                   LIMIT $2
+                 )`, [runIds, ROW_BATCH]
+              );
+              deleted = result?.[1] ?? 0;
+            } while (deleted >= ROW_BATCH);
+
+            // 2d. task_errors — FK to tasks was DROPPED, won't cascade.
+            //     Row-level batched.
+            do {
+              const result = await this.dataSource.query(
+                `DELETE FROM "${dbSchema}".task_errors WHERE id IN (
+                   SELECT te.id FROM "${dbSchema}".task_errors te
+                   INNER JOIN "${dbSchema}".tasks t ON t.id = te.task_id
+                   WHERE t.job_run_id = ANY($1)
+                   LIMIT $2
+                 )`, [runIds, ROW_BATCH]
+              );
+              deleted = result?.[1] ?? 0;
+            } while (deleted >= ROW_BATCH);
+
+            // 2e. tasks — large table, row-level batched
+            do {
+              const result = await this.dataSource.query(
+                `DELETE FROM "${dbSchema}".tasks WHERE id IN (
+                   SELECT id FROM "${dbSchema}".tasks
+                   WHERE job_run_id = ANY($1)
+                   LIMIT $2
+                 )`, [runIds, ROW_BATCH]
+              );
+              deleted = result?.[1] ?? 0;
+            } while (deleted >= ROW_BATCH);
+
+            // 2f. worker_jobrun_mapping — small table, no row-level batching needed
+            await this.dataSource.query(
+              `DELETE FROM "${dbSchema}".worker_jobrun_mapping WHERE job_run_id = ANY($1)`, [runIds]
+            );
+
+            // 2g. job_options — small table, no row-level batching needed
+            await this.dataSource.query(
+              `DELETE FROM "${dbSchema}".job_options WHERE job_run_id = ANY($1)`, [runIds]
+            );
+
+            // 3. Delete all jobruns for this config
+            await this.dataSource.query(
+              `DELETE FROM "${dbSchema}".jobrun WHERE job_config_id = $1`, [config.id]
+            );
+          }
+
+          // 4. Delete direct children of jobconfig (CASCADE would handle these,
+          //    but explicit delete is cheap and avoids relying on cascade alone)
+          await this.dataSource.query(
+            `DELETE FROM "${dbSchema}".identity_config_cross_mapping WHERE job_config_id = $1`, [config.id]
+          );
+          await this.dataSource.query(
+            `DELETE FROM "${dbSchema}".job_config_inventory_stats WHERE job_config_id = $1`, [config.id]
+          );
+
+          // 5. Finally delete the jobconfig row itself
+          const deleteResult = await this.dataSource.query(
+            `DELETE FROM "${dbSchema}".jobconfig WHERE id = $1 RETURNING id`, [config.id]
+          );
+
+          this.logger.log(`DELETE jobconfig id=${config.id}, returned rows=${deleteResult.length}, result=${JSON.stringify(deleteResult)}`);
+
+          if (deleteResult.length === 0) {
+            this.logger.warn(`DELETE returned 0 rows for job config ${config.id} — row may have already been removed or is locked`);
+            continue;
+          }
+
+          purgedCount++;
+          this.logger.log(`Purged deleted job config and all children: ${config.id}`);
+        } catch (error) {
+          this.logger.error(`Failed to purge job config ${config.id}`, error.stack);
+        }
+      }
+      this.logger.log(`Purge complete: ${purgedCount}/${deletedConfigs.length} job configs removed`);
+    } catch (error) {
+      this.logger.error('Failed to purge soft-deleted job configs', error.stack);
     }
   }
 
@@ -1446,6 +1602,7 @@ export class JobConfigService {
       .innerJoin("sp.fileServer", "fs")
       .innerJoin("fs.config", "c")
       .where("c.projectId = :projectId", { projectId })
+      .andWhere("jc.isDeleted = :isDeleted", { isDeleted: false })
       .andWhere("jr.status IN (:...statuses)", {
         statuses: [JobRunStatus.Failed, JobRunStatus.Errored],
       })
@@ -1458,6 +1615,7 @@ export class JobConfigService {
       .innerJoin("sp.fileServer", "fs")
       .innerJoin("fs.config", "c")
       .where("c.projectId = :projectId", { projectId })
+      .andWhere("jc.isDeleted = :isDeleted", { isDeleted: false })
       .andWhere("jr.status = :status", { status: JobRunStatus.Blocked })
       .andWhere("jc.jobType = :jobType", { jobType: JobType.CUT_OVER })
       .getCount();
@@ -1468,6 +1626,7 @@ export class JobConfigService {
       .innerJoin("sp.fileServer", "fs")
       .innerJoin("fs.config", "c")
       .where("c.projectId = :projectId", { projectId })
+      .andWhere("jc.isDeleted = :isDeleted", { isDeleted: false })
       .andWhere("jc.createdAt >= NOW() - INTERVAL '1 DAY'")
       .getCount();
 
@@ -1478,6 +1637,7 @@ export class JobConfigService {
       .innerJoin("sp.fileServer", "fs")
       .innerJoin("fs.config", "c")
       .where("c.projectId = :projectId", { projectId })
+      .andWhere("jc.isDeleted = :isDeleted", { isDeleted: false })
       .andWhere("jr.status = :status", { status: JobRunStatus.Completed })
       .andWhere("jr.endTime >= NOW() - INTERVAL '1 DAY'")
       .getCount();
@@ -1562,8 +1722,11 @@ export class JobConfigService {
       ])
       .addSelect("COUNT(jobRun.id)", "totalRuns")
       .addSelect("ARRAY_AGG(jobRun.id)", "jobRunIds")
-      .where("sourceConfig.projectId = :projectId", { projectId })
-      .orWhere("targetConfig.projectId = :projectId", { projectId })
+      .where(new Brackets(qb => {
+        qb.where("sourceConfig.projectId = :projectId", { projectId })
+          .orWhere("targetConfig.projectId = :projectId", { projectId });
+      }))
+      .andWhere("jobconfig.isDeleted = :isDeleted", { isDeleted: false })
       .groupBy("jobconfig.id")
       .addGroupBy("jobconfig.jobType")
       .addGroupBy("jobconfig.status")
@@ -1689,34 +1852,37 @@ export class JobConfigService {
   ) {
     if (conditions.length === 0) return [];
     const queryBuilder = this.jobConfigRepo.createQueryBuilder("jobConfig");
-    conditions.forEach(({ sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath }, index) => {
-      const sourceParam = `sourcePathId_${index}`;
-      const sourceDirParam = `sourceDirectoryPath_${index}`;
-      const targetParam = `destinationPathId_${index}`;
-      const targetDirParam = `destinationDirectoryPath_${index}`;
+    queryBuilder.where(new Brackets(qb => {
+      conditions.forEach(({ sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath }, index) => {
+        const sourceParam = `sourcePathId_${index}`;
+        const sourceDirParam = `sourceDirectoryPath_${index}`;
+        const targetParam = `destinationPathId_${index}`;
+        const targetDirParam = `destinationDirectoryPath_${index}`;
 
-      const sourceDirCondition = sourceDirectoryPath === null ? `jobConfig.sourceDirectoryPath IS NULL` : `jobConfig.sourceDirectoryPath = :${sourceDirParam}`;
-      const targetDirCondition = destinationDirectoryPath === null ? `jobConfig.targetDirectoryPath IS NULL` : `jobConfig.targetDirectoryPath = :${targetDirParam}`;
+        const sourceDirCondition = sourceDirectoryPath === null ? `jobConfig.sourceDirectoryPath IS NULL` : `jobConfig.sourceDirectoryPath = :${sourceDirParam}`;
+        const targetDirCondition = destinationDirectoryPath === null ? `jobConfig.targetDirectoryPath IS NULL` : `jobConfig.targetDirectoryPath = :${targetDirParam}`;
 
-      const whereClause = `(jobConfig.sourcePathId = :${sourceParam} AND ${sourceDirCondition} AND jobConfig.targetPathId = :${targetParam} AND ${targetDirCondition})`;
-      const params: any = {
-        [sourceParam]: sourcePathId,
-        [targetParam]: destinationPathId,
-      };
-      if (sourceDirectoryPath !== null) {
-        params[sourceDirParam] = sourceDirectoryPath;
-      }
-      if (destinationDirectoryPath !== null) {
-        params[targetDirParam] = destinationDirectoryPath;
-      }
+        const whereClause = `(jobConfig.sourcePathId = :${sourceParam} AND ${sourceDirCondition} AND jobConfig.targetPathId = :${targetParam} AND ${targetDirCondition})`;
+        const params: any = {
+          [sourceParam]: sourcePathId,
+          [targetParam]: destinationPathId,
+        };
+        if (sourceDirectoryPath !== null) {
+          params[sourceDirParam] = sourceDirectoryPath;
+        }
+        if (destinationDirectoryPath !== null) {
+          params[targetDirParam] = destinationDirectoryPath;
+        }
 
-      if (index === 0) {
-        queryBuilder.where(whereClause, params);
-      } else {
-        queryBuilder.orWhere(whereClause, params);
-      }
-    });
+        if (index === 0) {
+          qb.where(whereClause, params);
+        } else {
+          qb.orWhere(whereClause, params);
+        }
+      });
+    }));
     queryBuilder.andWhere("jobConfig.jobType = :jobType", { jobType: 'MIGRATE' });
+    queryBuilder.andWhere("jobConfig.isDeleted = :isDeleted", { isDeleted: false });
     return await queryBuilder.getMany();
   }
 

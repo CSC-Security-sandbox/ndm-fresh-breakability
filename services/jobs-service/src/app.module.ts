@@ -1,6 +1,7 @@
 import {MiddlewareConsumer, Module, NestModule} from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
+import { ScheduleModule } from "@nestjs/schedule";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppConfigModule } from "./config/config.module";
 import { JobConfigModule } from "./jobconfig/jobconfig.module";
@@ -19,6 +20,7 @@ import {
   imports: [
     LoggerModule.forRoot(),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     AppConfigModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

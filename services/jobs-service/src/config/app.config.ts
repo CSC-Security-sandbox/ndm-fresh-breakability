@@ -25,6 +25,10 @@ export default registerAs(
       healthCheckStatusTimout:
         parseInt(process.env.HEALTHCHECK_STATUS_TIMEOUT_SEC) || 60,
     },
+    purge: {
+      batchSize:
+        parseInt(process.env.PURGE_BATCH_SIZE) || 50000,
+    },
     mount: {
       basePath: process.env.DIR_MOUNT_BASE_PATH || "/mnt",
       idleTimeoutMs:

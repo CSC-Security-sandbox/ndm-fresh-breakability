@@ -6,14 +6,14 @@ import { JobRunEntity } from '../entities/jobrun.entity';
 import { JobRunStatus, JobStatus, JobType } from '../constants/enums';
 import { PreCheckCircularDependency } from '../jobconfig/jobconfig.types';
 import { MigrationConflictCheckConfig, MigrationConflictCheckData } from './types';
+import { SoftDeleteJobConfigRepository } from '../repositories/soft-delete-jobconfig.repository';
 
 @Injectable()
 export class MigrationConflictService {
     private readonly logger = new Logger(MigrationConflictService.name);
 
     constructor(
-        @InjectRepository(JobConfigEntity)
-        private readonly jobConfigEntity: Repository<JobConfigEntity>,
+        private readonly jobConfigEntity: SoftDeleteJobConfigRepository,
         @InjectRepository(JobRunEntity)
         private readonly jobRunRepo: Repository<JobRunEntity>,
     ) { }

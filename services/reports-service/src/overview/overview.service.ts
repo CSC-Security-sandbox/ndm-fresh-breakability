@@ -59,9 +59,23 @@ export class OverviewService {
           volumes: {
             sourceConfig: {
               id: jobConfigId,
+              isDeleted: false,
               jobRuns: {
                 status: JobRunStatus.Completed,
               },
+            },
+          },
+        },
+      };
+    } else {
+      // Exclude soft-deleted job configs from the overview
+      whereClause["configs"] = {
+        ...whereClause["configs"],
+        fileServers: {
+          ...whereClause["configs?.fileServers"],
+          volumes: {
+            sourceConfig: {
+              isDeleted: false,
             },
           },
         },
@@ -97,7 +111,6 @@ export class OverviewService {
     ).length;
 
     this.logger.log(`totalFileServers - ${totalFileServers}`);
-
 
     const {
       totalDiscoverJobs,

@@ -81,6 +81,9 @@ export class JobConfigEntity extends Base {
   @OneToMany(() => SpeedTestConfigEntity, speedTestConfig => speedTestConfig.jobConfig, { cascade: true })
   speedTestConfigs: SpeedTestConfigEntity[];
 
+  @Column({ name: 'is_deleted', type: 'boolean', default: false })
+  isDeleted: boolean;
+
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;
 
