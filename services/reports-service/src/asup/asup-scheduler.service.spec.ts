@@ -12,7 +12,20 @@ jest.mock('fs/promises', () => ({
   mkdir: jest.fn().mockResolvedValue(undefined),
   writeFile: jest.fn().mockResolvedValue(undefined),
   unlink: jest.fn().mockResolvedValue(undefined),
+  stat: jest.fn().mockResolvedValue({ size: 1024 }),
 }));
+
+// Mock createReadStream from 'fs' for streaming PUT requests
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  const { Readable } = require('stream');
+  return {
+    ...actual,
+    createReadStream: jest.fn(() => Readable.from([Buffer.from('mock-stream')])),
+  };
+});
+
+jest.mock('7zip-bin', () => ({ path7za: '/usr/bin/7za' }), { virtual: true });
 
 // axios is loaded via require('axios') in the service file.
 // We mock the entire module — jest.mock is hoisted above imports.
@@ -350,27 +363,26 @@ describe('AsupSchedulerService', () => {
         headersMap: { 'X-Netapp-Asup-Subject': 'NDM Support Bundle' },
         isLargePayload: false,
       });
-      // Guarantee readFile returns a tiny buffer (< 100MB) by default for each test in
-      // this describe block.  Tests that need a large archive override this inline.
+      // Default stat returns small size (< 100MB threshold)
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      fsMocked.readFile.mockResolvedValue(Buffer.from('mock-archive-data'));
+      fsMocked.stat.mockResolvedValue({ size: 1024 });
     });
 
-    it('should send a single PUT for archive ≤ 100MB with no ISF chunk headers', async () => {
-      // Default fs.readFile mock returns tiny buffer (< 100MB threshold)
+    it('should send a single streaming PUT for archive ≤ 100MB with no ISF chunk headers', async () => {
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip-data'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(asupPackagerService.packageSupportBundlePayload).toHaveBeenCalledWith(
         'bundle.zip',
-        expect.any(Buffer),
+        '/generated-zips/bundle.zip',
       );
       expect(mockAxiosPut).toHaveBeenCalledTimes(1);
       const [url, , options] = mockAxiosPut.mock.calls[0];
       expect(url).toContain('support-bundle-asup-123.7z');
       expect(options.headers['Content-Type']).toBe('application/x-7z-compressed');
+      expect(options.headers['Content-Length']).toBe('1024');
       expect(options.headers['X-Netapp-asup-chunk-number']).toBeUndefined();
       expect(options.headers['X-Netapp-asup-retransmit']).toBeUndefined();
       expect(options.headers['X-Netapp-asup-large']).toBeUndefined();
@@ -379,13 +391,13 @@ describe('AsupSchedulerService', () => {
     it('should send ISF chunked PUTs for archive > 100MB with retransmit=false on first attempt per chunk', async () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      // 201MB → Math.ceil(201/50) = 5 chunks (chunk size = 50MB)
-      const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
-      fsMocked.readFile.mockResolvedValue(largeBuffer);
+      const TOTAL = 201 * 1024 * 1024;
+      fsMocked.stat.mockResolvedValue({ size: TOTAL });
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
+      // 201MB / 50MB = 5 chunks
       expect(mockAxiosPut).toHaveBeenCalledTimes(5);
 
       // First chunk
@@ -394,7 +406,7 @@ describe('AsupSchedulerService', () => {
       expect(opts0.headers['X-Netapp-asup-chunk-total']).toBe('5');
       expect(opts0.headers['X-Netapp-asup-large']).toBe('true');
       expect(opts0.headers['X-Netapp-asup-large-filename']).toBe('support-bundle-asup-123.7z');
-      expect(opts0.headers['X-Netapp-asup-large-size']).toBe(String(largeBuffer.length));
+      expect(opts0.headers['X-Netapp-asup-large-size']).toBe(String(TOTAL));
       expect(opts0.headers['X-Netapp-asup-retransmit']).toBe('false');
 
       // Last chunk
@@ -409,9 +421,7 @@ describe('AsupSchedulerService', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      // 201MB → Math.ceil(201/50) = 5 chunks (chunk size = 50MB)
-      const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
-      fsMocked.readFile.mockResolvedValue(largeBuffer);
+      fsMocked.stat.mockResolvedValue({ size: 201 * 1024 * 1024 });
 
       // Chunk 1: attempt 1 fails, attempt 2 (retry) succeeds; chunks 2–5 pass on first try
       mockAxiosPut
@@ -422,7 +432,7 @@ describe('AsupSchedulerService', () => {
         .mockResolvedValueOnce({ status: 200 })              // chunk 4, attempt 1
         .mockResolvedValueOnce({ status: 200 });             // chunk 5, attempt 1
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(mockAxiosPut).toHaveBeenCalledTimes(6);
 
@@ -450,7 +460,7 @@ describe('AsupSchedulerService', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsMocked = require('fs/promises');
-      fsMocked.readFile.mockResolvedValue(Buffer.allocUnsafe(201 * 1024 * 1024));
+      fsMocked.stat.mockResolvedValue({ size: 201 * 1024 * 1024 });
 
       mockAxiosPut
         .mockRejectedValueOnce(new Error('chunk failed'))
@@ -458,7 +468,7 @@ describe('AsupSchedulerService', () => {
         .mockRejectedValueOnce(new Error('chunk failed'));
 
       await expect(
-        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('chunk failed');
 
       expect(mockAxiosPut).toHaveBeenCalledTimes(3);
@@ -472,7 +482,7 @@ describe('AsupSchedulerService', () => {
       mockAxiosPut.mockRejectedValue(new Error('connection refused'));
 
       await expect(
-        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('connection refused');
 
       // Retry logic makes 3 attempts before throwing
@@ -484,7 +494,7 @@ describe('AsupSchedulerService', () => {
     it('should merge packager headersMap and include standard ASUP headers in single PUT', async () => {
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
       const [, , options] = mockAxiosPut.mock.calls[0];
       // Standard headers
@@ -503,10 +513,10 @@ describe('AsupSchedulerService', () => {
       const TOTAL = 201 * 1024 * 1024;
       const CHUNK = 50 * 1024 * 1024;
       const lastSize = TOTAL - 4 * CHUNK; // 1MB
-      fsMocked.readFile.mockResolvedValue(Buffer.allocUnsafe(TOTAL));
+      fsMocked.stat.mockResolvedValue({ size: TOTAL });
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(mockAxiosPut).toHaveBeenCalledTimes(5);
       const [, , opts0] = mockAxiosPut.mock.calls[0];
@@ -535,7 +545,7 @@ describe('AsupSchedulerService', () => {
       const svc = module.get<AsupSchedulerService>(AsupSchedulerService);
 
       await expect(
-        svc.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        svc.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('ASUP support bundle endpoint is not configured');
     });
 
@@ -546,7 +556,7 @@ describe('AsupSchedulerService', () => {
       const fsMocked = require('fs/promises');
       mockAxiosPut.mockResolvedValue({ status: 200 });
 
-      await service.transmitSupportBundle('bundle.zip', Buffer.from('zip'));
+      await service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(fsMocked.unlink).toHaveBeenCalledWith(
         '/tmp/asup-reports/support-bundle-asup-123.7z',
@@ -563,7 +573,7 @@ describe('AsupSchedulerService', () => {
       mockAxiosPut.mockRejectedValue(new Error('network error'));
 
       await expect(
-        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('network error');
 
       // Despite the error, unlink must still have been called
@@ -586,7 +596,7 @@ describe('AsupSchedulerService', () => {
 
       // The original transmission error must be the one that propagates
       await expect(
-        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('PUT failed');
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -604,7 +614,7 @@ describe('AsupSchedulerService', () => {
 
       // Transmission succeeded — cleanup failure must NOT cause the method to throw
       await expect(
-        service.transmitSupportBundle('bundle.zip', Buffer.from('zip')),
+        service.transmitSupportBundle('bundle.zip', '/generated-zips/bundle.zip'),
       ).resolves.toBeUndefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(

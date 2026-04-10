@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -218,18 +219,16 @@ export class AsupSchedulerService {
 
   async transmitSupportBundle(
     bundleFilename: string,
-    bundleBuffer: Buffer,
+    bundlePath: string,
   ): Promise<void> {
-    this.logger.log(`[TransmitSupportBundle] Starting - fileName=${bundleFilename}, inputBufferSize=${(bundleBuffer.length / (1024 * 1024)).toFixed(2)}MB`);
+    this.logger.log(`[TransmitSupportBundle] Starting - fileName=${bundleFilename}, bundlePath=${bundlePath}`);
 
-    // archivePath is declared here so the finally block can always clean it up,
-    // even when packaging fails partway through.
     let archivePath: string | undefined;
 
     try {
       const packaged = await this.asupPackagerService.packageSupportBundlePayload(
         bundleFilename,
-        bundleBuffer,
+        bundlePath,
       );
       archivePath = packaged.archivePath;
       const { md5Checksum, headersMap } = packaged;
@@ -242,9 +241,10 @@ export class AsupSchedulerService {
 
       const archiveFilename = path.basename(archivePath);
       const requestUrl = `${this.asupSupportBundleEndpointUrl.replace(/\/$/, '')}/${archiveFilename}`;
-      const archiveBuffer = await fs.readFile(archivePath);
-      const archiveSizeMB = (archiveBuffer.length / (1024 * 1024)).toFixed(2);
-      this.logger.log(`[TransmitSupportBundle] Archive size=${archiveSizeMB}MB (${archiveBuffer.length} bytes), endpoint=${requestUrl}`);
+      const archiveStat = await fs.stat(archivePath);
+      const archiveSize = archiveStat.size;
+      const archiveSizeMB = (archiveSize / (1024 * 1024)).toFixed(2);
+      this.logger.log(`[TransmitSupportBundle] Archive size=${archiveSizeMB}MB (${archiveSize} bytes), endpoint=${requestUrl}`);
 
       const baseHeaders = {
         'Content-Type': 'application/x-7z-compressed',
@@ -254,14 +254,15 @@ export class AsupSchedulerService {
         ...headersMap,
       };
 
-      if (archiveBuffer.length <= ASUP_ISF_THRESHOLD_BYTES) {
-        this.logger.log(`[TransmitSupportBundle] Archive <= 100MB — sending as single PUT to ${requestUrl}`);
+      if (archiveSize <= ASUP_ISF_THRESHOLD_BYTES) {
+        this.logger.log(`[TransmitSupportBundle] Archive <= 100MB — streaming single PUT to ${requestUrl}`);
         let lastSingleErr: Error | null = null;
         for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
           try {
-            const response = await axios.put(requestUrl, archiveBuffer, {
-              headers: baseHeaders,
-              timeout: 60000,
+            const stream = createReadStream(archivePath);
+            const response = await axios.put(requestUrl, stream, {
+              headers: { ...baseHeaders, 'Content-Length': archiveSize.toString() },
+              timeout: 120000,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
             });
@@ -288,17 +289,17 @@ export class AsupSchedulerService {
         return;
       }
 
-      const totalChunks = Math.ceil(archiveBuffer.length / ASUP_ISF_CHUNK_BYTES);
+      const totalChunks = Math.ceil(archiveSize / ASUP_ISF_CHUNK_BYTES);
       this.logger.log(
         `[TransmitSupportBundle] Archive > 100MB (${archiveSizeMB}MB) — ISF chunked send: totalChunks=${totalChunks}, chunkSize=50MB, url=${requestUrl}`,
       );
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
         const start = chunkIndex * ASUP_ISF_CHUNK_BYTES;
-        const end = Math.min(start + ASUP_ISF_CHUNK_BYTES, archiveBuffer.length);
-        const chunkBuffer = archiveBuffer.subarray(start, end);
+        const end = Math.min(start + ASUP_ISF_CHUNK_BYTES, archiveSize);
+        const chunkSize = end - start;
         const chunkNumber = chunkIndex + 1;
-        const chunkSizeMB = (chunkBuffer.length / (1024 * 1024)).toFixed(2);
+        const chunkSizeMB = (chunkSize / (1024 * 1024)).toFixed(2);
 
         this.logger.log(`[TransmitSupportBundle] Sending chunk ${chunkNumber}/${totalChunks} - size=${chunkSizeMB}MB, bytes=[${start}-${end}]`);
 
@@ -306,23 +307,24 @@ export class AsupSchedulerService {
           ...baseHeaders,
           'X-Netapp-asup-large': 'true',
           'X-Netapp-asup-large-filename': archiveFilename,
-          'X-Netapp-asup-large-size': archiveBuffer.length.toString(),
+          'X-Netapp-asup-large-size': archiveSize.toString(),
           'X-Netapp-asup-chunk-filename': archiveFilename,
           'X-Netapp-asup-chunk-number': chunkNumber.toString(),
-          'X-Netapp-asup-chunk-size': chunkBuffer.length.toString(),
+          'X-Netapp-asup-chunk-size': chunkSize.toString(),
           'X-Netapp-asup-chunk-total': totalChunks.toString(),
         };
 
         let lastError: Error | null = null;
         for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
-          // ISF spec: retransmit must be true for any attempt after the first
           const chunkHeaders = {
             ...chunkBaseHeaders,
             'X-Netapp-asup-retransmit': attempt > 1 ? 'true' : 'false',
           };
           try {
-            const response = await axios.put(requestUrl, chunkBuffer, {
-              headers: chunkHeaders,
+            // Stream only this chunk's byte range from disk
+            const chunkStream = createReadStream(archivePath, { start, end: end - 1 });
+            const response = await axios.put(requestUrl, chunkStream, {
+              headers: { ...chunkHeaders, 'Content-Length': chunkSize.toString() },
               timeout: 1800000,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,

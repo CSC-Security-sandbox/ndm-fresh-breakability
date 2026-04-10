@@ -12,6 +12,7 @@ export default registerAs(
       asupEndpoint: process.env.ASUP_ENDPOINT || "https://support.netapp.com/put/AsupPut",
       supportBundleEndpoint:
         process.env.ASUP_SUPPORT_BUNDLE_ENDPOINT || "https://support.netapp.com/put/AsupPut",
+      bundlePath: process.env.BUNDLE_PATH || "/generated-zips",
     },
   }),
 );

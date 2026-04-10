@@ -68,6 +68,8 @@ env:
     value: "https://support.netapp.com/put/AsupPut"
   - name: JSON_PAYLOAD_LIMIT
     value: "50mb"
+  - name: BUNDLE_PATH
+    value: "/generated-zips"
 
 service:
   type: ClusterIP
@@ -96,3 +98,6 @@ persistentVolumes:
   - name: datamigrator-conf
     mountPath: /opt/datamigrator/conf
     hostPath: /opt/datamigrator/conf
+  - name: generated-zips
+    mountPath: /generated-zips
+    hostPath: /generated-zips
