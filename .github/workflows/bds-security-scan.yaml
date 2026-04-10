@@ -93,7 +93,7 @@ jobs:
 
   black-duck-scan:
     name: Black Duck Security Scan
-    runs-on: openlab
+    runs-on: [openlab, node24]
     timeout-minutes: 180
     needs: [prepare-matrix]
     if: needs.prepare-matrix.outputs.has_services == 'true'

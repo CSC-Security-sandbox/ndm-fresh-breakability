@@ -35,7 +35,7 @@ jobs:
   # ============================================================================
   validate-environment:
     name: Validate Environment
-    runs-on: openlab
+    runs-on: [openlab, node24]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -59,7 +59,7 @@ jobs:
   # ============================================================================
   prepare-docker-matrix:
     name: Prepare Docker Build Matrix
-    runs-on: openlab
+    runs-on: [openlab, node24]
     needs: [validate-environment]
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -100,7 +100,7 @@ jobs:
 
   build-docker-images:
     name: Build - ${{ matrix.service }}
-    runs-on: openlab
+    runs-on: [openlab, node24]
     needs: [prepare-docker-matrix]
     strategy:
       matrix: ${{ fromJSON(needs.prepare-docker-matrix.outputs.matrix) }}
@@ -165,7 +165,7 @@ jobs:
   # ============================================================================
   prepare-scan-matrix:
     name: Prepare Scan Matrix
-    runs-on: openlab
+    runs-on: [openlab, node24]
     needs: [prepare-docker-matrix, validate-environment, build-docker-images]
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -199,7 +199,7 @@ jobs:
 
   bds-docker-scan:
     name: Scan - ${{ matrix.display_name }}
-    runs-on: openlab
+    runs-on: [openlab, node24]
     timeout-minutes: 120
     needs: [prepare-scan-matrix, build-docker-images, validate-environment]
     if: always() && !cancelled()
@@ -404,7 +404,7 @@ jobs:
   # ============================================================================
   scan-complete:
     name: Scan Complete & Generate Report
-    runs-on: openlab
+    runs-on: [openlab, node24]
     if: always() && !cancelled()
     needs: [bds-docker-scan, prepare-scan-matrix]
     steps:
