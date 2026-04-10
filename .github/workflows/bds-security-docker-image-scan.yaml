@@ -27,7 +27,7 @@ env:
   VERSION_NAME: ${{ github.event.inputs.bds_scan_folder_name || 'ndm_main_docker_image' }}
   BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
   JAVA_VERSION: 17.0.11
-  SYNOPSYS_DETECT_VERSION: 9.10.1
+  SYNOPSYS_DETECT_VERSION: 10.7.0
 
 jobs:
   # ============================================================================
@@ -143,20 +143,20 @@ jobs:
 
       - name: Save Docker image
         run: |
-          mkdir -p /tmp/docker-images
-          docker save -o "/tmp/docker-images/${{ matrix.service }}.tar" "${{ matrix.service }}:latest"
+          mkdir -p "$HOME/docker-images"
+          docker save -o "$HOME/docker-images/${{ matrix.service }}.tar" "${{ matrix.service }}:latest"
           
           # Fix permissions so Black Duck Inspector can read the file
-          chmod 644 "/tmp/docker-images/${{ matrix.service }}.tar"
+          chmod 644 "$HOME/docker-images/${{ matrix.service }}.tar"
           
           echo "✓ Image saved"
-          ls -lh "/tmp/docker-images/${{ matrix.service }}.tar"
+          ls -lh "$HOME/docker-images/${{ matrix.service }}.tar"
 
       - name: Save Docker image to artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: docker-image-${{ matrix.service }}
-          path: /tmp/docker-images/${{ matrix.service }}.tar
+          path: ~/docker-images/${{ matrix.service }}.tar
           retention-days: 1
 
 
@@ -238,15 +238,15 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: docker-image-${{ matrix.service }}
-          path: /tmp/docker-images/
+          path: ~/docker-images/
 
       - name: Verify image exists
         run: |
-          TAR_FILE="/tmp/docker-images/${{ matrix.service }}.tar"
+          TAR_FILE="$HOME/docker-images/${{ matrix.service }}.tar"
 
           if [ ! -f "$TAR_FILE" ]; then
             echo "Docker image not found: $TAR_FILE"
-            ls -la /tmp/docker-images/ 2>/dev/null || echo "No docker-images directory"
+            ls -la "$HOME/docker-images/" 2>/dev/null || echo "No docker-images directory"
             exit 1
           fi
           
@@ -277,29 +277,39 @@ jobs:
           chmod +x detect10.sh
           echo "✓ Black Duck Detect downloaded"
 
-      - name: Setup Docker Inspector
+      - name: Setup Synopsys Docker Inspector
         run: |
           mkdir -p "$HOME/bds-inspector"
           cd "$HOME/bds-inspector"
           
           if [ ! -d "packaged-inspectors/docker" ]; then
-            echo "Downloading Docker Inspector..."
+            echo "Downloading Synopsys Docker Inspector (air-gap bundle v${{ env.SYNOPSYS_DETECT_VERSION }})..."
 
-            ZIP_FILE="synopsys-detect-${{ env.SYNOPSYS_DETECT_VERSION }}-air-gap.zip"
-            curl -s -L --connect-timeout 30 --max-time 600 \
-              "https://sig-repo.synopsys.com/bds-integrations-release/com/synopsys/integration/synopsys-detect/${{ env.SYNOPSYS_DETECT_VERSION }}/$ZIP_FILE" \
-              -o "$ZIP_FILE"
-            
-            if [ ! -f "$ZIP_FILE" ]; then
-              echo "Failed to download Docker Inspector"
+            ZIP_FILE="detect-${{ env.SYNOPSYS_DETECT_VERSION }}-air-gap.zip"
+            DOWNLOAD_URL="https://repo.blackduck.com/bds-integrations-release/com/blackduck/integration/detect/${{ env.SYNOPSYS_DETECT_VERSION }}/$ZIP_FILE"
+
+            for attempt in 1 2 3; do
+              echo "Download attempt $attempt/3..."
+              rm -f "$ZIP_FILE"
+              if curl -fSL --retry 3 --retry-delay 10 --connect-timeout 30 --max-time 600 \
+                   "$DOWNLOAD_URL" -o "$ZIP_FILE" && [ -s "$ZIP_FILE" ]; then
+                echo "Download succeeded"
+                break
+              fi
+              echo "Attempt $attempt failed, waiting 30s..."
+              sleep 30
+            done
+
+            if [ ! -s "$ZIP_FILE" ]; then
+              echo "Failed to download Synopsys Docker Inspector after 3 attempts"
               exit 1
             fi
             
             unzip -q "$ZIP_FILE"
             rm -f "$ZIP_FILE"
-            echo "Docker Inspector ready"
+            echo "Synopsys Docker Inspector ready"
           else
-            echo "Docker Inspector already available"
+            echo "Synopsys Docker Inspector already cached"
           fi
 
       - name: Run Black Duck Scan
@@ -314,7 +324,7 @@ jobs:
           SERVICE_ID="${{ matrix.service }}"
           VERSION_NAME="${{ env.VERSION_NAME }}"
 
-          TAR_FILE="/tmp/docker-images/$SERVICE_ID.tar"
+          TAR_FILE="$HOME/docker-images/$SERVICE_ID.tar"
           CODE_LOCATION_NAME="${{ env.PROJECT_NAME }}___${VERSION_NAME}___${SERVICE_NAME}"
           OUTPUT_DIR="${{ github.workspace }}/bds-output/$SERVICE_ID"
           
