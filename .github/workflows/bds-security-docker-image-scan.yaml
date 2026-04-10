@@ -242,7 +242,10 @@ jobs:
           ls -la "$TAR_FILE"
 
       - name: Ensure Maven local repo directory exists
-        run: mkdir -p ~/.m2
+        run: |
+          if [ ! -d "$HOME/.m2" ]; then
+            mkdir -p "$HOME/.m2" || sudo mkdir -p "$HOME/.m2" && sudo chown "$(id -u):$(id -g)" "$HOME/.m2"
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
