@@ -137,7 +137,7 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
           value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
         />
         <Divider orientation="vertical" flexItem />
-        <JobInfoReverseCard label="Files" value={displayFileCount} />
+        <JobInfoReverseCard label={showMigrationStats ? "Files (Newly Copied + Recopied)" : "Files"} value={displayFileCount} />
         <Divider orientation="vertical" flexItem />
         <JobInfoReverseCard
           label="Directories"
