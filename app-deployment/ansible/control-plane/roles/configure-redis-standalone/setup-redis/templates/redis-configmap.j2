@@ -13,7 +13,9 @@ data:
     redis.conf: |
         appendonly yes
         save ""
-        loglevel debug
+        maxmemory {{ (ansible_memtotal_mb * 0.30) | int }}mb
+        maxmemory-policy noeviction
+        loglevel warning
     replica.conf: |
         dir /data
         rename-command FLUSHDB ""

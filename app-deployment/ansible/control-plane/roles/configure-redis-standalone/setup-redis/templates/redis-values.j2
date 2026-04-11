@@ -59,6 +59,9 @@ master:
     requests:
       cpu: "750m"
       memory: "3Gi"
+    limits:
+      cpu: "1"
+      memory: "{{ [3072, (ansible_memtotal_mb * 0.30) | int] | max }}Mi"
 {% endif %}
   podSecurityContext:
     enabled: true
