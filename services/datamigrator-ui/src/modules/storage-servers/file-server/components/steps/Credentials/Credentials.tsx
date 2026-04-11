@@ -11,6 +11,7 @@ import FormFrame from "@modules/storage-servers/file-server/components/layout/Fo
 const Credentials = () => {
   const {
     hostCredentialsForm,
+    isEditMode,
     isJobRunning,
     selectedProtocol,
     setSelectedProtocol,
@@ -64,7 +65,7 @@ const Credentials = () => {
                 <RadioButton
                   checked={selectedProtocol === 'NFS'}
                   onChange={() => setSelectedProtocol('NFS')}
-                  disabled={isJobRunning}
+                  disabled={isJobRunning || isEditMode}
                   name="protocol"
                   value="NFS"
                 >
@@ -73,7 +74,7 @@ const Credentials = () => {
                 <RadioButton
                   checked={selectedProtocol === 'SMB'}
                   onChange={() => setSelectedProtocol('SMB')}
-                  disabled={isJobRunning}
+                  disabled={isJobRunning || isEditMode}
                   name="protocol"
                   value="SMB"
                 >
@@ -83,7 +84,9 @@ const Credentials = () => {
               <Box className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <InfoIcon className="text-blue-600 mt-0.5 flex-shrink-0" size="16" />
                 <Text className="text-sm text-blue-800">
-                  If your file server supports both NFS and SMB, set up two distinct file servers—one using NFS and another using SMB.
+                  {isEditMode
+                    ? "Protocol cannot be changed after the file server has been created."
+                    : "If your file server supports both NFS and SMB, set up two distinct file servers—one using NFS and another using SMB."}
                 </Text>
               </Box>
             </Box>
