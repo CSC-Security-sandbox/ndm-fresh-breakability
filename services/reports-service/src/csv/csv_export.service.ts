@@ -294,7 +294,9 @@ export class CsvService {
                   AND ($2::text IS NULL OR i.path > $2::text)
                 ORDER BY i.path, 
                          CASE WHEN i.is_deleted = true THEN 1 ELSE 0 END,
-                         CASE WHEN i.source_checksum IS NOT NULL AND i.target_checksum IS NOT NULL THEN 0 ELSE 1 END,
+                         CASE WHEN NULLIF(TRIM(i.source_checksum), '') IS NOT NULL
+                                   AND NULLIF(TRIM(i.target_checksum), '') IS NOT NULL
+                              THEN 0 ELSE 1 END,
                          arj.start_time DESC
             )
             SELECT 
