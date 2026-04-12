@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { promisify } from 'util';
@@ -146,14 +147,14 @@ export class AsupPackagerService {
 
   async packageSupportBundlePayload(
     bundleFilename: string,
-    bundleBuffer: Buffer,
+    bundlePath: string,
   ): Promise<{
     archivePath: string;
     md5Checksum: string;
     headersMap: Record<string, string>;
     isLargePayload: boolean;
   }> {
-    this.logger.log(`Starting support bundle ASUP packaging for ${bundleFilename}...`);
+    this.logger.log(`Starting support bundle ASUP packaging for ${bundleFilename} from ${bundlePath}...`);
     const startTime = Date.now();
     await fs.mkdir(this.WORK_DIR, { recursive: true });
     await fs.mkdir(this.ASUP_REPORTS_DIR, { recursive: true });
@@ -170,7 +171,7 @@ export class AsupPackagerService {
     let archivePath: string | undefined;
     let headersMap: Record<string, string> = {};
     try {
-      await fs.writeFile(files.bundle, bundleBuffer);
+      await fs.copyFile(bundlePath, files.bundle);
       await this.extractZip(files.bundle, extractedDir);
       const bundledFiles = await this.collectExtractedFiles(extractedDir);
       await fs.mkdir(stagedPayloadDir, { recursive: true });
@@ -206,8 +207,8 @@ export class AsupPackagerService {
 
     await execFile(sevenBin.path7za, ['a', archivePath, '.'], { cwd: stagedPayloadDir });
 
-      let archiveBuffer = await fs.readFile(archivePath);
-      const isLargePayload = archiveBuffer.length > ISF_THRESHOLD_BYTES;
+      const archiveStat = await fs.stat(archivePath);
+      const isLargePayload = archiveStat.size > ISF_THRESHOLD_BYTES;
       const archiveFilename = path.basename(archivePath);
 
       // ISF spec: X-Netapp-asup-large and X-Netapp-asup-large-filename must appear
@@ -215,7 +216,7 @@ export class AsupPackagerService {
       // We update x-header.txt inside the existing archive only when the payload is large.
       if (isLargePayload) {
         this.logger.log(
-          `[packageSupportBundlePayload] Archive is ${(archiveBuffer.length / 1024 / 1024).toFixed(2)}MB` +
+          `[packageSupportBundlePayload] Archive is ${(archiveStat.size / 1024 / 1024).toFixed(2)}MB` +
           ` > 100MB threshold — appending ISF fields to x-header.txt inside .7z`,
         );
         const isfXHeaderPath = path.join(stagedPayloadDir, 'x-header.txt');
@@ -230,14 +231,12 @@ export class AsupPackagerService {
           cwd: stagedPayloadDir,
         });
 
-        // MD5 must be recomputed over the updated archive
-        archiveBuffer = await fs.readFile(archivePath);
         this.logger.log(
           `[packageSupportBundlePayload] x-header.txt updated inside .7z with ISF fields`,
         );
       }
 
-      const md5Checksum = crypto.createHash('md5').update(archiveBuffer).digest('hex');
+      const md5Checksum = await this.computeStreamingMd5(archivePath);
       headersMap['X-Netapp-Asup-Payload-Checksum'] = md5Checksum;
 
       return { archivePath, md5Checksum, headersMap, isLargePayload };
@@ -514,6 +513,17 @@ export class AsupPackagerService {
     // Fallback: flatten path separators and sanitize
     const fallback = trimmed.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
     return fallback.length > 0 ? fallback : `file-${Date.now()}`;
+  }
+
+  /** Compute MD5 checksum by streaming the file in chunks instead of loading it entirely into memory. */
+  private computeStreamingMd5(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('md5');
+      const stream = createReadStream(filePath);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+      stream.on('error', reject);
+    });
   }
 
   /** Format date for ASUP x-headers (e.g. "Sun Jan 05 14:30:00 UTC 2025"). */

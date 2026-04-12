@@ -1,7 +1,7 @@
 jest.mock('axios', () => ({ put: jest.fn() }), { virtual: true });
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { AsupController } from './asup.controller';
 import { AsupSchedulerService } from './asup-scheduler.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
@@ -29,7 +29,10 @@ describe('AsupController', () => {
   };
 
   const mockConfigService = {
-    get: jest.fn().mockReturnValue({}),
+    get: jest.fn().mockImplementation((key: string) => {
+      if (key === 'app.asup.bundlePath') return '/test-bundles';
+      return undefined;
+    }),
   };
 
   const mockJwtAuthGuard = {
@@ -213,10 +216,9 @@ describe('AsupController', () => {
   // ─── POST /asup/support-bundle/send ─────────────────────────
 
   describe('sendSupportBundle', () => {
-    const validBase64 = Buffer.from('mock-zip-data').toString('base64');
-    const validDto = { fileName: 'ndm_bundle.zip', bundleBase64: validBase64 };
+    const validDto = { fileName: 'ndm_bundle.zip' };
 
-    it('should decode base64, call transmitSupportBundle, and return success=true', async () => {
+    it('should read from shared volume, call transmitSupportBundle, and return success=true', async () => {
       schedulerService.transmitSupportBundle.mockResolvedValue(undefined);
 
       const result = await controller.sendSupportBundle(validDto);
@@ -224,14 +226,11 @@ describe('AsupController', () => {
       expect(result).toEqual({ success: true });
       expect(schedulerService.transmitSupportBundle).toHaveBeenCalledWith(
         validDto.fileName,
-        expect.any(Buffer),
+        expect.stringContaining('ndm_bundle.zip'),
       );
-      // Verify the buffer content matches the decoded base64
-      const [, passedBuffer] = schedulerService.transmitSupportBundle.mock.calls[0];
-      expect(passedBuffer.toString()).toBe('mock-zip-data');
     });
 
-    it('should log the file name and decoded buffer size', async () => {
+    it('should log the file name', async () => {
       schedulerService.transmitSupportBundle.mockResolvedValue(undefined);
 
       await controller.sendSupportBundle(validDto);
@@ -239,6 +238,20 @@ describe('AsupController', () => {
       expect(mockLogger.log).toHaveBeenCalledWith(
         expect.stringContaining(`fileName=${validDto.fileName}`),
       );
+    });
+
+    it('should reject path traversal attempts with BadRequestException', async () => {
+      const maliciousDtos = [
+        { fileName: '../../../etc/passwd' },
+        { fileName: '../../secret.zip' },
+      ];
+
+      for (const dto of maliciousDtos) {
+        await expect(controller.sendSupportBundle(dto)).rejects.toThrow(
+          BadRequestException,
+        );
+      }
+      expect(schedulerService.transmitSupportBundle).not.toHaveBeenCalled();
     });
 
     it('should throw InternalServerErrorException when transmitSupportBundle fails', async () => {

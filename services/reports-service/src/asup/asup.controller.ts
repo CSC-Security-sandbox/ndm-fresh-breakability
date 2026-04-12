@@ -6,10 +6,13 @@ import {
   Body,
   Inject,
   Req,
+  BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiResponse, ApiTags, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
+import * as path from 'path';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import {
   LoggerFactory,
@@ -27,11 +30,15 @@ import {
 export class AsupController {
   private readonly logger: LoggerService;
 
+  private readonly bundlePath: string;
+
   constructor(
     private readonly asupSchedulerService: AsupSchedulerService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+    private readonly configService: ConfigService,
   ) {
     this.logger = loggerFactory.create(AsupController.name);
+    this.bundlePath = this.configService.get<string>('app.asup.bundlePath') || '/generated-zips';
   }
 
   // ─── Settings (get/update ASUP enabled) ───────────────────────────────────
@@ -95,19 +102,23 @@ export class AsupController {
   async sendSupportBundle(
     @Body() dto: SendSupportBundleDto,
   ): Promise<{ success: boolean }> {
-    this.logger.log(`[SendSupportBundle] Request received - fileName=${dto?.fileName}, bundleBase64 length=${dto?.bundleBase64?.length ?? 0} chars`);
+    this.logger.log(`[SendSupportBundle] Request received - fileName=${dto?.fileName}`);
     try {
-      const bundleBuffer = Buffer.from(dto.bundleBase64, 'base64');
-      const bufferSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
-      this.logger.log(`[SendSupportBundle] Decoded buffer size=${bufferSizeMB}MB - passing to transmitSupportBundle`);
+      const rootDir = path.resolve(this.bundlePath);
+      const bundleFilePath = path.resolve(rootDir, dto.fileName);
+      if (!bundleFilePath.startsWith(rootDir + path.sep)) {
+        throw new BadRequestException('Invalid bundle file name.');
+      }
+      this.logger.log(`[SendSupportBundle] Reading bundle from shared volume: ${bundleFilePath}`);
 
       await this.asupSchedulerService.transmitSupportBundle(
-        dto.fileName,
-        bundleBuffer,
+        path.basename(bundleFilePath),
+        bundleFilePath,
       );
       this.logger.log(`[SendSupportBundle] transmitSupportBundle completed successfully for fileName=${dto?.fileName}`);
       return { success: true };
     } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       this.logger.error(
         `[SendSupportBundle] Failed - fileName=${dto?.fileName}, error=${(error as Error).message}`,
         (error as Error).stack,

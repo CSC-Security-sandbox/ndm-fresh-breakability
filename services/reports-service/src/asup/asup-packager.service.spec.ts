@@ -7,10 +7,20 @@ import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import * as child_process from 'child_process';
 
+const MOCK_ARCHIVE_BYTES = Buffer.from('mock-7z-data');
+
 jest.mock('fs/promises');
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  const { Readable } = require('stream');
+  return {
+    ...actual,
+    createReadStream: jest.fn(() => Readable.from([MOCK_ARCHIVE_BYTES])),
+  };
+});
 jest.mock('7zip-bin', () => ({
   path7za: '/usr/bin/7za',
-}));
+}), { virtual: true });
 jest.mock('child_process', () => ({
   execFile: jest.fn((cmd: string, args: string[], optsOrCb: any, cb?: any) => {
     const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
@@ -268,10 +278,9 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
     });
 
     it('should return isLargePayload=false and skip ISF archive update for archive ≤ 100MB', async () => {
-      // Default readFile mock returns a tiny buffer, well below 100MB threshold
       const result = await service.packageSupportBundlePayload(
         'ndm_support_bundle.zip',
-        Buffer.from('mock-zip'),
+        '/generated-zips/ndm_support_bundle.zip',
       );
 
       expect(result.isLargePayload).toBe(false);
@@ -288,7 +297,6 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
     });
 
     it('should append ISF fields to x-header.txt inside .7z and return isLargePayload=true when archive > 100MB', async () => {
-      const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
       const existingXHeaderText = 'X-Netapp-Asup-Subject: NDM Support Bundle\n';
 
       mockedFs.readFile.mockImplementation(((filePath: string) => {
@@ -301,12 +309,20 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         if (String(filePath).includes('x-header.txt')) {
           return Promise.resolve(existingXHeaderText);
         }
-        return Promise.resolve(largeBuffer);
+        return Promise.resolve(MOCK_ARCHIVE_BYTES);
+      }) as any);
+
+      // fs.stat returns >100MB for the archive path, small size for extracted files
+      mockedFs.stat.mockImplementation(((filePath: string) => {
+        if (String(filePath).includes('support-bundle-asup-')) {
+          return Promise.resolve({ size: 201 * 1024 * 1024 });
+        }
+        return Promise.resolve({ size: 512 });
       }) as any);
 
       const result = await service.packageSupportBundlePayload(
         'ndm_support_bundle.zip',
-        Buffer.from('mock-zip'),
+        '/generated-zips/ndm_support_bundle.zip',
       );
 
       expect(result.isLargePayload).toBe(true);
@@ -336,9 +352,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(isf7zaUpdateCalls[0][1]).toContain('x-header.txt');
     });
 
-    it('should recompute MD5 over the updated archive after ISF patch', async () => {
-      const largeBuffer = Buffer.allocUnsafe(201 * 1024 * 1024);
-
+    it('should compute MD5 via streaming after ISF patch', async () => {
       mockedFs.readFile.mockImplementation(((filePath: string) => {
         if (
           String(filePath).includes('x-headers.template') ||
@@ -349,22 +363,30 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         if (String(filePath).includes('x-header.txt')) {
           return Promise.resolve('X-Header: value\n');
         }
-        return Promise.resolve(largeBuffer);
+        return Promise.resolve(MOCK_ARCHIVE_BYTES);
+      }) as any);
+
+      // fs.stat returns >100MB for the archive path
+      mockedFs.stat.mockImplementation(((filePath: string) => {
+        if (String(filePath).includes('support-bundle-asup-')) {
+          return Promise.resolve({ size: 201 * 1024 * 1024 });
+        }
+        return Promise.resolve({ size: 512 });
       }) as any);
 
       const result = await service.packageSupportBundlePayload(
         'bundle.zip',
-        Buffer.from('zip'),
+        '/generated-zips/bundle.zip',
       );
 
-      // MD5 is computed over the re-read (post-patch) archive buffer
-      const expectedMd5 = crypto.createHash('md5').update(largeBuffer).digest('hex');
+      // MD5 is computed via streaming from the createReadStream mock data
+      const expectedMd5 = crypto.createHash('md5').update(MOCK_ARCHIVE_BYTES).digest('hex');
       expect(result.md5Checksum).toBe(expectedMd5);
       expect(result.headersMap['X-Netapp-Asup-Payload-Checksum']).toBe(expectedMd5);
     });
 
     it('should clean up staged and extracted dirs after packaging', async () => {
-      await service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip'));
+      await service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(mockedFs.rm).toHaveBeenCalledWith(
         expect.stringContaining('support-bundle-extracted-'),
@@ -383,7 +405,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       ]);
       mockedFs.stat.mockResolvedValue({ size: 1024 } as any);
 
-      await service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip'));
+      await service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip');
 
       expect(xmlGeneratorService.buildSupportBundleManifestXml).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -407,7 +429,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       });
 
       await expect(
-        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+        service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip'),
       ).rejects.toThrow('compression failed');
     });
 
@@ -425,7 +447,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         ]);
       mockedFs.stat.mockResolvedValue({ size: 256 } as any);
 
-      await service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip'));
+      await service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip');
 
       // Manifest entry must use the trimmed, flattened safe name (no top-level dir prefix)
       expect(xmlGeneratorService.buildSupportBundleManifestXml).toHaveBeenCalledWith(
@@ -442,7 +464,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
     });
 
     it('should parse x-headers template into headersMap (non-Payload headers for HTTP)', async () => {
-      const result = await service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip'));
+      const result = await service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip');
 
       // Template contains X-Netapp-Asup-Subject and X-Netapp-Asup-Content-Type
       expect(result.headersMap['X-Netapp-Asup-Subject']).toBe('NDM ASUP Report');
@@ -687,7 +709,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
       // Should still resolve — unlink failure in finally must not propagate
       await expect(
-        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+        service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip'),
       ).resolves.toBeDefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -699,7 +721,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       mockedFs.rm.mockRejectedValue(new Error('rm extractedDir failed'));
 
       await expect(
-        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+        service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip'),
       ).resolves.toBeDefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -714,7 +736,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         .mockRejectedValueOnce(new Error('rm staged failed'));
 
       await expect(
-        service.packageSupportBundlePayload('bundle.zip', Buffer.from('zip')),
+        service.packageSupportBundlePayload('bundle.zip', '/generated-zips/bundle.zip'),
       ).resolves.toBeDefined();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -733,7 +755,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
       const result = await service.packageSupportBundlePayload(
         'bundle.zip',
-        Buffer.from('zip'),
+        '/generated-zips/bundle.zip',
       );
 
       // Headers built via the fallback xHeadersTemplate still resolve correctly
@@ -742,7 +764,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     it('should use fallback filename support-bundle.zip when bundleFilename is empty', async () => {
       // Exercises the `bundleFilename || 'support-bundle.zip'` branch
-      const result = await service.packageSupportBundlePayload('', Buffer.from('zip'));
+      const result = await service.packageSupportBundlePayload('', '/generated-zips/bundle.zip');
       expect(result.archivePath).toContain('support-bundle-asup-');
       expect(result.isLargePayload).toBe(false);
     });

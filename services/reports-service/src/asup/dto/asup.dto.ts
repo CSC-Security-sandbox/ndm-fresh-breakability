@@ -21,8 +21,8 @@ export class SendSupportBundleDto {
   @IsNotEmpty()
   fileName: string;
 
-  @ApiProperty({ description: 'Support bundle file content encoded as base64' })
+  @ApiProperty({ description: 'Deprecated — bundle is now read from the shared volume', required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  bundleBase64: string;
+  bundleBase64?: string;
 }

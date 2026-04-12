@@ -800,7 +800,6 @@ describe('SupportBundleService', () => {
     it('should return transmitting state while sendSupportBundleToAsup is still in progress', () => {
       const fileName = 'ndm_logs_user-123.zip';
       const fullPath = `/test/bundle/path/${fileName}`;
-      const mockBuffer = Buffer.from('zip content');
 
       let resolvePost: () => void;
       const pendingPost = new Promise<void>((resolve) => {
@@ -809,10 +808,8 @@ describe('SupportBundleService', () => {
 
       (path.join as jest.Mock).mockReturnValue(fullPath);
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(mockBuffer);
       (axios.post as jest.Mock).mockReturnValue(pendingPost);
 
-      // Fire without awaiting — async gap before axios resolves
       service.sendSupportBundleToAsup(fileName);
 
       const immediateStatus = service.getAsupTransmissionStatus(fileName);
@@ -820,7 +817,6 @@ describe('SupportBundleService', () => {
       expect(immediateStatus?.status).toBe('transmitting');
       expect(immediateStatus?.startedAt).toBeInstanceOf(Date);
 
-      // Settle the promise to avoid open handles in test runner
       resolvePost!();
     });
   });
@@ -828,12 +824,10 @@ describe('SupportBundleService', () => {
   describe('sendSupportBundleToAsup', () => {
     const fileName = 'ndm_logs_user-123.zip';
     const fullPath = `/test/bundle/path/${fileName}`;
-    const mockBuffer = Buffer.from('bundle data');
 
     beforeEach(() => {
       (path.join as jest.Mock).mockReturnValue(fullPath);
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(mockBuffer);
     });
 
     it('should set status to completed after successful transmission', async () => {
@@ -866,19 +860,6 @@ describe('SupportBundleService', () => {
       );
     });
 
-    it('should set status to failed and re-throw when fs.promises.readFile rejects', async () => {
-      const fsError = new Error('file read error');
-      (fs.promises.readFile as jest.Mock).mockRejectedValue(fsError);
-
-      await expect(
-        service.sendSupportBundleToAsup(fileName),
-      ).rejects.toThrow('file read error');
-
-      const state = service.getAsupTransmissionStatus(fileName);
-      expect(state?.status).toBe('failed');
-      expect(state?.error).toBe(fsError.message);
-    });
-
     it('should set status to failed and re-throw when downloadSupportBundle throws NotFoundException', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
@@ -890,29 +871,26 @@ describe('SupportBundleService', () => {
       expect(state?.status).toBe('failed');
     });
 
-    it('should read the bundle from the correct resolved path', async () => {
+    it('should verify the file exists before posting to reports-service', async () => {
       (axios.post as jest.Mock).mockResolvedValue({ data: {} });
 
       await service.sendSupportBundleToAsup(fileName);
 
       expect(path.join).toHaveBeenCalledWith(mockBundlePath, fileName);
-      expect((fs.promises.readFile as jest.Mock)).toHaveBeenCalledWith(fullPath);
+      expect(fs.existsSync).toHaveBeenCalledWith(fullPath);
     });
 
-    it('should post to reports-service with base64-encoded bundle and correct body keys', async () => {
+    it('should post only fileName to reports-service (no file data over HTTP)', async () => {
       (axios.post as jest.Mock).mockResolvedValue({ data: {} });
 
       await service.sendSupportBundleToAsup(fileName);
 
       expect(axios.post).toHaveBeenCalledWith(
-        mockBundlePath, // reportsSupportBundleSendUrl — configService.get returns mockBundlePath for all keys in test
-        { fileName, bundleBase64: mockBuffer.toString('base64') },
-        expect.objectContaining({
-          timeout: 0,
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
-        }),
+        mockBundlePath,
+        { fileName },
+        { timeout: 0 },
       );
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
     });
 
     it('should allow a re-send overwriting the previous failed state with a new completed state', async () => {

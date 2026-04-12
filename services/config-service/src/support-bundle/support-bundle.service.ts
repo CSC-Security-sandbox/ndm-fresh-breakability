@@ -217,30 +217,20 @@ export class SupportBundleService {
   async sendSupportBundleToAsup(fileName: string): Promise<void> {
     this.logger.log(`[SendSupportBundleToAsup] Looking up file: ${fileName}`);
 
-    // Capture startedAt once and reset state — every send overwrites previous state
     const startedAt = new Date();
     this.asupTransmissionMap.set(fileName, { status: 'transmitting', startedAt });
 
     try {
+      // Validate the file exists on disk (shared volume) before notifying reports-service
       const fullPath = this.downloadSupportBundle(fileName);
-      this.logger.log(`[SendSupportBundleToAsup] File found at path: ${fullPath}`);
+      this.logger.log(`[SendSupportBundleToAsup] File verified at path: ${fullPath}`);
 
-      const bundleBuffer = await fs.promises.readFile(fullPath);
-      const fileSizeMB = (bundleBuffer.length / (1024 * 1024)).toFixed(2);
-      this.logger.log(`[SendSupportBundleToAsup] File read successfully - size=${fileSizeMB}MB (${bundleBuffer.length} bytes)`);
-
-      const bundleBase64 = bundleBuffer.toString('base64');
-      const base64SizeMB = (Buffer.byteLength(bundleBase64) / (1024 * 1024)).toFixed(2);
-      this.logger.log(`[SendSupportBundleToAsup] Base64 encoded size=${base64SizeMB}MB - forwarding to reports-service at: ${this.reportsSupportBundleSendUrl}`);
-
+      // Reports-service reads the zip directly from the shared volume —
+      // only the filename is sent over HTTP (no file data, no base64).
       await axios.post(
         this.reportsSupportBundleSendUrl,
-        { fileName, bundleBase64 },
-        {
-          timeout: 0,
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
-        },
+        { fileName },
+        { timeout: 0 },
       );
 
       this.asupTransmissionMap.set(fileName, { status: 'completed', startedAt, completedAt: new Date() });
