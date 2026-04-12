@@ -6,6 +6,7 @@ import { LiveFilesCell, LiveSizeCell, LiveDirCell } from "@components/custom-cel
 import { BlueXpTableRowType, JobRunApiType } from "@/types/app.type";
 import TooltipCopyCellRenderer from "@components/custom-cell-renderer/TooltipCopyCellRenderer";
 import { getJobRunType } from "@/utils/common.utils";
+import React from "react";
 
 const JOB_RUN_LIST_COLUMN_DEFS = [
   {
@@ -54,26 +55,23 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     accessor: "scannedFilesCount",
     id: "scannedFilesCount",
     width: 80,
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
-      <LiveFilesCell row={row} />
-    ),
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveFilesCell, { key: row.jobRunId, row }),
   },
   {
     header: "Directories",
     accessor: "scannedDirectoriesCount",
     id: "scannedDirectoriesCount",
     width: 80,
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
-      <LiveDirCell row={row} />
-    ),
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveDirCell, { key: row.jobRunId, row }),
   },
   {
     header: "Size",
     accessor: "totalScannedSize",
     id: "totalScannedSize",
-    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) => (
-      <LiveSizeCell row={row} />
-    ),
+    Renderer: ({ row }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
+      React.createElement(LiveSizeCell, { key: row.jobRunId, row }),
     width: 80,
   },
   {

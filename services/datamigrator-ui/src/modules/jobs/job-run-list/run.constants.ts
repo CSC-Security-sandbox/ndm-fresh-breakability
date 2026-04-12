@@ -133,7 +133,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     Renderer: ({
       row,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
-      React.createElement(LiveFilesCell, { row }),
+      React.createElement(LiveFilesCell, { key: row.jobRunId, row }),
   },
   {
     header: "Directories",
@@ -143,7 +143,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     Renderer: ({
       row,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
-      React.createElement(LiveDirCell, { row }),
+      React.createElement(LiveDirCell, { key: row.jobRunId, row }),
   },
   {
     header: "Size",
@@ -152,7 +152,7 @@ const JOB_RUN_LIST_COLUMN_DEFS = [
     Renderer: ({
       row,
     }: BlueXpTableRowType<JobRunApiType, JobRunApiType>) =>
-      React.createElement(LiveSizeCell, { row }),
+      React.createElement(LiveSizeCell, { key: row.jobRunId, row }),
     width: 80,
   },
   {
