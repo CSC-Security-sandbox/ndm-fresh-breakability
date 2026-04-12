@@ -169,6 +169,8 @@ const (
 	INVENTORY_PREPARE_DOWNLOAD_ENDPOINT              = "/api/v1/report/inventory/prepare-download"
 	INVENTORY_DOWNLOAD_BY_TOKEN_ENDPOINT             = "/api/v1/report/inventory/download/"
 	JOBS_ENDPOINT                                    = "/api/v1/jobs"
+	UPDATE_JOB_CONFIG_ENDPOINT                       = "/api/v1/jobs/%s"
+	UPDATE_MIGRATION_CONFIG_ENDPOINT                 = "/api/v1/jobs/%s/migration-config"
 	FILE_SERVER_REFRESH_URL                          = "/api/v1/servers/refresh"
 	ADHOC_JOBRUN_URL                                 = "/api/v1/job-run/ad-hoc"
 	IS_SUPPORT_BUNDLE_READY_URL                      = "/api/v1/support-bundle/is-bundle-ready"

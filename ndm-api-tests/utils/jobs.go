@@ -699,3 +699,135 @@ func DeleteJob(jobID string, headers map[string]string) (*http.Response, error) 
 	url := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobID)
 	return SendAPIRequest("DELETE", url, nil, headers)
 }
+
+// EditDiscoveryJobParams holds the fields to update on a discovery job config.
+type EditDiscoveryJobParams struct {
+	ExcludeFilePatterns string
+	ExcludeOlderThan    string
+	FirstRunAt          string
+}
+
+// EditMigrationJobParams holds the fields to update on a migration job config.
+type EditMigrationJobParams struct {
+	ExcludeFilePatterns string
+	ExcludeOlderThan    string
+	SkipFile            string
+	FirstRunAt          string
+}
+
+// EditDiscoveryJob updates a discovery job config - It sets excludeFilePatterns, excludeOlderThan, and firstRunAt.
+// The current job status is fetched and forwarded in the payload
+func EditDiscoveryJob(jobConfigID string, params EditDiscoveryJobParams, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s"+UPDATE_JOB_CONFIG_ENDPOINT, JOB_SERVICE_URL, jobConfigID)
+
+	// Fetch current status to satisfy the required @IsEnum(JobStatus) validator.
+	jobDetail, _, err := GetJobRunDetails(jobConfigID, headers, true)
+	if err != nil {
+		return nil, fmt.Errorf("edit discovery job failed: could not fetch current job status: %v", err)
+	}
+
+	payload := map[string]interface{}{
+		"status":              jobDetail.Status,
+		"excludeFilePatterns": params.ExcludeFilePatterns,
+		"excludeOlderThan":    params.ExcludeOlderThan,
+		"firstRunAt":          params.FirstRunAt,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("edit discovery job failed: error marshaling request: %v", err)
+	}
+
+	resp, err := SendAPIRequest(http.MethodPatch, url, payloadBytes, headers)
+	if err != nil {
+		return nil, fmt.Errorf("edit discovery job failed: API request error: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return resp, fmt.Errorf("edit discovery job failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+	}
+
+	LogDebug(fmt.Sprintf("Discovery job %s edited successfully", jobConfigID))
+	return resp, nil
+}
+
+// EditMigrationJob updates a migration job config - It sets excludeFilePatterns, excludeOlderThan, skipFile, and firstRunAt.
+func EditMigrationJob(jobConfigID string, params EditMigrationJobParams, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s"+UPDATE_MIGRATION_CONFIG_ENDPOINT, JOB_SERVICE_URL, jobConfigID)
+
+	payload := map[string]interface{}{
+		"excludeFilePatterns": params.ExcludeFilePatterns,
+		"excludeOlderThan":    params.ExcludeOlderThan,
+		"skipFile":            params.SkipFile,
+		"firstRunAt":          params.FirstRunAt,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("edit migration job failed: error marshaling request: %v", err)
+	}
+
+	resp, err := SendAPIRequest(http.MethodPut, url, payloadBytes, headers)
+	if err != nil {
+		return nil, fmt.Errorf("edit migration job failed: API request error: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return resp, fmt.Errorf("edit migration job failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+	}
+
+	LogDebug(fmt.Sprintf("Migration job %s edited successfully", jobConfigID))
+	return resp, nil
+}
+
+// WaitForJobToTrigger polls GET /api/v1/jobs/:id until a job run record appears with status READY, RUNNING, COMPLETED, or BLOCKED, confirming the scheduler acted on the edited firstRunAt. Returns the jobRunID when found.
+func WaitForJobToTrigger(jobConfigID string, headers map[string]string, pollRetries ...int) (string, error) {
+	retryCount := MaxPollRetries
+	if len(pollRetries) > 0 && pollRetries[0] > 0 {
+		retryCount = pollRetries[0]
+	}
+
+	jobsURL := fmt.Sprintf("%s/api/v1/jobs/%s", JOB_SERVICE_URL, jobConfigID)
+
+	triggeredStates := map[string]bool{
+		READY_JOBRUN:     true,
+		RUNNING_JOBRUN:   true,
+		COMPLETED_JOBRUN: true,
+		BLOCKED_JOBRUN:   true,
+	}
+
+	for i := 0; i < retryCount; i++ {
+		resp, err := SendAPIRequest(http.MethodGet, jobsURL, nil, headers)
+		if err != nil {
+			Wait(DefaultPollInterval)
+			continue
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			Wait(DefaultPollInterval)
+			continue
+		}
+
+		apiResp, err := UnmarshalApiResponse[GetJobResponse](bodyBytes)
+		if err != nil || len(apiResp.Data.Items) == 0 {
+			Wait(DefaultPollInterval)
+			continue
+		}
+
+		jobDetail := apiResp.Data.Items[0]
+		if len(jobDetail.JobRuns) > 0 {
+			run := jobDetail.JobRuns[0]
+			if triggeredStates[run.Status] {
+				LogDebug(fmt.Sprintf("Job %s triggered: run %s reached state %s", jobConfigID, run.JobRunId, run.Status))
+				return run.JobRunId, nil
+			}
+		}
+
+		LogDebug(fmt.Sprintf("Waiting for job %s to trigger, attempt %d/%d", jobConfigID, i+1, retryCount))
+		Wait(DefaultPollInterval)
+	}
+
+	return "", fmt.Errorf("job %s was not triggered after %d retries", jobConfigID, retryCount)
+}
