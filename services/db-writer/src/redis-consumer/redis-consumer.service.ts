@@ -936,7 +936,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                 case ConsumerType.files:
                     const { pathId } = jobContext.jobConfig.sourceFileServer;
-                    this.processFileDataInBatches(stream.id, stream?.data, jobRunId, pathId, jobContext);
+                    await this.processFileDataInBatches(stream.id, stream?.data, jobRunId, pathId, jobContext);
                     break;
 
                 default:
