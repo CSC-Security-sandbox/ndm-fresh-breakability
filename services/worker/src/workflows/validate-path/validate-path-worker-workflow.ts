@@ -1,13 +1,12 @@
 import { proxyActivities } from '@temporalio/workflow';
 import { ValidatePathActivity } from 'src/activities/validate-path/validate-path.service';
+import { VALIDATE_PATH_CONCURRENCY } from '../core/common/workflow-constants';
 
 async function log(traceId: string, message: string) {
   console.log(`[${traceId}] ${message}`);
 }
 
 const { validatePath } = proxyActivities<ValidatePathActivity>({ startToCloseTimeout: '300s' });
-
-const VALIDATE_PATH_CONCURRENCY = parseInt(process.env.VALIDATE_PATH_CONCURRENCY ?? '10', 10);
 
 export async function ValidatePathWorkerWorkflow(
   args: any,
