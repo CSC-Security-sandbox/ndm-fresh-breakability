@@ -263,7 +263,7 @@ export class PathUploadService {
             options: {
               workflowExecutionTimeout: '1h',
               workflowTaskTimeout: '120s',
-              workflowRunTimeout: '120s',
+              workflowRunTimeout: '600s',
             },
           },
         ],
