@@ -586,6 +586,7 @@ export type JobDescriptionProps = {
 export type JobDescriptionColumnPropType = {
   name: string;
   value: string | ReactNode;
+  truncate?: boolean;
 };
 
 export interface AllFileServerWithVolumesApiType {
