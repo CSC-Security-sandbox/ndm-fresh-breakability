@@ -77,16 +77,7 @@ export class AsupPackagerService {
     const xHeaderSize = Buffer.byteLength(headersText, 'utf-8');
     this.logger.log(`Generated x-header-data.txt (${xHeaderSize} bytes)`);
 
-    // 3. Get manifest XML with x-header size included
-    const manifestXml = await this.asupXmlGeneratorService.buildManifestXml(
-      migrationXmlSize,
-      collectionTimeMs,
-      migrationXmlSize,
-      xHeaderSize,
-    );
-    this.logger.log(`Manifest XML from generator (${Buffer.byteLength(manifestXml, 'utf-8')} bytes)`);
-
-    // 4. Write temp files and compress into .7z
+    // 3. Write content files and create initial .7z (without manifest)
     await fs.mkdir(this.WORK_DIR, { recursive: true });
     await fs.mkdir(this.ASUP_REPORTS_DIR, { recursive: true });
 
@@ -98,35 +89,38 @@ export class AsupPackagerService {
 
     await Promise.all([
       fs.writeFile(files.migration, migrationXml, 'utf-8'),
-      fs.writeFile(files.manifest, manifestXml, 'utf-8'),
       fs.writeFile(files.xHeader, headersText, 'utf-8'),
     ]);
 
     const archivePath = path.join(this.ASUP_REPORTS_DIR, 'asup-payload.7z');
     try { await fs.unlink(archivePath); } catch {  }
 
-    try {
-      await new Promise<void>((resolve, reject) => {
-        execFileCb(
-          sevenBin.path7za,
-          ['a', archivePath, files.migration, files.manifest, files.xHeader],
-          (err, _stdout, stderr) => {
-            if (err) {
-              reject({ error: err, stderr: stderr?.trim() });
-            } else {
-              resolve();
-            }
-          },
-        );
-      });
-    } catch (failure: any) {
-      const { error, stderr } = failure;
-      this.logger.error(
-        `Failed to create .7z archive: ${error.message}`,
-        stderr ? `stderr: ${stderr}` : error.stack,
-      );
-      throw new Error(`7za failed: ${stderr || error.message}`);
-    }
+    // First pass: compress migration XML + x-header (no manifest yet)
+    await this.run7za(['a', archivePath, files.migration, files.xHeader]);
+    this.logger.log('Created initial .7z (migration-projects.xml + x-header-data.txt)');
+
+    // 4. Read actual compressed sizes from the archive
+    const compressedSizes = await this.readCompressedSizes(archivePath);
+    const migrationCompressed = compressedSizes.get('migration-projects.xml') ?? migrationXmlSize;
+    const xHeaderCompressed = compressedSizes.get('x-header-data.txt') ?? xHeaderSize;
+    this.logger.log(
+      `Compressed sizes: migration-projects.xml=${migrationCompressed}, x-header-data.txt=${xHeaderCompressed}`,
+    );
+
+    // 5. Generate manifest XML with actual compressed sizes
+    const manifestXml = await this.asupXmlGeneratorService.buildManifestXml(
+      migrationXmlSize,
+      collectionTimeMs,
+      migrationCompressed,
+      xHeaderSize,
+      0,
+      xHeaderCompressed,
+    );
+    this.logger.log(`Manifest XML from generator (${Buffer.byteLength(manifestXml, 'utf-8')} bytes)`);
+
+    // 6. Add manifest.xml into the existing archive (second pass)
+    await fs.writeFile(files.manifest, manifestXml, 'utf-8');
+    await this.run7za(['a', archivePath, files.manifest]);
 
     this.logger.log(`Created .7z archive at ${archivePath}`);
 
@@ -183,16 +177,19 @@ export class AsupPackagerService {
         manifestEntries.push({ name: safeName, size: file.size });
       }
 
-      const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
-        manifestEntries,
-        Date.now() - startTime,
-      );
       const serialId = (await this.serialIdSyncService.getSerialId()) ?? '';
       const xHeaders = this.buildXHeaders(
         this.supportBundleXHeadersTemplate || this.xHeadersTemplate,
         serialId,
       );
       headersMap = xHeaders.headersMap;
+      const xHeaderSize = Buffer.byteLength(xHeaders.headersText, 'utf-8');
+
+      const manifestXml = await this.asupXmlGeneratorService.buildSupportBundleManifestXml(
+        manifestEntries,
+        Date.now() - startTime,
+        xHeaderSize,
+      );
 
       await Promise.all([
         fs.writeFile(files.manifest, manifestXml, 'utf-8'),
@@ -513,6 +510,34 @@ export class AsupPackagerService {
     // Fallback: flatten path separators and sanitize
     const fallback = trimmed.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
     return fallback.length > 0 ? fallback : `file-${Date.now()}`;
+  }
+
+  private async run7za(args: string[]): Promise<{ stdout: string; stderr: string }> {
+    try {
+      return await execFile(sevenBin.path7za, args);
+    } catch (err: any) {
+      const subCmd = args[0] ?? '?';
+      const stderr: string = err.stderr ?? '';
+      const detail = stderr || err.message;
+      this.logger.error(`7za ${subCmd} failed: ${err.message}`, detail);
+      throw new Error(`7za ${subCmd} failed: ${detail}`);
+    }
+  }
+
+  private async readCompressedSizes(archivePath: string): Promise<Map<string, number>> {
+    const { stdout } = await execFile(sevenBin.path7za, ['l', '-slt', archivePath]);
+    const sizes = new Map<string, number>();
+    let currentPath = '';
+    for (const line of stdout.split('\n')) {
+      const t = line.trim();
+      if (t.startsWith('Path = ')) {
+        currentPath = t.slice(7).trim();
+      } else if (t.startsWith('Packed Size = ') && currentPath) {
+        const v = parseInt(t.slice(14).trim(), 10);
+        if (!isNaN(v)) sizes.set(currentPath, v);
+      }
+    }
+    return sizes;
   }
 
   /** Compute MD5 checksum by streaming the file in chunks instead of loading it entirely into memory. */

@@ -132,7 +132,7 @@
   <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
 </asup:ROW>
 <asup:ROW col_time_us="{{COL_TIME_US}}">
-  <seq-num>2</seq-num>
+  <seq-num>1</seq-num>
   <prio-num>2</prio-num>
   <subsys>HEADER</subsys>
   <body-file>x-header-data.txt</body-file>
@@ -142,6 +142,6 @@
   <error></error>
   <content-type>basic</content-type>
   <orig-size-collected>{{XHEADER_SIZE_COLLECTED}}</orig-size-collected>
-  <size-compressed>{{XHEADER_SIZE_COLLECTED}}</size-compressed>
+  <size-compressed>{{XHEADER_SIZE_COMPRESSED}}</size-compressed>
 </asup:ROW>
 </Manifest>

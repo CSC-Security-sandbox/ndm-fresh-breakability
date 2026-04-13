@@ -148,6 +148,7 @@ export class AsupXmlGeneratorService {
     sizeCompressed: number,
     xHeaderSize = 0,
     xHeaderTimeMs = 0,
+    xHeaderSizeCompressed?: number,
   ): Promise<string> {
     const template = await this.getManifestTemplate();
     const colTimeUs = (Date.now() * 1000).toString();
@@ -157,12 +158,14 @@ export class AsupXmlGeneratorService {
       .replace(/\{\{TIME_COLLECTED_MS\}\}/g, collectionTimeMs.toString())
       .replace(/\{\{SIZE_COMPRESSED\}\}/g, sizeCompressed.toString())
       .replace(/\{\{XHEADER_SIZE_COLLECTED\}\}/g, xHeaderSize.toString())
-      .replace(/\{\{XHEADER_TIME_COLLECTED_MS\}\}/g, xHeaderTimeMs.toString());
+      .replace(/\{\{XHEADER_TIME_COLLECTED_MS\}\}/g, xHeaderTimeMs.toString())
+      .replace(/\{\{XHEADER_SIZE_COMPRESSED\}\}/g, (xHeaderSizeCompressed ?? xHeaderSize).toString());
   }
 
   async buildSupportBundleManifestXml(
     bundleEntries: Array<{ name: string; size: number }>,
     collectionTimeMs: number,
+    xHeaderSize = 0,
   ): Promise<string> {
     const { prefix, rowTemplate, suffix } = await this.getSupportBundleManifestTemplate();
     const colTimeUs = (Date.now() * 1000).toString();
@@ -171,7 +174,6 @@ export class AsupXmlGeneratorService {
         ? bundleEntries
         : [{ name: 'support-bundle-unknown.log', size: 0 }];
 
-    // Replace {{COL_TIME_US}} in the prefix (Manifest root element attribute) as well as each row
     const filledPrefix = prefix.replace(/\{\{COL_TIME_US\}\}/g, colTimeUs);
 
     const rows = normalizedEntries.map((entry, index) =>
@@ -180,14 +182,20 @@ export class AsupXmlGeneratorService {
         .replace(/\{\{SEQ_NUM\}\}/g, String(index + 1))
         .replace(/\{\{PRIO_NUM\}\}/g, String(index + 1))
         .replace(/\{\{SUBSYS\}\}/g, 'support_bundle')
-        .replace(/\{\{CMD_TGT\}\}/g, 'dblade')
         .replace(/\{\{BODY_FILE\}\}/g, this.escapeXml(entry.name))
         .replace(/\{\{SIZE_COLLECTED\}\}/g, String(entry.size))
         .replace(/\{\{TIME_COLLECTED_MS\}\}/g, String(collectionTimeMs))
         .replace(/\{\{SIZE_COMPRESSED\}\}/g, String(entry.size))
     );
 
-    return `${filledPrefix}\n${rows.join('\n')}\n${suffix}\n`;
+    const xHeaderSeqNum = normalizedEntries.length + 1;
+    const filledSuffix = suffix
+      .replace(/\{\{COL_TIME_US\}\}/g, colTimeUs)
+      .replace(/\{\{XHEADER_SEQ_NUM\}\}/g, String(xHeaderSeqNum))
+      .replace(/\{\{XHEADER_PRIO_NUM\}\}/g, String(xHeaderSeqNum))
+      .replace(/\{\{XHEADER_SIZE_COLLECTED\}\}/g, String(xHeaderSize));
+
+    return `${filledPrefix}\n${rows.join('\n')}\n${filledSuffix}\n`;
   }
 
   /**

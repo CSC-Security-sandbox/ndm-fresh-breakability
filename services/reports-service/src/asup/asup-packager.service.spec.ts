@@ -22,9 +22,9 @@ jest.mock('7zip-bin', () => ({
   path7za: '/usr/bin/7za',
 }), { virtual: true });
 jest.mock('child_process', () => ({
-  execFile: jest.fn((cmd: string, args: string[], optsOrCb: any, cb?: any) => {
+  execFile: jest.fn((_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
     const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-    if (typeof callback === 'function') callback(null, '', '');
+    if (typeof callback === 'function') callback(null, { stdout: '', stderr: '' });
   }),
 }));
 
@@ -117,7 +117,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       mockedExecFile.mockImplementation(
         (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
           const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-          if (typeof callback === 'function') process.nextTick(() => callback(null, '', ''));
+          if (typeof callback === 'function') process.nextTick(() => callback(null, { stdout: '', stderr: '' }));
         },
       );
     });
@@ -133,17 +133,35 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result.xmlContent).toBe('<xml>migration data</xml>');
     });
 
-    it('should invoke 7za binary with correct arguments', async () => {
+    it('should invoke 7za binary with correct arguments (two-pass)', async () => {
       await service.packageAsupPayload();
 
+      // First pass: compress migration XML + x-header (no manifest)
       expect(mockedExecFile).toHaveBeenCalledWith(
         '/usr/bin/7za',
         expect.arrayContaining([
           'a',
           expect.stringContaining('asup-payload.7z'),
           expect.stringContaining('migration-projects.xml'),
-          expect.stringContaining('manifest.xml'),
           expect.stringContaining('x-header-data.txt'),
+        ]),
+        expect.any(Function),
+      );
+
+      // Listing pass: read compressed sizes
+      expect(mockedExecFile).toHaveBeenCalledWith(
+        '/usr/bin/7za',
+        expect.arrayContaining(['l', '-slt']),
+        expect.any(Function),
+      );
+
+      // Second pass: add manifest.xml
+      expect(mockedExecFile).toHaveBeenCalledWith(
+        '/usr/bin/7za',
+        expect.arrayContaining([
+          'a',
+          expect.stringContaining('asup-payload.7z'),
+          expect.stringContaining('manifest.xml'),
         ]),
         expect.any(Function),
       );
@@ -193,37 +211,37 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     it('should throw and log error.message when 7z fails without stderr', async () => {
       mockedExecFile.mockImplementation(
-        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-          process.nextTick(() => cb(new Error('exit code 2'), '', ''));
+        (_cmd: string, _args: string[], cb: Function) => {
+          process.nextTick(() => cb(Object.assign(new Error('exit code 2'), { stdout: '', stderr: '' })));
         },
       );
 
       await expect(service.packageAsupPayload()).rejects.toThrow(
-        '7za failed: exit code 2',
+        '7za a failed: exit code 2',
       );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to create .7z archive: exit code 2',
-        expect.stringContaining('exit code 2'),
+        '7za a failed: exit code 2',
+        'exit code 2',
       );
     });
 
     it('should throw and log stderr when 7z fails with stderr output', async () => {
       mockedExecFile.mockImplementation(
-        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-          process.nextTick(() => cb(new Error('exit code 2'), '', 'Permission denied: /tmp/asup-reports/asup-payload.7z'));
+        (_cmd: string, _args: string[], cb: Function) => {
+          process.nextTick(() => cb(Object.assign(new Error('exit code 2'), { stdout: '', stderr: 'Permission denied: /tmp/asup-reports/asup-payload.7z' })));
         },
       );
 
       await expect(service.packageAsupPayload()).rejects.toThrow(
-        '7za failed: Permission denied: /tmp/asup-reports/asup-payload.7z',
+        '7za a failed: Permission denied: /tmp/asup-reports/asup-payload.7z',
       );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to create .7z archive: exit code 2',
-        'stderr: Permission denied: /tmp/asup-reports/asup-payload.7z',
+        '7za a failed: exit code 2',
+        'Permission denied: /tmp/asup-reports/asup-payload.7z',
       );
     });
 
-    it('should pass manifest XML size metadata including xHeaderSize', async () => {
+    it('should pass manifest XML size metadata including xHeaderSize and compressed sizes', async () => {
       const migrationXml = '<xml>test migration data for sizing</xml>';
       xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue(migrationXml);
 
@@ -231,14 +249,50 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
       const manifestCall = xmlGeneratorService.buildManifestXml.mock.calls[0];
       const expectedMigrationSize = Buffer.byteLength(migrationXml, 'utf-8');
-      expect(manifestCall[0]).toBe(expectedMigrationSize); // migrationXmlSize
+      expect(manifestCall[0]).toBe(expectedMigrationSize); // migrationXmlSize (collected)
       expect(manifestCall[1]).toBeGreaterThanOrEqual(0);   // collectionTimeMs
-      expect(manifestCall[2]).toBe(expectedMigrationSize); // sizeCompressed
-      // xHeaderSize must be > 0 since x-headers template produces non-empty text
+      // sizeCompressed: falls back to migrationXmlSize when 7za listing returns empty
+      expect(manifestCall[2]).toBe(expectedMigrationSize);
+      // xHeaderSize (collected) must be > 0
       expect(manifestCall[3]).toBeGreaterThan(0);
+      expect(manifestCall[4]).toBe(0);                     // xHeaderTimeMs
+      // xHeaderSizeCompressed: falls back to xHeaderSize when 7za listing returns empty
+      expect(manifestCall[5]).toBe(manifestCall[3]);
     });
 
-    it('should build x-headers before calling buildManifestXml (ordering check)', async () => {
+    it('should use actual compressed sizes from 7za listing when available', async () => {
+      const migrationXml = '<xml>test data</xml>';
+      xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue(migrationXml);
+
+      // Mock 7za l -slt output on the listing call (2nd execFile invocation)
+      let callCount = 0;
+      mockedExecFile.mockImplementation(
+        (_cmd: string, args: string[], optsOrCb: any, cb?: any) => {
+          const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+          callCount++;
+          if (Array.isArray(args) && args[0] === 'l') {
+            const listing = [
+              'Path = migration-projects.xml',
+              'Packed Size = 42',
+              '',
+              'Path = x-header-data.txt',
+              'Packed Size = 18',
+            ].join('\n');
+            if (typeof callback === 'function') process.nextTick(() => callback(null, { stdout: listing, stderr: '' }));
+          } else {
+            if (typeof callback === 'function') process.nextTick(() => callback(null, { stdout: '', stderr: '' }));
+          }
+        },
+      );
+
+      await service.packageAsupPayload();
+
+      const manifestCall = xmlGeneratorService.buildManifestXml.mock.calls[0];
+      expect(manifestCall[2]).toBe(42); // migrationCompressed from 7z listing
+      expect(manifestCall[5]).toBe(18); // xHeaderCompressed from 7z listing
+    });
+
+    it('should build manifest after first 7z pass (ordering check)', async () => {
       const callOrder: string[] = [];
 
       xmlGeneratorService.buildMigrationProjectXml.mockResolvedValue('<xml/>');
@@ -247,7 +301,6 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         return '<manifest/>';
       });
 
-      // Track when writeFile is called for x-header-data.txt vs manifest.xml
       mockedFs.writeFile.mockImplementation(async (filePath: string) => {
         if (String(filePath).includes('x-header-data.txt')) callOrder.push('write-xheader');
         if (String(filePath).includes('manifest.xml')) callOrder.push('write-manifest');
@@ -255,10 +308,12 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
       await service.packageAsupPayload();
 
-      // buildManifestXml must be called before both temp files are written,
-      // and x-header build (tracked via write) happens in same batch after manifest call
-      const manifestIdx = callOrder.indexOf('buildManifestXml');
-      expect(manifestIdx).toBeGreaterThanOrEqual(0);
+      // x-header is written in first batch, manifest is generated after 7z listing, then written
+      const xheaderIdx = callOrder.indexOf('write-xheader');
+      const manifestGenIdx = callOrder.indexOf('buildManifestXml');
+      const manifestWriteIdx = callOrder.indexOf('write-manifest');
+      expect(xheaderIdx).toBeLessThan(manifestGenIdx);
+      expect(manifestGenIdx).toBeLessThan(manifestWriteIdx);
     });
   });
 
@@ -272,7 +327,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       mockedExecFile.mockImplementation(
         (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
           const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-          if (typeof callback === 'function') callback(null, '', '');
+          if (typeof callback === 'function') callback(null, { stdout: '', stderr: '' });
         },
       );
     });
@@ -398,7 +453,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       );
     });
 
-    it('should call buildSupportBundleManifestXml with collected file entries', async () => {
+    it('should call buildSupportBundleManifestXml with collected file entries and xHeaderSize', async () => {
       mockedFs.readdir.mockResolvedValue([
         { name: 'app.log', isDirectory: () => false } as any,
         { name: 'error.log', isDirectory: () => false } as any,
@@ -412,6 +467,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
           expect.objectContaining({ name: expect.any(String), size: 1024 }),
         ]),
         expect.any(Number),
+        expect.any(Number),
       );
     });
 
@@ -422,9 +478,9 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
         const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
         // Fail only on the 'a' (add/compress) command; let extract ('x') succeed
         if (Array.isArray(args) && args[0] === 'a') {
-          if (typeof callback === 'function') callback(new Error('compression failed'), '', '');
+          if (typeof callback === 'function') callback(Object.assign(new Error('compression failed'), { stdout: '', stderr: '' }));
         } else {
-          if (typeof callback === 'function') callback(null, '', '');
+          if (typeof callback === 'function') callback(null, { stdout: '', stderr: '' });
         }
       });
 
@@ -455,6 +511,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
           expect.objectContaining({ name: 'app_service.log' }),
         ]),
         expect.any(Number),
+        expect.any(Number),
       );
       // copyFile destination must also use the trimmed name
       const copyFileCalls = mockedFs.copyFile.mock.calls;
@@ -483,8 +540,8 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       xmlGeneratorService.buildManifestXml.mockResolvedValue('<manifest/>');
 
       mockedExecFile.mockImplementation(
-        (_cmd: string, _args: string[], cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-          process.nextTick(() => cb(null, '', ''));
+        (_cmd: string, _args: string[], cb: Function) => {
+          process.nextTick(() => cb(null, { stdout: '', stderr: '' }));
         },
       );
 
@@ -512,7 +569,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       mockedExecFile.mockImplementation(
         (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
           const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-          if (typeof callback === 'function') process.nextTick(() => callback(null, '', ''));
+          if (typeof callback === 'function') process.nextTick(() => callback(null, { stdout: '', stderr: '' }));
         },
       );
     });
@@ -699,7 +756,7 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       mockedExecFile.mockImplementation(
         (_cmd: string, _args: string[], optsOrCb: any, cb?: any) => {
           const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-          if (typeof callback === 'function') callback(null, '', '');
+          if (typeof callback === 'function') callback(null, { stdout: '', stderr: '' });
         },
       );
     });

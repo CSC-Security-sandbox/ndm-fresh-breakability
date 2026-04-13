@@ -54,6 +54,7 @@ describe('AsupXmlGeneratorService', () => {
   <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
   <xheader-size>{{XHEADER_SIZE_COLLECTED}}</xheader-size>
   <xheader-time>{{XHEADER_TIME_COLLECTED_MS}}</xheader-time>
+  <xheader-size-compressed>{{XHEADER_SIZE_COMPRESSED}}</xheader-size-compressed>
 </manifest>`;
 
   // Minimal support-bundle manifest template (mirrors actual template structure)
@@ -63,13 +64,21 @@ describe('AsupXmlGeneratorService', () => {
   <seq-num>{{SEQ_NUM}}</seq-num>
   <prio-num>{{PRIO_NUM}}</prio-num>
   <subsys>{{SUBSYS}}</subsys>
-  <cmd-tgt>{{CMD_TGT}}</cmd-tgt>
   <body-file>{{BODY_FILE}}</body-file>
   <size-collected>{{SIZE_COLLECTED}}</size-collected>
   <time-collected-ms>{{TIME_COLLECTED_MS}}</time-collected-ms>
   <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
 </asup:ROW>
 {{ROW_TEMPLATE_END}}
+<asup:ROW col_time_us="{{COL_TIME_US}}">
+  <seq-num>{{XHEADER_SEQ_NUM}}</seq-num>
+  <prio-num>{{XHEADER_PRIO_NUM}}</prio-num>
+  <subsys>HEADER</subsys>
+  <body-file>x-header.txt</body-file>
+  <size-collected>{{XHEADER_SIZE_COLLECTED}}</size-collected>
+  <time-collected-ms>0</time-collected-ms>
+  <size-compressed>{{XHEADER_SIZE_COLLECTED}}</size-compressed>
+</asup:ROW>
 </Manifest>`;
 
   beforeEach(async () => {
@@ -304,6 +313,20 @@ describe('AsupXmlGeneratorService', () => {
 
       expect(xml).toContain('<xheader-size>0</xheader-size>');
       expect(xml).toContain('<xheader-time>0</xheader-time>');
+      expect(xml).toContain('<xheader-size-compressed>0</xheader-size-compressed>');
+    });
+
+    it('should use actual xHeaderSizeCompressed when provided', async () => {
+      const xml = await service.buildManifestXml(1024, 150, 800, 512, 5, 200);
+
+      expect(xml).toContain('<xheader-size>512</xheader-size>');
+      expect(xml).toContain('<xheader-size-compressed>200</xheader-size-compressed>');
+    });
+
+    it('should fall back to xHeaderSize when xHeaderSizeCompressed is not provided', async () => {
+      const xml = await service.buildManifestXml(1024, 150, 800, 512, 5);
+
+      expect(xml).toContain('<xheader-size-compressed>512</xheader-size-compressed>');
     });
 
     it('should use cached manifest template on second call', async () => {
@@ -591,35 +614,39 @@ describe('AsupXmlGeneratorService', () => {
       const xml = await service.buildSupportBundleManifestXml(
         [{ name: 'ndm.log', size: 512 }],
         75,
+        128,
       );
 
       expect(xml).not.toContain('{{');
       expect(xml).not.toContain('}}');
     });
 
-    it('should replace {{COL_TIME_US}} in asup:ROW col_time_us attribute for every row', async () => {
+    it('should replace {{COL_TIME_US}} in asup:ROW col_time_us attribute for every row including x-header', async () => {
       const xml = await service.buildSupportBundleManifestXml(
         [{ name: 'a.log', size: 100 }, { name: 'b.log', size: 200 }],
         10,
+        256,
       );
 
-      // Neither row should keep the raw placeholder
       expect(xml).not.toContain('col_time_us="{{COL_TIME_US}}"');
-      // Both rows (2 occurrences) should have a numeric timestamp
+      // 2 bundle rows + 1 x-header row = 3 ROW elements
       const rowMatches = xml.match(/<asup:ROW col_time_us="\d{16,}">/g);
-      expect(rowMatches).toHaveLength(2);
+      expect(rowMatches).toHaveLength(3);
     });
 
-    it('should set subsys=support_bundle and cmd-tgt=dblade in every row', async () => {
+    it('should set subsys=support_bundle in bundle rows and include HEADER row for x-header', async () => {
       const xml = await service.buildSupportBundleManifestXml(
         [{ name: 'a.log', size: 100 }, { name: 'b.log', size: 200 }],
         10,
+        512,
       );
 
       const subsysMatches = xml.match(/<subsys>support_bundle<\/subsys>/g);
-      const cmdTgtMatches = xml.match(/<cmd-tgt>dblade<\/cmd-tgt>/g);
       expect(subsysMatches).toHaveLength(2);
-      expect(cmdTgtMatches).toHaveLength(2);
+      expect(xml).not.toContain('<cmd-tgt>');
+      expect(xml).toContain('<subsys>HEADER</subsys>');
+      expect(xml).toContain('<body-file>x-header.txt</body-file>');
+      expect(xml).toContain('<size-collected>512</size-collected>');
     });
 
     it('should use cached support-bundle-manifest template on subsequent calls', async () => {

@@ -23,9 +23,9 @@
 <!ELEMENT asup:qualification (#PCDATA)>
 <!ELEMENT asup:remap (#PCDATA)>
 <!ELEMENT asup:ABORT (#PCDATA)>
-<!ELEMENT asup:ROW (seq-num,prio-num,subsys,cmd-tgt,body-file,size-collected,time-collected-ms,status,error,content-type,orig-size-collected,size-compressed)>
+<!ELEMENT asup:ROW (seq-num,prio-num,subsys,body-file,size-collected,time-collected-ms,status,error,content-type,orig-size-collected,size-compressed)>
 <!ATTLIST asup:ROW col_time_us CDATA #REQUIRED>
-<!ELEMENT seq-num (#PCDATA)><!ELEMENT prio-num (#PCDATA)><!ELEMENT subsys (#PCDATA)><!ELEMENT cmd-tgt (#PCDATA)><!ELEMENT body-file (#PCDATA)><!ELEMENT size-collected (#PCDATA)><!ELEMENT time-collected-ms (#PCDATA)><!ELEMENT status (#PCDATA)><!ELEMENT error (#PCDATA)><!ELEMENT content-type (#PCDATA)><!ELEMENT orig-size-collected (#PCDATA)><!ELEMENT size-compressed (#PCDATA)>]>
+<!ELEMENT seq-num (#PCDATA)><!ELEMENT prio-num (#PCDATA)><!ELEMENT subsys (#PCDATA)><!ELEMENT body-file (#PCDATA)><!ELEMENT size-collected (#PCDATA)><!ELEMENT time-collected-ms (#PCDATA)><!ELEMENT status (#PCDATA)><!ELEMENT error (#PCDATA)><!ELEMENT content-type (#PCDATA)><!ELEMENT orig-size-collected (#PCDATA)><!ELEMENT size-compressed (#PCDATA)>]>
 
 <Manifest col_time_us="{{COL_TIME_US}}" smf_table_name="nd_autosupport_manifest" smf_table_desc="AutoSupport Manifest Table" cluster_uuid="c76500e2-f9ef-11ef-847d-6045bd370ca7" node_uuid="0e934e08-f9ef-11ef-847d-6045bd370ca7" node_system_id="97548219305762481930" node_sn="97548219305762481930" data_scope="node" xmlns="http://asup_search.netapp.com/ns/Manifest/1.0" xmlns:asup="http://asup_search.netapp.com/ns/ASUP/1.1">
 <asup:TABLE_INFO>
@@ -46,10 +46,10 @@
   <asup:remap>noop</asup:remap>
 </asup:field>
 <asup:field>
-  <asup:tag>cmd-tgt</asup:tag>
-  <asup:smf_name>cmd-tgt</asup:smf_name>
-  <asup:ui_name>Execution domain for command</asup:ui_name>
-  <asup:type>AutoSupport_cmd_tgt</asup:type>
+  <asup:tag>subsys</asup:tag>
+  <asup:smf_name>subsys</asup:smf_name>
+  <asup:ui_name>Subsystem</asup:ui_name>
+  <asup:type>text</asup:type>
   <asup:qualification>read</asup:qualification>
   <asup:remap>noop</asup:remap>
 </asup:field>
@@ -120,10 +120,9 @@
 </asup:TABLE_INFO>
 {{ROW_TEMPLATE_START}}
 <asup:ROW col_time_us="{{COL_TIME_US}}">
-  <seq-num>1</seq-num>
-  <prio-num>1</prio-num>
-  <subsys>support_bundle</subsys>
-  <cmd-tgt>dblade</cmd-tgt>
+  <seq-num>{{SEQ_NUM}}</seq-num>
+  <prio-num>{{PRIO_NUM}}</prio-num>
+  <subsys>{{SUBSYS}}</subsys>
   <body-file>{{BODY_FILE}}</body-file>
   <size-collected>{{SIZE_COLLECTED}}</size-collected>
   <time-collected-ms>{{TIME_COLLECTED_MS}}</time-collected-ms>
@@ -134,4 +133,17 @@
   <size-compressed>{{SIZE_COMPRESSED}}</size-compressed>
 </asup:ROW>
 {{ROW_TEMPLATE_END}}
+<asup:ROW col_time_us="{{COL_TIME_US}}">
+  <seq-num>{{XHEADER_SEQ_NUM}}</seq-num>
+  <prio-num>{{XHEADER_PRIO_NUM}}</prio-num>
+  <subsys>HEADER</subsys>
+  <body-file>x-header.txt</body-file>
+  <size-collected>{{XHEADER_SIZE_COLLECTED}}</size-collected>
+  <time-collected-ms>0</time-collected-ms>
+  <status>completed</status>
+  <error></error>
+  <content-type>basic</content-type>
+  <orig-size-collected>{{XHEADER_SIZE_COLLECTED}}</orig-size-collected>
+  <size-compressed>{{XHEADER_SIZE_COLLECTED}}</size-compressed>
+</asup:ROW>
 </Manifest>
