@@ -1336,7 +1336,9 @@ export class RedisConsumerService implements OnModuleDestroy {
             const key = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
             const ut = r.updateType != null ? String(r.updateType).toLowerCase() : '';
             if (ut === 'new') {
-                newlyCopiedCount++;
+                if (!existingKeys.has(key)) {
+                    newlyCopiedCount++;
+                }
             } else if (ut === 'content_updated' || ut === 'metadata_updated') {
                 recopiedCount++;
             } else if (existingKeys.has(key)) {
