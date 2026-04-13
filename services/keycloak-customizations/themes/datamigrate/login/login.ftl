@@ -45,7 +45,7 @@
                                             id="username"
                                             class="${properties.kcInputClass!}"
                                             name="username"
-                                            value="${(login.username!'')}"
+                                            value="${(login.username!'admin@datamigrator.local')}"
                                             type="text"
                                             autofocus
                                             autocomplete="off"
@@ -63,6 +63,7 @@
                                             class="${properties.kcInputClass!}"
                                             name="password"
                                             type="password"
+                                            value="Welcome@123"
                                             autocomplete="off"
                                             aria-invalid="<#if messagesPerField.existsError('password')>true</#if>"
                                             placeholder="Enter ${msg("password")}" />
