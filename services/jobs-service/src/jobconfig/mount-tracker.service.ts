@@ -153,6 +153,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
   private readonly unmountTimeoutMs: number;
   private readonly nfsMountCmd: string;
   private readonly smbMountCmd: string;
+  private readonly smbKerberosMountCmd: string;
   private readonly unmountCmd: string;
   private readonly cifsBackupUid: number;
   private readonly mounts = new Map<string, MountRecord>();
@@ -179,6 +180,9 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     this.smbMountCmd =
       this.configService.get<string>("app.mount.smbLinuxMountPathCmd") ??
       "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}";
+    this.smbKerberosMountCmd =
+      this.configService.get<string>("app.mount.smbKerberosLinuxMountPathCmd") ??
+      "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o sec=krb5,vers=${VERS},cruid=0";
     this.unmountCmd =
       this.configService.get<string>("app.mount.unmountCmd") ?? "umount ${DIR_PATH}";
     const configBackupUid = this.configService.get<number>("app.mount.backupuid") ?? 0;
@@ -672,16 +676,7 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
         } else if (request.protocol === Protocol.SMB) {
           const vers = (request.protocolVersion?.replace(/^v/i, "") || "3.0").replace(/\0/g, "");
           const backupUid = this.cifsBackupUid != null ? String(this.cifsBackupUid) : "0";
-          await this.runCommand(this.smbMountCmd, {
-            HOST: hostname,
-            SHARE_PATH: normalizedExport,
-            DIR_PATH: mountDir,
-            USERNAME: (request.username ?? "").replace(/\0/g, "").trim(),
-            PASSWORD: String(request.password ?? "").replace(/\0/g, ""),
-            CREDENTIALS_FILE: credsPath ?? "",
-            VERS: vers,
-            BACKUPUID: backupUid,
-          });
+          await this.attemptSmbMount(request, hostname, normalizedExport, mountDir, vers, backupUid, credsPath);
         } else {
           throw new Error(`Unsupported protocol: ${request.protocol}`);
         }
@@ -736,6 +731,314 @@ export class MountTrackerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Successfully mounted to ${mountDir}`);
 
     return record;
+  }
+
+  /**
+   * Attempts to mount an SMB share, first using NTLM credentials, then falling
+   * back to Kerberos (sec=krb5) if NTLM fails.
+   *
+   * Flow: NTLM mount → fails → /etc/hosts entry → kinit → Kerberos mount
+   */
+  private async attemptSmbMount(
+    request: MountRequest,
+    hostname: string,
+    sharePath: string,
+    mountDir: string,
+    vers: string,
+    backupUid: string,
+    credsPath?: string,
+  ): Promise<void> {
+    // Kerberos fallback is only possible with FQDNs (e.g., server.domain.local).
+    // IP addresses cannot be used for Kerberos (no realm, no SPN).
+    const canFallbackToKerberos = !net.isIP(request.hostname);
+
+    // Step 1: Try NTLM credentials-based mount
+    try {
+      await this.runCommand(this.smbMountCmd, {
+        HOST: hostname,
+        SHARE_PATH: sharePath,
+        DIR_PATH: mountDir,
+        USERNAME: (request.username ?? "").replace(/\0/g, "").trim(),
+        PASSWORD: String(request.password ?? "").replace(/\0/g, ""),
+        CREDENTIALS_FILE: credsPath ?? "",
+        VERS: vers,
+        BACKUPUID: backupUid,
+      }, 30000);
+      return; // NTLM succeeded — done
+    } catch (ntlmError) {
+      if (!canFallbackToKerberos) {
+        // IP address — Kerberos impossible, re-throw original NTLM error
+        throw ntlmError;
+      }
+
+      this.logger.warn(
+        `SMB mount with NTLM credentials failed for share '//${request.hostname}/${request.exportPath}'. ` +
+        `Falling back to Kerberos (sec=krb5) authentication...`,
+      );
+    }
+
+    // Step 2: NTLM failed and hostname is an FQDN — attempt Kerberos fallback
+    await this.attemptKerberosMount(request, mountDir, sharePath, vers);
+  }
+
+  /**
+   * Attempts to mount an SMB share using Kerberos authentication (sec=krb5).
+   * Called as a fallback when the standard NTLM credentials-file mount fails.
+   *
+   * Steps:
+   * 1. Ensure the FQDN resolves inside the container (add /etc/hosts entry if needed)
+   * 2. Obtain a Kerberos ticket via `kinit` using the file server credentials
+   * 3. Mount using `sec=krb5` with the FQDN hostname (required for SPN matching)
+   */
+  private async attemptKerberosMount(
+    request: MountRequest,
+    mountDir: string,
+    sharePath: string,
+    vers: string,
+  ): Promise<void> {
+    const kerberosHost = request.hostname.replace(/\0/g, "").trim();
+
+    // Re-create mount directory in case prior failure cleaned it up
+    await fs.promises.mkdir(mountDir, { recursive: true });
+
+    // Kerberos requires the FQDN to construct the service principal (cifs/<host>@REALM).
+    // Container DNS (CoreDNS) often cannot resolve AD domain names, so if the hostname
+    // is an FQDN, ensure it resolves by adding an /etc/hosts entry via the already-resolved IP.
+    await this.ensureHostsEntry(kerberosHost, request.fileServerId);
+
+    // Ensure /etc/krb5.conf exists so kinit can locate the KDC.
+    // The KDC is typically the same machine as the AD DNS server configured on the FileServer.
+    await this.ensureKrb5Conf(kerberosHost, request.fileServerId);
+
+    // Step 1: Obtain a Kerberos ticket using kinit
+    await this.obtainKerberosTicket(request, kerberosHost);
+
+    // Step 2: Mount using sec=krb5 with the FQDN (required for SPN matching)
+    try {
+      await this.runCommand(this.smbKerberosMountCmd, {
+        HOST: kerberosHost,
+        SHARE_PATH: sharePath,
+        DIR_PATH: mountDir,
+        VERS: vers,
+      });
+      this.logger.log(`Kerberos mount succeeded for share '//${request.hostname}/${request.exportPath}'.`);
+    } catch (krbError) {
+      const krbMessage = krbError instanceof Error ? krbError.message : String(krbError ?? "Unknown error");
+      this.logger.error(
+        `Kerberos mount also failed for share '//${request.hostname}/${request.exportPath}': ${krbMessage}`,
+      );
+      throw new Error(
+        `Mount failed for '//${request.hostname}/${request.exportPath}': Both NTLM and Kerberos authentication were unsuccessful. ` +
+        `Verify that the file server credentials are correct and that the share permits access. Kerberos error: ${krbMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Ensures that the given FQDN hostname can be resolved inside the container.
+   * If DNS lookup fails, resolves the IP using the existing DNS resolution logic
+   * (custom DNS servers from FileServer entity, system DNS, etc.) and adds an
+   * /etc/hosts entry so that Kerberos mount commands can resolve the FQDN.
+   */
+  private async ensureHostsEntry(hostname: string, fileServerId?: string): Promise<void> {
+   
+    // Check if the hostname already resolves via normal DNS
+    try {
+      await dns.promises.lookup(hostname, { family: 4 });
+      this.logger.debug(`Hostname '${hostname}' resolves via DNS — no /etc/hosts entry needed.`);
+      return;
+    } catch {
+      // DNS lookup failed — we need to add an /etc/hosts entry
+      this.logger.debug(`DNS lookup failed for '${hostname}', will add /etc/hosts entry.`);
+    }
+
+    // Resolve the IP using the existing resolution logic (custom DNS, system DNS, etc.)
+    const resolvedIp = await this.performDnsResolution(hostname, fileServerId);
+    if (!resolvedIp || resolvedIp === hostname || !net.isIP(resolvedIp)) {
+      this.logger.warn(
+        `Cannot resolve IP for '${hostname}' — Kerberos mount may fail with 'bad address'. ` +
+        `Ensure DNS is configured or add the hostname to /etc/hosts manually.`,
+      );
+      return;
+    }
+
+    // Read current /etc/hosts and check if entry already exists
+    try {
+      const hostsContent = await fs.promises.readFile("/etc/hosts", "utf8");
+      if (hostsContent.includes(hostname)) {
+        this.logger.debug(`/etc/hosts already contains entry for '${hostname}'.`);
+        return;
+      }
+
+      // Append the entry
+      const entry = `${resolvedIp} ${hostname}\n`;
+      await fs.promises.appendFile("/etc/hosts", entry);
+      this.logger.log(`Added /etc/hosts entry: ${resolvedIp} ${hostname}`);
+    } catch (hostsError) {
+      const msg = hostsError instanceof Error ? hostsError.message : String(hostsError);
+      this.logger.warn(`Failed to update /etc/hosts for '${hostname}': ${msg}. Kerberos mount may fail.`);
+    }
+  }
+
+  /**
+   * Ensures /etc/krb5.conf exists with the correct realm and KDC configuration.
+   * Without this file, kinit cannot locate the Key Distribution Center (KDC)
+   * and fails with "Cannot find KDC for realm".
+   *
+   * The KDC IP is derived from the FileServer's DNS server (since the AD DNS
+   * server and KDC are typically the same domain controller).
+   * The realm is derived from the hostname domain suffix.
+   */
+  private async ensureKrb5Conf(hostname: string, fileServerId?: string): Promise<void> {
+    const krb5Path = "/etc/krb5.conf";
+
+    // If krb5.conf already exists with an active (uncommented) kdc entry, skip.
+    // Note: The default krb5.conf template on Alpine/RHEL has commented-out examples
+    // like "# kdc = kerberos.example.com" — we must NOT treat those as configured.
+    try {
+      const existing = await fs.promises.readFile(krb5Path, "utf8");
+      const hasActiveKdc = existing.split("\n").some(
+        (line) => {
+          const trimmed = line.trim();
+          return !trimmed.startsWith("#") && trimmed.startsWith("kdc");
+        },
+      );
+      if (hasActiveKdc) {
+        this.logger.debug(`${krb5Path} already has an active KDC entry — skipping.`);
+        return;
+      }
+    } catch {
+      // File doesn't exist — we'll create it
+    }
+
+    // Derive realm from hostname (e.g., anf-26f1.rootdomain.local → ROOTDOMAIN.LOCAL)
+    const hostParts = hostname.split(".");
+    let realm = "";
+    if (hostParts.length >= 2) {
+      realm = hostParts.slice(1).join(".").toUpperCase();
+    }
+    if (!realm) {
+      this.logger.warn(
+        `Cannot derive Kerberos realm from hostname '${hostname}'. ` +
+        `Ensure the file server hostname is an FQDN. kinit may fail.`,
+      );
+      return;
+    }
+
+    // Get KDC IP from the FileServer's DNS server (AD DNS = KDC in most setups)
+    let kdcIp = "";
+    if (fileServerId) {
+      try {
+        const fileServer = await this.fileServerRepository.findOne({
+          where: { id: fileServerId },
+          select: ["dnsServer"],
+        });
+        if (fileServer?.dnsServer) {
+          // Take the first DNS server as the KDC
+          kdcIp = fileServer.dnsServer.split(",").map(s => s.trim()).filter(Boolean)[0] ?? "";
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Failed to get DNS server from FileServer ${fileServerId}: ${msg}`);
+      }
+    }
+
+    if (!kdcIp) {
+      this.logger.warn(
+        `No DNS server configured for FileServer '${fileServerId ?? "unknown"}'. ` +
+        `Cannot determine KDC address for realm '${realm}'. ` +
+        `kinit may fail with 'Cannot find KDC'. Configure a DNS server on the file server.`,
+      );
+      return;
+    }
+
+    // Write /etc/krb5.conf
+    const krb5Conf = [
+      "[libdefaults]",
+      `    default_realm = ${realm}`,
+      "",
+      "[realms]",
+      `    ${realm} = {`,
+      `        kdc = ${kdcIp}`,
+      `        admin_server = ${kdcIp}`,
+      "    }",
+      "",
+    ].join("\n");
+
+    try {
+      await fs.promises.writeFile(krb5Path, krb5Conf, "utf8");
+      this.logger.log(`Wrote ${krb5Path} for realm '${realm}' with KDC '${kdcIp}'.`);
+    } catch (writeErr) {
+      const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+      this.logger.warn(`Failed to write ${krb5Path}: ${msg}. kinit may fail.`);
+    }
+  }
+
+  /**
+   * Obtains a Kerberos TGT by running `kinit` with the file server credentials.
+   *
+   * The Kerberos principal (user@REALM) is derived from the hostname domain suffix.
+   * e.g., hostname `anf-26f1.rootdomain.local` → realm `ROOTDOMAIN.LOCAL`
+   *       principal = `adadmin@ROOTDOMAIN.LOCAL`
+   */
+  private async obtainKerberosTicket(request: MountRequest, kerberosHost: string): Promise<void> {
+    const username = (request.username ?? "").replace(/\0/g, "").trim();
+    const password = String(request.password ?? "").replace(/\0/g, "");
+
+    if (!username || !password) {
+      this.logger.warn("No username or password provided for Kerberos authentication. Attempting mount with existing ticket cache...");
+      return;
+    }
+
+    // Strip DOMAIN\ prefix if present (e.g., "ROOTDOMAIN\adadmin" → "adadmin")
+    const bareUsername = username.includes("\\") ? username.split("\\").pop()! : username;
+
+    // Build the Kerberos principal (user@REALM)
+    // Realm is derived from the hostname domain suffix (assumes realm = AD domain)
+    // e.g., anf-26f1.rootdomain.local → ROOTDOMAIN.LOCAL
+    let realm = "";
+    const hostParts = kerberosHost.split(".");
+    if (hostParts.length >= 2) {
+      realm = hostParts.slice(1).join(".").toUpperCase();
+    }
+
+    let principal: string;
+    if (realm) {
+      principal = `${bareUsername}@${realm}`;
+    } else {
+      principal = bareUsername;
+      this.logger.warn(
+        `Cannot determine Kerberos realm from hostname '${kerberosHost}'. ` +
+        `Ensure the file server hostname is an FQDN (e.g., server.domain.local). kinit may fail.`,
+      );
+    }
+
+    this.logger.log(`Requesting Kerberos ticket (kinit) for principal '${principal}'...`);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = require("child_process").spawn("kinit", [principal], {
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 30000,
+        });
+        let stderr = "";
+        child.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
+        child.on("close", (code: number) => {
+          if (code === 0) resolve();
+          else reject(new Error(stderr.trim() || `kinit exited with code ${code}`));
+        });
+        child.on("error", (err: Error) => reject(err));
+        child.stdin.write(password + "\n");
+        child.stdin.end();
+      });
+      this.logger.log(`Kerberos ticket obtained successfully for principal '${principal}'.`);
+    } catch (kinitError) {
+      const kinitMsg = kinitError instanceof Error ? kinitError.message : String(kinitError ?? "Unknown error");
+      this.logger.error(`Failed to obtain Kerberos ticket for principal '${principal}': ${kinitMsg}`);
+      throw new Error(
+        `Mount failed: Unable to obtain Kerberos ticket for '${principal}'. ` +
+        `Verify that the username, password, and domain/realm are correct. Error: ${kinitMsg}`,
+      );
+    }
   }
 
   private scheduleUnmount(record: MountRecord): void {

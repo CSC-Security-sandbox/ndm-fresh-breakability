@@ -45,6 +45,9 @@ export default registerAs(
       smbLinuxMountPathCmd:
         process.env.SMB_LINUX_MOUNT_PATH_CMD ||
         "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}",
+      smbKerberosLinuxMountPathCmd:
+        process.env.SMB_KERBEROS_LINUX_MOUNT_PATH_CMD ||
+        "mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o sec=krb5,vers=${VERS},cruid=0",
       unmountCmd: process.env.UNMOUNT_CMD || "umount ${DIR_PATH}",
     },
   }),

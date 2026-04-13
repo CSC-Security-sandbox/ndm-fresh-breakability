@@ -8,10 +8,26 @@ import { FileServerEntity } from '../entities/fileserver.entity';
 import { Protocol } from 'src/constants/enums';
 import * as path from 'path';
 
-jest.mock('child_process', () => ({
-  execFile: jest.fn(),
-  exec: jest.fn(),
-}));
+jest.mock('child_process', () => {
+  const { EventEmitter } = require('events');
+  const { Readable, Writable } = require('stream');
+  const createMockSpawn = () => {
+    const child = new EventEmitter();
+    child.stdin = new Writable({ write(_chunk: any, _enc: any, cb: any) { cb(); } });
+    child.stdout = new Readable({ read() {} });
+    child.stderr = new Readable({ read() {} });
+    // Emit close after a microtask delay so listeners are registered first
+    Promise.resolve().then(() => {
+      child.emit('close', (global as any).__mockSpawnExitCode ?? 0);
+    });
+    return child;
+  };
+  return {
+    execFile: jest.fn(),
+    exec: jest.fn(),
+    spawn: jest.fn(createMockSpawn),
+  };
+});
 
 jest.mock('util', () => {
   const fn = jest.fn();
@@ -49,13 +65,19 @@ jest.mock('fs', () => ({
       }),
     ),
     writeFile: jest.fn().mockResolvedValue(undefined),
+    appendFile: jest.fn().mockResolvedValue(undefined),
     unlink: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
 jest.mock('dns', () => ({
   ...jest.requireActual('dns'),
-  Resolver: jest.fn(),
+  Resolver: jest.fn().mockImplementation(() => ({
+    setServers: jest.fn(),
+    resolve4: jest.fn((_hostname: string, callback: Function) => {
+      callback(new Error('DNS not available'), null);
+    }),
+  })),
   promises: {
     lookup: jest.fn()
   }
@@ -140,9 +162,17 @@ describe('MountTrackerService', () => {
 
     service = module.get<MountTrackerService>(MountTrackerService);
     mockExecAsync.mockReset();
+    (global as any).__mockSpawnExitCode = 0; // kinit spawn succeeds by default
     (fs.promises.mkdir as jest.Mock).mockReset().mockResolvedValue(undefined);
     (fs.promises.readdir as jest.Mock).mockReset().mockResolvedValue([]);
+    (fs.promises.readFile as jest.Mock).mockReset().mockResolvedValue('');
+    (fs.promises.appendFile as jest.Mock).mockReset().mockResolvedValue(undefined);
+    (fs.promises.writeFile as jest.Mock).mockReset().mockResolvedValue(undefined);
     (fs.promises.rm as jest.Mock).mockReset().mockResolvedValue(undefined);
+
+    // dns.promises.lookup should reject by default so ensureHostsEntry doesn't hang
+    const dns = require('dns');
+    (dns.promises.lookup as jest.Mock).mockReset().mockRejectedValue(new Error('DNS not available'));
 
     // Set up net.isIP mock behavior
     mockIsIP.mockImplementation((input: string) => {
@@ -403,6 +433,342 @@ describe('MountTrackerService', () => {
       const result = await service.ensureMounted(nfsRequest);
 
       expect((result as any).timeoutHandle).toBeUndefined();
+    });
+
+    describe('Kerberos fallback', () => {
+      it('should retry with Kerberos (sec=krb5) when NTLM mount fails', async () => {
+        const fqdnRequest: MountRequest = {
+          ...smbRequest,
+          hostname: 'smb-server.domain.local',
+          fileServerId: 'server-789',
+        };
+
+        // performDnsResolution needs dns.promises.lookup to resolve the FQDN to an IP
+        const dns = require('dns');
+        (dns.promises.lookup as jest.Mock).mockResolvedValue({ address: '10.0.0.99', family: 4 });
+
+        // First call (NTLM) fails, second call (Kerberos mount) succeeds
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('mount: mounting //10.0.0.99/smb/share on /mnt/server-789/smb/share failed: Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const result = await service.ensureMounted(fqdnRequest);
+
+        expect(result.protocol).toBe(Protocol.SMB);
+        expect(result.mountPath).toBe('/mnt/server-789/smb/share');
+        // Second exec call should use the Kerberos command with sec=krb5
+        const krbCall = mockExecAsync.mock.calls.find((c: any[]) => String(c[0]).includes('sec=krb5'));
+        expect(krbCall).toBeDefined();
+        expect(krbCall[1].env.HOST).toBe('smb-server.domain.local');
+        expect(krbCall[1].env.SHARE_PATH).toBe('smb/share');
+      });
+
+      it('should throw error when both NTLM and Kerberos mounts fail', async () => {
+        const fqdnRequest: MountRequest = {
+          ...smbRequest,
+          hostname: 'smb-server.domain.local',
+          fileServerId: 'server-789',
+        };
+
+        const dns = require('dns');
+        (dns.promises.lookup as jest.Mock).mockResolvedValue({ address: '10.0.0.99', family: 4 });
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('mount failed: Permission denied'))
+          .mockRejectedValueOnce(new Error('mount failed: No such file or directory'));
+
+        await expect(service.ensureMounted(fqdnRequest)).rejects.toThrow(
+          /Both NTLM and Kerberos authentication were unsuccessful/,
+        );
+      });
+
+      it('should always attempt Kerberos fallback regardless of NTLM error type', async () => {
+        const fqdnRequest: MountRequest = {
+          ...smbRequest,
+          hostname: 'smb-server.domain.local',
+          fileServerId: 'server-789',
+        };
+
+        const dns = require('dns');
+        (dns.promises.lookup as jest.Mock).mockResolvedValue({ address: '10.0.0.99', family: 4 });
+
+        // Any NTLM failure triggers Kerberos fallback (not just Permission denied)
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('mount: No route to host'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const result = await service.ensureMounted(fqdnRequest);
+
+        expect(result.protocol).toBe(Protocol.SMB);
+        // Should have attempted Kerberos mount (sec=krb5)
+        const krbCall = mockExecAsync.mock.calls.find((c: any[]) => String(c[0]).includes('sec=krb5'));
+        expect(krbCall).toBeDefined();
+      });
+
+      it('should use original hostname (not resolved IP) for Kerberos mount', async () => {
+        const hostnameRequest: MountRequest = {
+          ...smbRequest,
+          hostname: 'anf-server.domain.local',
+        };
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        await service.ensureMounted(hostnameRequest);
+
+        // Kerberos mount call should use the original FQDN hostname
+        const krbCall = mockExecAsync.mock.calls.find((c: any[]) => String(c[0]).includes('sec=krb5'));
+        expect(krbCall).toBeDefined();
+        expect(krbCall[1].env.HOST).toBe('anf-server.domain.local');
+      });
+    });
+
+    describe('ensureHostsEntry', () => {
+      it('should skip /etc/hosts when DNS lookup succeeds', async () => {
+        const dns = require('dns');
+        // Use mockResolvedValue (persistent) so both performDnsResolution and ensureHostsEntry get a resolved value
+        (dns.promises.lookup as jest.Mock).mockResolvedValue({ address: '10.0.0.1', family: 4 });
+        // NTLM fails, Kerberos path runs
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'resolvable.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.debug).toHaveBeenCalledWith(
+          expect.stringContaining('resolves via DNS'),
+        );
+        expect(fs.promises.appendFile).not.toHaveBeenCalled();
+      });
+
+      it('should skip when /etc/hosts already contains the hostname', async () => {
+        const dns = require('dns');
+        // Call #1: performDnsResolution (resolveHostToIp) → system DNS → resolves OK
+        // Call #2: ensureHostsEntry dns.promises.lookup → fails → triggers /etc/hosts check
+        // Call #3: ensureHostsEntry → performDnsResolution → system DNS → resolves OK (needed to get IP for hosts check)
+        (dns.promises.lookup as jest.Mock)
+          .mockResolvedValueOnce({ address: '172.30.1.1', family: 4 })
+          .mockRejectedValueOnce(new Error('DNS not available'))
+          .mockResolvedValueOnce({ address: '172.30.1.1', family: 4 });
+
+        // readFile is called for /etc/hosts — return entry containing the hostname
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('172.30.1.1 existing.domain.local\n');
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'existing.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.debug).toHaveBeenCalledWith(
+          expect.stringContaining('already contains entry'),
+        );
+      });
+
+      it('should warn when IP cannot be resolved for hostname', async () => {
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        // performDnsResolution returns the hostname itself (unresolved)
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'unresolvable.domain.local', fileServerId: undefined };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Cannot resolve IP'),
+        );
+      });
+
+      it('should warn when /etc/hosts write fails', async () => {
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('# empty hosts\n');
+        (fs.promises.appendFile as jest.Mock).mockRejectedValueOnce(new Error('Read-only filesystem'));
+
+        // Set up FileServer with DNS so IP resolves
+        const mockRepo = (service as any).fileServerRepository;
+        mockRepo.findOne = jest.fn().mockResolvedValue({ dnsServer: '192.168.1.10' });
+
+        const dns = require('dns');
+        const dnsMock = { resolve4: jest.fn((_h: string, cb: any) => cb(null, ['10.0.0.50'])), setServers: jest.fn() };
+        const origResolver = dns.Resolver;
+        dns.Resolver = jest.fn(() => dnsMock);
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'newhost.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to update /etc/hosts'),
+        );
+        dns.Resolver = origResolver;
+      });
+    });
+
+    describe('ensureKrb5Conf', () => {
+      it('should skip when krb5.conf already has active KDC entry', async () => {
+        (fs.promises.readFile as jest.Mock).mockResolvedValue('[realms]\n    REALM = {\n        kdc = 1.2.3.4\n    }\n');
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.debug).toHaveBeenCalledWith(
+          expect.stringContaining('already has an active KDC entry'),
+        );
+      });
+
+      it('should warn when realm cannot be derived from short hostname', async () => {
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'shortname' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Cannot derive Kerberos realm'),
+        );
+      });
+
+      it('should warn when no DNS server configured for FileServer', async () => {
+        const mockRepo = (service as any).fileServerRepository;
+        mockRepo.findOne = jest.fn().mockResolvedValue({ dnsServer: '' });
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('No DNS server configured'),
+        );
+      });
+
+      it('should handle FileServer repository error gracefully', async () => {
+        const mockRepo = (service as any).fileServerRepository;
+        mockRepo.findOne = jest.fn().mockRejectedValue(new Error('DB connection lost'));
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to get DNS server from FileServer'),
+        );
+      });
+
+      it('should write krb5.conf when FileServer has DNS server configured', async () => {
+        const mockRepo = (service as any).fileServerRepository;
+        mockRepo.findOne = jest.fn().mockResolvedValue({ dnsServer: '10.0.0.5' });
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(fs.promises.writeFile).toHaveBeenCalledWith(
+          '/etc/krb5.conf',
+          expect.stringContaining('DOMAIN.LOCAL'),
+          'utf8',
+        );
+        expect(loggerService.log).toHaveBeenCalledWith(
+          expect.stringContaining('Wrote /etc/krb5.conf'),
+        );
+      });
+
+      it('should warn when krb5.conf write fails', async () => {
+        const mockRepo = (service as any).fileServerRepository;
+        mockRepo.findOne = jest.fn().mockResolvedValue({ dnsServer: '10.0.0.5' });
+        // First writeFile call is for credentials file (.cifs-*.cred) — let it succeed.
+        // Second writeFile call is for /etc/krb5.conf — make it fail.
+        (fs.promises.writeFile as jest.Mock)
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValueOnce(new Error('Permission denied'));
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await service.ensureMounted(hostnameReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to write /etc/krb5.conf'),
+        );
+      });
+    });
+
+    describe('obtainKerberosTicket', () => {
+      it('should warn and skip when no username provided', async () => {
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const noCredsReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local', username: '', password: '' };
+        await service.ensureMounted(noCredsReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('No username or password provided'),
+        );
+      });
+
+      it('should strip DOMAIN\\ prefix from username for kinit principal', async () => {
+        const cp = require('child_process');
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const domainReq: MountRequest = {
+          ...smbRequest,
+          hostname: 'host.domain.local',
+          username: 'DOMAIN\\adadmin',
+        };
+        await service.ensureMounted(domainReq);
+
+        expect(cp.spawn).toHaveBeenCalledWith('kinit', ['adadmin@DOMAIN.LOCAL'], expect.any(Object));
+      });
+
+      it('should warn when realm cannot be derived from short hostname', async () => {
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const shortReq: MountRequest = { ...smbRequest, hostname: 'shorthost', username: 'user', password: 'pass' };
+        await service.ensureMounted(shortReq);
+
+        expect(loggerService.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Cannot determine Kerberos realm'),
+        );
+      });
+
+      it('should throw when kinit fails', async () => {
+        (global as any).__mockSpawnExitCode = 1;
+
+        mockExecAsync
+          .mockRejectedValueOnce(new Error('Permission denied'))
+          .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const hostnameReq: MountRequest = { ...smbRequest, hostname: 'host.domain.local' };
+        await expect(service.ensureMounted(hostnameReq)).rejects.toThrow(
+          /Unable to obtain Kerberos ticket/,
+        );
+
+        (global as any).__mockSpawnExitCode = 0;
+      });
     });
   });
 

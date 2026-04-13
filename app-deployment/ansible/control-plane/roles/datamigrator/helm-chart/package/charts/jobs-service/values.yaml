@@ -93,6 +93,8 @@ env:
     value: 'mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}'
   - name: SMB_LINUX_MOUNT_PATH_CMD
     value: 'mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}'
+  - name: SMB_KERBEROS_LINUX_MOUNT_PATH_CMD
+    value: 'mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o sec=krb5,vers=${VERS},cruid=0'
   - name: UNMOUNT_CMD
     value: 'umount ${DIR_PATH}'
   - name: TEMPORAL_ADDRESS
