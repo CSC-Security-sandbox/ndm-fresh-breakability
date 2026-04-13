@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, Inject, Logger, Optional } from '@nestjs/common';
-import { GroupReaderType, JobContextFactory, JobManagerContext } from '@netapp-cloud-datamigrate/jobs-lib';
+import { GroupReaderType, JobContextFactory, JobManagerContext, ItemInfo } from '@netapp-cloud-datamigrate/jobs-lib';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { DataSource } from 'typeorm';
 import * as path from 'path';
@@ -11,7 +11,6 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { FileConsumerContext, getWorkflowId, ReaderStatus } from './utils';
 import { defaultDataConverter } from '@temporalio/common';
 import { RedisError, ValidationError, WorkerError, ConfigurationError } from '../errors/custom-errors';
-import { RedisUtils } from '@netapp-cloud-datamigrate/jobs-lib/dist/redis/redis-utils';
 import { SQL_QUERIES } from '../constants/custom-response-message';
 import { AuthService } from '../auth/auth.service';
 import { createClient, RedisClientType } from 'redis';
@@ -871,19 +870,54 @@ export class RedisConsumerService implements OnModuleDestroy {
             this.logger.error(`projectId: ${projectId} Error running consumer for jobRunId=${jobRunId} and consumerType=${consumerType}: ${error.message}`, error?.stack || error);
             throw error;
         } finally {
-            const context = this.jobConsumerMap.get(jobRunId);
-            if (context && context.records.length > 0) {
-                this.logger.warn(`projectId: ${projectId} ${context.records.length} unprocessed files remaining for job ${jobRunId}`);
+            // Only the files consumer owns jobConsumerMap / redisCompensationFailureCounts.
+            // tasks/errors must not delete the shared file batching context while files is still running.
+            if (consumerType === ConsumerType.files) {
+                const context = this.jobConsumerMap.get(jobRunId);
+                if (context && context.records.length > 0) {
+                    this.logger.warn(`projectId: ${projectId} ${context.records.length} unprocessed files remaining for job ${jobRunId}`);
 
-                try {
-                    await this.flushInventory(jobRunId, jobContext);
-                } catch (flushError) {
-                    this.logger.error(`projectId: ${projectId} Failed to flush remaining records during cleanup for job ${jobRunId}:`, flushError);
+                    let finalFlushOk = false;
+                    try {
+                        finalFlushOk = await this.flushInventory(jobRunId, jobContext);
+                    } catch (flushError) {
+                        this.logger.error(`projectId: ${projectId} Failed to flush remaining records during cleanup for job ${jobRunId}:`, flushError);
+                    }
+
+                    if (!finalFlushOk) {
+                        this.logger.error(
+                            `projectId: ${projectId} Final flush FAILED for job ${jobRunId}. ` +
+                            `${context.records.length} records not persisted to PostgreSQL. ` +
+                            `Stream IDs remain in Redis PEL for reclaim by future consumer.`,
+                        );
+                        try {
+                            await this.signalWorkflowDbWriterFailure(jobRunId);
+                        } catch (signalErr) {
+                            this.logger.error(
+                                `projectId: ${projectId} Failed to signal workflow failure for ${jobRunId} after final flush failure:`,
+                                signalErr,
+                            );
+                        }
+                    }
                 }
+
+                // Clear all timers before deleting context to prevent zombie callbacks
+                const ctxForCleanup = this.jobConsumerMap.get(jobRunId);
+                if (ctxForCleanup?.flushTimer) {
+                    clearTimeout(ctxForCleanup.flushTimer);
+                    ctxForCleanup.flushTimer = null;
+                }
+                if (ctxForCleanup?.errorRecoveryTimers) {
+                    for (const timer of ctxForCleanup.errorRecoveryTimers) {
+                        clearTimeout(timer);
+                    }
+                    ctxForCleanup.errorRecoveryTimers.clear();
+                }
+
+                this.jobConsumerMap.delete(jobRunId);
+                this.redisCompensationFailureCounts.delete(jobRunId);
             }
 
-            this.jobConsumerMap.delete(jobRunId);
-            this.redisCompensationFailureCounts.delete(jobRunId);
             await this.removeConsumer(jobRunId, consumerType);
             jobContext = null;
             this.logger.debug(`projectId: ${projectId} Consumer ${consumerType} cleanup completed for job ${jobRunId}`);
@@ -936,7 +970,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                 case ConsumerType.files:
                     const { pathId } = jobContext.jobConfig.sourceFileServer;
-                    this.processFileDataInBatches(stream.id, stream?.data, jobRunId, pathId, jobContext);
+                    await this.processFileDataInBatches(stream.id, stream?.data, jobRunId, pathId, jobContext);
                     break;
 
                 default:
@@ -970,9 +1004,9 @@ export class RedisConsumerService implements OnModuleDestroy {
         }
 
         const readerMap: Record<string, any> = {
-            [ConsumerType.files]: jobContext.groupReadFileStream(`${consumerType}-reader`, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.errors]: jobContext.groupReadErrorStream(`${consumerType}-reader`, 500, GroupReaderType.DB_WRITER),
-            [ConsumerType.tasks]: jobContext.groupReadTaskStream(`${consumerType}-reader`, 500, GroupReaderType.DB_WRITER),
+            [ConsumerType.files]: jobContext.groupReadFileStream(`${consumerType}-reader`, this.batchSize, GroupReaderType.DB_WRITER),
+            [ConsumerType.errors]: jobContext.groupReadErrorStream(`${consumerType}-reader`, this.batchSize, GroupReaderType.DB_WRITER),
+            [ConsumerType.tasks]: jobContext.groupReadTaskStream(`${consumerType}-reader`, this.batchSize, GroupReaderType.DB_WRITER),
         };
 
         if (!(consumerType in readerMap)) {
@@ -1182,14 +1216,14 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         // Flush on timeout
         if (!context.flushTimer) {
-            context.flushTimer = setTimeout(() => {
+            context.flushTimer = setTimeout(async () => {
                 if (context.flushTimer) {
                     clearTimeout(context.flushTimer);
                     context.flushTimer = null;
                 }
 
                 this.logger.debug(`projectId: ${projectId} Timeout reached, flushing inventory for job ${jobRunId}`);
-                this.flushInventory(jobRunId, jobContext).catch(err => {
+                await this.flushInventory(jobRunId, jobContext).catch(err => {
                     this.logger.error(`projectId: ${projectId} Timeout flush failed for job ${jobRunId}:`, err);
                 });
             }, this.batchTimeoutMs);
@@ -1200,8 +1234,8 @@ export class RedisConsumerService implements OnModuleDestroy {
      * 1. Dedupe batch; load prior entry_type per path via getInventoryEntryTypesForPaths
      * 2. Compute file/dir/size delta (MV-aligned) plus newlyCopied / recopied / skipped / deleted counters
      * 3. Increment Redis liveStats FIRST (when any delta is non-zero)
-     * 4. Write to PostgreSQL; on failure compensate Redis and rethrow
-     * 5. Ack stream IDs; on outer failure restore records for retry
+     * 4. Write to PostgreSQL; on partial failure compensate ONLY the failed portion
+     * 5. Ack ONLY succeeded stream IDs; restore ONLY failed records for retry
      *
      * @param jobRunId - The job run identifier
      * @param jobContext - Job context for Redis stream operations
@@ -1250,9 +1284,37 @@ export class RedisConsumerService implements OnModuleDestroy {
                 redisUpdated = true;
             }
 
-            await this.writeInventoryToPostgres(projectId, records, context, delta, redisUpdated);
-            await this.acknowledgeStreamIds(projectId, jobRunId, records, jobContext);
+            // Write to PostgreSQL — returns failed records (empty array = all succeeded)
+            const failedRecords = await this.writeInventoryToPostgres(projectId, records, context);
 
+            if (failedRecords.length > 0) {
+                // Partial or total failure — compensate ONLY the failed records' delta
+                if (redisUpdated) {
+                    const failedDedupedItems = this.deduplicateRecords(failedRecords);
+                    const failedDelta = this.computeLiveStatsDelta(
+                        context.jobRunId, failedDedupedItems, inventoryEntryByKey,
+                    );
+                    await this.compensateRedisIncrement(projectId, context.jobRunId, failedDelta);
+                }
+
+                // Ack ONLY the succeeded records' stream IDs
+                const failedStreamIds = new Set(failedRecords.map(r => r.streamId).filter(Boolean));
+                const succeededRecords = records.filter(r => r.streamId && !failedStreamIds.has(r.streamId));
+                if (succeededRecords.length > 0) {
+                    await this.acknowledgeStreamIds(projectId, jobRunId, succeededRecords, jobContext);
+                }
+
+                // Restore ONLY the failed records for retry
+                context.records.unshift(...failedRecords);
+                this.logger.warn(
+                    `projectId: ${projectId} Partial write for job ${jobRunId}: ` +
+                    `${succeededRecords.length} succeeded, ${failedRecords.length} failed and restored for retry`,
+                );
+                return false;
+            }
+
+            // All succeeded — ack all
+            await this.acknowledgeStreamIds(projectId, jobRunId, records, jobContext);
             return true;
         } catch (err) {
             this.logger.error(`projectId: ${projectId} Batch write failed for job ${jobRunId}:`, err);
@@ -1442,23 +1504,26 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
     /**
-     * Writes the batch to PostgreSQL. If the write fails and Redis was already updated,
-     * issues a compensating decrement via {@link compensateRedisIncrement}.
+     * Writes the batch to PostgreSQL.
+     * Returns an array of failed records (empty = all succeeded).
+     * On partial failure, returns only the records that failed so the caller
+     * can compensate Redis precisely and ack only the succeeded stream IDs.
      */
     private async writeInventoryToPostgres(
         projectId: string,
         records: any[],
         context: FileConsumerContext,
-        delta: InventoryDelta,
-        redisUpdated: boolean,
-    ): Promise<void> {
+    ): Promise<any[]> {
+        let failedRecords: ItemInfo[] = [];
         try {
-            await this.inventoryService.createInventory(records, context.jobRunId, context.pathId);
+            failedRecords = await this.inventoryService.createInventory(records, context.jobRunId, context.pathId);
+            return failedRecords;
         } catch (pgErr) {
-            if (redisUpdated) {
-                await this.compensateRedisIncrement(projectId, context.jobRunId, delta);
-            }
-            throw pgErr;
+            this.logger.error(
+                `projectId: ${projectId} PostgreSQL write error for job ${context.jobRunId}: ${pgErr.message}`,
+                pgErr?.stack || pgErr,
+            );
+            return failedRecords.length > 0 ? failedRecords: records;
         }
     }
 

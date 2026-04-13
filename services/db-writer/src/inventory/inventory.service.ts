@@ -196,9 +196,9 @@ export class InventoryService {
   }
 
 
-  async createInventory(data: ItemInfo[], jobRunId: string, pathId: string) {
+  async createInventory(data: ItemInfo[], jobRunId: string, pathId: string): Promise<ItemInfo[]> {
     if (!data || data.length === 0) {
-      return;
+      return [];
     }
 
     const deletedDirectories = data.filter(item => 
@@ -229,16 +229,13 @@ export class InventoryService {
     );
 
     if (regularItems.length === 0) {
-      return;
+      return [];
     }
 
     const batchSize = parseInt(process.env.DB_UPSERT_BATCH_SIZE) || 1000;
     const failedRecords: ItemInfo[] = [];
     /** Keys written in this call so later batches see them as existing (content_updated). */
-    const writtenInThisCall = new Set<string>();
-
-    const schema = this.validateAndQuoteSchema(process.env.SCHEMA || InventoryService.DEFAULT_SCHEMA);
-
+    const writtenInThisCall = new Set<string>();    
     for (let i = 0; i < regularItems.length; i += batchSize) {
       const batch = regularItems.slice(i, i + batchSize);
       try {
@@ -251,7 +248,7 @@ export class InventoryService {
           }, {} as Record<string, any>);
 
         const paths = Object.values(mapped) as Array<{ path: string; isDirectory: boolean }>;
-        const entryTypesByKey = await this.getInventoryEntryTypesForPaths(jobRunId, paths, schema);
+        const entryTypesByKey = await this.getInventoryEntryTypesForPaths(jobRunId, paths, this.schema);
         const existingInDb = new Set(entryTypesByKey.keys());
         writtenInThisCall.forEach(k => existingInDb.add(k));
 
@@ -272,8 +269,10 @@ export class InventoryService {
     }
 
     if (failedRecords.length > 0) {
-      this.logger.error(`Failed to save ${failedRecords.length} inventory records`);
+      this.logger.log(`Failed to save ${failedRecords.length} of ${data.length} inventory records`);
+      return failedRecords;
     }
+    return [];
   }
 
   async markDirectoryTreeAsDeleted(directoryPath: string, jobRunId: string, pathId: string, schema: string): Promise<void> {
