@@ -402,15 +402,15 @@ describe("InventoryService", () => {
     });
 
     it("should process large datasets in batches", async () => {
-      // Create 3000 items to test batching (batch size is 1000)
-      const data = Array(3000).fill(null).map(() => createMockItemInfo());
+      // Create 1500 items to test batching (batch size is 500)
+      const data = Array(1500).fill(null).map(() => createMockItemInfo());
       
       jest.spyOn(service, "mapSourceToTarget").mockReturnValue({} as any);
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [] } as any);
 
       await service.createInventory(data, "jobRunId", "pathId");
 
-      // Should be called 3 times (3000 / 1000 = 3 batches)
+      // Should be called 3 times (1500 / 500 = 3 batches)
       expect(inventoryRepo.upsert).toHaveBeenCalledTimes(3);
     });
 

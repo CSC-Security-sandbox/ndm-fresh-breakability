@@ -35,7 +35,7 @@ export class RedisConsumerService implements OnModuleDestroy {
     private readonly REDIS_KEY_PREFIX = process.env.REDIS_KEY_PREFIX || 'db-writer';
     private lastFile: string = process.env.LAST_FILE_NAME || "LAST_FILE";
     private accumulatedRecords: any[] = [];
-    private batchSize: number = parseInt(process.env.BATCH_SIZE) || 1000;
+    private batchSize: number = parseInt(process.env.BATCH_SIZE) || 500;
     private jobConsumerMap: Map<string, FileConsumerContext> = new Map();
     private readonly batchTimeoutMs = process.env.BATCH_TIMEOUT_MS ? parseInt(process.env.BATCH_TIMEOUT_MS) : 5000;
     private readonly maxRetries: number = process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES) : 3;

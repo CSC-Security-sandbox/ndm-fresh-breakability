@@ -232,7 +232,7 @@ export class InventoryService {
       return;
     }
 
-    const batchSize = parseInt(process.env.DB_UPSERT_BATCH_SIZE) || 1000;
+    const batchSize = 500; // Adjust batch size as needed
     const failedRecords: ItemInfo[] = [];
     /** Keys written in this call so later batches see them as existing (content_updated). */
     const writtenInThisCall = new Set<string>();
