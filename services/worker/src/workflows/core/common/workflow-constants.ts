@@ -29,3 +29,9 @@ export const CMD_LENGTH_VALIDATION_ITERATIONS = 10;
  * Used when batch size is not explicitly provided.
  */
 export const DEFAULT_BATCH_SIZE = 100;
+
+/**
+ * Number of paths to validate concurrently within a single batch.
+ * Controls parallelism in ValidatePathWorkerWorkflow.
+ */
+export const VALIDATE_PATH_CONCURRENCY = 10;

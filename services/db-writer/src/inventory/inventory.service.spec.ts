@@ -312,150 +312,143 @@ describe("InventoryService", () => {
   });
 
   describe("createInventory", () => {
-    it("should return early if no data is provided", async () => {
+    it("returns empty array when input array is empty", async () => {
       const result = await service.createInventory([], "jobRunId", "pathId");
-      expect(result).toBeUndefined();
-      
-      // Verify no repository methods were called
+      expect(result).toEqual([]);
       expect(inventoryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it("should return early if data is null", async () => {
+    it("returns empty array when input is null", async () => {
       const result = await service.createInventory(null, "jobRunId", "pathId");
-      expect(result).toBeUndefined();
+      expect(result).toEqual([]);
       expect(inventoryRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it("should save inventory records successfully", async () => {
+    it("persists inventory rows and returns empty array on full success", async () => {
       const data = [createMockItemInfo()];
-      const mappedData = { 
-        path: "/test/path/file.txt", 
-        jobRunId: "jobRunId", 
+      const mappedData = {
+        path: "/test/path/file.txt",
+        jobRunId: "jobRunId",
         pathId: "pathId",
         fileName: "/test/path/file.txt",
         isDirectory: false,
-        fileSize: "1024"
+        fileSize: "1024",
       };
 
       jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData);
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [{ id: 1 }] } as any);
 
-      await service.createInventory(data, "jobRunId", "pathId");
+      const result = await service.createInventory(data, "jobRunId", "pathId");
 
-      expect(service.mapSourceToTarget).toHaveBeenCalledWith(
-        data[0],
-        "jobRunId",
-        "pathId"
-      );
+      expect(result).toEqual([]);
+      expect(service.mapSourceToTarget).toHaveBeenCalledWith(data[0], "jobRunId", "pathId");
       expect(inventoryRepo.upsert).toHaveBeenCalled();
     });
 
-    it("should log an error if saving inventory records fails", async () => {
+    it("logs batch error, logs summary, and returns failed records when upsert rejects", async () => {
       const data = [createMockItemInfo()];
       const error = new Error("Database error");
-      
+
       jest.spyOn(service, "mapSourceToTarget").mockReturnValue({} as any);
       inventoryRepo.upsert.mockRejectedValue(error);
-      const loggerSpy = jest.spyOn(service["logger"], "error");
+      const errorSpy = jest.spyOn(service["logger"], "error");
+      const logSpy = jest.spyOn(service["logger"], "log");
 
-      await service.createInventory(data, "jobRunId", "pathId");
+      const result = await service.createInventory(data, "jobRunId", "pathId");
 
-      expect(loggerSpy).toHaveBeenCalledWith(
+      expect(errorSpy).toHaveBeenCalledWith(
         `Failed to save inventory batch: ${error.message}`,
-        error?.stack || error
+        error?.stack || error,
       );
-      expect(loggerSpy).toHaveBeenCalledWith(
-        `Failed to save 1 inventory records`
+      expect(logSpy).toHaveBeenCalledWith(
+        `Failed to save ${data.length} of ${data.length} inventory records`,
       );
+      expect(result).toEqual(data);
     });
 
-    it("should populate file_type as Junction when fileType is Junction", async () => {
+    it("maps Junction fileType through to upsert payload", async () => {
       const data = [
-      createMockItemInfo({ fileName: '/junction/path', fileType: FileType.JUNCTION }),
+        createMockItemInfo({ fileName: "/junction/path", fileType: FileType.JUNCTION }),
       ];
       const mappedData = {
-      path: "/junction/path",
-      jobRunId: "jobRunId",
-      pathId: "pathId",
-      fileName: "/junction/path",
-      isDirectory: false,
-      fileSize: "1024",
-      fileType: FileType.JUNCTION,
+        path: "/junction/path",
+        jobRunId: "jobRunId",
+        pathId: "pathId",
+        fileName: "/junction/path",
+        isDirectory: false,
+        fileSize: "1024",
+        fileType: FileType.JUNCTION,
       };
 
       jest.spyOn(service, "mapSourceToTarget").mockReturnValue(mappedData);
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [{ id: 1 }] } as any);
 
-      await service.createInventory(data, "jobRunId", "pathId");
+      const result = await service.createInventory(data, "jobRunId", "pathId");
 
-      expect(service.mapSourceToTarget).toHaveBeenCalledWith(
-      data[0],
-      "jobRunId",
-      "pathId"
-      );
+      expect(result).toEqual([]);
+      expect(service.mapSourceToTarget).toHaveBeenCalledWith(data[0], "jobRunId", "pathId");
       expect(inventoryRepo.upsert).toHaveBeenCalledWith(
-      expect.arrayContaining([
-      expect.objectContaining({ fileType: FileType.JUNCTION }),
-      ]),
-      ['path', 'jobRunId', 'isDirectory']
+        expect.arrayContaining([expect.objectContaining({ fileType: FileType.JUNCTION })]),
+        ["path", "jobRunId", "isDirectory"],
       );
     });
 
-    it("should process large datasets in batches", async () => {
-      // Create 3000 items to test batching (batch size is 1000)
-      const data = Array(3000).fill(null).map(() => createMockItemInfo());
-      
+    it("chunks upserts by DB_UPSERT_BATCH_SIZE", async () => {
+      const data = Array.from({ length: 3000 }, () => createMockItemInfo());
+
       jest.spyOn(service, "mapSourceToTarget").mockReturnValue({} as any);
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [] } as any);
 
-      await service.createInventory(data, "jobRunId", "pathId");
+      const result = await service.createInventory(data, "jobRunId", "pathId");
 
-      // Should be called 3 times (3000 / 1000 = 3 batches)
+      expect(result).toEqual([]);
       expect(inventoryRepo.upsert).toHaveBeenCalledTimes(3);
     });
 
-    it("should handle duplicate items correctly", async () => {
+    it("deduplicates same path within a batch before upsert", async () => {
       const data = [
-        createMockItemInfo({ fileName: '/same/path.txt' }),
-        createMockItemInfo({ fileName: '/same/path.txt' }),
-        createMockItemInfo({ fileName: '/different/path.txt' }),
+        createMockItemInfo({ fileName: "/same/path.txt" }),
+        createMockItemInfo({ fileName: "/same/path.txt" }),
+        createMockItemInfo({ fileName: "/different/path.txt" }),
       ];
-      
+
       jest.spyOn(service, "mapSourceToTarget").mockImplementation((item) => ({
         path: item.fileName,
         jobRunId: "jobRunId",
         isDirectory: item.isDirectory,
       }));
-      
+
       inventoryRepo.upsert.mockResolvedValue({ identifiers: [] } as any);
 
-      await service.createInventory(data, "jobRunId", "pathId");
+      const result = await service.createInventory(data, "jobRunId", "pathId");
 
+      expect(result).toEqual([]);
       expect(inventoryRepo.upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ path: '/same/path.txt' }),
-          expect.objectContaining({ path: '/different/path.txt' }),
+          expect.objectContaining({ path: "/same/path.txt" }),
+          expect.objectContaining({ path: "/different/path.txt" }),
         ]),
-        ['path', 'jobRunId', 'isDirectory']
+        ["path", "jobRunId", "isDirectory"],
       );
     });
 
-    it("should process deleted directory markers when isDeleted is true and isDirectory is true", async () => {
+    it("runs markDirectoryTreeAsDeleted for deleted-directory markers only", async () => {
       const deletedDirectoryMarker = createMockItemInfo({
-        fileName: '/test/deleted/directory',
-        isDirectory: true
+        fileName: "/test/deleted/directory",
+        isDirectory: true,
       });
       (deletedDirectoryMarker as any).isDeleted = true;
       dataSource.query = jest.fn().mockResolvedValue([]);
       jest.spyOn(service, "markDirectoryTreeAsDeleted").mockResolvedValue();
 
-      await service.createInventory([deletedDirectoryMarker], "jobRunId", "pathId");
+      const result = await service.createInventory([deletedDirectoryMarker], "jobRunId", "pathId");
 
+      expect(result).toEqual([]);
       expect(service.markDirectoryTreeAsDeleted).toHaveBeenCalledWith(
-        '/test/deleted/directory',
-        'jobRunId',
-        'pathId',
-        '"datamigrator"'
+        "/test/deleted/directory",
+        "jobRunId",
+        "pathId",
+        '"datamigrator"',
       );
     });
   });

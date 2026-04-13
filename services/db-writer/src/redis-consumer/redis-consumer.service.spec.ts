@@ -354,7 +354,7 @@ describe('RedisConsumerService - Worker Thread Crash Recovery', () => {
         {
           provide: InventoryService,
           useValue: {
-            createInventory: jest.fn().mockResolvedValue(undefined),
+            createInventory: jest.fn().mockResolvedValue([]),
             saveTasks: jest.fn().mockResolvedValue(undefined),
             saveOperationError: jest.fn().mockResolvedValue(undefined),
             saveTaskError: jest.fn().mockResolvedValue(undefined),

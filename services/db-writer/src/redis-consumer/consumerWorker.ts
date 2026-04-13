@@ -127,7 +127,7 @@ process.on('unhandledRejection', async (reason, promise) => {
     const projectId = workerData?.projectId || null;
     logger.log(`projectId: ${projectId} Worker thread starting for jobRunId=${workerData?.jobRunId}`);
 
-    
+    let exitCode = 0;
 
     try {
         // Validate required input
@@ -206,6 +206,7 @@ process.on('unhandledRejection', async (reason, promise) => {
         logger.log(`Worker completed successfully for job ${jobRunId}`);
         parentPort?.postMessage({ success: true });
     } catch (error) {
+        exitCode = 1;
         logger.error(`Worker error: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : '');
 
         parentPort?.postMessage({
@@ -214,7 +215,7 @@ process.on('unhandledRejection', async (reason, promise) => {
         });
     } finally {
         await performCleanup(projectId);
-        logger.log(`Worker thread exiting`);
-        process.exit(0);
+        logger.log(`Worker thread exiting (code ${exitCode})`);
+        process.exit(exitCode);
     }
 })();
