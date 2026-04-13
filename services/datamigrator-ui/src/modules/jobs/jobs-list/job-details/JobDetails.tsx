@@ -1199,7 +1199,7 @@ const JobDetails = () => {
         <JobHeader jobConfigDetails={jobConfigDetails} inventoryStats={inventoryStats} />
       </Box>
       <Box className="flex gap-6 items-stretch">
-        <Box className="grow basis-1/2">
+        <Box className="grow basis-1/2 min-w-0">
           <JobDescription
             id={jobId}
             source={jobConfigDetails?.sourceServer}

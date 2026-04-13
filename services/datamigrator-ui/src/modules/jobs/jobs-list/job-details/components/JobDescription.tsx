@@ -42,11 +42,13 @@ const JobDescription = (props: JobDescriptionProps) => {
           <JobDescriptionColumn
             name="Source Export Path"
             value={source.path}
+            truncate
           />
           {jobType !== JOBS_TYPE.DISCOVERY && (
             <JobDescriptionColumn
               name="Source Directory Path"
               value={source.directoryPath || "-"}
+              truncate
             />
           )}
           <JobDescriptionColumn
@@ -77,10 +79,12 @@ const JobDescription = (props: JobDescriptionProps) => {
             <JobDescriptionColumn
               name="Destination Export Path"
               value={destination.path}
+              truncate
             />
             <JobDescriptionColumn
               name="Destination Directory Path"
               value={destination.directoryPath || "-"}
+              truncate
             />
           </Box>
         )}
