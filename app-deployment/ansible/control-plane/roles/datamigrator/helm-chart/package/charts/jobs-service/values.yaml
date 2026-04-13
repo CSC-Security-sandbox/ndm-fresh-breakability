@@ -90,7 +90,7 @@ env:
   - name: MOUNT_TIMEOUT_MS
     value: "120000"
   - name: NFS_LINUX_MOUNT_PATH_CMD
-    value: 'mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}'
+    value: 'mount -t nfs -o nolock ${HOST}:${MOUNT_PATH} ${DIR_PATH}'
   - name: SMB_LINUX_MOUNT_PATH_CMD
     value: 'mount -t cifs //${HOST}/${SHARE_PATH} ${DIR_PATH} -o credentials=${CREDENTIALS_FILE},vers=${VERS},backupuid=${BACKUPUID}'
   - name: SMB_KERBEROS_LINUX_MOUNT_PATH_CMD
