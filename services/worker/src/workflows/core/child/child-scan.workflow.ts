@@ -4,6 +4,7 @@ import { CommonTaskService } from 'src/activities/core/common/common-task.servic
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning, validateCommandStreamLength } from '../common/workflow-utils';
+import { waitUntilRedisMemoryOk } from 'src/workflows/utils/memory-utils';
 import { MAX_CONCURRENT_BATCHES, ITERATIONS_LIMIT, CMD_LENGTH_VALIDATION_ITERATIONS, DEFAULT_BATCH_SIZE } from '../common/workflow-constants';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
@@ -51,7 +52,6 @@ const {
   startToCloseTimeout: '10m',
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
-
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
@@ -104,6 +104,10 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
     iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
 
+    // Backpressure: pause scanning if Redis is running out of memory.
+    // This lets the consumer (DB writer) catch up before we push more data.
+    await waitUntilRedisMemoryOk(jobRunId);
+
     const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
     scanWorkflowOutput.fileCount += batchExecResults.fileCount;
     scanWorkflowOutput.dirCount += batchExecResults.dirCount;
@@ -148,6 +152,9 @@ export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRun
     if(isMigration){
       await validateCommandStreamLength(jobRunId);
     }
+    // Backpressure between batch chunks: pause if Redis is filling up
+    await waitUntilRedisMemoryOk(jobRunId);
+    
   const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
   const batchResults = await Promise.all(
     batchSlice.map(async (batchId) => {
