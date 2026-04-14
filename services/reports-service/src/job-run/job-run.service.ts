@@ -362,7 +362,16 @@ export class JobRunService {
     try {
       const jobRun = await this.jobRunRepo.findOne({
         where: { id: jobRunId },
-        relations: ["jobConfig", "jobConfig.sourcePath"],
+        relations: ["jobConfig", "jobConfig.sourcePath", "jobConfig.sourcePath.fileServer"],
+        select: {
+          id: true,
+          jobConfig: {
+            id: true,
+            jobType: true,
+            sourceDirectoryPath: true,
+            sourcePath: { volumePath: true, fileServer: { protocol: true } },
+          },
+        },
       });
       if (!jobRun)
         throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
@@ -413,17 +422,25 @@ export class JobRunService {
       const jobType = jobRun.jobConfig.jobType;
       const batchSize = parseInt(process.env.CSV_BATCH_SIZE || "", 10) || 50000;
       const volumePath = jobRun.jobConfig.sourcePath?.volumePath ?? "";
-
-      const resumeCursorForFile = async (filePath: string): Promise<string | null> =>
-        (await this.fileExists(filePath))
-          ? await this.getResumeCursor(filePath, volumePath, projectId)
-          : null;
+      const sourceDirectoryPath = jobRun.jobConfig.sourceDirectoryPath ?? "";
+      const protocol = jobRun.jobConfig.sourcePath?.fileServer?.protocol ?? 'NFS';
+      const isSmb = protocol.toUpperCase() === 'SMB';
+      let sourcePathPrefix: string;
+      if (isSmb && sourceDirectoryPath) {
+        const dirAsBackslash = sourceDirectoryPath.replace(/^\/+/, '').replace(/\//g, '\\');
+        sourcePathPrefix = volumePath + '\\' + dirAsBackslash;
+      } else {
+        sourcePathPrefix = volumePath + sourceDirectoryPath;
+      }
 
       try {
         for (let i = 0; i < COC_BUNDLE_ENTRIES.length; i++) {
           const entry = COC_BUNDLE_ENTRIES[i];
           const filePath = bundleCsvPaths[i];
-          const resume = await resumeCursorForFile(filePath);
+          const listType = entry.kind === 'list' ? entry.listType : undefined;
+          const resume = (await this.fileExists(filePath))
+            ? await this.getResumeCursor(filePath, sourcePathPrefix, projectId, listType)
+            : null;
           this.logger.log(
             `projectId: ${projectId} ${resume ? 'Resuming' : 'Generating'} ${entry.fileName} for jobRunId: ${jobRunId}${resume ? `, cursor: ${resume}` : ''}`
           );
@@ -515,7 +532,7 @@ export class JobRunService {
     });
   }
 
-  private async getResumeCursor(filePath: string, volumePath: string, projectId?: string): Promise<string | null> {
+  private async getResumeCursor(filePath: string, volumePath: string, projectId?: string, listType?: 'excluded' | 'skipped' | 'deleted'): Promise<string | null> {
     try {
       const stat = await fs.promises.stat(filePath);
       if (stat.size === 0) return null;
@@ -547,11 +564,17 @@ export class JobRunService {
       const sourcePath = (parseCsv(lastLine)[0] ?? [])[sourcePathIndex];
       if (!sourcePath) return null;
 
-      // Parse the Source Path to get the i.path value which is the cursor
-      const cursor =
+      // Strip the volume+dir prefix to recover the raw i.path cursor value.
+      // For SMB excluded/skipped, "Source Path" uses backslashes but i.path is stored with
+      // forward slashes — normalize back. Deleted paths use backslashes in both the CSV
+      // and the DB, so no normalization needed there.
+      const stripped =
         volumePath && sourcePath.startsWith(volumePath)
           ? sourcePath.slice(volumePath.length)
           : sourcePath;
+      const cursor = (listType === 'excluded' || listType === 'skipped') && stripped.startsWith('\\')
+        ? stripped.replace(/\\/g, '/')
+        : stripped;
 
       this.logger.log(`projectId: ${projectId} CSV resume cursor: ${cursor}`);
       return cursor;

@@ -64,9 +64,9 @@ export class CsvService {
     }
 
     async generateCsv(filePath: string, jobRunId: string, batchSize: number = 50000, jobType?: string, resumeCursor?: string | null) {
-        const protocol = await this.getProtocolForJobRun(jobRunId);
+        const { protocol, sourceDirSuffix, targetDirSuffix } = await this.getJobRunContext(jobRunId);
         const strategy: CsvStrategy = {
-            fetchBatch: (limit, cursor) => this.getInventoryData(jobRunId, limit, cursor, jobType, protocol),
+            fetchBatch: (limit, cursor) => this.getInventoryData(jobRunId, limit, cursor, jobType, protocol, sourceDirSuffix, targetDirSuffix),
             nextCursor: (lastRow) => lastRow['_cursor_path'],
             toRow: ({ _cursor_path, ...csvRow }) => csvRow,
         };
@@ -80,13 +80,14 @@ export class CsvService {
         batchSize: number = 10000,
         resumeCursor?: string | null,
     ) {
+        const { protocol, sourceDirSuffix } = await this.getJobRunContext(jobRunId);
         const strategy: CsvStrategy = {
             fetchBatch: async (limit, cursor) => {
-                const q = await this.getListEntriesQuery(jobRunId, limit, cursor, type);
+                const q = await this.getListEntriesQuery(jobRunId, limit, cursor, type, protocol, sourceDirSuffix);
                 return this.dataSource.query(q.query, q.values);
             },
-            nextCursor: (lastRow) => lastRow?.Path ?? null,
-            toRow: (row) => ({ 'Source Path': row['Source Path'] }),
+            nextCursor: (lastRow) => lastRow?._cursor_path ?? null,
+            toRow: ({ _cursor_path, ...csvRow }) => csvRow,
         };
         await this.generateCsvCore(filePath, jobRunId, batchSize, resumeCursor, strategy);
     }
@@ -160,25 +161,39 @@ export class CsvService {
         }
     }
 
-    async getProtocolForJobRun(jobRunId: string): Promise<string> {
+    async getJobRunContext(jobRunId: string): Promise<{ protocol: string; sourceDirSuffix: string; targetDirSuffix: string }> {
         const jobRun = await this.jobRunRepository.findOne({
             where: { id: jobRunId },
             relations: ['jobConfig', 'jobConfig.sourcePath', 'jobConfig.sourcePath.fileServer'],
         });
-        return jobRun?.jobConfig?.sourcePath?.fileServer?.protocol || CsvService.DEFAULT_PROTOCOL;
+        const protocol = jobRun?.jobConfig?.sourcePath?.fileServer?.protocol || CsvService.DEFAULT_PROTOCOL;
+        const isSmb = protocol.toUpperCase() === CsvService.PROTOCOL_SMB;
+        return {
+            protocol,
+            sourceDirSuffix: this.formatDirSuffix(jobRun?.jobConfig?.sourceDirectoryPath, isSmb),
+            targetDirSuffix: this.formatDirSuffix(jobRun?.jobConfig?.destinationDirectoryPath, isSmb),
+        };
     }
 
-    async getInventoryData(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
+    formatDirSuffix(rawDir: string | null | undefined, isSmb: boolean): string {
+        if (!rawDir) return '';
+        if (isSmb) {
+            return '\\' + rawDir.replace(/^\/+/, '').replace(/\//g, '\\');
+        }
+        return rawDir;
+    }
+
+    async getInventoryData(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string, sourceDirSuffix?: string, targetDirSuffix?: string) {
         let query;
         if (jobType?.toUpperCase() === JobType.CutOver) {
-            query = await this.getCutoverInventoryDataQuery(jobRunId, limit, cursor);
+            query = await this.getCutoverInventoryDataQuery(jobRunId, limit, cursor, sourceDirSuffix, targetDirSuffix);
         } else {
-            query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol);
+            query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol, sourceDirSuffix, targetDirSuffix);
         } 
         return this.dataSource.query(query.query, query.values);
     }
 
-    async getInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string) {
+    async getInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string, sourceDirSuffix?: string, targetDirSuffix?: string) {
         const dbSchema = process.env.SCHEMA;
         const isMigrate = jobType?.toUpperCase() === JobType.Migrate;
         const columns = this.getMigrationCoCColumns(protocol, isMigrate);
@@ -186,8 +201,8 @@ export class CsvService {
         const query = `
         SELECT DISTINCT ON (i.path)
             i.path AS _cursor_path,
-            COALESCE(v_source.volume_path, '') || i.path as "Source Path",
-            v_target.volume_path || i.path as "Destination Path",
+            COALESCE(v_source.volume_path, '') || $4 || i.path as "Source Path",
+            COALESCE(v_target.volume_path, '') || $5 || i.path as "Destination Path",
             ${columns}
         FROM ${dbSchema}.inventory i
         LEFT JOIN ${dbSchema}.jobrun ON jobrun.id = i.job_run_id
@@ -201,10 +216,10 @@ export class CsvService {
             ORDER BY i.path
             LIMIT $3;
     `;
-        return { query, values: [jobRunId, cursor, limit] };
+        return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? '', targetDirSuffix ?? ''] };
     }
 
-    async getListEntriesQuery(jobRunId: string, limit: number, cursor: string | null, kind: 'excluded' | 'skipped' | 'deleted') {
+    async getListEntriesQuery(jobRunId: string, limit: number, cursor: string | null, kind: 'excluded' | 'skipped' | 'deleted', protocol?: string, sourceDirSuffix?: string) {
         const dbSchema = process.env.SCHEMA;
         let filter: string;
         switch (kind) {
@@ -218,10 +233,12 @@ export class CsvService {
                 filter = `(i.is_deleted = true)`;
                 break;
         }
+        const isSmb = (protocol || '').toUpperCase() === CsvService.PROTOCOL_SMB;
+        const iPathExpr = isSmb ? `REPLACE(i.path, '/', '\\')` : `i.path`;
         const query = `
             SELECT
-                COALESCE(v_source.volume_path, '') || i.path AS "Source Path",
-                i.path AS "Path"
+                i.path AS _cursor_path,
+                COALESCE(v_source.volume_path, '') || $4 || ${iPathExpr} AS "Source Path"
             FROM ${dbSchema}.inventory i
             LEFT JOIN ${dbSchema}.jobrun jr ON jr.id = i.job_run_id
             LEFT JOIN ${dbSchema}.jobconfig jc ON jc.id = jr.job_config_id
@@ -232,22 +249,10 @@ export class CsvService {
             ORDER BY i.path
             LIMIT $3
         `;
-        return { query, values: [jobRunId, cursor, limit] };
+        return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? ''] };
     }
 
-    async getExcludedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
-        return this.getListEntriesQuery(jobRunId, limit, cursor, 'excluded');
-    }
-
-    async getSkippedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
-        return this.getListEntriesQuery(jobRunId, limit, cursor, 'skipped');
-    }
-
-    async getDeletedEntriesQuery(jobRunId: string, limit: number, cursor: string | null) {
-        return this.getListEntriesQuery(jobRunId, limit, cursor, 'deleted');
-    }
-
-    async getCutoverInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null) {
+    async getCutoverInventoryDataQuery(jobRunId: string, limit: number, cursor: string | null, sourceDirSuffix?: string, targetDirSuffix?: string) {
         const dbSchema = process.env.SCHEMA;
         const query = `
             WITH all_related_jobs AS (
@@ -265,8 +270,8 @@ export class CsvService {
             latest_file_versions AS (
                 SELECT DISTINCT ON (i.path)
                     i.path AS _cursor_path,
-                    COALESCE(v_source.volume_path, '') || i.path as "Source Path",
-                    v_target.volume_path || i.path as "Destination Path",
+                    COALESCE(v_source.volume_path, '') || $4 || i.path as "Source Path",
+                    COALESCE(v_target.volume_path, '') || $5 || i.path as "Destination Path",
                     i.source_checksum as "Source Checksum",
                     i.target_checksum as "Destination Checksum",
                     CASE
@@ -313,7 +318,7 @@ export class CsvService {
             ORDER BY _cursor_path
             LIMIT $3;
         `;
-        return { query, values: [jobRunId, cursor, limit] };
+        return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? '', targetDirSuffix ?? ''] };
     }
 
  

@@ -253,6 +253,8 @@ describe("CsvService", () => {
         jobRunId,
         cursor,
         limit,
+        '',
+        '',
       ]);
     });
 
@@ -270,6 +272,8 @@ describe("CsvService", () => {
         jobRunId,
         cursor,
         limit,
+        '',
+        '',
       ]);
     });
   });
@@ -286,8 +290,8 @@ describe("CsvService", () => {
       );
 
       expect(result.query).toContain("SELECT");
-      // values order: [jobRunId, cursor, limit]
-      expect(result.values).toEqual([jobRunId, cursor, limit]);
+      // values order: [jobRunId, cursor, limit, sourceDirSuffix, targetDirSuffix]
+      expect(result.values).toEqual([jobRunId, cursor, limit, '', '']);
     });
 
     it("should include the correct schema in the query", async () => {
@@ -441,8 +445,8 @@ describe("CsvService", () => {
       expect(result.query).toContain("SYMBOLIC_LINK");
       expect(result.query).toContain("directory");
       expect(result.query).toContain("file");
-      // values order: [jobRunId, cursor, limit]
-      expect(result.values).toEqual([jobRunId, cursor, limit]);
+      // values order: [jobRunId, cursor, limit, sourceDirSuffix, targetDirSuffix]
+      expect(result.values).toEqual([jobRunId, cursor, limit, '', '']);
     });
 
     it("should include Type in the outer SELECT with other cutover columns", async () => {
@@ -475,7 +479,7 @@ describe("CsvService", () => {
 
       await service.getInventoryData(jobRunId, limit, cursor, 'CUT_OVER');
 
-      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, cursor);
+      expect(cutoverSpy).toHaveBeenCalledWith(jobRunId, limit, cursor, undefined, undefined);
       expect(cutoverSpy).toHaveBeenCalledTimes(1);
 
       cutoverSpy.mockRestore();
@@ -505,7 +509,7 @@ describe("CsvService", () => {
 
       await service.getInventoryData("test-id", 100, null, 'MIGRATE');
 
-      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, "MIGRATE", undefined);
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, "MIGRATE", undefined, undefined, undefined);
       migrationSpy.mockRestore();
     });
 
@@ -519,7 +523,7 @@ describe("CsvService", () => {
 
       await service.getInventoryData("test-id", 100, null);
 
-      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, undefined, undefined);
+      expect(migrationSpy).toHaveBeenCalledWith("test-id", 100, null, undefined, undefined, undefined, undefined);
       migrationSpy.mockRestore();
     });
 
@@ -559,7 +563,7 @@ describe("CsvService", () => {
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
       // cursor starts as null; protocol resolved to default NFS from jobRunRepository mock
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS');
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS', '', '');
     });
 
     it("should call regular query when jobType is MIGRATE", async () => {
@@ -582,7 +586,7 @@ describe("CsvService", () => {
       await service.generateCsv(filePath, jobRunId, 10000, jobType);
 
       // cursor starts as null; protocol resolved to default NFS from jobRunRepository mock
-      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS');
+      expect(service.getInventoryData).toHaveBeenCalledWith(jobRunId, 10000, null, jobType, 'NFS', '', '');
     });
   });
 
@@ -612,15 +616,15 @@ describe("CsvService", () => {
 
     it('should generate excluded list csv with cursor pagination', async () => {
       mockDataSource.query
-        .mockResolvedValueOnce([{ 'Source Path': '/vol/a', Path: '/a' }])
+        .mockResolvedValueOnce([{ 'Source Path': '/vol/a', _cursor_path: '/a' }])
         .mockResolvedValueOnce([]);
 
       await service.generateListCsv('/tmp/excluded.csv', 'job-1', 'excluded', 1);
 
       expect(mockDataSource.query).toHaveBeenCalledTimes(2);
       expect(mockDataSource.query.mock.calls[0][0]).toContain("entry_type = 'excluded'");
-      expect(mockDataSource.query.mock.calls[0][1]).toEqual(['job-1', null, 1]);
-      expect(mockDataSource.query.mock.calls[1][1]).toEqual(['job-1', '/a', 1]);
+      expect(mockDataSource.query.mock.calls[0][1]).toEqual(['job-1', null, 1, '']);
+      expect(mockDataSource.query.mock.calls[1][1]).toEqual(['job-1', '/a', 1, '']);
     });
 
     it('should select skipped query type', async () => {
@@ -646,43 +650,43 @@ describe("CsvService", () => {
       expect(result.query).toContain('FROM testSchema.inventory');
       expect(result.query).toContain("entry_type = 'excluded'");
       expect(result.query).toContain('"Source Path"');
-      expect(result.query).toContain('AS "Path"');
+      expect(result.query).toContain('AS _cursor_path');
       expect(result.query).toContain('v_source.volume_path');
-      expect(result.values).toEqual(['job-1', '/cursor', 50]);
+      expect(result.values).toEqual(['job-1', '/cursor', 50, '']);
     });
 
     it('should build skipped query with correct filter', async () => {
       const result = await service.getListEntriesQuery('job-1', 25, null, 'skipped');
       expect(result.query).toContain("entry_type = 'skipped'");
-      expect(result.values).toEqual(['job-1', null, 25]);
+      expect(result.values).toEqual(['job-1', null, 25, '']);
     });
 
     it('should build deleted query with is_deleted filter', async () => {
       const result = await service.getListEntriesQuery('job-1', 10, '/p', 'deleted');
       expect(result.query).toContain('(i.is_deleted = true)');
-      expect(result.values).toEqual(['job-1', '/p', 10]);
+      expect(result.values).toEqual(['job-1', '/p', 10, '']);
     });
   });
 
-  describe('legacy list query builders (delegates to getListEntriesQuery)', () => {
+  describe('getListEntriesQuery kind variants', () => {
     beforeEach(() => { process.env.SCHEMA = 'testSchema'; });
 
     it('should build excluded query with expected values', async () => {
-      const result = await service.getExcludedEntriesQuery('job-1', 50, '/cursor');
+      const result = await service.getListEntriesQuery('job-1', 50, '/cursor', 'excluded');
       expect(result.query).toContain("entry_type = 'excluded'");
-      expect(result.values).toEqual(['job-1', '/cursor', 50]);
+      expect(result.values).toEqual(['job-1', '/cursor', 50, '']);
     });
 
     it('should build skipped query with expected values', async () => {
-      const result = await service.getSkippedEntriesQuery('job-1', 25, null);
+      const result = await service.getListEntriesQuery('job-1', 25, null, 'skipped');
       expect(result.query).toContain("entry_type = 'skipped'");
-      expect(result.values).toEqual(['job-1', null, 25]);
+      expect(result.values).toEqual(['job-1', null, 25, '']);
     });
 
     it('should build deleted query with expected values', async () => {
-      const result = await service.getDeletedEntriesQuery('job-1', 10, '/p');
+      const result = await service.getListEntriesQuery('job-1', 10, '/p', 'deleted');
       expect(result.query).toContain('(i.is_deleted = true)');
-      expect(result.values).toEqual(['job-1', '/p', 10]);
+      expect(result.values).toEqual(['job-1', '/p', 10, '']);
     });
   });
 
