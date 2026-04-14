@@ -1,0 +1,60 @@
+---
+# ---- Staging ----
+# All external artifacts are downloaded to this directory on the Mac first,
+# then pushed to the VM (avoids network issues from SCS V2 to external CDNs).
+staging_dir: /tmp/scs-runner-staging
+
+# ---- Target VM ----
+# SSH login is as root; the runner service runs under this non-root user.
+vm_user: ubuntu
+vm_platform: scs_v2  # NetApp internal KVM-based hypervisor
+vm_os: ubuntu
+vm_os_version: "24.04"
+
+# ---- GitHub Actions Runner ----
+runner_version: "2.333.1"
+runner_arch: "x64"
+runner_checksum: "18f8f68ed1892854ff2ab1bab4fcaa2f5abeedc98093b6cb13638991725cab74"
+# Installed under /opt (root filesystem) because /home is a small separate LV on SCS V2 VMs.
+runner_install_dir: "/opt/actions-runner"
+ovftool_install_dir: "/opt/ovftool"
+
+# GitHub runner registration (repo-level).
+# Generate token from: https://github.com/NetApp-Cloud-DataMigrate/ndm/settings/actions/runners/new
+github_runner_url: "https://github.com/NetApp-Cloud-DataMigrate/ndm"
+# Provide at runtime: --extra-vars "runner_token=<TOKEN>"
+runner_token: ""
+# The following are per-runner and should be set in inventory.yaml (not here).
+# group_vars/all.yaml has lower precedence than inventory inline vars only when
+# defined in group_vars/<group>.yaml — so we leave these unset here.
+#   runner_name:    unique name shown in GitHub (e.g. scs-based-custom-runner1)
+#   runner_labels:  comma-separated labels (e.g. self-hosted,linux,scs-v2,yourname)
+#   ovftool_archive: local Mac path to the Linux ovftool zip
+
+# ---- Tool Versions ----
+govc_version: "0.51.0"
+helm_version: ""  # empty = latest via get-helm-3 script; set e.g. "3.17.3" to pin a version
+
+# ---- LVM Volume Extension (SCS V2 thin-provisioned VMs) ----
+# /var — apt cache, Docker, logs (only ~1G used; +5G is plenty of headroom)
+var_lv_extend: "+5G"
+var_lv_path: "/dev/mapper/ubuntu--vg-var--lv"
+# /home — tool caches (~/.npm, ~/.m2, ~/go) written by setup-* actions at CI time.
+# The default SCS V2 /home LV is only 0.5G which is far too small.
+home_lv_extend: "+80G"
+home_lv_path: "/dev/mapper/ubuntu--vg-home--lv"
+# / (root) — runner, tools, build workspace; gets all remaining VG free space
+root_lv_path: "/dev/mapper/ubuntu--vg-ubuntu--lv"
+
+# ---- /tmp tmpfs ----
+# Default SCS V2 tmpfs for /tmp is only 1G — too small for tools like the
+# BlackDuck Signature Scanner that download and extract large artifacts there.
+# tmpfs is RAM-backed, so keep this modest on 32G VMs.
+tmp_tmpfs_size: "5G"
+# Max age for files in /tmp before systemd-tmpfiles-clean removes them.
+# Ubuntu default is 10d; CI runners accumulate stale temp files quickly.
+tmp_cleanup_age: "1d"
+
+# ---- OVFTool ----
+# Installed to {{ ovftool_install_dir }} on the runner (required by CI workflows).
+# ovftool_archive is set per-runner in inventory.yaml (see above).

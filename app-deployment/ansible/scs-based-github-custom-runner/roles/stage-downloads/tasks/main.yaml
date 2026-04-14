@@ -1,0 +1,70 @@
+---
+# Downloads all external artifacts to a local staging directory on the Mac.
+# These are then pushed to the SCS V2 VM in subsequent plays, avoiding
+# network connectivity issues from the VM to external CDNs/GitHub.
+
+- name: Create local staging directory
+  ansible.builtin.file:
+    path: "{{ staging_dir }}"
+    state: directory
+    mode: '0755'
+
+# ---- Helm ----
+
+- name: Download Helm install script
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: "{{ staging_dir }}/get-helm-3.sh"
+    mode: '0755'
+
+- name: Download Helm binary tarball
+  ansible.builtin.get_url:
+    url: "https://get.helm.sh/helm-v{{ helm_version }}-linux-amd64.tar.gz"
+    dest: "{{ staging_dir }}/helm-linux-amd64.tar.gz"
+    mode: '0644'
+  when: helm_version | length > 0
+
+# ---- HashiCorp (Packer) GPG key ----
+
+- name: Download HashiCorp GPG key
+  ansible.builtin.get_url:
+    url: https://apt.releases.hashicorp.com/gpg
+    dest: "{{ staging_dir }}/hashicorp.asc"
+    mode: '0644'
+
+# ---- GOVC ----
+
+- name: Download govc tarball
+  ansible.builtin.get_url:
+    url: "https://github.com/vmware/govmomi/releases/download/v{{ govc_version }}/govc_Linux_x86_64.tar.gz"
+    dest: "{{ staging_dir }}/govc_Linux_x86_64.tar.gz"
+    mode: '0644'
+
+# ---- Azure CLI GPG key ----
+
+- name: Download Microsoft GPG key
+  ansible.builtin.get_url:
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    dest: "{{ staging_dir }}/microsoft.asc"
+    mode: '0644'
+
+# ---- Docker GPG key ----
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: "{{ staging_dir }}/docker.asc"
+    mode: '0644'
+
+# ---- GitHub Actions Runner ----
+
+- name: Download GitHub Actions runner tarball
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-{{ runner_arch }}-{{ runner_version }}.tar.gz"
+    dest: "{{ staging_dir }}/actions-runner.tar.gz"
+    checksum: "sha256:{{ runner_checksum }}"
+    mode: '0644'
+
+- name: Staging complete
+  ansible.builtin.debug:
+    msg: "All artifacts staged in {{ staging_dir }}"

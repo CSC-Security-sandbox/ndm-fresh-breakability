@@ -1,0 +1,5 @@
+---
+- name: Start runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh start
+    chdir: "{{ runner_install_dir }}"

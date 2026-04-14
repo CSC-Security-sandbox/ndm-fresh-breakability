@@ -1,0 +1,46 @@
+---
+# Provision a GitHub Actions self-hosted runner on an SCS V2 (KVM) Ubuntu VM.
+#
+# All external downloads happen on the Mac (localhost) first, then artifacts
+# are pushed to the VM. This avoids network issues from the SCS V2 VM to
+# external CDNs/GitHub.
+#
+# Usage:
+#   1. Copy config/inventory.yaml.example → config/inventory.yaml and fill in VM details.
+#   2. Obtain a runner registration token from:
+#      https://github.com/NetApp-Cloud-DataMigrate/ndm/settings/actions/runners
+#   3. Download the Linux ovftool archive from:
+#      https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
+#   4. Run (runner_name, runner_labels, ovftool_archive are set in the inventory):
+#      ansible-playbook -i config/inventory.yaml playbooks/setup-scs-based-github-custom-runner.yaml \
+#        --extra-vars "runner_token=<TOKEN>"
+
+# ---- Play 1: Stage downloads on Mac (localhost) ----
+
+- name: Stage downloads on Mac
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - { role: ../roles/stage-downloads, tags: 'stage' }
+
+# ---- Play 2: Install prerequisites on SCS V2 VM ----
+
+- name: Install prerequisites on SCS V2 runner VM
+  hosts: runners
+  gather_facts: true
+  roles:
+    - { role: ../roles/install-scs-runner-prerequisites, tags: 'prerequisites' }
+    - { role: ../roles/setup-scs-github-custom-runner, tags: 'runner' }
+
+# ---- Play 3: Clean up staging directory on Mac ----
+
+- name: Clean up staging directory on Mac
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Remove local staging directory
+      ansible.builtin.file:
+        path: "{{ staging_dir }}"
+        state: absent

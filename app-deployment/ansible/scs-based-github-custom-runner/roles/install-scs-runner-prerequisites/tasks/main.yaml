@@ -1,0 +1,513 @@
+---
+- name: Ensure runner user '{{ vm_user }}' exists
+  ansible.builtin.user:
+    name: "{{ vm_user }}"
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Enable passwordless sudo for runner user
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers.d/{{ vm_user }}-nopasswd
+    line: "{{ vm_user }} ALL=(ALL) NOPASSWD:ALL"
+    create: yes
+    validate: "visudo -cf %s"
+    mode: '0440'
+
+- name: Ensure /root/.bash_profile sources .bashrc
+  ansible.builtin.blockinfile:
+    path: /root/.bash_profile
+    create: yes
+    mode: '0644'
+    marker: "# {mark} source bashrc"
+    block: |
+      if [ "$BASH" ]; then
+        if [ -f ~/.bashrc ]; then
+          . ~/.bashrc
+        fi
+      fi
+
+# ---- Extend LVM volumes (SCS V2 thin-provisioned VMs) ----
+
+- name: Show initial disk and LVM layout
+  ansible.builtin.shell: |
+    echo "=== df -h ==="
+    df -h / /var /home /tmp
+    echo "=== pvs ==="
+    pvs
+    echo "=== vgs ==="
+    vgs
+    echo "=== lvs ==="
+    lvs
+  register: initial_layout
+  changed_when: false
+
+- name: Display initial disk layout
+  ansible.builtin.debug:
+    msg: "{{ initial_layout.stdout_lines }}"
+
+- name: Check if physical volume can be resized
+  ansible.builtin.shell: pvs --noheadings -o pv_name | awk '{print $1}' | head -1
+  register: pv_device
+  changed_when: false
+
+- name: Resize physical volume to use all available disk space
+  ansible.builtin.command:
+    cmd: pvresize {{ pv_device.stdout }}
+  register: pv_resize_result
+  changed_when: "'successfully resized' in pv_resize_result.stdout"
+
+- name: Check VG free space
+  ansible.builtin.shell: vgs --noheadings --nosuffix --units g -o vg_free | awk '{print int($1)}'
+  register: vg_free_space
+  changed_when: false
+
+- name: Display VG free space
+  ansible.builtin.debug:
+    msg: "VG free space: {{ vg_free_space.stdout }}G"
+
+- name: Warn if no VG free space available
+  ansible.builtin.debug:
+    msg: >
+      WARNING: No free space in the volume group — skipping LVM extension.
+      If more space is needed, expand the VM disk at the hypervisor level
+      via https://gec.netapp.com and re-run the playbook.
+  when: vg_free_space.stdout | int == 0
+
+- name: Extend /var LV by {{ var_lv_extend }}
+  ansible.builtin.command:
+    cmd: lvextend -L {{ var_lv_extend }} {{ var_lv_path }}
+  register: var_extend_result
+  failed_when:
+    - var_extend_result.rc != 0
+    - "'insufficient free space' not in var_extend_result.stderr"
+    - "'matches existing size' not in var_extend_result.stderr"
+  changed_when: var_extend_result.rc == 0
+  when: vg_free_space.stdout | int > 0
+
+- name: Resize /var filesystem
+  ansible.builtin.command:
+    cmd: resize2fs {{ var_lv_path }}
+  when:
+    - vg_free_space.stdout | int > 0
+    - var_extend_result is changed
+
+- name: Extend /home LV by {{ home_lv_extend }}
+  ansible.builtin.command:
+    cmd: lvextend -L {{ home_lv_extend }} {{ home_lv_path }}
+  register: home_extend_result
+  failed_when:
+    - home_extend_result.rc != 0
+    - "'insufficient free space' not in home_extend_result.stderr"
+    - "'matches existing size' not in home_extend_result.stderr"
+  changed_when: home_extend_result.rc == 0
+  when: vg_free_space.stdout | int > 0
+
+- name: Resize /home filesystem
+  ansible.builtin.command:
+    cmd: resize2fs {{ home_lv_path }}
+  when:
+    - vg_free_space.stdout | int > 0
+    - home_extend_result is changed
+
+- name: Extend root LV with all remaining free space
+  ansible.builtin.command:
+    cmd: lvextend -l +100%FREE {{ root_lv_path }}
+  register: root_extend_result
+  failed_when:
+    - root_extend_result.rc != 0
+    - "'insufficient free space' not in root_extend_result.stderr"
+    - "'matches existing size' not in root_extend_result.stderr"
+  changed_when: root_extend_result.rc == 0
+  when: vg_free_space.stdout | int > 0
+
+- name: Resize root filesystem
+  ansible.builtin.command:
+    cmd: resize2fs {{ root_lv_path }}
+  when:
+    - vg_free_space.stdout | int > 0
+    - root_extend_result is changed
+
+- name: Show final disk layout
+  ansible.builtin.command: df -h / /var /home /tmp
+  register: disk_layout
+  changed_when: false
+
+- name: Display final disk layout
+  ansible.builtin.debug:
+    msg: "{{ disk_layout.stdout_lines }}"
+
+# ---- /tmp tmpfs: resize and enable periodic cleanup ----
+
+- name: Create systemd override directory for tmp.mount
+  ansible.builtin.file:
+    path: /etc/systemd/system/tmp.mount.d
+    state: directory
+    mode: '0755'
+
+- name: Configure /tmp tmpfs size to {{ tmp_tmpfs_size }}
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tmp.mount.d/size.conf
+    mode: '0644'
+    content: |
+      [Mount]
+      Options=mode=1777,strictatime,nosuid,nodev,size={{ tmp_tmpfs_size }}
+  register: tmp_mount_override
+
+- name: Reload systemd and remount /tmp
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: tmp_mount_override is changed
+
+- name: Remount /tmp with new size
+  ansible.builtin.command:
+    cmd: mount -o remount /tmp
+  when: tmp_mount_override is changed
+
+- name: Set tmpfiles.d cleanup rule for /tmp (age={{ tmp_cleanup_age }})
+  ansible.builtin.copy:
+    dest: /etc/tmpfiles.d/tmp-cleanup.conf
+    mode: '0644'
+    content: |
+      # Override default 10d age — CI runners accumulate stale temp files quickly.
+      q /tmp 1777 root root {{ tmp_cleanup_age }}
+  register: tmpfiles_rule
+
+- name: Create systemd override directory for systemd-tmpfiles-clean.timer
+  ansible.builtin.file:
+    path: /etc/systemd/system/systemd-tmpfiles-clean.timer.d
+    state: directory
+    mode: '0755'
+
+- name: Run tmpfiles cleanup every 6 hours instead of daily
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/systemd-tmpfiles-clean.timer.d/frequency.conf
+    mode: '0644'
+    content: |
+      [Timer]
+      OnUnitActiveSec=6h
+  register: tmpfiles_timer_override
+
+- name: Reload systemd after timer override
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: tmpfiles_timer_override is changed
+
+- name: Ensure systemd-tmpfiles-clean.timer is enabled and started
+  ansible.builtin.systemd:
+    name: systemd-tmpfiles-clean.timer
+    state: started
+    enabled: yes
+
+- name: Show /tmp mount status
+  ansible.builtin.shell: df -h /tmp && echo "---" && systemctl status systemd-tmpfiles-clean.timer --no-pager || true
+  register: tmp_status
+  changed_when: false
+
+- name: Display /tmp configuration
+  ansible.builtin.debug:
+    msg: "{{ tmp_status.stdout_lines }}"
+
+- name: Ensure /home/{{ vm_user }} is owned by runner user
+  ansible.builtin.file:
+    path: /home/{{ vm_user }}
+    state: directory
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+    recurse: yes
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - zip
+      - unzip
+      - curl
+      - wget
+      - xorriso
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - jq
+      - poppler-utils
+      - gnupg
+      - lsb-release
+    state: present
+
+# ---- Helm (from staged binary or install script) ----
+
+- name: Check if Helm is installed
+  ansible.builtin.shell: which helm
+  register: helm_check
+  failed_when: false
+  changed_when: false
+
+- name: Copy staged Helm tarball to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/helm-linux-amd64.tar.gz"
+    dest: /tmp/helm-linux-amd64.tar.gz
+    mode: '0644'
+  when:
+    - helm_check.rc != 0
+    - helm_version | length > 0
+
+- name: Extract Helm binary from tarball
+  ansible.builtin.shell: >
+    tar -xzf /tmp/helm-linux-amd64.tar.gz -C /tmp/ linux-amd64/helm &&
+    mv /tmp/linux-amd64/helm /usr/local/bin/helm &&
+    chmod 0755 /usr/local/bin/helm
+  when:
+    - helm_check.rc != 0
+    - helm_version | length > 0
+
+- name: Copy staged Helm install script to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/get-helm-3.sh"
+    dest: /tmp/get-helm-3.sh
+    mode: '0755'
+  when:
+    - helm_check.rc != 0
+    - helm_version | length == 0
+
+- name: Install Helm via script (latest)
+  ansible.builtin.command: /tmp/get-helm-3.sh
+  environment:
+    HELM_INSTALL_DIR: /usr/local/bin
+  when:
+    - helm_check.rc != 0
+    - helm_version | length == 0
+
+# ---- Ansible (from Ubuntu default repos, no PPA needed) ----
+
+- name: Install Ansible
+  ansible.builtin.apt:
+    name:
+      - ansible-core
+      - python3-pip
+    state: present
+
+# ---- Packer (from staged GPG key) ----
+
+- name: Copy staged HashiCorp GPG key to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/hashicorp.asc"
+    dest: /tmp/hashicorp.asc
+    mode: '0644'
+
+- name: Dearmor HashiCorp GPG key
+  ansible.builtin.command:
+    cmd: gpg --dearmor --yes -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.asc
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+- name: Add HashiCorp apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_facts['architecture'] | regex_replace('x86_64', 'amd64') }} signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_facts['distribution_release'] }} main"
+    filename: hashicorp
+    state: present
+
+- name: Install Packer
+  ansible.builtin.apt:
+    name: packer
+    state: present
+    update_cache: yes
+
+# ---- Azure CLI (from staged GPG key) ----
+
+- name: Copy staged Microsoft GPG key to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/microsoft.asc"
+    dest: /tmp/microsoft.asc
+    mode: '0644'
+
+- name: Dearmor Microsoft GPG key
+  ansible.builtin.command:
+    cmd: gpg --dearmor --yes -o /usr/share/keyrings/microsoft-archive-keyring.gpg /tmp/microsoft.asc
+    creates: /usr/share/keyrings/microsoft-archive-keyring.gpg
+
+- name: Add Microsoft Azure CLI apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_facts['architecture'] | regex_replace('x86_64', 'amd64') }} signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/azure-cli/ {{ ansible_facts['distribution_release'] }} main"
+    filename: azure-cli
+    state: present
+
+- name: Install Azure CLI
+  ansible.builtin.apt:
+    name: azure-cli
+    state: present
+    update_cache: yes
+
+# ---- Docker Engine (from staged GPG key) ----
+
+- name: Copy staged Docker GPG key to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/docker.asc"
+    dest: /tmp/docker.asc
+    mode: '0644'
+
+- name: Dearmor Docker GPG key
+  ansible.builtin.command:
+    cmd: gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg /tmp/docker.asc
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_facts['architecture'] | regex_replace('x86_64', 'amd64') }} signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable"
+    filename: docker
+    state: present
+
+- name: Install Docker Engine
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+    state: present
+    update_cache: yes
+
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add runner user to docker group
+  ansible.builtin.user:
+    name: "{{ vm_user }}"
+    groups: docker
+    append: yes
+
+# ---- Ginkgo (Go test framework) ----
+
+- name: Install Ginkgo
+  ansible.builtin.apt:
+    name: ginkgo
+    state: present
+
+# ---- GOVC (from staged tarball) ----
+
+- name: Check if govc is installed
+  ansible.builtin.shell: which govc
+  register: govc_check
+  failed_when: false
+  changed_when: false
+
+- name: Copy staged govc tarball to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/govc_Linux_x86_64.tar.gz"
+    dest: /tmp/govc_Linux_x86_64.tar.gz
+    mode: '0644'
+  when: govc_check.rc != 0
+
+- name: Extract govc binary
+  ansible.builtin.unarchive:
+    src: /tmp/govc_Linux_x86_64.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  when: govc_check.rc != 0
+
+- name: Install govc to /usr/local/bin
+  ansible.builtin.copy:
+    src: /tmp/govc
+    dest: /usr/local/bin/govc
+    mode: '0755'
+    remote_src: yes
+  when: govc_check.rc != 0
+
+- name: Clean up govc artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/govc
+    - /tmp/govc_Linux_x86_64.tar.gz
+  when: govc_check.rc != 0
+
+# ---- OVFTool (Linux archive, copied from Mac and extracted on VM) ----
+
+- name: Fail if ovftool_archive is not provided
+  ansible.builtin.fail:
+    msg: >
+      ovftool_archive is required. Set it in config/inventory.yaml under runners:vars:.
+      Download the Linux ovftool bundle from
+      https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
+  when: ovftool_archive is not defined or ovftool_archive | length == 0
+
+- name: Copy ovftool archive to VM
+  ansible.builtin.copy:
+    src: "{{ ovftool_archive }}"
+    dest: /tmp/ovftool-archive
+    mode: '0644'
+
+- name: Extract ovftool archive to temp directory
+  ansible.builtin.unarchive:
+    src: /tmp/ovftool-archive
+    dest: /tmp/
+    remote_src: yes
+
+- name: Find extracted ovftool directory
+  ansible.builtin.shell: find /tmp -maxdepth 1 -type d -name '*ovftool*' ! -name ovftool-archive | head -1
+  register: ovftool_extracted_dir
+  changed_when: false
+
+- name: Move ovftool to target location
+  ansible.builtin.command:
+    cmd: mv {{ ovftool_extracted_dir.stdout }} {{ ovftool_install_dir }}
+    creates: "{{ ovftool_install_dir }}"
+
+- name: Set ownership on ovftool directory
+  ansible.builtin.file:
+    path: "{{ ovftool_install_dir }}"
+    state: directory
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+    recurse: yes
+    mode: '0755'
+
+- name: Check if /home/{{ vm_user }}/ovftool is a directory (not a symlink)
+  ansible.builtin.stat:
+    path: /home/{{ vm_user }}/ovftool
+  register: home_ovftool
+
+- name: Remove old ovftool directory from /home if present
+  ansible.builtin.file:
+    path: /home/{{ vm_user }}/ovftool
+    state: absent
+  when:
+    - home_ovftool.stat.exists
+    - home_ovftool.stat.isdir
+    - not home_ovftool.stat.islnk
+
+- name: Symlink ovftool to home directory for workflow compatibility
+  ansible.builtin.file:
+    src: "{{ ovftool_install_dir }}"
+    dest: /home/{{ vm_user }}/ovftool
+    state: link
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+
+- name: Clean up ovftool temp files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/ovftool-archive
+    - "{{ ovftool_extracted_dir.stdout | default('') }}"
+
+# ---- Clean up all remaining temp artifacts ----
+
+- name: Clean up temp files from staging
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/helm-linux-amd64.tar.gz
+    - /tmp/linux-amd64
+    - /tmp/get-helm-3.sh
+    - /tmp/hashicorp.asc
+    - /tmp/microsoft.asc
+    - /tmp/docker.asc

@@ -1,0 +1,125 @@
+---
+- name: Create runner install directory
+  ansible.builtin.file:
+    path: "{{ runner_install_dir }}"
+    state: directory
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+    mode: '0755'
+
+- name: Check if /home/{{ vm_user }}/actions-runner is a directory (not a symlink)
+  ansible.builtin.stat:
+    path: /home/{{ vm_user }}/actions-runner
+  register: home_runner
+
+- name: Remove old actions-runner directory from /home if present
+  ansible.builtin.file:
+    path: /home/{{ vm_user }}/actions-runner
+    state: absent
+  when:
+    - home_runner.stat.exists
+    - home_runner.stat.isdir
+    - not home_runner.stat.islnk
+
+- name: Symlink runner to home directory
+  ansible.builtin.file:
+    src: "{{ runner_install_dir }}"
+    dest: /home/{{ vm_user }}/actions-runner
+    state: link
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+
+# ---- Copy staged runner tarball from Mac, extract from /tmp ----
+
+- name: Copy staged runner tarball to VM
+  ansible.builtin.copy:
+    src: "{{ staging_dir }}/actions-runner.tar.gz"
+    dest: /tmp/actions-runner.tar.gz
+    mode: '0644'
+
+- name: Extract runner package
+  ansible.builtin.unarchive:
+    src: /tmp/actions-runner.tar.gz
+    dest: "{{ runner_install_dir }}"
+    remote_src: yes
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+
+- name: Remove runner tarball from /tmp
+  ansible.builtin.file:
+    path: /tmp/actions-runner.tar.gz
+    state: absent
+
+- name: Remove any stale runner tarball from install directory
+  ansible.builtin.shell: rm -f {{ runner_install_dir }}/actions-runner-*.tar.gz
+  changed_when: false
+
+# ---- Configure and register ----
+
+- name: Check if runner is already configured
+  ansible.builtin.stat:
+    path: "{{ runner_install_dir }}/.runner"
+  register: runner_config_file
+
+- name: Fail if runner_token is not provided
+  ansible.builtin.fail:
+    msg: >
+      runner_token is required. Generate a repo-level token from
+      {{ github_runner_url }}/settings/actions/runners/new
+      and pass it with --extra-vars "runner_token=<TOKEN>"
+  when:
+    - not runner_config_file.stat.exists
+    - runner_token | length == 0
+
+- name: Fail if runner_name is not provided
+  ansible.builtin.fail:
+    msg: >
+      runner_name is required (e.g. scs-based-custom-runner1).
+      Pass it with --extra-vars "runner_name=scs-based-custom-runner1"
+  when:
+    - not runner_config_file.stat.exists
+    - runner_name | length == 0
+
+- name: Create ansible temp dir for runner user
+  ansible.builtin.file:
+    path: /tmp/.ansible-tmp-{{ vm_user }}
+    state: directory
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+    mode: '0700'
+
+- name: Configure the runner
+  ansible.builtin.command:
+    cmd: >
+      ./config.sh
+      --url {{ github_runner_url }}
+      --token {{ runner_token }}
+      --name {{ runner_name }}
+      --labels {{ runner_labels }}
+      --unattended
+      --replace
+    chdir: "{{ runner_install_dir }}"
+  become: true
+  become_user: "{{ vm_user }}"
+  environment:
+    HOME: /tmp/.ansible-tmp-{{ vm_user }}
+  when: not runner_config_file.stat.exists
+
+# ---- Install and start as a systemd service ----
+
+- name: Check if runner service is already installed
+  ansible.builtin.shell: ls /etc/systemd/system/actions.runner.*.service 2>/dev/null
+  register: runner_service_check
+  failed_when: false
+  changed_when: false
+
+- name: Install runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh install {{ vm_user }}
+    chdir: "{{ runner_install_dir }}"
+  when: runner_service_check.rc != 0
+
+- name: Start runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh start
+    chdir: "{{ runner_install_dir }}"

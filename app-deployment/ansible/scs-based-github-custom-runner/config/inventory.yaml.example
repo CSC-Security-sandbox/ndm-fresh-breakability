@@ -1,0 +1,27 @@
+---
+# Copy this file to inventory.yaml and fill in your runner VM details.
+# Root credentials are available in CyberArk:
+#   https://pvwa.corp.netapp.com/PasswordVault/v10/
+# For multiple runners, add additional hosts under the 'runners' group
+# and give each a unique runner_name (increment the number).
+#
+# IMPORTANT: runner_name, runner_labels, and ovftool_archive MUST be set here
+# (not in group_vars/all.yaml) because file-based group_vars override inventory
+# inline vars in Ansible's precedence order.
+all:
+  children:
+    runners:
+      hosts:
+        runner-1:
+          ansible_host: <VM_IP_ADDRESS>
+          runner_name: scs-based-custom-runner1
+      vars:
+        ansible_user: root
+        ansible_password: <ROOT_PASSWORD_FROM_CYBERARK>
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+        # Add your name as a label so others know who owns the VM
+        runner_labels: "self-hosted,linux,scs-v2,openlab,yourname"
+        # Local Mac path to the Linux ovftool zip (do NOT extract it).
+        # Download from: https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
+        ovftool_archive: /path/to/VMware-ovftool-*.zip
