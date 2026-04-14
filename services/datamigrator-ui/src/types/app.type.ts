@@ -558,10 +558,11 @@ export type JobRunTaskCardPropType = {
 export type JobRunHeaderPropType = JobRunTaskCardPropType;
 
 export type JobInfoReverseCardPropType = {
-  label: string;
+  label: string | ReactNode;
   value: string | number | ReactNode;
   valueType?: string;
   labelTooltip?: string;
+  valueTooltip?: ReactNode;
 };
 
 export type JobInfoCardPropType = {

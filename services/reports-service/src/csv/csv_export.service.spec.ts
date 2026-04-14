@@ -630,11 +630,16 @@ describe("CsvService", () => {
       expect(mockDataSource.query.mock.calls[0][0]).toContain("entry_type = 'skipped'");
     });
 
-    it('should select deleted query type', async () => {
+    it('should select deleted query type including directories', async () => {
       mockDataSource.query.mockResolvedValueOnce([]);
 
       await service.generateListCsv('/tmp/deleted.csv', 'job-3', 'deleted', 5);
-      expect(mockDataSource.query.mock.calls[0][0]).toContain('(i.is_deleted = true)');
+      expect(mockDataSource.query.mock.calls[0][0]).toContain(
+        '(i.is_deleted = true)',
+      );
+      expect(mockDataSource.query.mock.calls[0][0]).not.toContain(
+        'NOT COALESCE(i.is_directory',
+      );
     });
   });
 
@@ -657,7 +662,7 @@ describe("CsvService", () => {
       expect(result.values).toEqual(['job-1', null, 25]);
     });
 
-    it('should build deleted query with is_deleted filter', async () => {
+    it('should build deleted query including both files and directories', async () => {
       const result = await service.getListEntriesQuery('job-1', 10, '/p', 'deleted');
       expect(result.query).toContain('(i.is_deleted = true)');
       expect(result.values).toEqual(['job-1', '/p', 10]);

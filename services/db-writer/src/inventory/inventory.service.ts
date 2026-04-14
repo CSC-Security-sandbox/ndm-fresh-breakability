@@ -100,11 +100,11 @@ export class InventoryService {
       fileSize: file?.size ? BigInt(file.size).toString() : '0',
       extension: file?.extension ?? '',
       fileType: file?.fileType ?? null,
-      modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? null,
-      accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? null,
+      modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? new Date(),
+      accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? new Date(),
       permission: file?.targetMeta?.permission ?? file?.sourceMeta?.permission ?? null,
       jobRunId: jobRunId,
-      birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? null,
+      birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? new Date(),
       pathId: pathId,
       sourceMeta: file?.sourceMeta ?? null,
       targetMeta: file?.targetMeta ?? null,
@@ -205,6 +205,51 @@ export class InventoryService {
       item.isDirectory && item.isDeleted
     );
 
+    const regularItems = data.filter(item => 
+      !(item.isDirectory && item.isDeleted)
+    );
+
+    const failedRecords: ItemInfo[] = [];
+
+    // Write regular items FIRST so that when we process deleted-directory markers
+    // below, the tree-deletion query can find children that arrived in the same batch.
+    if (regularItems.length > 0) {
+      const batchSize = parseInt(process.env.DB_UPSERT_BATCH_SIZE) || 1000;
+      const writtenInThisCall = new Set<string>();
+      for (let i = 0; i < regularItems.length; i += batchSize) {
+        const batch = regularItems.slice(i, i + batchSize);
+        try {
+          const mapped = batch
+            .map(item => this.mapSourceToTarget(item, jobRunId, pathId))
+            .reduce((acc, curr) => {
+              const key = `${curr.path}|${curr.jobRunId}|${curr.isDirectory}`;
+              acc[key] = curr;
+              return acc;
+            }, {} as Record<string, any>);
+
+          const paths = Object.values(mapped) as Array<{ path: string; isDirectory: boolean }>;
+          const entryTypesByKey = await this.getInventoryEntryTypesForPaths(jobRunId, paths, this.schema);
+          const existingInDb = new Set(entryTypesByKey.keys());
+          writtenInThisCall.forEach(k => existingInDb.add(k));
+
+          const mappedData = Object.values(mapped).map((row: any) => {
+            const key = `${row.path}|${row.jobRunId}|${row.isDirectory}`;
+            if (row.entryType !== 'excluded' && row.entryType !== 'skipped' && row.updateType == null) {
+              row.updateType = existingInDb.has(key) ? 'content_updated' : 'new';
+            }
+            return row;
+          });
+
+          await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
+          mappedData.forEach((row: any) => writtenInThisCall.add(`${row.path}|${row.jobRunId}|${row.isDirectory}`));
+        } catch (err) {
+          this.logger.error(`Failed to save inventory batch: ${err.message}`, err?.stack || err);
+          failedRecords.push(...batch);
+        }
+      }
+    }
+
+    // Process deleted-directory markers AFTER regular items are persisted.
     for (const deletedDir of deletedDirectories) {
       const directoryPath = deletedDir.fileName;
       
@@ -212,7 +257,7 @@ export class InventoryService {
       const existingDir = await this.dataSource.query(`
         SELECT i.is_deleted 
         FROM ${schema}.inventory i
-        WHERE i.job_run_id = $1 AND i.path = $2
+        WHERE i.job_run_id = $1 AND i.path = $2 AND i.is_directory = true
         LIMIT 1
       `, [jobRunId, directoryPath]);
       
@@ -221,51 +266,7 @@ export class InventoryService {
         continue;
       }
       
-      await this.markDirectoryTreeAsDeleted(directoryPath, jobRunId, pathId, schema);
-    }
-
-    const regularItems = data.filter(item => 
-      !(item.isDirectory && item.isDeleted)
-    );
-
-    if (regularItems.length === 0) {
-      return [];
-    }
-
-    const batchSize = parseInt(process.env.DB_UPSERT_BATCH_SIZE) || 1000;
-    const failedRecords: ItemInfo[] = [];
-    /** Keys written in this call so later batches see them as existing (content_updated). */
-    const writtenInThisCall = new Set<string>();    
-    for (let i = 0; i < regularItems.length; i += batchSize) {
-      const batch = regularItems.slice(i, i + batchSize);
-      try {
-        const mapped = batch
-          .map(item => this.mapSourceToTarget(item, jobRunId, pathId))
-          .reduce((acc, curr) => {
-            const key = `${curr.path}|${curr.jobRunId}|${curr.isDirectory}`;
-            acc[key] = curr;
-            return acc;
-          }, {} as Record<string, any>);
-
-        const paths = Object.values(mapped) as Array<{ path: string; isDirectory: boolean }>;
-        const entryTypesByKey = await this.getInventoryEntryTypesForPaths(jobRunId, paths, this.schema);
-        const existingInDb = new Set(entryTypesByKey.keys());
-        writtenInThisCall.forEach(k => existingInDb.add(k));
-
-        const mappedData = Object.values(mapped).map((row: any) => {
-          const key = `${row.path}|${row.jobRunId}|${row.isDirectory}`;
-          if (row.entryType !== 'excluded' && row.entryType !== 'skipped' && row.updateType == null) {
-            row.updateType = existingInDb.has(key) ? 'content_updated' : 'new';
-          }
-          return row;
-        });
-
-        await this.inventoryRepo.upsert(mappedData, ['path', 'jobRunId', 'isDirectory']);
-        mappedData.forEach((row: any) => writtenInThisCall.add(`${row.path}|${row.jobRunId}|${row.isDirectory}`));
-      } catch (err) {
-        this.logger.error(`Failed to save inventory batch: ${err.message}`, err?.stack || err);
-        failedRecords.push(...batch);
-      }
+      await this.markDirectoryTreeAsDeleted(deletedDir, jobRunId, pathId, schema);
     }
 
     if (failedRecords.length > 0) {
@@ -275,8 +276,19 @@ export class InventoryService {
     return [];
   }
 
-  async markDirectoryTreeAsDeleted(directoryPath: string, jobRunId: string, pathId: string, schema: string): Promise<void> {
+  /**
+   * Marks all inventory rows under a deleted directory path, and ensures a row exists
+   * for the directory itself when the worker reports a directory delete but nothing was
+   * returned from inventory (e.g. empty folder or no prior directory row).
+   */
+  async markDirectoryTreeAsDeleted(deletedDir: ItemInfo, jobRunId: string, pathId: string, schema: string): Promise<void> {
+    const directoryPath = deletedDir.fileName ?? '';
     try {
+        if (!directoryPath) {
+          this.logger.warn('markDirectoryTreeAsDeleted: missing fileName on deleted directory marker');
+          return;
+        }
+
         const relatedJobsResult = await this.dataSource.query(`
           WITH current_job AS (
             SELECT jc.source_path_id, jc.target_path_id
@@ -331,13 +343,15 @@ export class InventoryService {
             
             const filesToMarkDeleted = await this.dataSource.query(`
               WITH latest_records AS (
-                SELECT DISTINCT ON (path) path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth, is_deleted
+                SELECT DISTINCT ON (path) path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth, is_deleted,
+                       modified_time, access_time, birth_time
                 FROM ${schema}.inventory
                 WHERE job_run_id = ANY($1)
                   AND (path LIKE $2 ESCAPE '!' OR path = $3)
                 ORDER BY path, updated_at DESC NULLS LAST
               )
-              SELECT path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth
+              SELECT path, is_directory, file_size, extension, file_type, file_permission, uid, gid, depth,
+                     modified_time, access_time, birth_time
               FROM latest_records
               WHERE (is_deleted = false OR is_deleted IS NULL)
                 ${cursorCondition}
@@ -369,14 +383,14 @@ export class InventoryService {
                 fileSize: file.file_size ? BigInt(file.file_size).toString() : '0',
                 extension: file.extension || '',
                 fileType: file.file_type || 'file',
-                modifiedTime: file?.targetMeta?.modifiedTime ?? file?.sourceMeta?.modifiedTime ?? null,
-                accessTime: file?.targetMeta?.accessTime ?? file?.sourceMeta?.accessTime ?? null,
+                modifiedTime: file.modified_time ?? new Date(),
+                accessTime: file.access_time ?? new Date(),
                 permission: file.file_permission || '0644',
                 jobRunId: jobRunId,
-                birthTime: file?.targetMeta?.birthTime ?? file?.sourceMeta?.birthTime ?? null,
+                birthTime: file.birth_time ?? new Date(),
                 pathId: pathId,
-                sourceMeta: file?.sourceMeta ?? null,
-                targetMeta: file?.targetMeta ?? null,
+                sourceMeta: null,
+                targetMeta: null,
                 inode: null,
                 isDeleted: true,
                 copyContentStatus: null,
@@ -392,6 +406,28 @@ export class InventoryService {
             this.logger.error(`Failed to process batch ${batchNumber} for directory ${directoryPath}: ${batchError.message}`, batchError.stack);
           }
         }
+
+        const dirSelfRows = await this.dataSource.query(
+          `SELECT is_deleted FROM ${schema}.inventory
+           WHERE job_run_id = $1 AND path = $2 AND is_directory = true
+           LIMIT 1`,
+          [jobRunId, directoryPath],
+        );
+        const dirRowAlreadyDeleted =
+          dirSelfRows.length > 0 && dirSelfRows[0].is_deleted === true;
+        if (!dirRowAlreadyDeleted) {
+          const tombstone = this.mapSourceToTarget(
+            { ...deletedDir, fileName: directoryPath, isDeleted: true, isDirectory: true } as ItemInfo,
+            jobRunId,
+            pathId,
+          );
+          await this.inventoryRepo.upsert([tombstone], ['path', 'jobRunId', 'isDirectory']);
+          processedCount += 1;
+          this.logger.debug(
+            `Ensured deleted inventory row for directory path ${directoryPath} (jobRunId=${jobRunId})`,
+          );
+        }
+
         this.logger.log(`Successfully marked ${processedCount} items (files and directories) as deleted for directory: ${directoryPath}`);
     } catch (error) {
       this.logger.error(`Failed to mark directory tree as deleted ${directoryPath}: ${error.message}`, error.stack);

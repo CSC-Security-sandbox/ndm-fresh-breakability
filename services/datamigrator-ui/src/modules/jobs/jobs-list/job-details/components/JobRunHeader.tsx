@@ -1,7 +1,7 @@
 import JobInfoCard from "@modules/jobs/jobs-list/job-details/components/JobInfoCard";
 import JobInfoReverseCard from "@modules/jobs/jobs-list/job-details/components/JobInfoReverseCard";
 import { Box } from "@components/container/index";
-import { Card, CardContentLoading } from "@netapp/bxp-design-system-react";
+import { Card, CardContentLoading, Text, Tooltip } from "@netapp/bxp-design-system-react";
 import Divider from "@mui/material/Divider";
 import { JOB_STATUS_TYPE_ENUM, JOBS_TYPE, JobRunHeaderPropType } from "@/types/app.type";
 import JobRunStatusCellRenderer from "@components/custom-cell-renderer/JobRunStatusCellRenderer";
@@ -15,14 +15,6 @@ import { useGetJobRunLiveStatsQuery } from "@api/jobsApi";
 import { useEffect, useRef } from "react";
 
 const LIVE_STATS_POLL_INTERVAL_MS = 5000;
-
-const MIGRATION_BREAKDOWN_LABEL_TOOLTIPS = {
-  newlyCopied:
-    "Files copied for the first time.",
-  recopied:
-    "Files whose content or metadata was updated.",
-  deleted: "Files deleted on the source.",
-} as const;
 
 const ACTIVE_JOB_STATUSES = new Set([
   JOB_STATUS_TYPE_ENUM.RUNNING,
@@ -97,83 +89,75 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
     (jobType === JOBS_TYPE.MIGRATE || jobType === JOBS_TYPE.CUT_OVER) &&
     jobStats;
 
-    const pickLiveOrJobStat = (
-      liveVal: string | undefined,
-      jobVal: string | undefined,
-    ) => {
-      if (liveVal != null && liveVal !== "") {
-        return liveVal;
-      }
-      if (jobVal != null && jobVal !== "") {
-        return jobVal;
-      }
-      return "--";
-    };
-  
-    const displayNewlyCopied = pickLiveOrJobStat(
-      liveStats?.newlyCopiedCount,
-      jobStats?.newlyCopiedCount,
-    );
-    const displayRecopied = pickLiveOrJobStat(
-      liveStats?.modifiedCount,
-      jobStats?.modifiedCount,
-    );
-    const displayDeleted = pickLiveOrJobStat(
-      liveStats?.deletedCount,
-      jobStats?.deletedCount,
-    );
+  const pickLiveOrJobStat = (
+    liveVal: string | undefined,
+    jobVal: string | undefined,
+  ) => {
+    if (liveVal != null && liveVal !== "") {
+      return liveVal;
+    }
+    if (jobVal != null && jobVal !== "") {
+      return jobVal;
+    }
+    return "--";
+  };
+
+  const displayNewlyCopied = pickLiveOrJobStat(
+    liveStats?.newlyCopiedCount,
+    jobStats?.newlyCopiedCount,
+  );
+  const displayRecopied = pickLiveOrJobStat(
+    liveStats?.modifiedCount,
+    jobStats?.modifiedCount,
+  );
+
+  const filesLabel = showMigrationStats ? (
+    <Text>
+      {"Files ("}
+      <Box className="inline-block relative overflow-visible">
+        <span className="cursor-default underline decoration-dotted underline-offset-2">
+          Newly Copied
+        </span>
+        <Tooltip><Text>{`Count: ${displayNewlyCopied}`}</Text></Tooltip>
+      </Box>
+      {" + "}
+      <Box className="inline-block relative overflow-visible">
+        <span className="cursor-default underline decoration-dotted underline-offset-2">
+          Recopied
+        </span>
+        <Tooltip><Text>{`Count: ${displayRecopied}`}</Text></Tooltip>
+      </Box>
+      {")"}
+    </Text>
+  ) : "Files";
 
   return (
-    <Box className="flex flex-col gap-4">
-      <Card className="flex gap-16 p-10 min-h-[170px]">
-        <JobInfoCard
-          label={getJobType(jobType)}
-          value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
-        />
-        <Divider orientation="vertical" flexItem />
-        <JobInfoReverseCard label={showMigrationStats ? "Files (Newly Copied + Recopied)" : "Files"} value={displayFileCount} />
-        <Divider orientation="vertical" flexItem />
-        <JobInfoReverseCard
-          label="Directories"
-          value={displayDirCount}
-        />
-        <Divider orientation="vertical" flexItem />
-        <JobInfoReverseCard
-          label="Time Elapsed"
-          value={<TimeElapsedRenderer value={timeElapsed} />}
-        />
-        <Divider orientation="vertical" flexItem />
-        <JobInfoReverseCard
-          label={getJobTypeTextForHeader(jobType)}
-          value={displaySize}
-        />
-      </Card>
-      {showMigrationStats && (
-        <Card className="p-10 min-h-[170px]">
-          <Box className="text-l font-medium mb-6">Migrated Files Breakdown</Box>
-          <Box className="flex gap-16 flex-wrap">
-            <JobInfoReverseCard
-              label="Newly Copied"
-              value={displayNewlyCopied}
-              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.newlyCopied}
-            />
-            <Divider orientation="vertical" flexItem />
-            <JobInfoReverseCard
-              label="Recopied"
-              value={displayRecopied}
-              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.recopied}
-            />
-            <Divider orientation="vertical" flexItem />
-            <JobInfoReverseCard
-              label="Deleted"
-              value={displayDeleted}
-              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.deleted}
-            />
-            <Divider orientation="vertical" flexItem />
-          </Box>
-        </Card>
-      )}
-    </Box>
+    <Card className="flex gap-16 p-10 min-h-[170px]">
+      <JobInfoCard
+        label={getJobType(jobType)}
+        value={<JobRunStatusCellRenderer status={jobRunDetails.status} />}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label={filesLabel}
+        value={displayFileCount}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label="Directories"
+        value={displayDirCount}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label="Time Elapsed"
+        value={<TimeElapsedRenderer value={timeElapsed} />}
+      />
+      <Divider orientation="vertical" flexItem />
+      <JobInfoReverseCard
+        label={getJobTypeTextForHeader(jobType)}
+        value={displaySize}
+      />
+    </Card>
   );
 };
 
