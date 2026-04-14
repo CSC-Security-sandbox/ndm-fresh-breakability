@@ -379,7 +379,6 @@ export const jobsApi = createApi({
       totalSizeBytes: string;
       newlyCopiedCount: string;
       modifiedCount: string;
-      skippedCount: string;
       deletedCount: string;
       lastUpdated: string | null;
       source: 'redis' | 'database';

@@ -1494,7 +1494,6 @@ describe("JobRunService", () => {
           totalSize: "2048",
           newlyCopiedCount: "3",
           modifiedCount: "4",
-          skippedCount: "5",
           deletedCount: "6",
         },
       });

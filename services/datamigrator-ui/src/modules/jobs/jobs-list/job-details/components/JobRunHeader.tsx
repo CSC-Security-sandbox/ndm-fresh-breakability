@@ -21,8 +21,6 @@ const MIGRATION_BREAKDOWN_LABEL_TOOLTIPS = {
     "Files copied for the first time.",
   recopied:
     "Files whose content or metadata was updated.",
-  skipped:
-    "Files modified within the job's configured time window (for example, the last few minutes) and therefore skipped.",
   deleted: "Files deleted on the source.",
 } as const;
 
@@ -120,10 +118,6 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
       liveStats?.modifiedCount,
       jobStats?.modifiedCount,
     );
-    const displaySkipped = pickLiveOrJobStat(
-      liveStats?.skippedCount,
-      jobStats?.skippedCount,
-    );
     const displayDeleted = pickLiveOrJobStat(
       liveStats?.deletedCount,
       jobStats?.deletedCount,
@@ -168,12 +162,6 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
               label="Recopied"
               value={displayRecopied}
               labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.recopied}
-            />
-            <Divider orientation="vertical" flexItem />
-            <JobInfoReverseCard
-              label="Skipped"
-              value={displaySkipped}
-              labelTooltip={MIGRATION_BREAKDOWN_LABEL_TOOLTIPS.skipped}
             />
             <Divider orientation="vertical" flexItem />
             <JobInfoReverseCard

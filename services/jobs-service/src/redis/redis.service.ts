@@ -236,7 +236,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     totalSize: string;
     newlyCopiedCount: string;
     recopiedCount: string;
-    skippedCount: string;
     deletedCount: string;
     lastUpdated: string | null;
   }> {
@@ -249,33 +248,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       totalSize: stats.totalSize ?? '0',
       newlyCopiedCount: stats.newlyCopiedCount ?? '0',
       recopiedCount: stats.recopiedCount ?? '0',
-      skippedCount: stats.skippedCount ?? '0',
       deletedCount: stats.deletedCount ?? '0',
       lastUpdated: stats.lastUpdated ?? null,
     };
-  }
-
-  /**
-   * Bumps liveStats.skippedCount when excluded/skipped rows are written via
-   * addExcludedSkippedEntries (reporting path). Skipped inventory from scan is persisted
-   * there, not via the db-writer file stream, so Redis would otherwise stay at 0.
-   */
-  async incrementLiveSkippedCount(jobRunId: string, delta: number): Promise<void> {
-    if (!delta || delta <= 0) {
-      return;
-    }
-    try {
-      await this.ensureClient();
-      const key = `${jobRunId}:liveStats`;
-      await this.client.multi()
-        .hIncrBy(key, 'skippedCount', delta)
-        .hSet(key, 'lastUpdated', Date.now().toString())
-        .expire(key, 86400)
-        .exec();
-    } catch (err) {
-      this.logger.warn(
-        `incrementLiveSkippedCount failed for jobRunId=${jobRunId}: ${err instanceof Error ? err.message : err}`,
-      );
-    }
   }
 }

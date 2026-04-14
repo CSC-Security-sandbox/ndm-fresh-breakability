@@ -134,11 +134,6 @@ export class JobRunStats {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  skippedCount?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
   newlyCopiedCount?: string;
 
   @ApiProperty({ required: false })

@@ -3175,9 +3175,6 @@ describe("JobRunService", () => {
           total_size: "2048",
           deleted_count: "3",
           excluded_count: "5",
-          skipped_count: "6",
-          excluded_file_count: "2",
-          skipped_file_count: "1",
           newly_copied_count: "7",
           recopied_count: "8",
         },
@@ -3206,7 +3203,6 @@ describe("JobRunService", () => {
             modifiedCount: "8",
             deletedCount: "3",
             excludedCount: "5",
-            skippedCount: "6",
           }),
         }),
       );
@@ -4895,7 +4891,7 @@ describe("JobRunService", () => {
   /**
    * getJobRunLiveStats:
    * - Terminal / Paused: use persisted job_stats snapshot when any snapshot field is non-empty;
-    *   missing newlyCopiedCount / modifiedCount / skippedCount / deletedCount remain undefined.
+    *   missing newlyCopiedCount / modifiedCount / deletedCount remain undefined.
    * - Else same statuses: fall back to calculateJobRunStats (MV / DB).
    * - Running: Redis liveStats; modifiedCount maps from recopiedCount.
    */
@@ -4919,7 +4915,6 @@ describe("JobRunService", () => {
         totalSizeBytes: "1024",
         newlyCopiedCount: undefined,
         modifiedCount: undefined,
-        skippedCount: undefined,
         deletedCount: undefined,
         lastUpdated: null,
         source: "database",
@@ -4946,7 +4941,6 @@ describe("JobRunService", () => {
         totalSizeBytes: "8192",
         newlyCopiedCount: undefined,
         modifiedCount: undefined,
-        skippedCount: undefined,
         deletedCount: undefined,
         lastUpdated: null,
         source: "database",
@@ -4965,7 +4959,6 @@ describe("JobRunService", () => {
           totalSize: "100",
           newlyCopiedCount: "10",
           modifiedCount: "2",
-          skippedCount: "3",
           deletedCount: "1",
         },
       };
@@ -4981,7 +4974,6 @@ describe("JobRunService", () => {
         totalSizeBytes: "100",
         newlyCopiedCount: "10",
         modifiedCount: "2",
-        skippedCount: "3",
         deletedCount: "1",
         lastUpdated: null,
         source: "database",
@@ -5008,7 +5000,6 @@ describe("JobRunService", () => {
       expect(result.source).toBe("database");
       expect(result.newlyCopiedCount).toBeUndefined();
       expect(result.modifiedCount).toBeUndefined();
-      expect(result.skippedCount).toBeUndefined();
       expect(result.deletedCount).toBeUndefined();
     });
 
@@ -5072,7 +5063,6 @@ describe("JobRunService", () => {
         totalSizeBytes: "256",
         newlyCopiedCount: undefined,
         modifiedCount: undefined,
-        skippedCount: undefined,
         deletedCount: undefined,
         lastUpdated: null,
         source: "database",
@@ -5092,7 +5082,6 @@ describe("JobRunService", () => {
         totalSize: "512",
         newlyCopiedCount: "1",
         recopiedCount: "2",
-        skippedCount: "3",
         deletedCount: "4",
         lastUpdated: "2025-06-01T12:00:00Z",
       };
@@ -5110,7 +5099,6 @@ describe("JobRunService", () => {
         totalSizeBytes: "512",
         newlyCopiedCount: "1",
         modifiedCount: "2",
-        skippedCount: "3",
         deletedCount: "4",
         lastUpdated: "2025-06-01T12:00:00Z",
         source: "redis",
@@ -5201,12 +5189,9 @@ describe("JobRunService", () => {
       expect(querySpy).not.toHaveBeenCalled();
     });
 
-    it("should upsert rows, prefer skipped for duplicates, and increment skipped count", async () => {
+    it("should upsert rows and prefer skipped for duplicates", async () => {
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ id: "run-3" } as any);
-      jest.spyOn(service as any, "countSkippedRedisDelta").mockResolvedValueOnce(2);
       jest.spyOn(dataSource, "query").mockResolvedValueOnce([] as any);
-      const incrementSpy = jest.fn().mockResolvedValue(undefined);
-      (redisService as any).incrementLiveSkippedCount = incrementSpy;
 
       const result = await service.addExcludedSkippedEntries(
         "run-3",
@@ -5216,48 +5201,6 @@ describe("JobRunService", () => {
 
       expect(result).toEqual({ added: 3 });
       expect(dataSource.query).toHaveBeenCalled();
-      expect(incrementSpy).toHaveBeenCalledWith("run-3", 2);
-    });
-
-    it("should not increment skipped count when skipped delta is 0", async () => {
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce({ id: "run-4" } as any);
-      jest.spyOn(service as any, "countSkippedRedisDelta").mockResolvedValueOnce(0);
-      jest.spyOn(dataSource, "query").mockResolvedValueOnce([] as any);
-      const incrementSpy = jest.fn().mockResolvedValue(undefined);
-      (redisService as any).incrementLiveSkippedCount = incrementSpy;
-
-      const result = await service.addExcludedSkippedEntries(
-        "run-4",
-        [{ path: "/excluded-only", isDirectory: false }],
-        []
-      );
-
-      expect(result).toEqual({ added: 1 });
-      expect(incrementSpy).not.toHaveBeenCalled();
-    });
-
-    it("should return 0 delta for empty skipped path list", async () => {
-      const delta = await (service as any).countSkippedRedisDelta("run-5", [], "datamigrator");
-      expect(delta).toBe(0);
-    });
-
-    it("should calculate delta only for paths not previously skipped", async () => {
-      jest.spyOn(dataSource, "query").mockResolvedValueOnce([
-        { path: "/p1", is_directory: false, entry_type: "skipped" },
-        { path: "/p2", is_directory: false, entry_type: "excluded" },
-      ] as any);
-
-      const delta = await (service as any).countSkippedRedisDelta(
-        "run-6",
-        [
-          { path: "/p1", is_directory: false },
-          { path: "/p2", is_directory: false },
-          { path: "/p3", is_directory: true },
-        ],
-        "datamigrator"
-      );
-
-      expect(delta).toBe(2);
     });
 
     it("should rethrow error from getWorkerSetupErrors query builder", async () => {
