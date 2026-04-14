@@ -1130,7 +1130,7 @@ jobs:
           terraform init
 
       - name: Cleanup ONTAP Snapshots
-        if: always() && github.event_name == 'workflow_call' && contains(inputs.build_version, '-nightly')
+        if: always()
         run: |
           ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
           ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
