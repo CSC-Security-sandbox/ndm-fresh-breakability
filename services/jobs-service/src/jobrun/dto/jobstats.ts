@@ -20,6 +20,5 @@ export interface JobRunStats {
   modifiedCount?: string;
   deletedCount?: string;
   excludedCount?: string;
-  skippedCount?: string;
   totalCopiedSize?: string;
 }

@@ -764,7 +764,6 @@ export class JobRunService {
           totalSize: freshInventoryStats.totalSize,
           deletedCount: freshInventoryStats.deletedCount,
           excludedCount: freshInventoryStats.excludedCount,
-          skippedCount: freshInventoryStats.skippedCount,
           newlyCopiedCount: freshInventoryStats.newlyCopiedCount,
           modifiedCount: freshInventoryStats.modifiedCount,
           totalCopiedSize: freshInventoryStats.migratedSize,
@@ -855,7 +854,6 @@ export class JobRunService {
             liveStats.totalSize !== "0" ||
             liveStats.newlyCopiedCount !== "0" ||
             liveStats.recopiedCount !== "0" ||
-            liveStats.skippedCount !== "0" ||
             liveStats.deletedCount !== "0";
 
           if (hasRedisLiveStatsSnapshot) {
@@ -865,12 +863,11 @@ export class JobRunService {
               totalSize: liveStats.totalSize,
               newlyCopiedCount: liveStats.newlyCopiedCount,
               modifiedCount: liveStats.recopiedCount,
-              skippedCount: liveStats.skippedCount,
               deletedCount: liveStats.deletedCount,
               errors: [],
             };
             this.logger.log(
-              `Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}, newlyCopied=${liveStats.newlyCopiedCount}, recopied=${liveStats.recopiedCount}, skipped=${liveStats.skippedCount}, deleted=${liveStats.deletedCount}`,
+              `Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}, newlyCopied=${liveStats.newlyCopiedCount}, recopied=${liveStats.recopiedCount}, deleted=${liveStats.deletedCount}`,
             );
           }
         } catch (redisErr: unknown) {
@@ -1141,7 +1138,6 @@ export class JobRunService {
     totalSizeBytes: string;
     newlyCopiedCount: string;
     modifiedCount: string;
-    skippedCount: string;
     deletedCount: string;
     lastUpdated: string | null;
     source: 'redis' | 'database';
@@ -1165,9 +1161,6 @@ export class JobRunService {
         (snap.modifiedCount != null &&
           snap.modifiedCount !== "" &&
           snap.modifiedCount !== '0') ||
-        (snap.skippedCount != null &&
-          snap.skippedCount !== "" &&
-          snap.skippedCount !== '0') ||
         (snap.deletedCount != null &&
           snap.deletedCount !== "" &&
           snap.deletedCount !== '0'));
@@ -1179,7 +1172,6 @@ export class JobRunService {
           totalSizeBytes: snap.totalSize,
           newlyCopiedCount: snap.newlyCopiedCount,
           modifiedCount: snap.modifiedCount,
-          skippedCount: snap.skippedCount,
           deletedCount: snap.deletedCount,
           lastUpdated: null,
           source: 'database',
@@ -1194,7 +1186,6 @@ export class JobRunService {
         totalSizeBytes: dbStats.totalSize,
         newlyCopiedCount: dbStats.newlyCopiedCount,
         modifiedCount: dbStats.modifiedCount,
-        skippedCount: dbStats.skippedCount,
         deletedCount: dbStats.deletedCount,
         lastUpdated: dbStats.lastRefreshed ? String(dbStats.lastRefreshed) : null,
         source: 'database',
@@ -1209,7 +1200,6 @@ export class JobRunService {
       totalSizeBytes: live.totalSize,
       newlyCopiedCount: live.newlyCopiedCount,
       modifiedCount: live.recopiedCount,
-      skippedCount: live.skippedCount,
       deletedCount: live.deletedCount,
       lastUpdated: live.lastUpdated,
       source: 'redis',
@@ -1236,9 +1226,6 @@ export class JobRunService {
       (snap.modifiedCount != null &&
         snap.modifiedCount !== "" &&
         snap.modifiedCount !== "0") ||
-      (snap.skippedCount != null &&
-        snap.skippedCount !== "" &&
-        snap.skippedCount !== "0") ||
       (snap.deletedCount != null &&
         snap.deletedCount !== "" &&
         snap.deletedCount !== "0"));
@@ -1249,7 +1236,6 @@ export class JobRunService {
         totalSize: snap.totalSize,
         newlyCopiedCount: snap.newlyCopiedCount,
         modifiedCount: snap.modifiedCount,
-        skippedCount: snap.skippedCount,
         deletedCount: snap.deletedCount,
         excludedCount: snap.excludedCount,
         lastRefreshed: jobRun.endTime,
@@ -1276,7 +1262,6 @@ export class JobRunService {
     };
     if (jobStatsSummary?.deletedCount != null) jobRunStatus.deletedCount = String(jobStatsSummary.deletedCount);
     if (jobStatsSummary?.excludedCount != null) jobRunStatus.excludedCount = String(jobStatsSummary.excludedCount);
-    if (jobStatsSummary?.skippedCount != null) jobRunStatus.skippedCount = String(jobStatsSummary.skippedCount);
     if (jobStatsSummary?.newlyCopiedCount != null) jobRunStatus.newlyCopiedCount = String(jobStatsSummary.newlyCopiedCount);
     if (jobStatsSummary?.recopiedCount != null) jobRunStatus.modifiedCount = String(jobStatsSummary.recopiedCount);
     return jobRunStatus;
@@ -1292,7 +1277,6 @@ export class JobRunService {
     totalSize: string;
     deletedCount: string;
     excludedCount: string;
-    skippedCount: string;
     newlyCopiedCount: string;
     modifiedCount: string;
     migratedSize: string;
@@ -1305,7 +1289,6 @@ export class JobRunService {
          COALESCE(SUM(file_size) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND NOT is_directory AND NOT COALESCE(is_deleted, false)), 0) AS total_size,
          COUNT(*) FILTER (WHERE COALESCE(is_deleted, false) AND NOT COALESCE(is_directory, false)) AS deleted_count,
          COUNT(*) FILTER (WHERE entry_type = 'excluded') AS excluded_count,
-         COUNT(*) FILTER (WHERE entry_type = 'skipped') AS skipped_count,
          COUNT(*) FILTER (WHERE (entry_type IS NULL OR entry_type = 'inventory') AND update_type = 'new' AND NOT is_directory AND NOT COALESCE(is_deleted, false)) AS newly_copied_count,
          COUNT(*) FILTER (
            WHERE (entry_type IS NULL OR entry_type = 'inventory')
@@ -1331,7 +1314,6 @@ export class JobRunService {
       totalSize: String(row?.total_size ?? 0),
       deletedCount: String(row?.deleted_count ?? 0),
       excludedCount: String(row?.excluded_count ?? 0),
-      skippedCount: String(row?.skipped_count ?? 0),
       newlyCopiedCount: String(row?.newly_copied_count ?? 0),
       modifiedCount: String(row?.recopied_count ?? 0),
       migratedSize: String(row?.migrated_size ?? 0),
@@ -1406,13 +1388,6 @@ export class JobRunService {
 
     if (rows.length === 0) return { added: 0 };
 
-    const skippedRows = rows.filter((r) => r.entry_type === "skipped");
-    const skippedRedisDelta = await this.countSkippedRedisDelta(
-      jobRunId,
-      skippedRows.map((r) => ({ path: r.path, is_directory: r.is_directory })),
-      schema,
-    );
-
     const colsPerRow = 14;
     const values = rows
       .map(
@@ -1451,48 +1426,7 @@ export class JobRunService {
       params,
     );
     this.logger.log(`Added ${rows.length} excluded/skipped entries for job run ${jobRunId}`);
-    if (skippedRedisDelta > 0) {
-      await this.redisService.incrementLiveSkippedCount(jobRunId, skippedRedisDelta);
-    }
     return { added: rows.length };
-  }
-
-  private async countSkippedRedisDelta(
-    jobRunId: string,
-    skippedPaths: Array<{ path: string; is_directory: boolean }>,
-    schema: string,
-  ): Promise<number> {
-    if (skippedPaths.length === 0) {
-      return 0;
-    }
-    const pathArr = skippedPaths.map((p) => p.path);
-    const isDirArr = skippedPaths.map((p) => p.is_directory);
-    const existing = await this.dataSource.query(
-      `SELECT i.path, i.is_directory, i.entry_type
-       FROM ${schema}.inventory i
-       JOIN unnest($2::text[], $3::boolean[]) AS inp(path, is_directory)
-         ON i.path = inp.path
-        AND i.is_directory = inp.is_directory
-       WHERE i.job_run_id = $1`,
-      [jobRunId, pathArr, isDirArr],
-    );
-    const priorByKey = new Map<string, string | null>();
-    for (const r of existing as Array<{
-      path: string;
-      is_directory: boolean;
-      entry_type: string | null;
-    }>) {
-      priorByKey.set(`${r.path}|${r.is_directory}`, r.entry_type);
-    }
-    let delta = 0;
-    for (const s of skippedPaths) {
-      const k = `${s.path}|${s.is_directory}`;
-      const et = priorByKey.get(k);
-      if (String(et ?? "").toLowerCase() !== "skipped") {
-        delta++;
-      }
-    }
-    return delta;
   }
 
   async sendErrorRemedyEmail({

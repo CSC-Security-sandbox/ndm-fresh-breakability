@@ -411,7 +411,6 @@ export type JobStatsType = {
   directories: string;
   deletedCount?: string;
   excludedCount?: string;
-  skippedCount?: string;
   newlyCopiedCount?: string;
   modifiedCount?: string;
 };
