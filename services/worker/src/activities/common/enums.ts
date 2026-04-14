@@ -50,7 +50,6 @@ export interface UpdateStatusInput{
         modifiedCount?: number;
         deletedCount?: number;
         excludedCount?: number;
-        skippedCount?: number;
         totalCopiedSize?: string;
     };
 }

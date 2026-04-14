@@ -99,7 +99,6 @@ export class JobRunService {
         (jobStatsSnapshot.totalSize != null && jobStatsSnapshot.totalSize !== '0') ||
         (jobStatsSnapshot.newlyCopiedCount != null && jobStatsSnapshot.newlyCopiedCount !== '0') ||
         (jobStatsSnapshot.modifiedCount != null && jobStatsSnapshot.modifiedCount !== '0') ||
-        (jobStatsSnapshot.skippedCount != null && jobStatsSnapshot.skippedCount !== '0') ||
         (jobStatsSnapshot.deletedCount != null && jobStatsSnapshot.deletedCount !== '0')
       );
 
@@ -135,7 +134,6 @@ export class JobRunService {
           totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
           newlyCopiedCount: jobStatsSnapshot.newlyCopiedCount,
           modifiedCount: jobStatsSnapshot.modifiedCount,
-          skippedCount: jobStatsSnapshot.skippedCount,
           deletedCount: jobStatsSnapshot.deletedCount,
         };
         if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
@@ -268,7 +266,6 @@ export class JobRunService {
       jobRunStatus.totalSize = formatBytes(Number(jobRun.jobStats.totalSize ?? jobStatsSummary?.totalSize ?? 0)).toString();
       jobRunStatus.deletedCount = (jobRun.jobStats as any).deletedCount ?? jobStatsSummary?.deletedCount?.toString() ?? "0";
       jobRunStatus.excludedCount = (jobRun.jobStats as any).excludedCount ?? jobStatsSummary?.excludedCount?.toString() ?? "0";
-      jobRunStatus.skippedCount = (jobRun.jobStats as any).skippedCount ?? jobStatsSummary?.skippedCount?.toString() ?? "0";
       jobRunStatus.newlyCopiedCount = (jobRun.jobStats as any).newlyCopiedCount ?? jobStatsSummary?.newlyCopiedCount?.toString() ?? "0";
       jobRunStatus.modifiedCount = (jobRun.jobStats as any).modifiedCount ?? jobStatsSummary?.recopiedCount?.toString() ?? "0";
     } else if (jobStatsSummary) {
@@ -278,7 +275,6 @@ export class JobRunService {
       jobRunStatus.totalSize = formatBytes(Number(jobStatsSummary.totalSize)).toString();
       jobRunStatus.deletedCount = jobStatsSummary.deletedCount?.toString() ?? "0";
       jobRunStatus.excludedCount = jobStatsSummary.excludedCount?.toString() ?? "0";
-      jobRunStatus.skippedCount = jobStatsSummary.skippedCount?.toString() ?? "0";
       jobRunStatus.newlyCopiedCount = jobStatsSummary.newlyCopiedCount?.toString() ?? "0";
       jobRunStatus.modifiedCount = jobStatsSummary.recopiedCount?.toString() ?? "0";
     } else {
@@ -287,7 +283,6 @@ export class JobRunService {
       jobRunStatus.totalSize = "0";
       jobRunStatus.deletedCount = "0";
       jobRunStatus.excludedCount = "0";
-      jobRunStatus.skippedCount = "0";
       jobRunStatus.newlyCopiedCount = "0";
       jobRunStatus.modifiedCount = "0";
     }

@@ -21,7 +21,6 @@ interface InventoryDelta {
     totalSize: bigint;
     newlyCopiedCount: number;
     recopiedCount: number;
-    skippedCount: number;
     deletedCount: number;
 }
 
@@ -1232,7 +1231,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     /**
      * 1. Dedupe batch; load prior entry_type per path via getInventoryEntryTypesForPaths
-     * 2. Compute file/dir/size delta (MV-aligned) plus newlyCopied / recopied / skipped / deleted counters
+     * 2. Compute file/dir/size delta (MV-aligned) plus newlyCopied / recopied / deleted counters
      * 3. Increment Redis liveStats FIRST (when any delta is non-zero)
      * 4. Write to PostgreSQL; on partial failure compensate ONLY the failed portion
      * 5. Ack ONLY succeeded stream IDs; restore ONLY failed records for retry
@@ -1275,7 +1274,6 @@ export class RedisConsumerService implements OnModuleDestroy {
             const hasAdditionalCounters =
                 delta.newlyCopiedCount > 0 ||
                 delta.recopiedCount > 0 ||
-                delta.skippedCount > 0 ||
                 delta.deletedCount > 0;
             let redisUpdated = false;
 
@@ -1339,7 +1337,7 @@ export class RedisConsumerService implements OnModuleDestroy {
 
     /**
      * MV-aligned file/dir/size delta (excludes excluded; new rows only; skips deleted for totals)
-     * plus copy/skipped/deleted counters aligned with job_stats_summary / createInventory updateType rules.
+     * plus copy/deleted counters aligned with job_stats_summary / createInventory updateType rules.
      */
     private computeLiveStatsDelta(
         jobRunId: string,
@@ -1372,17 +1370,9 @@ export class RedisConsumerService implements OnModuleDestroy {
 
         let newlyCopiedCount = 0;
         let recopiedCount = 0;
-        let skippedCount = 0;
         let deletedCount = 0;
         for (const r of dedupedItems) {
             const entryType = String(r.entryType || '').toLowerCase();
-            if (entryType === 'skipped') {
-                const skipKey = `${r.fileName}|${jobRunId}|${r.isDirectory ?? false}`;
-                const prior = inventoryEntryByKey.get(skipKey);
-                if (String(prior ?? '').toLowerCase() !== 'skipped') {
-                    skippedCount++;
-                }
-            }
             if (!r.isDirectory && r.isDeleted === true) {
                 deletedCount++;
             }
@@ -1416,7 +1406,6 @@ export class RedisConsumerService implements OnModuleDestroy {
             totalSize,
             newlyCopiedCount,
             recopiedCount,
-            skippedCount,
             deletedCount,
         };
     }
@@ -1438,7 +1427,6 @@ export class RedisConsumerService implements OnModuleDestroy {
             .hIncrBy(liveStatsKey, 'totalSize', Number(delta.totalSize))
             .hIncrBy(liveStatsKey, 'newlyCopiedCount', delta.newlyCopiedCount)
             .hIncrBy(liveStatsKey, 'recopiedCount', delta.recopiedCount)
-            .hIncrBy(liveStatsKey, 'skippedCount', delta.skippedCount)
             .hIncrBy(liveStatsKey, 'deletedCount', delta.deletedCount)
             .hSet(liveStatsKey, 'lastUpdated', Date.now().toString())
             .exec();
@@ -1451,7 +1439,7 @@ export class RedisConsumerService implements OnModuleDestroy {
             `projectId: ${projectId} Updated liveStats for job ${jobRunId}: ` +
             `+${delta.fileCount} files, +${delta.dirCount} dirs, +${delta.totalSize} bytes, ` +
             `+${delta.newlyCopiedCount} newlyCopied, +${delta.recopiedCount} recopied, ` +
-            `+${delta.skippedCount} skipped, +${delta.deletedCount} deleted`,
+            `+${delta.deletedCount} deleted`,
         );
     }
 
@@ -1475,7 +1463,6 @@ export class RedisConsumerService implements OnModuleDestroy {
                 .hIncrBy(liveStatsKey, 'totalSize', -Number(delta.totalSize))
                 .hIncrBy(liveStatsKey, 'newlyCopiedCount', -delta.newlyCopiedCount)
                 .hIncrBy(liveStatsKey, 'recopiedCount', -delta.recopiedCount)
-                .hIncrBy(liveStatsKey, 'skippedCount', -delta.skippedCount)
                 .hIncrBy(liveStatsKey, 'deletedCount', -delta.deletedCount)
                 .exec();
             this.redisCompensationFailureCounts.delete(jobRunId);
