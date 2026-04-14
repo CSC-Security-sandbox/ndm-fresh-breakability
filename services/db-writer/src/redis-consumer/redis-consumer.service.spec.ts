@@ -850,3 +850,58 @@ describe('RedisConsumerService - signalWorkflowDbWriterFailure', () => {
     );
   });
 });
+
+describe('RedisConsumerService - deduplicateRecords', () => {
+  let service: RedisConsumerService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.REDIS_JWT_AUTH_ENABLED = 'false';
+
+    const mockRedisClient = {
+      isOpen: false,
+      connect: jest.fn().mockImplementation(function () { this.isOpen = true; return Promise.resolve(); }),
+      quit: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      keys: jest.fn().mockResolvedValue([]),
+      hGetAll: jest.fn().mockResolvedValue({}),
+    };
+    (createClient as jest.Mock).mockReturnValue(mockRedisClient);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisConsumerService,
+        { provide: InventoryService, useValue: { createInventory: jest.fn().mockResolvedValue([]) } },
+        { provide: DataSource, useValue: { query: jest.fn().mockResolvedValue([]) } },
+        { provide: WorkflowService, useValue: { signalWorkflow: jest.fn() } },
+        { provide: AuthService, useValue: { getAccessToken: jest.fn().mockResolvedValue('jwt') } },
+        { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+      ],
+    }).compile();
+
+    service = module.get<RedisConsumerService>(RedisConsumerService);
+    await new Promise(r => setImmediate(r));
+  });
+
+  afterEach(() => {
+    delete process.env.REDIS_JWT_AUTH_ENABLED;
+  });
+
+  it('filters out deleted-directory markers', () => {
+    const records = [
+      { fileName: '/a', isDirectory: true, isDeleted: true },
+      { fileName: '/b', isDirectory: false, isDeleted: false },
+    ];
+    const result = (service as any).deduplicateRecords(records);
+    expect(result).toHaveLength(1);
+    expect(result[0].fileName).toBe('/b');
+  });
+
+  it('keeps the last occurrence when paths are duplicated', () => {
+    const first = { fileName: '/f.txt', isDirectory: false, size: 10 };
+    const second = { fileName: '/f.txt', isDirectory: false, size: 20 };
+    const result = (service as any).deduplicateRecords([first, second]);
+    expect(result).toHaveLength(1);
+    expect(result[0].size).toBe(20);
+  });
+});

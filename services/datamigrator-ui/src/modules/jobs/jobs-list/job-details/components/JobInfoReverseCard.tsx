@@ -4,22 +4,37 @@ import TooltipRenderer from "@components/custom-cell-renderer/TooltipRenderer";
 import { Text, Heading } from "@netapp/bxp-design-system-react";
 
 const JobInfoReverseCard = (props: JobInfoReverseCardPropType) => {
-  const { label, value, valueType, labelTooltip } = props;
-  const labelNode = labelTooltip ? (
-    <TooltipRenderer tooltipContent={labelTooltip}>
-      <Text className="cursor-default underline decoration-dotted underline-offset-2">
-        {label}
-      </Text>
-    </TooltipRenderer>
-  ) : (
-    <Text>{label}</Text>
+  const { label, value, valueType, labelTooltip, valueTooltip } = props;
+
+  const isCustomLabel = typeof label !== "string";
+  const labelNode = isCustomLabel
+    ? label
+    : labelTooltip ? (
+      <TooltipRenderer tooltipContent={labelTooltip}>
+        <Text className="cursor-default underline decoration-dotted underline-offset-2">
+          {label}
+        </Text>
+      </TooltipRenderer>
+    ) : (
+      <Text>{label}</Text>
+    );
+
+  const valueNode = (
+    <Box className="flex gap-1 items-baseline">
+      <Heading level="24">{value}</Heading>
+      {valueType && <Text>{valueType}</Text>}
+    </Box>
   );
+
   return (
     <Box className="flex flex-col grow">
-      <Box className="flex gap-1 items-baseline">
-        <Heading level="24">{value}</Heading>
-        {valueType && <Text>{valueType}</Text>}
-      </Box>
+      {valueTooltip ? (
+        <TooltipRenderer tooltipContent={valueTooltip}>
+          <Box className="cursor-default">{valueNode}</Box>
+        </TooltipRenderer>
+      ) : (
+        valueNode
+      )}
       {labelNode}
     </Box>
   );

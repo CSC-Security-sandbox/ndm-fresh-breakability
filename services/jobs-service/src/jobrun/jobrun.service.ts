@@ -864,6 +864,7 @@ export class JobRunService {
               newlyCopiedCount: liveStats.newlyCopiedCount,
               modifiedCount: liveStats.recopiedCount,
               deletedCount: liveStats.deletedCount,
+              totalCopiedSize: jobRunStats.totalCopiedSize,
               errors: [],
             };
             this.logger.log(
@@ -1635,7 +1636,7 @@ export class JobRunService {
     jobConfigId: string,
     jobRunStats: JobRunStats,
   ): Promise<void> {
-    if (status !== JobRunStatus.Completed && status !== JobRunStatus.Stopped) return;
+    if (status !== JobRunStatus.Completed && status !== JobRunStatus.Stopped && status !== JobRunStatus.Blocked) return;
 
     const jobConfig = await manager.findOne(JobConfigEntity, {
       where: { id: jobConfigId },
@@ -1671,7 +1672,9 @@ export class JobRunService {
       const fileCountForAsup = isMigrationType
         ? parseInt(jobRunStats.newlyCopiedCount || '0', 10) + parseInt(jobRunStats.modifiedCount || '0', 10)
         : parseInt(jobRunStats.fileCount || '0', 10);
-      const sizeForAsup = parseInt(jobRunStats.totalSize || '0', 10);
+      const sizeForAsup = isMigrationType
+        ? parseInt(jobRunStats.totalCopiedSize || jobRunStats.totalSize || '0', 10)
+        : parseInt(jobRunStats.totalSize || '0', 10);
 
       await manager.query(
         `INSERT INTO ${dbSchema}.asup_stats (
