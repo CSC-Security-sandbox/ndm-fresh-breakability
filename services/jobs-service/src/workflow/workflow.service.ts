@@ -92,4 +92,13 @@ export class WorkflowService {
         const details: WorkflowExecutionDescription = await handle.describe();
         return details.status.name;
     }
+
+    async hasActivePollers(taskQueueName: string): Promise<boolean> {
+        const client = await this.getClient();
+        const response: any = await client.workflowService.describeTaskQueue({
+            namespace: 'default',
+            taskQueue: { name: taskQueueName, kind: 1 },
+        });
+        return (response.pollers || []).length > 0;
+    }
 }

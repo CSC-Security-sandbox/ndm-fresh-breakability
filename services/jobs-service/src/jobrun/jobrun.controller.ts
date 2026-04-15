@@ -132,8 +132,8 @@ export class JobRunController {
   @ApiBearerAuth()
   @Auth(Permission.ManageJob)
   @Put("/action")
-  async actions(@Body() jobRunActions: JobRunActionsReq) {
-    return this.jobRunActionService.actions(jobRunActions);
+  async actions(@Body() jobRunActions: JobRunActionsReq, @Headers("projectId") projectId?: string) {
+    return this.jobRunActionService.actions(jobRunActions, projectId);
   }
 
   @ApiOperation({ summary: "Approve cutover by jon run ID" })

@@ -11,6 +11,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { JobRunService } from "./jobrun.service";
 
 @Injectable()
 export class JobRunActionService {
@@ -30,13 +31,14 @@ export class JobRunActionService {
         @InjectRepository(JobRunEntity)
         private jobRunRepo: Repository<JobRunEntity>,
         private workFlowService: WorkflowService,
+        private jobRunService: JobRunService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     ){
         this.logger = loggerFactory.create(JobRunActionService.name);
     }
 
     //  ------------------- JobRun actions ------------------ //
-    async actions(jobRunActions: JobRunActionsReq) {
+    async actions(jobRunActions: JobRunActionsReq, projectId?: string) {
         switch (jobRunActions.action) {
             case JobRunActions.PAUSE: {
                 const jobRuns = await this.jobRunRepo.find({ where: {
@@ -50,15 +52,40 @@ export class JobRunActionService {
                  });
                 }
             case JobRunActions.STOP: {
-                 const jobRuns = await this.jobRunRepo.find({ where: {
-                    id: In(jobRunActions.jobRuns), 
+                const jobRuns = await this.jobRunRepo.find({ where: {
+                    id: In(jobRunActions.jobRuns),
                     status: In([JobRunStatus.Paused, JobRunStatus.Running, JobRunStatus.Ready, JobRunStatus.Pausing, JobRunStatus.Pending, JobRunStatus.Stopping])
                 }, select: ["id", "workFlowId"]});
-                return await this.signalJobRuns({
-                    jobRuns,
-                    progressingStatus: JobRunStatus.Stopping,
-                    signalStatus: JobRunStatus.Stopped
-                 });
+
+                return await Promise.allSettled(
+                    jobRuns.map(async (jobRun) => {
+                        try {
+                            const hasPollers = await this.workFlowService.hasActivePollers(`${jobRun.id}-TaskQueue`);
+                            if (hasPollers) {
+                                this.logger.log(`Active pollers found for jobRun ${jobRun.id}, sending graceful stop signal`);
+                                await this.workFlowService.sendSignal({
+                                    payload: JobRunStatus.Stopped,
+                                    signalName: "action",
+                                    workflowId: jobRun.workFlowId,
+                                });
+                                await this.jobRunRepo.update(jobRun.id, { status: JobRunStatus.Stopping });
+                                return { details: "Stop signal sent for jobRun: " + jobRun.id, status: "fulfilled" };
+                            } else {
+                                this.logger.warn(`No active pollers for jobRun ${jobRun.id}, force stopping`);
+                                try {
+                                    await this.workFlowService.terminateWorkflow(jobRun.workFlowId);
+                                } catch (error) {
+                                    this.logger.warn(`Could not terminate workflow ${jobRun.workFlowId}, may already be terminated: ${error.message}`);
+                                }
+                                await this.jobRunService.updateJobRunStatus(jobRun.id, JobRunStatus.Stopped, projectId);
+                                return { details: "Force stopped jobRun: " + jobRun.id, status: "fulfilled" };
+                            }
+                        } catch (error) {
+                            this.logger.error(`Failed to stop jobRun ${jobRun.id}: ${error.message}`);
+                            return { details: "Operation Failed for jobRun: " + jobRun.id, status: "rejected" };
+                        }
+                    })
+                );
                 }
             case JobRunActions.RESUME: {
                 // filter paused job runs and handle errors

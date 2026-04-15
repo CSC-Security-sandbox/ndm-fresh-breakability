@@ -12,6 +12,7 @@ describe("JobRunActionService", () => {
     let service: JobRunActionService;
     let jobRunRepo: any;
     let workFlowService: any;
+    let jobRunService: any;
     let loggerFactory: LoggerFactory;
 
     beforeEach(() => {
@@ -21,6 +22,11 @@ describe("JobRunActionService", () => {
         };
         workFlowService = {
             sendSignal: jest.fn(),
+            hasActivePollers: jest.fn(),
+            terminateWorkflow: jest.fn(),
+        };
+        jobRunService = {
+            updateJobRunStatus: jest.fn(),
         };
         loggerFactory = {
             create: jest.fn().mockReturnValue({
@@ -31,7 +37,7 @@ describe("JobRunActionService", () => {
                 verbose: jest.fn(),
             }),
         } as any;
-        service = new JobRunActionService(jobRunRepo, workFlowService, loggerFactory);
+        service = new JobRunActionService(jobRunRepo, workFlowService, jobRunService, loggerFactory);
     });
 
     describe("actions", () => {
@@ -71,19 +77,44 @@ describe("JobRunActionService", () => {
             expect(result).toBe("paused");
         });
 
-        it("should stop job runs", async () => {
+        it("should gracefully stop job runs when pollers exist", async () => {
             const jobRuns = [{ id: "2", workFlowId: "wf2" }];
             jobRunRepo.find.mockResolvedValue(jobRuns);
-            service.signalJobRuns = jest.fn().mockResolvedValue("stopped");
+            workFlowService.hasActivePollers.mockResolvedValue(true);
+            workFlowService.sendSignal.mockResolvedValue(undefined);
+            jobRunRepo.update.mockResolvedValue(undefined);
             const req = { action: JobRunActions.STOP, jobRuns: ["2"] };
             const result = await service.actions(req);
-            expect(jobRunRepo.find).toHaveBeenCalled();
-            expect(service.signalJobRuns).toHaveBeenCalledWith({
-                jobRuns,
-                progressingStatus: JobRunStatus.Stopping,
-                signalStatus: JobRunStatus.Stopped,
-            });
-            expect(result).toBe("stopped");
+            expect(workFlowService.hasActivePollers).toHaveBeenCalledWith("2-TaskQueue");
+            expect(workFlowService.sendSignal).toHaveBeenCalled();
+            expect(jobRunRepo.update).toHaveBeenCalledWith("2", { status: JobRunStatus.Stopping });
+            expect(result[0].status).toBe("fulfilled");
+        });
+
+        it("should force stop job runs when no pollers exist", async () => {
+            const jobRuns = [{ id: "2", workFlowId: "wf2" }];
+            jobRunRepo.find.mockResolvedValue(jobRuns);
+            workFlowService.hasActivePollers.mockResolvedValue(false);
+            workFlowService.terminateWorkflow.mockResolvedValue(true);
+            jobRunService.updateJobRunStatus.mockResolvedValue(undefined);
+            const req = { action: JobRunActions.STOP, jobRuns: ["2"] };
+            const result = await service.actions(req, "project-1");
+            expect(workFlowService.hasActivePollers).toHaveBeenCalledWith("2-TaskQueue");
+            expect(workFlowService.terminateWorkflow).toHaveBeenCalledWith("wf2");
+            expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith("2", JobRunStatus.Stopped, "project-1");
+            expect(result[0].status).toBe("fulfilled");
+        });
+
+        it("should force stop even if terminateWorkflow throws (already terminated)", async () => {
+            const jobRuns = [{ id: "2", workFlowId: "wf2" }];
+            jobRunRepo.find.mockResolvedValue(jobRuns);
+            workFlowService.hasActivePollers.mockResolvedValue(false);
+            workFlowService.terminateWorkflow.mockRejectedValue(new Error("workflow not found"));
+            jobRunService.updateJobRunStatus.mockResolvedValue(undefined);
+            const req = { action: JobRunActions.STOP, jobRuns: ["2"] };
+            const result = await service.actions(req, "project-1");
+            expect(jobRunService.updateJobRunStatus).toHaveBeenCalledWith("2", JobRunStatus.Stopped, "project-1");
+            expect(result[0].status).toBe("fulfilled");
         });
 
         it("should resume job runs", async () => {

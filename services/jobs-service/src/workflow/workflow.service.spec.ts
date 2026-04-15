@@ -279,6 +279,45 @@ describe('WorkflowService', () => {
       expect(mockHandle.describe).toHaveBeenCalled();
     });
   });
+  describe('hasActivePollers', () => {
+    it('should return true when pollers exist', async () => {
+      const mockClient = {
+        workflowService: {
+          describeTaskQueue: jest.fn().mockResolvedValue({ pollers: [{ identity: 'worker1' }] }),
+        },
+      };
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+      const result = await service.hasActivePollers('test-TaskQueue');
+      expect(mockClient.workflowService.describeTaskQueue).toHaveBeenCalledWith({
+        namespace: 'default',
+        taskQueue: { name: 'test-TaskQueue', kind: 1 },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should return false when pollers array is empty', async () => {
+      const mockClient = {
+        workflowService: {
+          describeTaskQueue: jest.fn().mockResolvedValue({ pollers: [] }),
+        },
+      };
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+      const result = await service.hasActivePollers('test-TaskQueue');
+      expect(result).toBe(false);
+    });
+
+    it('should return false when pollers is undefined', async () => {
+      const mockClient = {
+        workflowService: {
+          describeTaskQueue: jest.fn().mockResolvedValue({}),
+        },
+      };
+      jest.spyOn<any, any>(service, 'getClient').mockResolvedValue(mockClient as any);
+      const result = await service.hasActivePollers('test-TaskQueue');
+      expect(result).toBe(false);
+    });
+  });
+
   describe('startWorkflow', () => {
     it('should start the workflow and return the handle', async () => {
       const workflowName = WorkFlows.DISCOVERY;
