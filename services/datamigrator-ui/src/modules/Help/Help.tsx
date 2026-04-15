@@ -10,6 +10,9 @@ import { useHelpContent } from "@modules/Help/hook/useHelpContent";
 import { useDrawerNavigation } from "@hooks/useDrawerNavigation";
 import AsupHelpItem from "@modules/Help/components/asup-metrics/components/AsupHelpItem";
 
+const HELP_SUPPORT_URL = "https://mysupport.netapp.com/site/";
+const HELP_DOCUMENTATION_URL = "https://docs.netapp.com/us-en/data-migrator/index.htm";
+
 const HelpContent = () => {
   const { isHelpListVisible, setGetItemIndex } = useContext(HelpContext);
   const { handleCloseDrawer } = useDrawerNavigation("HelpContent");
@@ -44,7 +47,15 @@ const HelpContent = () => {
                 <Box
                   key={item.id}
                   className="flex flex-row justify-between items-center p-3 border-b cursor-pointer hover:bg-slate-100 hover:text-text-title transition-all duration-100"
-                  onClick={() => setGetItemIndex(item?.id)}
+                  onClick={() => {
+                    if ( item.name === HELP_ITEMS_ENUM.SUPPORT ) {
+                      window.open(HELP_SUPPORT_URL, "_blank", "noopener,noreferrer");
+                    } else if ( item.name === HELP_ITEMS_ENUM.DOCUMENTATION ) {
+                      window.open(HELP_DOCUMENTATION_URL, "_blank", "noopener,noreferrer");
+                    } else {
+                      setGetItemIndex(item.id);
+                    }
+                  }}
                 >
                   {item?.name}
                 </Box>
