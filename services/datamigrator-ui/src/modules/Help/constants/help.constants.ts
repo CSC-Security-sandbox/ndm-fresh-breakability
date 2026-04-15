@@ -7,7 +7,6 @@ export enum HELP_ITEMS_ENUM {
   ABOUT_NDM = "About NDM",
   SUPPORT = "Support",
   DOCUMENTATION = "Documentation",
-  FEEDBACK = "Feedback",
   SUPPORT_BUNDLE = "Support Bundle",
   UPGRADE = "Upgrade",
   ASUP_METRICS_SHARING = "Telemetry Transmission",
@@ -28,25 +27,23 @@ export const HELP_ITEMS = [
   },
   {
     id: 4,
-    name: HELP_ITEMS_ENUM.FEEDBACK,
-  },
-  {
-    id: 5,
     name: HELP_ITEMS_ENUM.SUPPORT_BUNDLE,
   },
   {
-    id: 6,
+    id: 5,
     name: HELP_ITEMS_ENUM.UPGRADE
   },
   {
-    id: 7,
+    id: 6,
     name: HELP_ITEMS_ENUM.ASUP_METRICS_SHARING,
   },
 ];
 
 export const CONFIG_MAP = {
   1: { name: "AboutNDM", component: React.createElement(AboutNDM) },
-  5: { name: "SupportBundle", component: React.createElement(SupportBundle) },
-  6: { name: "Upgrade", component: React.createElement(Upgrade) },
-  // Note: ASUP Metrics Sharing (id: 7) is not clickable - it only shows a toggle in the list
+  // 2: Support- opens an external URL in a new tab
+  // 3: Documentation - opens an external URL in a new tab
+  4: { name: "SupportBundle", component: React.createElement(SupportBundle) },
+  5: { name: "Upgrade", component: React.createElement(Upgrade) },
+  // 6: ASUP Metrics Sharing is not clickable - only shows a toggle in the list
 };
