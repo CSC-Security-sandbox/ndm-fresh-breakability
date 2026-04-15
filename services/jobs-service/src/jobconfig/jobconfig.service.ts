@@ -853,6 +853,28 @@ export class JobConfigService {
     };
   }
 
+  private async inheritIdentityMappingFromMigrateJobToCutover(
+    migrateJobConfigId: string,
+    cutoverJobConfigId: string,
+  ): Promise<void> {
+    const migrateCrossMapping = await this.identityCrossMappingRepo.findOne({
+      where: { jobConfigId: migrateJobConfigId, isOrphan: false },
+      order: { createdAt: "DESC" },
+    });
+    if (!migrateCrossMapping) {
+      return;
+    }
+    const row = this.identityCrossMappingRepo.create({
+      identityMappingId: migrateCrossMapping.identityMappingId,
+      jobConfigId: cutoverJobConfigId,
+      isOrphan: false,
+    });
+    await this.identityCrossMappingRepo.save(row);
+    this.logger.log(
+      `Cutover job ${cutoverJobConfigId} inherited identity map ${migrateCrossMapping.identityMappingId} from migrate job ${migrateJobConfigId}`,
+    );
+  }
+
   async createBulkCutover(
     bulkCutover: JobConfigCutoverBulk
   ): Promise<JobConfigBulkCutoverRes[]> {
@@ -896,6 +918,7 @@ export class JobConfigService {
       });
 
       const newCutoverJobs: JobConfigEntity[] = [];
+      const migrateConfigIdsForNewCutovers: string[] = [];
       const updatedCutoverJobs: JobConfigEntity[] = [];
 
       for (const { sourcePathId, sourceDirectoryPath, destinationPathId, destinationDirectoryPath } of allCutoverConfigs) {
@@ -934,6 +957,7 @@ export class JobConfigService {
                   excludeOlderThan: config.excludeOlderThan,
                 })
               );
+              migrateConfigIdsForNewCutovers.push(config.id);
             } else {
               if (
                 existingCutover &&
@@ -953,11 +977,19 @@ export class JobConfigService {
                   firstRunAt: new Date(),
                 });
                 updatedCutoverJobs.push({ ...existingCutover, ...config });
+                await this.identityCrossMappingRepo.update(
+                  { jobConfigId: existingCutover.id, isOrphan: false },
+                  { isOrphan: true },
+                );
+                await this.inheritIdentityMappingFromMigrateJobToCutover(
+                  config.id,
+                  existingCutover.id,
+                );
               } else {
                 throw new HttpException(
                   {
                     status: "failed",
-                    message: `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`,
+                    message: "Cutover job already exists for this migration job. Please activate or delete the existing one before creating a new one",
                   },
                   HttpStatus.BAD_REQUEST
                 );
@@ -968,6 +1000,14 @@ export class JobConfigService {
       }
 
       const savedJobs = await this.jobConfigRepo.save(newCutoverJobs);
+      await Promise.all(
+        savedJobs.map((job, i) =>
+          this.inheritIdentityMappingFromMigrateJobToCutover(
+            migrateConfigIdsForNewCutovers[i],
+            job.id,
+          ),
+        ),
+      );
 
       return [...savedJobs, ...updatedCutoverJobs].map((job) => ({
         id: job.id,

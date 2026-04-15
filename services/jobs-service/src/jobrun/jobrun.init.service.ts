@@ -183,7 +183,10 @@ export class JobRunInitService {
         }),
       );
       let identityMappingId: string | null = null;
-      if (details.jobType === JobType.MIGRATE) {
+      if (
+        details.jobType === JobType.MIGRATE ||
+        details.jobType === JobType.CUT_OVER
+      ) {
         const activeMapping = await this.identityConfigCrossMappingRepo.findOne({
           where: { jobConfigId: details.id, isOrphan: false },
           order: { createdAt: "DESC" },

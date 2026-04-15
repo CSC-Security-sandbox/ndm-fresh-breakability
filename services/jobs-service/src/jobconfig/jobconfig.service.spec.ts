@@ -5546,8 +5546,236 @@ describe("JobConfigService", () => {
       await expect(
         service.createBulkCutover({ cutoverConfig } as any)
       ).rejects.toThrowError(
-        `Cutover is already exists for the given source path ID ${sourcePathId} and destination path ID ${destinationPathId}`
+        "Cutover job already exists for this migration job. Please activate or delete the existing one before creating a new one"
       );
+    });
+
+    it('should inherit identity mapping from migrate job when creating new cutover jobs', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
+      const migrateJobId = 'migrate-job-id';
+      const newCutoverJobId = 'new-cutover-job-id';
+      const identityMappingId = 'identity-map-id';
+
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
+
+      const completedMigrateJob = {
+        id: migrateJobId,
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        preservePermissions: true,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null,
+      };
+
+      const jobRun = {
+        jobConfigId: migrateJobId,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+
+      const savedCutoverJob = {
+        id: newCutoverJobId,
+        jobType: JobType.CUT_OVER,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        status: JobStatus.Active,
+        firstRunAt: new Date(),
+      };
+
+      const migrateCrossMapping = {
+        id: 'cross-1',
+        jobConfigId: migrateJobId,
+        identityMappingId,
+        isOrphan: false,
+      };
+
+      jest.spyOn(service as any, 'flattenCutoverConfig').mockReturnValue(cutoverConfig);
+      jest.spyOn(service as any, 'findJobConfigs').mockResolvedValue([completedMigrateJob]);
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(null);
+      jest.spyOn(service['jobConfigRepo'], 'create').mockImplementation((data) => data as any);
+      jest.spyOn(service['jobConfigRepo'], 'save').mockResolvedValue([savedCutoverJob] as any);
+      jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue(migrateCrossMapping as any);
+      jest.spyOn(identityCrossMappingRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
+
+      await service.createBulkCutover({ cutoverConfig } as any);
+
+      expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId: migrateJobId, isOrphan: false },
+        order: { createdAt: 'DESC' },
+      });
+      expect(identityCrossMappingRepo.create).toHaveBeenCalledWith({
+        identityMappingId,
+        jobConfigId: newCutoverJobId,
+        isOrphan: false,
+      });
+      expect(identityCrossMappingRepo.save).toHaveBeenCalled();
+    });
+
+    it('should not create identity mapping for new cutover jobs when migrate job has no mapping', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
+      const migrateJobId = 'migrate-job-id';
+
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
+
+      const completedMigrateJob = {
+        id: migrateJobId,
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        preservePermissions: true,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null,
+      };
+
+      const jobRun = {
+        jobConfigId: migrateJobId,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+
+      const savedCutoverJob = {
+        id: 'new-cutover-job-id',
+        jobType: JobType.CUT_OVER,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        status: JobStatus.Active,
+        firstRunAt: new Date(),
+      };
+
+      jest.spyOn(service as any, 'flattenCutoverConfig').mockReturnValue(cutoverConfig);
+      jest.spyOn(service as any, 'findJobConfigs').mockResolvedValue([completedMigrateJob]);
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(null);
+      jest.spyOn(service['jobConfigRepo'], 'create').mockImplementation((data) => data as any);
+      jest.spyOn(service['jobConfigRepo'], 'save').mockResolvedValue([savedCutoverJob] as any);
+      jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue(null);
+      const createSpy = jest.spyOn(identityCrossMappingRepo, 'create');
+      const saveSpy = jest.spyOn(identityCrossMappingRepo, 'save');
+
+      await service.createBulkCutover({ cutoverConfig } as any);
+
+      expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId: migrateJobId, isOrphan: false },
+        order: { createdAt: 'DESC' },
+      });
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('should mark old mapping as orphan and inherit identity mapping when updating existing active cutover job', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
+      const migrateJobId = 'migrate-job-id';
+      const existingCutoverId = 'existing-cutover-id';
+      const identityMappingId = 'identity-map-id';
+
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
+
+      const completedMigrateJob = {
+        id: migrateJobId,
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        preservePermissions: true,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null,
+      };
+
+      const jobRun = {
+        jobConfigId: migrateJobId,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+
+      const existingCutoverJob = {
+        id: existingCutoverId,
+        jobType: JobType.CUT_OVER,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        status: JobStatus.Active,
+      };
+
+      const migrateCrossMapping = {
+        id: 'cross-1',
+        jobConfigId: migrateJobId,
+        identityMappingId,
+        isOrphan: false,
+      };
+
+      jest.spyOn(service as any, 'flattenCutoverConfig').mockReturnValue(cutoverConfig);
+      jest.spyOn(service as any, 'findJobConfigs').mockResolvedValue([completedMigrateJob]);
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(existingCutoverJob as any);
+      jest.spyOn(service['jobConfigRepo'], 'update').mockResolvedValue({} as any);
+      jest.spyOn(service['jobConfigRepo'], 'save').mockResolvedValue([] as any);
+      jest.spyOn(identityCrossMappingRepo, 'update').mockResolvedValue({} as any);
+      jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue(migrateCrossMapping as any);
+      jest.spyOn(identityCrossMappingRepo, 'create').mockImplementation((data) => data as any);
+      jest.spyOn(identityCrossMappingRepo, 'save').mockResolvedValue({} as any);
+
+      await service.createBulkCutover({ cutoverConfig } as any);
+
+      expect(identityCrossMappingRepo.update).toHaveBeenCalledWith(
+        { jobConfigId: existingCutoverId, isOrphan: false },
+        { isOrphan: true },
+      );
+      expect(identityCrossMappingRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId: migrateJobId, isOrphan: false },
+        order: { createdAt: 'DESC' },
+      });
+      expect(identityCrossMappingRepo.create).toHaveBeenCalledWith({
+        identityMappingId,
+        jobConfigId: existingCutoverId,
+        isOrphan: false,
+      });
+      expect(identityCrossMappingRepo.save).toHaveBeenCalled();
     });
   })
 

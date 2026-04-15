@@ -238,6 +238,66 @@ describe('JobRunInitService', () => {
   });
 
   describe('createJobRun', () => {
+    it('should fetch identity mapping for CUT_OVER job type', async () => {
+      const jobConfigId = 'cutover-config-id';
+      const currentTime = new Date();
+      const mockCrossMapping = {
+        jobConfigId,
+        identityMappingId: 'identity-map-id',
+        isOrphan: false,
+      };
+      const details = {
+        id: jobConfigId,
+        jobType: JobType.CUT_OVER,
+        workers: ['worker1'],
+        connection: {
+          sourceCredential: {
+            pathId: 'sourcePathId',
+            protocol: Protocol.NFS,
+            username: 'user',
+            password: 'pass',
+            host: 'host',
+            workingDirectory: '/mnt',
+            isValidPath: true,
+            isDisabled: false,
+          },
+          targetCredential: {
+            pathId: 'targetPathId',
+            protocol: Protocol.NFS,
+            username: 'user',
+            password: 'pass',
+            host: 'host',
+            workingDirectory: '/mnt',
+            isValidPath: true,
+            isDisabled: false,
+          },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      jest.spyOn(identityConfigCrossMappingRepo, 'findOne').mockResolvedValue(mockCrossMapping as any);
+      jest.spyOn(workerJobRunMapRepo, 'create').mockReturnValue({} as any);
+      jest.spyOn(optionRepo, 'create').mockReturnValue({} as any);
+      jest.spyOn(jobRunRepo, 'create').mockReturnValue({} as any);
+      jest.spyOn(jobRunRepo, 'save').mockResolvedValue({} as any);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({} as any);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue({
+        exists: jest.fn(),
+        xGroupCreate: jest.fn().mockImplementation(() => Promise.resolve()),
+        set: jest.fn().mockResolvedValue('OK'),
+        xAdd: jest.fn().mockImplementation(() => Promise.resolve()),
+      } as any);
+      jest.spyOn(service, 'initiateWorkflow').mockResolvedValue(undefined);
+      jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+
+      await service.createJobRun(jobConfigId, currentTime);
+
+      expect(identityConfigCrossMappingRepo.findOne).toHaveBeenCalledWith({
+        where: { jobConfigId, isOrphan: false },
+        order: { createdAt: 'DESC' },
+      });
+    });
+
     it('should create a job run and return it', async () => {
       const jobConfigId = 'jobConfigId';
       const currentTime = new Date();

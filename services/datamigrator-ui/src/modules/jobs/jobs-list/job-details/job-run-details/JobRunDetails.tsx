@@ -70,7 +70,11 @@ const JobRunDetails = () => {
 
   const [fetchIdentityMappings, { data: jobRunIdentityMappings }] = useLazyGetJobRunIdentityMappingsQuery();
   useEffect(() => {
-    if (jobRunId && jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.MIGRATE) {
+    if (
+      jobRunId &&
+      (jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.MIGRATE ||
+        jobRunDetails?.jobConfig?.jobType === JOBS_TYPE.CUT_OVER)
+    ) {
       fetchIdentityMappings(jobRunId);
     }
   }, [jobRunId, jobRunDetails?.jobConfig?.jobType, fetchIdentityMappings]);
@@ -290,6 +294,18 @@ const JobRunDetails = () => {
                       <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
                       <Text className="whitespace-pre-wrap">{excludeFilePatterns}</Text>
                     </Box>
+                    {jobRunConfig?.identityMappingId && (
+                      <ExistingIdentityMappings
+                        existingMappings={{
+                          items: {
+                            data: jobRunIdentityMappings?.items?.data,
+                          },
+                        }}
+                        protocol={jobRunProtocol}
+                        jobId={jobId}
+                        jobRunId={jobRunId}
+                      />
+                    )}
                   </Box>
                 </Box>
               </Box> 
