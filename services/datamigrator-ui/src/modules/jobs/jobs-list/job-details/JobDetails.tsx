@@ -181,6 +181,14 @@ const JobDetails = () => {
     }
   }, [jobId, jobConfigDetails?.jobType, fetchInventoryStats]);
 
+  const { data: cutoverIdentityMappings } = useGetJobIdentityMappingsQuery(
+    jobId as string,
+    {
+      skip: !jobId || jobConfigDetails?.jobType !== JOBS_TYPE.CUT_OVER,
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
   const handleRefreshInventoryStats = async () => {
     await fetchInventoryStats({ fetchLatest: true });
   };
@@ -673,7 +681,7 @@ const JobDetails = () => {
           )}
         </Box>
         <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
-          <Box className="p-6 flex">
+          <Box className="p-6 flex gap-4">
             <Box className="w-3/6 flex flex-col gap-8">
               <Box className="flex gap-6 items-center">
                 <Box className="flex gap-2 items-center">
@@ -1078,6 +1086,10 @@ const JobDetails = () => {
                     <Text>{preserveATime}</Text>
                   </Box>
                   <Box>
+                    <Text className="!mb-0 font-semibold">Preserve permissions:</Text>
+                    <Text>{preservePermissions}</Text>
+                  </Box>
+                  <Box>
                     <Text className="!mb-0 font-semibold">Exclude Files Older Than:</Text>
                     <Text>{skipFilesModified}</Text>
                   </Box>
@@ -1087,6 +1099,15 @@ const JobDetails = () => {
                     <Text className="!mb-0 font-semibold">Excluded Path Patterns:</Text>
                     <Text className="whitespace-pre-wrap">{excludeFilePatterns.join("\n")}</Text>
                   </Box>
+                  {cutoverIdentityMappings?.items?.data?.length>0 && (
+                    <Box className="flex flex-col gap-2">
+                      <ExistingIdentityMappings
+                        existingMappings={cutoverIdentityMappings}
+                        protocol={jobProtocol}
+                        jobId={jobId}
+                      />
+                    </Box>
+                  )}
                 </Box>
               </Box>
             </Box> 
@@ -1168,18 +1189,20 @@ const JobDetails = () => {
                   ? "View Configuration"
                   : "View / Edit Configuration"}
               </Button>
-              <Button
-                onClick={async () => {
-                  await adhocRun(jobId, true);
-                  refetch();
-                }}
-                disabled={
-                  !jobId ||
-                  jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE
-                }
-              >
-                Adhoc Run
-              </Button>
+              {jobConfigDetails?.jobType !== JOBS_TYPE.CUT_OVER && (
+                <Button
+                  onClick={async () => {
+                    await adhocRun(jobId, true);
+                    refetch();
+                  }}
+                  disabled={
+                    !jobId ||
+                    jobConfigDetails?.status === JOB_CONFIG_STATUS_ENUM.INACTIVE
+                  }
+                >
+                  Adhoc Run
+                </Button>
+              )}
               {jobConfigDetails?.jobType !== JOBS_TYPE.DISCOVERY && (
                 <Button
                   onClick={() => { handleRetryJobRun(jobId);
