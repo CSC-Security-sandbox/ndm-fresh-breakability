@@ -215,7 +215,7 @@ describe('JobRunController', () => {
       const result = { status: 'ok' };
       jobRunActionService.actions.mockResolvedValue(result as any);
       expect(await controller.actions(req)).toBe(result);
-      expect(jobRunActionService.actions).toHaveBeenCalledWith(req);
+      expect(jobRunActionService.actions).toHaveBeenCalledWith(req, undefined);
     });
   });
 
