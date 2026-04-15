@@ -603,6 +603,85 @@ describe('DiscoveryScanService', () => {
     });
   });
 
+  describe('getItemInfo - birthTime handling', () => {
+    const validBirthtime = new Date('2023-06-15');
+    const baseStat = {
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      atime: new Date('2023-01-01'),
+      mtime: new Date('2023-01-01'),
+      birthtime: validBirthtime,
+      size: 1024,
+      ino: 12345,
+    };
+
+    // NFSv3 — raw form as stored in DB ("v3")
+    it('should set birthTime to null for NFSv3 (protocolVersion === "v3", raw DB form)', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v3');
+      expect(result.sourceMeta.birthTime).toBeNull();
+    });
+
+    // NFSv3 — pre-normalized form as received by worker after upstream strips leading "v"
+    it('should set birthTime to null for NFSv3 (protocolVersion === "3", normalized by upstream)', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, '3');
+      expect(result.sourceMeta.birthTime).toBeNull();
+    });
+
+    it('should set birthTime to null for epoch birthtime regardless of protocol', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const epochStat = { ...baseStat, birthtime: new Date(0) };
+      const result = service.getItemInfo(epochStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v4.0');
+      expect(result.sourceMeta.birthTime).toBeNull();
+    });
+
+    it('should use stats.birthtime for NFSv4 with valid birthtime', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v4.0');
+      expect(result.sourceMeta.birthTime).toEqual(validBirthtime);
+    });
+
+    // SMBv3.0 ("v3.0") must NOT be confused with NFSv3 ("v3" / "3")
+    it('should NOT treat SMBv3.0 as NFSv3 — birthTime should use stats.birthtime', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v3.0');
+      expect(result.sourceMeta.birthTime).toEqual(validBirthtime);
+    });
+
+    // SMBv3.0 normalized ("3.0") — upstream strips "v", must still not match NFSv3
+    it('should NOT treat SMBv3.0 normalized ("3.0") as NFSv3', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, '3.0');
+      expect(result.sourceMeta.birthTime).toEqual(validBirthtime);
+    });
+
+    it('should NOT treat SMBv3.1.1 as NFSv3', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v3.1.1');
+      expect(result.sourceMeta.birthTime).toEqual(validBirthtime);
+    });
+
+    it('should use stats.birthtime when protocolVersion is undefined and birthtime is valid', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, undefined);
+      expect(result.sourceMeta.birthTime).toEqual(validBirthtime);
+    });
+
+    it('should set birthTime to null when protocolVersion is undefined and birthtime is epoch', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const epochStat = { ...baseStat, birthtime: new Date(0) };
+      const result = service.getItemInfo(epochStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, undefined);
+      expect(result.sourceMeta.birthTime).toBeNull();
+    });
+
+    it('should set birthTime to null for NFSv3 even when birthtime is a valid non-epoch date', () => {
+      (getFilePermissions as jest.Mock).mockReturnValue('755');
+      const result = service.getItemInfo(baseStat as any, '/path/file.txt', 'file.txt', FileType.FILE, false, 1024, 'v3');
+      expect(result.sourceMeta.birthTime).toBeNull();
+    });
+  });
+
   /**
    * Test suite for publishFileInfo method - Alternate Data Streams (ADS) scanning
    * 

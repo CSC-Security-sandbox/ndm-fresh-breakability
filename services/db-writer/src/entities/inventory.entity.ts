@@ -76,9 +76,9 @@ export class InventoryEntity {
     @Column({ name: 'volume_id',type:'uuid' })    
     pathId: string;
 
-    @ApiProperty({ description: 'Birth Time' })
-    @Column({ name: 'birth_time',type:'timestamp' })
-    birthTime: string;
+    @ApiProperty({ description: 'Birth Time', nullable: true })
+    @Column({ name: 'birth_time', type: 'timestamp', nullable: true })
+    birthTime: string | null;
 
     @ApiProperty({ description: 'Job Run ID' })
     @Column({ name: 'job_run_id',type:'uuid' })

@@ -83,6 +83,38 @@ it('CREATED_TIME_DISTRIBUTION_MAPPER maps input correctly', () => {
     ]);
 });
 
+it('CREATED_TIME_DISTRIBUTION_MAPPER filters out N/A entries (NFSv3 / no birthtime support)', () => {
+    const input = [{ count: '100', total_size: '5000', created_group: 'N/A' }];
+    const result = CREATED_TIME_DISTRIBUTION_MAPPER(input as any);
+    expect(result).toEqual([]);
+});
+
+it('CREATED_TIME_DISTRIBUTION_MAPPER returns empty array when all entries are N/A', () => {
+    const input = [{ count: '500', total_size: '20000', created_group: 'N/A' }];
+    const result = CREATED_TIME_DISTRIBUTION_MAPPER(input as any);
+    expect(result).toHaveLength(0);
+});
+
+it('CREATED_TIME_DISTRIBUTION_MAPPER keeps valid entries and drops N/A', () => {
+    const input = [
+        { count: '100', total_size: '5000', created_group: 'N/A' },
+        { count: '3', total_size: '75', created_group: '0-1 wk' },
+        { count: '10', total_size: '200', created_group: '1 wk - 1 mo' },
+    ];
+    const result = CREATED_TIME_DISTRIBUTION_MAPPER(input as any);
+    expect(result).toEqual([
+        { value: 3, category: 'Created', valueType: 'count', sub_category: 'File Count with Creation Time 0-1 wk' },
+        { value: 75, category: 'Created', valueType: 'size', sub_category: 'Capacity with Creation Time 0-1 wk' },
+        { value: 10, category: 'Created', valueType: 'count', sub_category: 'File Count with Creation Time 1 wk - 1 mo' },
+        { value: 200, category: 'Created', valueType: 'size', sub_category: 'Capacity with Creation Time 1 wk - 1 mo' },
+    ]);
+});
+
+it('CREATED_TIME_DISTRIBUTION_MAPPER handles empty input array', () => {
+    const result = CREATED_TIME_DISTRIBUTION_MAPPER([]);
+    expect(result).toEqual([]);
+});
+
 it('ACCESS_TIME_DISTRIBUTION_MAPPER maps input correctly', () => {
     const input = [{ count: '4', total_size: '200', access_group: 'Today' }];
     const result = ACCESS_TIME_DISTRIBUTION_MAPPER(input as any);

@@ -90,20 +90,22 @@ export const MODIFIED_TIME_DISTRIBUTION_MAPPER = (input: ModifiedTimeDistributio
 
 export const CREATED_TIME_DISTRIBUTION_MAPPER = (input: CreatedTimeDistributionInput[]) : DiscoveryReportSection[] => {
     const output: DiscoveryReportSection[] = [];
-    input.forEach(item => {
-        output.push({
-            value: parseInt(item.count, 0),
-            category: 'Created',
-            valueType: 'count',
-            sub_category: `File Count with Creation Time ${item.created_group}`
+    input
+        .filter(item => item.created_group !== 'N/A')
+        .forEach(item => {
+            output.push({
+                value: parseInt(item.count, 0),
+                category: 'Created',
+                valueType: 'count',
+                sub_category: `File Count with Creation Time ${item.created_group}`
+            });
+            output.push({
+                value: parseInt(item.total_size, 0),
+                category: 'Created',
+                valueType: 'size',
+                sub_category: `Capacity with Creation Time ${item.created_group}`
+            });
         });
-        output.push({
-            value: parseInt(item.total_size, 0),
-            category: 'Created',
-            valueType: 'size',
-            sub_category: `Capacity with Creation Time ${item.created_group}`
-        });
-    });
     return output;
 }
 

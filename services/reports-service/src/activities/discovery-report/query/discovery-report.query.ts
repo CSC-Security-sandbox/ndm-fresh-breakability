@@ -51,6 +51,7 @@ export const MODIFIED_TIME_DISTRIBUTION = (schema: string) => `
 export const CREATED_TIME_DISTRIBUTION = (schema: string) => `
     select
         case
+            when birth_time IS NULL then 'N/A'
             when birth_time > CURRENT_DATE then 'future'
             when birth_time >= CURRENT_date - interval '1 week' then '0-1 wk'
             when birth_time >= CURRENT_date - interval '1 month' then '1 wk - 1 mo'

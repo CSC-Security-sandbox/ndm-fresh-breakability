@@ -32,9 +32,19 @@ const Graphs = () => {
   });
   const isDataToShowInSize = form.formState.dataset?.value === "fileSize";
 
+  const hasCreatedData = (chart: ReturnType<typeof CHART_MAPER>[number]) =>
+    chart.countData?.length > 0 && chart.countData.some((v) => v > 0);
+
+  const visibleCharts = CHART_MAPER(reportData).filter((chart) => {
+    if (chart.label === "Created") {
+      return hasCreatedData(chart);
+    }
+    return true;
+  });
+
   return (
     <Box className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-      {CHART_MAPER(reportData).map((chart, index) => (
+      {visibleCharts.map((chart, index) => (
         <Card key={index} className="flex flex-col">
           {chart.haveToggle ? (
             <div className="flex justify-between px-8 py-4 border-b-2 items-center">
