@@ -564,7 +564,7 @@ jobs:
           echo "=== Processing GCNV Volumes (older than $AGE_THRESHOLD_DAYS_VMS_DISKS_VOLUMES days) ==="
           echo "Filter: $AGE_FILTER"
 
-          LOCATION_NAME="us-east4"
+          LOCATION_NAME="us-east4-a"
           GCNV_VOLUMES_JSON=$(gcloud netapp volumes list --project="$GCP_PROJECT_ID" --location="$LOCATION_NAME" --filter="$AGE_FILTER" --format="json" 2>&1)
           VOLUMES_EXIT_CODE=$?
           

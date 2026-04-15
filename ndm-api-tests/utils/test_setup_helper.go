@@ -22,6 +22,8 @@ type TestVolumeSetup struct {
 	DestSVMName         string
 	SourceANFConfig     *ANFEndpointConfig
 	DestANFConfig       *ANFEndpointConfig
+	SourceGCNVConfig    *GCNVEndpointConfig
+	DestGCNVConfig      *GCNVEndpointConfig
 	MasterSourceVolumes []string
 	MasterDestVolumes   []string
 	SourceVolumeManager *TestVolumeManager
@@ -128,6 +130,66 @@ func resolveANFEndpointConfig(protocolLabel, endpoint string) *ANFEndpointConfig
 	}
 }
 
+func initializeGCNVTestVolumeSetup(sourceVolumesEnv, destVolumesEnv, protocolLabel string) (*TestVolumeSetup, error) {
+	sourceConfig := resolveGCNVEndpointConfig(protocolLabel, "SOURCE")
+	destConfig := resolveGCNVEndpointConfig(protocolLabel, "DEST")
+	protocolKey := strings.ToUpper(strings.TrimSpace(protocolLabel))
+
+	setup := &TestVolumeSetup{
+		EnableCloning:    true,
+		CloneProvider:    VolumeCloneProviderGCNV,
+		SourceGCNVConfig: sourceConfig,
+		DestGCNVConfig:   destConfig,
+	}
+
+	if setup.SourceGCNVConfig.ProjectID == "" || setup.SourceGCNVConfig.Location == "" || setup.SourceGCNVConfig.StoragePool == "" {
+		return nil, fmt.Errorf(
+			"GCNV source configuration incomplete. Required: GCP_GCNV_PROJECT_ID, GCP_GCNV_LOCATION, GCP_GCNV_%s_SOURCE_STORAGE_POOL",
+			protocolKey,
+		)
+	}
+
+	if setup.DestGCNVConfig.ProjectID == "" || setup.DestGCNVConfig.Location == "" || setup.DestGCNVConfig.StoragePool == "" {
+		return nil, fmt.Errorf(
+			"GCNV destination configuration incomplete. Required: GCP_GCNV_PROJECT_ID, GCP_GCNV_LOCATION, GCP_GCNV_%s_DEST_STORAGE_POOL",
+			protocolKey,
+		)
+	}
+
+	if sourceVolumesEnv == "" || destVolumesEnv == "" {
+		return nil, fmt.Errorf("%s GCNV master volumes must be set before running GCNV clone tests", protocolLabel)
+	}
+
+	setup.MasterSourceVolumes = ParseVolumeNames(sourceVolumesEnv)
+	setup.MasterDestVolumes = ParseVolumeNames(destVolumesEnv)
+
+	if len(setup.MasterSourceVolumes) == 0 {
+		return nil, fmt.Errorf("%s GCNV source volumes are empty or invalid", protocolLabel)
+	}
+	if len(setup.MasterDestVolumes) == 0 {
+		return nil, fmt.Errorf("%s GCNV destination volumes are empty or invalid", protocolLabel)
+	}
+
+	LogDebug(fmt.Sprintf("%s GCNV cloning initialized", protocolLabel))
+	LogDebug(fmt.Sprintf("Source GCNV: project=%s location=%s pool=%s", setup.SourceGCNVConfig.ProjectID, setup.SourceGCNVConfig.Location, setup.SourceGCNVConfig.StoragePool))
+	LogDebug(fmt.Sprintf("Destination GCNV: project=%s location=%s pool=%s", setup.DestGCNVConfig.ProjectID, setup.DestGCNVConfig.Location, setup.DestGCNVConfig.StoragePool))
+	LogDebug(fmt.Sprintf("%s GCNV source volumes to clone: %v", protocolLabel, setup.MasterSourceVolumes))
+	LogDebug(fmt.Sprintf("%s GCNV destination volumes to clone: %v", protocolLabel, setup.MasterDestVolumes))
+
+	return setup, nil
+}
+
+func resolveGCNVEndpointConfig(protocolLabel, endpoint string) *GCNVEndpointConfig {
+	protocolKey := strings.ToUpper(strings.TrimSpace(protocolLabel))
+	endpointKey := strings.ToUpper(strings.TrimSpace(endpoint))
+
+	return &GCNVEndpointConfig{
+		ProjectID:   strings.TrimSpace(os.Getenv("GCP_GCNV_PROJECT_ID")),
+		Location:    strings.TrimSpace(os.Getenv("GCP_GCNV_LOCATION")),
+		StoragePool: strings.TrimSpace(os.Getenv(fmt.Sprintf("GCP_GCNV_%s_%s_STORAGE_POOL", protocolKey, endpointKey))),
+	}
+}
+
 func currentTestIdentifier() string {
 	report := CurrentSpecReport()
 	parts := make([]string, 0, len(report.ContainerHierarchyTexts)+1)
@@ -192,6 +254,14 @@ func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 		return initializeANFTestVolumeSetup(
 			os.Getenv("AZURE_NFS_SOURCE_VOLUMES"),
 			os.Getenv("AZURE_NFS_DEST_VOLUMES"),
+			"NFS",
+		)
+	}
+
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+		return initializeGCNVTestVolumeSetup(
+			os.Getenv("GCP_NFS_SOURCE_VOLUMES"),
+			os.Getenv("GCP_NFS_DEST_VOLUMES"),
 			"NFS",
 		)
 	}
@@ -266,6 +336,14 @@ func InitializeSMBTestVolumeSetup() (*TestVolumeSetup, error) {
 		)
 	}
 
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+		return initializeGCNVTestVolumeSetup(
+			os.Getenv("GCP_SMB_SOURCE_VOLUMES"),
+			os.Getenv("GCP_SMB_DEST_VOLUMES"),
+			"SMB",
+		)
+	}
+
 	// Validate required source configuration
 	if setup.SourceOntapURL == "" || setup.SourceOntapUsername == "" || setup.SourceOntapPassword == "" || setup.SourceSVMName == "" {
 		return nil, fmt.Errorf("ONTAP source configuration incomplete. Required: ONTAP_SRC_API_URL, ONTAP_SYSTEM_MANAGER_SRC_USERNAME, ONTAP_SYSTEM_MANAGER_SRC_PASSWORD, ONTAP_SRC_SVM_NAME")
@@ -323,6 +401,22 @@ func InitializeTestVolumeSetup() (*TestVolumeSetup, error) {
 	return nil, fmt.Errorf("unsupported PROTOCOL_TYPE: %s. Must be 'NFS' or 'SMB'", PROTOCOL_TYPE)
 }
 
+// CleanupStaleVolumeClones removes leftover clone volumes from previous test runs
+// that were killed before cleanup could finish. Must be called from SynchronizedBeforeSuite
+// (Process #1 only) before any parallel nodes start creating clones.
+func CleanupStaleVolumeClones() {
+	setup, err := InitializeTestVolumeSetup()
+	if err != nil {
+		LogDebug(fmt.Sprintf("Skipping stale clone cleanup: %v", err))
+		return
+	}
+
+	if setup.CloneProvider == VolumeCloneProviderGCNV && setup.SourceGCNVConfig != nil {
+		allMasterVolumes := append(setup.MasterSourceVolumes, setup.MasterDestVolumes...)
+		CleanupStaleGCNVClones(*setup.SourceGCNVConfig, allMasterVolumes)
+	}
+}
+
 // SetupTestVolumesBeforeEach creates volume clones before each test
 // This should be called in BeforeEach() in your test files
 // Automatically extracts test case ID from Ginkgo CurrentSpecReport
@@ -354,6 +448,9 @@ func SetupTestVolumesBeforeEach() ([]string, []string, *TestVolumeManager, *Test
 	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
 		sourceVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.SourceANFConfig)
 		destVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.DestANFConfig)
+	} else if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderGCNV {
+		sourceVolumeManager = NewGCNVTestVolumeManager(*GlobalVolumeSetup.SourceGCNVConfig)
+		destVolumeManager = NewGCNVTestVolumeManager(*GlobalVolumeSetup.DestGCNVConfig)
 	} else {
 		sourceVolumeManager = NewTestVolumeManager(
 			GlobalVolumeSetup.SourceOntapURL,
@@ -376,9 +473,9 @@ func SetupTestVolumesBeforeEach() ([]string, []string, *TestVolumeManager, *Test
 		SourceIndices: allIndices(len(GlobalVolumeSetup.MasterSourceVolumes)),
 		DestIndices:   allIndices(len(GlobalVolumeSetup.MasterDestVolumes)),
 	}
-	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
+	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF || GlobalVolumeSetup.CloneProvider == VolumeCloneProviderGCNV {
 		selection = RequiredCloneSelectionForTest(testCaseID, PROTOCOL_TYPE)
-		LogDebug(fmt.Sprintf("[%s] Using selective ANF cloning. Source indices: %v Destination indices: %v", testCaseID, selection.SourceIndices, selection.DestIndices))
+		LogDebug(fmt.Sprintf("[%s] Using selective %s cloning. Source indices: %v Destination indices: %v", testCaseID, GlobalVolumeSetup.CloneProvider, selection.SourceIndices, selection.DestIndices))
 	}
 
 	LogDebug(fmt.Sprintf("[%s] Creating source volume clone(s) from base volumes: %v", testCaseID, GlobalVolumeSetup.MasterSourceVolumes))

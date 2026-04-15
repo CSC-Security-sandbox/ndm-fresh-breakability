@@ -1,16 +1,22 @@
 #!/bin/bash
-# Usage: ./service_check.sh <ip_address> <username> <password>
+# Usage: ./service_check_gcp.sh <ip_address> <username> <ssh_key_path>
 
 IP=$1
 USERNAME=$2
-PASSWORD=$3
+SSH_KEY_PATH=$3
 SERVICE="boot-microk8s.service"
 TIMEOUT=1800
 INTERVAL=30
 ELAPSED=0
 
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
-SSH_CMD="sshpass -p $PASSWORD ssh $SSH_OPTS"
+
+if [ -z "$SSH_KEY_PATH" ] || [ ! -f "$SSH_KEY_PATH" ]; then
+  echo "ERROR: SSH key path not provided or file not found: $SSH_KEY_PATH"
+  exit 1
+fi
+
+SSH_CMD="ssh $SSH_OPTS -i $SSH_KEY_PATH"
 
 echo "Monitoring service $SERVICE on $IP (timeout: ${TIMEOUT}s, interval: ${INTERVAL}s)"
 

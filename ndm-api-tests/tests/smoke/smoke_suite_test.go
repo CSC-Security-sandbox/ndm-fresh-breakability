@@ -34,6 +34,10 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	By("Setting up global test environment for smoke tests (Process #1)")
 	flag.Parse()
 	UpdateConfVariables(ProtocolType, Environment)
+
+	By("Cleaning up stale clone volumes from previous runs")
+	CleanupStaleVolumeClones()
+
 	InitTestEnv()
 
 	LogDebug(fmt.Sprintf("[Smoke Process #1] Global project created: %s (ID: %s) with %d workers",
