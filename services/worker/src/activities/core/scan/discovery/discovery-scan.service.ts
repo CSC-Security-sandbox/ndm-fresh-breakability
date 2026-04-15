@@ -104,10 +104,12 @@ export class DiscoveryScanService {
         return output;
     }
     
-    getItemInfo(stats: fs.Stats, fPath: string, relativeSourcePath: string, fileType:FileType , isDirectory: boolean, fileSize: number): ItemInfo{
-         const sourceMeta: ItemMeta = {
+    getItemInfo(stats: fs.Stats, fPath: string, relativeSourcePath: string, fileType:FileType , isDirectory: boolean, fileSize: number, protocolVersion?: string): ItemInfo{
+        const normalizedVersion = protocolVersion?.replace(/^v/i, '');
+        const isNFSv3 = normalizedVersion === '3';
+        const sourceMeta: ItemMeta = {
             accessTime: stats.atime,
-            birthTime: stats.birthtime,
+            birthTime: ((isNFSv3 || (stats.birthtime?.getTime() ?? 0) <= 0) ? null : stats.birthtime) as unknown as Date,
             modifiedTime: stats.mtime,
             permission: getFilePermissions(stats, isDirectory),
         };
@@ -131,7 +133,8 @@ export class DiscoveryScanService {
     
     async publishFileInfo({ jobContext, command, stats, fPath, relativeSourcePath, fileType, shouldScanADS }: PublishItemInfoInput): Promise<void> {
         const isDirectory = stats.isDirectory();
-        const itemInfo = this.getItemInfo(stats, fPath, relativeSourcePath, fileType, isDirectory, stats.size);        
+        const protocolVersion = jobContext.jobConfig?.sourceFileServer?.protocolVersion;
+        const itemInfo = this.getItemInfo(stats, fPath, relativeSourcePath, fileType, isDirectory, stats.size, protocolVersion);        
         try {
             await jobContext.publishToFileStream(itemInfo);
             if(process.platform === 'win32' && shouldScanADS){           
