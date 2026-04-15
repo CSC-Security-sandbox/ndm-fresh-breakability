@@ -724,7 +724,7 @@ jobs:
           shell: pwsh
           run: |
             Write-Host "Current working directory: $(Get-Location)"
-            Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
+            Copy-Item -Path "app-deployment/ansible/worker/roles/configure-worker/templates/worker-windows.env.j2" -Destination "wininstaller\worker-windows.env.j2" -Force
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
             Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force

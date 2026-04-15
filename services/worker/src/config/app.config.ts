@@ -3,14 +3,18 @@ import { ConfigObject, ConfigService, registerAs } from '@nestjs/config';
 
 // Platform constants
 export const WINDOWS = 'win32';
+const platform = process.platform;
+const isWindows = platform === WINDOWS;
 
 export default registerAs(
   'worker',
   (): ConfigObject => ({
     workerId: process.env.WORKER_ID || '6cf21220-5627-4614-a947-778915dba29f',
     buildId: process.env.BUILD_ID || '1.0.0',
-    baseWorkingPath: process.env.BASE_WORKING_PATH || '/mnt/datamigrate',
-    platform: process.platform,
+    baseWorkingPath:
+      process.env.BASE_WORKING_PATH ||
+      (isWindows ? 'C:\\datamigrator\\mnt' : '/mnt/datamigrator'),
+    platform,
     // connection
     connection: {
       workerConfigUrl: process.env.WORKER_CONFIG_URL || 'http://localhost:3002',
@@ -29,23 +33,31 @@ export default registerAs(
     maxScanCommand: parseInt(process.env.MAX_SCAN_COMMAND || '500'),
     migrationTaskStreamLimit: parseInt(process.env.MIGRATION_TASK_LIMIT || '100'),
     migrationChunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
-    maxCommandConcurrency: parseInt(process.env.MAX_COMMAND_CONCURRENCY || '100'),
-    maxWriteConcurrency: parseInt(process.env.MAX_WRITE_CONCURRENCY || '100'),
+    maxCommandConcurrency: parseInt(
+      process.env.MAX_COMMAND_CONCURRENCY || (isWindows ? '15' : '20'),
+    ),
+    maxWriteConcurrency: parseInt(
+      process.env.MAX_WRITE_CONCURRENCY || (isWindows ? '5' : '10'),
+    ),
     operationTimeout: parseInt(process.env.OPERATION_TIMEOUT || '5000'),
     groupSize: parseInt(process.env.REDIS_STREAM_GROUP_SIZE || '1000'),
     commandsInTask: parseInt(process.env.COMMANDS_IN_TASK || '100'),
     maxCmdStreamLen: parseInt(process.env.MAX_CMDS_IN_STREAM || '5000'),
     metaUpdatedToleranceMs: parseInt(process.env.META_UPDATED_TOLERANCE_MS || '30000'),
-    dirStreamBatchSize: parseInt(process.env.DIR_STREAM_BATCH_SIZE || '5000'),
+    dirStreamBatchSize: parseInt(
+      process.env.DIR_STREAM_BATCH_SIZE || (isWindows ? '40000' : '80000'),
+    ),
 
     // speed test
     speedTestFileName: process.env.SPEED_TEST_FILE_NAME || '1GB_zero_file.bin',
     speedTestFileSize: parseFloat(process.env.SPEED_TEST_FILE_Size_GB || '1'),
     speedTestTimeout: parseInt(process.env.SPEED_TEST_TIMEOUT || '120000'),
 
-    // redis and temporal 
+    // redis and temporal
     redisMemoryUsageThreshold: parseInt(process.env.REDIS_MEM_USAGE_THRESHOLD || '90'),
-    maxActivityConcurrency: parseInt(process.env.JOB_TASK_ACTIVITY_CONCURRENCY || '1'),
+    maxActivityConcurrency: parseInt(
+      process.env.JOB_TASK_ACTIVITY_CONCURRENCY || (isWindows ? '15' : '20'),
+    ),
     maxActivityTaskPollers: parseInt(process.env.MAX_ACTIVITY_TASK_POLLERS || '0'),
     workerStartupTimeout: parseInt(process.env.WORKER_STARTUP_TIMEOUT || '2000'),
     shutDownForceTime: process.env.WORKER_SHUTDOWN_FORCE_TIME || '10s',

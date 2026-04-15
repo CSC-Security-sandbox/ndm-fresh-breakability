@@ -23,7 +23,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "worker.exe"; DestDir: "{app}\binary"; Flags: ignoreversion
 Source: "winsw.exe"; DestDir: "{app}"; DestName: "DatamigratorWorker.exe"; Flags: ignoreversion
 Source: "service.xml"; DestDir: "{app}"; DestName: "DatamigratorWorker.xml"; Flags: ignoreversion
-Source: "worker.env.j2"; DestDir: "{tmp}";
+Source: "worker-windows.env.j2"; DestDir: "{tmp}";
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd\fluent-package-5.2.0-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd.conf"; DestDir: "{tmp}";
@@ -345,13 +345,12 @@ var
   TempContent: String;
   ConfigPath: String;
   TemplatePath: String;
-  CountMatch: Integer;
   ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
     ConfigPath := ExpandConstant('{app}\binary\.env');
-    TemplatePath := ExpandConstant('{tmp}\worker.env.j2');
+    TemplatePath := ExpandConstant('{tmp}\worker-windows.env.j2');
     Log('Creating configuration file at: ' + ConfigPath);
 
     if FileExists(TemplatePath) then
@@ -363,15 +362,12 @@ begin
           MsgBox('Error reading template file.', mbError, MB_OK);
         exit;
       end;
-      Log('Successfully read template file');
+      Log('Successfully read Windows worker env template');
       TempContent := String(TemplateContent);
-      CountMatch := StringChangeEx(TempContent, 'BASE_WORKING_PATH=''/mnt/datamigrator''', '', True);
-      Log('Count Match is: '+ IntToStr(CountMatch));
-      Log('Removed BASE_WORKING_PATH from template');
     end
     else
     begin
-      Log('Template worker.env.j2 not found at: ' + TemplatePath);
+      Log('Template worker-windows.env.j2 not found at: ' + TemplatePath);
       if not WizardSilent() then
         MsgBox('Template file missing.', mbError, MB_OK);
       exit;
@@ -398,7 +394,6 @@ begin
       'REDIS_JWT_AUTH_ENABLED=true' + #13#10 +
       'REDIS_GATEWAY_HOST=' + ConfigControlPlaneIP + #13#10 +
       'REDIS_GATEWAY_PORT=6379' + #13#10 +
-      'BASE_WORKING_PATH=''C:\datamigrator\mnt''' + #13#10 +
       'PROJECT_ID=' + ConfigProjectID + #13#10 +
       'OTEL_COLLECTOR_ENDPOINT=' + ConfigControlPlaneIP + ':4318';
 

@@ -127,7 +127,8 @@ jobs:
             exit 1
           fi
 
-          cp ./app-deployment/ansible/worker/roles/configure-worker/templates/worker.env.j2 artifacts/worker.env
+          cp ./app-deployment/ansible/worker/roles/configure-worker/templates/worker-linux.env.j2 artifacts/worker-linux.env
+          cp ./app-deployment/ansible/worker/roles/configure-worker/templates/worker-windows.env.j2 artifacts/worker-windows.env
 
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             ARTIFACTORY_PATH="releases/${REF_NAME}/worker"
@@ -140,10 +141,15 @@ jobs:
             curl --silent --show-error --fail --request PUT --upload-file artifacts/pkg.zip \
               "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}/datamigrator-worker-${{ env.RELEASE_TAG }}.zip" \
               -u "${{ env.NDM_NEXUS_USERNAME }}":"${{ env.NDM_NEXUS_PASSWORD }}"
-              
-            # Upload worker env
-            curl --silent --show-error --fail --request PUT --upload-file artifacts/worker.env \
-              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}/worker-${{ env.RELEASE_TAG }}.env" \
+
+            # Upload worker env (Linux)
+            curl --silent --show-error --fail --request PUT --upload-file artifacts/worker-linux.env \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}/worker-linux-${{ env.RELEASE_TAG }}.env" \
+              -u "${{ env.NDM_NEXUS_USERNAME }}":"${{ env.NDM_NEXUS_PASSWORD }}"
+
+            # Upload worker env (Windows)
+            curl --silent --show-error --fail --request PUT --upload-file artifacts/worker-windows.env \
+              "https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}/worker-windows-${{ env.RELEASE_TAG }}.env" \
               -u "${{ env.NDM_NEXUS_USERNAME }}":"${{ env.NDM_NEXUS_PASSWORD }}"
           done
           
@@ -179,7 +185,8 @@ jobs:
             "short_commit": "${GITHUB_SHA::7}",
             "timestamp": "$ISO_TIME",
             "binary_path": "worker/${REF_TYPE}/${REF_NAME}/${{ env.RELEASE_TAG }}/datamigrator-worker-${{ env.RELEASE_TAG }}.zip",
-            "env_path": "worker/${REF_TYPE}/${REF_NAME}/${{ env.RELEASE_TAG }}/worker-${{ env.RELEASE_TAG }}.env",
+            "env_linux_path": "worker/${REF_TYPE}/${REF_NAME}/${{ env.RELEASE_TAG }}/worker-linux-${{ env.RELEASE_TAG }}.env",
+            "env_windows_path": "worker/${REF_TYPE}/${REF_NAME}/${{ env.RELEASE_TAG }}/worker-windows-${{ env.RELEASE_TAG }}.env",
             "published_by": "${{ github.actor }}"
           }
           EOF
@@ -207,7 +214,8 @@ jobs:
           echo "Build details for worker binary:"
           echo "Release Tag: ${{ env.RELEASE_TAG }}"
           echo "Binary Artifact: worker-${{ env.RELEASE_TAG }}.zip"
-          echo "Worker Environment File: worker-${{ env.RELEASE_TAG }}.env"
+          echo "Worker Environment File (Linux): worker-linux-${{ env.RELEASE_TAG }}.env"
+          echo "Worker Environment File (Windows): worker-windows-${{ env.RELEASE_TAG }}.env"
           
           echo ""
           echo "Worker config for NDM VM image build:"
@@ -230,7 +238,8 @@ jobs:
           echo "| Commit | \`${GITHUB_SHA}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | \`${GITHUB_REF_NAME}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Binary Artifact | \`worker-${{ env.RELEASE_TAG }}.zip\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment File | \`worker-${{ env.RELEASE_TAG }}.env\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment File (Linux) | \`worker-linux-${{ env.RELEASE_TAG }}.env\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment File (Windows) | \`worker-windows-${{ env.RELEASE_TAG }}.env\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "### Worker Configuration for NDM VM Image Build" >> $GITHUB_STEP_SUMMARY

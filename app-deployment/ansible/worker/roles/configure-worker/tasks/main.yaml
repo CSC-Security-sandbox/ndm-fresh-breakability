@@ -64,7 +64,7 @@
 - name: 4.6. Copy worker env to /opt/datamigrator/conf/
   become: yes
   copy:
-    src: ./templates/worker.env.j2
+    src: "./templates/worker-{{ os_type | default('linux') }}.env.j2"
     dest: /opt/datamigrator/conf/worker.env
     mode: '0644'
     owner: root

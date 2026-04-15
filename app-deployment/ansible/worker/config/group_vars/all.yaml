@@ -2,6 +2,10 @@
 # Build Version
 build_version: "0.1.0"
 
+# Target OS — controls which worker env template is deployed.
+# Valid values: "linux" (default), "windows"
+os_type: "linux"
+
 # Binary file paths
 vm_username: datamigrator
 vm_uid: 1030
