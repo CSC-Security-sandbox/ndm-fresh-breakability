@@ -82,7 +82,7 @@ export const MODIFIED_TIME_DISTRIBUTION_MAPPER = (input: ModifiedTimeDistributio
             value: parseInt(item.total_size, 0),
             category: 'Modified',
             valueType: 'size',
-            sub_category: `Capacity With Modification Time ${item.modified_group}`
+            sub_category: `Capacity with Modification Time ${item.modified_group}`
         });
     });
     return output;
@@ -400,7 +400,7 @@ export const JOB_RUN_DETAILS_MAPPER = (input: JobRunDetailsInput[]) : DiscoveryR
         const item = input[0];
         const fileServerInfo = [
             { value: item.volume_path, sub_category: 'Path' },
-            { value: item.config_name, sub_category: 'Server Profile' },
+            { value: item.config_name, sub_category: 'Config Name' },
             { value: item.protocol, sub_category: 'Protocol' }
         ];
         
