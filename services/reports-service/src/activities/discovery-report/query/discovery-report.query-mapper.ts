@@ -82,7 +82,7 @@ export const MODIFIED_TIME_DISTRIBUTION_MAPPER = (input: ModifiedTimeDistributio
             value: parseInt(item.total_size, 0),
             category: 'Modified',
             valueType: 'size',
-            sub_category: `Capacity with Modification Time ${item.modified_group}`
+            sub_category: `Capacity With Modification Time ${item.modified_group}`
         });
     });
     return output;

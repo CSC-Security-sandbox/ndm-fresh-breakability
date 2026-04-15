@@ -574,14 +574,9 @@ const numBytes = Number(bytes);
 export function formatLargeNumber(num: number, decimals = 2): string {
   if (Number(num) === 0) return "0";
 
-  const i = Math.floor(Math.log10(Math.abs(num)) / 3);
-
-  if (i <= 0) {
-    const parsed = parseFloat(num.toFixed(decimals));
-    return `${parsed}`;
-  }
+  const i = Math.floor(Math.log10(num) / 3);
 
   const formattedNumber = (num / Math.pow(DECIMAL_BASE, i)).toFixed(decimals);
 
-  return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i] ?? ""}`;
+  return `${parseFloat(formattedNumber)}${LARGE_NUMBER_SUFFIXES[i]}`;
 }

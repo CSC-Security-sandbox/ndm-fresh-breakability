@@ -59,7 +59,7 @@ it('MODIFIED_TIME_DISTRIBUTION_MAPPER maps input correctly', () => {
             value: 50,
             category: 'Modified',
             valueType: 'size',
-            sub_category: 'Capacity with Modification Time Last Month'
+            sub_category: 'Capacity With Modification Time Last Month'
         }
     ]);
 });
