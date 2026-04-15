@@ -29,6 +29,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	By("Setting up global test environment (Process #1)")
 	flag.Parse()
 	UpdateConfVariables(ProtocolType, Environment)
+
 	InitTestEnv()
 
 	LogDebug(fmt.Sprintf("[Process #1] Global project created: %s (ID: %s) with %d workers", 
@@ -73,8 +74,8 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 // It has 2 functions:
 // 1. First function: Runs on ALL parallel processes when they finish
 // 2. Second function: Runs ONLY on Process #1 after all others complete
-//    - This is where we stop and detach workers
-//    - Mirrors the SynchronizedBeforeSuite pattern
+//   - This is where we stop and detach workers
+//   - Mirrors the SynchronizedBeforeSuite pattern
 var _ = SynchronizedAfterSuite(func() {
 	// This runs on ALL processes after their tests complete
 	By("Process cleanup complete")

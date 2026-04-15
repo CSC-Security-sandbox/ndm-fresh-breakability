@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,8 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 
 				// Job Config and Migration IDs
 				migrationJobConfigIDs []string
+
+				resp *http.Response
 			)
 
 			// Generate unique ID for FileServer names
@@ -93,17 +96,30 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+
+			if NeedsGCNVManualUpload() {
+				sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0], clonedSourceVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				var resp *http.Response
+				sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetSourcePathIDForGCNV(clonedSourceVolumes[1], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -119,17 +135,30 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0], clonedDestVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				var resp *http.Response
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetSourcePathIDForGCNV(clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating base migration job with Incremental Sync of 5 mins")
 			currentDateTime := GetCurrentUTCTimestamp()
@@ -252,7 +281,7 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 			additionDiscoveryJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,

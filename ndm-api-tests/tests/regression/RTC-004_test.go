@@ -50,55 +50,79 @@ var _ = Describe("RTC-004: Test migration with single worker and make worker unh
 		It("RTC-004: Test migration with single worker and make worker unhealthy during migration", func() {
 			By("########################## RTC-004 start ################################")
 
-			By("Creating the source file server")
-			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IPs[0],
-				Workers:          []string{workerId},
-				WorkingDirectory: "",
-			}
-			SourceConfigId, resp, err := CreateFileServer(sourceParams, headers)
+		By("Creating the source file server")
+		sourceParams := CreateServereParams{
+			ConfigName:       "source-file-server",
+			ConfigType:       ConfigTypeFile,
+			ProjectID:        ProjectId,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         PROTOCOL_USERNAME,
+			Password:         PROTOCOL_PASSWORD,
+			Protocol:         PROTOCOL_TYPE,
+			ProtocolVersion:  ProtocolVersion3,
+			Host:             SOURCE_HOST_IPs[0],
+			Workers:          []string{workerId},
+			WorkingDirectory: "",
+		}
+		var SourceConfigId string
+		var sourceVolumeId string
+		if NeedsGCNVManualUpload() {
+			SourceConfigId, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+		} else {
+			var resp *http.Response
+			SourceConfigId, resp, err = CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(SourceConfigId).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+		}
+		Expect(SourceConfigId).NotTo(BeEmpty(), "sourceConfigID is empty")
 
-			By("Getting the source file server by config ID and fetching the volumes")
-			sourceVolumeId, err := GetExportPathID("source", clonedSourceVolumes[0], SourceConfigId, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+		By("Getting the source file server by config ID and fetching the volumes")
+		if NeedsGCNVManualUpload() {
+			sourceVolumeId, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], SourceConfigId, headers)
+		} else {
+			sourceVolumeId, err = GetExportPathID("source", clonedSourceVolumes[0], SourceConfigId, headers)
+		}
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
-			By("Creating the destination file server")
-			destinationParams := CreateServereParams{
-				ConfigName:       "destination-file-server",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IPs[0],
-				Workers:          []string{workerId},
-				WorkingDirectory: "",
-			}
+		By("Creating the destination file server")
+		destinationParams := CreateServereParams{
+			ConfigName:       "destination-file-server",
+			ConfigType:       ConfigTypeFile,
+			ProjectID:        ProjectId,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         PROTOCOL_USERNAME,
+			Password:         PROTOCOL_PASSWORD,
+			Protocol:         PROTOCOL_TYPE,
+			ProtocolVersion:  ProtocolVersion3,
+			Host:             DESTINATION_HOST_IPs[0],
+			Workers:          []string{workerId},
+			WorkingDirectory: "",
+		}
 
-			destinationConfigID, resp, err := CreateFileServer(destinationParams, headers)
+		var destinationConfigID string
+		var destinationVolumeID string
+		if NeedsGCNVManualUpload() {
+			destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+		} else {
+			var resp *http.Response
+			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
-			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+		}
+		Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
 
-			By("Getting the destination file server by configId")
-			destinationVolumeID, err := GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+		By("Getting the destination file server by configId")
+		if NeedsGCNVManualUpload() {
+			destinationVolumeID, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigID, headers)
+		} else {
+			destinationVolumeID, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
+		}
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a migration job")
 			migrationParams := MigrationJobParams{

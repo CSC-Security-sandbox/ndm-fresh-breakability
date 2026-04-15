@@ -89,7 +89,7 @@ var _ = Describe("TC-SMB-RESTRICTED-ACCESS: Create a fileserver with a single wo
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       true,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,

@@ -432,6 +432,9 @@ func validateCSVAgainstJSON(csvPath, jsonPath string, volumeReplacements map[str
 		// Perform replacements in order (longest keys first)
 		for _, oldVol := range keys {
 			newVol := volumeReplacements[oldVol]
+			if PROTOCOL_TYPE == ProtocolSMB && VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+				newVol = strings.ToUpper(newVol)
+			}
 			jsonContent = strings.ReplaceAll(jsonContent, oldVol, newVol)
 			LogDebug(fmt.Sprintf("Replaced volume name in validator: '%s' -> '%s'", oldVol, newVol))
 		}
@@ -491,12 +494,12 @@ func validateCSVAgainstJSON(csvPath, jsonPath string, volumeReplacements map[str
 					match = false
 					break
 				}
-				cell := strings.TrimSpace(record[idx])
-				want := strings.TrimSpace(fmt.Sprint(val))
-				if cell != want {
-					match = false
-					break
-				}
+			cell := strings.TrimSpace(record[idx])
+			want := strings.TrimSpace(fmt.Sprint(val))
+			if cell != want {
+				match = false
+				break
+			}
 			}
 			if match {
 				used[i] = true

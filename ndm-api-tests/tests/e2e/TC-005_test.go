@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"net/http"
 	"strings"
 	"time"
 
@@ -87,6 +88,7 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 			var sourceFileServerID, sourcePathID1, sourcePathID2 string
 			var migrationJobConfigIDs []string
 			var destinationFileServerID, destinationPathID1, destinationPathID2 string
+			var resp *http.Response
 
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
@@ -106,18 +108,30 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceFileServerID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+
+			if NeedsGCNVManualUpload() {
+				sourceFileServerID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0], clonedSourceVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				var resp *http.Response
+				sourceFileServerID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(sourceFileServerID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			defer resp.Body.Close()
-			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceFileServerID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceFileServerID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetSourcePathIDForGCNV(clonedSourceVolumes[1], sourceFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -133,17 +147,30 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationFileServerID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+
+			if NeedsGCNVManualUpload() {
+				destinationFileServerID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0], clonedDestVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				var resp *http.Response
+				destinationFileServerID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(destinationFileServerID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationFileServerID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationFileServerID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetSourcePathIDForGCNV(clonedDestVolumes[1], destinationFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationFileServerID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating a migration job by uploading GID/UID mapping csv")
 			migrationParams := MigrationJobParams{

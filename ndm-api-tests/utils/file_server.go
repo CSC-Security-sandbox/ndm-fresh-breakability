@@ -380,6 +380,119 @@ func GetExportPathID(
 	return sourcePathID, nil
 }
 
+// NeedsGCNVManualUpload returns true when the active clone provider is GCNV
+// and the protocol is NFS. GCNV Flex NFS volumes don't expose exports via
+// showmount, so file servers must be created with ManualUpload and paths
+// uploaded via CSV. SMB volumes on GCNV support auto-discover.
+func NeedsGCNVManualUpload() bool {
+	return VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV && PROTOCOL_TYPE == ProtocolNFS
+}
+
+// CreateSourceFileServerForGCNV creates a source file server with ManualUpload,
+// uploads the given volume paths as a CSV, confirms the upload, and waits for
+// the volumes to appear. It returns the config ID and file server ID.
+// This is needed because GCNV Flex volumes don't expose exports via showmount.
+func CreateSourceFileServerForGCNV(
+	params CreateServereParams,
+	volumePaths []string,
+	headers map[string]string,
+) (configID string, err error) {
+	params.ExportPathSource = PtrExportPathSource(ManualUpload)
+
+	var resp *http.Response
+	configID, resp, err = CreateFileServer(params, headers)
+	if err != nil {
+		return "", fmt.Errorf("error creating GCNV source file server: %w", err)
+	}
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if configID == "" {
+		return "", fmt.Errorf("source file server config ID is empty")
+	}
+
+	fileServer, err := GetFileServerDetails(configID, headers)
+	if err != nil {
+		return "", fmt.Errorf("error getting file server details: %w", err)
+	}
+	if len(fileServer.FileServers) == 0 {
+		return "", fmt.Errorf("no file servers found after creation")
+	}
+	fileServerID := fileServer.FileServers[0].Id
+
+	var paths []string
+	for _, p := range volumePaths {
+		if p == "" {
+			continue
+		}
+		paths = append(paths, fmt.Sprintf("/%s", strings.TrimPrefix(p, "/")))
+	}
+	if len(paths) == 0 {
+		return "", fmt.Errorf("no valid volume paths provided for CSV upload")
+	}
+	csvLines := "path\n" + strings.Join(paths, "\n")
+
+	fileContent := FileContent{
+		FileName: "gcnv_paths.csv",
+		FileSize: len(csvLines),
+		Contents: csvLines,
+	}
+
+	uploadResp, uploadStats, err := UploadPathFile(fileServerID, fileContent, headers)
+	if err != nil {
+		return "", fmt.Errorf("error uploading path file: %w", err)
+	}
+	if uploadResp != nil {
+		defer uploadResp.Body.Close()
+	}
+	if uploadStats.UploadId == "" {
+		return "", fmt.Errorf("upload returned empty upload ID (message: %s)", uploadStats.Message)
+	}
+
+	LogDebug(fmt.Sprintf("[GCNV] Uploaded %d path(s), confirming...", uploadStats.NewPaths))
+	Wait(10)
+
+	confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
+	if err != nil {
+		return "", fmt.Errorf("error confirming path file upload: %w", err)
+	}
+	if confirmResp != nil {
+		defer confirmResp.Body.Close()
+	}
+	if confirmStats.WorkflowId == "" {
+		LogDebug("[GCNV] Warning: confirm returned empty workflow ID")
+	}
+
+	LogDebug("[GCNV] Waiting for volume discovery after path upload...")
+	Wait(60)
+
+	return configID, nil
+}
+
+// GetSourcePathIDForGCNV retrieves the source volume path ID from a GCNV file
+// server that was created with ManualUpload. The volumeName should be the
+// cloned volume name (without leading slash).
+func GetSourcePathIDForGCNV(volumeName string, configID string, headers map[string]string) (string, error) {
+	volumePath := volumeName
+	if !strings.HasPrefix(volumePath, "/") {
+		volumePath = "/" + volumePath
+	}
+
+	fileServerDetails, err := GetFileServerDetails(configID, headers)
+	if err != nil {
+		return "", fmt.Errorf("error getting file server details: %w", err)
+	}
+	if len(fileServerDetails.FileServers) == 0 {
+		return "", fmt.Errorf("no file servers found")
+	}
+
+	volume, err := GetVolumeDetailsFromFileServer(fileServerDetails.FileServers[0].Volumes, volumePath)
+	if err != nil {
+		return "", fmt.Errorf("volume path %q not found in file server: %w", volumePath, err)
+	}
+	return volume.ID, nil
+}
+
 func ClearVolumeForSMB(export string) string {
 	// Use unique drive letter to avoid conflicts in parallel test execution
 	mappedDrive := getUniqueDriveLetter()
@@ -800,10 +913,11 @@ func GetVolumeID(response FileServerDetailsItems, volumePath string) (string, er
 
 	for _, fileServer := range response.FileServers {
 		for _, volume := range fileServer.Volumes {
-			// Match either exact path or path with leading slash
-			if volume.VolumePath == volumePath || volume.VolumePath == volumePathWithSlash {
+			// Case-insensitive comparison — SMB shares on GCNV are
+			// returned in uppercase while clone names are lowercase.
+			if strings.EqualFold(volume.VolumePath, volumePath) || strings.EqualFold(volume.VolumePath, volumePathWithSlash) {
 				LogDebug(fmt.Sprintf("GetVolumeID: MATCH FOUND! Returning ID='%s'", volume.ID))
-				return volume.ID, nil // Return the found ID and no error
+				return volume.ID, nil
 			}
 		}
 	}

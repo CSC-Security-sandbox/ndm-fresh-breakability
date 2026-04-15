@@ -127,7 +127,7 @@ var _ = Describe("Project Viewer Discovery Migration Cutover Test", func() {
 		jobParams := DiscoveryJobParams{
 			SourcePathIDs:            []string{},
 			ExcludeOlderThan:         nil,
-			ExcludeFilePatterns:      "",
+			ExcludeFilePatterns:      "*/.snapshot",
 			PreserveAccessTime:       false,
 			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,

@@ -49,36 +49,48 @@ var _ = Describe("RTC-003: Test discovery with single worker and restart the wor
 		It("RTC-003: Test discovery with single worker and restart the worker service during discovery for NFS", func() {
 			By("########################## RTC-003 start ################################")
 
-			By("Creating the source file server")
-			sourceParams := CreateServereParams{
-				ConfigName:       "source-file-server",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IPs[0],
-				Workers:          []string{workerId},
-				WorkingDirectory: "",
-			}
-			ConfigID, resp, err := CreateFileServer(sourceParams, headers)
+		By("Creating the source file server")
+		sourceParams := CreateServereParams{
+			ConfigName:       "source-file-server",
+			ConfigType:       ConfigTypeFile,
+			ProjectID:        ProjectId,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         PROTOCOL_USERNAME,
+			Password:         PROTOCOL_PASSWORD,
+			Protocol:         PROTOCOL_TYPE,
+			ProtocolVersion:  ProtocolVersion3,
+			Host:             SOURCE_HOST_IPs[0],
+			Workers:          []string{workerId},
+			WorkingDirectory: "",
+		}
+		var ConfigID string
+		if NeedsGCNVManualUpload() {
+			ConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+		} else {
+			var resp *http.Response
+			ConfigID, resp, err = CreateFileServer(sourceParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
-			Expect(ConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 			defer resp.Body.Close()
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
+		}
+		Expect(ConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
 
-			By("Getting the source file server by config ID and fetching the volumes")
-			volumeId, err := GetExportPathID("source", clonedSourceVolumes[0], ConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+		By("Getting the source file server by config ID and fetching the volumes")
+		var volumeId string
+		if NeedsGCNVManualUpload() {
+			volumeId, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], ConfigID, headers)
+		} else {
+			volumeId, err = GetExportPathID("source", clonedSourceVolumes[0], ConfigID, headers)
+		}
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 			By("Creating a new discovery job on the file server")
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{volumeId},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
