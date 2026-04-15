@@ -1,4 +1,4 @@
-name: Run E2E API Automation Tests for NDM on Azure
+name: Run E2E API Automation Tests for NDM on GCP
 
 env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
@@ -9,14 +9,16 @@ env:
 on:
   workflow_dispatch:
     inputs:
-      control_plane_image_version:
-        description: 'Image version for control plane'
-        required: true
+      control_plane_image:
+        description: 'Image name/self-link for control plane (leave empty for latest)'
+        required: false
         type: string
-      worker_image_version:
-        description: 'Image version for Linux workers'
-        required: true
+        default: ''
+      worker_image:
+        description: 'Image name/self-link for Linux workers (leave empty for latest)'
+        required: false
         type: string
+        default: ''
       windows_worker_installer_url:
         description: 'Artifactory URL for windows worker installer'
         required: true
@@ -39,13 +41,12 @@ on:
           - 'SMB'
           - 'NFS'
       volume_clone_provider:
-        description: 'Select volume clone backend'
+        description: 'Volume clone backend'
         required: false
-        default: 'ontap'
+        default: 'gcnv'
         type: choice
         options:
-          - 'anf'
-          - 'ontap'
+          - 'gcnv'
       run_smoke_tests:
         description: 'Run smoke tests'
         required: false
@@ -62,16 +63,18 @@ on:
         default: true
         type: boolean
 
-  workflow_call: 
+  workflow_call:
     inputs:
-      control_plane_image_version:
-        description: 'Image version for control plane'
-        required: true
+      control_plane_image:
+        description: 'Image name/self-link for control plane (leave empty for latest)'
+        required: false
         type: string
-      worker_image_version:
-        description: 'Image version for Linux workers'
-        required: true
+        default: ''
+      worker_image:
+        description: 'Image name/self-link for Linux workers (leave empty for latest)'
+        required: false
         type: string
+        default: ''
       windows_worker_installer_url:
         description: 'Artifactory URL for windows worker installer'
         type: string
@@ -89,9 +92,9 @@ on:
         default: 'Both'
         type: string
       volume_clone_provider:
-        description: 'Select volume clone backend (anf/ontap)'
+        description: 'Volume clone backend (gcnv)'
         required: false
-        default: 'ontap'
+        default: 'gcnv'
         type: string
       trigger_type:
         description: 'Original trigger type (schedule/workflow_dispatch/workflow_call)'
@@ -114,7 +117,7 @@ on:
         default: true
         type: boolean
 
-permissions: 
+permissions:
   contents: read
 
 jobs:
@@ -126,7 +129,7 @@ jobs:
       linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
       windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
     steps:
-      
+
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
         with:
@@ -145,6 +148,16 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7
+        with:
+          version: 'latest'
+
       - name: Configure Provider Credentials
         id: credentials
         run: |
@@ -154,24 +167,44 @@ jobs:
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
 
-          # Write to GITHUB_ENV
           echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
 
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
+          # Resolve images — use input if provided, otherwise discover latest from GCP
+          GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}"
+          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image || github.event.inputs.control_plane_image }}"
+          WORKER_IMAGE="${{ inputs.worker_image || github.event.inputs.worker_image }}"
 
-          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
+          if [ -z "$CONTROL_PLANE_IMAGE" ]; then
+            echo "No control plane image specified, discovering latest..."
+            CONTROL_PLANE_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'cp|control-plane'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+            echo "Discovered control plane image: $CONTROL_PLANE_IMAGE"
+          fi
+
+          if [ -z "$WORKER_IMAGE" ]; then
+            echo "No worker image specified, discovering latest..."
+            WORKER_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'worker'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+            echo "Discovered worker image: $WORKER_IMAGE"
+          fi
+
+          # GCP Terraform Variables
+          echo "TF_VAR_control_plane_image=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image=$WORKER_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
+          echo "TF_VAR_region=${{ vars.GCP_REGION || 'us-east4' }}" >> $GITHUB_ENV
+
+          # Keep vm_owner compact so the final Terraform VM names stay within 63 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
           TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
@@ -184,26 +217,26 @@ jobs:
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+          echo "TF_VAR_dns_servers=${{ vars.GCP_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
 
       - name: Initialize Terraform
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform init
 
       - name: Validate Terraform Configuration
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform validate
 
       - name: Create Terraform Plan
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform plan -out=tfplan
 
       - name: Apply Terraform Plan
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform apply -auto-approve tfplan
 
       - name: Upload Terraform State
@@ -212,20 +245,20 @@ jobs:
         with:
           name: terraform-state
           path: |
-            app-deployment/terraform/azure/environments/api/terraform.tfstate
-            app-deployment/terraform/azure/environments/api/.terraform.lock.hcl
-            app-deployment/terraform/azure/environments/api/.terraform
+            app-deployment/terraform/automation-gcp/environments/api/terraform.tfstate
+            app-deployment/terraform/automation-gcp/environments/api/.terraform.lock.hcl
+            app-deployment/terraform/automation-gcp/environments/api/.terraform
 
       - name: Extract Deployment Information
         id: deployment-info
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
           LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
           WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
-          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
           echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
           echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
           echo "Control Plane IP: $CONTROL_PLANE_IP"
           echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
           echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
@@ -302,7 +335,6 @@ jobs:
               echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
             else
               echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
-              # Continue with other VMs instead of failing completely
             fi
           done
           
@@ -334,15 +366,11 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
-      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
-      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
@@ -350,19 +378,16 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
-      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
-      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
-      AZURE_SMB_DEST_VOLUMES: ${{ vars.AZURE_SMB_DEST_VOLUMES }}
-      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
-      AZURE_SMB_DOMAIN_NAME: ${{ vars.AZURE_SMB_DOMAIN_NAME }}
-      AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP }}
-      AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME }}
-      AZURE_ANF_SMB_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_POOL_NAME }}
-      AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
-      AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
-      AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      GCP_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      GCP_SMB_NDM_WORKERS_PORT: ${{ vars.GCP_SMB_NDM_WORKERS_PORT }}
+      GCP_SMB_SOURCE_VOLUMES: ${{ vars.GCP_SMB_SOURCE_VOLUMES }}
+      GCP_SMB_DEST_VOLUMES: ${{ vars.GCP_SMB_DEST_VOLUMES }}
+      GCP_SMB_SOURCE_HOST_IP: ${{ vars.GCP_SMB_SOURCE_HOST_IP }}
+      GCP_SMB_DESTINATION_HOST_IP: ${{ vars.GCP_SMB_DESTINATION_HOST_IP }}
+      GCP_SMB_DOMAIN_NAME: ${{ vars.GCP_SMB_DOMAIN_NAME }}
+      GCP_SMB_PROTOCOL_USERNAME: ${{ secrets.GCP_SMB_PROTOCOL_USERNAME }}
+      GCP_SMB_PROTOCOL_PASSWORD: ${{ secrets.GCP_SMB_PROTOCOL_PASSWORD }}
+
       ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
       ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
       ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
@@ -375,10 +400,7 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      AD_SMB_SOURCE_VOLUMES: ${{ vars.AD_SMB_SOURCE_VOLUMES }}
-      AD_SMB_SOURCE_HOST_IP: ${{ vars.AD_SMB_SOURCE_HOST_IP }}
+
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
@@ -400,17 +422,17 @@ jobs:
 
       - name: Setup credentials for SMB tests
         run: |
-
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
           
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "GCP_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "GCP_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
       - name: Install Ginkgo
         run: |
           cd ndm-api-tests
@@ -422,7 +444,7 @@ jobs:
       - name: Run SMB API Tests
         run: |
           cd ndm-api-tests
-          chmod +x ./run-smb-azure-automation.sh
+          chmod +x ./run-smb-gcp-automation.sh
 
           SCRIPT_ARGS=""
           RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
@@ -442,7 +464,7 @@ jobs:
           fi
           
           echo "Running SMB tests with arguments: $SCRIPT_ARGS"
-          ./run-smb-azure-automation.sh $SCRIPT_ARGS
+          ./run-smb-gcp-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
       - name: Upload SMB Test Logs
@@ -459,34 +481,26 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
     env:
-      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
-      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-      
+
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
-      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
-      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
-      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
-      AZURE_NFS_DEST_VOLUMES: ${{ vars.AZURE_NFS_DEST_VOLUMES }}
-      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
-      AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP }}
-      AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME }}
-      AZURE_ANF_NFS_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_POOL_NAME }}
-      AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
-      AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
-      AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      GCP_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      GCP_NFS_NDM_WORKERS_PORT: ${{ vars.GCP_NFS_NDM_WORKERS_PORT }}
+      GCP_NFS_SOURCE_VOLUMES: ${{ vars.GCP_NFS_SOURCE_VOLUMES }}
+      GCP_NFS_DEST_VOLUMES: ${{ vars.GCP_NFS_DEST_VOLUMES }}
+      GCP_NFS_SOURCE_HOST_IP: ${{ vars.GCP_NFS_SOURCE_HOST_IP }}
+      GCP_NFS_DESTINATION_HOST_IP: ${{ vars.GCP_NFS_DESTINATION_HOST_IP }}
+      GCP_NFS_PROTOCOL_USERNAME: ${{ vars.GCP_NFS_PROTOCOL_USERNAME }}
+
       ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
       ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
       ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
@@ -499,7 +513,7 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
       RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
@@ -531,8 +545,8 @@ jobs:
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "GCP_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "GCP_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
@@ -547,7 +561,7 @@ jobs:
       - name: Run NFS API Tests
         run: |
           cd ndm-api-tests
-          chmod +x ./run-nfs-azure-automation.sh
+          chmod +x ./run-nfs-gcp-automation.sh
           
           SCRIPT_ARGS=""
           RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
@@ -567,7 +581,7 @@ jobs:
           fi
           
           echo "Running NFS tests with arguments: $SCRIPT_ARGS"
-          ./run-nfs-azure-automation.sh $SCRIPT_ARGS
+          ./run-nfs-gcp-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
       - name: Upload NFS Test Logs
@@ -670,7 +684,6 @@ jobs:
         echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
         echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
         
-        # Set individual test result lines as outputs
         echo "smoke_smb_line=$SMOKE_SMB_LINE" >> $GITHUB_OUTPUT
         echo "smoke_nfs_line=$SMOKE_NFS_LINE" >> $GITHUB_OUTPUT
         echo "e2e_smb_line=$E2E_SMB_LINE" >> $GITHUB_OUTPUT
@@ -678,7 +691,6 @@ jobs:
         echo "regression_smb_line=$REGRESSION_SMB_LINE" >> $GITHUB_OUTPUT
         echo "regression_nfs_line=$REGRESSION_NFS_LINE" >> $GITHUB_OUTPUT
         
-        # Set individual failure summary outputs
         echo "smoke_smb_failure<<EOF" >> $GITHUB_OUTPUT
         echo "$SMOKE_SMB_FAILURE" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -725,18 +737,16 @@ jobs:
     - name: Send Teams Notification Card
       if: always()
       run: |
-        # Determine test status for title and color
         TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
         TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
         TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
         TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
         TEST_STATUS="${{ steps.parser.outputs.test_status }}"
-        CLONE_PROVIDER="${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}"
+        CLONE_PROVIDER="${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}"
         PROVIDER_LABEL=$(echo "$CLONE_PROVIDER" | tr '[:lower:]' '[:upper:]')
         
-        CARD_TITLE="NDM Test Results - ${PROVIDER_LABEL}"
+        CARD_TITLE="NDM GCP Test Results - ${PROVIDER_LABEL}"
         
-        # Build the unified Teams card with conditional failure sections
         cat > teams_card.json << EOF
         {
           "type": "AdaptiveCard",
@@ -751,30 +761,13 @@ jobs:
             {
               "type": "FactSet",
               "facts": [
-                {
-                  "title": "Total Tests:",
-                  "value": "${TOTAL_TESTS}"
-                },
-                {
-                  "title": "Passed:",
-                  "value": "${TOTAL_PASSED}"
-                },
-                {
-                  "title": "Failed:",
-                  "value": "${TOTAL_FAILED}"
-                },
-                {
-                  "title": "Skipped:",
-                  "value": "${TOTAL_SKIPPED}"
-                },
-                {
-                  "title": "Status:",
-                  "value": "${TEST_STATUS}"
-                },
-                {
-                  "title": "Clone Backend:",
-                  "value": "${PROVIDER_LABEL}"
-                }
+                { "title": "Total Tests:", "value": "${TOTAL_TESTS}" },
+                { "title": "Passed:", "value": "${TOTAL_PASSED}" },
+                { "title": "Failed:", "value": "${TOTAL_FAILED}" },
+                { "title": "Skipped:", "value": "${TOTAL_SKIPPED}" },
+                { "title": "Status:", "value": "${TEST_STATUS}" },
+                { "title": "Clone Backend:", "value": "${PROVIDER_LABEL}" },
+                { "title": "Cloud:", "value": "GCP" }
               ]
             },
             {
@@ -790,7 +783,7 @@ jobs:
               "spacing": "Small"
             },
             {
-              "type": "TextBlock", 
+              "type": "TextBlock",
               "text": "${{ steps.parser.outputs.smoke_smb_line }}",
               "wrap": true,
               "spacing": "None"
@@ -839,7 +832,6 @@ jobs:
             }
         EOF
         
-        # Add failure sections conditionally if there are failures
         if [ "${TOTAL_FAILED}" != "0" ]; then
           cat >> teams_card.json << 'EOF'
             ,
@@ -851,7 +843,6 @@ jobs:
             }
         EOF
           
-          # Add individual failure sections
           if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
             cat >> teams_card.json << 'EOF'
             ,
@@ -931,7 +922,6 @@ jobs:
           fi
         fi
         
-        # Close the Teams card
         cat >> teams_card.json << 'EOF'
           ],
           "actions": [
@@ -944,13 +934,11 @@ jobs:
         }
         EOF
         
-        # Display the card for debugging
         echo "=== TEAMS CARD PAYLOAD ==="
         cat teams_card.json | jq . 2>/dev/null || cat teams_card.json
         echo ""
         echo "=========================="
         
-        # Send to Teams (if webhook URL is configured)
         if [ -n "${{ secrets.POWER_AUTOMATE_URL }}" ]; then
           echo "Sending Teams notification..."
           curl -X POST \
@@ -970,9 +958,8 @@ jobs:
     - name: Create Test Summary for GitHub Actions
       if: always()
       run: |
-        # Create GitHub Actions Job Summary
         cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-        ## Nightly Test Results Summary (${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }})
+        ## GCP Nightly Test Results Summary (${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }})
         
         ### Test Metrics
         | Metric | Count |
@@ -982,7 +969,8 @@ jobs:
         | Failed | ${{ steps.parser.outputs.total_failed }} |
         | Skipped | ${{ steps.parser.outputs.total_skipped }} |
         | Status | ${{ steps.parser.outputs.test_status }} |
-        | Clone Backend | ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }} |
+        | Clone Backend | ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }} |
+        | Cloud | GCP |
         
         ### Test Results
         
@@ -1001,14 +989,12 @@ jobs:
         - ${{ steps.parser.outputs.regression_nfs_line }}
         EOF
         
-        # Add failure sections conditionally if there are failures
         if [ "${{ steps.parser.outputs.total_failed }}" != "0" ]; then
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
         
         ### Failures
         EOF
           
-          # Add individual failure sections
           if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
             cat >> $GITHUB_STEP_SUMMARY << 'EOF'
         
@@ -1064,13 +1050,11 @@ jobs:
           fi
         fi
         
-        # Add the rest of the summary
         cat >> $GITHUB_STEP_SUMMARY << 'EOF'
         EOF
         
-        echo " GitHub Actions Job Summary created!"
+        echo "GitHub Actions Job Summary created!"
 
-        
   upload-support-bundle:
     name: Upload Support Bundles
     runs-on: openlab
@@ -1142,24 +1126,45 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Configure Provider Credentials for Cleanup
         run: |
+          GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}"
+
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
 
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
+          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image || github.event.inputs.control_plane_image }}"
+          WORKER_IMAGE="${{ inputs.worker_image || github.event.inputs.worker_image }}"
+
+          if [ -z "$CONTROL_PLANE_IMAGE" ]; then
+            CONTROL_PLANE_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'cp|control-plane'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+          fi
+
+          if [ -z "$WORKER_IMAGE" ]; then
+            WORKER_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'worker'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+          fi
+
+          echo "TF_VAR_control_plane_image=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image=$WORKER_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
+          echo "TF_VAR_region=${{ vars.GCP_REGION || 'us-east4' }}" >> $GITHUB_ENV
+
+          # Keep vm_owner compact so the final Terraform VM names stay within 63 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
           TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
@@ -1172,17 +1177,17 @@ jobs:
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.GCP_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
 
       - name: Download Terraform State
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: terraform-state
-          path: app-deployment/terraform/azure/environments/api
+          path: app-deployment/terraform/automation-gcp/environments/api
 
       - name: Initialize Terraform for Cleanup
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform init
 
       - name: Cleanup ONTAP Snapshots
@@ -1336,7 +1341,7 @@ jobs:
 
       - name: Destroy Terraform Resources
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd app-deployment/terraform/automation-gcp/environments/api
           terraform destroy -auto-approve
 
       - name: Clean Up Temporary Files
