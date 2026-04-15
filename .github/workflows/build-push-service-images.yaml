@@ -184,9 +184,9 @@ jobs:
           fi
 
           # Convert to JSON for the matrix
-          service_json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s . | tr -d '\n')
-          echo "Matrix for changed services: $service_json"
-          echo "matrix={\"service\":$service_json}" >> $GITHUB_OUTPUT
+          service_json=$(printf '%s\n' "${targets[@]}" | jq -R . | jq -s -c .)
+          echo "Matrix for changed services: ${service_json}"
+          echo "matrix={\"service\":${service_json}}" >> "$GITHUB_OUTPUT"
 
   
   build-and-push:
@@ -194,6 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: determine-matrix
     outputs:
+      image_tag: ${{ steps.set_image_tag.outputs.image_tag }}
       metadata_path: ${{ steps.metadata_paths.outputs.metadata_path }}
       latest_path: ${{ steps.metadata_paths.outputs.latest_path }}
       ref_type: ${{ steps.metadata_paths.outputs.ref_type }}
@@ -212,17 +213,20 @@ jobs:
           egress-policy: audit
 
       - name: Set IMAGE_TAG with build suffix
+        id: set_image_tag
         run: |
           if [ -n "${{ inputs.build }}" ]; then
-            echo "IMAGE_TAG=${{ github.sha }}-${{ inputs.build }}" >> $GITHUB_ENV
+            IMAGE_TAG="${{ github.sha }}-${{ inputs.build }}"
           else
             if [ "${{ github.ref_name }}" = "main" ]; then
-              echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+              IMAGE_TAG="${{ github.sha }}"
             else
               BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's#/#-#g')
-              echo "IMAGE_TAG=${{ github.sha }}-${BRANCH_TAG}" >> $GITHUB_ENV
+              IMAGE_TAG="${{ github.sha }}-${BRANCH_TAG}"
             fi
           fi
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -385,6 +389,107 @@ jobs:
           path: |
             metadata.json
             latest.json
+
+  # ============================================================================
+  # WIZ CONTAINER IMAGE SCAN
+  # Scans each pushed image with Wiz CLI for vulnerability detection.
+  # Pulls the just-pushed image from ACR and runs wizcli scan.
+  # ============================================================================
+  wiz-scan:
+    name: Wiz Scan - ${{ matrix.service }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [determine-matrix, build-and-push]
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.determine-matrix.outputs.matrix).service }}
+      fail-fast: false
+    env:
+      IMAGE_NAME: ${{ secrets.ACR_NAME }}.azurecr.io/ndm-${{ matrix.service }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Authenticate to ACR
+        uses: azure/docker-login@15c4aadf093404726ab2ff205b2cdd33fa6d054c
+        with:
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_SP_USERNAME }}
+          password: ${{ secrets.AZURE_SP_PASSWORD }}
+
+      - name: Pull image from ACR
+        run: |
+          echo "Pulling $IMAGE_NAME:$IMAGE_TAG ..."
+          docker pull --platform linux/amd64 "$IMAGE_NAME:$IMAGE_TAG"
+          echo "✓ Image pulled"
+          docker images "$IMAGE_NAME" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+      - name: Download Wiz CLI
+        run: |
+          curl -sSL -o wizcli https://downloads.wiz.io/v1/wizcli/latest/wizcli-linux-amd64
+          chmod +x wizcli
+
+      - name: Scan image with Wiz CLI
+        id: wiz-scan
+        continue-on-error: true
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: |
+          set +e
+          ./wizcli scan container-image "$IMAGE_NAME:$IMAGE_TAG" \
+            --client-id "$WIZ_CLIENT_ID" \
+            --client-secret "$WIZ_CLIENT_SECRET" \
+            --assist-migration \
+            --by-policy-hits DISABLED \
+            --sarif-output-file "wiz-results-${{ matrix.service }}.sarif" \
+            --json-output-file  "wiz-results-${{ matrix.service }}.json" \
+            --csv-output-file   "wiz-results-${{ matrix.service }}.csv.zip"
+          SCAN_EXIT=$?
+
+          echo "exit_code=$SCAN_EXIT" >> $GITHUB_OUTPUT
+
+          if [ -f "wiz-results-${{ matrix.service }}.json" ]; then
+            echo "=== Wiz scan summary for ${{ matrix.service }} ==="
+            jq -r '
+              .result.analytics.vulnerabilities as $v |
+              "  Critical: \($v.criticalCount // 0)",
+              "  High:     \($v.highCount // 0)",
+              "  Medium:   \($v.mediumCount // 0)",
+              "  Low:      \($v.lowCount // 0)",
+              "  Total:    \($v.totalCount // 0)",
+              "  Verdict:  \(.status.verdict // "?")"
+            ' "wiz-results-${{ matrix.service }}.json" 2>/dev/null || true
+          fi
+
+          exit $SCAN_EXIT
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && steps.wiz-scan.outputs.exit_code == '0'
+        uses: github/codeql-action/upload-sarif@7fc1baf373eb073c686865bd453d412d506a05a2 # v3.35.1
+        with:
+          sarif_file: wiz-results-${{ matrix.service }}.sarif
+          category: wiz-${{ matrix.service }}
+        continue-on-error: true
+
+      - name: Upload Wiz scan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wiz-scan-${{ matrix.service }}
+          path: |
+            wiz-results-${{ matrix.service }}.json
+            wiz-results-${{ matrix.service }}.sarif
+            wiz-results-${{ matrix.service }}.csv.zip
+          retention-days: 30
+          if-no-files-found: ignore
 
   upload-artifactory:
     runs-on: openlab
