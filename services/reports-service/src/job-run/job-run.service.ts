@@ -81,26 +81,12 @@ export class JobRunService {
   async getJobStatsId(id: string) {
     const getLatestReportStatus = await this.jobRunRepo.findOne({
       where: { id: id },
-      select: { isReportReady: true, jobStats: true, endTime: true },
+      select: { isReportReady: true, endTime: true },
     });
 
     if (!getLatestReportStatus) {
       throw new NotFoundException(`Job run not found for id ${id}`);
     }
-
-    // job_stats is snapshotted from Redis when the job reaches terminal status.
-    // It is the most accurate source; prefer it over the materialized view.
-    const jobStatsSnapshot = getLatestReportStatus.jobStats;
-    const hasValidSnapshot =
-      !!jobStatsSnapshot &&
-      (
-        (jobStatsSnapshot.fileCount != null && jobStatsSnapshot.fileCount !== '0') ||
-        (jobStatsSnapshot.directories != null && jobStatsSnapshot.directories !== '0') ||
-        (jobStatsSnapshot.totalSize != null && jobStatsSnapshot.totalSize !== '0') ||
-        (jobStatsSnapshot.newlyCopiedCount != null && jobStatsSnapshot.newlyCopiedCount !== '0') ||
-        (jobStatsSnapshot.modifiedCount != null && jobStatsSnapshot.modifiedCount !== '0') ||
-        (jobStatsSnapshot.deletedCount != null && jobStatsSnapshot.deletedCount !== '0')
-      );
 
     const saved = await this.reportsRepo.findOne({
       where: { jobRunId: id, reportType: ReportType.JOB_RUN_STATS },
@@ -122,28 +108,20 @@ export class JobRunService {
         );
       }
       if (jobStatsSummary) {
-        parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
-        
-      }
-      // Cached report may have been built when the MV had zeros.
-      // If we now have a valid job_stats snapshot, override the stats section.
-      if (hasValidSnapshot) {
-        const statsFromSnapshot = {
-          fileCount: jobStatsSnapshot.fileCount,
-          directories: jobStatsSnapshot.directories,
-          totalSize: formatBytes(Number(jobStatsSnapshot.totalSize || '0')).toString(),
-          newlyCopiedCount: jobStatsSnapshot.newlyCopiedCount,
-          modifiedCount: jobStatsSnapshot.modifiedCount,
-          deletedCount: jobStatsSnapshot.deletedCount,
+        const toCount = (v: unknown): string =>
+          v === null || v === undefined || v === '' ? '0' : String(v);
+        const statsFromMv = {
+          fileCount: toCount(jobStatsSummary.fileCount),
+          directories: toCount(jobStatsSummary.directoryCount),
+          totalSize: formatBytes(Number(jobStatsSummary.totalSize || '0')).toString(),
+          newlyCopiedCount: toCount(jobStatsSummary.newlyCopiedCount),
+          modifiedCount: toCount(jobStatsSummary.recopiedCount),
+          deletedCount: toCount(jobStatsSummary.deletedCount),
         };
-        if (parsedReport.migrate) parsedReport.migrate = statsFromSnapshot;
-        if (parsedReport.discovery) parsedReport.discovery = statsFromSnapshot;
-        if (parsedReport.cutOver) parsedReport.cutOver = statsFromSnapshot;
-        // Stats came from job_stats snapshot captured at job completion — use endTime as the accurate timestamp.
-        // Only override if endTime is non-null; if missing, keep the MV lastRefreshed already set above.
-        if (getLatestReportStatus.endTime != null) {
-          parsedReport.lastRefreshed = getLatestReportStatus.endTime;
-        }
+        if (parsedReport.migrate) parsedReport.migrate = statsFromMv;
+        if (parsedReport.discovery) parsedReport.discovery = statsFromMv;
+        if (parsedReport.cutOver) parsedReport.cutOver = statsFromMv;
+        parsedReport.lastRefreshed = jobStatsSummary.lastRefreshed;
       }
       return parsedReport;
     }
@@ -187,7 +165,6 @@ export class JobRunService {
         isReportReady: true,
         status: true,
         endTime: true,
-        jobStats: true,
         // worker: {workerId: true},
         jobConfig: {
           id: true,
@@ -254,21 +231,8 @@ export class JobRunService {
       worker: jobRun?.worker?.length ?? 0,
     };
     const jobRunStatus = new JobRunStats();
-    
-    // For completed jobs, use persisted jobStats from jobRun (accurate at completion time)
-    // For running jobs, fall back to materialized view
-    const isTerminal = TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status as JobRunStatus);
-    
-    if (isTerminal && jobRun.jobStats) {
-      this.logger.log(`Job Run ${id} using persisted jobStats: ${JSON.stringify(jobRun.jobStats)}`);
-      jobRunStatus.fileCount = jobRun.jobStats.fileCount?.toString() ?? jobStatsSummary?.fileCount?.toString() ?? "0";
-      jobRunStatus.directories = jobRun.jobStats.directories?.toString() ?? jobStatsSummary?.directoryCount?.toString() ?? "0";
-      jobRunStatus.totalSize = formatBytes(Number(jobRun.jobStats.totalSize ?? jobStatsSummary?.totalSize ?? 0)).toString();
-      jobRunStatus.deletedCount = (jobRun.jobStats as any).deletedCount ?? jobStatsSummary?.deletedCount?.toString() ?? "0";
-      jobRunStatus.excludedCount = (jobRun.jobStats as any).excludedCount ?? jobStatsSummary?.excludedCount?.toString() ?? "0";
-      jobRunStatus.newlyCopiedCount = (jobRun.jobStats as any).newlyCopiedCount ?? jobStatsSummary?.newlyCopiedCount?.toString() ?? "0";
-      jobRunStatus.modifiedCount = (jobRun.jobStats as any).modifiedCount ?? jobStatsSummary?.recopiedCount?.toString() ?? "0";
-    } else if (jobStatsSummary) {
+
+    if (jobStatsSummary) {
       this.logger.log(`Job Run ${id} using MV stats: ${JSON.stringify(jobStatsSummary)}`);
       jobRunStatus.fileCount = jobStatsSummary.fileCount?.toString() ?? "0";
       jobRunStatus.directories = jobStatsSummary.directoryCount?.toString() ?? "0";
@@ -295,12 +259,7 @@ export class JobRunService {
       response["cutOver"] = jobRunStatus;
 
     if (jobStatsSummary) {
-      // When stats come from the job_stats snapshot, use endTime (when snapshot was captured)
-      // rather than the MV refresh timestamp which is unrelated to the snapshot.
-      // Fall back to MV lastRefreshed if endTime is not yet set (older jobs / edge cases).
-      response["lastRefreshed"] = (hasValidSnapshot && getLatestReportStatus.endTime != null)
-        ? getLatestReportStatus.endTime
-        : jobStatsSummary.lastRefreshed;
+      response["lastRefreshed"] = jobStatsSummary.lastRefreshed;
     }
     this.logger.log("Job Run Status: " + jobStatsSummary?.jobRunStatus);
     if (jobStatsSummary?.jobRunStatus === JobRunStatus.Completed) {

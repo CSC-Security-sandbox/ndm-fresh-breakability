@@ -93,10 +93,10 @@ const JobHeader = ({ jobRunDetails, jobRunId }: JobRunHeaderPropType) => {
     liveVal: string | undefined,
     jobVal: string | undefined,
   ) => {
-    if (liveVal != null && liveVal !== "") {
+    if (liveVal != null && liveVal !== "" && liveVal !== '0') {
       return liveVal;
     }
-    if (jobVal != null && jobVal !== "") {
+    if (jobVal != null && jobVal !== "" && jobVal !== '0') {
       return jobVal;
     }
     return "--";
