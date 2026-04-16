@@ -45,31 +45,48 @@ describe('RedisMemoryCheckActivity', () => {
     );
   });
 
-  it('should return true when memory usage is below threshold', async () => {
+  it('should return true when memory usage is below threshold (using maxmemory)', async () => {
     const memoryInfo = {
       used_memory: 40,
-      total_system_memory: 100
+      total_system_memory: 1000,
+      maxmemory: 100
     };
     mockRedisService.getMemoryInfo.mockResolvedValue(memoryInfo);
 
     const result = await redisMemoryCheckActivity.checkMemoryUsage();
     expect(result).toBe(true);
     expect(logger.log).toHaveBeenCalledWith(
-      `Redis Memory Usage : ${JSON.stringify(memoryInfo)}`
+      expect.stringContaining('40.0%')
     );
   });
 
-  it('should return false when memory usage is above threshold', async () => {
+  it('should return false when memory usage is above threshold (using maxmemory)', async () => {
     const memoryInfo = {
       used_memory: 95,
-      total_system_memory: 100
+      total_system_memory: 1000,
+      maxmemory: 100
     };
     mockRedisService.getMemoryInfo.mockResolvedValue(memoryInfo);
 
     const result = await redisMemoryCheckActivity.checkMemoryUsage();
     expect(result).toBe(false);
     expect(logger.log).toHaveBeenCalledWith(
-      `Redis Memory Usage : ${JSON.stringify(memoryInfo)}`
+      expect.stringContaining('95.0%')
+    );
+  });
+
+  it('should fall back to total_system_memory when maxmemory is 0', async () => {
+    const memoryInfo = {
+      used_memory: 40,
+      total_system_memory: 100,
+      maxmemory: 0
+    };
+    mockRedisService.getMemoryInfo.mockResolvedValue(memoryInfo);
+
+    const result = await redisMemoryCheckActivity.checkMemoryUsage();
+    expect(result).toBe(true);
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('40.0%')
     );
   });
 

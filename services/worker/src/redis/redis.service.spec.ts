@@ -48,7 +48,7 @@ describe('RedisService', () => {
       hKeys: jest.fn().mockResolvedValue([]),
       info: jest
         .fn()
-        .mockResolvedValue('used_memory:1024\ntotal_system_memory:4096\n'),
+        .mockResolvedValue('used_memory:1024\ntotal_system_memory:4096\nmaxmemory:2048\n'),
     };
     (createClient as jest.Mock).mockReturnValue(mockClient);
 
@@ -665,34 +665,35 @@ describe('RedisService', () => {
       });
 
       it('parseMemoryStats extracts values correctly', () => {
-        const stats = 'used_memory:256\ntotal_system_memory:1024\nother:foo';
+        const stats = 'used_memory:256\ntotal_system_memory:1024\nmaxmemory:512\nother:foo';
         const parsed = service.parseMemoryStats(stats);
-        expect(parsed).toEqual({ used_memory: 256, total_system_memory: 1024 });
+        expect(parsed).toEqual({ used_memory: 256, total_system_memory: 1024, maxmemory: 512 });
       });
 
       it('parseMemoryStats returns zeros if keys missing', () => {
         const stats = 'foo:bar\nbaz:qux';
         const parsed = service.parseMemoryStats(stats);
-        expect(parsed).toEqual({ used_memory: 0, total_system_memory: 0 });
+        expect(parsed).toEqual({ used_memory: 0, total_system_memory: 0, maxmemory: 0 });
       });
 
       it('parseMemoryStats handles empty string', () => {
         const parsed = service.parseMemoryStats('');
-        expect(parsed).toEqual({ used_memory: 0, total_system_memory: 0 });
+        expect(parsed).toEqual({ used_memory: 0, total_system_memory: 0, maxmemory: 0 });
       });
 
       it('parseMemoryStats handles malformed data', () => {
-        const stats = 'used_memory:invalid\ntotal_system_memory:notanumber';
+        const stats = 'used_memory:invalid\ntotal_system_memory:notanumber\nmaxmemory:bad';
         const parsed = service.parseMemoryStats(stats);
         expect(parsed.used_memory).toBeNaN();
         expect(parsed.total_system_memory).toBeNaN();
+        expect(parsed.maxmemory).toBeNaN();
       });
 
       it('getMemoryInfo calls info and returns parsed', async () => {
         (service as any).client = mockClient;
         const info = await service.getMemoryInfo();
         expect(mockClient.info).toHaveBeenCalledWith('memory');
-        expect(info).toEqual({ used_memory: 1024, total_system_memory: 4096 });
+        expect(info).toEqual({ used_memory: 1024, total_system_memory: 4096, maxmemory: 2048 });
       });
     });
 

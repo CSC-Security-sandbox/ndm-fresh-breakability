@@ -18,15 +18,16 @@ export class RedisMemoryCheckActivity {
   }
 
     /**
-     * Check Redis memory usage
-     * @returns {Promise<boolean>} - Returns true if memory usage is below 90%, false otherwise
+     * Check Redis memory usage against maxmemory (falls back to total_system_memory if maxmemory is not set)
+     * @returns {Promise<boolean>} - Returns true if memory usage is below threshold, false otherwise
      */
   async checkMemoryUsage(): Promise<boolean> {
     try {
       const memoryInfo = await this.redisService.getMemoryInfo();
-      const memoryUsagePercentage = (memoryInfo.used_memory/ memoryInfo.total_system_memory) * 100;
-      this.logger.log(`Redis Memory Usage : ${JSON.stringify(memoryInfo)}`);
-      return memoryUsagePercentage < this.memoryUsageThreshold;      
+      const memoryLimit = memoryInfo.maxmemory > 0 ? memoryInfo.maxmemory : memoryInfo.total_system_memory;
+      const memoryUsagePercentage = (memoryInfo.used_memory / memoryLimit) * 100;
+      this.logger.log(`Redis Memory Usage: ${memoryUsagePercentage.toFixed(1)}% (${memoryInfo.used_memory} / ${memoryLimit}) threshold: ${this.memoryUsageThreshold}%`);
+      return memoryUsagePercentage < this.memoryUsageThreshold;
     } catch (error) {
       this.logger.error(`Error fetching Redis memory info: ${error}`);
       throw error;
