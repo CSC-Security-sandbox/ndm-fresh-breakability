@@ -83,45 +83,60 @@
   ansible.builtin.debug:
     msg: "Helm Install (openbao) => stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
-- name: Pause for 90 seconds to make sure openbao is up
+- name: Wait for openbao pods to be scheduled and containers created
   ansible.builtin.pause:
     seconds: 90
 
 - name: Waiting for openbao-0 to be ready
   become: yes
   shell: |
-    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
+    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }} --timeout=180s
   with_items:
     - 0
   args:
     chdir: $HOME
   retries: 6
-  delay: 20
+  delay: 15
 
-- name: Get the unseal keys and store them in /opt/datamigrator/openbao
+- name: Initialize openbao-0 and store unseal keys
   become: yes
   shell: |
-    kubectl exec openbao-{{ item }} -n openbao -- bao operator init -key-shares=1 -key-threshold=1 -format=json > /opt/datamigrator/openbao/cluster-keys.json
-    OPENBAO_UNSEAL_KEY=$(cat /opt/datamigrator/openbao/cluster-keys.json | jq -r ".unseal_keys_b64[]")
-    kubectl exec openbao-{{ item }} -n openbao -- bao operator unseal $OPENBAO_UNSEAL_KEY
-  with_items:
-    - 0
+    INIT_STATUS=$(kubectl exec openbao-0 -n openbao -- bao status -format=json 2>/dev/null | jq -r '.initialized' 2>/dev/null || echo "false")
+    if [ "$INIT_STATUS" = "true" ]; then
+      echo "Already initialized, skipping init"
+    else
+      kubectl exec openbao-0 -n openbao -- bao operator init -key-shares=1 -key-threshold=1 -format=json > /opt/datamigrator/openbao/cluster-keys.json
+    fi
+  args:
+    executable: /bin/bash
+  register: openbao_init_result
+  retries: 3
+  delay: 10
+  until: openbao_init_result.rc == 0
 
-- name: Pause for 45 seconds to make sure openbao is up
-  ansible.builtin.pause:
-    seconds: 45
+- name: Unseal openbao-0
+  become: yes
+  shell: |
+    OPENBAO_UNSEAL_KEY=$(jq -r ".unseal_keys_b64[]" /opt/datamigrator/openbao/cluster-keys.json)
+    kubectl exec openbao-0 -n openbao -- bao operator unseal "$OPENBAO_UNSEAL_KEY"
+  args:
+    executable: /bin/bash
+  register: openbao_unseal_0_result
+  retries: 3
+  delay: 10
+  until: openbao_unseal_0_result.rc == 0
 
 - name: Waiting for openbao-1, openbao-2 to be ready
   become: yes
   shell: |
-    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }}
+    kubectl wait --namespace="openbao" --for=jsonpath='{.status.phase}'=Running pod/openbao-{{ item }} --timeout=120s
   with_items:
     - 1
     - 2
   args:
     chdir: $HOME
   retries: 6
-  delay: 20
+  delay: 15
 
 - name: Unseal the openbao vault
   become: yes
@@ -131,10 +146,10 @@
   with_items:
     - 1
     - 2
-
-- name: Pause for 10 seconds to make sure openbao is up
-  ansible.builtin.pause:
-    seconds: 10
+  register: openbao_unseal_result
+  retries: 3
+  delay: 10
+  until: openbao_unseal_result.rc == 0
 
 - name: Authenticate to openbao
   become: yes
@@ -145,6 +160,10 @@
     - 0
     - 1
     - 2
+  register: openbao_auth_result
+  retries: 3
+  delay: 10
+  until: openbao_auth_result.rc == 0
 
 - name: Deploy OpenBao unseal CronJob, ConfigMap and RBAC
   become: yes

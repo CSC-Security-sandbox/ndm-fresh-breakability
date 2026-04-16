@@ -79,10 +79,6 @@
   ansible.builtin.debug:
     msg: "Helm Install (temporal): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
-- name: Wait for 150 seconds before waiting for pods to come up
-  ansible.builtin.pause:
-    seconds: 150
-
 - name: Wait for pods to come up and handle failure
   block:
     - name: Wait for pods to come up

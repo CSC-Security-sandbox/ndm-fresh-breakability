@@ -2,14 +2,20 @@
 - name: Copy Docker image tar file to target
   copy:
     src: "../../../artifacts/datamigrator-{{ build_version }}.tar"
-    dest: "$HOME/datamigrator-images-{{ build_version }}.tar"
+    dest: "{{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
     mode: '0644'
+  when: local_cluster is not defined
+
+- name: Compress datamigrator Docker image tar to reduce VM image size
+  command: "gzip -1 {{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
+  args:
+    removes: "{{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
   when: local_cluster is not defined
 
 - name: Copy helm chart tgz file to target
   copy:
     src: "../../../artifacts/datamigrator-{{ build_version }}.tgz"
-    dest: "$HOME/datamigrator-helmchart-{{ build_version }}.tgz"
+    dest: "{{ ansible_env.HOME }}/datamigrator-helmchart-{{ build_version }}.tgz"
   when: local_cluster is not defined
 
 - name: Template each subchart's Chart.yaml
@@ -78,7 +84,7 @@
   become: yes
   copy:
     src: "../roles/datamigrator/helm-chart/package/datamigrator-{{ build_version }}.tgz"
-    dest: "$HOME/helm-chart.tgz"
+    dest: "{{ ansible_env.HOME }}/helm-chart.tgz"
   when: local_cluster is defined
 
 - name: Clean up rendered subchart Chart.yaml files
@@ -260,7 +266,7 @@
 - name: Delete the tarball from the remote host
   become: yes
   file:
-    path: $HOME/helm-chart.tgz
+    path: "{{ ansible_env.HOME }}/helm-chart.tgz"
     state: absent
   when: local_cluster is defined
 

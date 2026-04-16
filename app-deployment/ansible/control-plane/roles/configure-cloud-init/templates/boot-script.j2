@@ -124,7 +124,27 @@ echo "Current build version: $BUILD_VERSION"
 
 load_docker_images() {
     log "Loading Docker images into MicroK8s registry..."
-    retry $MAX_RETRIES "microk8s images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load Docker images"
+
+    if [ -f "$HOME/ndm-docker-images.tar.gz" ]; then
+        log "Decompressing third-party Docker images..."
+        gunzip "$HOME/ndm-docker-images.tar.gz" || handle_failure "Failed to decompress third-party Docker images"
+        log "Importing third-party Docker images..."
+        retry $MAX_RETRIES "microk8s images import $HOME/ndm-docker-images.tar" || handle_failure "Failed to load third-party Docker images"
+        rm -f "$HOME/ndm-docker-images.tar"
+    elif [ -f "$HOME/ndm-docker-images.tar" ]; then
+        log "Importing third-party Docker images..."
+        retry $MAX_RETRIES "microk8s images import $HOME/ndm-docker-images.tar" || handle_failure "Failed to load third-party Docker images"
+    else
+        log "Third-party Docker images tar not found, skipping"
+    fi
+
+    if [ -f "$HOME/datamigrator-images-$BUILD_VERSION.tar.gz" ]; then
+        log "Decompressing NDM application Docker images..."
+        gunzip "$HOME/datamigrator-images-$BUILD_VERSION.tar.gz" || handle_failure "Failed to decompress NDM application Docker images"
+    fi
+
+    log "Importing NDM application Docker images..."
+    retry $MAX_RETRIES "microk8s images import $HOME/datamigrator-images-$BUILD_VERSION.tar" || handle_failure "Failed to load NDM Docker images"
 }
 
 install_helm_chart() {
@@ -482,8 +502,8 @@ main() {
     log "Waiting for system stabilization..."
     sleep $MICROK8S_INIT_DELAY
     
-    unseal_openbao
     load_docker_images
+    unseal_openbao
     install_keycloak_chart
     install_helm_chart
     apply_postgres_cronjob_and_wait

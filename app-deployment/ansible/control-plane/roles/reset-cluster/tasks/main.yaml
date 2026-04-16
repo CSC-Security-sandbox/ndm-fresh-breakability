@@ -92,3 +92,13 @@
 - name: Debug MicroK8s status output
   debug:
     var: microk8s_status.stdout
+
+- name: Wipe containerd image store to reduce VM image size
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/snap/microk8s/common/var/lib/containerd/io.containerd.content.v1.content
+    - /var/snap/microk8s/common/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
+    - /var/snap/microk8s/common/var/lib/containerd/io.containerd.metadata.v1.bolt

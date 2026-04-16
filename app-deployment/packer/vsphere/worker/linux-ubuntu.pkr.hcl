@@ -733,8 +733,6 @@ build {
   provisioner "ansible" {
     playbook_file          = "../../../ansible/worker/playbooks/master-playbook.yaml"
     inventory_directory    = "../../../ansible/worker/config"
-    galaxy_file            = "../../../ansible/worker/playbooks/linux-requirements.yaml"
-    galaxy_force_with_deps = true
     user                   = var.build_username
     ansible_env_vars = [
       "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
@@ -751,8 +749,6 @@ build {
 
   provisioner "ansible" {
     user                   = var.build_username
-    galaxy_file            = "../../../ansible/worker/playbooks/linux-requirements.yaml"
-    galaxy_force_with_deps = true
     playbook_file          = "../../../ansible/worker/playbooks/linux-cleanup.yaml"
     roles_path             = "../../../ansible/worker/roles"
     ansible_env_vars = [
@@ -770,10 +766,13 @@ build {
 
   provisioner "shell" {
     execute_command = "echo '${var.build_password}' | sudo -S -E sh '{{ .Path }}'"
-    inline = [
-      "echo 'Zeroing free space for smaller exported image...'",
+    inline = var.image_suffix == "" ? [
+      "echo 'Zeroing free space for smaller exported image (release build)...'",
       "dd if=/dev/zero of=/var/tmp/zeros bs=1M 2>/dev/null || true",
       "rm -f /var/tmp/zeros",
+      "sync"
+    ] : [
+      "echo 'Skipping zero-fill for adhoc build'",
       "sync"
     ]
     inline_shebang = "/bin/sh -x"

@@ -101,6 +101,14 @@ on:
         options:
           - 'anf'
           - 'ontap'
+      vm_resources:
+        description: 'Build VM resources — lean uses smaller instances (4 vCPU, 16 GB) to reduce cost and share infrastructure'
+        required: false
+        type: choice
+        default: 'default'
+        options:
+          - default
+          - lean
   schedule:
     - cron: '30 18 * * *'
   workflow_call:
@@ -113,6 +121,11 @@ on:
         description: 'Select volume clone backend for Azure API tests (anf/ontap)'
         required: false
         default: 'ontap'
+        type: string
+      vm_resources:
+        description: 'Build VM resources — default (8 vCPU, 32 GB) or lean (4 vCPU, 16 GB)'
+        required: false
+        default: 'default'
         type: string
 
 permissions: 
@@ -1166,6 +1179,33 @@ jobs:
       - name: Add ovftool to PATH
         run: echo "/home/ubuntu/ovftool" >> $GITHUB_PATH
 
+      - name: Determine VM resource overrides
+        id: vm-resources
+        run: |
+          VM_RESOURCES="${{ inputs.vm_resources || 'default' }}"
+          RESOURCE_VARS=""
+
+          if [ "$VM_RESOURCES" == "lean" ] && [ "${{ matrix.component }}" == "control-plane" ]; then
+            echo "Using lean VM resources (4 vCPU, 16 GB RAM) for ${{ matrix.provider }}"
+            case "${{ matrix.provider }}" in
+              aws)
+                RESOURCE_VARS='-var "aws_packer_instance_type=t3a.xlarge"'
+                ;;
+              azure)
+                RESOURCE_VARS='-var "azure_packer_vm_size=Standard_D4s_v4"'
+                ;;
+              gcp)
+                RESOURCE_VARS='-var "gcp_packer_machine_type=e2-standard-4"'
+                ;;
+              vsphere)
+                RESOURCE_VARS='-var "vm_cpu_count=4" -var "vm_mem_size=16384"'
+                ;;
+            esac
+          fi
+
+          echo "resource_vars=$RESOURCE_VARS" >> $GITHUB_OUTPUT
+          echo "Resource overrides: ${RESOURCE_VARS:-none}"
+
       - name: Packer Init
         run: |
           cd ${{ steps.packer-path.outputs.path }}
@@ -1181,11 +1221,13 @@ jobs:
             packer validate \
               -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
               -var-file="variables.pkrvars.hcl" \
+              ${{ steps.vm-resources.outputs.resource_vars }} \
               linux-ubuntu.pkr.hcl
           else
             echo "Validating control-plane configuration..."
             packer validate \
               -var-file="variables.pkrvars.hcl" \
+              ${{ steps.vm-resources.outputs.resource_vars }} \
               linux-ubuntu.pkr.hcl
           fi
 
@@ -1213,11 +1255,13 @@ jobs:
               packer build \
                 -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
                 -var-file="variables.pkrvars.hcl" \
+                ${{ steps.vm-resources.outputs.resource_vars }} \
                 linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
             else
               echo "Building control-plane image..."
               packer build \
                 -var-file="variables.pkrvars.hcl" \
+                ${{ steps.vm-resources.outputs.resource_vars }} \
                 linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
             fi
 
