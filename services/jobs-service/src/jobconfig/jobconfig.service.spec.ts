@@ -4847,54 +4847,41 @@ describe("JobConfigService", () => {
  
 
   describe("calculateJobRunStats", () => {
-    it("should throw NotFoundException if jobRunId does not exist", async () => {
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(null);
-      await expect(service.calculateJobRunStats("invalid-id")).rejects.toThrow(
-        new NotFoundException("Job Run with id invalid-id not found")
-      );
-    });
-
-    it("should return values from inventory summary", async () => {
+    it("should return MV stats for a job run", async () => {
       const jobRunId = "12345";
       const mockJobStatsSummary = {
         fileCount: "10",
         directoryCount: "5",
         totalSize: "1000",
-      };
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        lastRefreshed: null,
       };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockJobStatsSummary as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);
+      expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalledWith({ where: { jobRunId } });
       expect(result).toEqual({
         fileCount: "10",
         directories: "5",
         totalSize: "1000",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        modifiedCount: "0",
+        lastRefreshed: null,
         errors: [],
       });
     });
 
-    it("should default to '0' when inventory summary values are undefined", async () => {
+    it("should default to '0' when MV returns no row", async () => {
       const jobRunId = "12345";
-      const mockInventoryCounts = {
-        // All values are undefined
-      };
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-      };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
-      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
-      } as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(null);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
       const result = await service.calculateJobRunStats(jobRunId);
@@ -4902,92 +4889,97 @@ describe("JobConfigService", () => {
         fileCount: "0",
         directories: "0",
         totalSize: "0",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        modifiedCount: "0",
+        lastRefreshed: null,
         errors: [],
       });
     });
 
-    it("should return job_stats snapshot when fileCount is non-zero", async () => {
+    it("should always query MV even when job_stats snapshot is present on the job run", async () => {
       const jobRunId = "snap-fc";
-      const endTime = new Date("2025-01-01T10:00:00Z");
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-        endTime,
-        jobStats: { fileCount: "100", directories: "10", totalSize: "2048" },
+      const mockMv = {
+        fileCount: "100",
+        directoryCount: "10",
+        totalSize: "2048",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        lastRefreshed: new Date("2025-01-01T10:00:00Z"),
       };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockMv as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
-      jest.spyOn(jobStatsSummaryMvRepo, "findOne");
 
       const result = await service.calculateJobRunStats(jobRunId);
 
-      expect(result).toEqual({
-        fileCount: "100",
-        directories: "10",
-        totalSize: "2048",
-        lastRefreshed: endTime,
-        errors: [],
-      });
-      expect(jobStatsSummaryMvRepo.findOne).not.toHaveBeenCalled();
+      expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalled();
+      expect(result.fileCount).toBe("100");
+      expect(result.directories).toBe("10");
     });
 
-    it("should use job_stats snapshot when fileCount is '0' but directories is non-zero", async () => {
+    it("should return MV dirCount when fileCount is '0' but directoryCount is non-zero", async () => {
       const jobRunId = "snap-dirs";
-      const endTime = new Date("2025-01-01T10:00:00Z");
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-        endTime,
-        jobStats: { fileCount: "0", directories: "5", totalSize: "0" },
+      const lastRefreshed = new Date("2025-01-01T10:00:00Z");
+      const mockMv = {
+        fileCount: "0",
+        directoryCount: "5",
+        totalSize: "0",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        lastRefreshed,
       };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockMv as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
-      jest.spyOn(jobStatsSummaryMvRepo, "findOne");
 
       const result = await service.calculateJobRunStats(jobRunId);
 
       expect(result.directories).toBe("5");
-      expect(result.lastRefreshed).toBe(endTime);
-      expect(jobStatsSummaryMvRepo.findOne).not.toHaveBeenCalled();
+      expect(result.lastRefreshed).toBe(lastRefreshed);
+      expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalled();
     });
 
-    it("should use job_stats snapshot when only totalSize is non-zero", async () => {
+    it("should return MV totalSize when only totalSize is non-zero", async () => {
       const jobRunId = "snap-size";
-      const endTime = new Date("2025-01-01T10:00:00Z");
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-        endTime,
-        jobStats: { fileCount: "0", directories: "0", totalSize: "8192" },
+      const mockMv = {
+        fileCount: "0",
+        directoryCount: "0",
+        totalSize: "8192",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        lastRefreshed: null,
       };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockMv as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
-      jest.spyOn(jobStatsSummaryMvRepo, "findOne");
 
       const result = await service.calculateJobRunStats(jobRunId);
 
       expect(result.totalSize).toBe("8192");
-      expect(jobStatsSummaryMvRepo.findOne).not.toHaveBeenCalled();
+      expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalled();
     });
 
-    it("should fall back to MV when job_stats snapshot has all-zero counts", async () => {
+    it("should return MV data with all-zero counts when MV has zeros", async () => {
       const jobRunId = "snap-zeros";
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-        endTime: new Date(),
-        jobStats: { fileCount: "0", directories: "0", totalSize: "0" },
-      };
       const mockJobStatsSummary = {
         fileCount: "10",
         directoryCount: "2",
         totalSize: "1024",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        lastRefreshed: null,
       };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue(mockJobStatsSummary as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
@@ -4997,23 +4989,14 @@ describe("JobConfigService", () => {
       expect(jobStatsSummaryMvRepo.findOne).toHaveBeenCalled();
     });
 
-    it("should default to '0' when inventory summary values are falsy", async () => {
+    it("should default to '0' when MV fields are falsy", async () => {
       const jobRunId = "12345";
-      const mockInventoryCounts = {
-        filecount: "",
-        directorycount: null,
-        totalfilesize: 0,
-      };
-      const mockJobRun = {
-        id: jobRunId,
-        jobConfig: { id: "jobConfigId" },
-      };
 
-      jest.spyOn(jobRunRepo, "findOne").mockResolvedValue(mockJobRun as any);
-      jest.spyOn(inventoryRepo, "createQueryBuilder").mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue(mockInventoryCounts),
+      jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValue({
+        fileCount: "",
+        directoryCount: null,
+        totalSize: 0,
+        lastRefreshed: null,
       } as any);
       jest.spyOn(service, "getErrorCounts").mockResolvedValue([]);
 
@@ -5022,6 +5005,11 @@ describe("JobConfigService", () => {
         fileCount: "0",
         directories: "0",
         totalSize: "0",
+        deletedCount: "0",
+        excludedCount: "0",
+        newlyCopiedCount: "0",
+        modifiedCount: "0",
+        lastRefreshed: null,
         errors: [],
       });
     });

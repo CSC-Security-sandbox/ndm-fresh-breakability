@@ -532,13 +532,12 @@ describe("JobRunService", () => {
       expect(result.lastRefreshed).toEqual(mockLastRefreshed);
     });
 
-    it("should override cached report stats with snapshot when hasValidSnapshot is true", async () => {
-      const endTime = new Date("2025-06-01T10:00:00Z");
+    it("should override cached report stats with MV data when MV has results", async () => {
+      const lastRefreshed = new Date("2025-06-01T10:00:00Z");
       mockJobRunRepo.findOne.mockResolvedValueOnce({
         id: jobId,
         isReportReady: true,
-        jobStats: { fileCount: "99", directories: "9", totalSize: "8192" },
-        endTime,
+        endTime: lastRefreshed,
       });
       const existingReport = {
         reportData: JSON.stringify({
@@ -547,23 +546,30 @@ describe("JobRunService", () => {
         }),
       };
       mockReportsRepo.findOne.mockResolvedValue(existingReport);
-      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "99",
+        directoryCount: "9",
+        totalSize: "8192",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        deletedCount: "0",
+        lastRefreshed,
+      });
 
       const result = await service.getJobStatsId(jobId);
 
       expect(result.migrate.fileCount).toBe("99");
       expect(result.migrate.directories).toBe("9");
-      expect(result.lastRefreshed).toEqual(endTime);
+      expect(result.lastRefreshed).toEqual(lastRefreshed);
     });
 
-    it("should use snapshot stats in fresh-build path when hasValidSnapshot is true", async () => {
+    it("should use MV stats in fresh-build path when MV has results", async () => {
       const endTime = new Date("2025-06-01T11:00:00Z");
       const mockFullJobRun = {
         id: jobId,
         startTime: new Date(),
         status: JobRunStatus.Completed,
         isReportReady: false,
-        jobStats: { fileCount: "77", directories: "7", totalSize: "4096" },
         jobConfig: {
           id: "configId",
           jobType: JobType.Migrate,
@@ -582,15 +588,18 @@ describe("JobRunService", () => {
       };
 
       mockJobRunRepo.findOne
-        .mockResolvedValueOnce({
-          id: jobId,
-          isReportReady: false,
-          jobStats: { fileCount: "77", directories: "7", totalSize: "4096" },
-          endTime,
-        })
+        .mockResolvedValueOnce({ id: jobId, isReportReady: false, endTime })
         .mockResolvedValueOnce(mockFullJobRun);
       mockReportsRepo.findOne.mockResolvedValue(null);
-      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "77",
+        directoryCount: "7",
+        totalSize: "4096",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        deletedCount: "0",
+        lastRefreshed: null,
+      });
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});
 
@@ -788,14 +797,19 @@ describe("JobRunService", () => {
       mockReportsRepo.findOne.mockResolvedValue(null);
     });
 
-    it("should use persisted jobStats for terminal job runs with jobStats", async () => {
-      const mockJobRun = buildMockJobRun({
-        status: JobRunStatus.Completed,
-        jobStats: { fileCount: "42", directories: "7", totalSize: "102400" },
-      });
+    it("should use MV stats for terminal job runs when MV has data", async () => {
+      const mockJobRun = buildMockJobRun({ status: JobRunStatus.Completed });
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "42",
+        directoryCount: "7",
+        totalSize: "102400",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        deletedCount: "0",
+        lastRefreshed: null,
+      });
 
       const result = await service.getJobStatsId(jobId);
 
@@ -804,7 +818,7 @@ describe("JobRunService", () => {
       expect(result.discovery.totalSize).toBe("100 KiB");
     });
 
-    it("should use persisted jobStats for BLOCKED cutover runs (scan finished, review pending)", async () => {
+    it("should use MV stats for BLOCKED cutover runs (scan finished, review pending)", async () => {
       const mockJobRun = buildMockJobRun({
         status: JobRunStatus.Blocked,
         jobConfig: {
@@ -819,11 +833,18 @@ describe("JobRunService", () => {
             volumePath: "/destination",
           },
         },
-        jobStats: { fileCount: "100", directories: "10", totalSize: "2048000" },
       });
 
       mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
-      mockJobSummaryMvRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "100",
+        directoryCount: "10",
+        totalSize: "2048000",
+        newlyCopiedCount: "0",
+        recopiedCount: "0",
+        deletedCount: "0",
+        lastRefreshed: null,
+      });
 
       const result = await service.getJobStatsId(jobId);
 
@@ -1481,21 +1502,13 @@ describe("JobRunService", () => {
   });
 
   describe("getJobStatsId - snapshot override behavior", () => {
-    it("should override cached report stats from snapshot when snapshot is valid", async () => {
+    it("should override cached report stats with MV data when MV is available", async () => {
       const jobId = "override-1";
-      const endTime = new Date("2025-06-01T12:00:00Z");
+      const lastRefreshed = new Date("2025-06-01T12:00:00Z");
       mockJobRunRepo.findOne.mockResolvedValueOnce({
         id: jobId,
         isReportReady: true,
-        endTime,
-        jobStats: {
-          fileCount: "11",
-          directories: "2",
-          totalSize: "2048",
-          newlyCopiedCount: "3",
-          modifiedCount: "4",
-          deletedCount: "6",
-        },
+        endTime: lastRefreshed,
       });
       mockReportsRepo.findOne.mockResolvedValueOnce({
         reportData: JSON.stringify({
@@ -1503,7 +1516,15 @@ describe("JobRunService", () => {
           migrate: { fileCount: "0", directories: "0", totalSize: "0 B" },
         }),
       });
-      mockJobSummaryMvRepo.findOne.mockResolvedValueOnce(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValueOnce({
+        fileCount: "11",
+        directoryCount: "2",
+        totalSize: "2048",
+        newlyCopiedCount: "3",
+        recopiedCount: "4",
+        deletedCount: "6",
+        lastRefreshed,
+      });
 
       const result = await service.getJobStatsId(jobId);
 
@@ -1511,7 +1532,7 @@ describe("JobRunService", () => {
       expect(result.migrate.directories).toBe("2");
       expect(result.migrate.totalSize).toBe("2 KiB");
       expect(result.migrate.modifiedCount).toBe("4");
-      expect(result.lastRefreshed).toEqual(endTime);
+      expect(result.lastRefreshed).toEqual(lastRefreshed);
     });
   });
 
