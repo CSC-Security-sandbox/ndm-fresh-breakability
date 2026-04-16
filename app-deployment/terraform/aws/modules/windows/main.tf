@@ -22,6 +22,17 @@ resource "aws_instance" "vm" {
 
   user_data = <<-USERDATA
 <powershell>
+# Set AD DNS servers so domain join works on AWS.
+# Azure does this via azurerm_network_interface.dns_servers before boot;
+# on AWS there is no NIC-level DNS, so we set it here at first boot.
+$dnsServers = @(${join(",", [for ip in var.dns_servers : "\"${ip}\""])})
+if ($dnsServers.Count -gt 0) {
+  Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
+    Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dnsServers
+  }
+  $dnsServers -join "," | Out-File -FilePath "C:\dns-setup.txt" -Force
+}
+
 $password = "${var.admin_password}"
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 $user = [adsi]"WinNT://./Administrator,user"

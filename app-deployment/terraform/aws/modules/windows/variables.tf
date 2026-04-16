@@ -35,6 +35,12 @@ variable "admin_password" {
   sensitive   = true
 }
 
+variable "dns_servers" {
+  description = "List of AD DNS server IPs to set on the NIC at boot. Required on AWS (VPC resolver cannot resolve the AD domain). Leave empty to skip."
+  type        = list(string)
+  default     = []
+}
+
 variable "root_volume_size" {
   description = "Size of the root EBS volume in GB"
   type        = number

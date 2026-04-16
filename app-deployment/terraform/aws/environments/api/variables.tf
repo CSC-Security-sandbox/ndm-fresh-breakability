@@ -55,6 +55,12 @@ variable "admin_password" {
   sensitive   = true
 }
 
+variable "ad_dns_servers" {
+  description = "List of AD DNS server IPs to configure on Windows worker NICs at boot. Mirrors the Azure dns_servers variable. Leave empty to skip."
+  type        = list(string)
+  default     = []
+}
+
 variable "vm_owner" {
   description = "Short prefix for VM name tags (kept compact for readability)"
   type        = string

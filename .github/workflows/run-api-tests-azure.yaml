@@ -5,6 +5,11 @@ env:
   TERRAFORM_VERSION: 1.12.1
   GO_VERSION: 1.24.2
   NODE_VERSION: 22.15.0
+  # AD DNS server IP used for Windows worker NIC configuration at boot.
+  # aws-fsxn → AWS_WIN_DNS_SERVERS; anf/ontap → AZURE_WIN_DNS_SERVERS.
+  # Both vars are stored as JSON lists e.g. [\"172.x.x.x\"] — we pick the
+  # right one here and each consumer wraps/unwraps as needed for its type.
+  WIN_AD_DNS_SERVERS: ${{ (inputs.volume_clone_provider == 'aws-fsxn' || github.event.inputs.volume_clone_provider == 'aws-fsxn') && vars.AWS_WIN_DNS_SERVERS || vars.AZURE_WIN_DNS_SERVERS }}
 
 on:
   workflow_dispatch:
@@ -54,6 +59,7 @@ on:
         options:
           - 'anf'
           - 'ontap'
+          - 'aws-fsxn'
       run_smoke_tests:
         description: 'Run smoke tests'
         required: false
@@ -102,7 +108,7 @@ on:
         default: 'Both'
         type: string
       volume_clone_provider:
-        description: 'Select volume clone backend (anf/ontap)'
+        description: 'Select volume clone backend (anf/ontap/aws-fsxn)'
         required: false
         default: 'ontap'
         type: string
@@ -188,6 +194,7 @@ jobs:
             echo "TF_VAR_key_name=${{ secrets.AWS_EC2_KEY_PAIR_NAME }}" >> $GITHUB_ENV
             echo "TF_VAR_control_plane_ami_id=$CONTROL_PLANE_AMI" >> $GITHUB_ENV
             echo "TF_VAR_linux_worker_ami_id=$LINUX_WORKER_AMI" >> $GITHUB_ENV
+            echo "TF_VAR_ad_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
 
             echo "${{ secrets.AWS_EC2_PRIVATE_KEY }}" > $GITHUB_WORKSPACE/credentials/ec2-key.pem
             chmod 600 $GITHUB_WORKSPACE/credentials/ec2-key.pem
@@ -204,7 +211,7 @@ jobs:
             echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
             echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
             echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-            echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+            echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
           else
             echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
             exit 1
@@ -1260,7 +1267,7 @@ jobs:
             echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
             echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
             echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-            echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+            echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
           else
             echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
             exit 1

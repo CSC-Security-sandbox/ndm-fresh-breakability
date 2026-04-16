@@ -51,6 +51,7 @@ module "windows_workers" {
   key_name          = var.key_name
   admin_username    = "datamigrator"
   admin_password    = var.admin_password
+  dns_servers       = var.ad_dns_servers
   root_volume_size  = var.windows_worker_root_volume_size
 
   tags = {
