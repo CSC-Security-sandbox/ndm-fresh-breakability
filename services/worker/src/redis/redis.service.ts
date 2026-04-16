@@ -339,26 +339,30 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return await this.client.hSet(`${jobRunId}:mapping`, `${type}:${id}`, owner);
   }
 
-  async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number }> {
+  async getMemoryInfo(): Promise<{ used_memory: number; total_system_memory: number; maxmemory: number }> {
     await this.ensureClient();
     const memoryInfo = await this.client.info('memory');
     const parsedInfo = this.parseMemoryStats(memoryInfo);
     return parsedInfo;
   }
-  parseMemoryStats(stats: string): { used_memory: number; total_system_memory: number } {
+  parseMemoryStats(stats: string): { used_memory: number; total_system_memory: number; maxmemory: number } {
     let usedMemory = 0;
     let totalSystemMemory = 0;
-  
+    let maxmemory = 0;
+
     stats.split('\n').forEach((line) => {
       if (line.startsWith('used_memory:')) {
         usedMemory = parseInt(line.split(':')[1], 10);
       } else if (line.startsWith('total_system_memory:')) {
         totalSystemMemory = parseInt(line.split(':')[1], 10);
+      } else if (line.startsWith('maxmemory:')) {
+        maxmemory = parseInt(line.split(':')[1], 10);
       }
     });
     return {
       used_memory: usedMemory,
       total_system_memory: totalSystemMemory,
+      maxmemory,
     };
   }
 

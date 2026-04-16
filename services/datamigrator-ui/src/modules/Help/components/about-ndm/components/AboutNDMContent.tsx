@@ -1,6 +1,5 @@
 import Box from "@/components/container/Box";
 import { Card, InlineLoader } from "@netapp/bxp-design-system-react";
-import { ABOUT_NDM_CONSTANTS } from "@modules/Help/components/about-ndm/constants/about-ndm.constants";
 import { useEffect, useState } from "react";
 import { AboutNDMApiRespType } from "@/types/app.type";
 import { Show } from "@/components/show/Show";
@@ -37,7 +36,7 @@ const AboutNDMContent = () => {
           <Show.When isTrue={!isLoading && !isError && !!aboutNdm}>
             <Box className="flex flex-row items-center">
               <Box className="Box-lg font-semibold mr-2">Product:</Box>
-              {aboutNdm?.product?.name} {aboutNdm?.product?.version}
+              {aboutNdm?.product?.name}
             </Box>
             <Box className="flex flex-row items-center">
               <Box className="Box-lg font-semibold mr-2">Control Plane:</Box>
@@ -86,28 +85,6 @@ const AboutNDMContent = () => {
               </Box>
             )}
 
-            <Box className="flex flex-row items-center">
-              <Box className="Box-lg font-semibold mr-2">
-                {ABOUT_NDM_CONSTANTS.CONTACT_US}
-              </Box>
-              <u className="text-blue-500">{aboutNdm?.contact?.email}</u>
-            </Box>
-            <Show>
-              <Show.When isTrue={!!aboutNdm?.contact?.phone}>
-                <Box className="flex flex-row items-center">
-                  <Box className="Box-lg font-semibold mr-2">Phone:</Box>
-                  {aboutNdm?.contact?.phone}
-                </Box>
-              </Show.When>
-            </Show>
-            <Show>
-              <Show.When isTrue={!!aboutNdm?.contact?.website}>
-                <Box className="flex flex-row items-center">
-                  <Box className="Box-lg font-semibold mr-2">Website:</Box>
-                  <u className="text-blue-500">{aboutNdm?.contact?.website}</u>
-                </Box>
-              </Show.When>
-            </Show>
           </Show.When>
           <Show.When isTrue={isError}>
             <Box className="text-sm text-red-500">
