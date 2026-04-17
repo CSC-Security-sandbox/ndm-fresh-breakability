@@ -454,6 +454,7 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
+      # Azure SMB worker + volume config
       AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
       AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
       AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
@@ -467,6 +468,12 @@ jobs:
       AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
       AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
       AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      AD_SMB_SOURCE_VOLUMES: ${{ vars.AD_SMB_SOURCE_VOLUMES }}
+      AD_SMB_SOURCE_HOST_IP: ${{ vars.AD_SMB_SOURCE_HOST_IP }}
+
+      # ONTAP SMB volume config (used by Azure and vSphere)
       ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
       ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
       ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
@@ -479,10 +486,26 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      AD_SMB_SOURCE_VOLUMES: ${{ vars.AD_SMB_SOURCE_VOLUMES }}
-      AD_SMB_SOURCE_HOST_IP: ${{ vars.AD_SMB_SOURCE_HOST_IP }}
+
+      # AWS SMB worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
+      AWS_SMB_NDM_WORKERS_HOST: ${{ vars.AWS_SMB_NDM_WORKERS_HOST }}
+      AWS_SMB_NDM_WORKERS_PORT: ${{ vars.AWS_SMB_NDM_WORKERS_PORT }}
+      AWS_SMB_PROTOCOL_USERNAME: ${{ secrets.AWS_SMB_PROTOCOL_USERNAME }}
+      AWS_SMB_PROTOCOL_PASSWORD: ${{ secrets.AWS_SMB_PROTOCOL_PASSWORD }}
+      AWS_SMB_DOMAIN_NAME: ${{ vars.AWS_SMB_DOMAIN_NAME }}
+      AWS_FSXN_SRC_API_URL: ${{ vars.AWS_FSXN_SRC_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD }}
+      AWS_FSXN_SRC_SVM_NAME: ${{ vars.AWS_FSXN_SRC_SVM_NAME }}
+      AWS_FSXN_DST_API_URL: ${{ vars.AWS_FSXN_DST_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD }}
+      AWS_FSXN_DST_SVM_NAME: ${{ vars.AWS_FSXN_DST_SVM_NAME }}
+      AWS_FSXN_SMB_SOURCE_VOLUMES: ${{ vars.AWS_FSXN_SMB_SOURCE_VOLUMES }}
+      AWS_FSXN_SMB_DEST_VOLUMES: ${{ vars.AWS_FSXN_SMB_DEST_VOLUMES }}
+      AWS_FSXN_SMB_SRC_HOST_IP: ${{ vars.AWS_FSXN_SMB_SRC_HOST_IP }}
+      AWS_FSXN_SMB_DST_HOST_IP: ${{ vars.AWS_FSXN_SMB_DST_HOST_IP }}
+
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
@@ -504,17 +527,26 @@ jobs:
 
       - name: Setup credentials for SMB tests
         run: |
-
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
+
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+          # Set worker credentials under the correct prefix for the active cloud provider
+          if [ "${{ env.VOLUME_CLONE_PROVIDER }}" = "aws-fsxn" ]; then
+            echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
+            echo "AWS_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AWS_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          else
+            echo "CLOUD_ENVIRONMENT=Azure" >> $GITHUB_ENV
+            echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          fi
+
       - name: Install Ginkgo
         run: |
           cd ndm-api-tests
@@ -545,7 +577,7 @@ jobs:
             SCRIPT_ARGS="$SCRIPT_ARGS --regression"
           fi
           
-          echo "Running SMB tests with arguments: $SCRIPT_ARGS"
+          echo "Running SMB tests (provider: $VOLUME_CLONE_PROVIDER) with arguments: $SCRIPT_ARGS"
           ./run-smb-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
@@ -561,7 +593,7 @@ jobs:
     name: Run NFS API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
+    if: ${{ inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both' }}
     env:
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -575,10 +607,11 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-      
+
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
+      # Azure NFS worker + volume config
       AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
       AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
@@ -591,6 +624,9 @@ jobs:
       AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
       AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
       AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
+      # ONTAP NFS volume config (used by Azure and vSphere)
       ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
       ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
       ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
@@ -603,7 +639,25 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
+      # AWS NFS worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
+      AWS_NFS_NDM_WORKERS_HOST: ${{ vars.AWS_NFS_NDM_WORKERS_HOST }}
+      AWS_NFS_NDM_WORKERS_PORT: ${{ vars.AWS_NFS_NDM_WORKERS_PORT }}
+      AWS_NFS_PROTOCOL_USERNAME: ${{ vars.AWS_NFS_PROTOCOL_USERNAME }}
+      AWS_NFS_PROTOCOL_PASSWORD: ${{ secrets.AWS_NFS_PROTOCOL_PASSWORD }}
+      AWS_FSXN_SRC_API_URL: ${{ vars.AWS_FSXN_SRC_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD }}
+      AWS_FSXN_SRC_SVM_NAME: ${{ vars.AWS_FSXN_SRC_SVM_NAME }}
+      AWS_FSXN_DST_API_URL: ${{ vars.AWS_FSXN_DST_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD }}
+      AWS_FSXN_DST_SVM_NAME: ${{ vars.AWS_FSXN_DST_SVM_NAME }}
+      AWS_FSXN_NFS_SOURCE_VOLUMES: ${{ vars.AWS_FSXN_NFS_SOURCE_VOLUMES }}
+      AWS_FSXN_NFS_DEST_VOLUMES: ${{ vars.AWS_FSXN_NFS_DEST_VOLUMES }}
+      AWS_FSXN_NFS_SRC_HOST_IP: ${{ vars.AWS_FSXN_NFS_SRC_HOST_IP }}
+      AWS_FSXN_NFS_DST_HOST_IP: ${{ vars.AWS_FSXN_NFS_DST_HOST_IP }}
+
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
       RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
@@ -631,14 +685,23 @@ jobs:
         run: |
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
+
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+          # Set worker credentials under the correct prefix for the active cloud provider
+          if [ "${{ env.VOLUME_CLONE_PROVIDER }}" = "aws-fsxn" ]; then
+            echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
+            echo "AWS_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AWS_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          else
+            echo "CLOUD_ENVIRONMENT=Azure" >> $GITHUB_ENV
+            echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          fi
 
       - name: Install Ginkgo
         run: |
@@ -652,25 +715,25 @@ jobs:
         run: |
           cd ndm-api-tests
           chmod +x ./run-nfs-azure-automation.sh
-          
+
           SCRIPT_ARGS=""
           RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
           RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
           RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
-          
+
           if [ "$RUN_SMOKE" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
           fi
-          
+
           if [ "$RUN_E2E" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
           fi
-          
+
           if [ "$RUN_REGRESSION" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --regression"
           fi
-          
-          echo "Running NFS tests with arguments: $SCRIPT_ARGS"
+
+          echo "Running NFS tests (provider: $VOLUME_CLONE_PROVIDER) with arguments: $SCRIPT_ARGS"
           ./run-nfs-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 

@@ -117,6 +117,70 @@ func initializeANFTestVolumeSetup(sourceVolumesEnv, destVolumesEnv, protocolLabe
 	return setup, nil
 }
 
+// initializeFSxNTestVolumeSetup builds a TestVolumeSetup backed by an AWS FSxN ONTAP REST endpoint.
+// FSxN exposes the same ONTAP REST API, so it reuses OntapClient / TestVolumeManager directly.
+func initializeFSxNTestVolumeSetup(
+	sourceVolumesEnv, destVolumesEnv string,
+	srcAPIURL, srcUsername, srcPassword, srcSVMName string,
+	dstAPIURL, dstUsername, dstPassword, dstSVMName string,
+	protocolLabel string,
+) (*TestVolumeSetup, error) {
+	if srcAPIURL == "" || srcUsername == "" || srcPassword == "" || srcSVMName == "" {
+		return nil, fmt.Errorf(
+			"FSxN source configuration incomplete. Required: AWS_FSXN_SRC_API_URL, AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME, AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD, AWS_FSXN_SRC_SVM_NAME",
+		)
+	}
+	if dstAPIURL == "" || dstUsername == "" || dstPassword == "" || dstSVMName == "" {
+		return nil, fmt.Errorf(
+			"FSxN destination configuration incomplete. Required: AWS_FSXN_DST_API_URL, AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME, AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD, AWS_FSXN_DST_SVM_NAME",
+		)
+	}
+	if sourceVolumesEnv == "" || destVolumesEnv == "" {
+		return nil, fmt.Errorf("%s FSxN master volumes must be set before running FSxN clone tests", protocolLabel)
+	}
+
+	setup := &TestVolumeSetup{
+		EnableCloning:       true,
+		CloneProvider:       VolumeCloneProviderFSxN,
+		SourceOntapURL:      srcAPIURL,
+		SourceOntapUsername: srcUsername,
+		SourceOntapPassword: srcPassword,
+		SourceSVMName:       srcSVMName,
+		DestOntapURL:        dstAPIURL,
+		DestOntapUsername:   dstUsername,
+		DestOntapPassword:   dstPassword,
+		DestSVMName:         dstSVMName,
+	}
+
+	setup.MasterSourceVolumes = ParseVolumeNames(sourceVolumesEnv)
+	setup.MasterDestVolumes = ParseVolumeNames(destVolumesEnv)
+
+	if len(setup.MasterSourceVolumes) == 0 {
+		return nil, fmt.Errorf("%s FSxN source volumes are empty or invalid", protocolLabel)
+	}
+	if len(setup.MasterDestVolumes) == 0 {
+		return nil, fmt.Errorf("%s FSxN destination volumes are empty or invalid", protocolLabel)
+	}
+
+	LogDebug(fmt.Sprintf("%s FSxN cloning initialized", protocolLabel))
+	LogDebug(fmt.Sprintf("Source FSxN URL: %s, SVM: %s", srcAPIURL, srcSVMName))
+	LogDebug(fmt.Sprintf("Destination FSxN URL: %s, SVM: %s", dstAPIURL, dstSVMName))
+	LogDebug(fmt.Sprintf("%s FSxN source volumes to clone: %v", protocolLabel, setup.MasterSourceVolumes))
+	LogDebug(fmt.Sprintf("%s FSxN destination volumes to clone: %v", protocolLabel, setup.MasterDestVolumes))
+
+	sourceClient := NewOntapClient(srcAPIURL, srcUsername, srcPassword)
+	if err := validateOntapConfiguration(sourceClient, srcSVMName, setup.MasterSourceVolumes, fmt.Sprintf("source %s FSxN", protocolLabel)); err != nil {
+		return nil, err
+	}
+
+	destClient := NewOntapClient(dstAPIURL, dstUsername, dstPassword)
+	if err := validateOntapConfiguration(destClient, dstSVMName, setup.MasterDestVolumes, fmt.Sprintf("destination %s FSxN", protocolLabel)); err != nil {
+		return nil, err
+	}
+
+	return setup, nil
+}
+
 func resolveANFEndpointConfig(protocolLabel, endpoint string) *ANFEndpointConfig {
 	protocolKey := strings.ToUpper(strings.TrimSpace(protocolLabel))
 	endpointKey := strings.ToUpper(strings.TrimSpace(endpoint))
@@ -175,9 +239,28 @@ func logCreatedClones(title string, cloneNames, masterVolumes []string) {
 
 // InitializeNFSTestVolumeSetup reads NFS-specific configuration from environment variables
 func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+		return initializeANFTestVolumeSetup(
+			os.Getenv("AZURE_NFS_SOURCE_VOLUMES"),
+			os.Getenv("AZURE_NFS_DEST_VOLUMES"),
+			"NFS",
+		)
+	}
+
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+		return initializeFSxNTestVolumeSetup(
+			AWS_FSXN_NFS_SOURCE_VOLUMES,
+			AWS_FSXN_NFS_DEST_VOLUMES,
+			AWS_FSXN_SRC_API_URL, AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME, AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD, AWS_FSXN_SRC_SVM_NAME,
+			AWS_FSXN_DST_API_URL, AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME, AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD, AWS_FSXN_DST_SVM_NAME,
+			"NFS",
+		)
+	}
+
+	// Default: ONTAP
 	setup := &TestVolumeSetup{
-		EnableCloning:       true, // Always enable cloning
-		CloneProvider:       VOLUME_CLONE_PROVIDER,
+		EnableCloning:       true,
+		CloneProvider:       VolumeCloneProviderONTAP,
 		SourceOntapURL:      ONTAP_SRC_API_URL,
 		SourceOntapUsername: ONTAP_SYSTEM_MANAGER_SRC_USERNAME,
 		SourceOntapPassword: ONTAP_SYSTEM_MANAGER_SRC_PASSWORD,
@@ -188,25 +271,14 @@ func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 		DestSVMName:         ONTAP_DST_SVM_NAME,
 	}
 
-	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
-		return initializeANFTestVolumeSetup(
-			os.Getenv("AZURE_NFS_SOURCE_VOLUMES"),
-			os.Getenv("AZURE_NFS_DEST_VOLUMES"),
-			"NFS",
-		)
-	}
-
-	// Validate required source configuration
 	if setup.SourceOntapURL == "" || setup.SourceOntapUsername == "" || setup.SourceOntapPassword == "" || setup.SourceSVMName == "" {
 		return nil, fmt.Errorf("ONTAP source configuration incomplete. Required: ONTAP_SRC_API_URL, ONTAP_SYSTEM_MANAGER_SRC_USERNAME, ONTAP_SYSTEM_MANAGER_SRC_PASSWORD, ONTAP_SRC_SVM_NAME")
 	}
-
-	// Validate required destination configuration
 	if setup.DestOntapURL == "" || setup.DestOntapUsername == "" || setup.DestOntapPassword == "" || setup.DestSVMName == "" {
 		return nil, fmt.Errorf("ONTAP destination configuration incomplete. Required: ONTAP_DST_API_URL, ONTAP_SYSTEM_MANAGER_DST_USERNAME, ONTAP_SYSTEM_MANAGER_DST_PASSWORD, ONTAP_DST_SVM_NAME")
 	}
 
-	LogDebug("NFS volume cloning initialized")
+	LogDebug("NFS ONTAP volume cloning initialized")
 	LogDebug(fmt.Sprintf("Source ONTAP URL: %s, SVM: %s", setup.SourceOntapURL, setup.SourceSVMName))
 	LogDebug(fmt.Sprintf("Destination ONTAP URL: %s, SVM: %s", setup.DestOntapURL, setup.DestSVMName))
 
@@ -245,9 +317,28 @@ func InitializeNFSTestVolumeSetup() (*TestVolumeSetup, error) {
 
 // InitializeSMBTestVolumeSetup reads SMB-specific configuration from environment variables
 func InitializeSMBTestVolumeSetup() (*TestVolumeSetup, error) {
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
+		return initializeANFTestVolumeSetup(
+			os.Getenv("AZURE_SMB_SOURCE_VOLUMES"),
+			os.Getenv("AZURE_SMB_DEST_VOLUMES"),
+			"SMB",
+		)
+	}
+
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+		return initializeFSxNTestVolumeSetup(
+			AWS_FSXN_SMB_SOURCE_VOLUMES,
+			AWS_FSXN_SMB_DEST_VOLUMES,
+			AWS_FSXN_SRC_API_URL, AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME, AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD, AWS_FSXN_SRC_SVM_NAME,
+			AWS_FSXN_DST_API_URL, AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME, AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD, AWS_FSXN_DST_SVM_NAME,
+			"SMB",
+		)
+	}
+
+	// Default: ONTAP
 	setup := &TestVolumeSetup{
-		EnableCloning:       true, // Always enable cloning
-		CloneProvider:       VOLUME_CLONE_PROVIDER,
+		EnableCloning:       true,
+		CloneProvider:       VolumeCloneProviderONTAP,
 		SourceOntapURL:      ONTAP_SRC_API_URL,
 		SourceOntapUsername: ONTAP_SYSTEM_MANAGER_SRC_USERNAME,
 		SourceOntapPassword: ONTAP_SYSTEM_MANAGER_SRC_PASSWORD,
@@ -258,15 +349,6 @@ func InitializeSMBTestVolumeSetup() (*TestVolumeSetup, error) {
 		DestSVMName:         ONTAP_DST_SVM_NAME,
 	}
 
-	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderANF {
-		return initializeANFTestVolumeSetup(
-			os.Getenv("AZURE_SMB_SOURCE_VOLUMES"),
-			os.Getenv("AZURE_SMB_DEST_VOLUMES"),
-			"SMB",
-		)
-	}
-
-	// Validate required source configuration
 	if setup.SourceOntapURL == "" || setup.SourceOntapUsername == "" || setup.SourceOntapPassword == "" || setup.SourceSVMName == "" {
 		return nil, fmt.Errorf("ONTAP source configuration incomplete. Required: ONTAP_SRC_API_URL, ONTAP_SYSTEM_MANAGER_SRC_USERNAME, ONTAP_SYSTEM_MANAGER_SRC_PASSWORD, ONTAP_SRC_SVM_NAME")
 	}
@@ -351,10 +433,12 @@ func SetupTestVolumesBeforeEach() ([]string, []string, *TestVolumeManager, *Test
 	var sourceVolumeManager *TestVolumeManager
 	var destVolumeManager *TestVolumeManager
 
-	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
+	switch GlobalVolumeSetup.CloneProvider {
+	case VolumeCloneProviderANF:
 		sourceVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.SourceANFConfig)
 		destVolumeManager = NewANFTestVolumeManager(*GlobalVolumeSetup.DestANFConfig)
-	} else {
+	default:
+		// Both ONTAP and FSxN use the same OntapClient-backed TestVolumeManager.
 		sourceVolumeManager = NewTestVolumeManager(
 			GlobalVolumeSetup.SourceOntapURL,
 			GlobalVolumeSetup.SourceOntapUsername,

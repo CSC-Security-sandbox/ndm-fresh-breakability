@@ -10,6 +10,7 @@ type VolumeCloneProvider string
 const (
 	VolumeCloneProviderONTAP VolumeCloneProvider = "ontap"
 	VolumeCloneProviderANF   VolumeCloneProvider = "anf"
+	VolumeCloneProviderFSxN  VolumeCloneProvider = "aws-fsxn"
 )
 
 type CloneSelection struct {
@@ -25,6 +26,8 @@ func ResolveVolumeCloneProvider() VolumeCloneProvider {
 		return VolumeCloneProviderANF
 	case VolumeCloneProviderONTAP:
 		return VolumeCloneProviderONTAP
+	case VolumeCloneProviderFSxN:
+		return VolumeCloneProviderFSxN
 	}
 
 	// Default to ONTAP unless we are explicitly running a nightly GitHub workflow.
