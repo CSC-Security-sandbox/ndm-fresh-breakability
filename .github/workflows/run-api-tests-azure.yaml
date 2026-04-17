@@ -9,7 +9,7 @@ env:
   # aws-fsxn → AWS_WIN_DNS_SERVERS; anf/ontap → AZURE_WIN_DNS_SERVERS.
   # Both vars are stored as JSON lists e.g. [\"172.x.x.x\"] — we pick the
   # right one here and each consumer wraps/unwraps as needed for its type.
-  WIN_AD_DNS_SERVERS: ${{ (inputs.volume_clone_provider == 'aws-fsxn' || github.event.inputs.volume_clone_provider == 'aws-fsxn') && vars.AWS_WIN_DNS_SERVERS || vars.AZURE_WIN_DNS_SERVERS }}
+  WIN_AD_DNS_SERVERS: ${{ (inputs.volume_clone_provider == 'aws-fsxn' || github.event.inputs.volume_clone_provider == 'aws-fsxn') && vars.AWS_WIN_DNS_SERVERS != '' && vars.AWS_WIN_DNS_SERVERS || vars.AZURE_WIN_DNS_SERVERS }}
 
 on:
   workflow_dispatch:
@@ -438,6 +438,7 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
+      CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -536,8 +537,8 @@ jobs:
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
-          # Set worker credentials under the correct prefix for the active cloud provider
-          if [ "${{ env.VOLUME_CLONE_PROVIDER }}" = "aws-fsxn" ]; then
+          # Set worker credentials under the correct prefix for the actual infrastructure cloud
+          if [ "${{ env.CLOUD_PROVIDER }}" = "aws" ]; then
             echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
             echo "AWS_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
             echo "AWS_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
@@ -595,6 +596,7 @@ jobs:
     needs: setup-infrastructure
     if: ${{ inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both' }}
     env:
+      CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -692,8 +694,8 @@ jobs:
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
-          # Set worker credentials under the correct prefix for the active cloud provider
-          if [ "${{ env.VOLUME_CLONE_PROVIDER }}" = "aws-fsxn" ]; then
+          # Set worker credentials under the correct prefix for the actual infrastructure cloud
+          if [ "${{ env.CLOUD_PROVIDER }}" = "aws" ]; then
             echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
             echo "AWS_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
             echo "AWS_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
