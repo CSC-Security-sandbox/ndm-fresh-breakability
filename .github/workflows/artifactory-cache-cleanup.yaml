@@ -1,0 +1,218 @@
+name: Artifactory Artifact Cleanup
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # First of every month at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — list candidates but do not delete'
+        required: false
+        default: true
+        type: boolean
+      cache_max_age_days:
+        description: 'Delete cached images not downloaded in this many days'
+        required: false
+        default: 90
+        type: number
+      tarball_keep_count:
+        description: 'Number of recent tarball versions to keep (0 = skip tarball cleanup)'
+        required: false
+        default: 10
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Clean up stale Artifactory artifacts
+    runs-on: scs-v2
+    timeout-minutes: 15
+
+    env:
+      ARTIFACTORY_URL: https://generic.repo.eng.netapp.com/artifactory
+      REPO: openlab-generic
+      CACHE_PREFIX: cicd/ndm/container-cache
+      TARBALL_PREFIX: cicd/ndm/docker-images
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Clean stale container-cache entries
+        env:
+          ART_USER: ${{ secrets.NDM_NEXUS_USERNAME }}
+          ART_PASS: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+          MAX_AGE_DAYS="${{ github.event.inputs.cache_max_age_days || '90' }}"
+          CUTOFF_EPOCH=$(( $(date +%s) - MAX_AGE_DAYS * 86400 ))
+
+          echo "Container-cache cleanup"
+          echo "  Max age: ${MAX_AGE_DAYS} days (cutoff: $(date -u -d @${CUTOFF_EPOCH} '+%Y-%m-%d' 2>/dev/null || date -u -r ${CUTOFF_EPOCH} '+%Y-%m-%d'))"
+          echo "  Dry run: ${DRY_RUN}"
+          echo ""
+
+          API="${ARTIFACTORY_URL}/api/storage/${REPO}/${CACHE_PREFIX}"
+          FILE_BASE="${ARTIFACTORY_URL}/${REPO}/${CACHE_PREFIX}"
+
+          # List all files recursively under container-cache/
+          FILES_JSON=$(curl -sf -u "${ART_USER}:${ART_PASS}" \
+            "${API}?list&deep=1&listFolders=0" 2>/dev/null) || {
+            echo "::warning::Could not list container-cache (may not exist yet)"
+            exit 0
+          }
+
+          mapfile -t FILE_URIS < <(echo "$FILES_JSON" | jq -r '.files[]?.uri // empty')
+
+          if [ ${#FILE_URIS[@]} -eq 0 ]; then
+            echo "No cached images found — nothing to clean."
+            exit 0
+          fi
+
+          echo "Found ${#FILE_URIS[@]} cached image(s)"
+          echo ""
+
+          DELETED=0
+          KEPT=0
+          FREED_BYTES=0
+
+          for uri in "${FILE_URIS[@]}"; do
+            # Only process .tar.gz files
+            [[ "$uri" == *.tar.gz ]] || continue
+
+            STATS=$(curl -sf -u "${ART_USER}:${ART_PASS}" \
+              "${API}${uri}?stats" 2>/dev/null) || continue
+
+            LAST_DL=$(echo "$STATS" | jq -r '.lastDownloaded // 0')
+            DL_COUNT=$(echo "$STATS" | jq -r '.downloadCount // 0')
+
+            # lastDownloaded is in milliseconds; convert to seconds.
+            # If never downloaded (0), fall back to file creation date.
+            if [ "$LAST_DL" -gt 0 ] 2>/dev/null; then
+              LAST_USED_EPOCH=$((LAST_DL / 1000))
+              LAST_USED_SOURCE="downloaded"
+            else
+              CREATED=$(echo "$FILES_JSON" | jq -r --arg u "$uri" \
+                '.files[] | select(.uri == $u) | .lastModified // empty')
+              if [ -n "$CREATED" ]; then
+                LAST_USED_EPOCH=$(date -d "$CREATED" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%S" "$CREATED" +%s 2>/dev/null || echo 0)
+                LAST_USED_SOURCE="created"
+              else
+                LAST_USED_EPOCH=0
+                LAST_USED_SOURCE="unknown"
+              fi
+            fi
+
+            LAST_USED_DATE=$(date -u -d @${LAST_USED_EPOCH} '+%Y-%m-%d' 2>/dev/null || date -u -r ${LAST_USED_EPOCH} '+%Y-%m-%d' 2>/dev/null || echo "unknown")
+
+            FILE_SIZE=$(echo "$FILES_JSON" | jq -r --arg u "$uri" \
+              '.files[] | select(.uri == $u) | .size // 0')
+
+            if [ "$LAST_USED_EPOCH" -lt "$CUTOFF_EPOCH" ]; then
+              SIZE_MB=$(( FILE_SIZE / 1048576 ))
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "  [DELETE] ${uri}  (last ${LAST_USED_SOURCE}: ${LAST_USED_DATE}, downloads: ${DL_COUNT}, ${SIZE_MB}MB)"
+              else
+                echo "  Deleting ${uri}  (last ${LAST_USED_SOURCE}: ${LAST_USED_DATE}, ${SIZE_MB}MB)"
+                curl -sf -u "${ART_USER}:${ART_PASS}" \
+                  -X DELETE "${FILE_BASE}${uri}" >/dev/null 2>&1 || \
+                  echo "::warning::Failed to delete ${uri}"
+              fi
+              DELETED=$((DELETED + 1))
+              FREED_BYTES=$((FREED_BYTES + FILE_SIZE))
+            else
+              KEPT=$((KEPT + 1))
+            fi
+          done
+
+          FREED_MB=$((FREED_BYTES / 1048576))
+          echo ""
+          ACTION="freed"
+          [ "$DRY_RUN" = "true" ] && ACTION="would be freed"
+          echo "Container-cache: ${DELETED} stale, ${KEPT} kept (~${FREED_MB}MB ${ACTION})"
+          echo "cache_deleted=${DELETED}" >> "$GITHUB_ENV"
+          echo "cache_kept=${KEPT}" >> "$GITHUB_ENV"
+          echo "cache_freed_mb=${FREED_MB}" >> "$GITHUB_ENV"
+
+      - name: Clean old tarball versions
+        env:
+          ART_USER: ${{ secrets.NDM_NEXUS_USERNAME }}
+          ART_PASS: ${{ secrets.NDM_NEXUS_PASSWORD }}
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+          KEEP_COUNT="${{ github.event.inputs.tarball_keep_count || '10' }}"
+
+          if [ "$KEEP_COUNT" -eq 0 ]; then
+            echo "Tarball cleanup skipped (keep_count=0)"
+            exit 0
+          fi
+
+          echo "Tarball version cleanup"
+          echo "  Keep latest: ${KEEP_COUNT}"
+          echo "  Dry run: ${DRY_RUN}"
+          echo ""
+
+          API="${ARTIFACTORY_URL}/api/storage/${REPO}/${TARBALL_PREFIX}"
+          FILE_BASE="${ARTIFACTORY_URL}/${REPO}/${TARBALL_PREFIX}"
+
+          # List immediate children (version directories + latest.json)
+          DIR_JSON=$(curl -sf -u "${ART_USER}:${ART_PASS}" "${API}" 2>/dev/null) || {
+            echo "::warning::Could not list tarball directory (may not exist yet)"
+            exit 0
+          }
+
+          # Extract version directories (date-prefixed, e.g. 20240101-120000-abc1234).
+          # Exclude non-directory entries like latest.json.
+          mapfile -t ALL_VERSIONS < <(echo "$DIR_JSON" | \
+            jq -r '.children[]? | select(.folder == true) | .uri | ltrimstr("/")' | \
+            sort -r)
+
+          TOTAL=${#ALL_VERSIONS[@]}
+          echo "Found ${TOTAL} tarball version(s)"
+
+          if [ "$TOTAL" -le "$KEEP_COUNT" ]; then
+            echo "Nothing to clean (${TOTAL} <= ${KEEP_COUNT})"
+            echo "tarball_deleted=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # Versions to delete (everything after the first KEEP_COUNT)
+          DELETE_VERSIONS=("${ALL_VERSIONS[@]:${KEEP_COUNT}}")
+          DELETED=0
+
+          for ver in "${DELETE_VERSIONS[@]}"; do
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "  [DELETE] ${ver}/"
+            else
+              echo "  Deleting ${ver}/"
+              curl -sf -u "${ART_USER}:${ART_PASS}" \
+                -X DELETE "${FILE_BASE}/${ver}" >/dev/null 2>&1 || \
+                echo "::warning::Failed to delete ${ver}"
+            fi
+            DELETED=$((DELETED + 1))
+          done
+
+          echo ""
+          ACTION="removed"
+          [ "$DRY_RUN" = "true" ] && ACTION="would be removed"
+          echo "Tarballs: ${DELETED} old version(s) ${ACTION}, ${KEEP_COUNT} kept"
+          echo "tarball_deleted=${DELETED}" >> "$GITHUB_ENV"
+
+      - name: Print summary
+        if: always()
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+
+          echo "## Artifactory Artifact Cleanup" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "> **DRY RUN** — no artifacts were deleted" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Area | Action | Detail |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Container cache | ${cache_deleted:-0} removed, ${cache_kept:-0} kept | ~${cache_freed_mb:-0} MB freed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tarball versions | ${tarball_deleted:-0} removed | keep latest ${{ github.event.inputs.tarball_keep_count || '10' }} |" >> "$GITHUB_STEP_SUMMARY"

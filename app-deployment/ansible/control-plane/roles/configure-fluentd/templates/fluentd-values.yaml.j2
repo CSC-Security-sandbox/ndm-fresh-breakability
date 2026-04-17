@@ -8,7 +8,7 @@ resources:
 image:
   repository: "{% if local_cluster is defined %}fluent/fluentd-kubernetes-daemonset{% else %}ndm-fluentd-loki{% endif %}"
   pullPolicy: "{% if local_cluster is defined %}IfNotPresent{% else %}Never{% endif %}"
-  tag: "{% if local_cluster is defined %}{% else %}v1.17-1{% endif %}"
+  tag: "{% if local_cluster is defined %}v1.17.1-debian-1{% else %}v1.17-1{% endif %}"
 
 service:
   ports:

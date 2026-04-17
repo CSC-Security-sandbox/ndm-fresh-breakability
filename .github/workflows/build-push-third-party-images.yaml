@@ -8,16 +8,6 @@ on:
         required: false
         default: false
         type: boolean
-      keycloak_tag:
-        description: 'Keycloak image tag (most frequently changed)'
-        required: false
-        default: '26.5.7-debian-12-r0'
-        type: string
-      upload_flat_copy:
-        description: 'Also upload a backward-compatible flat copy at the unversioned path'
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -25,13 +15,14 @@ permissions:
 jobs:
   build-tarball:
     name: Build ndm-docker-images.tar
-    runs-on: openlab
+    runs-on: scs-v2
     timeout-minutes: 60
 
     env:
       TARBALL_NAME: ndm-docker-images.tar
       ARTIFACTORY_BASE_URL: https://generic.repo.eng.netapp.com/artifactory/openlab-generic
       ARTIFACTORY_PATH: cicd/ndm/docker-images
+      CACHE_PATH: cicd/ndm/container-cache
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -45,15 +36,8 @@ jobs:
       - name: Define image list
         id: images
         run: |
-          KEYCLOAK_TAG="${{ github.event.inputs.keycloak_tag }}"
-
-          if [[ ! "${KEYCLOAK_TAG}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-            echo "::error::Invalid keycloak_tag '${KEYCLOAK_TAG}'. Must match [a-zA-Z0-9._-]+"
-            exit 1
-          fi
-
           cat > /tmp/images.txt <<IMAGES
-          docker.io/bitnami/keycloak:${KEYCLOAK_TAG}
+          docker.io/bitnami/keycloak:26.5.7-debian-12-r0
           docker.io/bitnami/postgresql:17.6.0-debian-12-r0
           docker.io/bitnami/os-shell:12-debian-12-r50
           docker.io/bitnami/postgres-exporter:0.17.1-debian-12-r15
@@ -65,13 +49,13 @@ jobs:
           docker.io/grafana/loki-canary:3.5.3
           docker.io/grafana/loki-helm-test:ewelch-distributed-helm-chart-17db5ee
           docker.io/nginxinc/nginx-unprivileged:1.29-alpine
-          docker.io/memcached:1.6.38-alpine
+          docker.io/library/memcached:1.6.38-alpine
           docker.io/kiwigrid/k8s-sidecar:1.30.7
           docker.io/temporalio/server:1.28.1
           docker.io/temporalio/ui:2.39.0
           docker.io/temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
           quay.io/openbao/openbao:2.3.2
-          docker.io/busybox:1.36
+          docker.io/library/busybox:1.36
           docker.io/hashicorp/vault-k8s:1.4.2
           registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.16.0
           quay.io/prometheus/node-exporter:v1.9.1
@@ -80,6 +64,7 @@ jobs:
           quay.io/prometheus/alertmanager:v0.28.1
           quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
           quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+          docker.io/library/alpine:3.22.1
           ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.132.4
           IMAGES
 
@@ -89,36 +74,133 @@ jobs:
           echo "Image list:"
           cat /tmp/images.txt
           echo ""
-          echo "count=$(wc -l < /tmp/images.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          PULLED_COUNT=$(wc -l < /tmp/images.txt | tr -d ' ')
+
+          CUSTOM_IMAGES=("ndm-fluentd-loki:v1.17-1" "ndm-admin-entry:alpine")
+          printf '%s\n' "${CUSTOM_IMAGES[@]}" > /tmp/custom_images.txt
+          echo "count=$((PULLED_COUNT + ${#CUSTOM_IMAGES[@]}))" >> "$GITHUB_OUTPUT"
 
       - name: Check available disk space
         run: df -h /
 
       - name: Pull images (linux/amd64)
+        env:
+          ART_USER: ${{ secrets.NDM_NEXUS_USERNAME }}
+          ART_PASS: ${{ secrets.NDM_NEXUS_PASSWORD }}
         run: |
-          # Bitnami removed versioned debian tags from Docker Hub (Aug 2025).
-          # For any docker.io/bitnami/* image, fall back to public.ecr.aws/bitnami/*.
+          CACHE_BASE="${ARTIFACTORY_BASE_URL}/${CACHE_PATH}"
+
+          # ── helpers ────────────────────────────────────────────────
+
+          # Map image ref → Artifactory cache URL.
+          # docker.io/bitnami/keycloak:26.5.7-debian-12-r0
+          #   → …/container-cache/docker.io/bitnami/keycloak/26.5.7-debian-12-r0.tar.gz
+          cache_url() {
+            local repo="${1%:*}" tag="${1##*:}"
+            echo "${CACHE_BASE}/${repo}/${tag}.tar.gz"
+          }
+
+          # Try loading an image from the Artifactory cache.
+          cache_load() {
+            local ref="$1" url
+            url=$(cache_url "$ref")
+            local code
+            code=$(curl -sf -o /dev/null -w "%{http_code}" --head \
+              -u "${ART_USER}:${ART_PASS}" "${url}" 2>/dev/null) || true
+            [ "$code" = "200" ] || return 1
+            echo "  Downloading from Artifactory cache…"
+            if curl -sf -u "${ART_USER}:${ART_PASS}" "${url}" | gunzip | docker load; then
+              return 0
+            fi
+            echo "  Cache download/load failed, falling back to internet"
+            return 1
+          }
+
+          # Save an image to the Artifactory cache (non-fatal on failure).
+          cache_save() {
+            local ref="$1" url
+            url=$(cache_url "$ref")
+            echo "  Caching → ${url##*/container-cache/}"
+            if ! docker save "$ref" | gzip -1 | \
+                curl -sf -T - -u "${ART_USER}:${ART_PASS}" \
+                  --retry 2 --retry-delay 5 "${url}" >/dev/null 2>&1; then
+              echo "::warning::Cache upload failed for ${ref} (non-fatal)"
+            fi
+          }
+
+          # Retry with exponential backoff.  Skips retries on 404 / "not found"
+          # so bitnami fallbacks aren't delayed by pointless waits.
+          pull_with_retry() {
+            local ref="$1" retries=3 delay=30 output rc
+            for attempt in $(seq 1 "$retries"); do
+              output=$(docker pull --platform linux/amd64 "${ref}" 2>&1)
+              rc=$?
+              echo "$output"
+              [ $rc -eq 0 ] && return 0
+              if echo "$output" | grep -qi "not found\|manifest unknown\|does not exist"; then
+                return 1
+              fi
+              if [ "$attempt" -lt "$retries" ]; then
+                echo "  attempt ${attempt}/${retries} failed, retrying in ${delay}s…"
+                sleep "$delay"
+                delay=$((delay * 2))
+              fi
+            done
+            return 1
+          }
+
+          # Pull from the internet with bitnami fallback chain.
+          internet_pull() {
+            local image="$1"
+            if pull_with_retry "${image}"; then
+              echo "✓ ${image}"
+              return 0
+            elif [[ "${image}" == docker.io/bitnami/* ]]; then
+              LEGACY_REF="${image/bitnami/bitnamilegacy}"
+              echo "::warning::Docker Hub failed, trying bitnamilegacy: ${LEGACY_REF}"
+              if pull_with_retry "${LEGACY_REF}"; then
+                docker tag "${LEGACY_REF}" "${image}"
+                echo "✓ ${image} (via bitnamilegacy)"
+                return 0
+              fi
+              ECR_REF="${image/docker.io/public.ecr.aws}"
+              echo "::warning::bitnamilegacy failed, trying ECR Public: ${ECR_REF}"
+              if pull_with_retry "${ECR_REF}"; then
+                docker tag "${ECR_REF}" "${image}"
+                echo "✓ ${image} (via ECR Public)"
+                return 0
+              fi
+            fi
+            return 1
+          }
+
+          # ── main loop ─────────────────────────────────────────────
+
           FAILED=()
+          CACHE_HITS=0
+          CACHE_MISSES=0
+
           while IFS= read -r image; do
             echo "::group::Pulling ${image}"
-            if docker pull --platform linux/amd64 "${image}"; then
-              echo "✓ ${image}"
-            elif [[ "${image}" == docker.io/bitnami/* ]]; then
-              ECR_REF="${image/docker.io/public.ecr.aws}"
-              echo "::warning::Docker Hub pull failed, trying ECR Public fallback: ${ECR_REF}"
-              if docker pull --platform linux/amd64 "${ECR_REF}"; then
-                docker tag "${ECR_REF}" "${image}"
-                echo "✓ ${image} (via ECR fallback)"
-              else
-                echo "::error::Both Docker Hub and ECR failed for ${image}"
-                FAILED+=("${image}")
-              fi
+
+            if cache_load "${image}"; then
+              echo "✓ ${image} (cached)"
+              CACHE_HITS=$((CACHE_HITS + 1))
+            elif internet_pull "${image}"; then
+              cache_save "${image}"
+              CACHE_MISSES=$((CACHE_MISSES + 1))
             else
               echo "::error::Failed to pull ${image}"
               FAILED+=("${image}")
             fi
+
             echo "::endgroup::"
           done < /tmp/images.txt
+
+          echo ""
+          echo "Cache stats: ${CACHE_HITS} hits, ${CACHE_MISSES} misses"
+          echo "cache_hits=${CACHE_HITS}" >> "$GITHUB_ENV"
+          echo "cache_misses=${CACHE_MISSES}" >> "$GITHUB_ENV"
 
           if [ ${#FAILED[@]} -gt 0 ]; then
             echo ""
@@ -127,14 +209,77 @@ jobs:
             exit 1
           fi
 
-      - name: Save all images to tarball
+      - name: Build custom images
+        run: |
+          echo "::group::Building ndm-fluentd-loki"
+          docker build --platform linux/amd64 \
+            -t ndm-fluentd-loki:v1.17-1 \
+            app-deployment/docker/fluentd-loki
+          echo "✓ ndm-fluentd-loki:v1.17-1"
+          echo "::endgroup::"
+
+          echo "::group::Building ndm-admin-entry"
+          docker build --platform linux/amd64 \
+            -t ndm-admin-entry:alpine \
+            app-deployment/docker/admin-entry
+          echo "✓ ndm-admin-entry:alpine"
+          echo "::endgroup::"
+
+      - name: Save all images to tarball (Docker + OCI dual format)
         run: |
           mapfile -t IMAGES < /tmp/images.txt
+          mapfile -t CUSTOM < /tmp/custom_images.txt
+          IMAGES+=("${CUSTOM[@]}")
+
+          CTR_NS="ndm-export-${GITHUB_RUN_ID}"
           echo "Saving ${#IMAGES[@]} images to ${TARBALL_NAME}..."
-          docker save -o "${TARBALL_NAME}" "${IMAGES[@]}"
+          echo "Using dedicated containerd namespace '${CTR_NS}' for isolation"
+          echo "(produces both manifest.json and index.json)"
+
+          # containerd normalises short names: refs without a '/' become
+          # docker.io/library/<name>.  Align our export list accordingly.
+          ctr_ref() {
+            local r="$1"
+            [[ "$r" == */* ]] && echo "$r" || echo "docker.io/library/${r}"
+          }
+
+          EXPORTED_REFS=()
+          for img in "${IMAGES[@]}"; do
+            echo "::group::Importing ${img}"
+            docker save "${img}" | sudo ctr -n "${CTR_NS}" images import --no-unpack -
+            EXPORTED_REFS+=("$(ctr_ref "${img}")")
+            echo "::endgroup::"
+          done
+
+          echo "Exporting ${#EXPORTED_REFS[@]} images (deterministic, matches declared list):"
+          printf '  %s\n' "${EXPORTED_REFS[@]}"
+
+          # Export only the explicit refs we imported — ctr export produces
+          # both manifest.json (Docker v2) and index.json (OCI image index)
+          # in a single tar, matching the format expected by
+          # 'microk8s images import'.
+          sudo ctr -n "${CTR_NS}" images export --platform linux/amd64 \
+            "${TARBALL_NAME}" "${EXPORTED_REFS[@]}"
+
+          # Clean up the dedicated namespace.  Log failures rather than
+          # silently swallowing them so stale images are visible in the run log.
+          echo "Cleaning up namespace '${CTR_NS}'…"
+          if ! sudo ctr -n "${CTR_NS}" images rm "${EXPORTED_REFS[@]}" 2>&1; then
+            echo "::warning::Partial cleanup failure in namespace '${CTR_NS}' (non-fatal)"
+          fi
+
           ls -lh "${TARBALL_NAME}"
-          tarball_size=$(du -h "${TARBALL_NAME}" | cut -f1)
+          uncompressed_size=$(du -h "${TARBALL_NAME}" | cut -f1)
+          echo "uncompressed_size=${uncompressed_size}" >> "$GITHUB_ENV"
+
+      - name: Compress tarball with gzip
+        run: |
+          echo "Compressing ${TARBALL_NAME} with gzip..."
+          gzip -1 "${TARBALL_NAME}"
+          ls -lh "${TARBALL_NAME}.gz"
+          tarball_size=$(du -h "${TARBALL_NAME}.gz" | cut -f1)
           echo "tarball_size=${tarball_size}" >> "$GITHUB_ENV"
+          echo "Compressed ${uncompressed_size} → ${tarball_size}"
 
       - name: Generate version string
         id: version
@@ -149,6 +294,8 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           mapfile -t IMAGE_ARRAY < /tmp/images.txt
+          mapfile -t CUSTOM < /tmp/custom_images.txt
+          IMAGE_ARRAY+=("${CUSTOM[@]}")
           IMAGES_JSON=$(printf '%s\n' "${IMAGE_ARRAY[@]}" | jq -R . | jq -s .)
 
           jq -n \
@@ -156,14 +303,12 @@ jobs:
             --arg commit "$GITHUB_SHA" \
             --arg build_time "$BUILD_TIME" \
             --arg run_id "$GITHUB_RUN_ID" \
-            --arg keycloak_tag "${{ github.event.inputs.keycloak_tag }}" \
             --argjson images "$IMAGES_JSON" \
             '{
               version: $version,
               commit: $commit,
               build_time: $build_time,
               workflow_run_id: $run_id,
-              keycloak_tag: $keycloak_tag,
               images: $images
             }' > manifest.json
 
@@ -174,13 +319,13 @@ jobs:
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          VERSIONED_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}"
-          echo "Uploading ${TARBALL_NAME} (${tarball_size}) to ${VERSIONED_URL}..."
+          VERSIONED_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}.gz"
+          echo "Uploading ${TARBALL_NAME}.gz (${tarball_size}) to ${VERSIONED_URL}..."
 
           HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
             --retry 3 --retry-delay 10 --retry-all-errors \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-            -T "${TARBALL_NAME}" \
+            -T "${TARBALL_NAME}.gz" \
             "${VERSIONED_URL}")
 
           if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
@@ -220,7 +365,7 @@ jobs:
 
           jq -n \
             --arg version "$VERSION" \
-            --arg tarball_url "${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}" \
+            --arg tarball_url "${ARTIFACTORY_PATH}/${VERSION}/${TARBALL_NAME}.gz" \
             --arg image_count "${{ steps.images.outputs.count }}" \
             --arg tarball_size "${tarball_size}" \
             --arg commit "$GITHUB_SHA" \
@@ -254,25 +399,6 @@ jobs:
             exit 1
           fi
 
-      - name: Upload backward-compatible flat tarball to Artifactory
-        if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.upload_flat_copy == 'true' }}
-        run: |
-          FLAT_URL="${ARTIFACTORY_BASE_URL}/${ARTIFACTORY_PATH}/${TARBALL_NAME}"
-          echo "Uploading backward-compatible copy to ${FLAT_URL}..."
-
-          HTTP_CODE=$(curl -s -o /tmp/upload_response.txt -w "%{http_code}" \
-            --retry 3 --retry-delay 10 --retry-all-errors \
-            -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
-            -T "${TARBALL_NAME}" \
-            "${FLAT_URL}")
-
-          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 300 ]; then
-            echo "✓ Backward-compatible upload successful (HTTP ${HTTP_CODE})"
-          else
-            echo "::warning::Backward-compatible upload failed with HTTP ${HTTP_CODE} (non-fatal)"
-            cat /tmp/upload_response.txt
-          fi
-
       - name: Print summary
         if: always()
         run: |
@@ -282,16 +408,20 @@ jobs:
           echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image count | ${{ steps.images.outputs.count }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Keycloak tag | ${{ github.event.inputs.keycloak_tag }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cache hits / misses | ${cache_hits:-0} / ${cache_misses:-0} |" >> "$GITHUB_STEP_SUMMARY"
 
-          if [ -f "${TARBALL_NAME}" ]; then
-            SIZE=$(du -h "${TARBALL_NAME}" | cut -f1)
-            echo "| Tarball size | ${SIZE} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "${TARBALL_NAME}.gz" ]; then
+            SIZE=$(du -h "${TARBALL_NAME}.gz" | cut -f1)
+            echo "| Tarball size (gzip) | ${SIZE} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Uncompressed size | ${uncompressed_size:-n/a} |" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Images included" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/images.txt >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r img; do
+            echo "${img} (custom build)" >> "$GITHUB_STEP_SUMMARY"
+          done < /tmp/custom_images.txt
           echo '```' >> "$GITHUB_STEP_SUMMARY"
