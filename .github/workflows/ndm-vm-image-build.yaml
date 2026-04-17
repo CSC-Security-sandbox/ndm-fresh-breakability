@@ -25,7 +25,7 @@ on:
       provider:
         description: 'Cloud provider'
         required: false
-        default: 'all'
+        default: 'vsphere'
         type: choice
         options:
           - all
@@ -40,44 +40,44 @@ on:
         default: |
           {
             "worker": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f",
+              "branch": "release/2026.04.0"
             },
             "admin-service": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "config-service": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "datamigrator-ui": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "db-writer": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "jobs-service": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "keycloak-customizations": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "reports-service": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "db-migrations": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             },
             "support-service": {
-              "tag": "latest",
-              "branch": "main"
+              "tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0",
+              "branch": "release/2026.04.0"
             }
           }
       docker_images_version:
@@ -179,16 +179,16 @@ jobs:
           if [ -z "$SERVICES_CONFIG" ] || [ "$SERVICES_CONFIG" = "null" ]; then
             echo "No services configuration provided, using defaults"
             SERVICES_CONFIG='{
-              "worker": {"tag": "latest", "branch": "main"},
-              "admin-service": {"tag": "latest", "branch": "main"},
-              "config-service": {"tag": "latest", "branch": "main"},
-              "datamigrator-ui": {"tag": "latest", "branch": "main"},
-              "db-writer": {"tag": "latest", "branch": "main"},
-              "jobs-service": {"tag": "latest", "branch": "main"},
-              "keycloak-customizations": {"tag": "latest", "branch": "main"},
-              "reports-service": {"tag": "latest", "branch": "main"},
-              "db-migrations": {"tag": "latest", "branch": "main"},
-              "support-service": {"tag": "latest", "branch": "main"}
+              "worker": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f", "branch": "release/2026.04.0"},
+              "admin-service": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "config-service": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "datamigrator-ui": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "db-writer": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "jobs-service": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "keycloak-customizations": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "reports-service": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "db-migrations": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"},
+              "support-service": {"tag": "c1dd2a8441e37f2325d519fe7d7348c4143c730f-2026.04.0", "branch": "release/2026.04.0"}
             }'
           fi
           
@@ -307,7 +307,7 @@ jobs:
           echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Fetch and Replace tags and bundle docker images
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         env:
           WORKER_TAG: ${{ steps.parse-config.outputs.worker_tag }}
           ADMIN_SERVICE_TAG: ${{ steps.parse-config.outputs.admin_service_tag }}
@@ -334,7 +334,7 @@ jobs:
           ./app-deployment/scripts/get_tags.sh ${{steps.build_version.outputs.build_version}} "${{ steps.build_version.outputs.ref_type }}" "${{ steps.build_version.outputs.ref_name }}"
 
       - name: Build Redis JWT Wasm extension
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y make
@@ -347,12 +347,12 @@ jobs:
           echo "Wasm extension built and copied to Helm chart"
 
       - name: Run helm package ansible playbook
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         run: |
           ansible-playbook ./app-deployment/ansible/control-plane/playbooks/package-helm-chart.yaml -i ./app-deployment/ansible/control-plane/config/local-inventory.yaml --extra-vars "build_version=${{ steps.build_version.outputs.build_version }}" --extra-vars "@./app-deployment/ansible/control-plane/config/group_vars/vars.yaml"
 
       - name: Upload Docker tar and Helm chart tgz to artifactory
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         run: |
           BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -396,7 +396,7 @@ jobs:
           fi
 
       - name: Download Worker Binary from Artifactory
-        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         id: worker-binary
         run: |
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
@@ -541,7 +541,7 @@ jobs:
           fi
       
       - name: Download Docker images tarball
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         run: |
           cd app-deployment/artifacts
           ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images"
@@ -586,35 +586,35 @@ jobs:
           echo "Downloaded docker images tarball version: ${RESOLVED_VERSION}"
 
       - name: Upload Ansible vars.yaml
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ansible-vars
           path: app-deployment/ansible/control-plane/config/group_vars/vars.yaml
 
       - name: Upload Helm chart artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: helm-chart
           path: app-deployment/artifacts/datamigrator-*.tgz
 
       - name: Upload Docker image tar artifacts
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: datamigrator-images
           path: app-deployment/artifacts/*.tar
 
       - name: Upload Wasm extension artifact
-        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: redis-jwt-wasm
           path: app-deployment/ansible/control-plane/roles/datamigrator/helm-chart/package/wasm/redis-jwt-auth.wasm
 
       - name: Upload Worker Binaries as Artifact
-        if: ${{ github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'worker' || github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: worker-binary
@@ -641,7 +641,7 @@ jobs:
 
           # Set providers based on input
           if [[ "${{ github.event.inputs.provider }}" == "all" || "${{ github.event.inputs.provider }}" == "" ]]; then
-            PROVIDERS='["azure", "vsphere", "gcp", "aws"]'
+            PROVIDERS='["vsphere"]'
           else
             PROVIDERS='["${{ github.event.inputs.provider }}"]'
           fi
@@ -650,7 +650,7 @@ jobs:
           echo "matrix={\"component\":${COMPONENTS},\"provider\":${PROVIDERS}}" >> $GITHUB_OUTPUT
 
   build-windows-installer:
-    if: ${{ github.event.inputs.component == 'windows-installer' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
+    if: false
     runs-on: windows-latest
     needs: package-artifacts
     env:
@@ -760,6 +760,7 @@ jobs:
             path: wininstaller/datamigrator-worker-setup.exe
 
   upload-windows-installer:
+    if: false
     needs: [package-artifacts, build-windows-installer]
     runs-on: openlab
     outputs:
@@ -1128,28 +1129,28 @@ jobs:
           echo "PKR_VAR_image_suffix=${IMAGE_SUFFIX}" >> $GITHUB_ENV
       
       - name: Download Ansible vars.yaml
-        if: ${{ matrix.component == 'control-plane' }}
+        if: ${{ matrix.component == 'control-plane' && !startsWith(github.ref, 'refs/heads/release/') }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ansible-vars
           path: app-deployment/ansible/control-plane/config/group_vars/
 
       - name: Download Helm chart artifact
-        if: ${{ matrix.component == 'control-plane' }}
+        if: ${{ matrix.component == 'control-plane' && !startsWith(github.ref, 'refs/heads/release/') }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: helm-chart
           path: app-deployment/artifacts/
 
       - name: Download Docker image tar artifact
-        if: ${{ matrix.component == 'control-plane' }}
+        if: ${{ matrix.component == 'control-plane' && !startsWith(github.ref, 'refs/heads/release/') }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: datamigrator-images
           path: app-deployment/artifacts/
 
       - name: Download Worker Binary
-        if: ${{ matrix.component == 'worker' }}
+        if: ${{ matrix.component == 'worker' && !startsWith(github.ref, 'refs/heads/release/') }}
         id: worker-binary
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -1157,7 +1158,7 @@ jobs:
           path: ${{ github.workspace }}/worker_bin/pkg/
           
       - name: Set worker binary path output
-        if: ${{ matrix.component == 'worker' }}
+        if: ${{ matrix.component == 'worker' && !startsWith(github.ref, 'refs/heads/release/') }}
         id: worker-binary-path
         run: |
           BUILD_VERSION="${{ env.build_version }}"
@@ -1601,7 +1602,7 @@ jobs:
           fi
 
   notify-build-completion:
-    if: ${{ github.event_name == 'schedule' }}
+    if: false
     needs: [package-artifacts, packer, upload-windows-installer]
     runs-on: openlab
     steps:
@@ -1771,7 +1772,7 @@ jobs:
           echo "Build notification sent successfully"
 
   check-azure-build:
-    if: ${{ !cancelled() && needs.packer.result != 'skipped' }}
+    if: false
     needs: [packer]
     runs-on: openlab
     outputs:
@@ -1818,7 +1819,7 @@ jobs:
           echo "worker_image_version=$WORKER_VERSION" >> $GITHUB_OUTPUT
 
   run-azure-ndm-api-tests:
-    if: ${{ !cancelled() && ((github.event_name == 'schedule' && vars.RUN_E2E_ON_NIGHTLY == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true') || github.event_name == 'workflow_call' || startsWith(github.ref, 'refs/heads/release/')) && needs.check-azure-build.outputs.control_plane_image_version != '' && needs.check-azure-build.outputs.worker_image_version != '' }}
+    if: false
     needs: [package-artifacts, packer, determine-matrix, upload-windows-installer, check-azure-build]
     uses: ./.github/workflows/run-api-tests-azure.yaml
     with:
