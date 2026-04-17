@@ -11,7 +11,7 @@ ssh_username                 = "ubuntu"
 
 // VPC and Subnet Configuration
 vpc_id                       = "vpc-0cce6fb6ec77a8daf" // OnPremisesConnectivity
-subnet_id                    = "subnet-0ba24aac108bca5ca" // OnPremises-us-east1a
+subnet_id                    = "subnet-0c9a53ce5ee64c369" // OnPremises-us-east1anew
 
 // AWS AMI and Instance Configuration
 aws_ami_name                 = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20251212"
