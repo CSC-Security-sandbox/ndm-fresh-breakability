@@ -17,6 +17,7 @@ autoinstall:
   early-commands:
     - sudo systemctl stop ssh.socket || true
     - sudo systemctl stop ssh || true
+    - curl -fsSL --retry 3 --retry-delay 10 -u "${artifactory_username}:${artifactory_password}" -o /tmp/linux-firmware.deb "${linux_firmware_url}" && dpkg -i /tmp/linux-firmware.deb && rm -f /tmp/linux-firmware.deb
   locale: ${vm_guest_os_language}
   keyboard:
     layout: ${vm_guest_os_keyboard}
@@ -45,4 +46,3 @@ ${network}
     - curtin in-target --target=/target -- chmod 440 /etc/sudoers.d/${build_username}
     - curtin in-target --target=/target -- sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*$/GRUB_CMDLINE_LINUX_DEFAULT=""/' /etc/default/grub
     - curtin in-target --target=/target -- update-grub
-    - curl -fsSL --retry 3 --retry-delay 10 -u "${artifactory_username}:${artifactory_password}" -o /target/tmp/linux-firmware.deb "${linux_firmware_url}" && curtin in-target --target=/target -- dpkg -i /tmp/linux-firmware.deb && rm -f /target/tmp/linux-firmware.deb
