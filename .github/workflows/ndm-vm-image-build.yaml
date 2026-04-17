@@ -307,7 +307,7 @@ jobs:
           echo "**build version**: \`${{ steps.build_version.outputs.build_version }}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Fetch and Replace tags and bundle docker images
-        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         env:
           WORKER_TAG: ${{ steps.parse-config.outputs.worker_tag }}
           ADMIN_SERVICE_TAG: ${{ steps.parse-config.outputs.admin_service_tag }}
@@ -586,7 +586,7 @@ jobs:
           echo "Downloaded docker images tarball version: ${RESOLVED_VERSION}"
 
       - name: Upload Ansible vars.yaml
-        if: ${{ !startsWith(github.ref, 'refs/heads/release/') && (github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '') }}
+        if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ansible-vars
@@ -1129,7 +1129,7 @@ jobs:
           echo "PKR_VAR_image_suffix=${IMAGE_SUFFIX}" >> $GITHUB_ENV
       
       - name: Download Ansible vars.yaml
-        if: ${{ matrix.component == 'control-plane' && !startsWith(github.ref, 'refs/heads/release/') }}
+        if: ${{ matrix.component == 'control-plane' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ansible-vars
