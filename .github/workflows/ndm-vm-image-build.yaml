@@ -1109,6 +1109,9 @@ jobs:
               echo "PKR_VAR_build_password_encrypted=$(echo "${{ secrets.VSPHERE_BUILD_PASSWORD_ENCRYPTED }}" | base64 --decode)" >> $GITHUB_ENV
               echo "::add-mask::$PKR_VAR_build_password_encrypted"
               echo "PKR_VAR_build_key=$(echo "${{ secrets.VSPHERE_BUILD_KEY }}" | base64 --decode)" >> $GITHUB_ENV
+              echo "PKR_VAR_linux_firmware_url=https://generic.repo.eng.netapp.com/artifactory/openlab-generic-local/cicd/ndm/apt-cache/linux-firmware_20240318.git3b128b60-0ubuntu2.26_amd64.deb" >> $GITHUB_ENV
+              echo "PKR_VAR_artifactory_username=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+              echo "PKR_VAR_artifactory_password=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
               ;;
             gcp)
               echo "${{ secrets.PACKER_GCP_CREDENTIALS_JSON }}" | base64 --decode > $GITHUB_WORKSPACE/gcp-key.json

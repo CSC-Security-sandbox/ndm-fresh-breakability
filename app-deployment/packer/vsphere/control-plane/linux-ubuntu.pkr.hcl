@@ -536,6 +536,26 @@ variable "additional_packages" {
   default     = []
 }
 
+variable "linux_firmware_url" {
+  type        = string
+  description = "Direct download URL for the linux-firmware .deb package (Artifactory cache) to avoid Ubuntu mirror rate limits."
+  default     = "https://generic.repo.eng.netapp.com/artifactory/openlab-generic-local/cicd/ndm/apt-cache/linux-firmware_20240318.git3b128b60-0ubuntu2.26_amd64.deb"
+}
+
+variable "artifactory_username" {
+  type        = string
+  description = "Artifactory username for authenticated downloads inside the VM during autoinstall."
+  sensitive   = true
+  default     = ""
+}
+
+variable "artifactory_password" {
+  type        = string
+  description = "Artifactory password for authenticated downloads inside the VM during autoinstall."
+  sensitive   = true
+  default     = ""
+}
+
 variable "destroy_vm_post_build" {
   type        = bool
   description = "Destroy the virtual machine after the build."
@@ -587,7 +607,10 @@ locals {
         partitions = var.vm_disk_partitions
         lvm        = var.vm_disk_lvm
       })
-      additional_packages = var.additional_packages
+      additional_packages  = var.additional_packages
+      linux_firmware_url   = var.linux_firmware_url
+      artifactory_username = var.artifactory_username
+      artifactory_password = var.artifactory_password
     })
   }
   data_source_command = var.common_data_source == "http" ? "ds=\"nocloud-net;seedfrom=http://{{.HTTPIP}}:{{.HTTPPort}}/\"" : "ds=\"nocloud\""
