@@ -371,9 +371,8 @@ jobs:
             exit 0
           fi
 
-          # Parse IP list — handles both JSON ["a","b"] and plain [a,b] formats
-          # Strip brackets, split by comma
-          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | tr -d '[]"' | tr ',' ' '))
+          # Parse JSON array ["ip1","ip2",...] into shell array using jq
+          mapfile -t WINDOWS_IP_ARRAY < <(echo "$WINDOWS_IPS" | jq -r '.[]')
 
           if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
             echo "No Windows VM IP addresses found, skipping copy"
@@ -391,15 +390,22 @@ jobs:
 
             # Wait for Windows SSH to be ready (user_data installs OpenSSH which takes time)
             echo "Waiting for SSH on Windows VM #$VM_INDEX ($WINDOWS_IP)..."
+            SSH_READY=false
             for attempt in {1..30}; do
               if SSHPASS="$VM_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                 -o ConnectTimeout=10 "$VM_USERNAME@$WINDOWS_IP" "echo ready" 2>/dev/null; then
                 echo "SSH ready on Windows VM #$VM_INDEX"
+                SSH_READY=true
                 break
               fi
               echo "  attempt $attempt/30 — waiting 20s..."
               sleep 20
             done
+
+            if [ "$SSH_READY" = "false" ]; then
+              echo "SSH never became ready on Windows VM #$VM_INDEX ($WINDOWS_IP) after 10 minutes, skipping"
+              continue
+            fi
 
             if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=30 windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
