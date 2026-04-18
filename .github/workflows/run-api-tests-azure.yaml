@@ -538,7 +538,7 @@ jobs:
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
           # Set worker credentials under the correct prefix for the actual infrastructure cloud
-          if [ "${{ env.CLOUD_PROVIDER }}" = "aws" ]; then
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
             echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
             echo "AWS_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
             echo "AWS_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
@@ -695,7 +695,7 @@ jobs:
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
 
           # Set worker credentials under the correct prefix for the actual infrastructure cloud
-          if [ "${{ env.CLOUD_PROVIDER }}" = "aws" ]; then
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
             echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
             echo "AWS_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
             echo "AWS_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
