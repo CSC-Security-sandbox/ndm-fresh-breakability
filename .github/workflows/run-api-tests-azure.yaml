@@ -495,7 +495,7 @@ jobs:
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
 
       # AWS SMB worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
-      AWS_SMB_NDM_WORKERS_HOST: ${{ vars.AWS_SMB_NDM_WORKERS_HOST }}
+      AWS_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
       AWS_SMB_NDM_WORKERS_PORT: ${{ vars.AWS_SMB_NDM_WORKERS_PORT }}
       AWS_SMB_PROTOCOL_USERNAME: ${{ secrets.AWS_SMB_PROTOCOL_USERNAME }}
       AWS_SMB_PROTOCOL_PASSWORD: ${{ secrets.AWS_SMB_PROTOCOL_PASSWORD }}
@@ -649,7 +649,7 @@ jobs:
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
 
       # AWS NFS worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
-      AWS_NFS_NDM_WORKERS_HOST: ${{ vars.AWS_NFS_NDM_WORKERS_HOST }}
+      AWS_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       AWS_NFS_NDM_WORKERS_PORT: ${{ vars.AWS_NFS_NDM_WORKERS_PORT }}
       AWS_NFS_PROTOCOL_USERNAME: ${{ vars.AWS_NFS_PROTOCOL_USERNAME }}
       AWS_NFS_PROTOCOL_PASSWORD: ${{ secrets.AWS_NFS_PROTOCOL_PASSWORD }}
