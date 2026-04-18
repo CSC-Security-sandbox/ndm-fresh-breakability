@@ -18,6 +18,9 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB Redirects is skipped in CI/CD as it is not supported in NFS")
 		}
+		if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+			Skip("TC-SMB-REDIRECTS requires AD Server volumes not available in AWS FSxN environment")
+		}
 	})
 	var (
 		ProjectId             string

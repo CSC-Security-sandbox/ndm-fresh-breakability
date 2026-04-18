@@ -18,6 +18,9 @@ var _ = Describe("TC-SMB-RESTRICTED-ACCESS: Create a fileserver with a single wo
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB restricted access test is skipped as it is not supported in NFS")
 		}
+		if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+			Skip("TC-SMB-RESTRICTED-ACCESS requires AD Server volumes not available in AWS FSxN environment")
+		}
 	})
 	var (
 		ProjectId             string
