@@ -153,22 +153,25 @@ run_tests() {
 
 # Test runs
 
+# Resolve cloud environment — set by the CI credential step; defaults to Azure locally
+EFFECTIVE_ENVIRONMENT="${CLOUD_ENVIRONMENT:-Azure}"
+
 #Smoke Testing
 if [[ "$RUN_SMOKE" == true ]]; then
     echo "Running SMB Smoke Tests..."
-    run_tests "smoke" "./tests/smoke" "Azure" "SMB"
+    run_tests "smoke" "./tests/smoke" "$EFFECTIVE_ENVIRONMENT" "SMB"
 fi
 
 #End-to-End Testing
 if [[ "$RUN_E2E" == true ]]; then
     echo "Running SMB End-to-End Tests..."
-    run_tests "end-to-end" "./tests/e2e" "Azure" "SMB"
+    run_tests "end-to-end" "./tests/e2e" "$EFFECTIVE_ENVIRONMENT" "SMB"
 fi
 
 #Regression Testing
 if [[ "$RUN_REGRESSION" == true ]]; then
     echo "Running SMB Regression Tests..."
-    run_tests "regression" "./tests/regression" "Azure" "SMB"
+    run_tests "regression" "./tests/regression" "$EFFECTIVE_ENVIRONMENT" "SMB"
 fi
 
 

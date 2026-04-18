@@ -153,22 +153,25 @@ run_tests() {
 
 # Test runs
 
+# Resolve cloud environment — set by the CI credential step; defaults to Azure locally
+EFFECTIVE_ENVIRONMENT="${CLOUD_ENVIRONMENT:-Azure}"
+
 #Smoke Testing
 if [[ "$RUN_SMOKE" == true ]]; then
     echo "Running NFS Smoke Tests..."
-    run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+    run_tests "smoke" "./tests/smoke" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 #End-to-End Testing
 if [[ "$RUN_E2E" == true ]]; then
     echo "Running NFS End-to-End Tests..."
-    run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
+    run_tests "end-to-end" "./tests/e2e" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 #Regression Testing
 if [[ "$RUN_REGRESSION" == true ]]; then
     echo "Running NFS Regression Tests..."
-    run_tests "regression" "./tests/regression" "Azure" "NFS"
+    run_tests "regression" "./tests/regression" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 
