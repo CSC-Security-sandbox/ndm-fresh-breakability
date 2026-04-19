@@ -8,10 +8,11 @@ This tarball is consumed by the VM image build workflow (`ndm-vm-image-build.yam
 
 ## Usage
 
-Trigger the workflow manually from the GitHub Actions UI with two optional inputs:
+Trigger the workflow manually from the GitHub Actions UI with one optional input:
 
 - **dry_run** (default: `false`) — pull and save images without uploading to Artifactory
-- **keycloak_tag** (default: `26.5.7-debian-12-r0`) — override the Keycloak image tag
+
+The Keycloak image tag is pinned in code (`KEYCLOAK_TAG` env var at the top of the `build-tarball` job, currently `26.6.1-debian-12-r0`). To bake a different tag into the tarball, edit that value and merge — there is no UI override.
 
 ## What it does
 
@@ -67,9 +68,9 @@ Contains full build metadata for each version:
   "commit": "a1b2c3d...",
   "build_time": "2026-04-04T14:30:22Z",
   "workflow_run_id": "12345678",
-  "keycloak_tag": "26.5.7-debian-12-r0",
+  "keycloak_tag": "26.6.1-debian-12-r0",
   "images": [
-    "docker.io/bitnami/keycloak:26.5.7-debian-12-r0",
+    "docker.io/bitnami/keycloak:26.6.1-debian-12-r0",
     "..."
   ]
 }

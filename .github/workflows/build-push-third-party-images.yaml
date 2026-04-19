@@ -23,6 +23,9 @@ jobs:
       ARTIFACTORY_BASE_URL: https://generic.repo.eng.netapp.com/artifactory/openlab-generic
       ARTIFACTORY_PATH: cicd/ndm/docker-images
       CACHE_PATH: cicd/ndm/container-cache
+      # Single source of truth for the Keycloak image tag baked into the
+      # tarball. Bump here when picking up a new Keycloak release.
+      KEYCLOAK_TAG: 26.6.1-debian-12-r0
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -37,7 +40,7 @@ jobs:
         id: images
         run: |
           cat > /tmp/images.txt <<IMAGES
-          docker.io/bitnami/keycloak:26.5.7-debian-12-r0
+          docker.io/bitnami/keycloak:${KEYCLOAK_TAG}
           docker.io/bitnami/postgresql:17.6.0-debian-12-r0
           docker.io/bitnami/os-shell:12-debian-12-r50
           docker.io/bitnami/postgres-exporter:0.17.1-debian-12-r15
@@ -93,8 +96,8 @@ jobs:
           # ── helpers ────────────────────────────────────────────────
 
           # Map image ref → Artifactory cache URL.
-          # docker.io/bitnami/keycloak:26.5.7-debian-12-r0
-          #   → …/container-cache/docker.io/bitnami/keycloak/26.5.7-debian-12-r0.tar.gz
+          # docker.io/bitnami/keycloak:26.6.1-debian-12-r0
+          #   → …/container-cache/docker.io/bitnami/keycloak/26.6.1-debian-12-r0.tar.gz
           cache_url() {
             local repo="${1%:*}" tag="${1##*:}"
             echo "${CACHE_BASE}/${repo}/${tag}.tar.gz"
@@ -303,12 +306,14 @@ jobs:
             --arg commit "$GITHUB_SHA" \
             --arg build_time "$BUILD_TIME" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg keycloak_tag "$KEYCLOAK_TAG" \
             --argjson images "$IMAGES_JSON" \
             '{
               version: $version,
               commit: $commit,
               build_time: $build_time,
               workflow_run_id: $run_id,
+              keycloak_tag: $keycloak_tag,
               images: $images
             }' > manifest.json
 
