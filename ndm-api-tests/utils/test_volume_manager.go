@@ -283,15 +283,23 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 			continue
 		}
 
-		// Step 1: Delete SMB share first (only for SMB protocol) before deleting volume
-		// SMB shares must be removed before the volume can be deleted
+		// Step 1: Delete protocol-specific resources before deleting volume
 		if PROTOCOL_TYPE == ProtocolSMB {
+			// SMB shares must be removed before the volume can be deleted
 			LogDebug(fmt.Sprintf("[CLEANUP] Attempting to delete SMB share '%s' from SVM '%s'", volInfo.Name, tm.SVMName))
 			if err := tm.OntapClient.DeleteSMBShare(tm.SVMName, volInfo.Name); err != nil {
-				// Log error but continue - cleanup should be best-effort
 				LogError(fmt.Sprintf("[CLEANUP] Failed to delete SMB share '%s': %v (continuing)", volInfo.Name, err))
 			} else {
 				LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted SMB share '%s'", volInfo.Name))
+			}
+		} else if PROTOCOL_TYPE == ProtocolNFS {
+			// Delete the export policy created for this clone
+			policyName := fmt.Sprintf("export_%s", volInfo.Name)
+			LogDebug(fmt.Sprintf("[CLEANUP] Attempting to delete NFS export policy '%s'", policyName))
+			if err := tm.OntapClient.DeleteExportPolicy(tm.SVMName, policyName); err != nil {
+				LogError(fmt.Sprintf("[CLEANUP] Failed to delete export policy '%s': %v (continuing)", policyName, err))
+			} else {
+				LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted export policy '%s'", policyName))
 			}
 		}
 
