@@ -394,15 +394,17 @@ func (c *OntapClient) DeleteVolume(volumeUUID string) error {
 	unmountReq := map[string]interface{}{
 		"nas": map[string]interface{}{"path": ""},
 	}
-	if resp, err := c.doRequest("PATCH", endpoint, unmountReq); err == nil {
+	if resp, err := c.doRequest("PATCH", endpoint, unmountReq); resp != nil {
 		resp.Body.Close()
+		_ = err
 	}
 
 	// Step 2: offline the volume
 	offlineReq := map[string]interface{}{"state": "offline"}
-	if resp, err := c.doRequest("PATCH", endpoint, offlineReq); err == nil {
+	if resp, err := c.doRequest("PATCH", endpoint, offlineReq); resp != nil {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		_ = err
 		var offlineResp OntapResponse
 		if json.Unmarshal(bodyBytes, &offlineResp) == nil && offlineResp.Job != nil {
 			// wait for offline job — ignore error, proceed to delete anyway

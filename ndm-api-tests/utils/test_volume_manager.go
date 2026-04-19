@@ -211,6 +211,22 @@ func (tm *TestVolumeManager) CreateCloneVolume(masterVolumeName string) (string,
 			time.Sleep(2 * time.Second)
 			LogDebug(fmt.Sprintf("SMB share registered for volume '%s'", cloneName))
 		}
+
+		// FSxN FlexClone does not preserve the NTFS ACL on the cloned volume root.
+		// Reset to Everyone:Full Control so all tests start with an open baseline.
+		if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+			hostIP := SOURCE_HOST_IP
+			workerConfig := GetAttachedWorkerDetails()
+			if workerConfig.Host != "" {
+				script := fmt.Sprintf(`icacls "\\%s\%s" /grant Everyone:(OI)(CI)F /T /C`, hostIP, cloneName)
+				LogDebug(fmt.Sprintf("Resetting FSxN clone root ACL for '%s'", cloneName))
+				if _, aclErr := sshRunScript(workerConfig, script); aclErr != nil {
+					LogDebug(fmt.Sprintf("Warning: Failed to reset ACL on clone '%s': %v", cloneName, aclErr))
+				} else {
+					LogDebug(fmt.Sprintf("FSxN clone root ACL reset for '%s'", cloneName))
+				}
+			}
+		}
 	}
 
 	// Track for cleanup
