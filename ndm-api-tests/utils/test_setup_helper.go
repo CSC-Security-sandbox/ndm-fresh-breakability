@@ -523,20 +523,31 @@ func CleanupTestVolumesAfterEach(sourceManager, destManager *TestVolumeManager) 
 	return cleanupErr
 }
 
-// GetADServerSMBVolumes returns the AD Server SMB volumes that cannot be cloned
-// These volumes are used directly by tests that need pre-existing AD server structure
+// GetADServerSMBVolumes returns the AD Server SMB volumes that cannot be cloned.
+// Selects the correct env vars based on the active volume clone provider:
+//   - FSxN  → AWS_AD_SMB_SOURCE_VOLUMES / AWS_AD_SMB_SOURCE_HOST_IP
+//   - else  → AZURE_AD_SMB_SOURCE_VOLUMES / AZURE_AD_SMB_SOURCE_HOST_IP
 func GetADServerSMBVolumes() (volumes []string, hostIPs []string) {
-	volumesStr := os.Getenv("AD_SMB_SOURCE_VOLUMES")
-	hostIPsStr := os.Getenv("AD_SMB_SOURCE_HOST_IP")
+	var volumesEnvKey, hostIPEnvKey string
+	if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
+		volumesEnvKey = "AWS_AD_SMB_SOURCE_VOLUMES"
+		hostIPEnvKey = "AWS_AD_SMB_SOURCE_HOST_IP"
+	} else {
+		volumesEnvKey = "AZURE_AD_SMB_SOURCE_VOLUMES"
+		hostIPEnvKey = "AZURE_AD_SMB_SOURCE_HOST_IP"
+	}
+
+	volumesStr := os.Getenv(volumesEnvKey)
+	hostIPsStr := os.Getenv(hostIPEnvKey)
 
 	if volumesStr == "" {
-		LogDebug("AD_SMB_SOURCE_VOLUMES not configured, returning empty list")
+		LogDebug(fmt.Sprintf("%s not configured, returning empty list", volumesEnvKey))
 		return []string{}, []string{}
 	}
 
 	volumes = ParseVolumeNames(volumesStr)
 	hostIPs = ParseVolumeNames(hostIPsStr)
 
-	LogDebug(fmt.Sprintf("AD Server SMB volumes: %v (hosts: %v)", volumes, hostIPs))
+	LogDebug(fmt.Sprintf("AD Server SMB volumes (%s): %v (hosts: %v)", volumesEnvKey, volumes, hostIPs))
 	return volumes, hostIPs
 }

@@ -18,9 +18,6 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("SMB Redirects is skipped in CI/CD as it is not supported in NFS")
 		}
-		if VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN {
-			Skip("TC-SMB-REDIRECTS requires AD Server volumes not available in AWS FSxN environment")
-		}
 	})
 	var (
 		ProjectId             string
@@ -48,7 +45,7 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 			// Get AD Server volumes (not cloneable)
 			adServerVolumes, adServerHostIPs = GetADServerSMBVolumes()
 			if len(adServerVolumes) == 0 {
-				Skip("AD_SMB_SOURCE_VOLUMES not configured, skipping test")
+				Skip("AD SMB source volumes not configured (AWS_AD_SMB_SOURCE_VOLUMES / AZURE_AD_SMB_SOURCE_VOLUMES), skipping test")
 			}
 		})
 

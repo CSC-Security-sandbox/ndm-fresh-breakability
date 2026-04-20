@@ -47,7 +47,7 @@ var _ = Describe("TC-SMB-RESTRICTED-ACCESS: Create a fileserver with a single wo
 			// Get AD Server volumes (not cloneable)
 			adServerVolumes, adServerHostIPs = GetADServerSMBVolumes()
 			if len(adServerVolumes) < 2 && len(adServerHostIPs) < 2 {
-				Skip("AD_SMB_SOURCE_VOLUMES not configured or missing restricted volume (index 1), skipping test")
+				Skip("AD SMB source volumes not configured or missing restricted volume at index 1 (AWS_AD_SMB_SOURCE_VOLUMES / AZURE_AD_SMB_SOURCE_VOLUMES), skipping test")
 			}
 		})
 
