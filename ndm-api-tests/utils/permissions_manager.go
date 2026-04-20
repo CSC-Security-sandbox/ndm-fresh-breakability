@@ -2363,6 +2363,12 @@ func createInheritanceTestStructureScript(export string) string {
 	parts = append(parts, fmt.Sprintf(`(if exist %s\ ( rmdir /s /q %s ) else ( echo "permissions_test not found" )) &`, share, share))
 	parts = append(parts, fmt.Sprintf(`xcopy /E /I /Y %s %s &&`, localTestDir, share))
 
+	// Reset ACLs on all xcopy'd files/folders to Everyone:Full Control before applying
+	// scenario-specific ACLs. xcopy preserves the source (local C:\) ACLs which are
+	// restrictive and cause Access Denied when subsequent icacls commands run.
+	// This is especially needed on FSxN where clone root ACLs are not inherited from master.
+	parts = append(parts, fmt.Sprintf(`icacls "%s" /grant Everyone:(OI)(CI)F /T /C &&`, share))
+
 	// 5. Set up inheritance scenarios
 	parts = append(parts, `echo ===== SCENARIO 1: Share Level (default) ===== &&`)
 	parts = append(parts, fmt.Sprintf(`icacls "%s" /grant Everyone:M &&`, share))
