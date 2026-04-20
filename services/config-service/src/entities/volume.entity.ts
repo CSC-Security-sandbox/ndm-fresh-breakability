@@ -36,6 +36,11 @@ export class VolumeEntity extends Base {
 
     @OneToMany(()=> JobConfigEntity, jobConfig=>jobConfig.paths, {cascade: true, eager: false})
     jobConfig: JobConfigEntity[];
+    @OneToMany(() => JobConfigEntity, jobConfig => jobConfig.targetVolume, {
+        cascade: false,
+        eager: false,
+    })
+    targetPathJobConfigs?: JobConfigEntity[];
 
     @ApiProperty({ description: 'isValid' })
     @Column({ type: 'boolean', nullable: true, default: true, name: 'is_valid' })

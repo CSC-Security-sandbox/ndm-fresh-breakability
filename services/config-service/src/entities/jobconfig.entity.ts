@@ -75,7 +75,13 @@ export class JobConfigEntity extends Base {
 
   @ManyToOne(() => VolumeEntity, volume => volume.jobConfig, { onDelete: 'CASCADE', orphanedRowAction: 'delete' })
   @JoinColumn({ name: 'source_path_id' })
-  paths: VolumeEntity
+  paths: VolumeEntity;
+  @ManyToOne(() => VolumeEntity, volume => volume.targetPathJobConfigs, {
+    onDelete: 'CASCADE',
+    orphanedRowAction: 'delete',
+  })
+  @JoinColumn({ name: 'target_path_id' })
+  targetVolume: VolumeEntity;
 
   @Column({ name: 'scheduler', type: 'varchar', nullable: true })
   scheduler: string;

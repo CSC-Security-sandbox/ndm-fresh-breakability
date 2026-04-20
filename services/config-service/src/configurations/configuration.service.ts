@@ -312,6 +312,14 @@ export class ConfigurationService {
                   status: true,
                 },
               },
+              targetPathJobConfigs: {
+                id: true,
+                jobType: true,
+                jobRunDetails: {
+                  id: true,
+                  status: true,
+                },
+              },
             },
           },
         },
@@ -324,6 +332,9 @@ export class ConfigurationService {
             },
             volumes: {
               jobConfig: {
+                jobRunDetails: true,
+              },
+              targetPathJobConfigs: {
                 jobRunDetails: true,
               },
             },
@@ -348,12 +359,26 @@ export class ConfigurationService {
         config.fileServers = config.fileServers.map((fileServer) => ({
           ...fileServer,
           adServerIp: fileServer.dnsServer, // Expose as adServerIp for UI (SMB edit form)
-          volumes: fileServer.volumes.map((volume) => ({
-            ...volume,
-            validationResult:
-              uploads.find((upload) => upload.id === volume.id)
-                ?.validationResponse || '',
-          })),
+          volumes: fileServer.volumes.map((volume) => {
+            const mergedJobConfig = this.mergeSourceAndTargetJobConfigs(
+              volume as VolumeEntity & {
+                targetPathJobConfigs?: JobConfigEntity[];
+              },
+            );
+            const {
+              targetPathJobConfigs: _targetJobs,
+              ...volumeWithoutTargetRelation
+            } = volume as VolumeEntity & {
+              targetPathJobConfigs?: JobConfigEntity[];
+            };
+            return {
+              ...volumeWithoutTargetRelation,
+              jobConfig: mergedJobConfig,
+              validationResult:
+                uploads.find((upload) => upload.id === volume.id)
+                  ?.validationResponse || '',
+            };
+          }),
           workers: fileServer.workers.map((worker) => ({
             ...worker,
             status: isWorkerHealthy(worker.stats.updatedAt, this.timeout)
@@ -487,6 +512,27 @@ export class ConfigurationService {
       allowedTags: [],
       allowedAttributes: {},
     }).trim();
+  }
+
+  /**
+   * ORM maps `volume.jobConfig` only from source_path_id. Jobs where this volume is the
+   * migration destination live under target_path_id (`targetPathJobConfigs`). The UI expects
+   * a single `jobConfig` list per export path for Discovery / Migration / Cutover counts.
+   */
+  private mergeSourceAndTargetJobConfigs(
+    volume: VolumeEntity & { targetPathJobConfigs?: JobConfigEntity[] },
+  ): JobConfigEntity[] {
+    const combined = [
+      ...(volume.jobConfig ?? []),
+      ...(volume.targetPathJobConfigs ?? []),
+    ];
+    const byId = new Map<string, JobConfigEntity>();
+    for (const jc of combined) {
+      if (jc?.id && !byId.has(jc.id)) {
+        byId.set(jc.id, jc);
+      }
+    }
+    return [...byId.values()];
   }
 
   private async fetchConfigWithRelations(configId: string, fileServerId?: string) {

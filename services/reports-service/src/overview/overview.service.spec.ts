@@ -4,6 +4,7 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { ProjectEntity } from "../entities/project.entity";
 import { StorageOverviewSummaryEntity } from "../entities/storage-summary-mv.entity";
+import { FileServerEntity } from "../entities/fileserver.entity";
 import { JobRunStatus, JobType } from "../constants/enums";
 
 describe("OverviewService", () => {
@@ -11,6 +12,7 @@ describe("OverviewService", () => {
   let mockInventoryRepository;
   let mockProjectRepository;
   let mockStorageOverviewSummaryRepository;
+  let mockFileServerRepository;
 
   const mockProjectData = {
     id: "project1",
@@ -92,6 +94,10 @@ describe("OverviewService", () => {
       createQueryBuilder: jest.fn(),
     };
 
+    mockFileServerRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OverviewService,
@@ -109,6 +115,10 @@ describe("OverviewService", () => {
         {
           provide: getRepositoryToken(StorageOverviewSummaryEntity),
           useValue: mockStorageOverviewSummaryRepository,
+        },
+        {
+          provide: getRepositoryToken(FileServerEntity),
+          useValue: mockFileServerRepository,
         },
       ],
     }).compile();
@@ -445,10 +455,51 @@ describe("OverviewService", () => {
 
       await service.getStorageAndJobsOverview(null, "config1", null);
 
+      expect(mockFileServerRepository.findOne).toHaveBeenCalledWith({
+        where: { id: "config1" },
+        select: ["id", "configId"],
+      });
+
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           configs: {
             id: "config1",
+          },
+        },
+        relations: [
+          "configs",
+          "configs.fileServers",
+          "configs.fileServers.volumes",
+          "configs.fileServers.volumes.sourceConfig",
+        ],
+      });
+    });
+
+    it("should resolve fileServerId to config id for storage MV and project query", async () => {
+      mockFileServerRepository.findOne.mockResolvedValue({
+        id: "fs-dest-uuid",
+        configId: "config-from-fs",
+      });
+      mockProjectRepository.find.mockResolvedValue([
+        {
+          configs: [],
+        },
+      ]);
+      mockStorageOverviewSummaryRepository.findOne.mockResolvedValue({
+        totalDiscoveredSize: 100,
+        totalMigratedSize: 50,
+        lastRefreshed: new Date(),
+      });
+
+      await service.getStorageAndJobsOverview(null, "fs-dest-uuid", null);
+
+      expect(mockStorageOverviewSummaryRepository.findOne).toHaveBeenCalledWith({
+        where: { configId: "config-from-fs" },
+      });
+      expect(mockProjectRepository.find).toHaveBeenCalledWith({
+        where: {
+          configs: {
+            id: "config-from-fs",
           },
         },
         relations: [
@@ -558,7 +609,7 @@ describe("OverviewService", () => {
     let service: OverviewService;
 
     beforeEach(() => {
-      service = new OverviewService({} as any, {} as any, {} as any);
+      service = new OverviewService({} as any, {} as any, {} as any, {} as any);
     });
 
     it("should return correct counts for each job type", () => {

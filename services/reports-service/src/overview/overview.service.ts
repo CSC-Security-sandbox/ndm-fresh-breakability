@@ -11,6 +11,7 @@ import {
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { StorageOverviewSummaryEntity } from "src/entities/storage-summary-mv.entity";
+import { FileServerEntity } from "src/entities/fileserver.entity";
 
 @Injectable()
 export class OverviewService {
@@ -22,6 +23,8 @@ export class OverviewService {
     private readonly projectRepository: Repository<ProjectEntity>,
     @InjectRepository(StorageOverviewSummaryEntity)
     private readonly storageOverviewSummaryRepository: Repository<StorageOverviewSummaryEntity>,
+    @InjectRepository(FileServerEntity)
+    private readonly fileServerRepository: Repository<FileServerEntity>,
     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
   ) {
     if (loggerFactory) {
@@ -34,7 +37,7 @@ export class OverviewService {
 
   async getStorageAndJobsOverview(
     projectId: string,
-    configId: string,
+    fileServerIdOrConfigId: string,
     jobConfigId: string
   ) {
     const getStorageAndJobsOverviewStart = Date.now();
@@ -44,10 +47,17 @@ export class OverviewService {
       whereClause["id"] = projectId;
     }
 
-    if (configId) {
+    /** UI passes ?fileServerId=… but storage_jobs_overview_mv is keyed by config.id */
+    let resolvedConfigId: string | undefined;
+    if (fileServerIdOrConfigId) {
+      const fileServer = await this.fileServerRepository.findOne({
+        where: { id: fileServerIdOrConfigId },
+        select: ["id", "configId"],
+      });
+      resolvedConfigId = fileServer?.configId ?? fileServerIdOrConfigId;
       whereClause["configs"] = {
         ...whereClause["configs"],
-        id: configId,
+        id: resolvedConfigId,
       };
     }
 
@@ -125,18 +135,20 @@ export class OverviewService {
       this.logger.debug(`Total Migrated Size for ${projectId}: ${totalMigratedSize}`);
       this.logger.log(`Project Storage Overview: ${JSON.stringify(projectStorageOverview)}`);
     }
-    if(configId){
-      this.logger.log(`Config ID provided: ${configId}`);
+    if (fileServerIdOrConfigId) {
+      this.logger.log(
+        `File server or config scope provided: ${fileServerIdOrConfigId} (resolved configId: ${resolvedConfigId})`
+      );
       const configStorageOverview = await this.storageOverviewSummaryRepository.findOne({
-        where: { configId: configId },
+        where: { configId: resolvedConfigId },
       });
       if(configStorageOverview) {
         lastRefreshed= configStorageOverview?.lastRefreshed;
       }
       totalDiscoveredSize = configStorageOverview?.totalDiscoveredSize ?? 0;
       totalMigratedSize = configStorageOverview?.totalMigratedSize ?? 0;
-      this.logger.debug(`Total Discovered Size for ${configId}: ${totalDiscoveredSize}`);
-      this.logger.debug(`Total Migrated Size for ${configId}: ${totalMigratedSize}`);
+      this.logger.debug(`Total Discovered Size for config ${resolvedConfigId}: ${totalDiscoveredSize}`);
+      this.logger.debug(`Total Migrated Size for config ${resolvedConfigId}: ${totalMigratedSize}`);
       this.logger.log(`Config Storage Overview: ${JSON.stringify(configStorageOverview)}`);
     }  
     
