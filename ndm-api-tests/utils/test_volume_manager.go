@@ -293,6 +293,15 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 			} else {
 				LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted SMB share '%s'", volInfo.Name))
 			}
+		} else if PROTOCOL_TYPE == ProtocolNFS {
+			// Delete the export policy created for this clone
+			policyName := fmt.Sprintf("export_%s", volInfo.Name)
+			LogDebug(fmt.Sprintf("[CLEANUP] Attempting to delete NFS export policy '%s'", policyName))
+			if err := tm.OntapClient.DeleteExportPolicy(tm.SVMName, policyName); err != nil {
+				LogError(fmt.Sprintf("[CLEANUP] Failed to delete export policy '%s': %v (continuing)", policyName, err))
+			} else {
+				LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted export policy '%s'", policyName))
+			}
 		}
 
 		// Step 2: Delete the volume
