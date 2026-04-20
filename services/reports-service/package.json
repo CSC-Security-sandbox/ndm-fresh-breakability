@@ -160,6 +160,7 @@
     "hbs": {
       "handlebars": "^4.7.9"
     },
-    "basic-ftp": "5.2.2"
+    "basic-ftp": "5.2.2",
+    "protobufjs": "7.5.5"
   }
 }
