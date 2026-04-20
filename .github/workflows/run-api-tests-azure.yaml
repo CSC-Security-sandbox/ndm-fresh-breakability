@@ -428,7 +428,7 @@ jobs:
     name: Run SMB API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
+    if: false # Disabled - only setup-infrastructure needed on this branch
     env:
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -558,7 +558,7 @@ jobs:
     name: Run NFS API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
+    if: false # Disabled - only setup-infrastructure needed on this branch
     env:
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -689,7 +689,7 @@ jobs:
   send-workflow-card:
     name: Parse Test Results & Send Notifications
     runs-on: openlab
-    if: ${{ github.event_name == 'schedule' || inputs.trigger_type == 'schedule' }}
+    if: false # Disabled - only setup-infrastructure needed on this branch
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
     outputs:
       test_status: ${{ steps.workflow_outputs.outputs.test_status }}
@@ -1153,7 +1153,7 @@ jobs:
     name: Upload Support Bundles
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
-    if: always()
+    if: false # Disabled - only setup-infrastructure needed on this branch
     env:
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -1200,7 +1200,7 @@ jobs:
     name: Cleanup Infrastructure
     runs-on: openlab
     needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
-    if: cancelled()
+    if: false # Disabled - only setup-infrastructure needed on this branch
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
