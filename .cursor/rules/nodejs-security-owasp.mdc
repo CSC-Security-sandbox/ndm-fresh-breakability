@@ -1,0 +1,58 @@
+---
+description: "Implement and generate Node/TypeScript code per OWASP Node.js Security Cheat Sheet"
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Node.js Security (OWASP)
+
+When writing or changing TypeScript/Node code, follow [OWASP Node.js Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Nodejs_Security_Cheat_Sheet.html). Prefer secure defaults; do not introduce patterns the cheat sheet warns against.
+
+## Asynchronous code and the event loop
+
+- Prefer `async`/`await` with `try/catch`, or flat Promise chains with `.catch()`, over deep callback nesting so errors are not lost.
+- Avoid blocking the event loop: no CPU-heavy sync work on hot paths; avoid `*Sync` fs/child_process APIs in request handlers (see project TypeScript rules).
+- Order dependent async work so later steps run only after earlier ones complete (avoid races, e.g. auth in a callback vs. synchronous follow-up).
+
+## HTTP requests and parsing
+
+- Configure body/parser size limits appropriate to each route or content type; treat stated `Content-Type` as untrusted—validate payload shape/type before heavy parsing.
+- Be aware Express-style parsers can turn repeated query keys into arrays or objects—validate types (string vs. array vs. object) before use.
+
+## Input, output, and data exposure
+
+- Validate input with allowlists or strict schemas; escape or sanitize HTML/JS when emitting user-controlled strings to HTML contexts (XSS).
+- Apply authorization and least privilege; do not expose internal IDs or extra fields—return only fields the client needs (avoid mass assignment / over-fetching in APIs).
+- Parameterize SQL; never concatenate user input into queries or shell commands.
+
+## Dangerous APIs
+
+- Do not use `eval`, `Function`, or `new Function` on user-influenced strings.
+- Treat `child_process.exec` and shell interpolation as high risk—prefer `execFile`/`spawn` with argument arrays and validated inputs.
+- Sanitize paths from users before `fs` operations; avoid directory traversal and unintended symlink following in security-sensitive paths.
+
+## Errors and observability
+
+- Do not return stack traces or internal error details to API clients; log details server-side.
+- Handle `uncaughtException`/`unhandledRejection` per ops standards: log, release resources if safe, avoid continuing in a bad state.
+- For `EventEmitter` and similar, attach `error` listeners so failures are not unhandled.
+- Log for security and debugging without writing secrets, tokens, passwords, or full PII (follow [Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) ideas).
+
+## HTTP server and sessions (when applicable)
+
+- Set session cookies with `httpOnly`, `secure` (HTTPS), and appropriate `sameSite` for CSRF risk.
+- Use security headers (e.g. Helmet or equivalent): CSP, HSTS where HTTPS, `X-Content-Type-Options`, frame controls; remove or avoid leaking `X-Powered-By`.
+- For cookie-based state-changing requests, use established CSRF protection; do not rely on deprecated/unmaintained CSRF middleware.
+
+## Abuse and availability
+
+- Consider rate limiting or backoff on authentication and sensitive endpoints; avoid unbounded work per request (ReDoS: avoid vulnerable regex on user input; cap input size).
+
+## Dependencies and runtime
+
+- Prefer audited, maintained dependencies; avoid known-vulnerable patterns flagged by `npm audit` and team process.
+- Use `"strict"` / TypeScript `strict` alignment with safe JS subset; avoid legacy foot-guns the cheat sheet calls out.
+
+## Related project rules
+
+- Complements `.cursor/rules/security-review.mdc` (reviewer lens) and `.cursor/rules/typescript-review.mdc` (TypeScript quality). When both apply, satisfy OWASP Node practices and project conventions together.
