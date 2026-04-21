@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type ConfigType string
@@ -42,6 +43,7 @@ var (
 	PROTOCOL_USERNAME        string
 	PROTOCOL_PASSWORD        string
 	PROTOCOL_DOMAIN_NAME     string
+	PROTOCOL_AD_SERVER_IP    string
 	BUILD_VERSION            string
 	REF_TYPE                 string
 	NDM_NEXUS_USERNAME       string
@@ -56,6 +58,8 @@ var (
 
 	SOURCE_HOST_IPs      []string
 	DESTINATION_HOST_IPs []string
+
+	MIGRATION_DIR string
 )
 
 // NFS / SMB specific variables from the environment.
@@ -158,6 +162,8 @@ var (
 	AWS_SMB_PROTOCOL_USERNAME     string
 	AWS_SMB_PROTOCOL_PASSWORD     string
 	AWS_SMB_DOMAIN_NAME           string
+	AWS_SMB_AD_SERVER_IP          string
+	AZURE_SMB_AD_SERVER_IP        string
 )
 
 // Default environment variable constants (if needed).
@@ -200,6 +206,7 @@ const (
 	GENERATE_SUPPORT_BUNDLE_URL                           = "/api/v1/support-bundle"
 	DOWNLOAD_SUPPORT_BUNDLE_URL                           = "/api/v1/support-bundle/download"
 	ABOUT_NDM_URL                                         = "/api/v1/about-ndm"
+	GET_DIRS_ENDPOINT                                     = "/api/v1/jobs/get-dirs"
 	JobTypeDiscovery                     JobType          = "DISCOVER"
 	JobTypeCutover                       JobType          = "CUTOVER"
 	JobTypeMigration                     JobType          = "MIGRATE"
@@ -318,6 +325,8 @@ func init() {
 	AWS_SMB_PROTOCOL_USERNAME = os.Getenv("AWS_SMB_PROTOCOL_USERNAME")
 	AWS_SMB_PROTOCOL_PASSWORD = os.Getenv("AWS_SMB_PROTOCOL_PASSWORD")
 	AWS_SMB_DOMAIN_NAME = os.Getenv("AWS_SMB_DOMAIN_NAME")
+	AWS_SMB_AD_SERVER_IP = parseFirstIP(os.Getenv("AWS_WIN_DNS_SERVERS"))
+	AZURE_SMB_AD_SERVER_IP = parseFirstIP(os.Getenv("AZURE_WIN_DNS_SERVERS"))
 
 	// Rate limiting test configuration
 	if envVal := os.Getenv("RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ"); envVal != "" {
@@ -325,6 +334,23 @@ func init() {
 			RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ = parsedVal
 		}
 	}
+}
+
+// parseFirstIP extracts the first IP from a plain string ("172.30.166.253")
+// or a JSON-encoded array (e.g. `["172.30.166.253"]` or `[\"172.30.166.253\"]`).
+func parseFirstIP(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Remove array brackets, then split on comma to get first element
+	raw = strings.Trim(raw, "[]")
+	parts := strings.Split(raw, ",")
+	// Strip both real quotes and backslash-escaped quotes
+	ip := strings.TrimSpace(parts[0])
+	ip = strings.ReplaceAll(ip, `\"`, "")
+	ip = strings.Trim(ip, "\"")
+	return ip
 }
 
 // UpdateConfVariables sets worker, volume, and protocol configuration from environment variables.
@@ -439,6 +465,7 @@ func UpdateConfVariables(protocolType, environment string) {
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_NFS_PROTOCOL_PASSWORD")
 		}
 		ProtocolVersion3 = ProtocolVersionNFS_V3
+		MIGRATION_DIR = os.Getenv("MIGRATION_NFS_DIR")
 
 	case ProtocolSMB:
 		switch VOLUME_CLONE_PROVIDER {
@@ -446,13 +473,16 @@ func UpdateConfVariables(protocolType, environment string) {
 			PROTOCOL_USERNAME = os.Getenv("AWS_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AWS_SMB_PROTOCOL_PASSWORD")
 			PROTOCOL_DOMAIN_NAME = os.Getenv("AWS_SMB_DOMAIN_NAME")
+			PROTOCOL_AD_SERVER_IP = AWS_SMB_AD_SERVER_IP
 		default: // ANF / ONTAP → Azure AD
 			PROTOCOL_USERNAME = os.Getenv("AZURE_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_SMB_PROTOCOL_PASSWORD")
 			PROTOCOL_DOMAIN_NAME = os.Getenv("AZURE_SMB_DOMAIN_NAME")
+			PROTOCOL_AD_SERVER_IP = AZURE_SMB_AD_SERVER_IP
 		}
 		SMB_EXECUTABLE_FILENAME = os.Getenv("SMB_EXECUTABLE_FILENAME")
 		ProtocolVersion3 = ProtocolVersionSMB_V3
+		MIGRATION_DIR = os.Getenv("MIGRATION_SMB_DIR")
 
 	default:
 		LogFatalf("Invalid protocol type: %s. Valid protocol types are: NFS / SMB.", protocolType)

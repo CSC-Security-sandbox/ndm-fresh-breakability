@@ -39,6 +39,7 @@ type CreateServereParams struct {
 	Workers          []string
 	WorkingDirectory string
 	ExportPathSource *ExportPathSource
+	AdServerIp       string // SMB only: Active Directory server IP / domain name
 }
 
 func InitFileServer(src_volumes, dest_volumes, source_ips, dest_ips string, minVolumesCount int) {
@@ -101,6 +102,10 @@ func CreateFileServer(params CreateServereParams, headers map[string]string) (st
 		"host":            params.Host,
 		"volumes":         []interface{}{},
 		"workers":         params.Workers,
+	}
+
+	if params.AdServerIp != "" {
+		fileServerParams["adServerIp"] = params.AdServerIp
 	}
 
 	if params.ExportPathSource != nil {
@@ -287,6 +292,43 @@ func checkFileServerStatus(fileConfigID string, headers map[string]string) (stri
 	}
 
 	return lastSeenFileServerID, fmt.Errorf("FileServer did not become ACTIVE after %d attempts", MaxFileServerStatusRetries)
+}
+
+// GetFileServerEntityID fetches the file server config by configID and returns the
+// entity ID of the first file server entry (i.e., fileServers[0].id). This is the
+// ID required by the jobs-service endpoints such as POST /api/v1/jobs/get-dirs.
+// It is distinct from the config/job-config ID returned by CreateFileServer.
+func GetFileServerEntityID(configID string, headers map[string]string) (string, error) {
+	getURL := fmt.Sprintf("%s%s/%s", CONFIG_SERVICE_URL, FILESERVER_ENDPOINT, configID)
+
+	resp, err := SendAPIRequest(http.MethodGet, getURL, nil, headers)
+	if err != nil {
+		return "", fmt.Errorf("GetFileServerEntityID: request error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("GetFileServerEntityID: read error: %w", err)
+	}
+
+	var details FileServerDetails
+	if err := json.Unmarshal(bodyBytes, &details); err != nil {
+		return "", fmt.Errorf("GetFileServerEntityID: unmarshal error: %w", err)
+	}
+
+	fileServers := details.Data.Items.FileServers
+	if len(fileServers) == 0 {
+		return "", fmt.Errorf("GetFileServerEntityID: no fileServers in response for configID=%s", configID)
+	}
+
+	entityID := fileServers[0].Id
+	if entityID == "" {
+		return "", fmt.Errorf("GetFileServerEntityID: fileServers[0].id is empty for configID=%s", configID)
+	}
+
+	LogDebug(fmt.Sprintf("GetFileServerEntityID: configID=%s -> entityID=%s", configID, entityID))
+	return entityID, nil
 }
 
 // GetSourcePathID fetches the source file server by Volume Name, validates the response,

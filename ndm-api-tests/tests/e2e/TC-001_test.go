@@ -367,6 +367,177 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By("########################## About NDM END ################################")
 		})
 
+		It("TC-001 - DLM : Should test a small migration from a directory to the destination", func() {
+			By("########################## TC-001 DLM start ################################")
+
+			if MIGRATION_DIR == "" {
+				Skip("MIGRATION_DIR not set, skipping DLM folder migration test or maybe it is a SMB protocol")
+			}
+
+			var sourceConfigID string
+			var sourcePathID string
+
+			var destConfigID string
+			var destPathID string
+			var dlmJobConfigIDs []string
+
+			uniqueID := uuid.New().String()[:8]
+			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+			username := PROTOCOL_USERNAME
+			if PROTOCOL_TYPE == ProtocolSMB && strings.Contains(PROTOCOL_USERNAME, "\\") {
+				username = strings.Split(PROTOCOL_USERNAME, "\\")[1]
+			}
+
+			// Step 1: Create source file server
+
+			By(fmt.Sprintf("Creating Source File Server for DLM test: %s", SOURCE_HOST_IPs[0]))
+			sourceParams := CreateServereParams{
+				ConfigName:       fmt.Sprintf("tc-001-dlm-%s-src-%s", protocol, uniqueID),
+				ConfigType:       ConfigTypeFile,
+				ProjectID:        ProjectId,
+				ServerType:       ServerTypeOtherNAS,
+				UserName:         username,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
+				ProtocolVersion:  ProtocolVersion3,
+				Host:             SOURCE_HOST_IPs[0],
+				Workers:          []string{workerId1, workerId2},
+				WorkingDirectory: "",
+			}
+			if PROTOCOL_TYPE == ProtocolSMB {
+				sourceParams.AdServerIp = PROTOCOL_AD_SERVER_IP
+			}
+			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
+			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
+			defer resp.Body.Close()
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+			By("Getting the Source File Server Export Path ID")
+			sourcePathID, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error getting source export path: %s", err))
+			LogDebug(fmt.Sprintf("Source export path ID: %s", sourcePathID))
+
+			// Step 2: Get the file server entity ID (distinct from config ID, required by jobs-service)
+			By("Getting the file server entity ID for GetDirs")
+			sourceEntityID, err := GetFileServerEntityID(sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting file server entity ID")
+			LogDebug(fmt.Sprintf("Source file server entity ID: %s", sourceEntityID))
+
+			// Step 3: Get the Directories in the first level
+			By(fmt.Sprintf("Calling GetDirs and validating MIGRATION_DIR '%s' exists", MIGRATION_DIR))
+			dirs, resp, err := GetDirs(GetDirsRequest{
+				FileServerID: sourceEntityID,
+				ExportPath:   "/" + clonedSourceVolumes[0],
+			}, GetProjectIdHeader(AuthToken, ProjectId))
+			Expect(err).NotTo(HaveOccurred(), "Error calling GetDirs")
+			defer resp.Body.Close()
+			Expect(dirs).NotTo(BeEmpty(), "GetDirs returned empty list — no directories found on source volume")
+
+			LogDebug(fmt.Sprintf("Dirs: %v", dirs))
+
+			// Step 4: Validate our Directory exists
+			found := false
+			for _, d := range dirs {
+				if d.Name == MIGRATION_DIR {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), fmt.Sprintf("MIGRATION_DIR '%s' not found in GetDirs response", MIGRATION_DIR))
+			LogDebug(fmt.Sprintf("MIGRATION_DIR '%s' confirmed in GetDirs response", MIGRATION_DIR))
+
+			// Step 4: Create destination file server and get export path
+			By(fmt.Sprintf("Creating Destination File Server for DLM test: %s", DESTINATION_HOST_IPs[0]))
+			destParams := CreateServereParams{
+				ConfigName:       fmt.Sprintf("tc-001-dlm-%s-dest-%s", protocol, uniqueID),
+				ConfigType:       ConfigTypeFile,
+				ProjectID:        ProjectId,
+				ServerType:       ServerTypeOtherNAS,
+				UserName:         username,
+				Password:         PROTOCOL_PASSWORD,
+				Protocol:         PROTOCOL_TYPE,
+				ProtocolVersion:  ProtocolVersion3,
+				Host:             DESTINATION_HOST_IPs[0],
+				Workers:          []string{workerId1, workerId2},
+				WorkingDirectory: "",
+			}
+			if PROTOCOL_TYPE == ProtocolSMB {
+				destParams.AdServerIp = PROTOCOL_AD_SERVER_IP
+			}
+			destConfigID, resp, err = CreateFileServer(destParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
+			Expect(destConfigID).NotTo(BeEmpty(), "destConfigID is empty")
+			defer resp.Body.Close()
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+
+			By("Getting the Destination File Server Export Path ID")
+			destPathID, err = GetExportPathID("destination", clonedDestVolumes[0], destConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error getting destination export path: %s", err))
+			LogDebug(fmt.Sprintf("Destination export path ID: %s", destPathID))
+
+			// Step 5: Migrate source directory to root of destination volume.
+			// correctly as: volume_path + sourceDirectoryPath + file_path.
+			// Append '/' to the directory path just like the UI does.
+			sourceDirPath := "/" + strings.TrimPrefix(MIGRATION_DIR, "/")
+			By(fmt.Sprintf("Creating folder migration job: source dir '%s' → destination root", sourceDirPath))
+			dlmJobConfigIDs, resp, err = CreateMigrationJob(MigrationJobParams{
+				FirstRunAt:               GetCurrentUTCTimestamp(),
+				FutureRunSchedule:        "",
+				SourcePathIDs:            []string{sourcePathID},
+				DestinationPathIDs:       []string{destPathID},
+				SourceDirectoryPath:      sourceDirPath,
+				DestinationDirectoryPath: "",
+				Options: map[string]interface{}{
+					"excludeFilePatterns": "*/~snapshot/*,*/.snapshot/*",
+					"preserveAccessTime":  true,
+					"preservePermissions": true,
+					"skipFile":            "0-M",
+				},
+			}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating DLM migration job")
+			defer resp.Body.Close()
+
+			By("Waiting for folder migration job to complete")
+			for _, dlmJobConfigID := range dlmJobConfigIDs {
+				getJobsResp, resp, err := GetJobRunDetails(dlmJobConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error getting DLM migration job run details")
+				defer resp.Body.Close()
+				dlmJobRunID := getJobsResp.JobRuns[0].JobRunId
+				Expect(dlmJobRunID).NotTo(BeEmpty(), "DLM migration job run ID is empty")
+				err = WaitForJobState(dlmJobRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "DLM migration job did not complete")
+				LogDebug(fmt.Sprintf("DLM migration job run ID: %s completed", dlmJobRunID))
+
+				// Step 6: Validate the migration report.
+				// JSON spec stores hardcoded base volume names; replacements map them to the
+				// actual cloned names in the report (same pattern as the rest of TC-001).
+				By("Validating DLM migration report against JSON spec")
+				var volReplacements map[string]string
+				if PROTOCOL_TYPE == "NFS" {
+					volReplacements = map[string]string{
+						"master_nfs_vol_dnd_src_automation_1":  clonedSourceVolumes[0],
+						"master_nfs_vol_dnd_dest_automation_1": clonedDestVolumes[0],
+					}
+				} else { // SMB
+					volReplacements = map[string]string{
+						"master_smb_vol_dnd_src_automation_1":  clonedSourceVolumes[0],
+						"master_smb_vol_dnd_dest_automation_1": clonedDestVolumes[0],
+					}
+				}
+				result, err := ValidateReport(
+					dlmJobRunID,
+					JobTypeMigration,
+					fmt.Sprintf("../../validators/%s/dlm_folder_migration.json", PROTOCOL_TYPE),
+					volReplacements,
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error validating DLM migration report")
+				LogDebug(fmt.Sprintf("DLM migration report validation result: %v", result))
+			}
+
+			By("########################## TC-001 DLM end ################################")
+		})
+
 		AfterEach(func() {
 			testEndTime := time.Now()
 			testDuration := testEndTime.Sub(testStartTime)

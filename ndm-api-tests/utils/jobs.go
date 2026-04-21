@@ -82,13 +82,18 @@ type DiscoveryJobParams struct {
 }
 
 type MigrationJobParams struct {
-	FirstRunAt         string
-	FutureRunSchedule  string
-	SourcePathIDs      []string
-	DestinationPathIDs []string
-	SidMapping         interface{}
-	Options            map[string]interface{}
-	ExtraParams        map[string]interface{}
+	FirstRunAt               string
+	FutureRunSchedule        string
+	SourcePathIDs            []string
+	DestinationPathIDs       []string
+	SidMapping               interface{}
+	Options                  map[string]interface{}
+	ExtraParams              map[string]interface{}
+	// Optional: when set, migration is scoped to this subdirectory on the source volume.
+	SourceDirectoryPath      string
+	// Optional: when set, files land under this subdirectory on the destination volume.
+	// Pass an empty string (or omit) to migrate to the root of the destination volume.
+	DestinationDirectoryPath string
 }
 
 type BulkCutoverJobParams struct {
@@ -106,6 +111,64 @@ type AdHocJobRunResponse struct {
 	Data struct {
 		ID string `json:"id"`
 	} `json:"data"`
+}
+
+// GetDirsRequest is the payload for POST /api/v1/jobs/get-dirs.
+type GetDirsRequest struct {
+	FileServerID string `json:"fileServerId"`
+	ExportPath   string `json:"exportPath"`
+	Path         string `json:"path,omitempty"`
+	Dir          string `json:"dir,omitempty"`
+}
+
+// GetDirsEntry represents a single directory entry returned by get-dirs.
+type GetDirsEntry struct {
+	Name string `json:"name"`
+}
+
+// getDirsResponse is the envelope returned by POST /api/v1/jobs/get-dirs.
+type getDirsResponse struct {
+	Data struct {
+		Items []GetDirsEntry `json:"items"`
+	} `json:"data"`
+}
+
+// =============================================================================
+// DIRECTORY LISTING
+// =============================================================================
+
+// GetDirs calls POST /api/v1/jobs/get-dirs and returns the list of subdirectory
+// names under the given export path (optionally scoped to a sub-path).
+func GetDirs(req GetDirsRequest, headers map[string]string) ([]GetDirsEntry, *http.Response, error) {
+	getDirsURL := JOB_SERVICE_URL + GET_DIRS_ENDPOINT
+
+	payloadBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GetDirs: failed to marshal request: %v", err)
+	}
+
+	resp, err := SendAPIRequest(http.MethodPost, getDirsURL, payloadBytes, headers)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GetDirs: API request error: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, resp, fmt.Errorf("GetDirs: unexpected HTTP status %d", resp.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp, fmt.Errorf("GetDirs: failed to read response body: %v", err)
+	}
+
+	var envelope getDirsResponse
+	if err := json.Unmarshal(bodyBytes, &envelope); err != nil {
+		return nil, resp, fmt.Errorf("GetDirs: failed to unmarshal response: %v", err)
+	}
+
+	dirs := envelope.Data.Items
+	LogDebug(fmt.Sprintf("GetDirs: found %d directories under exportPath=%s path=%s", len(dirs), req.ExportPath, req.Path))
+	return dirs, resp, nil
 }
 
 // =============================================================================
@@ -205,10 +268,13 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		minLen = len(params.DestinationPathIDs)
 	}
 	for i := 0; i < minLen; i++ {
-		migrateConfigs = append(migrateConfigs, map[string]interface{}{
-			"sourcePathId":      params.SourcePathIDs[i],
-			"destinationPathId": []string{params.DestinationPathIDs[i]},
-		})
+		cfg := map[string]interface{}{
+			"sourcePathId":             params.SourcePathIDs[i],
+			"destinationPathId":        []string{params.DestinationPathIDs[i]},
+			"sourceDirectoryPath":      params.SourceDirectoryPath,
+			"destinationDirectoryPath": params.DestinationDirectoryPath,
+		}
+		migrateConfigs = append(migrateConfigs, cfg)
 	}
 
 	migrationPayload := map[string]interface{}{
