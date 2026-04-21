@@ -371,7 +371,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By("########################## TC-001 DLM start ################################")
 
 			if MIGRATION_DIR == "" {
-				Skip("MIGRATION_DIR not set, skipping DLM folder migration test or maybe it is a SMB protocol")
+				Skip("MIGRATION_DIR not set, skipping DLM folder migration test")
 			}
 
 			var sourceConfigID string
