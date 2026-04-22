@@ -287,9 +287,33 @@ jobs:
       - name: Generate version string
         id: version
         run: |
-          VERSION="$(date -u +'%Y%m%d-%H%M%S')-${GITHUB_SHA::7}"
+          TIMESTAMP="$(date -u +'%Y%m%d-%H%M%S')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          # Only dispatches from main produce "production" builds that are
+          # allowed to move the `latest.json` pointer. Anything else is
+          # treated as an ad-hoc developer build: it uploads a versioned
+          # tarball + manifest (so it's still usable via explicit version),
+          # but does NOT update latest.json.
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            VERSION="${TIMESTAMP}-${SHORT_SHA}"
+            IS_PRODUCTION="true"
+          else
+            # Slugify the branch name so it is safe for URLs/paths:
+            # lowercase, non-alphanumerics → '-', collapse repeats, trim,
+            # cap length to keep the final version string readable.
+            BRANCH_SLUG="$(echo "${GITHUB_REF_NAME}" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+              | cut -c1-32)"
+            VERSION="${TIMESTAMP}-${SHORT_SHA}-adhoc-${BRANCH_SLUG}"
+            IS_PRODUCTION="false"
+          fi
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "is_production=${IS_PRODUCTION}" >> "$GITHUB_OUTPUT"
           echo "Generated version: ${VERSION}"
+          echo "Production build: ${IS_PRODUCTION}"
 
       - name: Generate manifest.json
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -363,7 +387,7 @@ jobs:
           fi
 
       - name: Upload latest.json to Artifactory
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ github.event.inputs.dry_run != 'true' && steps.version.outputs.is_production == 'true' }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -404,6 +428,11 @@ jobs:
             exit 1
           fi
 
+      - name: Note ad-hoc build (latest.json intentionally skipped)
+        if: ${{ github.event.inputs.dry_run != 'true' && steps.version.outputs.is_production != 'true' }}
+        run: |
+          echo "::notice::Ad-hoc build from '${GITHUB_REF_NAME}' — versioned tarball uploaded as '${{ steps.version.outputs.version }}' but latest.json was NOT updated. Only runs dispatched from 'main' publish latest.json."
+
       - name: Print summary
         if: always()
         run: |
@@ -411,7 +440,15 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.version.outputs.is_production }}" = "true" ]; then
+            BUILD_TYPE="production (updates latest.json)"
+          else
+            BUILD_TYPE="ad-hoc (latest.json NOT updated)"
+          fi
+
           echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build type | ${BUILD_TYPE} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Source ref | \`${GITHUB_REF_NAME}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image count | ${{ steps.images.outputs.count }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cache hits / misses | ${cache_hits:-0} / ${cache_misses:-0} |" >> "$GITHUB_STEP_SUMMARY"
