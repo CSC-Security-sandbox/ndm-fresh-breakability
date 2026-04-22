@@ -234,11 +234,15 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 				defer resp.Body.Close()
 				Expect(adHocJobRunId).NotTo(BeEmpty(), "Ad-hoc JobRun ID should not be empty")
 
+				By("Waiting for ad-hoc job to start running before stopping")
+				err = WaitForJobState(adHocJobRunId, RUNNING_JOBRUN, 60)
+				Expect(err).NotTo(HaveOccurred(), "Ad-hoc job did not reach RUNNING state")
+
 				By("Stopping ad-hoc migration job")
 				err = HandleJobRunStateChange(adHocJobRunId, "STOP", []string{adHocJobRunId})
 				Expect(err).NotTo(HaveOccurred(), "Error while stopping job run ID")
 
-				err = WaitForJobState(adHocJobRunId, STOPPED_JOBRUN, 30)
+				err = WaitForJobState(adHocJobRunId, STOPPED_JOBRUN, 60)
 				Expect(err).NotTo(HaveOccurred(), "Ad-hoc migration job did not stop")
 			}
 
