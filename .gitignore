@@ -1,12 +1,8 @@
-node_modules
-.env.*
-.vscode
-coverage
-dist
 
 # Playwright
+node_modules/
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
-e2e/.auth/
+/playwright/.auth/
