@@ -449,6 +449,13 @@ export class CommandGenerationService {
    * Returns undefined if no update is needed.
    */
   buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats, originalCommandId?: string): Cmd | undefined {
+
+    this.logger.log(`sFile  details : ${sFile}`);
+    this.logger.log(`##################`);
+    this.logger.log(`#this.metaUpdatedToleranceMs : ${this.metaUpdatedToleranceMs}`);
+    this.logger.log(`##################`);
+    this.logger.log(`dFile  details : ${dFile}`);
+
     const metadata: CmdMeta = {
       size: sFile.size,
       mtime: sFile.mtime,
