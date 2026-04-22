@@ -1,15 +1,19 @@
 import { test, expect } from "@playwright/test";
 import { setupMockAuth, setupMockAPIs } from "./helpers/mock-auth";
 
+const isLiveMode = !!process.env.BASE_URL;
+
 test.describe("Home Page", () => {
   test.beforeEach(async ({ page }) => {
-    await setupMockAuth(page);
-    await setupMockAPIs(page);
+    if (!isLiveMode) {
+      await setupMockAuth(page);
+      await setupMockAPIs(page);
 
-    await page.addInitScript(() => {
-      localStorage.setItem("account_id", "acc-001");
-      localStorage.setItem("selected_project_id", "proj-001");
-    });
+      await page.addInitScript(() => {
+        localStorage.setItem("account_id", "acc-001");
+        localStorage.setItem("selected_project_id", "proj-001");
+      });
+    }
   });
 
   test("should load the dashboard with heading, charts, and notice board", async ({
