@@ -13,6 +13,7 @@ import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-l
 import { isPathExists } from "../../utils/utils";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
 import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
+import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
 
 
 @Injectable()
@@ -29,7 +30,8 @@ export class MigrateScanService {
         private readonly configService: ConfigService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly fileTypeDetectionService: FileTypeDetectionService,
-        private readonly commandGenerationService: CommandGenerationService
+        private readonly commandGenerationService: CommandGenerationService,
+        private readonly deferredDirStampService: DeferredDirStampService,
     ) {
         this.workerId = this.configService.get<string>('worker.workerId');
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -88,7 +90,8 @@ export class MigrateScanService {
             },
             errorType: errorType || ErrorType.RECOVERABLE_ERROR,
             targetContent: new LocalSetLookup(targetContent),
-            maxCommandsPerBatch: this.maxMigrationCommand
+            maxCommandsPerBatch: this.maxMigrationCommand,
+            deferredDirStampService: this.deferredDirStampService,
         });
 
         // Update output with results

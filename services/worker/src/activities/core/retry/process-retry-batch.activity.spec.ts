@@ -142,6 +142,7 @@ describe('ProcessRetryBatchActivity', () => {
             redisService,
             commandGenerationService,
             dirStreamingService,
+            { add: jest.fn() } as any,
         );
     });
 

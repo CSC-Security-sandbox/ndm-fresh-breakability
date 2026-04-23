@@ -439,6 +439,27 @@ describe('StampMetaService', () => {
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
+
+    // Directory mtimes/atimes are clobbered by every child write, so the per-command
+    // stamp is intentionally skipped — the deferred restamp pass at the end of
+    // ChildSyncWorkflow re-applies them deepest-first. See DeferredDirStampService.
+    it('should skip utimes/lutimes when command is a directory (deferred restamp owns it)', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+        },
+        {},
+        true, // isDir
+      );
+
+      const result = await service.stampAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect((mockFs.promises as any).lutimes).not.toHaveBeenCalled();
+    });
   });
 
   describe('preserveAccessAndModifiedTime', () => {

@@ -21,6 +21,7 @@ import { MappingResolverService } from "src/activities/core/initializer/mapping-
 import { SetupExportsPathPermissionService } from "src/activities/core/initializer/setup-exports-path-permission.service";
 import { FetchFailedOperationsActivity } from "src/activities/core/retry/fetch-failed-operations.activity";
 import { ProcessRetryBatchActivity } from "src/activities/core/retry/process-retry-batch.activity";
+import { RestampDirectoriesService } from "src/activities/core/migrate/restamp-directories.service";
 import { UpgradeActivityService } from "src/activities/upgrade/upgrade.activity.service";
 
 @Injectable()
@@ -47,6 +48,7 @@ export class WorkerOptionsService {
     private readonly setupExportsPathPermissionService: SetupExportsPathPermissionService,
     private readonly fetchFailedOperationsActivity: FetchFailedOperationsActivity,
     private readonly processRetryBatchActivity: ProcessRetryBatchActivity,
+    private readonly restampDirectoriesService: RestampDirectoriesService,
     private readonly upgradeActivityService: UpgradeActivityService,
 
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -126,6 +128,8 @@ export class WorkerOptionsService {
           // Retry workflow activities
           fetchFailedOperations: this.fetchFailedOperationsActivity.fetchFailedOperations.bind(this.fetchFailedOperationsActivity),
           processRetryBatch: this.processRetryBatchActivity.processRetryBatch.bind(this.processRetryBatchActivity),
+          // Post-migration directory mtime/atime restamp pass
+          restampDirectories: this.restampDirectoriesService.restampDirectories.bind(this.restampDirectoriesService),
         }, this.jobTaskActivityConcurrency, this.shutDownForceTime, this.maxActivityTaskPollers);
       default:
         return undefined;
