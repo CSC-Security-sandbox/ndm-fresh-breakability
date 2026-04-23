@@ -5,16 +5,29 @@ env:
   TERRAFORM_VERSION: 1.12.1
   GO_VERSION: 1.24.2
   NODE_VERSION: 22.15.0
+  # AD DNS server IP used for Windows worker NIC configuration at boot.
+  # aws-fsxn → AWS_WIN_DNS_SERVERS; anf/ontap → AZURE_WIN_DNS_SERVERS.
+  # Both vars are stored as JSON lists e.g. [\"172.x.x.x\"] — we pick the
+  # right one here and each consumer wraps/unwraps as needed for its type.
+  WIN_AD_DNS_SERVERS: ${{ (inputs.volume_clone_provider == 'aws-fsxn' || github.event.inputs.volume_clone_provider == 'aws-fsxn') && vars.AWS_WIN_DNS_SERVERS != '' && vars.AWS_WIN_DNS_SERVERS || vars.AZURE_WIN_DNS_SERVERS }}
 
 on:
   workflow_dispatch:
     inputs:
+      cloud_provider:
+        description: 'Cloud provider to deploy infrastructure on'
+        required: false
+        default: 'azure'
+        type: choice
+        options:
+          - 'azure'
+          - 'aws'
       control_plane_image_version:
-        description: 'Image version for control plane'
+        description: 'Azure: gallery version | AWS: CP AMI ID (ami-xxx)'
         required: true
         type: string
       worker_image_version:
-        description: 'Image version for Linux workers'
+        description: 'Azure: gallery version | AWS: Linux worker AMI ID (ami-xxx)'
         required: true
         type: string
       windows_worker_installer_url:
@@ -46,6 +59,7 @@ on:
         options:
           - 'anf'
           - 'ontap'
+          - 'aws-fsxn'
       run_smoke_tests:
         description: 'Run smoke tests'
         required: false
@@ -64,12 +78,17 @@ on:
 
   workflow_call: 
     inputs:
+      cloud_provider:
+        description: 'Cloud provider to deploy infrastructure on (azure/aws)'
+        required: false
+        default: 'azure'
+        type: string
       control_plane_image_version:
-        description: 'Image version for control plane'
+        description: 'Azure: gallery version | AWS: CP AMI ID (ami-xxx)'
         required: true
         type: string
       worker_image_version:
-        description: 'Image version for Linux workers'
+        description: 'Azure: gallery version | AWS: Linux worker AMI ID (ami-xxx)'
         required: true
         type: string
       windows_worker_installer_url:
@@ -89,7 +108,7 @@ on:
         default: 'Both'
         type: string
       volume_clone_provider:
-        description: 'Select volume clone backend (anf/ontap)'
+        description: 'Select volume clone backend (anf/ontap/aws-fsxn)'
         required: false
         default: 'ontap'
         type: string
@@ -126,7 +145,7 @@ jobs:
       linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
       windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
     steps:
-      
+
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
         with:
@@ -146,8 +165,8 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Configure Provider Credentials
-        id: credentials
         run: |
+          CLOUD="${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}"
           mkdir -p $GITHUB_WORKSPACE/credentials
 
           echo "Setting VM credentials..."
@@ -158,52 +177,69 @@ jobs:
           echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
 
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-
-          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
           TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
             VM_OWNER="ntly${TIME_SUFFIX}"
-            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
             VM_OWNER="adhc${TIME_SUFFIX}"
-            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           fi
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
-          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
           echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV 
+
+          if [[ "$CLOUD" == "aws" ]]; then
+            echo "TF_DIR=app-deployment/terraform/aws/environments/api" >> $GITHUB_ENV
+            CONTROL_PLANE_AMI="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+            LINUX_WORKER_AMI="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+            echo "TF_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+            echo "TF_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+            echo "TF_VAR_key_name=${{ secrets.AWS_EC2_KEY_PAIR_NAME }}" >> $GITHUB_ENV
+            echo "TF_VAR_control_plane_ami_id=$CONTROL_PLANE_AMI" >> $GITHUB_ENV
+            echo "TF_VAR_linux_worker_ami_id=$LINUX_WORKER_AMI" >> $GITHUB_ENV
+            echo "TF_VAR_ad_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+
+            echo "${{ secrets.AWS_EC2_PRIVATE_KEY }}" > $GITHUB_WORKSPACE/credentials/ec2-key.pem
+            chmod 600 $GITHUB_WORKSPACE/credentials/ec2-key.pem
+            echo "EC2_KEY_FILE=$GITHUB_WORKSPACE/credentials/ec2-key.pem" >> $GITHUB_ENV
+          elif [[ "$CLOUD" == "azure" ]]; then
+            echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
+            echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+            echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+
+            CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+            WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+
+          # Azure Terraform Variables
+            echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+            echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
+            echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+            echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+          else
+            echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
+            exit 1
+          fi
 
       - name: Initialize Terraform
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform init
 
       - name: Validate Terraform Configuration
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform validate
 
       - name: Create Terraform Plan
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform plan -out=tfplan
 
       - name: Apply Terraform Plan
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform apply -auto-approve tfplan
 
       - name: Upload Terraform State
@@ -212,29 +248,89 @@ jobs:
         with:
           name: terraform-state
           path: |
-            app-deployment/terraform/azure/environments/api/terraform.tfstate
-            app-deployment/terraform/azure/environments/api/.terraform.lock.hcl
-            app-deployment/terraform/azure/environments/api/.terraform
+            ${{ env.TF_DIR }}/terraform.tfstate
+            ${{ env.TF_DIR }}/.terraform.lock.hcl
+            ${{ env.TF_DIR }}/.terraform
+
+      - name: Set Password on Linux/CP VMs (AWS)
+        if: ${{ (inputs.cloud_provider || github.event.inputs.cloud_provider) == 'aws' }}
+        run: |
+          cd $TF_DIR
+          CP_IP=$(terraform output -raw control_plane_private_ip)
+          ALL_LINUX_IPS=$(terraform output -json linux_worker_private_ips | jq -r '.[]' | tr '\n' ' ')
+          ALL_IPS="$CP_IP $ALL_LINUX_IPS"
+
+          echo "Setting password on Linux/CP VMs..."
+          for IP in $ALL_IPS; do
+            echo "Configuring password auth on $IP..."
+
+            SSH_READY=false
+            for attempt in {1..40}; do
+              if ssh -i "$EC2_KEY_FILE" \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 \
+                -o PubkeyAcceptedAlgorithms=+ssh-rsa \
+                "ubuntu@$IP" "echo connected" 2>/dev/null; then
+                echo "SSH ready on $IP"
+                SSH_READY=true
+                break
+              fi
+              echo "Waiting for SSH on $IP... (attempt $attempt/40)"
+              sleep 15
+            done
+
+            if [ "$SSH_READY" = false ]; then
+              echo "ERROR: SSH never became ready on $IP after 10 minutes — failing step to prevent silent misconfiguration"
+              exit 1
+            fi
+
+            REMOTE_CMD="echo '${VM_USERNAME}:${VM_PASSWORD}' | sudo chpasswd"
+            REMOTE_CMD="$REMOTE_CMD && sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config"
+            REMOTE_CMD="$REMOTE_CMD && if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf; fi"
+            REMOTE_CMD="$REMOTE_CMD && sudo systemctl restart ssh"
+            REMOTE_CMD="$REMOTE_CMD && echo 'Password auth configured successfully on $IP'"
+
+            ssh -i "$EC2_KEY_FILE" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=30 \
+              -o PubkeyAcceptedAlgorithms=+ssh-rsa \
+              "ubuntu@$IP" "$REMOTE_CMD"
+          done
+          echo "Password configuration complete on all Linux/CP VMs"
 
       - name: Extract Deployment Information
         id: deployment-info
         run: |
-          cd app-deployment/terraform/azure/environments/api
-          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
-          LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
-          WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
-          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
-          echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
-          echo "Control Plane IP: $CONTROL_PLANE_IP"
-          echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
-          echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
+          cd $TF_DIR
+          CP_IP=$(terraform output -raw control_plane_private_ip)
+          LINUX_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
+          WINDOWS_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
+          echo "control_plane_vm_ip_address=$CP_IP" >> $GITHUB_OUTPUT
+          echo "linux_worker_vm_ip_addresses=$LINUX_IPS" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_ip_addresses=$WINDOWS_IPS" >> $GITHUB_OUTPUT
+          echo "Control Plane IP: $CP_IP"
+          echo "Linux Worker IPs (NFS): $LINUX_IPS"
+          echo "Windows Worker IPs (SMB): $WINDOWS_IPS"
 
+      # ── Shared: install sshpass, download & copy installer, wait for boot ─
       - name: Install sshpass
         run: |
           echo "Installing sshpass..."
-          
-          # Wait for apt locks to be released (max 5 minutes)
+
+          # Kill any background apt processes holding the lock
+          sudo pkill -9 -f unattended-upgrade 2>/dev/null || true
+          sudo pkill -9 -f apt.systemd.daily 2>/dev/null || true
+          sleep 2
+
+          # Remove stale lock files if no apt process is running
+          if ! pgrep -f 'apt|dpkg' > /dev/null 2>&1; then
+            sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+            sudo dpkg --configure -a 2>/dev/null || true
+          fi
+
+          # Wait for any remaining apt locks (5 minutes max)
           for i in {1..60}; do
             if sudo apt-get update -qq 2>/dev/null; then
               break
@@ -242,15 +338,8 @@ jobs:
             echo "Waiting for apt locks... (attempt $i/60)"
             sleep 5
           done
-          
-          # Install sshpass with retry
-          sudo apt-get install -y sshpass || {
-            echo "First attempt failed, retrying after cleanup..."
-            sudo pkill -9 unattended-upgrade 2>/dev/null || true
-            sleep 5
-            sudo apt-get install -y sshpass
-          }
-          
+
+          sudo apt-get install -y sshpass
           echo "sshpass installed successfully."
 
       - name: Download Windows installer
@@ -262,7 +351,7 @@ jobs:
             curl -s -o "windows-worker-installer.exe" \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               "$WINDOWS_INSTALLER_URL"
-            
+
             if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
               echo "Error: Failed to download Windows installer or file is empty"
               exit 1
@@ -276,45 +365,66 @@ jobs:
         if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
         run: |
           WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
-          
+
           if [ ! -f "windows-worker-installer.exe" ]; then
             echo "Windows installer file not found, skipping copy to Windows VMs"
             exit 0
           fi
-          
-          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
-          
+
+          # Parse JSON array ["ip1","ip2",...] into shell array using jq
+          mapfile -t WINDOWS_IP_ARRAY < <(echo "$WINDOWS_IPS" | jq -r '.[]')
+
           if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
             echo "No Windows VM IP addresses found, skipping copy"
             exit 0
           fi
-          
+
           echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
-          
+
           for i in "${!WINDOWS_IP_ARRAY[@]}"; do
             WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
             echo "$WINDOWS_IP"
             VM_INDEX=$((i + 1))
             
             echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP"
+
+            # Wait for Windows SSH to be ready (user_data installs OpenSSH which takes time)
+            echo "Waiting for SSH on Windows VM #$VM_INDEX ($WINDOWS_IP)..."
+            SSH_READY=false
+            for attempt in {1..30}; do
+              if SSHPASS="$VM_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 "$VM_USERNAME@$WINDOWS_IP" "echo ready" 2>/dev/null; then
+                echo "SSH ready on Windows VM #$VM_INDEX"
+                SSH_READY=true
+                break
+              fi
+              echo "  attempt $attempt/30 — waiting 20s..."
+              sleep 20
+            done
+
+            if [ "$SSH_READY" = "false" ]; then
+              echo "SSH never became ready on Windows VM #$VM_INDEX ($WINDOWS_IP) after 10 minutes, skipping"
+              continue
+            fi
+
             if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
+              -o ConnectTimeout=30 windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
               echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
             else
               echo "Failed to copy Windows installer to Windows VM #$VM_INDEX ($WINDOWS_IP)"
               # Continue with other VMs instead of failing completely
             fi
           done
-          
+
           echo "Completed copying Windows installer to all available Windows VMs"
 
       - name: Wait for Service Boot Setup to Complete
         run: |
           echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
-          
+
           # Ensure script is executable
           chmod +x ./app-deployment/scripts/service_check.sh
-          
+
           # Run the service_check.sh script to wait for the microk8s-boot service to complete
           ./app-deployment/scripts/service_check.sh \
           "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
@@ -325,7 +435,7 @@ jobs:
             echo "Service setup failed or timed out"
             exit 1
           fi
-          
+
           echo "Service setup completed successfully"
 
   run-smb-tests:
@@ -334,6 +444,7 @@ jobs:
     needs: setup-infrastructure
     if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
+      CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -350,6 +461,7 @@ jobs:
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
+      # Azure SMB worker + volume config
       AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
       AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
       AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
@@ -363,6 +475,14 @@ jobs:
       AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
       AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
       AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      AZURE_AD_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_AD_SMB_SOURCE_VOLUMES }}
+      AZURE_AD_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_AD_SMB_SOURCE_HOST_IP }}
+      AWS_AD_SMB_SOURCE_VOLUMES: ${{ vars.AWS_AD_SMB_SOURCE_VOLUMES }}
+      AWS_AD_SMB_SOURCE_HOST_IP: ${{ vars.AWS_AD_SMB_SOURCE_HOST_IP }}
+
+      # ONTAP SMB volume config (used by Azure and vSphere)
       ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
       ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
       ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
@@ -375,10 +495,26 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      AD_SMB_SOURCE_VOLUMES: ${{ vars.AD_SMB_SOURCE_VOLUMES }}
-      AD_SMB_SOURCE_HOST_IP: ${{ vars.AD_SMB_SOURCE_HOST_IP }}
+
+      # AWS SMB worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
+      AWS_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      AWS_SMB_NDM_WORKERS_PORT: ${{ vars.AWS_SMB_NDM_WORKERS_PORT }}
+      AWS_SMB_PROTOCOL_USERNAME: ${{ secrets.AWS_SMB_PROTOCOL_USERNAME }}
+      AWS_SMB_PROTOCOL_PASSWORD: ${{ secrets.AWS_SMB_PROTOCOL_PASSWORD }}
+      AWS_SMB_DOMAIN_NAME: ${{ vars.AWS_SMB_DOMAIN_NAME }}
+      AWS_FSXN_SRC_API_URL: ${{ vars.AWS_FSXN_SRC_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD }}
+      AWS_FSXN_SRC_SVM_NAME: ${{ vars.AWS_FSXN_SRC_SVM_NAME }}
+      AWS_FSXN_DST_API_URL: ${{ vars.AWS_FSXN_DST_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD }}
+      AWS_FSXN_DST_SVM_NAME: ${{ vars.AWS_FSXN_DST_SVM_NAME }}
+      AWS_FSXN_SMB_SOURCE_VOLUMES: ${{ vars.AWS_FSXN_SMB_SOURCE_VOLUMES }}
+      AWS_FSXN_SMB_DEST_VOLUMES: ${{ vars.AWS_FSXN_SMB_DEST_VOLUMES }}
+      AWS_FSXN_SMB_SRC_HOST_IP: ${{ vars.AWS_FSXN_SMB_SRC_HOST_IP }}
+      AWS_FSXN_SMB_DST_HOST_IP: ${{ vars.AWS_FSXN_SMB_DST_HOST_IP }}
+
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
@@ -400,17 +536,26 @@ jobs:
 
       - name: Setup credentials for SMB tests
         run: |
-
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
+
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+          # Set worker credentials under the correct prefix for the actual infrastructure cloud
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
+            echo "AWS_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AWS_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          else
+            echo "CLOUD_ENVIRONMENT=Azure" >> $GITHUB_ENV
+            echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          fi
+
       - name: Install Ginkgo
         run: |
           cd ndm-api-tests
@@ -441,7 +586,7 @@ jobs:
             SCRIPT_ARGS="$SCRIPT_ARGS --regression"
           fi
           
-          echo "Running SMB tests with arguments: $SCRIPT_ARGS"
+          echo "Running SMB tests (provider: $VOLUME_CLONE_PROVIDER) with arguments: $SCRIPT_ARGS"
           ./run-smb-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
@@ -457,8 +602,9 @@ jobs:
     name: Run NFS API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
+    if: ${{ inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both' }}
     env:
+      CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
       JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
@@ -471,10 +617,11 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
-      
+
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
 
+      # Azure NFS worker + volume config
       AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
       AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
       AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
@@ -487,6 +634,9 @@ jobs:
       AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
       AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
       AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
+      # ONTAP NFS volume config (used by Azure and vSphere)
       ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
       ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
       ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
@@ -499,7 +649,25 @@ jobs:
       ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
       ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
       ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
-      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
+      # AWS NFS worker + FSxN volume config (used when volume_clone_provider == aws-fsxn)
+      AWS_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      AWS_NFS_NDM_WORKERS_PORT: ${{ vars.AWS_NFS_NDM_WORKERS_PORT }}
+      AWS_NFS_PROTOCOL_USERNAME: ${{ vars.AWS_NFS_PROTOCOL_USERNAME }}
+      AWS_NFS_PROTOCOL_PASSWORD: ${{ secrets.AWS_NFS_PROTOCOL_PASSWORD }}
+      AWS_FSXN_SRC_API_URL: ${{ vars.AWS_FSXN_SRC_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_SRC_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_SRC_PASSWORD }}
+      AWS_FSXN_SRC_SVM_NAME: ${{ vars.AWS_FSXN_SRC_SVM_NAME }}
+      AWS_FSXN_DST_API_URL: ${{ vars.AWS_FSXN_DST_API_URL }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.AWS_FSXN_SYSTEM_MANAGER_DST_USERNAME }}
+      AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.AWS_FSXN_SYSTEM_MANAGER_DST_PASSWORD }}
+      AWS_FSXN_DST_SVM_NAME: ${{ vars.AWS_FSXN_DST_SVM_NAME }}
+      AWS_FSXN_NFS_SOURCE_VOLUMES: ${{ vars.AWS_FSXN_NFS_SOURCE_VOLUMES }}
+      AWS_FSXN_NFS_DEST_VOLUMES: ${{ vars.AWS_FSXN_NFS_DEST_VOLUMES }}
+      AWS_FSXN_NFS_SRC_HOST_IP: ${{ vars.AWS_FSXN_NFS_SRC_HOST_IP }}
+      AWS_FSXN_NFS_DST_HOST_IP: ${{ vars.AWS_FSXN_NFS_DST_HOST_IP }}
+
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
       RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
@@ -527,14 +695,23 @@ jobs:
         run: |
           VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
+
           echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
-          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
           echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
           echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+          # Set worker credentials under the correct prefix for the actual infrastructure cloud
+          if [ "$CLOUD_PROVIDER" = "aws" ]; then
+            echo "CLOUD_ENVIRONMENT=AWS" >> $GITHUB_ENV
+            echo "AWS_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AWS_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          else
+            echo "CLOUD_ENVIRONMENT=Azure" >> $GITHUB_ENV
+            echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+            echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          fi
 
       - name: Install Ginkgo
         run: |
@@ -548,25 +725,25 @@ jobs:
         run: |
           cd ndm-api-tests
           chmod +x ./run-nfs-azure-automation.sh
-          
+
           SCRIPT_ARGS=""
           RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
           RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
           RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
-          
+
           if [ "$RUN_SMOKE" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
           fi
-          
+
           if [ "$RUN_E2E" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
           fi
-          
+
           if [ "$RUN_REGRESSION" = "true" ]; then
             SCRIPT_ARGS="$SCRIPT_ARGS --regression"
           fi
-          
-          echo "Running NFS tests with arguments: $SCRIPT_ARGS"
+
+          echo "Running NFS tests (provider: $VOLUME_CLONE_PROVIDER) with arguments: $SCRIPT_ARGS"
           ./run-nfs-azure-automation.sh $SCRIPT_ARGS
         continue-on-error: true
 
@@ -1144,45 +1321,56 @@ jobs:
 
       - name: Configure Provider Credentials for Cleanup
         run: |
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          CLOUD="${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}"
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          
-          # Azure Provider Credentials
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-        
-          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-          WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
 
-          # Azure Terraform Variables
-          echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-          echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-          # Keep vm_owner compact so the final Terraform VM names stay within 15 characters.
           TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
           TIME_SUFFIX=$(date +"%H%M%S")
           if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
             VM_OWNER="ntly${TIME_SUFFIX}"
-            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           else
             VM_OWNER="adhc${TIME_SUFFIX}"
-            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
           fi
           echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
-          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
-          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+          if [[ "$CLOUD" == "aws" ]]; then
+            echo "TF_DIR=app-deployment/terraform/aws/environments/api" >> $GITHUB_ENV
+            CONTROL_PLANE_AMI="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+            LINUX_WORKER_AMI="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+            echo "TF_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+            echo "TF_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+            echo "TF_VAR_key_name=${{ secrets.AWS_EC2_KEY_PAIR_NAME }}" >> $GITHUB_ENV
+            echo "TF_VAR_control_plane_ami_id=$CONTROL_PLANE_AMI" >> $GITHUB_ENV
+            echo "TF_VAR_linux_worker_ami_id=$LINUX_WORKER_AMI" >> $GITHUB_ENV
+            echo "TF_VAR_ad_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+          elif [[ "$CLOUD" == "azure" ]]; then
+            echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
+            echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+            echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+            CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+            WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+            echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+            echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
+            echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+            echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+          else
+            echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
+            exit 1
+          fi
 
       - name: Download Terraform State
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: terraform-state
-          path: app-deployment/terraform/azure/environments/api
+          path: ${{ env.TF_DIR }}
 
       - name: Initialize Terraform for Cleanup
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform init
 
       - name: Cleanup ONTAP Snapshots
@@ -1336,7 +1524,7 @@ jobs:
 
       - name: Destroy Terraform Resources
         run: |
-          cd app-deployment/terraform/azure/environments/api
+          cd $TF_DIR
           terraform destroy -auto-approve
 
       - name: Clean Up Temporary Files

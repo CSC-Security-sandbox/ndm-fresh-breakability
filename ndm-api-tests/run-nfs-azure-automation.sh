@@ -121,9 +121,15 @@ run_tests() {
     clone_provider=$(echo "$clone_provider" | tr '[:upper:]' '[:lower:]')
 
     # ANF runs stay sequential, and smoke should also stay sequential to avoid
-    # clone contention. ONTAP keeps parallel execution only for end-to-end runs.
+    # clone contention. FSxN uses reduced parallelism (2 procs) due to the per-node
+    # volume limit. ONTAP keeps parallel execution (5 procs) for end-to-end runs.
     if [[ "$clone_provider" == "anf" ]]; then
         echo "Running sequentially for ANF clone provider..." | tee -a "$report_file"
+        ginkgo run -v --timeout="$timeout" "$test_path" -- \
+            --protocol_type="$protocol_type" \
+            --environment="$environment" | tee -a "$report_file"
+    elif [[ "$clone_provider" == "aws-fsxn" ]]; then
+        echo "Running sequentially for FSxN clone provider..." | tee -a "$report_file"
         ginkgo run -v --timeout="$timeout" "$test_path" -- \
             --protocol_type="$protocol_type" \
             --environment="$environment" | tee -a "$report_file"
@@ -153,22 +159,25 @@ run_tests() {
 
 # Test runs
 
+# Resolve cloud environment — set by the CI credential step; defaults to Azure locally
+EFFECTIVE_ENVIRONMENT="${CLOUD_ENVIRONMENT:-Azure}"
+
 #Smoke Testing
 if [[ "$RUN_SMOKE" == true ]]; then
     echo "Running NFS Smoke Tests..."
-    run_tests "smoke" "./tests/smoke" "Azure" "NFS"
+    run_tests "smoke" "./tests/smoke" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 #End-to-End Testing
 if [[ "$RUN_E2E" == true ]]; then
     echo "Running NFS End-to-End Tests..."
-    run_tests "end-to-end" "./tests/e2e" "Azure" "NFS"
+    run_tests "end-to-end" "./tests/e2e" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 #Regression Testing
 if [[ "$RUN_REGRESSION" == true ]]; then
     echo "Running NFS Regression Tests..."
-    run_tests "regression" "./tests/regression" "Azure" "NFS"
+    run_tests "regression" "./tests/regression" "$EFFECTIVE_ENVIRONMENT" "NFS"
 fi
 
 

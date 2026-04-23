@@ -385,9 +385,34 @@ func (c *OntapClient) HideSnapshotDirectory(svmName, volumeName string) error {
 	return nil
 }
 
-// DeleteVolume deletes a volume by UUID
+// DeleteVolume deletes a volume by UUID.
+// FSxN requires the volume to be unmounted and offlined before deletion.
 func (c *OntapClient) DeleteVolume(volumeUUID string) error {
 	endpoint := fmt.Sprintf("/api/storage/volumes/%s", volumeUUID)
+
+	// Step 1: unmount (clear junction path)
+	unmountReq := map[string]interface{}{
+		"nas": map[string]interface{}{"path": ""},
+	}
+	if resp, err := c.doRequest("PATCH", endpoint, unmountReq); resp != nil {
+		resp.Body.Close()
+		_ = err
+	}
+
+	// Step 2: offline the volume
+	offlineReq := map[string]interface{}{"state": "offline"}
+	if resp, err := c.doRequest("PATCH", endpoint, offlineReq); resp != nil {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		_ = err
+		var offlineResp OntapResponse
+		if json.Unmarshal(bodyBytes, &offlineResp) == nil && offlineResp.Job != nil {
+			// wait for offline job — ignore error, proceed to delete anyway
+			_ = c.waitForJob(offlineResp.Job.UUID, 2*time.Minute)
+		}
+	}
+
+	// Step 3: delete
 	resp, err := c.doRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return err
@@ -718,6 +743,36 @@ func (c *OntapClient) CreateNFSExportForVolume(svmName, volumeName string) error
 	}
 
 	LogDebug(fmt.Sprintf("NFS export created and assigned for volume '%s'", volumeName))
+	return nil
+}
+
+// DeleteExportPolicy deletes an NFS export policy by name
+func (c *OntapClient) DeleteExportPolicy(svmName, policyName string) error {
+	policy, err := c.GetExportPolicy(svmName, policyName)
+	if err != nil {
+		// Policy not found — already gone, treat as success
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return fmt.Errorf("failed to get export policy '%s': %w", policyName, err)
+	}
+
+	endpoint := fmt.Sprintf("/api/protocols/nfs/export-policies/%d", policy.ID)
+	resp, err := c.doRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete export policy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusAccepted {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete export policy, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	LogDebug(fmt.Sprintf("Export policy '%s' deleted successfully", policyName))
 	return nil
 }
 
