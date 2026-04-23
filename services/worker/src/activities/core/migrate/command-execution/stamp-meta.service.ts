@@ -137,6 +137,12 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'stamp_time' })
     async stampAccessAndModifiedTime({ command, jobContext, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        // Skip per-command mtime/atime stamping for directories: any subsequent
+        // child write will clobber it. Directories are restamped in a single
+        // post-migration pass driven by DeferredDirStampService.
+        if (command.isDir) {
+            return output;
+        }
         if (command.metadata.mtime && command.metadata.atime) {
             try {
                 if (command?.metadata?.isSymLink) {
