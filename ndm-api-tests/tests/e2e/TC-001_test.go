@@ -367,7 +367,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			By("########################## About NDM END ################################")
 		})
 
-		It("TC-001 - DLM : Should test a small migration from a directory to the destination", func() {
+		FIt("TC-001 - DLM : Should test a small migration from a directory to the destination", func() {
 			By("########################## TC-001 DLM start ################################")
 
 			if MIGRATION_DIR == "" {
@@ -383,10 +383,13 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			uniqueID := uuid.New().String()[:8]
 			protocol := strings.ToLower(string(PROTOCOL_TYPE))
+			// AWS FSxN SMB requires the bare username without the DOMAIN\ prefix;
+			// all other providers (ANF, ONTAP) require the full DOMAIN\username format.
 			username := PROTOCOL_USERNAME
-			if PROTOCOL_TYPE == ProtocolSMB && strings.Contains(PROTOCOL_USERNAME, "\\") {
+			if PROTOCOL_TYPE == ProtocolSMB && VOLUME_CLONE_PROVIDER == VolumeCloneProviderFSxN && strings.Contains(PROTOCOL_USERNAME, "\\") {
 				username = strings.Split(PROTOCOL_USERNAME, "\\")[1]
 			}
+			LogDebug(fmt.Sprintf("DLM username: %s", username))
 
 			// Step 1: Create source file server
 
