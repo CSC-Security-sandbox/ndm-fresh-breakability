@@ -43,6 +43,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	sharedData := SharedSuiteData{
 		AuthToken:                   AuthToken,
 		RefreshToken:                RefreshToken,
+		TokenExpiresAt:              TokenExpiresAt,
 		KeycloakUser:                KeycloakUser,
 		KeycloakPassword:            KeycloakPassword,
 		ClientSecret:                CLIENT_SECRET,

@@ -276,6 +276,8 @@ func init() {
 		}
 	}
 
+	// JWT refresh testing - enabled by default to test short-lived token scenarios
+	// This configures Keycloak with short token lifespan and worker JWT refresh intervals
 	JWT_REFRESH_INTERVAL_MINUTES = 15
 	if envVal := os.Getenv("JWT_REFRESH_INTERVAL_MINUTES"); envVal != "" {
 		if parsedVal, err := strconv.Atoi(envVal); err == nil && parsedVal > 0 {
