@@ -560,7 +560,7 @@ jobs:
 
       - name: Collect and display image details
         run: |
-          SERVICES=$(echo "${{ toJSON(needs.determine-matrix.outputs.matrix) }}" | jq -r '.service | join(",")')
+          SERVICES=$(echo '${{ needs.determine-matrix.outputs.matrix }}' | jq -r '.service | join(",")')
           echo "Built services: $SERVICES"
           echo ""
           
