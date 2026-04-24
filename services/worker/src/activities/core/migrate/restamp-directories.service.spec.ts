@@ -218,4 +218,126 @@ describe('RestampDirectoriesService', () => {
     await service.restampDirectories({ jobRunId: 'job1', batchSize: 13 });
     expect(deferredDirStampService.popBatch).toHaveBeenCalledWith('job1', 13);
   });
+
+  describe('source atime preservation', () => {
+    const jobContextWithSource = {
+      jobConfig: {
+        destinationFileServer: { pathId: 'dest-path-id' },
+        destinationDirectoryPath: '/dest',
+        sourceFileServer: { pathId: 'src-path-id' },
+        sourceDirectoryPath: '/src',
+        options: { preserveAccessTime: true },
+      },
+    };
+
+    it('stamps both destination and source when preserveAccessTime is enabled', async () => {
+      const utimes = fs.promises.utimes as unknown as jest.Mock;
+      utimes.mockResolvedValue(undefined);
+      redisService.getJobManagerContext = jest
+        .fn()
+        .mockResolvedValue(jobContextWithSource) as any;
+
+      deferredDirStampService.popBatch
+        .mockResolvedValueOnce([
+          { fPath: '/a/b', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 2 },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const out = await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(out).toEqual({ attempted: 1, stamped: 1, failed: 0, skipped: 0 });
+      expect(utimes).toHaveBeenCalledTimes(2);
+      expect(utimes).toHaveBeenCalledWith(
+        path.join('/base/job1/dest-path-id/dest', '/a/b'),
+        new Date('2024-01-01T00:00:00.000Z'),
+        new Date('2024-01-02T00:00:00.000Z'),
+      );
+      expect(utimes).toHaveBeenCalledWith(
+        path.join('/base/job1/src-path-id/src', '/a/b'),
+        new Date('2024-01-01T00:00:00.000Z'),
+        new Date('2024-01-02T00:00:00.000Z'),
+      );
+    });
+
+    it('skips source utimes when preserveAccessTime is disabled', async () => {
+      const utimes = fs.promises.utimes as unknown as jest.Mock;
+      utimes.mockResolvedValue(undefined);
+      redisService.getJobManagerContext = jest.fn().mockResolvedValue({
+        jobConfig: {
+          ...jobContextWithSource.jobConfig,
+          options: { preserveAccessTime: false },
+        },
+      }) as any;
+
+      deferredDirStampService.popBatch
+        .mockResolvedValueOnce([
+          { fPath: '/a', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 1 },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(utimes).toHaveBeenCalledTimes(1);
+      expect(utimes).toHaveBeenCalledWith(
+        path.join('/base/job1/dest-path-id/dest', '/a'),
+        expect.any(Date),
+        expect.any(Date),
+      );
+    });
+
+    it('does not fail the record when source utimes fails with EPERM (best-effort preserve)', async () => {
+      const utimes = fs.promises.utimes as unknown as jest.Mock;
+      redisService.getJobManagerContext = jest
+        .fn()
+        .mockResolvedValue(jobContextWithSource) as any;
+
+      // Fail source side with EPERM, destination side succeeds. Parallel
+      // order isn't deterministic, so match by path rather than call index.
+      utimes.mockImplementation(async (p: string) => {
+        if (p.startsWith('/base/job1/src-path-id')) {
+          const err = new Error('perm denied') as any;
+          err.code = 'EPERM';
+          throw err;
+        }
+        return undefined;
+      });
+
+      deferredDirStampService.popBatch
+        .mockResolvedValueOnce([
+          { fPath: '/a', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 1 },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const out = await service.restampDirectories({ jobRunId: 'job1' });
+      expect(out).toEqual({ attempted: 1, stamped: 1, failed: 0, skipped: 0 });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Source atime preserve failed'),
+      );
+    });
+
+    it('still fails the record when destination utimes fails with non-ENOENT', async () => {
+      const utimes = fs.promises.utimes as unknown as jest.Mock;
+      redisService.getJobManagerContext = jest
+        .fn()
+        .mockResolvedValue(jobContextWithSource) as any;
+
+      utimes.mockImplementation(async (p: string) => {
+        if (p.startsWith('/base/job1/dest-path-id')) {
+          const err = new Error('perm denied') as any;
+          err.code = 'EPERM';
+          throw err;
+        }
+        return undefined;
+      });
+
+      deferredDirStampService.popBatch
+        .mockResolvedValueOnce([
+          { fPath: '/a', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 1 },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const out = await service.restampDirectories({ jobRunId: 'job1' });
+      expect(out).toEqual({ attempted: 1, stamped: 0, failed: 1, skipped: 0 });
+    });
+  });
 });

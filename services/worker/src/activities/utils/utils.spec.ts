@@ -487,7 +487,41 @@ describe('utils', () => {
         });
     });
 
- 
+    describe('isMetaUpdated', () => {
+        it('should return true when destination file is missing', () => {
+            const sourceStats = { ctimeMs: 1_000_000 } as fs.Stats;
+            expect(isMetaUpdated(sourceStats)).toBe(true);
+        });
+
+        it('should return true when source ctime is newer than dest ctime beyond tolerance', () => {
+            const sourceStats = { ctimeMs: 1_000_000 + 5_000 } as fs.Stats;
+            const destStats = { ctimeMs: 1_000_000 } as fs.Stats;
+            expect(isMetaUpdated(sourceStats, destStats, 1000)).toBe(true);
+        });
+
+        it('should return false when source ctime is older than dest ctime (directional guard)', () => {
+            // This is the key fix: previous abs-diff logic would flag this as
+            // updated because the destination was recently stamped, causing
+            // an infinite re-stamp loop. Directional check must return false.
+            const sourceStats = { ctimeMs: 1_000_000 } as fs.Stats;
+            const destStats = { ctimeMs: 1_000_000 + 10_000 } as fs.Stats;
+            expect(isMetaUpdated(sourceStats, destStats, 1000)).toBe(false);
+        });
+
+        it('should return false when source and dest ctime differ within tolerance', () => {
+            const sourceStats = { ctimeMs: 1_000_500 } as fs.Stats;
+            const destStats = { ctimeMs: 1_000_000 } as fs.Stats;
+            expect(isMetaUpdated(sourceStats, destStats, 1000)).toBe(false);
+        });
+
+        it('should honor custom tolerance', () => {
+            const sourceStats = { ctimeMs: 1_030_000 } as fs.Stats;
+            const destStats = { ctimeMs: 1_000_000 } as fs.Stats;
+            expect(isMetaUpdated(sourceStats, destStats, 60_000)).toBe(false);
+            expect(isMetaUpdated(sourceStats, destStats, 10_000)).toBe(true);
+        });
+    });
+
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {

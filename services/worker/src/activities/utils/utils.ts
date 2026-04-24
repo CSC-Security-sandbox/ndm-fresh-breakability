@@ -172,10 +172,66 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+// Snapshot the subset of fs.Stats that matters for content/meta comparisons,
+// with Date fields serialized as ISO strings so structured log sinks pick
+// them up cleanly. Returns undefined when no stats object was captured (e.g.
+// destination file missing), so the resulting log payload stays symmetric.
+// Each field is guarded because some real-world mocks / retry paths hand us
+// partial Stats objects — we never want the debug logging to throw and
+// mask the actual comparison result.
+const statsForLog = (file?: fs.Stats) => {
+  if (!file) return undefined;
+  const iso = (d?: Date) => (d instanceof Date ? d.toISOString() : undefined);
+  return {
+    size: file.size,
+    mtime: iso(file.mtime),
+    atime: iso(file.atime),
+    ctime: iso(file.ctime),
+    mode: file.mode,
+    uid: file.uid,
+    gid: file.gid,
+    ino: file.ino,
+    isDirectory: typeof file.isDirectory === 'function' ? file.isDirectory() : undefined,
+    isFile: typeof file.isFile === 'function' ? file.isFile() : undefined,
+    isSymbolicLink: typeof file.isSymbolicLink === 'function' ? file.isSymbolicLink() : undefined,
+  };
+};
 
-// added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
+  const isUpdated = !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+  console.debug('[isContentUpdate]', {
+    file: fileName,
+    sourceStats: statsForLog(sFile),
+    destinationStats: statsForLog(dFile),
+    result: isUpdated,
+  });
+  return isUpdated;
+};
+
+// Directional check: only flag a meta update when the source ctime is newer
+// than the destination ctime beyond the tolerance. Using abs-diff caused false
+// positives because every STAMP_META bumps the destination ctime (chmod/chown/
+// utimes all mutate ctime on POSIX) — so a freshly-stamped dest would look
+// "different" on the next scan and get re-stamped forever. With sourceCtime >
+// destCtime + tol, once the dest is stamped its ctime is >= source ctime and
+// we stop flipping.
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000, fileName = 'unknown'): boolean => {
+  const sourceCtimeMs = sFile.ctimeMs;
+  const destinationCtimeMs = dFile?.ctimeMs;
+  const thresholdCtimeMs = destinationCtimeMs !== undefined ? destinationCtimeMs + toleranceMs : undefined;
+  const isUpdated = !dFile || (thresholdCtimeMs !== undefined && sourceCtimeMs > thresholdCtimeMs);
+  console.debug('[isMetaUpdated]', {
+    file: fileName,
+    sourceStats: statsForLog(sFile),
+    destinationStats: statsForLog(dFile),
+    sourceCtimeMs,
+    destinationCtimeMs,
+    thresholdCtimeMs,
+    toleranceMs,
+    result: isUpdated,
+  });
+  return isUpdated;
+};
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(

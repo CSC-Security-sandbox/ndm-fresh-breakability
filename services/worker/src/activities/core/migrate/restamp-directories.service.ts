@@ -63,6 +63,13 @@ export class RestampDirectoriesService {
       const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
       const tPathId = jobContext.jobConfig?.destinationFileServer?.pathId;
       const destDirectoryPath = jobContext.jobConfig?.destinationDirectoryPath;
+      const sPathId = jobContext.jobConfig?.sourceFileServer?.pathId;
+      const sourceDirectoryPath = jobContext.jobConfig?.sourceDirectoryPath;
+      // Preserve atime on the source in the same pass that stamps the
+      // destination. Running both sides together minimizes ctime drift so
+      // the directional isMetaUpdated check doesn't re-flag these dirs on
+      // the next scan.
+      const preserveSourceAccessTime = !!jobContext.jobConfig?.options?.preserveAccessTime;
 
       if (!tPathId) {
         this.logger.warn(`[${jobRunId}] No destination pathId on job config — skipping directory restamp pass.`);
@@ -70,15 +77,21 @@ export class RestampDirectoriesService {
       }
 
       const baseTargetPrefixPath = basePrefix(jobRunId, tPathId, destDirectoryPath);
+      // Only compute the source prefix when we can actually use it — if
+      // preserveAccessTime is off, or the job has no source pathId (retry
+      // workflows, etc.), we skip the source utimes entirely.
+      const baseSourcePrefixPath = (preserveSourceAccessTime && sPathId)
+        ? basePrefix(jobRunId, sPathId, sourceDirectoryPath)
+        : undefined;
       const initialCount = await this.deferredDirStampService.count(jobRunId).catch(() => 0);
-      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}).`);
+      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}, preserveSourceAccessTime=${!!baseSourcePrefixPath}).`);
 
       while (true) {
         const batch = await this.deferredDirStampService.popBatch(jobRunId, batchSize);
         if (!batch || batch.length === 0) break;
 
         // Stamp within a batch in parallel — each utimes is independent.
-        const results = await Promise.allSettled(batch.map(rec => this.applyStamp(baseTargetPrefixPath, rec, jobRunId)));
+        const results = await Promise.allSettled(batch.map(rec => this.applyStamp(baseTargetPrefixPath, baseSourcePrefixPath, rec, jobRunId)));
         for (const r of results) {
           output.attempted += 1;
           if (r.status === "fulfilled") {
@@ -111,7 +124,12 @@ export class RestampDirectoriesService {
     }
   }
 
-  private async applyStamp(baseTargetPrefixPath: string, rec: DeferredDirStamp, jobRunId: string): Promise<"stamped" | "skipped"> {
+  private async applyStamp(
+    baseTargetPrefixPath: string,
+    baseSourcePrefixPath: string | undefined,
+    rec: DeferredDirStamp,
+    jobRunId: string,
+  ): Promise<"stamped" | "skipped"> {
     if (!rec?.fPath || !rec?.atime || !rec?.mtime) return "skipped";
 
     // path.join handles separator normalization across platforms and trims
@@ -125,6 +143,35 @@ export class RestampDirectoriesService {
       return "skipped";
     }
 
+    // Run destination stamp and (optional) source atime preservation in
+    // parallel so both sides' ctime lands in the same narrow window. This
+    // is essential for the directional isMetaUpdated check: if we stamped
+    // the destination seconds later than we touched the source, a
+    // subsequent scan would see source ctime > dest ctime and re-queue
+    // the dir for another round.
+    const destStamp = this.stampWithRecovery(targetPath, atime, mtime, jobRunId, "target");
+    const sourceStamp = baseSourcePrefixPath
+      ? this.stampWithRecovery(path.join(baseSourcePrefixPath, rec.fPath), atime, mtime, jobRunId, "source")
+      : Promise.resolve<"stamped" | "skipped">("skipped");
+
+    const [destResult, sourceResult] = await Promise.all([destStamp, sourceStamp]);
+
+    // The destination stamp is the primary goal of the post-pass; a source
+    // preserve failure is best-effort (already logged inside
+    // stampWithRecovery) and shouldn't promote the record to "failed".
+    // stampWithRecovery rethrows real destination errors so Promise.all
+    // rejects and the outer allSettled counts this as failed.
+    void sourceResult;
+    return destResult;
+  }
+
+  private async stampWithRecovery(
+    targetPath: string,
+    atime: Date,
+    mtime: Date,
+    jobRunId: string,
+    side: "source" | "target",
+  ): Promise<"stamped" | "skipped"> {
     try {
       await fs.promises.utimes(targetPath, atime, mtime);
       return "stamped";
@@ -134,7 +181,13 @@ export class RestampDirectoriesService {
       // restamp pass doesn't surface phantom failure counts; surface real
       // I/O errors as failures so they're observable.
       if (error?.code === "ENOENT") {
-        this.logger.debug(`[${jobRunId}] Restamp skipped — target missing: ${targetPath}`);
+        this.logger.debug(`[${jobRunId}] Restamp skipped — ${side} missing: ${targetPath}`);
+        return "skipped";
+      }
+      if (side === "source") {
+        // Source preserve is best-effort: swallow so we don't fail the
+        // whole record if we can't write atime on the source.
+        this.logger.warn(`[${jobRunId}] Source atime preserve failed for ${targetPath}: ${error?.message ?? error}`);
         return "skipped";
       }
       this.logger.warn(`[${jobRunId}] Restamp failed for ${targetPath}: ${error?.message ?? error}`);

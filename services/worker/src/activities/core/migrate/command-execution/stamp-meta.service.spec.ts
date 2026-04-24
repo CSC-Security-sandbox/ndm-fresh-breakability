@@ -756,14 +756,14 @@ describe('StampMetaService', () => {
 
         await service.stampMetaData(input);
 
-        // preserveAccessAndModifiedTime calls utimes on source first,
-        // then stampPermission calls chmod on target,
-        // then stampAccessAndModifiedTime calls utimes on target.
-        // chmod must run before the final utimes so it does not overwrite atime.
+        // Order: chown -> chmod -> (preserveAccessAndModifiedTime on source ||
+        // stampAccessAndModifiedTime on target) in parallel.
+        // chmod must still run before the target utimes so it does not
+        // overwrite the stamped atime/mtime on the destination.
         const chmodOrder = (mockFs.promises.chmod as jest.Mock).mock.invocationCallOrder[0];
         const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.invocationCallOrder;
-        const utimesTargetOrder = utimesCalls[utimesCalls.length - 1]; // last utimes is on target
-        expect(chmodOrder).toBeLessThan(utimesTargetOrder);
+        const firstUtimesOrder = utimesCalls[0];
+        expect(chmodOrder).toBeLessThan(firstUtimesOrder);
       });
 
       it('should still stamp atime when preservePermissions is false but preserveAccessTime is true', async () => {

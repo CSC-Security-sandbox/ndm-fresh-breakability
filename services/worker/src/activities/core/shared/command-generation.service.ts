@@ -479,7 +479,7 @@ export class CommandGenerationService {
     };
 
     const targetExisted = !!dFile;
-    if (isContentUpdate(sFile, dFile)) {
+    if (isContentUpdate(sFile, dFile, fPath)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),
@@ -495,7 +495,7 @@ export class CommandGenerationService {
       );
     }
 
-    if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+    if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs, fPath)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),

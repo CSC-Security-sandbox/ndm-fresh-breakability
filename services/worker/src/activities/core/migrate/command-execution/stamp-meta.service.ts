@@ -36,42 +36,52 @@ export class StampMetaService {
 
             if (process.platform === 'win32') {
 
-                // Stamp SID to object
+                // Step 1: ACL (target) — must succeed before we touch target utimes,
+                // and independent of source-side work.
+                const aclStampOutput = await this.stampObjectACL(input);
+                output.sourceErrors.push(...aclStampOutput.sourceErrors);
+                output.targetErrors.push(...aclStampOutput.targetErrors);
 
-                const [aclStampOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampObjectACL(input),
-                    this.preserveAccessAndModifiedTime(input)
-                ]);
-
-                output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
-                
-                if(aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length ===0) {
-                // Stamp access and modified time
-                    const timeOutput = await this.stampAccessAndModifiedTime(input);
-                    output.sourceErrors.push(...timeOutput.sourceErrors);
-                    output.targetErrors.push(...timeOutput.targetErrors);
+                if (aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length === 0) {
+                    // Step 2: preserve atime on source + stamp mtime/atime on
+                    // destination together. Running them in parallel minimizes
+                    // drift between the two sides' ctime — paired with the
+                    // directional isMetaUpdated check, this prevents a
+                    // re-stamp loop on the next scan.
+                    const [preserveTimeOutput, timeOutput] = await Promise.all([
+                        this.preserveAccessAndModifiedTime(input),
+                        this.stampAccessAndModifiedTime(input),
+                    ]);
+                    output.sourceErrors.push(...preserveTimeOutput.sourceErrors, ...timeOutput.sourceErrors);
+                    output.targetErrors.push(...preserveTimeOutput.targetErrors, ...timeOutput.targetErrors);
                 }
             }
             else {
 
-                // Step 1: chown (targetPath) and preserve source time (sourcePath) are independent — run in parallel
-                const [gidUidOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampGIDandUID(input),
-                    this.preserveAccessAndModifiedTime(input),
-                ]);
-                output.sourceErrors.push(...gidUidOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...gidUidOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                // Step 1: chown (targetPath) — must run before target chmod/utimes
+                // so it doesn't reset setuid/setgid or clobber freshly-written
+                // timestamps.
+                const gidUidOutput = await this.stampGIDandUID(input);
+                output.sourceErrors.push(...gidUidOutput.sourceErrors);
+                output.targetErrors.push(...gidUidOutput.targetErrors);
 
                 // Step 2: chmod must run after chown (changing owner can reset setuid/setgid bits)
                 const permissionsOutput = await this.stampPermission(input);
                 output.sourceErrors.push(...permissionsOutput.sourceErrors);
                 output.targetErrors.push(...permissionsOutput.targetErrors);
 
-                // Step 3: utimes must run last so chmod does not overwrite atime/mtime
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
+                // Step 3: preserve atime on source + stamp mtime/atime on
+                // destination together. Running them in parallel keeps both
+                // sides' ctime close enough that the directional
+                // isMetaUpdated check won't flag the pair again on the next
+                // scan. Target utimes must come AFTER chmod so chmod doesn't
+                // overwrite the stamped atime/mtime.
+                const [preserveTimeOutput, timeOutput] = await Promise.all([
+                    this.preserveAccessAndModifiedTime(input),
+                    this.stampAccessAndModifiedTime(input),
+                ]);
+                output.sourceErrors.push(...preserveTimeOutput.sourceErrors, ...timeOutput.sourceErrors);
+                output.targetErrors.push(...preserveTimeOutput.targetErrors, ...timeOutput.targetErrors);
             }
         }
 
