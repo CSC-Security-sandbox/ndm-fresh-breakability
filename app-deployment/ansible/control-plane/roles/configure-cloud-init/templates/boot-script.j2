@@ -126,16 +126,10 @@ load_docker_images() {
     log "Loading Docker images into MicroK8s registry..."
 
     if [ -f "$HOME/ndm-docker-images.tar.gz" ]; then
-        log "Decompressing third-party Docker images..."
-        gunzip "$HOME/ndm-docker-images.tar.gz" || handle_failure "Failed to decompress third-party Docker images"
-        log "Importing third-party Docker images..."
-        retry $MAX_RETRIES "microk8s images import $HOME/ndm-docker-images.tar" || handle_failure "Failed to load third-party Docker images"
-        rm -f "$HOME/ndm-docker-images.tar"
-    elif [ -f "$HOME/ndm-docker-images.tar" ]; then
-        log "Importing third-party Docker images..."
-        retry $MAX_RETRIES "microk8s images import $HOME/ndm-docker-images.tar" || handle_failure "Failed to load third-party Docker images"
+        log "Importing third-party Docker images from gzip bundle (stream)..."
+        retry $MAX_RETRIES "gunzip -c \"$HOME/ndm-docker-images.tar.gz\" | microk8s images import -" || handle_failure "Failed to load third-party Docker images"
     else
-        log "Third-party Docker images tar not found, skipping"
+        log "Third-party Docker images bundle (ndm-docker-images.tar.gz) not found, skipping"
     fi
 
     if [ -f "$HOME/datamigrator-images-$BUILD_VERSION.tar.gz" ]; then

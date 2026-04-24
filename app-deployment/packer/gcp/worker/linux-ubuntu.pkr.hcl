@@ -93,6 +93,18 @@ variable "worker_binary_path" {
   description = "The path to the worker binary"
 }
 
+variable "verbose" {
+  type        = bool
+  description = "Verbose Ansible (set PKR_VAR_verbose via CI)"
+  default     = false
+}
+
+variable "ansible_log_path" {
+  type        = string
+  description = "If set, ANSIBLE_LOG_PATH on the controller (CI runner) for the main playbook run"
+  default     = ""
+}
+
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
@@ -145,15 +157,23 @@ build {
     galaxy_file            = "../../../ansible/worker/playbooks/linux-requirements.yaml"
     galaxy_force_with_deps = true
     user                   = var.ssh_username
-    ansible_ssh_extra_args =  [ "-oHostKeyAlgorithms=+ecdsa-sha2-nistp384", "-v" ]
-    ansible_env_vars = [
-      "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
-    ]
-    extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "local_binary_path=${var.worker_binary_path}",
-      "--extra-vars", "build_version=${var.build_version}"
-    ]
+    ansible_ssh_extra_args = var.verbose ? ["-oHostKeyAlgorithms=+ecdsa-sha2-nistp384", "-vv"] : ["-oHostKeyAlgorithms=+ecdsa-sha2-nistp384", "-v"]
+    ansible_env_vars = concat(
+      [
+        "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg",
+        "ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks",
+      ],
+      var.ansible_log_path != "" ? ["ANSIBLE_LOG_PATH=${var.ansible_log_path}"] : [],
+      var.verbose ? ["ANSIBLE_VERBOSITY=3"] : [],
+    )
+    extra_arguments = concat(
+      [
+        "--extra-vars", "display_skipped_hosts=false",
+        "--extra-vars", "local_binary_path=${var.worker_binary_path}",
+        "--extra-vars", "build_version=${var.build_version}",
+      ],
+      var.verbose ? ["-vvv"] : [],
+    )
   }
 
   provisioner "shell" {

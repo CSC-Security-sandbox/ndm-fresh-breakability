@@ -1,4 +1,67 @@
 ---
+# Fluentd writes log files into the /ndm-logs hostPath volume (see
+# fluentd-values.yaml.j2 match paths) and support-service reads from the
+# same directory (BASE_LOG_PATH=/ndm-logs) to build support bundles.
+# The Kubernetes DirectoryOrCreate semantics would otherwise create the
+# directory as root:root 0755 on first pod scheduling, which is not
+# writable by the fluentd container.  The fluent user's UID varies
+# across fluent/fluentd-kubernetes-daemonset base images (was 100 in
+# older debian-elasticsearch variants, different in v1.17.1-debian-
+# forward-1.2 that ndm-fluentd-loki is built from) so we cannot rely on
+# a hardcoded owner UID matching the container.  Pre-create the
+# directory with sticky-bit 01777 (same as /tmp) so the fluent
+# container can write its per-date / per-project / per-service
+# subdirectories regardless of its image UID, while still preventing
+# cross-user deletion of subtrees.  vm_username retains the default
+# POSIX ACL so operators can still traverse and read the logs.
+- name: Ensure /ndm-logs hostPath exists and is writable by Fluentd
+  become: yes
+  file:
+    path: /ndm-logs
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: "01777"
+
+- name: Set default ACL for {{ vm_username }} on /ndm-logs
+  become: yes
+  ansible.posix.acl:
+    path: /ndm-logs
+    entity: "{{ vm_username }}"
+    etype: user
+    permissions: rwx
+    default: true
+    state: present
+
+# The fluent Helm chart mounts the host's /var/log into the container so
+# fluentd can tail /var/log/containers/*.log and stage its buf_file
+# buffers (path /var/log/fluentd-buffers/*, see fileConfigs in
+# fluentd-values.yaml.j2).  /var/log on the VM is root:root 0755, and
+# the fluent user inside the container is not root, so it cannot
+# `mkdir /var/log/fluentd-buffers` on its own (observed as
+# `Errno::EACCES error="Permission denied @ dir_s_mkdir - /var/log/fluentd-buffers"`
+# in run 24611261104).  Pre-create the buffer directory with the same
+# sticky-bit 01777 we use for /ndm-logs so the buf_file plugin can
+# create its per-output subtrees regardless of the image's UID.
+- name: Ensure /var/log/fluentd-buffers exists and is writable by Fluentd
+  become: yes
+  file:
+    path: /var/log/fluentd-buffers
+    state: directory
+    owner: "{{ vm_username }}"
+    group: "{{ vm_username }}"
+    mode: "01777"
+
+- name: Set default ACL for {{ vm_username }} on /var/log/fluentd-buffers
+  become: yes
+  ansible.posix.acl:
+    path: /var/log/fluentd-buffers
+    entity: "{{ vm_username }}"
+    etype: user
+    permissions: rwx
+    default: true
+    state: present
+
 - name: Create Fluentd directory
   become: yes
   file:
@@ -43,12 +106,99 @@
     msg: "Helm Install (fluentd): stderr: {{ SHELL_STDOUT.stderr_lines }} stdout: {{ SHELL_STDOUT.stdout_lines }}"
 
 - name: Wait for Fluentd pods to be ready
-  become: yes
-  shell: kubectl wait --namespace="fluentd" --for=condition=Ready pod --all
-  register: kubectl_get_pods
-  retries: 10
-  delay: 25
-  until: kubectl_get_pods.rc == 0
+  block:
+    # Wait for Fluentd DaemonSet pods to reach Ready, but abort early if a
+    # pod lands in an unrecoverable waiting state (CrashLoopBackOff,
+    # ImagePullBackOff, ErrImagePull, CreateContainerConfigError,
+    # InvalidImageName).  Previously this task used a single
+    # `kubectl wait --timeout=120s` retried 10 times with a 25s delay,
+    # which meant ~26 min of wasted wall-clock time before the rescue
+    # diagnostics ran when the pod was already crashing (observed in run
+    # 24606547305).  With the fail-fast loop below, a healthy pod still
+    # reaches Ready well under a minute, but a broken pod is detected
+    # and surfaced to the rescue block within ~30s.
+    - name: Wait for Fluentd pods to be ready (fail-fast on CrashLoopBackOff)
+      become: yes
+      shell: |
+        set -o pipefail
+        NS=fluentd
+        MAX_ATTEMPTS=8
+        WAIT_TIMEOUT=30s
+        FATAL_REASONS="CrashLoopBackOff ImagePullBackOff ErrImagePull CreateContainerConfigError InvalidImageName RunContainerError"
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          echo "[attempt $attempt/$MAX_ATTEMPTS] kubectl wait --for=condition=Ready --timeout=$WAIT_TIMEOUT"
+          if kubectl wait --namespace="$NS" --for=condition=Ready pod --all --timeout="$WAIT_TIMEOUT"; then
+            echo "All fluentd pods are Ready"
+            exit 0
+          fi
+          echo "=== pod status snapshot ==="
+          kubectl get pods -n "$NS" -o wide 2>&1 || true
+          waiting_reasons=$(kubectl get pods -n "$NS" \
+            -o jsonpath='{.items[*].status.containerStatuses[*].state.waiting.reason}' \
+            2>/dev/null || true)
+          echo "waiting reasons: ${waiting_reasons:-<none>}"
+          for reason in $FATAL_REASONS; do
+            case " $waiting_reasons " in
+              *" $reason "*)
+                echo "fail-fast: fluentd pod is in unrecoverable state ($reason); aborting retry loop"
+                exit 2
+                ;;
+            esac
+          done
+        done
+        echo "retry window exhausted without fluentd pods becoming Ready"
+        exit 1
+      args:
+        executable: /bin/bash
+      register: kubectl_wait_fluentd
+      changed_when: false
+
+  rescue:
+    - name: Fluentd diagnostics — pods, services, and recent events
+      become: yes
+      shell: |
+        set +e
+        echo "=== kubectl get pods,svc -n fluentd -o wide ==="
+        kubectl get pods,svc -n fluentd -o wide 2>&1
+        echo "=== kubectl get events -n fluentd (last 80) ==="
+        kubectl get events -n fluentd --sort-by='.lastTimestamp' 2>&1 | tail -80
+      register: fluentd_diag_get
+      changed_when: false
+
+    - name: Fluentd diagnostics — describe pods
+      become: yes
+      shell: kubectl describe pods -n fluentd 2>&1
+      register: fluentd_diag_describe
+      changed_when: false
+      failed_when: false
+
+    - name: Fluentd diagnostics — container logs
+      become: yes
+      shell: |
+        kubectl logs -n fluentd --all-containers=true --tail=400 --prefix=true 2>&1 \
+          || kubectl logs -n fluentd -l app.kubernetes.io/instance=fluentd --all-containers=true --tail=400 --prefix=true 2>&1
+      register: fluentd_diag_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Fluentd diagnostics — pods and events (stdout)
+      ansible.builtin.debug:
+        var: fluentd_diag_get.stdout
+
+    - name: Fluentd diagnostics — describe pods (stdout)
+      ansible.builtin.debug:
+        var: fluentd_diag_describe.stdout
+
+    - name: Fluentd diagnostics — container logs (stdout)
+      ansible.builtin.debug:
+        var: fluentd_diag_logs.stdout
+
+    - name: Fail — Fluentd pods did not become Ready
+      ansible.builtin.fail:
+        msg: >-
+          Fluentd pods did not become Ready within the retry window.
+          See "Print Fluentd diagnostics" and Helm output above.
+          Ensure Grafana/Loki is deployed before this play (loki-gateway.grafana.svc must exist).
 
 - name: Check Fluentd pod status
   shell: kubectl get pods -n fluentd

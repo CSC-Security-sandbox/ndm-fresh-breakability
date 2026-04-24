@@ -1298,6 +1298,13 @@ func UpdateAppAdmin(keycloakUser, keycloakPassword string) error {
 	return nil
 }
 
+// RunSSHScript is the exported wrapper around sshRunScript for callers outside
+// this package (for example, the observability test suite that SSHs into the
+// control-plane VM to introspect the in-cluster Prometheus).
+func RunSSHScript(config SSHConfig, script string) (string, error) {
+	return sshRunScript(config, script)
+}
+
 // sshRunScript connects via SSH to a worker and runs the provided script.
 func sshRunScript(config SSHConfig, script string) (string, error) {
 	sshConfig := &ssh.ClientConfig{

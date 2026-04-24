@@ -12,6 +12,10 @@
     upgrade_dir: "/upgrade"
     bundle_dir: "{{ upgrade_dir }}/{{ build_version }}"
     checksum_file: "checksums-{{ build_version }}.sha256"
+    # Third-party images (Keycloak, Postgres, Redis, …) — gzip bundle from build-push-third-party-images.
+    third_party_tar_gz: "CP/docker/ndm-docker-images.tar.gz"
+    # Application images bundle; gunzip before ctr import. docker_tar is the uncompressed path after Step 5b.
+    docker_tar_gz: "CP/docker/datamigrator-images-{{ build_version }}.tar.gz"
     docker_tar: "CP/docker/datamigrator-images-{{ build_version }}.tar"
     helm_tgz: "CP/helm/datamigrator-helmchart-{{ build_version }}.tgz"
     worker_linux_tar: "worker/linux/datamigrator-worker-linux-{{ build_version }}.tar.gz"
@@ -122,7 +126,7 @@
       ansible.builtin.debug:
         msg:
           - "Previous Helm chart: {{ old_helm_chart if old_helm_chart | length > 0 else 'NOT FOUND' }}"
-          - "Old Docker images: already in MicroK8s registry (import is additive)"
+          - "Docker images: ctr import is additive; upgrade bundle may refresh third-party and application image layers."
           - "{{ 'Full rollback to previous version is available.' if old_helm_chart | length > 0 else 'WARNING: Old Helm chart not found on disk. Keep previous upgrade bundle for rollback capability.' }}"
 
     # =========================================================================
@@ -225,15 +229,51 @@
     # =========================================================================
     - name: "Steps 5-7 — Deploy new version (with auto-rollback on failure)"
       block:
-        # === Step 5: Import Docker images ===
-        - name: "Step 5 — Import Docker images into MicroK8s"
+        # === Step 5: Import Docker images (third-party, then NDM application) ===
+        - name: "Step 5a — Stat third-party Docker bundle (gzip)"
+          ansible.builtin.stat:
+            path: "{{ bundle_dir }}/{{ third_party_tar_gz }}"
+          register: third_party_gz_stat
+
+        - name: "Step 5a — Import third-party Docker images from gzip bundle"
+          ansible.builtin.shell: |
+            set -o pipefail
+            gunzip -c "{{ bundle_dir }}/{{ third_party_tar_gz }}" | microk8s ctr images import -
+          args:
+            executable: /bin/bash
+          environment: "{{ helm_environment }}"
+          when: third_party_gz_stat.stat.exists
+
+        - name: "Step 5a — Import legacy third-party Docker tars (no gzip bundle)"
+          ansible.builtin.shell: |
+            set -euo pipefail
+            D="{{ bundle_dir }}/CP/docker"
+            if [ -f "$D/ndm-thirdparty-image.tar" ]; then
+              microk8s ctr images import "$D/ndm-thirdparty-image.tar"
+            elif [ -f "$D/ndm-docker-images.tar" ]; then
+              microk8s ctr images import "$D/ndm-docker-images.tar"
+            fi
+          args:
+            executable: /bin/bash
+          environment: "{{ helm_environment }}"
+          when: not third_party_gz_stat.stat.exists
+
+        - name: "Step 5b — Decompress application Docker images archive"
+          ansible.builtin.command:
+            argv:
+              - gunzip
+              - -f
+              - "{{ bundle_dir }}/{{ docker_tar_gz }}"
+          environment: "{{ helm_environment }}"
+
+        - name: "Step 5c — Import NDM application Docker images into MicroK8s"
           ansible.builtin.command: >
             microk8s ctr images import "{{ bundle_dir }}/{{ docker_tar }}"
           environment: "{{ helm_environment }}"
 
         - name: "Step 5 — Display Docker import result"
           ansible.builtin.debug:
-            msg: "Docker images imported successfully from {{ docker_tar }}"
+            msg: "NDM application images imported from {{ docker_tar }}; third-party layers imported when present in bundle"
 
         # === Step 6: Fresh Helm install ===
         - name: "Step 6 — Install Datamigrator via Helm"
@@ -321,6 +361,11 @@
           loop:
             - "{{ docker_tar }}"
             - "{{ helm_tgz }}"
+
+        - name: "Step 7 — Move third-party Docker bundle to /root (when gzip bundle was in archive)"
+          ansible.builtin.command: >
+            mv "{{ bundle_dir }}/{{ third_party_tar_gz }}" /root/
+          when: third_party_gz_stat.stat.exists
 
       rescue:
         # =================================================================

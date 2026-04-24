@@ -39,7 +39,10 @@ fileConfigs:
       @id in_tail_container_logs
       @label @KUBERNETES
       path /var/log/containers/*.log
-      pos_file /var/log/fluentd-containers.log.pos
+      # pos files live under /var/log/fluentd-buffers (pre-created 01777
+      # by Ansible) because /var/log on the host is root:root 0755 and
+      # the fluent user in the container cannot create new files there.
+      pos_file /var/log/fluentd-buffers/fluentd-containers.log.pos
       tag kubernetes.*
       read_from_head true
       <parse>
@@ -78,7 +81,7 @@ fileConfigs:
       @id in_tail_istio_access_logs
       @label @ISTIO
       path /var/log/containers/*istio-ingressgateway*istio-proxy*.log
-      pos_file /var/log/fluentd-istio-access.log.pos
+      pos_file /var/log/fluentd-buffers/fluentd-istio-access.log.pos
       tag istio.access
       read_from_head true
       <parse>

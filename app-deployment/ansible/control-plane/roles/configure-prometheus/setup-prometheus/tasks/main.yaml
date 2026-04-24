@@ -35,7 +35,7 @@
     helm delete prometheus --namespace "prometheus"
     kubectl delete pvc --all --namespace "prometheus"
     kubectl delete -f $HOME/prometheus/prometheus-storageclass.yaml
-    kubectl delete -f $HOME/alertmanager/alertmanager-storageclass.yaml
+    kubectl delete -f $HOME/prometheus/alertmanager-storageclass.yaml
     kubectl delete -f $HOME/prometheus/prometheus-alertmanager-pv.yaml
     kubectl delete -f $HOME/prometheus/prometheus-server-pv.yaml
     kubectl delete -f $HOME/prometheus/prometheus-namespace.yaml
@@ -48,7 +48,7 @@
   shell: |
     kubectl apply -f $HOME/prometheus/prometheus-namespace.yaml
     kubectl apply -f $HOME/prometheus/prometheus-storageclass.yaml
-    kubectl apply -f $HOME/alertmanager/alertmanager-storageclass.yaml
+    kubectl apply -f $HOME/prometheus/alertmanager-storageclass.yaml
     kubectl apply -f $HOME/prometheus/prometheus-alertmanager-pv.yaml
     kubectl apply -f $HOME/prometheus/prometheus-server-pv.yaml
   args:

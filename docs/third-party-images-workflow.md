@@ -2,9 +2,9 @@
 
 ## Overview
 
-The GitHub Actions workflow at `.github/workflows/build-push-third-party-images.yaml` automates building and uploading `ndm-docker-images.tar` — a tarball containing all third-party container images required by the NDM control plane.
+The GitHub Actions workflow at `.github/workflows/build-push-third-party-images.yaml` automates building and uploading `ndm-docker-images.tar.gz` — a **gzip-compressed** tarball containing all third-party container images required by the NDM control plane (compressed once in CI; consumers stream-import and do not re-gzip).
 
-This tarball is consumed by the VM image build workflow (`ndm-vm-image-build.yaml`), which downloads it from Artifactory and side-loads the images into MicroK8s via `microk8s images import`.
+This bundle is consumed by the VM image build workflow (`ndm-vm-image-build.yaml`), which downloads it from Artifactory and side-loads the images into MicroK8s (for example `gunzip -c … | microk8s images import -` or equivalent `ctr` import).
 
 ## Usage
 
@@ -17,11 +17,11 @@ The Keycloak image tag is pinned in code (`KEYCLOAK_TAG` env var at the top of t
 ## What it does
 
 1. Pulls 28 third-party container images for `linux/amd64` from Docker Hub, Quay.io, GHCR, and registry.k8s.io
-2. Saves all images into a single `ndm-docker-images.tar` via `docker save`
+2. Exports all images into a single `ndm-docker-images.tar`, then compresses with `gzip -1` to produce `ndm-docker-images.tar.gz`
 3. Generates a version string in the format `YYYYMMDD-HHMMSS-<7-char git SHA>` (e.g., `20260404-143022-a1b2c3d`)
-4. Uploads the tarball and a `manifest.json` to a versioned directory in Artifactory
+4. Uploads the `.tar.gz` and a `manifest.json` to a versioned directory in Artifactory
 5. Updates `latest.json` to point to the new version
-6. Uploads a backward-compatible copy at the flat path for unconverted consumers
+6. Uploads the same bytes to the flat path `ndm-docker-images.tar.gz` (convenience copy; VM build uses `latest` or a version id only)
 7. Prints a summary with version, image count, and tarball size
 
 If the Bitnami Keycloak image cannot be pulled from Docker Hub, the workflow automatically falls back to AWS ECR Public Gallery and retags the image so Helm references remain unchanged.
@@ -33,12 +33,12 @@ Each build produces a uniquely versioned tarball in Artifactory. The layout is:
 ```
 cicd/ndm/docker-images/
   latest.json                              # pointer to the current version
-  ndm-docker-images.tar                    # copy of current version (backward compat)
+  ndm-docker-images.tar.gz                 # latest build (flat path; same as current version)
   20260404-143022-a1b2c3d/
-    ndm-docker-images.tar                  # versioned tarball
+    ndm-docker-images.tar.gz               # versioned gzip bundle
     manifest.json                          # build metadata (images, commit, timestamp)
   20260401-091500-f4e5d6a/
-    ndm-docker-images.tar
+    ndm-docker-images.tar.gz
     manifest.json
 ```
 
@@ -49,7 +49,7 @@ Points to the most recent successful build:
 ```json
 {
   "version": "20260404-143022-a1b2c3d",
-  "tarball_url": "cicd/ndm/docker-images/20260404-143022-a1b2c3d/ndm-docker-images.tar",
+  "tarball_url": "cicd/ndm/docker-images/20260404-143022-a1b2c3d/ndm-docker-images.tar.gz",
   "image_count": 28,
   "tarball_size": "8.2G",
   "commit": "a1b2c3d...",

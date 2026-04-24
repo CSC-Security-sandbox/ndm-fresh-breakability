@@ -81,9 +81,9 @@ on:
             }
           }
       docker_images_version:
-        description: 'Third-party docker images tarball version. "default" uses the original unversioned tarball. "latest" auto-resolves from latest.json. Or specify an exact version (e.g. 20260404-143022-a1b2c3d).'
+        description: 'Third-party images bundle: latest (resolve via Artifactory latest.json) or explicit version id (directory under docker-images/)'
         required: false
-        default: 'default'
+        default: 'latest'
         type: string
       run_e2e:
         description: 'Run E2E tests'
@@ -109,6 +109,11 @@ on:
         options:
           - default
           - lean
+      verbose:
+        description: 'Extra Ansible (-vvv) and Packer debug logs for VM build'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '30 18 * * *'
   workflow_call:
@@ -127,6 +132,11 @@ on:
         required: false
         default: 'default'
         type: string
+      verbose:
+        description: 'Extra Ansible (-vvv) and Packer debug logs for VM build'
+        required: false
+        type: boolean
+        default: false
 
 permissions: 
   contents: read
@@ -370,23 +380,23 @@ jobs:
           BUILD_TYPE="${{ steps.build_version.outputs.build_type }}"
           BUILD_VERSION="${{ steps.build_version.outputs.build_version }}"
 
-          # Upload Docker image tar
-          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar ]; then
+          # Upload Docker image bundle (gzip after docker save in get_tags.sh)
+          if [ -f app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar.gz ]; then
             if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
-              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar"
+              ARTIFACTORY_PATH="releases/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar.gz"
             else
-              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar"
+              ARTIFACTORY_PATH="builds/${BUILD_TYPE}/${BUILD_VERSION}/docker/datamigrator-images-${BUILD_VERSION}.tar.gz"
             fi
             for REPO_PATH in "cicd/ndm" "team/ndm"; do
               TARGET_URL="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/${REPO_PATH}/${ARTIFACTORY_PATH}"
-              echo "Uploading Docker tar to $TARGET_URL..."
-              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar \
+              echo "Uploading Docker image bundle (gzip) to $TARGET_URL..."
+              curl --silent --show-error --fail --request PUT --upload-file app-deployment/artifacts/datamigrator-${BUILD_VERSION}.tar.gz \
                 "$TARGET_URL" \
                 -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}"
-              echo "Docker tar uploaded successfully to $TARGET_URL."
+              echo "Docker bundle uploaded successfully to $TARGET_URL."
             done
           else
-            echo "Docker tar not found, skipping upload."
+            echo "Docker image bundle (datamigrator-*.tar.gz) not found, skipping upload."
           fi
 
           # Upload Helm chart tgz
@@ -558,14 +568,10 @@ jobs:
         run: |
           cd app-deployment/artifacts
           ARTIFACTORY_BASE="https://generic.repo.eng.netapp.com/artifactory/openlab-generic/cicd/ndm/docker-images"
-          REQUESTED_VERSION="${{ github.event.inputs.docker_images_version || 'default' }}"
+          REQUESTED_VERSION="${{ github.event.inputs.docker_images_version || 'latest' }}"
 
-          if [ "${REQUESTED_VERSION}" = "default" ]; then
-            echo "Using original unversioned docker images tarball..."
-            RESOLVED_VERSION="default"
-            TARGET_URL="${ARTIFACTORY_BASE}/ndm-docker-images.tar"
-          elif [ "${REQUESTED_VERSION}" = "latest" ]; then
-            echo "Resolving latest version from latest.json..."
+          if [ "${REQUESTED_VERSION}" = "latest" ]; then
+            echo "Resolving latest version from latest.json (expects ndm-docker-images.tar.gz)..."
             LATEST_JSON=$(curl -fsSL --retry 3 --retry-delay 5 --retry-all-errors \
               -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
               "${ARTIFACTORY_BASE}/latest.json" 2>/dev/null || echo "")
@@ -575,28 +581,30 @@ jobs:
               RESOLVED_VERSION=$(echo "${LATEST_JSON}" | jq -r '.version // empty')
             fi
 
-            if [ -n "${RESOLVED_VERSION}" ]; then
-              echo "Resolved version from latest.json: ${RESOLVED_VERSION}"
-              TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar"
-            else
-              echo "::warning::Could not resolve version from latest.json — falling back to unversioned path"
-              RESOLVED_VERSION="default"
-              TARGET_URL="${ARTIFACTORY_BASE}/ndm-docker-images.tar"
+            if [ -z "${RESOLVED_VERSION}" ]; then
+              echo "::error::Could not resolve version from ${ARTIFACTORY_BASE}/latest.json. Fix Artifactory or pass an explicit docker_images_version."
+              exit 1
             fi
+
+            echo "Resolved version from latest.json: ${RESOLVED_VERSION}"
+            OUTPUT_FILE="ndm-docker-images.tar.gz"
+            TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar.gz"
           else
             RESOLVED_VERSION="${REQUESTED_VERSION}"
-            TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar"
+            OUTPUT_FILE="ndm-docker-images.tar.gz"
+            TARGET_URL="${ARTIFACTORY_BASE}/${RESOLVED_VERSION}/ndm-docker-images.tar.gz"
           fi
 
           echo "Downloading docker images tarball (version: ${RESOLVED_VERSION})..."
           echo "URL: ${TARGET_URL}"
+          echo "Local file: ${OUTPUT_FILE}"
           curl -fSL --retry 5 --retry-delay 10 --retry-max-time 600 --retry-all-errors \
-            -o "ndm-docker-images.tar" \
+            -o "${OUTPUT_FILE}" \
             -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
             "${TARGET_URL}"
 
           echo "docker_images_version=${RESOLVED_VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Downloaded docker images tarball version: ${RESOLVED_VERSION}"
+          echo "Downloaded third-party bundle: ndm-docker-images.tar.gz (resolved: ${RESOLVED_VERSION})"
 
       - name: Upload Ansible vars.yaml
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
@@ -617,7 +625,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: datamigrator-images
-          path: app-deployment/artifacts/*.tar
+          path: |
+            app-deployment/artifacts/ndm-docker-images.tar.gz
+            app-deployment/artifacts/datamigrator-*.tar.gz
 
       - name: Upload Wasm extension artifact
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
@@ -973,8 +983,26 @@ jobs:
           UPGRADE="upgrade-${BUILD_VERSION}"
 
           mkdir -p "${UPGRADE}"/{docker,helm,worker}
-          cp ./artifacts/docker/datamigrator-${BUILD_VERSION}.tar  "${UPGRADE}/docker/datamigrator-images-${BUILD_VERSION}.tar"
-          cp ./artifacts/helm/datamigrator-${BUILD_VERSION}.tgz    "${UPGRADE}/helm/datamigrator-helmchart-${BUILD_VERSION}.tgz"
+          DOCKER_SRC=$(find ./artifacts/docker -name "datamigrator-${BUILD_VERSION}.tar.gz" -type f | head -1)
+          if [ -z "$DOCKER_SRC" ]; then
+            echo "::error::Could not find datamigrator-${BUILD_VERSION}.tar.gz under ./artifacts/docker"
+            find ./artifacts/docker -type f -ls 2>/dev/null || true
+            exit 1
+          fi
+          cp "$DOCKER_SRC" "${UPGRADE}/docker/datamigrator-images-${BUILD_VERSION}.tar.gz"
+          TP_SRC="./artifacts/docker/ndm-docker-images.tar.gz"
+          if [ ! -f "$TP_SRC" ]; then
+            echo "::error::Third-party bundle not found: $TP_SRC (required in upgrade bundle)"
+            find ./artifacts/docker -type f -ls 2>/dev/null || true
+            exit 1
+          fi
+          cp "$TP_SRC" "${UPGRADE}/docker/ndm-docker-images.tar.gz"
+          HELM_SRC=$(find ./artifacts/helm -name "datamigrator-${BUILD_VERSION}.tgz" -type f | head -1)
+          if [ -z "$HELM_SRC" ]; then
+            echo "::error::Could not find datamigrator-${BUILD_VERSION}.tgz under ./artifacts/helm"
+            exit 1
+          fi
+          cp "$HELM_SRC" "${UPGRADE}/helm/datamigrator-helmchart-${BUILD_VERSION}.tgz"
 
           # Place prepared worker packages into the bundle
           LINUX_WORKER="datamigrator-worker-linux-${BUILD_VERSION}"
@@ -987,7 +1015,8 @@ jobs:
           # Checksums
           cd "${UPGRADE}"
           sha256sum \
-            "docker/datamigrator-images-${BUILD_VERSION}.tar" \
+            "docker/datamigrator-images-${BUILD_VERSION}.tar.gz" \
+            "docker/ndm-docker-images.tar.gz" \
             "helm/datamigrator-helmchart-${BUILD_VERSION}.tgz" \
             "worker/datamigrator-worker-linux-${BUILD_VERSION}.tar.gz" \
             "worker/datamigrator-worker-windows-${BUILD_VERSION}.zip" \
@@ -1085,6 +1114,38 @@ jobs:
           PACKER_PATH="app-deployment/packer/${PROVIDER_PATH}/${{ matrix.component }}"
           echo "path=$PACKER_PATH" >> $GITHUB_OUTPUT
           echo "Using packer configuration path: $PACKER_PATH"
+
+      - name: Configure VM build logging
+        id: vm_build_log
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/vm-build-logs"
+          LOGDIR="${GITHUB_WORKSPACE}/vm-build-logs"
+          echo "log_dir=${LOGDIR}" >> $GITHUB_OUTPUT
+
+          case "${{ github.event_name }}" in
+            workflow_dispatch)
+              V="${{ github.event.inputs.verbose }}"
+              ;;
+            workflow_call)
+              V="${{ inputs.verbose }}"
+              ;;
+            *)
+              V="false"
+              ;;
+          esac
+
+          if [ "$V" = "true" ]; then
+            echo "NDM_VERBOSE_BUILD=true" >> $GITHUB_ENV
+            echo "PACKER_LOG=1" >> $GITHUB_ENV
+            echo "PACKER_LOG_PATH=${LOGDIR}/packer-debug-${{ matrix.component }}-${{ matrix.provider }}.log" >> $GITHUB_ENV
+            echo "PKR_VAR_verbose=true" >> $GITHUB_ENV
+          else
+            echo "NDM_VERBOSE_BUILD=false" >> $GITHUB_ENV
+            echo "PKR_VAR_verbose=false" >> $GITHUB_ENV
+          fi
+
+          echo "PKR_VAR_ansible_log_path=${LOGDIR}/ansible-${{ matrix.component }}-${{ matrix.provider }}.log" >> $GITHUB_ENV
+          echo "ansible_log=${LOGDIR}/ansible-${{ matrix.component }}-${{ matrix.provider }}.log" >> $GITHUB_OUTPUT
 
       - name: Export ACR pull secret
         if: ${{ matrix.component != 'worker' }}
@@ -1241,14 +1302,20 @@ jobs:
       - name: Packer Build with Retry
         id: build
         run: |
+          set -o pipefail
           cd ${{ steps.packer-path.outputs.path }}
 
           # Set build-specific variables
           BUILD_ID=$(date -u +'%Y%m%dT%H%M%SZ')-${{ github.sha }}
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
 
+          LOGDIR="${GITHUB_WORKSPACE}/vm-build-logs"
+          mkdir -p "$LOGDIR"
+          PLOG="${LOGDIR}/packer-stream-${{ matrix.component }}-${{ matrix.provider }}.log"
+
           for attempt in {1..3}; do 
             echo "Attempt $attempt: Running Packer build..."
+            echo "NDM_VERBOSE_BUILD=${NDM_VERBOSE_BUILD:-false}  PACKER_LOG=${PACKER_LOG:-unset}  ansible_log_path=${PKR_VAR_ansible_log_path:-unset}"
 
             if [ "${{ matrix.component }}" == "worker" ]; then
               echo "Building worker image with binary path..."
@@ -1256,21 +1323,22 @@ jobs:
                 -var "worker_binary_path=${{ steps.worker-binary-path.outputs.worker_binary_path }}" \
                 -var-file="variables.pkrvars.hcl" \
                 ${{ steps.vm-resources.outputs.resource_vars }} \
-                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+                linux-ubuntu.pkr.hcl 2>&1 | tee "$GITHUB_WORKSPACE/packer.log" | tee "$PLOG"
             else
               echo "Building control-plane image..."
               packer build \
                 -var-file="variables.pkrvars.hcl" \
                 ${{ steps.vm-resources.outputs.resource_vars }} \
-                linux-ubuntu.pkr.hcl | tee $GITHUB_WORKSPACE/packer.log
+                linux-ubuntu.pkr.hcl 2>&1 | tee "$GITHUB_WORKSPACE/packer.log" | tee "$PLOG"
             fi
 
-            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            rc=${PIPESTATUS[0]}
+            if [ "$rc" -eq 0 ]; then
               echo "Packer build succeeded on attempt $attempt"
               break
             else 
-              echo "Packer build failed on attempt $attempt"
-              if [ $attempt -eq 3 ]; then
+              echo "Packer build failed on attempt $attempt (exit $rc)"
+              if [ "$attempt" -eq 3 ]; then
                 echo "All retry attempts failed"
                 exit 1
               fi
@@ -1280,6 +1348,25 @@ jobs:
           done
 
           echo "Packer build completed successfully"
+
+      - name: VM build log summary (sizes and artifacts)
+        if: always()
+        run: |
+          bash "${GITHUB_WORKSPACE}/app-deployment/scripts/vm-build-log-summary.sh" \
+            "${GITHUB_WORKSPACE}/vm-build-logs" \
+            "${GITHUB_WORKSPACE}/${{ steps.packer-path.outputs.path }}" \
+            "${{ matrix.provider }}" \
+            "${{ matrix.component }}"
+
+      - name: Upload VM build diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vm-build-diagnostics-${{ matrix.component }}-${{ matrix.provider }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            vm-build-logs/
+            packer.log
+          if-no-files-found: warn
 
       - name: Extract Image Info
         id: image-info
@@ -1405,12 +1492,12 @@ jobs:
           ISO_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           if [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
             METADATA_PATH="releases/${BUILD_VERSION}/manifests/${PROVIDER}/${COMPONENT}.json"
-            DOCKER_PATH="releases/${BUILD_VERSION}/docker/datamigrator-images-$BUILD_VERSION.tar"
+            DOCKER_PATH="releases/${BUILD_VERSION}/docker/datamigrator-images-$BUILD_VERSION.tar.gz"
             HELM_PATH="releases/${BUILD_VERSION}/helm/datamigrator-helmchart-$BUILD_VERSION.tgz"
           else
             METADATA_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/manifests/${PROVIDER}/${COMPONENT}.json"
             LATEST_PATH="builds/$BUILD_TYPE/${PROVIDER}-${COMPONENT}-latest.json"
-            DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-images-$BUILD_VERSION.tar"
+            DOCKER_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/docker/datamigrator-images-$BUILD_VERSION.tar.gz"
             HELM_PATH="builds/$BUILD_TYPE/$BUILD_VERSION/helm/datamigrator-helmchart-$BUILD_VERSION.tgz"
           fi
 

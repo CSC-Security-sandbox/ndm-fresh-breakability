@@ -171,6 +171,18 @@ variable "sig_use_shallow_replication" {
   default     = false
 }
 
+variable "verbose" {
+  type        = bool
+  description = "When true, ansible-playbook uses -vvv (set PKR_VAR_verbose via CI)"
+  default     = false
+}
+
+variable "ansible_log_path" {
+  type        = string
+  description = "If set, ANSIBLE_LOG_PATH on the controller (CI runner) for the main playbook run"
+  default     = ""
+}
+
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
@@ -246,14 +258,22 @@ build {
     galaxy_file            = "../../../ansible/control-plane/playbooks/linux-requirements.yaml"
     galaxy_force_with_deps = true
     user                   = var.ssh_username
-    ansible_env_vars = [
-      "ANSIBLE_CONFIG=../../../ansible/control-plane/config/ansible.cfg"
-    ]
-    extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "@../../../ansible/control-plane/config/group_vars/vars.yaml",
-      "--extra-vars", "build_version=${var.build_version}"
-    ]
+    ansible_env_vars = concat(
+      [
+        "ANSIBLE_CONFIG=../../../ansible/control-plane/config/ansible.cfg",
+        "ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks",
+      ],
+      var.ansible_log_path != "" ? ["ANSIBLE_LOG_PATH=${var.ansible_log_path}"] : [],
+      var.verbose ? ["ANSIBLE_VERBOSITY=3"] : [],
+    )
+    extra_arguments = concat(
+      [
+        "--extra-vars", "display_skipped_hosts=false",
+        "--extra-vars", "@../../../ansible/control-plane/config/group_vars/vars.yaml",
+        "--extra-vars", "build_version=${var.build_version}",
+      ],
+      var.verbose ? ["-vvv"] : [],
+    )
   }
 
 provisioner "shell" {

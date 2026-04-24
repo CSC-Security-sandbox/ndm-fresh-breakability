@@ -133,7 +133,8 @@ upgrade-<version>/
 ├── upgrade-playbook.yaml
 ├── upgrade-ansible.cfg
 ├── docker/
-│   └── datamigrator-images-<version>.tar
+│   ├── datamigrator-images-<version>.tar.gz   # NDM application images
+│   └── ndm-docker-images.tar.gz               # Third-party images (gzip; version pinned by CI)
 ├── helm/
 │   └── datamigrator-helmchart-<version>.tgz
 └── worker/
@@ -391,7 +392,7 @@ If the previous Helm chart `.tgz` file is not found on disk at `/root/`, the pla
 |------|-------------|
 | `/upload/` | Upload working directory (chunks, assembled archives, organized bundles) |
 | `/upload/<version>/` | Organized bundle ready for deployment |
-| `/upload/<version>/CP/docker/` | Docker image tar for MicroK8s import |
+| `/upload/<version>/CP/docker/` | `datamigrator-images-<version>.tar.gz` (NDM apps; gunzipped before `ctr import`) and `ndm-docker-images.tar.gz` (third-party; stream-import). Legacy: `ndm-thirdparty-image.tar` or `ndm-docker-images.tar` |
 | `/upload/<version>/CP/helm/` | Helm chart `.tgz` for installation |
 | `/upload/<version>/worker/linux/` | Linux worker binary (`.tar.gz`) |
 | `/upload/<version>/worker/windows/` | Windows worker binary (`.zip`) |

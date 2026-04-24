@@ -438,6 +438,41 @@ jobs:
 
           echo "Service setup completed successfully"
 
+  run-observability-tests:
+    name: Run Observability Smoke Tests
+    runs-on: openlab
+    needs: setup-infrastructure
+    env:
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Resolve SSH credentials for the control plane
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Run Prometheus observability smoke tests
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          ginkgo --timeout=5m -v ./tests/observability/...
+
   run-smb-tests:
     name: Run SMB API Tests
     runs-on: openlab
@@ -1298,7 +1333,7 @@ jobs:
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-observability-tests, run-nfs-tests, run-smb-tests, upload-support-bundle]
     if: always()
     steps:
       - name: Harden the runner (Audit all outbound calls)

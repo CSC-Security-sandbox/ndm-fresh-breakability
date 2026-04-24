@@ -547,6 +547,18 @@ variable "destroy_vm_post_build" {
   default     = true
 }
 
+variable "verbose" {
+  type        = bool
+  description = "When true, ansible-playbook uses -vvv (set PKR_VAR_verbose via CI)"
+  default     = false
+}
+
+variable "ansible_log_path" {
+  type        = string
+  description = "If set, ANSIBLE_LOG_PATH on the controller for the master-playbook run only"
+  default     = ""
+}
+
 //  BLOCK: data
 //  Defines the data sources.
 
@@ -718,50 +730,72 @@ build {
     galaxy_force_with_deps = true
     playbook_file          = "../../../ansible/worker/playbooks/linux-playbook.yaml"
     roles_path             = "../../../ansible/worker/roles"
-    ansible_env_vars = [
-      "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
-    ]
-    extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "ansible_username=${var.build_username}",
-      "--extra-vars", "ansible_key='${var.build_key}'",
-      "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
-      "--extra-vars", "build_version=${var.build_version}",
-      "--extra-vars", "vsphere_build=true"
-    ]
+    ansible_env_vars = concat(
+      [
+        "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg",
+        "ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks",
+      ],
+      var.verbose ? ["ANSIBLE_VERBOSITY=3"] : [],
+    )
+    extra_arguments = concat(
+      [
+        "--extra-vars", "display_skipped_hosts=false",
+        "--extra-vars", "ansible_username=${var.build_username}",
+        "--extra-vars", "ansible_key='${var.build_key}'",
+        "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+        "--extra-vars", "build_version=${var.build_version}",
+        "--extra-vars", "vsphere_build=true",
+      ],
+      var.verbose ? ["-vvv"] : [],
+    )
   }
   provisioner "ansible" {
     playbook_file          = "../../../ansible/worker/playbooks/master-playbook.yaml"
     inventory_directory    = "../../../ansible/worker/config"
     user                   = var.build_username
-    ansible_env_vars = [
-      "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
-    ]
-    extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "ansible_username=${var.build_username}",
-      "--extra-vars", "ansible_key='${var.build_key}'",
-      "--extra-vars", "local_binary_path=${var.worker_binary_path}",
-      "--extra-vars", "build_version=${var.build_version}",
-      "--extra-vars", "vsphere_build=true"
-    ]
+    ansible_env_vars = concat(
+      [
+        "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg",
+        "ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks",
+      ],
+      var.ansible_log_path != "" ? ["ANSIBLE_LOG_PATH=${var.ansible_log_path}"] : [],
+      var.verbose ? ["ANSIBLE_VERBOSITY=3"] : [],
+    )
+    extra_arguments = concat(
+      [
+        "--extra-vars", "display_skipped_hosts=false",
+        "--extra-vars", "ansible_username=${var.build_username}",
+        "--extra-vars", "ansible_key='${var.build_key}'",
+        "--extra-vars", "local_binary_path=${var.worker_binary_path}",
+        "--extra-vars", "build_version=${var.build_version}",
+        "--extra-vars", "vsphere_build=true",
+      ],
+      var.verbose ? ["-vvv"] : [],
+    )
   }
 
   provisioner "ansible" {
     user                   = var.build_username
     playbook_file          = "../../../ansible/worker/playbooks/linux-cleanup.yaml"
     roles_path             = "../../../ansible/worker/roles"
-    ansible_env_vars = [
-      "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg"
-    ]
-    extra_arguments = [
-      "--extra-vars", "display_skipped_hosts=false",
-      "--extra-vars", "ansible_username=${var.build_username}",
-      "--extra-vars", "ansible_key='${var.build_key}'",
-      "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
-      "--extra-vars", "build_version=${var.build_version}",
-      "--extra-vars", "vsphere_build=true"
-    ]
+    ansible_env_vars = concat(
+      [
+        "ANSIBLE_CONFIG=../../../ansible/worker/config/ansible.cfg",
+        "ANSIBLE_CALLBACKS_ENABLED=ansible.posix.profile_tasks",
+      ],
+      var.verbose ? ["ANSIBLE_VERBOSITY=3"] : [],
+    )
+    extra_arguments = concat(
+      [
+        "--extra-vars", "display_skipped_hosts=false",
+        "--extra-vars", "ansible_username=${var.build_username}",
+        "--extra-vars", "ansible_key='${var.build_key}'",
+        "--extra-vars", "enable_cloudinit=${var.vm_guest_os_cloudinit}",
+        "--extra-vars", "build_version=${var.build_version}",
+        "--extra-vars", "vsphere_build=true",
+      ],
+      var.verbose ? ["-vvv"] : [],
+    )
   }
 
   provisioner "shell" {

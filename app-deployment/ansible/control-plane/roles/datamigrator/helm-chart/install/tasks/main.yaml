@@ -1,15 +1,10 @@
 ---
-- name: Copy Docker image tar file to target
+# get_tags.sh produces datamigrator-<version>.tar.gz after docker save + gzip
+- name: Copy application Docker images archive to target
   copy:
-    src: "../../../artifacts/datamigrator-{{ build_version }}.tar"
-    dest: "{{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
+    src: "../../../artifacts/datamigrator-{{ build_version }}.tar.gz"
+    dest: "{{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar.gz"
     mode: '0644'
-  when: local_cluster is not defined
-
-- name: Compress datamigrator Docker image tar to reduce VM image size
-  command: "gzip -1 {{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
-  args:
-    removes: "{{ ansible_env.HOME }}/datamigrator-images-{{ build_version }}.tar"
   when: local_cluster is not defined
 
 - name: Copy helm chart tgz file to target

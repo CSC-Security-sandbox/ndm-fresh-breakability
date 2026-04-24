@@ -1,0 +1,41 @@
+name: Ansible Template Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - 'app-deployment/ansible/control-plane/roles/**'
+      - 'app-deployment/tests/ansible-template-lint/**'
+      - '.github/workflows/ansible-template-lint.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-pv-selectors:
+    name: Lint Ansible PV <-> Helm selector consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install linter dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --upgrade pip
+          .venv/bin/pip install --quiet -r app-deployment/tests/ansible-template-lint/requirements.txt
+
+      - name: Self-test the linter
+        run: |
+          .venv/bin/python app-deployment/tests/ansible-template-lint/lint_pv_selectors.py --self-test
+
+      - name: Lint Ansible PV / Helm selector pairs
+        run: |
+          .venv/bin/python app-deployment/tests/ansible-template-lint/lint_pv_selectors.py

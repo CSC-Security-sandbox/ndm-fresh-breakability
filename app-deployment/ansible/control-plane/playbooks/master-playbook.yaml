@@ -35,16 +35,17 @@
   import_playbook: configure-prometheus.yaml
   when: local_cluster is not defined
 
+# Grafana/Loki must run before Fluentd: Fluentd ships logs to loki-gateway in the grafana namespace.
+- name: Configure grafana
+  import_playbook: configure-grafana.yaml
+  when: local_cluster is not defined
+
 - name: Configure fluentd
   import_playbook: configure-fluentd.yaml
   when: local_cluster is not defined
 
 - name: Configure otel 
   import_playbook: configure-otel.yaml
-
-- name: Configure grafana
-  import_playbook: configure-grafana.yaml
-  when: local_cluster is not defined
 
 - name: Configure microk8s image registry with datamigrator application images
   import_playbook: configure-microk8s-registry.yaml
