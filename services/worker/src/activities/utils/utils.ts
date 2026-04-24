@@ -14,6 +14,24 @@ import { E8Dot3CollisionError, FatalError } from "../../errors/errors.types";
 
 const execAsync = promisify(exec);
 
+const statsForLog = (file?: fs.Stats) => {
+  if (!file) return undefined;
+  const iso = (d?: Date) => (d instanceof Date ? d.toISOString() : undefined);
+  return {
+    size: file.size,
+    mtime: iso(file.mtime),
+    atime: iso(file.atime),
+    ctime: iso(file.ctime),
+    mode: file.mode,
+    uid: file.uid,
+    gid: file.gid,
+    ino: file.ino,
+    isDirectory: typeof file.isDirectory === 'function' ? file.isDirectory() : undefined,
+    isFile: typeof file.isFile === 'function' ? file.isFile() : undefined,
+    isSymbolicLink: typeof file.isSymbolicLink === 'function' ? file.isSymbolicLink() : undefined,
+  };
+};
+
 export const getChecksum = (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash("sha256");
@@ -172,10 +190,35 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
+  const isUpdated = !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+  console.debug('[isContentUpdate]', {
+    file: fileName,
+    sourceStats: statsForLog(sFile),
+    destinationStats: statsForLog(dFile),
+    result: isUpdated,
+  });
+  return isUpdated;
+};
+ 
 
-// added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000, fileName = 'unknown'): boolean => {
+  const sourceCtimeMs = sFile.ctimeMs;
+  const destinationCtimeMs = dFile?.ctimeMs;
+  const thresholdCtimeMs = destinationCtimeMs !== undefined ? destinationCtimeMs + toleranceMs : undefined;
+  const isUpdated = !dFile || (thresholdCtimeMs !== undefined && sourceCtimeMs > thresholdCtimeMs);
+  console.debug('[isMetaUpdated]', {
+    file: fileName,
+    sourceStats: statsForLog(sFile),
+    destinationStats: statsForLog(dFile),
+    sourceCtimeMs,
+    destinationCtimeMs,
+    thresholdCtimeMs,
+    toleranceMs,
+    result: isUpdated,
+  });
+  return isUpdated;
+};
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(
