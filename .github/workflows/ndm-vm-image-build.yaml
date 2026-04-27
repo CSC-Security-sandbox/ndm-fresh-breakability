@@ -738,6 +738,8 @@ jobs:
             Copy-Item -Path "services/worker/wininstaller/installer.iss" -Destination "wininstaller\installer.iss" -Force
             Copy-Item -Path "services/worker/wininstaller/service.xml" -Destination "wininstaller\service.xml" -Force
             Copy-Item -Path "services/worker/wininstaller/fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
+            Copy-Item -Path "scripts/stamp-metadata.ps1" -Destination "wininstaller\stamp-metadata.ps1" -Force
+            Copy-Item -Path "scripts/README-stamp-metadata.md" -Destination "wininstaller\README-stamp-metadata.md" -Force
 
         - name: Update installer version
           shell: pwsh
