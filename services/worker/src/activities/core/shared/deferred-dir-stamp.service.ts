@@ -20,6 +20,9 @@ export interface DeferredDirStamp {
   mtime: string;
   /** Path depth — used to drain deepest-first (defensive ordering). */
   depth: number;
+  /** Source ctime in ISO string form — used during post-migration restamp
+   *  to detect permission changes that occurred after this folder was processed. */
+  sourceCtime?: string;
 }
 
 /**
@@ -83,7 +86,7 @@ export class DeferredDirStampService {
       const client = this.redisService.getClient();
       const orderKey = this.orderKey(jobRunId);
       const metaKey = this.metaKey(jobRunId);
-      const payload = JSON.stringify({ atime: record.atime, mtime: record.mtime });
+      const payload = JSON.stringify({ atime: record.atime, mtime: record.mtime, sourceCtime: record.sourceCtime });
 
       // Store payload first so a successful ZADD always has a meta to read.
       await client.hSet(metaKey, record.fPath, payload);
@@ -96,6 +99,27 @@ export class DeferredDirStampService {
       await client.expire(orderKey, DEFAULT_KEY_TTL_SECONDS);
     } catch (error) {
       this.logger.warn(`Failed to record deferred dir stamp for ${record.fPath}: ${error?.message ?? error}`);
+    }
+  }
+
+  /**
+   * Updates only the sourceCtime field in an existing deferred dir stamp record.
+   * Called after stampMetaData completes for a directory, so the post-migration
+   * restamp pass compares against the post-stamp ctime (T3) rather than the
+   * scan-time ctime.
+   */
+  async updateSourceCtime(jobRunId: string, fPath: string, sourceCtime: string): Promise<void> {
+    if (!fPath || !sourceCtime) return;
+    try {
+      const client = this.redisService.getClient();
+      const metaKey = this.metaKey(jobRunId);
+      const existing = await client.hGet(metaKey, fPath);
+      if (!existing) return;
+      const meta = JSON.parse(existing) as { atime: string; mtime: string; sourceCtime?: string };
+      meta.sourceCtime = sourceCtime;
+      await client.hSet(metaKey, fPath, JSON.stringify(meta));
+    } catch (error) {
+      this.logger.warn(`Failed to update sourceCtime for ${fPath}: ${error?.message ?? error}`);
     }
   }
 
@@ -126,9 +150,9 @@ export class DeferredDirStampService {
       const payloadStr = payloads[i];
       if (!payloadStr) continue;
       try {
-        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string };
+        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string; sourceCtime?: string };
         if (meta?.atime && meta?.mtime) {
-          records.push({ fPath, atime: meta.atime, mtime: meta.mtime, depth: -score });
+          records.push({ fPath, atime: meta.atime, mtime: meta.mtime, depth: -score, sourceCtime: meta.sourceCtime });
           fPathsToDelete.push(fPath);
         }
       } catch (error) {

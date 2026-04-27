@@ -1,11 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ErrorType, JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-lib";
 import { Context } from "@temporalio/activity";
 import * as fs from "fs";
 import * as path from "path";
-import { basePrefix } from "src/activities/utils/utils";
+import { basePrefix, dmError } from "src/activities/utils/utils";
+import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { DeferredDirStamp, DeferredDirStampService } from "../shared/deferred-dir-stamp.service";
 
@@ -20,6 +21,7 @@ export interface RestampDirectoriesOutput {
   stamped: number;
   failed: number;
   skipped: number;
+  ctimeConflicts: number;
 }
 
 /**
@@ -50,7 +52,7 @@ export class RestampDirectoriesService {
   async restampDirectories(input: RestampDirectoriesInput): Promise<RestampDirectoriesOutput> {
     const { jobRunId } = input;
     const batchSize = input.batchSize ?? this.defaultBatchSize;
-    const output: RestampDirectoriesOutput = { attempted: 0, stamped: 0, failed: 0, skipped: 0 };
+    const output: RestampDirectoriesOutput = { attempted: 0, stamped: 0, failed: 0, skipped: 0, ctimeConflicts: 0 };
 
     const ctx = (() => {
       try { return Context.current(); } catch { return undefined; }
@@ -70,20 +72,30 @@ export class RestampDirectoriesService {
       }
 
       const baseTargetPrefixPath = basePrefix(jobRunId, tPathId, destDirectoryPath);
+
+      const sPathId = jobContext.jobConfig?.sourceFileServer?.pathId;
+      const sourceDirectoryPath = jobContext.jobConfig?.sourceDirectoryPath;
+      const baseSourcePrefixPath = sPathId ? basePrefix(jobRunId, sPathId, sourceDirectoryPath) : null;
+      const ctimeValidationEnabled = this.configService.get<boolean>('worker.ctimeValidationEnabled', true)
+        && !!baseSourcePrefixPath
+        && !!jobContext.jobConfig?.options?.preservePermissions;
+
       const initialCount = await this.deferredDirStampService.count(jobRunId).catch(() => 0);
-      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}).`);
+      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}), ctimeValidation=${ctimeValidationEnabled}.`);
 
       while (true) {
         const batch = await this.deferredDirStampService.popBatch(jobRunId, batchSize);
         if (!batch || batch.length === 0) break;
 
-        // Stamp within a batch in parallel — each utimes is independent.
-        const results = await Promise.allSettled(batch.map(rec => this.applyStamp(baseTargetPrefixPath, rec, jobRunId)));
+        const results = await Promise.allSettled(
+          batch.map(rec => this.applyStamp(baseTargetPrefixPath, baseSourcePrefixPath, rec, jobRunId, jobContext, ctimeValidationEnabled)),
+        );
         for (const r of results) {
           output.attempted += 1;
           if (r.status === "fulfilled") {
             if (r.value === "stamped") output.stamped += 1;
             else if (r.value === "skipped") output.skipped += 1;
+            else if (r.value === "ctime_conflict") { output.stamped += 1; output.ctimeConflicts += 1; }
           } else {
             output.failed += 1;
           }
@@ -91,7 +103,7 @@ export class RestampDirectoriesService {
       }
 
       this.logger.log(
-        `[${jobRunId}] Directory restamp pass complete — attempted=${output.attempted}, stamped=${output.stamped}, skipped=${output.skipped}, failed=${output.failed}.`,
+        `[${jobRunId}] Directory restamp pass complete — attempted=${output.attempted}, stamped=${output.stamped}, skipped=${output.skipped}, failed=${output.failed}, ctimeConflicts=${output.ctimeConflicts}.`,
       );
       return output;
     } catch (error) {
@@ -111,7 +123,14 @@ export class RestampDirectoriesService {
     }
   }
 
-  private async applyStamp(baseTargetPrefixPath: string, rec: DeferredDirStamp, jobRunId: string): Promise<"stamped" | "skipped"> {
+  private async applyStamp(
+    baseTargetPrefixPath: string,
+    baseSourcePrefixPath: string | null,
+    rec: DeferredDirStamp,
+    jobRunId: string,
+    jobContext: JobManagerContext,
+    ctimeValidationEnabled: boolean,
+  ): Promise<"stamped" | "skipped" | "ctime_conflict"> {
     if (!rec?.fPath || !rec?.atime || !rec?.mtime) return "skipped";
 
     // path.join handles separator normalization across platforms and trims
@@ -125,14 +144,40 @@ export class RestampDirectoriesService {
       return "skipped";
     }
 
+    // Per design (Section 5.1.2): fetch source cTime BEFORE stamping mTime
+    // at destination, so we capture the source state at the moment of restamp.
+    let ctimeConflictDetected = false;
+    if (ctimeValidationEnabled && baseSourcePrefixPath && rec.sourceCtime) {
+      try {
+        const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
+        const currentStat = await fs.promises.lstat(sourcePath);
+        const storedCtimeMs = new Date(rec.sourceCtime).getTime();
+        if (currentStat.ctimeMs > storedCtimeMs) {
+          this.logger.warn(
+            `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
+            + `(stored=${rec.sourceCtime}, current=${currentStat.ctime.toISOString()}). Flagging as PERMISSION_STAMP_CONFLICT.`,
+          );
+          ctimeConflictDetected = true;
+          const error = new Error(
+            `Source folder metadata changed between migration and post-migration restamp. `
+            + `Folder permissions may be stale — re-run migration to update.`,
+          );
+          const dmErr = dmError(
+            "OPERATION", Origin.SOURCE, Operation.STAMP_META,
+            'PERM_STAMP_CTIME_CONFLICT' as ErrorType, jobRunId, error,
+            { name: rec.fPath, path: sourcePath },
+          );
+          await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+        }
+      } catch (error) {
+        this.logger.debug(`[${jobRunId}] Could not validate source ctime for ${rec.fPath}: ${error?.message}`);
+      }
+    }
+
+    // Stamp mTime at destination regardless of conflict (both paths in design stamp mTime)
     try {
       await fs.promises.utimes(targetPath, atime, mtime);
-      return "stamped";
     } catch (error) {
-      // Common reasons: dir was never created (its COPY_DIR failed earlier),
-      // or it was deleted between scan and restamp. Treat as skipped so the
-      // restamp pass doesn't surface phantom failure counts; surface real
-      // I/O errors as failures so they're observable.
       if (error?.code === "ENOENT") {
         this.logger.debug(`[${jobRunId}] Restamp skipped — target missing: ${targetPath}`);
         return "skipped";
@@ -140,5 +185,7 @@ export class RestampDirectoriesService {
       this.logger.warn(`[${jobRunId}] Restamp failed for ${targetPath}: ${error?.message ?? error}`);
       throw error;
     }
+
+    return ctimeConflictDetected ? "ctime_conflict" : "stamped";
   }
 }

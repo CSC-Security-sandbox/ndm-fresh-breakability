@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { StampMetaService } from './stamp-meta.service';
 import { RedisService } from 'src/redis/redis.service';
 import {
@@ -86,6 +87,13 @@ describe('StampMetaService', () => {
     (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
 
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
+        if (key === 'worker.ctimeValidationEnabled') return true;
+        return defaultValue;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StampMetaService,
@@ -93,6 +101,7 @@ describe('StampMetaService', () => {
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: WinOperationService, useValue: winOperationService },
         { provide: MetricsService, useValue: mockMetricsService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 

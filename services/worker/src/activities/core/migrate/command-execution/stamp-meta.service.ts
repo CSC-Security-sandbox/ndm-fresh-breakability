@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { OPS_CMD, OPS_STATUS } from "@netapp-cloud-datamigrate/jobs-lib";
+import { ConfigService } from "@nestjs/config";
+import { OPS_CMD, OPS_STATUS, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
 import { dmError } from "src/activities/utils/utils";
@@ -12,17 +13,23 @@ import { StampMetaOutput } from "./stamp-meta.type";
 import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
 
+const MAX_CTIME_RETRIES = 2;
+
 
 @Injectable()
 export class StampMetaService {
     private readonly logger: LoggerService;
+    private readonly ctimeValidationEnabled: boolean;
+
     constructor(
         private readonly redisService: RedisService,
         private readonly winOperationService: WinOperationService,
         private readonly metricsService: MetricsService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+        @Inject(ConfigService) configService: ConfigService,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
+        this.ctimeValidationEnabled = configService.get<boolean>('worker.ctimeValidationEnabled', true);
     }
 
     @Timed(MetricsService.METRIC.STAMP_META)
@@ -33,49 +40,17 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
+            const shouldValidateCtime = process.platform === 'win32'
+                && this.ctimeValidationEnabled
+                && input.jobContext.jobConfig?.options?.preservePermissions;
 
-            if (process.platform === 'win32') {
-
-                // Stamp SID to object
-
-                const [aclStampOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampObjectACL(input),
-                    this.preserveAccessAndModifiedTime(input)
-                ]);
-
-                output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
-                
-                if(aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length ===0) {
-                // Stamp access and modified time
-                    const timeOutput = await this.stampAccessAndModifiedTime(input);
-                    output.sourceErrors.push(...timeOutput.sourceErrors);
-                    output.targetErrors.push(...timeOutput.targetErrors);
-                }
-            }
-            else {
-
-                // Step 1: chown (targetPath) and preserve source time (sourcePath) are independent — run in parallel
-                const [gidUidOutput, preserveTimeOutput] = await Promise.all([
-                    this.stampGIDandUID(input),
-                    this.preserveAccessAndModifiedTime(input),
-                ]);
-                output.sourceErrors.push(...gidUidOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
-                output.targetErrors.push(...gidUidOutput.targetErrors, ...preserveTimeOutput.targetErrors);
-
-                // Step 2: chmod must run after chown (changing owner can reset setuid/setgid bits)
-                const permissionsOutput = await this.stampPermission(input);
-                output.sourceErrors.push(...permissionsOutput.sourceErrors);
-                output.targetErrors.push(...permissionsOutput.targetErrors);
-
-                // Step 3: utimes must run last so chmod does not overwrite atime/mtime
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                output.sourceErrors.push(...timeOutput.sourceErrors);
-                output.targetErrors.push(...timeOutput.targetErrors);
+            if (shouldValidateCtime) {
+                await this.stampMetaWithCtimeValidation(input, output);
+            } else {
+                await this.executeStampMeta(input, output);
             }
         }
 
-        // Only update status if the operation exists
         if (input.command.ops[OPS_CMD.STAMP_META]) {
             if (output.sourceErrors.length > 0 || output.targetErrors.length > 0)
                 input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.ERROR;
@@ -83,6 +58,149 @@ export class StampMetaService {
                 input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
         }
         return output;
+    }
+
+    /**
+     * Wraps the stamp operations with ctime-based validation per the design. 
+     * The flow uses 4 ctime checkpoints to bracket our own
+     * source-modifying operation (preserveAccessAndModifiedTime) separately
+     * from external changes:
+     *
+     *   T1:      fetch source cTime before any operations
+     *   (stamp permissions/ACL at destination)
+     *   T2Start: fetch source cTime before restoring aTime/mTime at source
+     *   (preserveAccessAndModifiedTime — bumps source cTime)
+     *   T2End:   fetch source cTime after restoring aTime/mTime at source
+     *   (stamp aTime/mTime at destination)
+     *   T3:      fetch source cTime after all operations
+     *
+     *   CHECK: (cTime_T2Start > cTime_T1) OR (cTime_T3 > cTime_T2End)
+     *
+     * When preserveAccessTime is disabled, preserveAccessAndModifiedTime is
+     * a no-op so T2Start/T2End are skipped and we fall back to a simple
+     * T1 vs T3 comparison.
+     */
+    private async stampMetaWithCtimeValidation(input: CommandExecInput, output: CommandOutput): Promise<void> {
+        const preserveAccessTime = !!input.jobContext.jobConfig?.options?.preserveAccessTime;
+
+        for (let attempt = 0; attempt <= MAX_CTIME_RETRIES; attempt++) {
+            // Step 1 (T1): fetch source cTime before any operations
+            const ctimeT1 = await this.fetchSourceCtimeMs(input.sourcePath);
+
+            const attemptOutput: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
+
+            // Steps 2 + 3: stamp ACL at destination in parallel with
+            // bracketed preserveAccessAndModifiedTime at src (T2Start → utimes → T2End).
+            // ACL stamps target the destination so they don't bump source ctime.
+            let ctimeT2Start: number = 0;
+            let ctimeT2End: number = 0;
+
+            const [aclStampOutput, preserveTimeOutput] = await Promise.all([
+                this.stampObjectACL(input),
+                preserveAccessTime
+                    ? (async () => {
+                        ctimeT2Start = await this.fetchSourceCtimeMs(input.sourcePath);
+                        const output = await this.preserveAccessAndModifiedTime(input);
+                        ctimeT2End = await this.fetchSourceCtimeMs(input.sourcePath);
+                        return output;
+                    })()
+                    : Promise.resolve(null),
+            ]);
+            attemptOutput.sourceErrors.push(...aclStampOutput.sourceErrors);
+            attemptOutput.targetErrors.push(...aclStampOutput.targetErrors);
+            if (preserveTimeOutput) {
+                attemptOutput.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+            }
+
+            const noAclErrors = aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0;
+            if (noAclErrors) {
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
+                attemptOutput.sourceErrors.push(...timeOutput.sourceErrors);
+                attemptOutput.targetErrors.push(...timeOutput.targetErrors);
+            }
+
+            // Step 5 (T3): fetch source cTime after all operations
+            const ctimeT3 = await this.fetchSourceCtimeMs(input.sourcePath);
+
+            // CHECK per design: (cTime_T2Start > cTime_T1) OR (cTime_T3 > cTime_T2End)
+            let sourceChanged: boolean;
+            if (preserveAccessTime) {
+                const changedDuringStamp = ctimeT2Start > ctimeT1;
+                const changedAfterPreserveTimeAtSource = ctimeT3 > ctimeT2End;
+                sourceChanged = changedDuringStamp || changedAfterPreserveTimeAtSource;
+            } else {
+                sourceChanged = ctimeT3 > ctimeT1;
+            }
+
+            if (!sourceChanged) {
+                output.sourceErrors.push(...attemptOutput.sourceErrors);
+                output.targetErrors.push(...attemptOutput.targetErrors);
+                output.postStampSourceCtimeIso = new Date(ctimeT3).toISOString();
+                return;
+            }
+
+            this.logger.warn(
+                `[${input.command.id}] Source ctime changed during stamp `
+                + `(T1=${ctimeT1}, T2Start=${ctimeT2Start}, T2End=${ctimeT2End}, T3=${ctimeT3}, `
+                + `attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}): ${input.sourcePath}`,
+            );
+
+            if (attempt === MAX_CTIME_RETRIES) {
+                output.sourceErrors.push(...attemptOutput.sourceErrors);
+                output.targetErrors.push(...attemptOutput.targetErrors);
+                output.postStampSourceCtimeIso = new Date(ctimeT3).toISOString();
+                const error = new Error(
+                    `Source metadata changed during all ${MAX_CTIME_RETRIES + 1} stamp attempts. `
+                    + `Re-run migration after source stabilizes.`,
+                );
+                const dmErr = dmError(
+                    "OPERATION", Origin.SOURCE, Operation.STAMP_META,
+                    'PERM_STAMP_CTIME_CONFLICT' as ErrorType,
+                    input.command.id, error,
+                    { name: input.command.fPath, path: input.sourcePath },
+                );
+                await input.jobContext.publishToErrorStream(dmErr, input.jobContext.jobConfig?.jobRunId);
+                output.sourceErrors.push('PERM_STAMP_CTIME_CONFLICT');
+            }
+        }
+    }
+
+    private async fetchSourceCtimeMs(sourcePath: string): Promise<number> {
+        const stat = await fs.promises.lstat(sourcePath);
+        return stat.ctimeMs;
+    }
+
+    private async executeStampMeta(input: CommandExecInput, output: CommandOutput): Promise<void> {
+        if (process.platform === 'win32') {
+            const [aclStampOutput, preserveTimeOutput] = await Promise.all([
+                this.stampObjectACL(input),
+                this.preserveAccessAndModifiedTime(input)
+            ]);
+
+            output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+            output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+
+            if(aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length === 0) {
+                const timeOutput = await this.stampAccessAndModifiedTime(input);
+                output.sourceErrors.push(...timeOutput.sourceErrors);
+                output.targetErrors.push(...timeOutput.targetErrors);
+            }
+        } else {
+            const [gidUidOutput, preserveTimeOutput] = await Promise.all([
+                this.stampGIDandUID(input),
+                this.preserveAccessAndModifiedTime(input),
+            ]);
+            output.sourceErrors.push(...gidUidOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+            output.targetErrors.push(...gidUidOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+
+            const permissionsOutput = await this.stampPermission(input);
+            output.sourceErrors.push(...permissionsOutput.sourceErrors);
+            output.targetErrors.push(...permissionsOutput.targetErrors);
+
+            const timeOutput = await this.stampAccessAndModifiedTime(input);
+            output.sourceErrors.push(...timeOutput.sourceErrors);
+            output.targetErrors.push(...timeOutput.targetErrors);
+        }
     }
 
     @Timed({ category: 'stamp_phase', phase: 'permissions' })
