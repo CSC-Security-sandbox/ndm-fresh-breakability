@@ -5,6 +5,7 @@ import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-l
 import { Context } from "@temporalio/activity";
 import * as fs from "fs";
 import * as path from "path";
+import { CtimeTestTriggersService } from "./ctime-test-triggers.service";
 import { basePrefix, dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -44,6 +45,7 @@ export class RestampDirectoriesService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
     private readonly deferredDirStampService: DeferredDirStampService,
+    private readonly ctimeTestTriggers: CtimeTestTriggersService,
   ) {
     this.logger = loggerFactory.create(RestampDirectoriesService.name);
     this.defaultBatchSize = this.configService.get<number>("worker.restampDirBatchSize") || 500;
@@ -144,15 +146,16 @@ export class RestampDirectoriesService {
       return "skipped";
     }
 
-    // Per design (Section 5.1.2): fetch source cTime BEFORE stamping mTime
+    // Per design: fetch source cTime BEFORE stamping mTime
     // at destination, so we capture the source state at the moment of restamp.
     let ctimeConflictDetected = false;
     if (ctimeValidationEnabled && baseSourcePrefixPath && rec.sourceCtime) {
       try {
         const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
+        this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);
         const currentStat = await fs.promises.lstat(sourcePath);
         const storedCtimeMs = new Date(rec.sourceCtime).getTime();
-        if (currentStat.ctimeMs > storedCtimeMs) {
+        if (Math.floor(currentStat.ctimeMs) > storedCtimeMs) {
           this.logger.warn(
             `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
             + `(stored=${rec.sourceCtime}, current=${currentStat.ctime.toISOString()}). Flagging as PERMISSION_STAMP_CONFLICT.`,

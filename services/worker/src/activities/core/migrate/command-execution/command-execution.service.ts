@@ -15,8 +15,6 @@ import { MetricsService } from "src/metrics/metrics.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
-import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
-
 @Injectable()
 export class CommandExecService {
     readonly workerId: string;
@@ -28,7 +26,6 @@ export class CommandExecService {
         private readonly workerThreadService: WorkerThreadService,
         private readonly stampMetaService: StampMetaService,
         private readonly metricsService: MetricsService,
-        private readonly deferredDirStampService: DeferredDirStampService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
         this.logger = loggerFactory.create(CommandExecService.name);
@@ -78,14 +75,6 @@ export class CommandExecService {
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
-
-            if (input.command.isDir && metaResult.postStampSourceCtimeIso) {
-                await this.deferredDirStampService.updateSourceCtime(
-                    input.jobContext.jobRunId,
-                    input.command.fPath,
-                    metaResult.postStampSourceCtimeIso,
-                );
-            }
         }
 
         // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo

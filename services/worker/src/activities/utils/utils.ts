@@ -192,12 +192,12 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
   const isUpdated = !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
-  console.debug('[isContentUpdate]', {
-    file: fileName,
-    sourceStats: statsForLog(sFile),
-    destinationStats: statsForLog(dFile),
-    result: isUpdated,
-  });
+  // console.debug('[isContentUpdate]', {
+  //   file: fileName,
+  //   sourceStats: statsForLog(sFile),
+  //   destinationStats: statsForLog(dFile),
+  //   result: isUpdated,
+  // });
   return isUpdated;
 };
  
@@ -207,16 +207,16 @@ export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1
   const destinationCtimeMs = dFile?.ctimeMs;
   const thresholdCtimeMs = destinationCtimeMs !== undefined ? destinationCtimeMs + toleranceMs : undefined;
   const isUpdated = !dFile || (thresholdCtimeMs !== undefined && sourceCtimeMs > thresholdCtimeMs);
-  console.debug('[isMetaUpdated]', {
-    file: fileName,
-    sourceStats: statsForLog(sFile),
-    destinationStats: statsForLog(dFile),
-    sourceCtimeMs,
-    destinationCtimeMs,
-    thresholdCtimeMs,
-    toleranceMs,
-    result: isUpdated,
-  });
+  // console.debug('[isMetaUpdated]', {
+  //   file: fileName,
+  //   sourceStats: statsForLog(sFile),
+  //   destinationStats: statsForLog(dFile),
+  //   sourceCtimeMs,
+  //   destinationCtimeMs,
+  //   thresholdCtimeMs,
+  //   toleranceMs,
+  //   result: isUpdated,
+  // });
   return isUpdated;
 };
 
@@ -383,7 +383,7 @@ const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ET
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // Transient errors that should not be retried
-const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION', 'PERM_STAMP_CTIME_CONFLICT']);
 
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL

@@ -10,7 +10,6 @@ import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecService } from './command-execution.service';
 import { StampMetaService } from './stamp-meta.service';
-import { DeferredDirStampService } from '../../shared/deferred-dir-stamp.service';
 import { createDirectory } from 'src/activities/utils/directory.utils';
 
 // Mock fs module
@@ -62,7 +61,6 @@ describe('CommandExecService', () => {
     let loggerFactory: jest.Mocked<LoggerFactory>;
     let workerThreadService: jest.Mocked<WorkerThreadService>;
     let stampMetaService: jest.Mocked<StampMetaService>;
-    let deferredDirStampService: jest.Mocked<DeferredDirStampService>;
     let mockJobContext: any;
 
     const mockFs = fs as jest.Mocked<typeof fs>;
@@ -91,14 +89,6 @@ describe('CommandExecService', () => {
             resetFileAttributes: jest.fn(),
         } as any;
 
-        deferredDirStampService = {
-            add: jest.fn().mockResolvedValue(undefined),
-            updateSourceCtime: jest.fn().mockResolvedValue(undefined),
-            popBatch: jest.fn().mockResolvedValue([]),
-            count: jest.fn().mockResolvedValue(0),
-            cleanup: jest.fn().mockResolvedValue(undefined),
-        } as any;
-
         const mockMetricsService = {
             runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: string, fn: () => unknown) =>
                 typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
@@ -118,7 +108,6 @@ describe('CommandExecService', () => {
                 { provide: WorkerThreadService, useValue: workerThreadService },
                 { provide: StampMetaService, useValue: stampMetaService },
                 { provide: MetricsService, useValue: mockMetricsService },
-                { provide: DeferredDirStampService, useValue: deferredDirStampService },
             ],
         }).compile();
 
@@ -150,7 +139,6 @@ describe('CommandExecService', () => {
                     { provide: WorkerThreadService, useValue: workerThreadService },
                     { provide: StampMetaService, useValue: stampMetaService },
                     { provide: MetricsService, useValue: mockMetricsService },
-                    { provide: DeferredDirStampService, useValue: deferredDirStampService },
                 ],
             }).compile();
 

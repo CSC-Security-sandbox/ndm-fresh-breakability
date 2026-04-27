@@ -3,6 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { OPS_CMD, OPS_STATUS, ErrorType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import * as fs from "fs";
+import * as path from "path";
+import { CtimeTestTriggersService } from "../ctime-test-triggers.service";
 import { dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
@@ -12,6 +14,7 @@ import { CommandExecInput, CommandOutput } from "./command-execution.type";
 import { StampMetaOutput } from "./stamp-meta.type";
 import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
+import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
 
 const MAX_CTIME_RETRIES = 2;
 
@@ -25,6 +28,8 @@ export class StampMetaService {
         private readonly redisService: RedisService,
         private readonly winOperationService: WinOperationService,
         private readonly metricsService: MetricsService,
+        private readonly deferredDirStampService: DeferredDirStampService,
+        private readonly ctimeTestTriggers: CtimeTestTriggersService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         @Inject(ConfigService) configService: ConfigService,
     ) {
@@ -82,12 +87,24 @@ export class StampMetaService {
      */
     private async stampMetaWithCtimeValidation(input: CommandExecInput, output: CommandOutput): Promise<void> {
         const preserveAccessTime = !!input.jobContext.jobConfig?.options?.preserveAccessTime;
+        const cmdId = input.command.id;
+
+        this.logger.log(
+            `[${cmdId}] CtimeValidation START | preserveAccessTime=${preserveAccessTime} `
+            + `| sourcePath=${input.sourcePath} | fPath=${input.command.fPath}`,
+        );
 
         for (let attempt = 0; attempt <= MAX_CTIME_RETRIES; attempt++) {
             // Step 1 (T1): fetch source cTime before any operations
             const ctimeT1 = await this.fetchSourceCtimeMs(input.sourcePath);
+            this.logger.log(
+                `[${cmdId}] [attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}] T1=${ctimeT1} `
+                + `(${new Date(ctimeT1).toISOString()}) | ${input.sourcePath}`,
+            );
 
             const attemptOutput: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
+
+            this.ctimeTestTriggers.testChangeBetweenT1AndT2Start(input.sourcePath, attempt + 1, cmdId);
 
             // Steps 2 + 3: stamp ACL at destination in parallel with
             // bracketed preserveAccessAndModifiedTime at src (T2Start → utimes → T2End).
@@ -100,8 +117,10 @@ export class StampMetaService {
                 preserveAccessTime
                     ? (async () => {
                         ctimeT2Start = await this.fetchSourceCtimeMs(input.sourcePath);
+                        this.logger.log(`[${cmdId}] T2Start=${ctimeT2Start} (${new Date(ctimeT2Start).toISOString()})`);
                         const output = await this.preserveAccessAndModifiedTime(input);
                         ctimeT2End = await this.fetchSourceCtimeMs(input.sourcePath);
+                        this.logger.log(`[${cmdId}] T2End=${ctimeT2End} (${new Date(ctimeT2End).toISOString()})`);
                         return output;
                     })()
                     : Promise.resolve(null),
@@ -112,6 +131,11 @@ export class StampMetaService {
                 attemptOutput.sourceErrors.push(...preserveTimeOutput.sourceErrors);
             }
 
+            this.logger.log(
+                `[${cmdId}] ACL stamp done | sourceErrors=${aclStampOutput.sourceErrors.length} `
+                + `| targetErrors=${aclStampOutput.targetErrors.length}`,
+            );
+
             const noAclErrors = aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0;
             if (noAclErrors) {
                 const timeOutput = await this.stampAccessAndModifiedTime(input);
@@ -119,8 +143,15 @@ export class StampMetaService {
                 attemptOutput.targetErrors.push(...timeOutput.targetErrors);
             }
 
+            this.ctimeTestTriggers.testExhaustAllRetries(input.sourcePath, attempt + 1, cmdId);
+            this.ctimeTestTriggers.testChangeBetweenT2EndAndT3(input.sourcePath, attempt + 1, cmdId);
+
             // Step 5 (T3): fetch source cTime after all operations
             const ctimeT3 = await this.fetchSourceCtimeMs(input.sourcePath);
+            this.logger.log(
+                `[${cmdId}] T3=${ctimeT3} (${new Date(ctimeT3).toISOString()}) | `
+                + `T1=${ctimeT1}, T2Start=${ctimeT2Start}, T2End=${ctimeT2End}`,
+            );
 
             // CHECK per design: (cTime_T2Start > cTime_T1) OR (cTime_T3 > cTime_T2End)
             let sourceChanged: boolean;
@@ -128,27 +159,52 @@ export class StampMetaService {
                 const changedDuringStamp = ctimeT2Start > ctimeT1;
                 const changedAfterPreserveTimeAtSource = ctimeT3 > ctimeT2End;
                 sourceChanged = changedDuringStamp || changedAfterPreserveTimeAtSource;
+                this.logger.log(
+                    `[${cmdId}] preserveAccessTime check | changedDuringStamp=${changedDuringStamp} `
+                    + `| changedAfterPreserveTimeAtSource=${changedAfterPreserveTimeAtSource} | sourceChanged=${sourceChanged}`,
+                );
             } else {
                 sourceChanged = ctimeT3 > ctimeT1;
+                this.logger.log(
+                    `[${cmdId}] simple check | T3 > T1 = ${sourceChanged}`,
+                );
             }
 
             if (!sourceChanged) {
+                this.logger.log(
+                    `[${cmdId}] CtimeValidation PASSED | postStampCtime=${new Date(ctimeT3).toISOString()} `
+                    + `| attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}`,
+                );
                 output.sourceErrors.push(...attemptOutput.sourceErrors);
                 output.targetErrors.push(...attemptOutput.targetErrors);
                 output.postStampSourceCtimeIso = new Date(ctimeT3).toISOString();
+                if (input.command.isDir) {
+                    await this.deferredDirStampService.updateSourceCtime(
+                        input.jobContext.jobRunId, input.command.fPath, output.postStampSourceCtimeIso,
+                    );
+                }
                 return;
             }
 
             this.logger.warn(
-                `[${input.command.id}] Source ctime changed during stamp `
+                `[${cmdId}] Source ctime changed during stamp `
                 + `(T1=${ctimeT1}, T2Start=${ctimeT2Start}, T2End=${ctimeT2End}, T3=${ctimeT3}, `
                 + `attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}): ${input.sourcePath}`,
             );
 
             if (attempt === MAX_CTIME_RETRIES) {
+                this.logger.error(
+                    `[${cmdId}] CtimeValidation FAILED | all ${MAX_CTIME_RETRIES + 1} attempts exhausted `
+                    + `| publishing PERM_STAMP_CTIME_CONFLICT | ${input.sourcePath}`,
+                );
                 output.sourceErrors.push(...attemptOutput.sourceErrors);
                 output.targetErrors.push(...attemptOutput.targetErrors);
                 output.postStampSourceCtimeIso = new Date(ctimeT3).toISOString();
+                if (input.command.isDir) {
+                    await this.deferredDirStampService.updateSourceCtime(
+                        input.jobContext.jobRunId, input.command.fPath, output.postStampSourceCtimeIso,
+                    );
+                }
                 const error = new Error(
                     `Source metadata changed during all ${MAX_CTIME_RETRIES + 1} stamp attempts. `
                     + `Re-run migration after source stabilizes.`,
@@ -167,7 +223,7 @@ export class StampMetaService {
 
     private async fetchSourceCtimeMs(sourcePath: string): Promise<number> {
         const stat = await fs.promises.lstat(sourcePath);
-        return stat.ctimeMs;
+        return Math.floor(stat.ctimeMs);
     }
 
     private async executeStampMeta(input: CommandExecInput, output: CommandOutput): Promise<void> {
