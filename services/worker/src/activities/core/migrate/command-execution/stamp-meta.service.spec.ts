@@ -88,8 +88,7 @@ describe('StampMetaService', () => {
     (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
 
     const mockConfigService = {
-      get: jest.fn().mockImplementation((key: string, defaultValue?: any) => {
-        if (key === 'worker.ctimeValidationEnabled') return true;
+      get: jest.fn().mockImplementation((_key: string, defaultValue?: any) => {
         return defaultValue;
       }),
     };

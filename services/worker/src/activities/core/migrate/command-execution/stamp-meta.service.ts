@@ -22,7 +22,6 @@ const MAX_CTIME_RETRIES = 2;
 @Injectable()
 export class StampMetaService {
     private readonly logger: LoggerService;
-    private readonly ctimeValidationEnabled: boolean;
 
     constructor(
         private readonly redisService: RedisService,
@@ -34,7 +33,6 @@ export class StampMetaService {
         @Inject(ConfigService) configService: ConfigService,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
-        this.ctimeValidationEnabled = configService.get<boolean>('worker.ctimeValidationEnabled', true);
     }
 
     @Timed(MetricsService.METRIC.STAMP_META)
@@ -45,9 +43,7 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
-            const shouldValidateCtime = process.platform === 'win32'
-                && this.ctimeValidationEnabled
-                && input.jobContext.jobConfig?.options?.preservePermissions;
+            const shouldValidateCtime = process.platform === 'win32';
 
             if (shouldValidateCtime) {
                 await this.stampMetaWithCtimeValidation(input, output);
@@ -66,23 +62,23 @@ export class StampMetaService {
     }
 
     /**
-     * Wraps the stamp operations with ctime-based validation per the design. 
-     * The flow uses 4 ctime checkpoints to bracket our own
+     * Wraps the stamp operations with ctime-based validation per the design.
+     * The flow uses 3 ctime checkpoints to bracket our own
      * source-modifying operation (preserveAccessAndModifiedTime) separately
      * from external changes:
      *
-     *   T1:      fetch source cTime before any operations
+     *   T1:    fetch source cTime before any operations
      *   (stamp permissions/ACL at destination)
-     *   T2Start: fetch source cTime before restoring aTime/mTime at source
      *   (preserveAccessAndModifiedTime — bumps source cTime)
-     *   T2End:   fetch source cTime after restoring aTime/mTime at source
+     *   T2End: fetch source cTime after restoring aTime/mTime at source
      *   (stamp aTime/mTime at destination)
-     *   T3:      fetch source cTime after all operations
+     *   T3:    fetch source cTime after all operations
      *
-     *   CHECK: (cTime_T2Start > cTime_T1) OR (cTime_T3 > cTime_T2End)
+     *   CHECK: T3 > T2End (files with preserveAccessTime)
+     *          T3 > T1    (dirs / no preserveAccessTime)
      *
      * When preserveAccessTime is disabled, preserveAccessAndModifiedTime is
-     * a no-op so T2Start/T2End are skipped and we fall back to a simple
+     * a no-op so T2End is skipped and we fall back to a simple
      * T1 vs T3 comparison.
      */
     private async stampMetaWithCtimeValidation(input: CommandExecInput, output: CommandOutput): Promise<void> {
@@ -104,31 +100,20 @@ export class StampMetaService {
 
             const attemptOutput: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
-            this.ctimeTestTriggers.testChangeBetweenT1AndT2Start(input.sourcePath, attempt + 1, cmdId);
-
-            // Steps 2 + 3: stamp ACL at destination in parallel with
-            // bracketed preserveAccessAndModifiedTime at src (T2Start → utimes → T2End).
-            // ACL stamps target the destination so they don't bump source ctime.
-            let ctimeT2Start: number = 0;
+            // Step 2: stamp ACL at destination (doesn't bump source ctime)
+            // Step 3: preserve aTime/mTime at source in parallel (bumps source ctime), then capture T2End
             let ctimeT2End: number = 0;
+            const aclStampPromise = this.stampObjectACL(input);
+            const preserveTimePromise = preserveAccessTime
+                ? this.preserveAccessAndModifiedTimeAndCaptureT2End(input, cmdId)
+                : Promise.resolve(null);
 
-            const [aclStampOutput, preserveTimeOutput] = await Promise.all([
-                this.stampObjectACL(input),
-                preserveAccessTime
-                    ? (async () => {
-                        ctimeT2Start = await this.fetchSourceCtimeMs(input.sourcePath);
-                        this.logger.log(`[${cmdId}] T2Start=${ctimeT2Start} (${new Date(ctimeT2Start).toISOString()})`);
-                        const output = await this.preserveAccessAndModifiedTime(input);
-                        ctimeT2End = await this.fetchSourceCtimeMs(input.sourcePath);
-                        this.logger.log(`[${cmdId}] T2End=${ctimeT2End} (${new Date(ctimeT2End).toISOString()})`);
-                        return output;
-                    })()
-                    : Promise.resolve(null),
-            ]);
+            const [aclStampOutput, preserveTimeResult] = await Promise.all([aclStampPromise, preserveTimePromise]);
             attemptOutput.sourceErrors.push(...aclStampOutput.sourceErrors);
             attemptOutput.targetErrors.push(...aclStampOutput.targetErrors);
-            if (preserveTimeOutput) {
-                attemptOutput.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+            if (preserveTimeResult) {
+                ctimeT2End = preserveTimeResult.ctimeT2End;
+                attemptOutput.sourceErrors.push(...preserveTimeResult.output.sourceErrors);
             }
 
             this.logger.log(
@@ -146,22 +131,19 @@ export class StampMetaService {
             this.ctimeTestTriggers.testExhaustAllRetries(input.sourcePath, attempt + 1, cmdId);
             this.ctimeTestTriggers.testChangeBetweenT2EndAndT3(input.sourcePath, attempt + 1, cmdId);
 
-            // Step 5 (T3): fetch source cTime after all operations
+            // Step 4 (T3): fetch source cTime after all operations
             const ctimeT3 = await this.fetchSourceCtimeMs(input.sourcePath);
             this.logger.log(
                 `[${cmdId}] T3=${ctimeT3} (${new Date(ctimeT3).toISOString()}) | `
-                + `T1=${ctimeT1}, T2Start=${ctimeT2Start}, T2End=${ctimeT2End}`,
+                + `T1=${ctimeT1}, T2End=${ctimeT2End}`,
             );
 
-            // CHECK per design: (cTime_T2Start > cTime_T1) OR (cTime_T3 > cTime_T2End)
+            // CHECK: T3 > T2End (files with preserveAccessTime) or T3 > T1 (dirs / no preserveAccessTime)
             let sourceChanged: boolean;
             if (preserveAccessTime) {
-                const changedDuringStamp = ctimeT2Start > ctimeT1;
-                const changedAfterPreserveTimeAtSource = ctimeT3 > ctimeT2End;
-                sourceChanged = changedDuringStamp || changedAfterPreserveTimeAtSource;
+                sourceChanged = ctimeT3 > ctimeT2End;
                 this.logger.log(
-                    `[${cmdId}] preserveAccessTime check | changedDuringStamp=${changedDuringStamp} `
-                    + `| changedAfterPreserveTimeAtSource=${changedAfterPreserveTimeAtSource} | sourceChanged=${sourceChanged}`,
+                    `[${cmdId}] preserveAccessTime check | T3 > T2End = ${sourceChanged}`,
                 );
             } else {
                 sourceChanged = ctimeT3 > ctimeT1;
@@ -188,7 +170,7 @@ export class StampMetaService {
 
             this.logger.warn(
                 `[${cmdId}] Source ctime changed during stamp `
-                + `(T1=${ctimeT1}, T2Start=${ctimeT2Start}, T2End=${ctimeT2End}, T3=${ctimeT3}, `
+                + `(T1=${ctimeT1}, T2End=${ctimeT2End}, T3=${ctimeT3}, `
                 + `attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}): ${input.sourcePath}`,
             );
 
@@ -375,6 +357,16 @@ export class StampMetaService {
             }
         }
         return output;
+    }
+
+    private async preserveAccessAndModifiedTimeAndCaptureT2End(
+        input: CommandExecInput,
+        cmdId: string,
+    ): Promise<{ output: StampMetaOutput; ctimeT2End: number }> {
+        const output = await this.preserveAccessAndModifiedTime(input);
+        const ctimeT2End = await this.fetchSourceCtimeMs(input.sourcePath);
+        this.logger.log(`[${cmdId}] T2End=${ctimeT2End} (${new Date(ctimeT2End).toISOString()})`);
+        return { output, ctimeT2End };
     }
 
     async resetFileAttributes(path: string): Promise<boolean> {

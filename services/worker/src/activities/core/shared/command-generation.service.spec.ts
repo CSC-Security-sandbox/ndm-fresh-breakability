@@ -687,7 +687,7 @@ describe('CommandGenerationService', () => {
     });
 
     describe('buildCommand', () => {
-        it('should return command when isContentUpdate is true', () => {
+        it('should return command when isContentUpdate is true', async () => {
             mockIsContentUpdate.mockReturnValue(true);
             mockIsMetaUpdated.mockReturnValue(false);
             const sFile = {
@@ -703,12 +703,12 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', undefined);
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: false });
         });
 
-        it('should set targetExisted true when target file was provided (content_updated)', () => {
+        it('should set targetExisted true when target file was provided (content_updated)', async () => {
             mockIsContentUpdate.mockReturnValue(true);
             mockIsMetaUpdated.mockReturnValue(false);
             const sFile = {
@@ -724,7 +724,7 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
         });

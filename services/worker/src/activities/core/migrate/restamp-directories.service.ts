@@ -78,19 +78,16 @@ export class RestampDirectoriesService {
       const sPathId = jobContext.jobConfig?.sourceFileServer?.pathId;
       const sourceDirectoryPath = jobContext.jobConfig?.sourceDirectoryPath;
       const baseSourcePrefixPath = sPathId ? basePrefix(jobRunId, sPathId, sourceDirectoryPath) : null;
-      const ctimeValidationEnabled = this.configService.get<boolean>('worker.ctimeValidationEnabled', true)
-        && !!baseSourcePrefixPath
-        && !!jobContext.jobConfig?.options?.preservePermissions;
 
       const initialCount = await this.deferredDirStampService.count(jobRunId).catch(() => 0);
-      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}), ctimeValidation=${ctimeValidationEnabled}.`);
+      this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}).`);
 
       while (true) {
         const batch = await this.deferredDirStampService.popBatch(jobRunId, batchSize);
         if (!batch || batch.length === 0) break;
 
         const results = await Promise.allSettled(
-          batch.map(rec => this.applyStamp(baseTargetPrefixPath, baseSourcePrefixPath, rec, jobRunId, jobContext, ctimeValidationEnabled)),
+          batch.map(rec => this.applyStamp(baseTargetPrefixPath, baseSourcePrefixPath, rec, jobRunId, jobContext)),
         );
         for (const r of results) {
           output.attempted += 1;
@@ -131,7 +128,6 @@ export class RestampDirectoriesService {
     rec: DeferredDirStamp,
     jobRunId: string,
     jobContext: JobManagerContext,
-    ctimeValidationEnabled: boolean,
   ): Promise<"stamped" | "skipped" | "ctime_conflict"> {
     if (!rec?.fPath || !rec?.atime || !rec?.mtime) return "skipped";
 
@@ -149,7 +145,7 @@ export class RestampDirectoriesService {
     // Per design: fetch source cTime BEFORE stamping mTime
     // at destination, so we capture the source state at the moment of restamp.
     let ctimeConflictDetected = false;
-    if (ctimeValidationEnabled && baseSourcePrefixPath && rec.sourceCtime) {
+    if (baseSourcePrefixPath && rec.sourceCtime) {
       try {
         const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
         this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);

@@ -1,6 +1,6 @@
 # test-exhaust-all-retries.ps1
 # Exhausts all ctime validation retries by modifying source ACL on every attempt.
-# Adds escalating permissions for user 'kiran' (Read → Write → FullControl).
+# Removes all existing kiran rules, then adds escalating permissions (Read → Write → FullControl).
 # Does NOT restore permissions — verify on destination what got stamped.
 #
 # Expected result: PERM_STAMP_CTIME_CONFLICT after all attempts exhausted.
@@ -18,7 +18,7 @@ param(
 
 $Identity = "kiran"
 
-function Add-PermissionForKiran {
+function Set-PermissionForKiran {
     param(
         [string]$Path,
         [System.Security.AccessControl.FileSystemRights]$Rights
@@ -31,7 +31,9 @@ function Add-PermissionForKiran {
         Write-Host "BEFORE | Existing ACL entries for ${Identity}:"
         $existingRules | ForEach-Object {
             Write-Host "         $($_.IdentityReference) | $($_.FileSystemRights) | $($_.AccessControlType)"
+            $acl.RemoveAccessRule($_) | Out-Null
         }
+        Write-Host "REMOVED | All existing rules for $Identity"
     } else {
         Write-Host "BEFORE | No existing ACL entries for $Identity"
     }
@@ -69,8 +71,8 @@ if (-not $rights) {
 }
 
 try {
-    Write-Host "=== EXHAUST ALL RETRIES | attempt=$Attempt | Adding $rights for $Identity ==="
-    Add-PermissionForKiran -Path $SharePath -Rights $rights
+    Write-Host "=== EXHAUST ALL RETRIES | attempt=$Attempt | Setting ONLY $rights for $Identity ==="
+    Set-PermissionForKiran -Path $SharePath -Rights $rights
     Write-Host "VERIFY | expect PERM_STAMP_CTIME_CONFLICT (all retries should fail)"
 } catch {
     Write-Host "ERROR | $($_.Exception.Message)"

@@ -191,33 +191,46 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 )
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
-  const isUpdated = !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
-  // console.debug('[isContentUpdate]', {
-  //   file: fileName,
-  //   sourceStats: statsForLog(sFile),
-  //   destinationStats: statsForLog(dFile),
-  //   result: isUpdated,
-  // });
-  return isUpdated;
+  return !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
 };
- 
 
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000, fileName = 'unknown'): boolean => {
+export const isMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile?: fs.Stats,
+  toleranceMs = 1000,
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  if (!dFile) return true;
+  if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
+  return isSmbMetaUpdated(sFile, dFile, toleranceMs);
+};
+
+const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
   const sourceCtimeMs = sFile.ctimeMs;
-  const destinationCtimeMs = dFile?.ctimeMs;
-  const thresholdCtimeMs = destinationCtimeMs !== undefined ? destinationCtimeMs + toleranceMs : undefined;
-  const isUpdated = !dFile || (thresholdCtimeMs !== undefined && sourceCtimeMs > thresholdCtimeMs);
-  // console.debug('[isMetaUpdated]', {
-  //   file: fileName,
-  //   sourceStats: statsForLog(sFile),
-  //   destinationStats: statsForLog(dFile),
-  //   sourceCtimeMs,
-  //   destinationCtimeMs,
-  //   thresholdCtimeMs,
-  //   toleranceMs,
-  //   result: isUpdated,
-  // });
-  return isUpdated;
+  const destinationCtimeMs = dFile.ctimeMs;
+  const thresholdCtimeMs = destinationCtimeMs + toleranceMs;
+  return sourceCtimeMs > thresholdCtimeMs;
+};
+
+export const isNfsMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile: fs.Stats,
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  if (sFile.mode !== dFile.mode) return true;
+  let gid = sFile.gid;
+  let uid = sFile.uid;
+  if (jobContext?.jobConfig?.options?.isIdentityMappingAvailable === true && redisService) {
+    const [gid_res, uid_res] = await Promise.all([
+      redisService.getOwnerIdentity(jobContext.jobRunId, gid.toString(), 'GID'),
+      redisService.getOwnerIdentity(jobContext.jobRunId, uid.toString(), 'UID'),
+    ]);
+    gid = gid_res ? parseInt(gid_res) : gid;
+    uid = uid_res ? parseInt(uid_res) : uid;
+  }
+  return uid !== dFile.uid || gid !== dFile.gid;
 };
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);

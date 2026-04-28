@@ -571,26 +571,26 @@ describe('MigrateScanService', () => {
             expect(result).toBeUndefined();
         });
 
-        it('should build REMOVE_FILE command when sFile is undefined and dFile is undefined', () => {
+        it('should build REMOVE_FILE command when sFile is undefined and dFile is undefined', async () => {
             (isContentUpdate as jest.Mock).mockReturnValue(false);
-            const result = service.buildCommand(undefined as any, 'file/path');
+            const result = await service.buildCommand(undefined as any, 'file/path');
             expect(result).toBeDefined();
             expect(result!.isDir).toBe(false);
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_FILE);
         });
 
-        it('should build REMOVE_DIR command when sFile is undefined and dFile is directory', () => {
+        it('should build REMOVE_DIR command when sFile is undefined and dFile is directory', async () => {
             const dFile = {
                 isDirectory: () => true,
                 isSymbolicLink: () => false,
             };
-            const result = service.buildCommand(undefined as any, 'dir/path', dFile as any);
+            const result = await service.buildCommand(undefined as any, 'dir/path', dFile as any);
             expect(result).toBeDefined();
             expect(result!.isDir).toBe(true);
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_DIR);
         });
 
-        it('should build command with STAMP_META when isMetaUpdated true and isContentUpdate false', () => {
+        it('should build command with STAMP_META when isMetaUpdated true and isContentUpdate false', async () => {
             const mockSFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -605,7 +605,7 @@ describe('MigrateScanService', () => {
             };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
             (isMetaUpdated as jest.Mock).mockReturnValue(true);
-            const result = service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
+            const result = await service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
             expect(result).toBeDefined();
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.STAMP_META);
         });

@@ -1,7 +1,7 @@
 # test-change-between-t3-and-dir-restamp.ps1
 # Simulates an external ACL change on source directory AFTER T3 was stored
 # during migration but BEFORE the deferred restamp preserves mtime at destination.
-# Adds Modify permission for user 'kiran'. Does NOT restore.
+# Removes all existing kiran rules, then adds Modify permission. Does NOT restore.
 #
 # Expected result:
 #   restamp-directories detects currentCtime > storedT3 → PERM_STAMP_CTIME_CONFLICT
@@ -26,7 +26,9 @@ try {
         Write-Host "BEFORE | Existing ACL entries for ${Identity}:"
         $existingRules | ForEach-Object {
             Write-Host "         $($_.IdentityReference) | $($_.FileSystemRights) | $($_.AccessControlType)"
+            $acl.RemoveAccessRule($_) | Out-Null
         }
+        Write-Host "REMOVED | All existing rules for $Identity"
     } else {
         Write-Host "BEFORE | No existing ACL entries for $Identity"
     }

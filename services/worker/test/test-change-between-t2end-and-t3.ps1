@@ -1,7 +1,7 @@
 # test-change-between-t2end-and-t3.ps1
 # Simulates a single external ACL change on source between T2End and T3.
 # Fires only on attempt 1 so the retry succeeds and stamps the new ACL.
-# Adds Write permission for user 'kiran'. Does NOT restore.
+# Removes all existing kiran rules, then adds Write permission. Does NOT restore.
 #
 # Expected result:
 #   Attempt 1: T3 > T2End → conflict detected (changedAfterPreserveTimeAtSource=true)
@@ -33,7 +33,9 @@ try {
         Write-Host "BEFORE | Existing ACL entries for ${Identity}:"
         $existingRules | ForEach-Object {
             Write-Host "         $($_.IdentityReference) | $($_.FileSystemRights) | $($_.AccessControlType)"
+            $acl.RemoveAccessRule($_) | Out-Null
         }
+        Write-Host "REMOVED | All existing rules for $Identity"
     } else {
         Write-Host "BEFORE | No existing ACL entries for $Identity"
     }
@@ -58,7 +60,7 @@ try {
     }
 
     Write-Host "ADDED  | $rights (Allow) for $Identity"
-    Write-Host "VERIFY | destination should have: $Identity -> $rights (Allow)"
+    Write-Host "VERIFY | destination should have ONLY: $Identity -> $rights (Allow)"
 } catch {
     Write-Host "ERROR | $($_.Exception.Message)"
     exit 1
