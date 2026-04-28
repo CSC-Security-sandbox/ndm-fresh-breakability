@@ -7,13 +7,10 @@ autoinstall:
     preserve_sources_list: false
     primary:
       - arches: [amd64, i386]
-        uri: http://archive.linux.duke.edu/ubuntu
-      - arches: [default]
-        uri: http://ports.ubuntu.com/ubuntu-ports
+        uri: http://archive.ubuntu.com/ubuntu
       - arches: [default]
         uri: http://ports.ubuntu.com/ubuntu-ports
   early-commands:
-    - printf 'Acquire::Retries "10";\nAcquire::http::Timeout "120";\nAcquire::https::Timeout "120";\n' > /etc/apt/apt.conf.d/80-retries
     - sudo systemctl stop ssh
   locale: ${vm_guest_os_language}
   keyboard:

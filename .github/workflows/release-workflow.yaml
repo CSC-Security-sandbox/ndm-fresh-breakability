@@ -54,22 +54,22 @@ jobs:
           BRANCH_NAME="${GITHUB_REF#refs/heads/release/}"
           echo "build=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
-  # build-docker-images:
-  #   needs: check-branch
-  #   uses: ./.github/workflows/build-push-service-images.yaml
-  #   with:
-  #     build: ${{ needs.check-branch.outputs.build }}
-  #   secrets: inherit
+  build-docker-images:
+    needs: check-branch
+    uses: ./.github/workflows/build-push-service-images.yaml
+    with:
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
 
-  # build-worker-binary:
-  #   needs: check-branch
-  #   uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
-  #   with:
-  #     build: ${{ needs.check-branch.outputs.build }}
-  #   secrets: inherit
+  build-worker-binary:
+    needs: check-branch
+    uses: ./.github/workflows/build-binary-and-installer-for-worker.yaml
+    with:
+      build: ${{ needs.check-branch.outputs.build }}
+    secrets: inherit
   
   build-vm-images:
-    needs: [check-branch]
+    needs: [check-branch, build-worker-binary, build-docker-images]
     uses: ./.github/workflows/ndm-vm-image-build.yaml
     with:
       build: ${{ needs.check-branch.outputs.build }}
