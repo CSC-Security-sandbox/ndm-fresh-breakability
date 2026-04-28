@@ -114,8 +114,8 @@ export class StampMetaService {
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID'),
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID'),
                     ]);
-                    gid = gid_res;
-                    uid = uid_res;
+                    gid = gid_res? gid_res : gid;
+                    uid = uid_res? uid_res : uid;
                 }
                 if (gid && uid) {
                     if (command?.metadata?.isSymLink) {

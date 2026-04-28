@@ -174,8 +174,41 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
 
-// added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+export const isMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile?: fs.Stats,
+  toleranceMs = 1000,
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  // Check for destination file
+  if (!dFile) return true;
+  // For NFS validate for actual meta data changes
+  if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
+  // TODO : For SMB 
+  if (Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs) return true;
+  return false;
+};
+
+export const isNfsMetaUpdated = async (
+  sFile: fs.Stats, 
+  dFile: fs.Stats, 
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  if (sFile.mode !== dFile.mode) return true;
+    let gid = sFile.gid;
+    let uid = sFile.uid;
+    if (jobContext?.jobConfig?.options?.isIdentityMappingAvailable === true && redisService) {
+      const [gid_res, uid_res] = await Promise.all([
+          redisService.getOwnerIdentity(jobContext.jobRunId, gid.toString(), 'GID'),
+          redisService.getOwnerIdentity(jobContext.jobRunId, uid.toString(), 'UID'),
+      ]);
+      gid = gid_res ? parseInt(gid_res) : gid;
+      uid = uid_res ? parseInt(uid_res) : uid;
+    }
+    return uid !== dFile.uid || gid !== dFile.gid;
+};
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(

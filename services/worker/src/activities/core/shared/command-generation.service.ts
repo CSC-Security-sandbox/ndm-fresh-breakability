@@ -5,6 +5,7 @@ import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
 import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, getExcludeOrSkipReason } from "src/activities/utils/utils";
+import { RedisService } from "src/redis/redis.service";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isExists } from "../utils/utils";
@@ -124,7 +125,8 @@ export class CommandGenerationService {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-    private readonly fileTypeDetectionService: FileTypeDetectionService
+    private readonly fileTypeDetectionService: FileTypeDetectionService,
+    private readonly redisService: RedisService
   ) {
     this.metaUpdatedToleranceMs = this.configService.get('worker.metaUpdatedToleranceMs') || 60000;
     this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
@@ -266,7 +268,7 @@ export class CommandGenerationService {
             // CASE 1: mkdir failed — directory does not exist in target.
             // Scan children recursively AND generate a COPY_DIR command.
             result.subDirs.push(relativeSourcePath);
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
           } else if (itemData.originalCommandId) {
             // CASE 2: stamp failed — directory already exists in target, retry with originalCommandId.
@@ -274,7 +276,7 @@ export class CommandGenerationService {
             // Do NOT recurse: that would inflate error counts with phantom child errors.
             const targetDirPath = path.join(targetPath, itemName);
             const targetDirStat = await fs.promises.lstat(targetDirPath);
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
           } else {
             // CASE 3: normal scan — directory exists in target, no originalCommandId.
@@ -286,7 +288,7 @@ export class CommandGenerationService {
             const targetDirExists = await isExists(targetDirPath);
             if (targetDirExists) {
                 const targetDirStat = await fs.promises.lstat(targetDirPath);
-                const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetDirStat);
+                const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, undefined, jobContext);
                 if (newCommand) result.commands.push(newCommand);  // STAMP_META only if needed
             }
           }
@@ -303,20 +305,20 @@ export class CommandGenerationService {
               continue;
             }
             // Target doesn't exist - create symlink
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
           } else {
             // Target exists for symlink - compare and potentially update
             const targetFilePath = path.join(targetPath, itemName);
             const targetStatLstat = await fs.promises.lstat(targetFilePath);
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
           }
         } else if (!itemInTarget) {
           // Regular file, target doesn't exist
           result.fileCount++;
           result.totalSize += sourceStat.size;
-          const newCommand = this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId);
+          const newCommand = await this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, jobContext);
           if (newCommand) result.commands.push(newCommand);
         } else {
           // Target exists - compare stats
@@ -330,7 +332,7 @@ export class CommandGenerationService {
             } else {
               targetStat = await fs.promises.stat(targetFilePath);
             }
-            const newCommand = this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
           }
         }
@@ -448,7 +450,7 @@ export class CommandGenerationService {
    * Used for both scan and retry operations - compares source vs target.
    * Returns undefined if no update is needed.
    */
-  buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats, originalCommandId?: string): Cmd | undefined {
+  async buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats, originalCommandId?: string, jobContext?: JobManagerContext): Promise<Cmd | undefined> {
     const metadata: CmdMeta = {
       size: sFile.size,
       mtime: sFile.mtime,
@@ -480,7 +482,7 @@ export class CommandGenerationService {
       );
     }
 
-    if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+    if (await isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs, this.redisService, jobContext)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),
