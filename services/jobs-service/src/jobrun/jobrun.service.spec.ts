@@ -2915,7 +2915,7 @@ describe("JobRunService", () => {
         
         expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
           "oe.errorType IN (:...errorTypes)", 
-          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
+          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR", "PERM_STAMP_CTIME_ERROR"]) }
         );
         expect(result).toEqual(mockErrorCounts);
         expect(result.find(e => e.errortype === "RECOVERABLE_ERROR")).toBeUndefined();

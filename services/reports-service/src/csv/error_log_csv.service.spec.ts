@@ -451,7 +451,7 @@ describe("ErrorLogService", () => {
           expect.any(String),
           expect.arrayContaining([
             'job-run-filtered',
-            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR'])
+            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR', 'PERM_STAMP_CTIME_ERROR'])
           ])
         );
       });
@@ -542,7 +542,7 @@ describe("ErrorLogService", () => {
           expect.arrayContaining([
             'run1',
             'run2',
-            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR'])
+            expect.arrayContaining(['FATAL_ERROR', 'TRANSIENT_ERROR', 'PERM_STAMP_CTIME_ERROR'])
           ])
         );
       });

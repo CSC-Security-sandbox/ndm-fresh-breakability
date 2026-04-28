@@ -2,7 +2,7 @@
  * Error types that should be visible to users
  * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism
  */
-export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
+export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR', 'PERM_STAMP_CTIME_ERROR'] as const;
 
 export const SQL_QUERIES = {
   /**

@@ -322,6 +322,9 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'ETRAILSPACE':
           // Filename contains trailing spaces
           return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
+      case 'PERM_STAMP_CTIME_CONFLICT':
+        // Explicit metadata stamp race/conflict simulation code
+        return 'PERM_STAMP_CTIME_CONFLICT';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
