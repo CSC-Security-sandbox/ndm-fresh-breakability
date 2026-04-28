@@ -1,4 +1,4 @@
-import { CsvService, COC_BUNDLE_ENTRIES } from "./../csv/csv_export.service";
+import { CsvService, COC_BUNDLE_ENTRIES, CocBundleFileEntry } from "./../csv/csv_export.service";
 import {
   Injectable,
   Logger,
@@ -396,17 +396,24 @@ export class JobRunService {
         for (let i = 0; i < COC_BUNDLE_ENTRIES.length; i++) {
           const entry = COC_BUNDLE_ENTRIES[i];
           const filePath = bundleCsvPaths[i];
-          const listType = entry.kind === 'list' ? entry.listType : undefined;
           const resume = (await this.fileExists(filePath))
-            ? await this.getResumeCursor(filePath, sourcePathPrefix, projectId, listType)
+            ? await this.getResumeCursor(filePath, sourcePathPrefix, projectId, entry)
             : null;
           this.logger.log(
             `projectId: ${projectId} ${resume ? 'Resuming' : 'Generating'} ${entry.fileName} for jobRunId: ${jobRunId}${resume ? `, cursor: ${resume}` : ''}`
           );
           if (entry.kind === "inventory") {
             await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType, resume);
-          } else {
+          } else if (entry.kind === 'list') {
             await this.csvService.generateListCsv(filePath, jobRunId, entry.listType, batchSize, resume);
+          } else {
+            await this.csvService.generatePermStampCtimeConflictCsv(
+              filePath,
+              jobRunId,
+              batchSize,
+              jobType,
+              resume,
+            );
           }
         }
       } catch (csvError) {
@@ -417,7 +424,7 @@ export class JobRunService {
         throw csvError;
       }
 
-      // Create ZIP from the four CSV files under the bundle folder
+      // Create ZIP from all generated CSV files under the bundle folder
       this.logger.log(`projectId: ${projectId} Creating ZIP at: ${zipFilePath}`);
       try {
         await this.createZipFile(bundleCsvPaths, zipFilePath);
@@ -491,7 +498,12 @@ export class JobRunService {
     });
   }
 
-  private async getResumeCursor(filePath: string, volumePath: string, projectId?: string, listType?: 'excluded' | 'skipped' | 'deleted'): Promise<string | null> {
+  private async getResumeCursor(
+    filePath: string,
+    volumePath: string,
+    projectId?: string,
+    entry?: CocBundleFileEntry,
+  ): Promise<string | null> {
     try {
       const stat = await fs.promises.stat(filePath);
       if (stat.size === 0) return null;
@@ -531,7 +543,12 @@ export class JobRunService {
         volumePath && sourcePath.startsWith(volumePath)
           ? sourcePath.slice(volumePath.length)
           : sourcePath;
-      const cursor = (listType === 'excluded' || listType === 'skipped') && stripped.startsWith('\\')
+      // SMB paths need backslash-to-forward-slash normalization for all report
+      // types except 'deleted' (which stores backslashes in the DB) and 'inventory'.
+      const shouldNormalizeSmbPath =
+        entry?.kind === 'permStampCtimeConflict' ||
+        (entry?.kind === 'list' && entry.listType !== 'deleted');
+      const cursor = shouldNormalizeSmbPath && stripped.startsWith('\\')
         ? stripped.replace(/\\/g, '/')
         : stripped;
 

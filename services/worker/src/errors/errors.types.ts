@@ -1,5 +1,7 @@
 import { ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 
+export const PERM_STAMP_CTIME_CONFLICT = 'PERM_STAMP_CTIME_CONFLICT' as const;
+
 export class RetryableError extends Error {
   constructor(message: string) {
     super(message);
@@ -34,5 +36,21 @@ export class E8Dot3CollisionError extends Error {
     this.filePath = filePath;
     // E8DOT3_COLLISION is a TRANSIENT_ERROR - file-specific issue that doesn't cancel the entire activity
     this.errorType = ErrorType.TRANSIENT_ERROR;
+  }
+}
+
+export class PermStampCtimeConflictError extends Error {
+  code: string;
+  filePath: string;
+  errorType: ErrorType;
+
+  constructor(filePath: string) {
+    const message = `Permission stamp / metadata ctime conflict for path: ${filePath}`;
+    super(message);
+    this.name = 'PermStampCtimeConflictError';
+    this.code = PERM_STAMP_CTIME_CONFLICT;
+    this.filePath = filePath;
+    // File-specific conflict after bounded retries — same class shape as E8Dot3CollisionError
+    this.errorType = ErrorType.PERM_STAMP_CTIME_ERROR;
   }
 }

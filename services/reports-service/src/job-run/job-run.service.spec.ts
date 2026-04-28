@@ -122,6 +122,7 @@ describe("JobRunService", () => {
     mockCsvService = {
       generateCsv: jest.fn(),
       generateListCsv: jest.fn().mockResolvedValue(undefined),
+      generatePermStampCtimeConflictCsv: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockLogger = {
@@ -942,6 +943,7 @@ describe("JobRunService", () => {
       path.resolve(cocReportsBaseDir, `${id}-coc-report/excluded-report.csv`),
       path.resolve(cocReportsBaseDir, `${id}-coc-report/skipped-report.csv`),
       path.resolve(cocReportsBaseDir, `${id}-coc-report/deleted-report.csv`),
+      path.resolve(cocReportsBaseDir, `${id}-coc-report/perm-stamp-ctime-conflict-report.csv`),
     ]);
 
     beforeEach(() => {
@@ -1012,14 +1014,15 @@ describe("JobRunService", () => {
         jobConfig: { jobType: JobType.Migrate },
       });
 
-      // ZIP not found, all 4 CSVs not found (fresh generation)
+      // ZIP not found, all CSVs not found (fresh generation)
       jest
         .spyOn(service as any, "fileExists")
         .mockResolvedValueOnce(false)  // ZIP does not exist
         .mockResolvedValueOnce(false)  // coc-report.csv
         .mockResolvedValueOnce(false)  // excluded-report.csv
         .mockResolvedValueOnce(false)  // skipped-report.csv
-        .mockResolvedValueOnce(false); // deleted-report.csv
+        .mockResolvedValueOnce(false)  // deleted-report.csv
+        .mockResolvedValueOnce(false); // perm-stamp-ctime-conflict-report.csv
       // ZIP verified present after creation
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
 
@@ -1034,9 +1037,10 @@ describe("JobRunService", () => {
 
       expect(result).toBe(expectedCocPath);
 
-      // All four CSVs generated via unified per-file loop (no generateCocCsvBundle)
+      // All CSVs generated via unified per-file loop (no generateCocCsvBundle)
       expect(mockCsvService.generateCsv).toHaveBeenCalledTimes(1);
       expect(mockCsvService.generateListCsv).toHaveBeenCalledTimes(3);
+      expect(mockCsvService.generatePermStampCtimeConflictCsv).toHaveBeenCalledTimes(1);
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         expect.stringContaining("coc-report.csv"), jobRunId, 50000, JobType.Migrate, null,
       );
@@ -1212,6 +1216,7 @@ describe("JobRunService", () => {
       path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/perm-stamp-ctime-conflict-report.csv`),
     ];
 
     beforeEach(() => {
@@ -1355,6 +1360,7 @@ describe("JobRunService", () => {
       path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
+      path.resolve(mockBase, `${jobRunId}-coc-report/perm-stamp-ctime-conflict-report.csv`),
     ];
 
     beforeEach(() => {
@@ -1458,6 +1464,7 @@ describe("JobRunService", () => {
       path.resolve(bundleDir, "excluded-report.csv"),
       path.resolve(bundleDir, "skipped-report.csv"),
       path.resolve(bundleDir, "deleted-report.csv"),
+      path.resolve(bundleDir, "perm-stamp-ctime-conflict-report.csv"),
     ];
 
     beforeEach(() => {
