@@ -242,7 +242,7 @@ export class SetupExportsPathPermissionService {
                                 cacheMap = new Map();
                                 this.mappingCache.set(jobRunId, cacheMap);
                             }
-                            cacheMap.set(output, principal);
+                            cacheMap.set(this.normalizePrincipal(output), principal);
                             resolvedPrincipal = output;
                         }
                     }

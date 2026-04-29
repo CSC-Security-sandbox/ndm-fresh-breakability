@@ -659,6 +659,24 @@ describe('RedisService', () => {
       expect(result).toBe(0);
     });
 
+    it('setOwnerIdentity should skip write and return early when id is falsy', async () => {
+      mockClient.hSet = jest.fn();
+
+      const result = await service.setOwnerIdentity('job-run-123', undefined as any, 'SID', 'S-1-5-21-target');
+
+      expect(mockClient.hSet).not.toHaveBeenCalled();
+      expect(result).toBeUndefined();
+    });
+
+    it('setOwnerIdentity should skip write and return early when owner is falsy', async () => {
+      mockClient.hSet = jest.fn();
+
+      const result = await service.setOwnerIdentity('job-run-123', 'S-1-5-21-source', 'SID', undefined as any);
+
+      expect(mockClient.hSet).not.toHaveBeenCalled();
+      expect(result).toBeUndefined();
+    });
+
     describe('Memory info', () => {
       beforeEach(() => {
         jest.spyOn(service as any, 'ensureClient').mockResolvedValue(undefined);

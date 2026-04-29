@@ -222,6 +222,7 @@ describe('WinOperationService', () => {
         SourceAclError,
       );
     });
+
   });
 
   describe('setAclOperation', () => {
@@ -318,6 +319,7 @@ describe('WinOperationService', () => {
         TargetAclError,
       );
     });
+
   });
 
   describe('stampAclOperation', () => {
@@ -1288,9 +1290,26 @@ describe('WinOperationService', () => {
       expect(result.size).toBe(1);
     });
 
-    it('should handle empty array response', async () => {
+    it('should return an empty map when PowerShell returns an empty array', async () => {
       const usernames = ['nonexistentuser'];
-      const mockOutput: any[] = [];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify([]),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
+    });
+
+    it('should skip array entries that are missing username or sid', async () => {
+      const usernames = ['user1', 'user2', 'user3'];
+      const mockOutput = [
+        { username: 'user1', sid: 'S-1-5-21-1001' },
+        { username: 'user2' },
+        { sid: 'S-1-5-21-1003' },
+      ];
 
       mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
         stdout: JSON.stringify(mockOutput),
@@ -1300,7 +1319,46 @@ describe('WinOperationService', () => {
       const result = await service.resolveUsernamesToSids(usernames);
 
       expect(result.size).toBe(1);
-      expect(result.get(undefined as any)).toBe(undefined);
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+    });
+
+    it('should return an empty map when single-object response is missing username or sid', async () => {
+      const usernames = ['nonexistentuser'];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify({}),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
+    });
+
+    it('should throw when stdout is unparseable', async () => {
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: 'not valid json',
+        stderr: '',
+      });
+
+      await expect(service.resolveUsernamesToSids(['bob'])).rejects.toThrow(
+        'Failed to parse Resolve-UsernamesToSid output',
+      );
+    });
+
+    it('should warn on stderr but succeed when stdout is valid JSON', async () => {
+      const mockOutput = [{ username: 'user1', sid: 'S-1-5-21-1001' }];
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify(mockOutput),
+        stderr: 'WARNING: deprecated parameter',
+      });
+
+      const result = await service.resolveUsernamesToSids(['user1']);
+
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Resolve-UsernamesToSid stderr'),
+      );
     });
   });
 

@@ -1,4 +1,5 @@
 import * as wf from '@temporalio/workflow';
+import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning, validateCommandStreamLength } from '../common/workflow-utils';
@@ -36,6 +37,13 @@ const {
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
+
+const {
+  resolveUsernamesToSids: resolveUsernamesToSidsActivity,
+} = wf.proxyActivities<MappingResolverService>({
+  startToCloseTimeout: '10m',
+  retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
+});
 
 const {
   fetchFailedOperations: fetchFailedOperationsActivity,
@@ -96,6 +104,8 @@ export const ChildRetryScanWorkflow = async ({
 
   // Update status to RUNNING at start
   await updateJobStatusActivity({ jobRunId, status: JobRunStatus.Running });
+
+  await resolveUsernamesToSidsActivity(jobRunId);
 
   const retryScanWorkflowOutput: ChildRetryScanWorkflowOutput = {
     jobRunId,
