@@ -11,6 +11,7 @@ import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-l
 import { isExists } from "../utils/utils";
 import { FileTypeDetectionService } from "../utils/file-type-detection.service";
 import { FileType } from "src/activities/types/tasks";
+import { DeferredDirStamp, DeferredDirStampService } from "./deferred-dir-stamp.service";
 
 /**
  * Interface for target content membership lookups.
@@ -104,6 +105,15 @@ export interface ProcessItemsInput {
   maxCommandsPerBatch?: number;
   /** Pre-resolved target membership for SMB lowercase conflict detection */
   targetLcLookup?: TargetContentLookup;
+  /**
+   * Optional store for deferring directory mtime/atime stamping until after
+   * all child writes are done. When provided, every directory encountered
+   * (created, retried, or already-existing in incremental mode) is recorded
+   * so a post-pass activity can re-apply the source timestamps. When omitted,
+   * the existing behavior (no deferred stamping) is preserved — useful in
+   * unit tests or callers that explicitly opt out.
+   */
+  deferredDirStampService?: DeferredDirStampService;
 }
 
 export interface ProcessItemsResult {
@@ -270,6 +280,9 @@ export class CommandGenerationService {
             result.subDirs.push(relativeSourcePath);
             const newCommand = await this.buildCommand(sourceStat, fileInfo.path, undefined, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
+            // Record deferred mtime/atime stamping — child writes will clobber
+            // anything the per-command STAMP_META does for this dir.
+            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           } else if (itemData.originalCommandId) {
             // CASE 2: stamp failed — directory already exists in target, retry with originalCommandId.
             // Generate a stamp-only command (target stat passed in → buildCommand emits STAMP_META only).
@@ -278,6 +291,7 @@ export class CommandGenerationService {
             const targetDirStat = await fs.promises.lstat(targetDirPath);
             const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
+            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           } else {
             // CASE 3: normal scan — directory exists in target, no originalCommandId.
             // Just recurse into children; no command needed for the directory itself.
@@ -291,6 +305,7 @@ export class CommandGenerationService {
                 const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, undefined, jobContext);
                 if (newCommand) result.commands.push(newCommand);  // STAMP_META only if needed
             }
+            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           }
         } else if (sourceStat.isSymbolicLink()) {
           // Handle symbolic links
@@ -525,5 +540,29 @@ export class CommandGenerationService {
       undefined,
       originalCommandId
     );
+  }
+
+  /**
+   * Records a directory for deferred mtime/atime restamping after migration.
+   * No-op if the caller didn't supply a deferredDirStampService.
+   *
+   * Failures here are swallowed (logged inside the service) — recording is
+   * best-effort and must never fail the surrounding scan/migration.
+   */
+  private async recordDeferredDirStamp(
+    deferredDirStampService: DeferredDirStampService | undefined,
+    jobContext: JobManagerContext,
+    relativeSourcePath: string,
+    sourceStat: fs.Stats,
+  ): Promise<void> {
+    if (!deferredDirStampService) return;
+    if (!sourceStat?.mtime || !sourceStat?.atime) return;
+    const record: DeferredDirStamp = {
+      fPath: relativeSourcePath,
+      atime: new Date(sourceStat.atime).toISOString(),
+      mtime: new Date(sourceStat.mtime).toISOString(),
+      depth: DeferredDirStampService.computeDepth(relativeSourcePath),
+    };
+    await deferredDirStampService.add(jobContext.jobRunId, record);
   }
 }

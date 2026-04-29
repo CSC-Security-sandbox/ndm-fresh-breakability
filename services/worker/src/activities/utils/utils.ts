@@ -172,7 +172,9 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
+  return !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+};
 
 export const isMetaUpdated = async (
   sFile: fs.Stats,
@@ -181,18 +183,21 @@ export const isMetaUpdated = async (
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
   jobContext?: JobManagerContext
 ): Promise<boolean> => {
-  // Check for destination file
   if (!dFile) return true;
-  // For NFS validate for actual meta data changes
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
-  // TODO : For SMB 
-  if (Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs) return true;
-  return false;
+  return isSmbMetaUpdated(sFile, dFile, toleranceMs);
+};
+
+const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
+  const sourceCtimeMs = sFile.ctimeMs;
+  const destinationCtimeMs = dFile.ctimeMs;
+  const thresholdCtimeMs = destinationCtimeMs + toleranceMs;
+  return sourceCtimeMs > thresholdCtimeMs;
 };
 
 export const isNfsMetaUpdated = async (
-  sFile: fs.Stats, 
-  dFile: fs.Stats, 
+  sFile: fs.Stats,
+  dFile: fs.Stats,
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
   jobContext?: JobManagerContext
 ): Promise<boolean> => {
@@ -373,7 +378,7 @@ const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ET
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // Transient errors that should not be retried
-const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION', 'PERM_STAMP_CTIME_CONFLICT']);
 
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL

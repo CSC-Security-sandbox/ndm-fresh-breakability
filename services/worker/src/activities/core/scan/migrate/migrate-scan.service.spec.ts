@@ -128,7 +128,8 @@ describe('MigrateScanService', () => {
             configService,
             mockLoggerFactory as LoggerFactory,
             fileTypeDetectionService as FileTypeDetectionService,
-            commandGenerationService as CommandGenerationService
+            commandGenerationService as CommandGenerationService,
+            { add: jest.fn() } as any,
         );
 
         jobContext = {
@@ -638,7 +639,7 @@ describe('MigrateScanService', () => {
     // --- scanDirectory ---
     describe('scanDirectory', () => {
         beforeEach(() => {
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
             (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
                 category,
                 origin,
@@ -1180,7 +1181,7 @@ describe('MigrateScanService', () => {
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
             (service as any).maxMigrationCommand = 2;
 
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -1333,7 +1334,7 @@ describe('MigrateScanService', () => {
             }),
         } as Partial<CommandGenerationService>;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
 
         jobContext = {
             publishToErrorStream: jest.fn(),

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { StampMetaService } from './stamp-meta.service';
 import { RedisService } from 'src/redis/redis.service';
 import {
@@ -86,6 +87,12 @@ describe('StampMetaService', () => {
     (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
 
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((_key: string, defaultValue?: any) => {
+        return defaultValue;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StampMetaService,
@@ -93,6 +100,7 @@ describe('StampMetaService', () => {
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: WinOperationService, useValue: winOperationService },
         { provide: MetricsService, useValue: mockMetricsService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -510,6 +518,27 @@ describe('StampMetaService', () => {
         error.stack,
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    // Directory mtimes/atimes are clobbered by every child write, so the per-command
+    // stamp is intentionally skipped — the deferred restamp pass at the end of
+    // ChildSyncWorkflow re-applies them deepest-first. See DeferredDirStampService.
+    it('should skip utimes/lutimes when command is a directory (deferred restamp owns it)', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+        },
+        {},
+        true, // isDir
+      );
+
+      const result = await service.stampAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect((mockFs.promises as any).lutimes).not.toHaveBeenCalled();
     });
   });
 
