@@ -248,6 +248,40 @@ Inputs:
   but the publish to `/x/eng/3rdparty/ftpstaging/` is skipped. Use this
   to validate CSV parsing and the guardrails before a real release.
 
+## Runner disk and `TMPDIR`
+
+Staged sources (CSV copy, downloaded archives, reports, logs) use
+**`${STAGE_ROOT}`**, which defaults to **`/var/lib/rts-ftp-posting`** on
+the runner — intended to live on the **root filesystem** (e.g. LVM
+`ubuntu--vg-ubuntu--lv` mounted at `/`), not under **`RUNNER_TEMP`**
+(which on scs-v2 can be a smaller mount). Override the directory with
+the repo/org GitHub Actions variable **`RTS_FTP_RUNNER_STAGE_ROOT`**
+if your layout differs. The workflow creates the directory with **`sudo
+mkdir`** when the runner user cannot write there yet.
+
+On typical scs-v2 hosts **`/var`** is tens of gigabytes; treating **on the
+order of ~43 GB** on that filesystem as workable capacity for a full
+RTS tree plus temporary unpack during the IP scan is reasonable. Always
+check **`df -h /var`** (or the mount that contains **`/var/lib`**) ahead
+of an unusually large posting.
+
+The NetApp IP scanner unpacks each archive with Python `tempfile`,
+which uses **`TMPDIR`** if set, otherwise the OS default (typically
+**`/tmp`**). On some hosts **`/tmp`** is a small **tmpfs**, so unpacking
+large upstream tarballs (e.g. Debian **`firefox-esr`** **`.orig.tar.xz`**)
+can hit **`Errno 28`** even when the root volume has space.
+
+The workflow sets **`TMPDIR="${STAGE_ROOT}/ip-scan-tmp"`** before
+invoking `scan-for-netapp-ip.py` so extraction temp dirs sit on the same
+filesystem as **`STAGE_ROOT`**. If you still run out of space, free
+disk or grow the volume that holds **`RTS_FTP_RUNNER_STAGE_ROOT`**.
+
+After each run, the workflow removes **`${STAGE_ROOT}`** with **`rm -rf`**
+(step **`if: always()`**, after artifact upload) so self-hosted runners do not retain
+gigabytes of staged sources between jobs. The Git checkout under
+**`GITHUB_WORKSPACE`** (including **`release-branch/`**) is managed by
+Actions and is not removed by that step.
+
 ## Output
 
 Every run uploads a workflow artifact named

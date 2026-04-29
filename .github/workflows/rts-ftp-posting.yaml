@@ -43,6 +43,10 @@ jobs:
       RTS_DATA_RETENTION_ROOT: ${{ vars.RTS_DATA_RETENTION_ROOT || '/x/eng/3rdparty/data_retention' }}
       FTP_STAGING_ROOT: ${{ vars.FTP_STAGING_ROOT || '/x/eng/3rdparty/ftpstaging' }}
       COSINE_NOTIFY_EMAIL: ${{ vars.COSINE_NOTIFY_EMAIL || 'enghelp+blackduck@netapp.com' }}
+      # Staged sources + ip-scan TMPDIR live here. Default is on the root FS
+      # (typical LVM: ubuntu--vg-ubuntu--lv → /) — not RUNNER_TEMP, which on
+      # scs-v2 can sit on a small partition. Override via repo/org variable.
+      RTS_FTP_RUNNER_STAGE_ROOT: ${{ vars.RTS_FTP_RUNNER_STAGE_ROOT || '/var/lib/rts-ftp-posting' }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -137,7 +141,11 @@ jobs:
           PROJECT_SUBDIR="${RTS_PROJECT_NAME// /_}"
           DATA_RETENTION_DIR="${RTS_DATA_RETENTION_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}"
 
-          STAGE_ROOT="${RUNNER_TEMP:-/tmp}/rts-ftp-posting"
+          STAGE_ROOT="${RTS_FTP_RUNNER_STAGE_ROOT}"
+          if [[ ! -d "${STAGE_ROOT}" || ! -w "${STAGE_ROOT}" ]]; then
+            sudo mkdir -p "${STAGE_ROOT}"
+            sudo chown "$(id -un):$(id -gn)" "${STAGE_ROOT}"
+          fi
           PROJECT_DIR="${STAGE_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}"
           mkdir -p "${PROJECT_DIR}"
           CSV_NAME="${RTS_PROJECT_NAME} ${RTS_PROJECT_VERSION}-FTP-Components.csv"
@@ -322,6 +330,17 @@ jobs:
           # reference, fix it in the source tree (rename, redact, exclude
           # from the published archive at the source) rather than
           # bypassing the guard.
+          #
+          # Archive extraction uses Python tempfile, which honors TMPDIR.
+          # The default (often /tmp) may be a small tmpfs or a different
+          # partition than the staging root (RTS_FTP_RUNNER_STAGE_ROOT) where
+          # we stage ~hundreds of GB of sources — large .orig.tar.xz unpacks then fail with Errno 28.
+          mkdir -p "${STAGE_ROOT}/ip-scan-tmp"
+          export TMPDIR="${STAGE_ROOT}/ip-scan-tmp"
+          export TMP="${TMPDIR}"
+          echo "=== df before IP scan (staging + TMPDIR) ==="
+          df -h "${STAGE_ROOT}" "${TMPDIR}" 2>/dev/null || df -h
+
           REPORT="${STAGE_ROOT}/ip-scan.json"
           python3 scripts/rts-ftp-posting/scan-for-netapp-ip.py \
             --root "${PROJECT_DIR}" \
@@ -524,3 +543,25 @@ jobs:
             ${{ steps.paths.outputs.csv_path }}
           if-no-files-found: warn
           retention-days: 30
+
+      # Self-hosted runners reuse disk across jobs; without this, hundreds of
+      # GB under RTS_FTP_RUNNER_STAGE_ROOT accumulate until the volume fills.
+      # Run only after artifact upload so failed runs still retain logs in CI.
+      - name: Clean up staging tree on runner
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          STAGE_ROOT: ${{ steps.paths.outputs.stage_root }}
+        run: |
+          set -eu
+          if [[ -z "${STAGE_ROOT}" ]]; then
+            echo "::warning::STAGE_ROOT unset; skipping cleanup."
+            exit 0
+          fi
+          if [[ -d "${STAGE_ROOT}" ]]; then
+            echo "Removing runner staging tree (sources + ip-scan temp): ${STAGE_ROOT}"
+            rm -rf "${STAGE_ROOT}"
+            echo "Cleanup done."
+          else
+            echo "No staging directory at ${STAGE_ROOT} (nothing to remove)."
+          fi

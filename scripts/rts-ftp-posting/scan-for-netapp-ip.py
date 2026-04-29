@@ -44,8 +44,11 @@ What it does
 ------------
 1. For every file under ``--root``:
    * If the file is a known archive (tar/tar.gz/tar.bz2/tar.xz/zip/jar/
-     war/aar/ear), extract it into a temporary directory and walk the
-     extracted tree as **archive content** (full pattern set applies).
+     war/aar/ear), extract it into a temporary directory (respects the
+     ``TMPDIR`` / ``TMP`` environment variables — default is often
+     ``/tmp``, which may be too small for huge upstream ``.orig.tar.xz``
+     trees) and walk the extracted tree as **archive content** (full
+     pattern set applies).
    * Otherwise treat the single file as **staging-root metadata**
      (NDM-emitted manifest, RTS-emitted SBOM CSV, ...) and scan with
      high-confidence IP markers + NDM source-tree paths only.
