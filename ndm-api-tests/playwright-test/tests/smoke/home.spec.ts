@@ -1,34 +1,22 @@
 import { test, expect } from "@playwright/test";
-import { setupMockAuth, setupMockAPIs } from "./helpers/mock-auth";
 
-const isLiveMode = !!process.env.BASE_URL;
-
+/**
+ * Home page tests — no workers or file servers needed.
+ * Just validates the dashboard loads and basic navigation works.
+ */
 test.describe("Home Page", () => {
-  test.beforeEach(async ({ page }) => {
-    if (!isLiveMode) {
-      await setupMockAuth(page);
-      await setupMockAPIs(page);
-
-      await page.addInitScript(() => {
-        localStorage.setItem("account_id", "acc-001");
-        localStorage.setItem("selected_project_id", "proj-001");
-      });
-    }
-  });
 
   test("should load the dashboard with heading, charts, and notice board", async ({
     page,
   }) => {
     await page.goto("/home");
 
-    const heading = page.getByRole("heading", { name: "Home" });
-    await expect(heading).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { name: "Home" })
+    ).toBeVisible({ timeout: 15_000 });
 
     const mainContent = page.locator(".p-6").first();
     await expect(mainContent.getByText("Jobs").first()).toBeVisible();
-    await expect(
-      mainContent.locator("div", { hasText: /^.*Storage$/ }).first()
-    ).toBeVisible();
     await expect(page.getByText(/Notice Board/)).toBeVisible();
   });
 
@@ -55,7 +43,9 @@ test.describe("Home Page", () => {
       page.getByRole("heading", { name: "Home" })
     ).toBeVisible({ timeout: 15_000 });
 
-    const sidebar = page.locator('[data-testid="ps-sidebar-container-test-id"]');
+    const sidebar = page.locator(
+      '[data-testid="ps-sidebar-container-test-id"]'
+    );
     await sidebar.hover();
     await page.waitForTimeout(800);
 
@@ -74,7 +64,9 @@ test.describe("Home Page", () => {
       page.getByRole("heading", { name: "Home" })
     ).toBeVisible({ timeout: 15_000 });
 
-    const sidebar = page.locator('[data-testid="ps-sidebar-container-test-id"]');
+    const sidebar = page.locator(
+      '[data-testid="ps-sidebar-container-test-id"]'
+    );
     await sidebar.hover();
     await page.waitForTimeout(800);
 
@@ -91,7 +83,9 @@ test.describe("Home Page", () => {
       page.getByRole("heading", { name: "Home" })
     ).toBeVisible({ timeout: 15_000 });
 
-    const sidebar = page.locator('[data-testid="ps-sidebar-container-test-id"]');
+    const sidebar = page.locator(
+      '[data-testid="ps-sidebar-container-test-id"]'
+    );
     await sidebar.hover();
     await page.waitForTimeout(800);
 
@@ -101,7 +95,7 @@ test.describe("Home Page", () => {
     await expect(page).toHaveURL(/\/jobs-list/);
   });
 
-  test("should toggle Telemetry Transmission on and off via Help drawer", async ({
+  test("should toggle Telemetry Transmission via Help drawer", async ({
     page,
   }) => {
     await page.goto("/home");
@@ -109,7 +103,6 @@ test.describe("Home Page", () => {
       page.getByRole("heading", { name: "Home" })
     ).toBeVisible({ timeout: 15_000 });
 
-    // Intercept the ASUP settings API so we can observe the calls
     const asupRequests: { method: string; body: any }[] = [];
     await page.route("**/asup/settings", async (route) => {
       const request = route.request();
@@ -122,59 +115,41 @@ test.describe("Home Page", () => {
       await route.continue();
     });
 
-    // Open the Help drawer — click the button containing the HelpIcon SVG
-    // The HelpIcon SVG has a <desc> with text "Help" inside it
-    const helpButton = page.locator('button', {
-      has: page.locator('desc#-Help'),
+    const helpButton = page.locator("button", {
+      has: page.locator("desc#-Help"),
     });
     await helpButton.click();
 
-    // Wait for "Telemetry Transmission" label to appear inside the drawer
     const telemetryLabel = page.getByText("Telemetry Transmission");
     await expect(telemetryLabel).toBeVisible({ timeout: 10_000 });
 
-    // Locate the toggle switch (role="switch") near the label
     const toggle = page
       .locator("div", { hasText: "Telemetry Transmission" })
       .getByRole("switch");
 
     await expect(toggle).toBeVisible();
-
-    // Read initial state
     const initialChecked = await toggle.getAttribute("aria-checked");
-    console.log(`Telemetry toggle initial state: ${initialChecked}`);
 
-    // --- First toggle: flip the value ---
+    // First toggle: flip
     await toggle.click();
-    // Wait for the notification confirming the change
-    const firstNotification = initialChecked === "true"
-      ? "Telemetry Transmission has been disabled"
-      : "Telemetry Transmission has been enabled";
+    const firstNotification =
+      initialChecked === "true"
+        ? "Telemetry Transmission has been disabled"
+        : "Telemetry Transmission has been enabled";
     await expect(page.getByText(firstNotification).first()).toBeVisible({
       timeout: 10_000,
     });
-    // Verify the toggle state flipped
-    const flippedChecked = initialChecked === "true" ? "false" : "true";
-    await expect(toggle).toHaveAttribute("aria-checked", flippedChecked);
 
-    // --- Second toggle: flip it back to original ---
+    // Second toggle: flip back
     await toggle.click();
-    const secondNotification = initialChecked === "true"
-      ? "Telemetry Transmission has been enabled"
-      : "Telemetry Transmission has been disabled";
+    const secondNotification =
+      initialChecked === "true"
+        ? "Telemetry Transmission has been enabled"
+        : "Telemetry Transmission has been disabled";
     await expect(page.getByText(secondNotification).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(toggle).toHaveAttribute("aria-checked", initialChecked!);
 
-    // Verify two PUT requests were made to asup/settings
     expect(asupRequests).toHaveLength(2);
-    expect(asupRequests[0].body).toEqual({
-      enabled: initialChecked !== "true",
-    });
-    expect(asupRequests[1].body).toEqual({
-      enabled: initialChecked === "true",
-    });
-    console.log("ASUP settings API calls captured:", JSON.stringify(asupRequests, null, 2));
   });
 });

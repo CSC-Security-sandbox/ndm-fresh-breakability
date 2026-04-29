@@ -1,0 +1,17 @@
+{
+  "name": "ndm-playwright-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright UI tests for NDM Data Migrator",
+  "scripts": {
+    "test:live": "npx playwright test --config=playwright.live.config.ts",
+    "test:live:headed": "npx playwright test --config=playwright.live.config.ts --headed",
+    "test:live:debug": "npx playwright test --config=playwright.live.config.ts --headed --debug",
+    "codegen": "npx playwright codegen",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "dotenv": "^17.4.2"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+tests/.auth/
+test-results/
+playwright-report/
+blob-report/
+test-env.json
+.env
