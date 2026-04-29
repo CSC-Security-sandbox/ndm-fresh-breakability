@@ -43,6 +43,9 @@ export class WorkerEntity extends Base {
   @Column({ type: 'varchar', length: 100, name: 'staged_version', nullable: true })
   stagedVersion: string;
 
+  @Column({ type: 'varchar', nullable: true, name: 'current_multicast_workflow_id' })
+  currentMulticastWorkflowId: string;
+
   @Column({
     type: 'varchar',
     length: 20,

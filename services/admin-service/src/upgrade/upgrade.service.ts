@@ -2083,10 +2083,14 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         `Starting multicast workflow: ${workflowId} for ${workerIds.length} active workers, version ${dto.version}`,
       );
 
-      // 3. Set upgrade_bundle_staged to IN_PROGRESS for all active workers
+      // 3. Set upgrade_bundle_staged to IN_PROGRESS for all active workers and stamp the workflow ID
       await this.workerRepository.update(
         { workerId: In(workerIds) },
-        { upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS , stagedVersion: dto.version },
+        {
+          upgradeBundleStaged: UpgradeBundleStatus.IN_PROGRESS,
+          stagedVersion: dto.version,
+          currentMulticastWorkflowId: workflowId,
+        },
       );
       this.logger.log(`Set upgrade_bundle_staged=IN_PROGRESS for ${workerIds.length} workers`);
 
@@ -2239,6 +2243,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
 
       const workers = await this.workerRepository.find({
         relations: ['stats'],
+        where: { currentMulticastWorkflowId: workflowId },
       });
 
       const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
@@ -2400,7 +2405,10 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       const workflowId = bundle.executionWorkflowId;
       const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
 
-      const allWorkers = await this.workerRepository.find();
+      // Only fetch workers that were part of the staging run for this bundle
+      const allWorkers = await this.workerRepository.find({
+        where: { currentMulticastWorkflowId: bundle.multicastWorkflowId },
+      });
 
       const executionWorkers = allWorkers.filter(
         (w) => w.upgradeExecutionStatus !== UpgradeExecutionStatus.IDLE,

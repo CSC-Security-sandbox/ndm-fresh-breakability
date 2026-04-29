@@ -720,4 +720,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260411_01_alter_worker_table_add_multicast_workflow_id.sql" author="dk49889">
+      <sqlFile path="liquibase/20260411_01_alter_worker_table_add_multicast_workflow_id.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260411_01_alter_worker_table_add_multicast_workflow_id_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
