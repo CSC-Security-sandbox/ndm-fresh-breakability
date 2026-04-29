@@ -1163,9 +1163,26 @@ describe('WinOperationService', () => {
       expect(result.size).toBe(1);
     });
 
-    it('should handle empty array response', async () => {
+    it('should return an empty map when PowerShell returns an empty array', async () => {
       const usernames = ['nonexistentuser'];
-      const mockOutput: any[] = [];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify([]),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
+    });
+
+    it('should skip array entries that are missing username or sid', async () => {
+      const usernames = ['user1', 'user2', 'user3'];
+      const mockOutput = [
+        { username: 'user1', sid: 'S-1-5-21-1001' },
+        { username: 'user2' },
+        { sid: 'S-1-5-21-1003' },
+      ];
 
       mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
         stdout: JSON.stringify(mockOutput),
@@ -1175,7 +1192,20 @@ describe('WinOperationService', () => {
       const result = await service.resolveUsernamesToSids(usernames);
 
       expect(result.size).toBe(1);
-      expect(result.get(undefined as any)).toBe(undefined);
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+    });
+
+    it('should return an empty map when single-object response is missing username or sid', async () => {
+      const usernames = ['nonexistentuser'];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify({}),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
     });
   });
 

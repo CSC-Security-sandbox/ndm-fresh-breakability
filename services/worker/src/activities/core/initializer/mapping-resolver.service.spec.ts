@@ -590,6 +590,60 @@ describe('MappingResolverService', () => {
         ).not.toHaveBeenCalled();
         expect(redisService.setOwnerIdentity).not.toHaveBeenCalled();
       });
+
+      it.each([
+        ['undefined', undefined],
+        ['null', null],
+        ['empty string', ''],
+      ])(
+        'should skip SIDs whose Redis mapping value is %s and not crash',
+        async (_label, missingValue) => {
+          const sourceSIDs = ['S-1-5-21-source-1', 'S-1-5-21-source-2'];
+
+          redisService.getMappingKeys.mockResolvedValue(sourceSIDs);
+          redisService.getOwnerIdentity
+            .mockResolvedValueOnce('S-1-5-21-target-1')
+            .mockResolvedValueOnce(missingValue as any);
+
+          await expect(
+            service.resolveUsernamesToSids(mockJobRunId),
+          ).resolves.not.toThrow();
+
+          expect(logger.warn).toHaveBeenCalledWith(
+            `No mapping value found for SID S-1-5-21-source-2 in jobRunId ${mockJobRunId}, skipping`,
+          );
+          expect(
+            winOperationService.resolveUsernamesToSids,
+          ).not.toHaveBeenCalled();
+          expect(redisService.setOwnerIdentity).not.toHaveBeenCalled();
+        },
+      );
+
+      it('should still resolve usernames in the same batch when some SIDs have undefined values', async () => {
+        const sourceSIDs = ['testuser1', 'S-1-5-21-orphan'];
+        const resolvedSidMap = new Map([['testuser1', 'S-1-5-21-resolved-1']]);
+
+        redisService.getMappingKeys.mockResolvedValue(sourceSIDs);
+        redisService.getOwnerIdentity
+          .mockResolvedValueOnce('S-1-5-21-target-1')
+          .mockResolvedValueOnce(undefined as any);
+        winOperationService.resolveUsernamesToSids.mockResolvedValue(
+          resolvedSidMap,
+        );
+
+        await service.resolveUsernamesToSids(mockJobRunId);
+
+        expect(winOperationService.resolveUsernamesToSids).toHaveBeenCalledWith(
+          ['testuser1'],
+        );
+        expect(redisService.setOwnerIdentity).toHaveBeenCalledTimes(1);
+        expect(redisService.setOwnerIdentity).toHaveBeenCalledWith(
+          mockJobRunId,
+          'S-1-5-21-resolved-1',
+          'SID',
+          'S-1-5-21-target-1',
+        );
+      });
     });
 
     describe('error handling', () => {
