@@ -914,7 +914,9 @@ export class JobRunService {
         oe.error_code AS "errorCode"
       FROM datamigrator.operation_errors oe
       LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
-      WHERE o.job_run_id = $1 AND oe.error_type = $2 AND oe.error_status = 'UNRESOLVED'
+      WHERE o.job_run_id = $1
+        AND oe.error_type = $2
+        AND oe.error_status = 'UNRESOLVED'
       ORDER BY ${sortColumn} ${orderClause}
       LIMIT $3 OFFSET $4
     `;
@@ -968,12 +970,14 @@ export class JobRunService {
       })
     );
 
-    const totalResult = await this.operationErrorRepo
+    const totalQb = this.operationErrorRepo
       .createQueryBuilder("oe")
       .leftJoin("oe.operation", "o")
       .where("o.jobRunId = :jobRunId", { jobRunId })
-      .andWhere("oe.errorType = :errorType", { errorType })
       .andWhere("oe.errorStatus = :status", { status: 'UNRESOLVED' })
+      .andWhere("oe.errorType = :errorType", { errorType });
+
+      const totalResult = await totalQb
       .select("COUNT(*)", "total")
       .getRawOne();
 

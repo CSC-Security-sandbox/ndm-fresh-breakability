@@ -1045,7 +1045,7 @@ describe('StampMetaService', () => {
         return Promise.resolve({ ctimeMs: callCount * 1000 });
       });
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('PERM_STAMP_CTIME_CONFLICT');
+      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
     });
 
     it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
@@ -1063,7 +1063,7 @@ describe('StampMetaService', () => {
         return Promise.resolve({ ctimeMs: callCount * 1000 });
       });
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('PERM_STAMP_CTIME_CONFLICT');
+      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
     });
   });
 

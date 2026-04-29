@@ -9,6 +9,7 @@ import { CtimeTestTriggersService } from "./ctime-test-triggers.service";
 import { basePrefix, dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
+import { MetadataUpdateConflictError } from "src/errors/errors.types";
 import { DeferredDirStamp, DeferredDirStampService } from "../shared/deferred-dir-stamp.service";
 
 export interface RestampDirectoriesInput {
@@ -155,16 +156,15 @@ export class RestampDirectoriesService {
           this.logger.warn(
             `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
             + `| stored=${rec.sourceCtimeMs} (${new Date(rec.sourceCtimeMs).toISOString()}) `
-            + `| current=${currentCtimeMs} (${new Date(currentCtimeMs).toISOString()}) | Flagging as PERMISSION_STAMP_CONFLICT`,
+            + `| current=${currentCtimeMs} (${new Date(currentCtimeMs).toISOString()}) | Flagging as METADATA_UPDATE_CONFLICT`,
           );
           ctimeConflictDetected = true;
-          const error = new Error(
-            `Source folder metadata changed between migration and post-migration restamp. `
-            + `Folder permissions may be stale — re-run migration to update.`,
-          );
+          const error = new MetadataUpdateConflictError(sourcePath);
           const dmErr = dmError(
             "OPERATION", Origin.SOURCE, Operation.STAMP_META,
-            'PERM_STAMP_CTIME_CONFLICT' as ErrorType, jobRunId, error,
+            ErrorType.METADATA_UPDATE_CONFLICT,
+            jobRunId,
+            error,
             { name: rec.fPath, path: sourcePath },
           );
           await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);

@@ -15,6 +15,7 @@ import { StampMetaOutput } from "./stamp-meta.type";
 import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
+import { MetadataUpdateConflictError } from "src/errors/errors.types";
 
 const MAX_CTIME_RETRIES = 2;
 
@@ -177,7 +178,7 @@ export class StampMetaService {
             if (attempt === MAX_CTIME_RETRIES) {
                 this.logger.error(
                     `[${cmdId}] CtimeValidation FAILED | all ${MAX_CTIME_RETRIES + 1} attempts exhausted `
-                    + `| publishing PERM_STAMP_CTIME_CONFLICT | ${input.sourcePath}`,
+                    + `| publishing METADATA_UPDATE_CONFLICT | ${input.sourcePath}`,
                 );
                 output.sourceErrors.push(...attemptOutput.sourceErrors);
                 output.targetErrors.push(...attemptOutput.targetErrors);
@@ -187,18 +188,15 @@ export class StampMetaService {
                         input.jobContext.jobRunId, input.command.fPath, ctimeT3,
                     );
                 }
-                const error = new Error(
-                    `Source metadata changed during all ${MAX_CTIME_RETRIES + 1} stamp attempts. `
-                    + `Re-run migration after source stabilizes.`,
-                );
+                const error = new MetadataUpdateConflictError(input.sourcePath);
                 const dmErr = dmError(
                     "OPERATION", Origin.SOURCE, Operation.STAMP_META,
-                    'PERM_STAMP_CTIME_CONFLICT' as ErrorType,
+                    ErrorType.METADATA_UPDATE_CONFLICT,
                     input.command.id, error,
                     { name: input.command.fPath, path: input.sourcePath },
                 );
                 await input.jobContext.publishToErrorStream(dmErr, input.jobContext.jobConfig?.jobRunId);
-                output.sourceErrors.push('PERM_STAMP_CTIME_CONFLICT');
+                output.sourceErrors.push(error.code);
             }
         }
     }
