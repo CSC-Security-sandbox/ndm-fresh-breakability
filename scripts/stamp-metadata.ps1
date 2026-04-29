@@ -9,11 +9,21 @@
     Uses the same FastAcl P/Invoke layer and Get-FileSecurityFast / Set-FileSecurityFast
     functions as the NDM worker service (powershell.script.ts).
 
+.PARAMETER SourceHost
+    Hostname or IP address of the source SMB server (e.g. srcserver or 192.168.1.10)
+
 .PARAMETER SourceShare
-    UNC path to the source SMB share (e.g. \\server\share)
+    Share name (or path) on the source server (e.g. nfs_share or /srv/nfs_share).
+    Leading slashes are stripped automatically. Combined with SourceHost to form
+    the UNC path \\SourceHost\SourceShare used for mounting.
+
+.PARAMETER DestHost
+    Hostname or IP address of the destination SMB server (e.g. dstserver or 192.168.1.20)
 
 .PARAMETER DestShare
-    UNC path to the destination SMB share (e.g. \\server\share)
+    Share name (or path) on the destination server (e.g. nfs_share or /srv/nfs_share).
+    Leading slashes are stripped automatically. Combined with DestHost to form
+    the UNC path \\DestHost\DestShare used for mounting.
 
 .PARAMETER SourceUsername
     SMB username for the source share (DOMAIN\user or user@domain)
@@ -28,15 +38,13 @@
     SMB password for the destination share. Defaults to SourcePassword.
 
 .PARAMETER InputFile
-    CSV file with a column named 'Source Path' (paths relative to the share
-    root). The same path is used as both source and destination. Any other
-    columns in the CSV are ignored.
-    Path values are normalised before use:
-      - Leading '/' or '\' are stripped, so '/srv/foo/bar.txt' becomes
-        'srv/foo/bar.txt'.
-      - Forward slashes are converted to backslashes for the Windows/SMB
-        mounted view, e.g. 'mtime/hello.txt' becomes 'mtime\hello.txt' and is
-        accessed as 'S:\mtime\hello.txt' on the mounted source share.
+    CSV file with a column named 'Source Path' containing absolute paths
+    (e.g. /srv/nfs_share/file.txt). An optional 'Destination Path' column may
+    also be present; when it is, its value is used as the destination path
+    instead of mirroring the source path. Any other columns are ignored.
+    The share prefix (derived from SourceShare / DestShare) is automatically
+    stripped from each path so only the share-relative portion is used, e.g.:
+      /srv/nfs_share/subdir/file.txt  ->  subdir\file.txt  ->  S:\subdir\file.txt
     If omitted, all items on the source share are processed.
 
 .PARAMETER LogFile
@@ -46,30 +54,67 @@
     Path to write per-item errors. Defaults to stamp-metadata-<timestamp>-errors.log
 
 .PARAMETER SidMapFile
-    Optional. Path to a CSV file that maps source-domain SIDs to destination-domain SIDs.
+    Optional. Path to a CSV file that maps source identities to destination identities.
     Required columns: SourceSID, DestSID
+    Values may be SID strings (S-1-...) or usernames (DOMAIN\user or user@domain).
+    Usernames are resolved to SIDs at load time:
+      - If already qualified (DOMAIN\name or user@domain) -> translate directly
+      - If -Domain is provided -> use Domain\name directly (no COMPUTERNAME/USERDOMAIN guessing)
+      - If -Domain is not provided -> fall back to COMPUTERNAME\name, then USERDOMAIN\name
     When provided, every SID in Owner, Group, and all DACL ACEs is translated before
     stamping. SIDs absent from the map are stamped as-is (raw SID string).
     Set DestSID to "Invalid" to explicitly drop an ACE for that SID.
 
-    Example CSV:
-        SourceSID,DestSID
+    Both the NDM UI column names and alternative names are accepted:
+      NDM UI format:   sid_source,sid_target   (matches the CSV downloaded from NDM UI)
+      Alternative:     SourceSID,DestSID
+
+    Example CSV (NDM UI format, usernames):
+        sid_source,sid_target
+        user1,user2
+        user3,Invalid
+    (use -Domain "rootdomain" if the machine running the script is not domain-joined)
+
+    Example CSV (NDM UI format, qualified usernames - no -Domain needed):
+        sid_source,sid_target
+        rootdomain\user1,destdomain\user1
+        rootdomain\user2,Invalid
+
+    Example CSV (NDM UI format, SIDs):
+        sid_source,sid_target
         S-1-5-21-111-222-333-1001,S-1-5-21-444-555-666-1001
         S-1-5-21-111-222-333-1002,Invalid
 
+    Example CSV (alternative format, mixed):
+        SourceSID,DestSID
+        rootdomain\user1,S-1-5-21-444-555-666-1001
+        S-1-5-21-111-222-333-1002,destdomain\user2
+
+.PARAMETER Domain
+    Optional. NetBIOS domain name to use when resolving unqualified usernames in
+    the SidMapFile (e.g. "rootdomain"). When provided, unqualified names are resolved
+    as Domain\name directly — COMPUTERNAME and USERDOMAIN are not used.
+    If the username is already qualified (DOMAIN\user or user@domain) this parameter
+    is not used for that entry.
+
 .EXAMPLE
-    .\stamp-metadata.ps1 -SourceShare "\\src\vol1" -DestShare "\\dst\vol1" `
+    .\stamp-metadata.ps1 -SourceHost "srcserver" -SourceShare "nfs_share" `
+        -DestHost "dstserver" -DestShare "nfs_share" `
         -SourceUsername "DOMAIN\admin" -SourcePassword "P@ss"
 
 .EXAMPLE
-    .\stamp-metadata.ps1 -SourceShare "\\src\vol1" -DestShare "\\dst\vol1" `
+    .\stamp-metadata.ps1 -SourceHost "srcserver" -SourceShare "/srv/nfs_share" `
+        -DestHost "dstserver" -DestShare "/srv/nfs_share" `
         -SourceUsername "DOMAIN\srcadmin" -SourcePassword "SrcP@ss" `
         -DestUsername "DOMAIN\dstadmin" -DestPassword "DstP@ss" `
-        -InputFile "files.csv" -SidMapFile "sid-map.csv"
+        -InputFile "metadata_conflict_errors.csv" -SidMapFile "sid-map.csv" `
+        -Domain "rootdomain"
 #>
 
 param(
+    [Parameter(Mandatory=$true)] [string]$SourceHost,
     [Parameter(Mandatory=$true)] [string]$SourceShare,
+    [Parameter(Mandatory=$true)] [string]$DestHost,
     [Parameter(Mandatory=$true)] [string]$DestShare,
     [Parameter(Mandatory=$true)] [string]$SourceUsername,
     [Parameter(Mandatory=$true)] [string]$SourcePassword,
@@ -78,11 +123,24 @@ param(
     [string]$InputFile,
     [string]$LogFile,
     [string]$ErrorFile,
-    [string]$SidMapFile
+    [string]$SidMapFile,
+    [string]$Domain
 )
 
 if (-not $DestUsername) { $DestUsername = $SourceUsername }
 if (-not $DestPassword) { $DestPassword = $SourcePassword }
+
+# Normalize share names: strip leading slashes so "/srv/nfs_share" -> "srv\nfs_share"
+$SourceShare = ($SourceShare.Trim() -replace '^[/\\]+', '') -replace '/', '\'
+$DestShare   = ($DestShare.Trim()   -replace '^[/\\]+', '') -replace '/', '\'
+
+# Normalize hosts: strip any leading \\ in case user passed a UNC-style host
+$SourceHost = $SourceHost.Trim().TrimStart('\')
+$DestHost   = $DestHost.Trim().TrimStart('\')
+
+# Build UNC paths from host + share
+$SourceUNC = "\\$SourceHost\$SourceShare"
+$DestUNC   = "\\$DestHost\$DestShare"
 
 $tsStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 if (-not $LogFile)   { $LogFile   = "stamp-metadata-${tsStamp}.log" }
@@ -120,23 +178,13 @@ function Write-Error-Entry {
 # Parameter validation
 # =============================================================================
 
-function Assert-UNCPath([string]$path, [string]$label) {
-    if ([string]::IsNullOrWhiteSpace($path)) {
-        Write-Log "$label cannot be empty" "ERROR"; exit 1
-    }
-    if ($path -notmatch '^\\\\') {
-        Write-Log "$label must be a UNC path [\\server\share]. Got: $path" "ERROR"; exit 1
-    }
-    if (($path.TrimStart('\') -split '\\').Count -lt 2) {
-        Write-Log "$label must include server and share name [\\server\share]. Got: $path" "ERROR"; exit 1
-    }
-}
+if ([string]::IsNullOrWhiteSpace($SourceHost))  { Write-Log "SourceHost cannot be empty"  "ERROR"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($SourceShare)) { Write-Log "SourceShare cannot be empty" "ERROR"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($DestHost))    { Write-Log "DestHost cannot be empty"    "ERROR"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($DestShare))   { Write-Log "DestShare cannot be empty"   "ERROR"; exit 1 }
 
-Assert-UNCPath $SourceShare "SourceShare"
-Assert-UNCPath $DestShare   "DestShare"
-
-if ($SourceShare -eq $DestShare) {
-    Write-Log "SourceShare and DestShare are the same [$SourceShare]. Aborting." "ERROR"; exit 1
+if ($SourceUNC -eq $DestUNC) {
+    Write-Log "Source and destination resolve to the same UNC path [$SourceUNC]. Aborting." "ERROR"; exit 1
 }
 if ([string]::IsNullOrWhiteSpace($SourceUsername)) {
     Write-Log "SourceUsername cannot be empty" "ERROR"; exit 1
@@ -304,10 +352,70 @@ function Map-Sid {
 # =============================================================================
 # SID mapping table  (optional, loaded from -SidMapFile)
 # CSV format:  SourceSID,DestSID
-# Mirrors what NDM does via its Redis identity-mapping store.
+# Values may be SID strings (S-1-...) or usernames (DOMAIN\user / user@domain).
+# Mirrors NDM's identity-mapping behaviour (mapping-resolver.service.ts +
+# Resolve-UsernamesToSid in powershell.script.ts).
 # =============================================================================
 
 $script:sidMap = @{}
+
+# Resolve a single account name to a SID string using the same fallback chain
+# NDM uses in Resolve-UsernamesToSid (powershell.script.ts):
+#   1. Already a SID (starts with S-1-)  -> return as-is
+#   2. DOMAIN\name or UPN (contains \ or @) -> translate directly
+#   3. COMPUTERNAME\name
+#   4. USERDOMAIN\name
+#   5. Unresolvable -> return "Invalid"
+function Resolve-AccountToSid([string]$account, [string]$domain = "") {
+    if ([string]::IsNullOrWhiteSpace($account)) { return "Invalid" }
+    $account = $account.Trim()
+
+    # Already a SID
+    if ($account -match '^S-1-') { return $account }
+
+    # "Invalid" is a special sentinel value - pass through unchanged
+    if ($account -eq "Invalid") { return "Invalid" }
+
+    function Try-Translate([string]$acct) {
+        try {
+            return ([System.Security.Principal.NTAccount]$acct).Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+        } catch { return $null }
+    }
+
+    $computer   = $env:COMPUTERNAME
+    $userdomain = $env:USERDOMAIN
+    $sid        = $null
+
+    Write-Log "Resolve-AccountToSid: account='$account' | COMPUTERNAME='$computer' | USERDOMAIN='$userdomain' | Domain param='$domain'"
+
+    # Qualified (DOMAIN\name) or UPN (user@domain) -> try as-is
+    if ($account -like '*\*' -or $account -like '*@*') {
+        $sid = Try-Translate $account
+        Write-Log "Resolve-AccountToSid: try as-is '$account' -> $(if ($sid) { $sid } else { 'null' })"
+    }
+
+    if (-not $sid) {
+        if (-not [string]::IsNullOrWhiteSpace($domain)) {
+            # -Domain explicitly provided: use it directly, skip COMPUTERNAME/USERDOMAIN guesses
+            $sid = Try-Translate "$domain\$account"
+            Write-Log "Resolve-AccountToSid: try '$domain\$account' -> $(if ($sid) { $sid } else { 'null' })"
+        } else {
+            # No -Domain provided: fall back to COMPUTERNAME then USERDOMAIN
+            $sid = Try-Translate "$computer\$account"
+            Write-Log "Resolve-AccountToSid: try '$computer\$account' -> $(if ($sid) { $sid } else { 'null' })"
+            if (-not $sid -and $userdomain) {
+                $sid = Try-Translate "$userdomain\$account"
+                Write-Log "Resolve-AccountToSid: try '$userdomain\$account' -> $(if ($sid) { $sid } else { 'null' })"
+            }
+        }
+    }
+
+    if ($sid) { return $sid }
+
+    Write-Log "Could not resolve '$account' to a SID - will mark as Invalid" "WARN"
+    return "Invalid"
+}
 
 function Import-SidMap([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return }
@@ -322,18 +430,42 @@ function Import-SidMap([string]$path) {
     }
 
     $cols = $rows[0].PSObject.Properties.Name
-    if ($cols -notcontains "SourceSID" -or $cols -notcontains "DestSID") {
-        Write-Log "SidMapFile must have SourceSID and DestSID columns. Found: $($cols -join ', ')" "ERROR"; exit 1
+
+    # Accept both NDM UI column names (sid_source/sid_target) and our own (SourceSID/DestSID)
+    $srcCol = $null
+    $dstCol = $null
+    if ($cols -contains "sid_source" -and $cols -contains "sid_target") {
+        $srcCol = "sid_source"; $dstCol = "sid_target"
+        Write-Log "SidMapFile: using NDM column names (sid_source / sid_target)"
+    } elseif ($cols -contains "SourceSID" -and $cols -contains "DestSID") {
+        $srcCol = "SourceSID"; $dstCol = "DestSID"
+        Write-Log "SidMapFile: using column names SourceSID / DestSID"
+    } else {
+        Write-Log "SidMapFile must have columns 'sid_source,sid_target' or 'SourceSID,DestSID'. Found: $($cols -join ', ')" "ERROR"; exit 1
     }
 
+    $resolved = 0
     foreach ($row in $rows) {
-        $src = $row.SourceSID.Trim()
-        $dst = $row.DestSID.Trim()
-        if (-not [string]::IsNullOrWhiteSpace($src) -and -not [string]::IsNullOrWhiteSpace($dst)) {
-            $script:sidMap[$src] = $dst
+        $src = $row.$srcCol.Trim()
+        $dst = $row.$dstCol.Trim()
+        if ([string]::IsNullOrWhiteSpace($src) -or [string]::IsNullOrWhiteSpace($dst)) { continue }
+
+        # Resolve usernames -> SIDs (mirrors NDM's Resolve-UsernamesToSid)
+        $srcSid = Resolve-AccountToSid $src $Domain
+        $dstSid = Resolve-AccountToSid $dst $Domain
+
+        if ($srcSid -eq "Invalid") {
+            Write-Log "SID map: could not resolve source '$src' - skipping entry" "WARN"
+            continue
         }
+
+        if ($srcSid -ne $src) { Write-Log "SID map  resolved source : $src -> $srcSid" }
+        if ($dstSid -ne $dst) { Write-Log "SID map  resolved dest   : $dst -> $dstSid" }
+
+        $script:sidMap[$srcSid] = $dstSid
+        $resolved++
     }
-    Write-Log "Loaded $($script:sidMap.Count) SID mapping(s) from $path"
+    Write-Log "Loaded $resolved SID mapping(s) from $path (of $($rows.Count) rows)"
 }
 
 # Applies the SID map to an ACL JSON string.
@@ -634,8 +766,8 @@ function Unmount-Share([string]$drive, [string]$label) {
 # =============================================================================
 
 Write-Log "=== SMB Metadata Stamp Script ==="
-Write-Log "Source:    $SourceShare [user: $SourceUsername]"
-Write-Log "Dest:      $DestShare [user: $DestUsername]"
+Write-Log "Source:    $SourceUNC [user: $SourceUsername]"
+Write-Log "Dest:      $DestUNC [user: $DestUsername]"
 Write-Log "Log:       $LogFile"
 Write-Log "Errors:    $ErrorFile"
 if ($InputFile)  { Write-Log "InputFile:  $InputFile" }
@@ -655,9 +787,9 @@ if ($r1 -ne "SUCCESS" -or $r2 -ne "SUCCESS") {
 $srcDrive = "S:"
 $dstDrive = "T:"
 
-Mount-Share $srcDrive $SourceShare $SourceUsername $SourcePassword "source"
+Mount-Share $srcDrive $SourceUNC $SourceUsername $SourcePassword "source"
 $srcMounted = $true
-Mount-Share $dstDrive $DestShare $DestUsername $DestPassword "destination"
+Mount-Share $dstDrive $DestUNC $DestUsername $DestPassword "destination"
 $dstMounted = $true
 
 $successCount = 0
@@ -684,6 +816,18 @@ try {
             Write-Log "InputFile must have a 'Source Path' column. Found: $($columns -join ', ')" "ERROR"; exit 1
         }
 
+        $hasDestCol = $columns -contains "Destination Path"
+        if ($hasDestCol) {
+            Write-Log "CSV has 'Destination Path' column - using it for destination paths"
+        } else {
+            Write-Log "CSV has no 'Destination Path' column - mirroring source path to destination"
+        }
+
+        # Build the share prefix to strip from CSV paths, e.g. "srv\nfs_share\"
+        # $SourceShare and $DestShare are already normalised to backslashes above.
+        $srcSharePrefix = if ($SourceShare) { $SourceShare + '\' } else { '' }
+        $dstSharePrefix = if ($DestShare)   { $DestShare   + '\' } else { '' }
+
         $lineNum = 1
         foreach ($row in $csv) {
             $lineNum++
@@ -691,16 +835,34 @@ try {
             if ([string]::IsNullOrWhiteSpace($srcRel)) {
                 Write-Log "Skipping empty 'Source Path' at CSV line $lineNum" "WARN"; continue
             }
-            # Treat the value as relative to the share root: strip any leading
-            # '/' or '\' so '/srv/foo/bar' becomes 'srv/foo/bar'.
-            $srcRel = $srcRel.Trim() -replace '^[/\\]+', ''
-            # Normalise separators to backslash for the Windows/SMB mounted view,
-            # e.g. 'mtime/hello.txt' -> 'mtime\hello.txt' (accessed as 'S:\mtime\hello.txt').
-            $srcRel = $srcRel -replace '/', '\'
-            # Same path is used for source and destination.
+            # Strip leading slashes, normalise to backslashes.
+            $srcRel = ($srcRel.Trim() -replace '^[/\\]+', '') -replace '/', '\'
+            # Strip the share prefix (e.g. "srv\nfs_share\") leaving only the
+            # share-relative portion (e.g. "subdir\file.txt").
+            if ($srcSharePrefix -and $srcRel.StartsWith($srcSharePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $srcRel = $srcRel.Substring($srcSharePrefix.Length)
+            } elseif ($srcSharePrefix) {
+                Write-Log "WARN: 'Source Path' at CSV line $lineNum does not start with share prefix '$srcSharePrefix': $($row.'Source Path')" "WARN"
+            }
+
+            if ($hasDestCol) {
+                $dstRel = $row."Destination Path"
+                if ([string]::IsNullOrWhiteSpace($dstRel)) {
+                    Write-Log "Skipping empty 'Destination Path' at CSV line $lineNum" "WARN"; continue
+                }
+                $dstRel = ($dstRel.Trim() -replace '^[/\\]+', '') -replace '/', '\'
+                if ($dstSharePrefix -and $dstRel.StartsWith($dstSharePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $dstRel = $dstRel.Substring($dstSharePrefix.Length)
+                } elseif ($dstSharePrefix) {
+                    Write-Log "WARN: 'Destination Path' at CSV line $lineNum does not start with share prefix '$dstSharePrefix': $($row.'Destination Path')" "WARN"
+                }
+            } else {
+                $dstRel = $srcRel
+            }
+
             $filePairs += @{
                 Src     = Join-Path $srcDrive $srcRel
-                Dest    = Join-Path $dstDrive $srcRel
+                Dest    = Join-Path $dstDrive $dstRel
                 SrcRel  = $srcRel
                 CsvLine = $lineNum
             }
