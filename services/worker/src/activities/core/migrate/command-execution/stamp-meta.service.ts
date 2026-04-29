@@ -105,7 +105,7 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'gid_uid' })
     async stampGIDandUID({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
-        if (command.metadata?.gid && command.metadata?.uid && process.platform !== 'win32' && jobContext.jobConfig.options.preservePermissions) {
+        if (command.metadata?.gid != null && command.metadata?.uid != null && process.platform !== 'win32' && jobContext.jobConfig.options.preservePermissions) {
             try {
                 let gid = command.metadata.gid?.toString();
                 let uid = command.metadata.uid?.toString();
@@ -114,15 +114,13 @@ export class StampMetaService {
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID'),
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID'),
                     ]);
-                    gid = gid_res? gid_res : gid;
-                    uid = uid_res? uid_res : uid;
+                    gid = gid_res != null ? gid_res : gid;  
+                    uid = uid_res != null ? uid_res : uid;
                 }
-                if (gid && uid) {
-                    if (command?.metadata?.isSymLink) {
-                        await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
-                    } else {
-                        await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
-                    }
+                if (command?.metadata?.isSymLink) {
+                    await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
+                } else {
+                    await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
                 }
             } catch (error) {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);

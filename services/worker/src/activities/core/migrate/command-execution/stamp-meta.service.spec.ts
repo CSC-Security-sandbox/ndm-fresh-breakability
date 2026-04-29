@@ -345,6 +345,78 @@ describe('StampMetaService', () => {
       expect(mockFs.promises.chown).not.toHaveBeenCalled();
     });
 
+    it('should stamp when GID is 0 (root) without identity mapping', async () => {
+      const input = createMockInput({ gid: 0, uid: 3001 }, { preservePermissions: true });
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        3001,
+        0,
+      );
+    });
+
+    it('should stamp when UID is 0 (root) without identity mapping', async () => {
+      const input = createMockInput({ gid: 1000, uid: 0 }, { preservePermissions: true });
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        0,
+        1000,
+      );
+    });
+
+    it('should apply mapped value of "0" from identity mapping', async () => {
+      const input = createMockInput(
+        { gid: 0, uid: 3001 },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
+      );
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+      redisService.getOwnerIdentity
+        .mockResolvedValueOnce('0')    // mapped gid stays 0
+        .mockResolvedValueOnce('0');   // mapped uid 3001 → 0
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        0,
+        0,
+      );
+    });
+
+    it('should fall back to source GID/UID when identity mapping returns null (no mapping in Redis)', async () => {
+      const input = createMockInput(
+        { gid: 1000, uid: 3001 },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
+      );
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+      redisService.getOwnerIdentity
+        .mockResolvedValueOnce(null) // no mapping for gid
+        .mockResolvedValueOnce(null); // no mapping for uid
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        3001,
+        1000,
+      );
+    });
+
     it('should skip when GID or UID is missing', async () => {
       const input = createMockInput({ gid: undefined, uid: 1001 });
 

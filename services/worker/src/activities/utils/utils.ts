@@ -204,8 +204,8 @@ export const isNfsMetaUpdated = async (
           redisService.getOwnerIdentity(jobContext.jobRunId, gid.toString(), 'GID'),
           redisService.getOwnerIdentity(jobContext.jobRunId, uid.toString(), 'UID'),
       ]);
-      gid = gid_res ? parseInt(gid_res) : gid;
-      uid = uid_res ? parseInt(uid_res) : uid;
+      gid = gid_res != null ? parseInt(gid_res) : gid;
+      uid = uid_res != null ? parseInt(uid_res) : uid;
     }
     return uid !== dFile.uid || gid !== dFile.gid;
 };
