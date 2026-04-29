@@ -191,8 +191,7 @@ export const isMetaUpdated = async (
 const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
   const sourceCtimeMs = sFile.ctimeMs;
   const destinationCtimeMs = dFile.ctimeMs;
-  const thresholdCtimeMs = destinationCtimeMs + toleranceMs;
-  return sourceCtimeMs > thresholdCtimeMs;
+  return (sourceCtimeMs + toleranceMs) > destinationCtimeMs;
 };
 
 export const isNfsMetaUpdated = async (

@@ -185,6 +185,7 @@
       "src/activities/speed-test/speed-test-activities.ts",
       "src/activities/upgrade/binary-handler.interface.ts",
       "src/activities/upgrade/upgrade.activity.service.ts",
+      "src/activities/core/migrate/ctime-test-triggers.service.ts",
       "src/activities/upgrade/handlers/linux-binary.handler.ts",
       "src/activities/upgrade/handlers/windows-binary.handler.ts",
       "src/activities/utils/utils.ts",

@@ -6,10 +6,12 @@ import * as path from 'path';
 import { RestampDirectoriesService } from './restamp-directories.service';
 import { RedisService } from 'src/redis/redis.service';
 import { DeferredDirStampService } from '../shared/deferred-dir-stamp.service';
+import { CtimeTestTriggersService } from './ctime-test-triggers.service';
 
 jest.mock('fs', () => ({
   promises: {
     utimes: jest.fn(),
+    lstat: jest.fn(),
   },
 }));
 
@@ -79,6 +81,7 @@ describe('RestampDirectoriesService', () => {
         { provide: RedisService, useValue: redisService },
         { provide: DeferredDirStampService, useValue: deferredDirStampService },
         { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+        { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
       ],
     }).compile();
 
@@ -205,6 +208,7 @@ describe('RestampDirectoriesService', () => {
         { provide: RedisService, useValue: redisService },
         { provide: DeferredDirStampService, useValue: deferredDirStampService },
         { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+        { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
       ],
     }).compile();
     const svc = module.get(RestampDirectoriesService);
@@ -217,5 +221,81 @@ describe('RestampDirectoriesService', () => {
     deferredDirStampService.popBatch.mockResolvedValue([]);
     await service.restampDirectories({ jobRunId: 'job1', batchSize: 13 });
     expect(deferredDirStampService.popBatch).toHaveBeenCalledWith('job1', 13);
+  });
+
+  it('detects ctime conflict when source ctime changed since migration', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    utimes.mockResolvedValue(undefined);
+    (fs.promises.lstat as unknown as jest.Mock).mockResolvedValue({ ctimeMs: 9999 });
+
+    redisService.getJobManagerContext.mockResolvedValue({
+      jobConfig: {
+        destinationFileServer: { pathId: 'dp' },
+        destinationDirectoryPath: '/dest',
+        sourceFileServer: { pathId: 'sp' },
+        sourceDirectoryPath: '/src',
+        jobRunId: 'job1',
+      },
+      publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+    });
+
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/Dir0', atime: '2024-01-01T00:00:00Z', mtime: '2024-01-02T00:00:00Z', depth: 1, sourceCtimeMs: 5000 },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.restampDirectories({ jobRunId: 'job1' });
+    expect(result.ctimeConflicts).toBe(1);
+    expect(result.stamped).toBe(1);
+  });
+
+  it('handles lstat failure gracefully during ctime check', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    utimes.mockResolvedValue(undefined);
+    (fs.promises.lstat as unknown as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+
+    redisService.getJobManagerContext.mockResolvedValue({
+      jobConfig: {
+        destinationFileServer: { pathId: 'dp' },
+        destinationDirectoryPath: '/dest',
+        sourceFileServer: { pathId: 'sp' },
+        sourceDirectoryPath: '/src',
+      },
+    });
+
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/Dir0', atime: '2024-01-01T00:00:00Z', mtime: '2024-01-02T00:00:00Z', depth: 1, sourceCtimeMs: 5000 },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.restampDirectories({ jobRunId: 'job1' });
+    expect(result.stamped).toBe(1);
+    expect(result.ctimeConflicts).toBe(0);
+  });
+
+  it('skips ctime check when sourceCtimeMs is null', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    utimes.mockResolvedValue(undefined);
+
+    redisService.getJobManagerContext.mockResolvedValue({
+      jobConfig: {
+        destinationFileServer: { pathId: 'dp' },
+        destinationDirectoryPath: '/dest',
+        sourceFileServer: { pathId: 'sp' },
+        sourceDirectoryPath: '/src',
+      },
+    });
+
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/Dir0', atime: '2024-01-01T00:00:00Z', mtime: '2024-01-02T00:00:00Z', depth: 1 },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.restampDirectories({ jobRunId: 'job1' });
+    expect(result.stamped).toBe(1);
+    expect(result.ctimeConflicts).toBe(0);
   });
 });
