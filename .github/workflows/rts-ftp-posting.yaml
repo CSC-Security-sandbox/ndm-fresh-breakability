@@ -1,56 +1,27 @@
-name: RTS FTP Posting (Open-Source Source Code Release)
+name: RTS FTP Posting
 
-# Automates the post-RTS FTP posting process described in
-# https://netapp.atlassian.net/wiki/spaces/DEVTS/pages/88387662 :
-#
-#   1. Pulls the <RTS Project Name>_<Version>-FTP-Components.csv report from the
-#      RTS tool (rts.rtp.openenglab.netapp.com) for the specified project
-#      + version.
-#   2. For every component listed in that CSV, downloads the source archive
-#      that RTS has pre-staged under /x/eng/3rdparty/data_retention/ so that
-#      NetApp has a local copy of the sources it is legally obligated to
-#      publish.
-#   3. Verifies that every component in the CSV is really a dependency
-#      (direct or transitive) of this repo across every language the repo
-#      uses (npm, Go, Maven, Docker base images). A component that is NOT
-#      referenced anywhere blocks the publish — it should never have been
-#      in our BlackDuck scan to begin with.
-#   4. Scans every staged file (and the contents of every archive) for any
-#      NetApp or NDM intellectual-property marker (copyright strings, the
-#      @NetApp-Cloud-DataMigrate npm scope, NDM source-tree paths, ...) and
-#      blocks the publish on any hit. This is the final "no NetApp IP gets
-#      out of the runner" guardrail.
-#   5. Copies the staging tree onto the VED FTP staging filesystem at
-#      /x/eng/3rdparty/ftpstaging/<Project>/<Version>/ — this share is
-#      mounted on the scs-based runners and is the location COSINE syncs
-#      from to the public NetApp open-source FTP site. We deliberately do
-#      NOT push to ftp.netapp.com directly: the filesystem path is more
-#      reliable, doesn't need credentials, and is the intended drop point
-#      per Confluence DEVTS/88387662.
-#   6. Prints a ready-to-send e-mail (subject + body) to the workflow summary
-#      and log so the operator can paste it into their mail client and send it
-#      to enghelp+blackduck@netapp.com — the COSINE team treats that e-mail as
-#      a Service-Now ticket request to sync staging -> public FTP.
-#
-# Runner: scs-v2 (NetApp's scs-based custom runner). The RTS download
-# endpoint AND the /x/eng/3rdparty/ftpstaging mount are only reachable
-# from inside the NetApp network; the scs-v2 runners already have both,
-# and other NDM workflows use the same label.
+# Automates the post-RTS FTP posting process: pulls the FTP-Components
+# CSV from RTS, stages each open-source archive from
+# /x/eng/3rdparty/data_retention/, runs dependency-correctness +
+# NetApp-IP guardrails, copies the result to the VED FTP staging share
+# at /x/eng/3rdparty/ftpstaging/, and prints the COSINE notification
+# e-mail. Detailed design and operator runbook live in
+# scripts/rts-ftp-posting/readme.md and Confluence DEVTS/88387662.
 
 on:
   workflow_dispatch:
     inputs:
       branch_name:
-        description: "Release branch to check out — MUST match release/YYYY.MM[.DD][-suffix] (e.g. release/2026.04, release/2025.08.03, release/2026.04-1). FTP posting is only allowed for dated release branches."
+        description: "Release branch to check out — MUST match release/YYYY.MM[.DD][-suffix] (e.g. release/2026.04.0). FTP posting is only allowed for dated release branches."
         required: true
         type: string
       rts_project_name:
-        description: "RTS Project Name (exactly as it appears in the RTS tool — pre-filled with the canonical NDM name; override only if RTS lists it differently)"
+        description: "RTS Project Name (exactly as it appears on the data_retention filer — pre-filled with the canonical NDM name in the casing the filer uses; override only if RTS has been re-keyed)"
         required: true
         type: string
-        default: "Netapp Data Migrator"
+        default: "NetApp Data Migrator"
       rts_project_version:
-        description: "RTS Project Version (exactly as it appears in the RTS tool, e.g. 2026.04)"
+        description: "RTS Project Version (exactly as it appears in the RTS tool, e.g. 2026.04.0_GA)"
         required: true
         type: string
       dry_run:
@@ -58,16 +29,6 @@ on:
         required: false
         default: false
         type: boolean
-      skip_dependency_check:
-        description: "Skip the 'component is a real NDM dependency' check (only use when you have recorded the justification in the run summary)"
-        required: false
-        default: false
-        type: boolean
-      allow_ip_hit_sha256s:
-        description: "Comma-separated sha256 hashes of files to EXEMPT from the NetApp-IP contamination scan (use only after Legal sign-off)"
-        required: false
-        default: ""
-        type: string
 
 permissions:
   contents: read
@@ -79,7 +40,6 @@ jobs:
     timeout-minutes: 180
 
     env:
-      RTS_BASE_URL: ${{ vars.RTS_BASE_URL || 'https://rts.rtp.openenglab.netapp.com' }}
       RTS_DATA_RETENTION_ROOT: ${{ vars.RTS_DATA_RETENTION_ROOT || '/x/eng/3rdparty/data_retention' }}
       FTP_STAGING_ROOT: ${{ vars.FTP_STAGING_ROOT || '/x/eng/3rdparty/ftpstaging' }}
       COSINE_NOTIFY_EMAIL: ${{ vars.COSINE_NOTIFY_EMAIL || 'enghelp+blackduck@netapp.com' }}
@@ -119,19 +79,30 @@ jobs:
           fi
           echo "branch_name='${BRANCH_NAME}' is a dated release branch — proceeding."
 
-      - name: Checkout specified branch
+      # Two checkouts on purpose. The workflow scripts under
+      # scripts/rts-ftp-posting/ live on main and are NOT present on
+      # the older dated release branches that this workflow has to be
+      # able to FTP-post. So we lay down the scripts from the dispatch
+      # ref at the workspace root, and lay down the release branch
+      # under release-branch/ for dependency-manifest inspection.
+      - name: Checkout workflow scripts (from the dispatch ref)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Checkout the release branch under release-branch/
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.inputs.branch_name }}
+          path: release-branch
 
-      - name: Install required tools (rsync, curl, python3)
+      - name: Install required tools (rsync, python3)
         run: |
           set -euo pipefail
           # rsync is the only non-default we need for the publish step;
-          # curl + python3 + ca-certificates are listed for completeness
-          # in case the runner image is ever slimmed down.
+          # python3 is listed for completeness in case the runner image
+          # is ever slimmed down. The workflow no longer talks HTTP to
+          # RTS, so curl is intentionally omitted.
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends rsync curl ca-certificates python3
+          sudo apt-get install -y --no-install-recommends rsync python3
 
       - name: Validate inputs and compute paths
         id: paths
@@ -151,10 +122,20 @@ jobs:
           fi
 
           # Reject path-traversal attempts in the user-supplied values — these
-          # end up in URLs and in filesystem paths below.
+          # end up in filesystem paths below (both for reading from the
+          # data_retention filer and for writing into the staging tree).
           case "${RTS_PROJECT_NAME}${RTS_PROJECT_VERSION}" in
             *..*|*/*) echo "::error::Project name/version must not contain '..' or '/'"; exit 1 ;;
           esac
+
+          # The data_retention filer convention is: directory uses the
+          # project name with spaces converted to underscores (e.g.
+          # "NetApp Data Migrator" -> "NetApp_Data_Migrator"), but the
+          # CSV/source filenames still use the spaced form. The casing
+          # itself must match the filer (capital N + capital A) — that
+          # is what the rts_project_name input default encodes.
+          PROJECT_SUBDIR="${RTS_PROJECT_NAME// /_}"
+          DATA_RETENTION_DIR="${RTS_DATA_RETENTION_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}"
 
           STAGE_ROOT="${RUNNER_TEMP:-/tmp}/rts-ftp-posting"
           PROJECT_DIR="${STAGE_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}"
@@ -168,80 +149,102 @@ jobs:
           {
             echo "stage_root=${STAGE_ROOT}"
             echo "project_dir=${PROJECT_DIR}"
+            echo "project_subdir=${PROJECT_SUBDIR}"
+            echo "data_retention_dir=${DATA_RETENTION_DIR}"
             echo "csv_name=${CSV_NAME}"
             echo "csv_path=${CSV_PATH}"
             echo "manifest_path=${MANIFEST_PATH}"
             echo "log_dir=${LOG_DIR}"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Project:         ${RTS_PROJECT_NAME}"
-          echo "Version:         ${RTS_PROJECT_VERSION}"
-          echo "Staging dir:     ${PROJECT_DIR}"
-          echo "CSV target path: ${CSV_PATH}"
+          echo "Project:             ${RTS_PROJECT_NAME}"
+          echo "Project subdir:      ${PROJECT_SUBDIR}"
+          echo "Version:             ${RTS_PROJECT_VERSION}"
+          echo "data_retention dir:  ${DATA_RETENTION_DIR}"
+          echo "Staging dir:         ${PROJECT_DIR}"
+          echo "CSV target path:     ${CSV_PATH}"
 
-      - name: Download FTP-Components CSV from RTS
+      - name: Read FTP-Components CSV from the data_retention filer
         env:
-          RTS_USER: ${{ secrets.RTS_USER }}
-          RTS_PASSWORD: ${{ secrets.RTS_PASSWORD }}
           RTS_PROJECT_NAME: ${{ github.event.inputs.rts_project_name }}
           RTS_PROJECT_VERSION: ${{ github.event.inputs.rts_project_version }}
+          CSV_NAME: ${{ steps.paths.outputs.csv_name }}
           CSV_PATH: ${{ steps.paths.outputs.csv_path }}
+          DATA_RETENTION_DIR: ${{ steps.paths.outputs.data_retention_dir }}
+          PROJECT_SUBDIR: ${{ steps.paths.outputs.project_subdir }}
         run: |
           set -euo pipefail
 
-          # Build:
-          #   <base>/download?file=/x/eng/3rdparty/data_retention/<Project>/<Version>/<Project> <Version>-FTP-Components.csv
-          CSV_FILE_NAME="${RTS_PROJECT_NAME} ${RTS_PROJECT_VERSION}-FTP-Components.csv"
-          REMOTE_PATH="${RTS_DATA_RETENTION_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}/${CSV_FILE_NAME}"
-          URL="${RTS_BASE_URL}/download?file=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${REMOTE_PATH}")"
-
-          AUTH_ARGS=()
-          if [[ -n "${RTS_USER:-}" && -n "${RTS_PASSWORD:-}" ]]; then
-            AUTH_ARGS=(--user "${RTS_USER}:${RTS_PASSWORD}")
-          fi
-
-          echo "Downloading CSV from: ${URL}"
-          curl --fail --show-error --silent --location "${AUTH_ARGS[@]}" \
-            --output "${CSV_PATH}" "${URL}"
-
-          if [[ ! -s "${CSV_PATH}" ]]; then
-            echo "::error::CSV download succeeded but file is empty: ${CSV_PATH}"
+          # The data_retention share is mounted directly on scs-v2
+          # runners (same filer as /x/eng/3rdparty/ftpstaging), so we
+          # read the CSV — and, in the next step, the source archives
+          # it references — straight from the filesystem. This is
+          # strictly better than the previous HTTP path: no auth, no
+          # network hop, no possibility of an HTML "login required" or
+          # "not found" page being silently mis-parsed as a CSV.
+          if [[ ! -d "${RTS_DATA_RETENTION_ROOT}" ]]; then
+            echo "::error::data_retention root not mounted on this runner: ${RTS_DATA_RETENTION_ROOT}"
+            echo "::error::This workflow must run on a runner that has ${RTS_DATA_RETENTION_ROOT} mounted (e.g. scs-v2)."
             exit 1
           fi
 
-          echo "CSV downloaded ($(wc -c <"${CSV_PATH}") bytes)."
+          CSV_SOURCE="${DATA_RETENTION_DIR}/${CSV_NAME}"
+          if [[ ! -f "${CSV_SOURCE}" ]]; then
+            echo "::error::FTP-Components.csv not found on the data_retention filer."
+            echo "::error::Looked for: ${CSV_SOURCE}"
+            echo "::error::Likely causes: (1) RTS hasn't generated the CSV yet for this <project, version> (it's produced after the legal-review step in the RTS tool); or (2) the project name or version don't match the layout under ${RTS_DATA_RETENTION_ROOT}/."
+            if [[ -d "${RTS_DATA_RETENTION_ROOT}/${PROJECT_SUBDIR}" ]]; then
+              echo "::error::Versions present for ${PROJECT_SUBDIR}:"
+              ls -1 "${RTS_DATA_RETENTION_ROOT}/${PROJECT_SUBDIR}/" 2>/dev/null | sed 's/^/  - /' || true
+            else
+              echo "::error::Project subdirectory ${PROJECT_SUBDIR} is missing under ${RTS_DATA_RETENTION_ROOT}/."
+              echo "::error::Project subdirectories present:"
+              ls -1 "${RTS_DATA_RETENTION_ROOT}/" 2>/dev/null | sed 's/^/  - /' || true
+            fi
+            exit 1
+          fi
+
+          cp -- "${CSV_SOURCE}" "${CSV_PATH}"
+          echo "Read CSV from filer:"
+          echo "  source: ${CSV_SOURCE}"
+          echo "  staged: ${CSV_PATH} ($(wc -c <"${CSV_PATH}") bytes)"
           echo "First rows:"
           head -n 5 "${CSV_PATH}" || true
 
-      - name: Verify CSV components are real dependencies of this repo
+      - name: Classify CSV components — direct deps vs ride-along
         env:
           CSV_PATH: ${{ steps.paths.outputs.csv_path }}
           STAGE_ROOT: ${{ steps.paths.outputs.stage_root }}
-          SKIP_CHECK: ${{ github.event.inputs.skip_dependency_check }}
         run: |
           set -euo pipefail
 
-          # Runs BEFORE any source archive is downloaded so an unknown
-          # component aborts the job cheaply and we don't waste bandwidth
-          # fetching things that should never be posted.
+          # Informational classification, not a fail-stop. The RTS CSV
+          # is the legal-authoritative list of what we ship — once a
+          # release has gone through SBOM + VP-sign-off, every row is
+          # by definition shippable. This step splits each row into
+          # "direct dependency of this repo" (declared in some
+          # manifest) vs "ride-along" (transitively pulled in by an
+          # upstream image — Bitnami Keycloak, Debian base layer,
+          # Quarkus runtime, ...) so the operator can spot-check the
+          # breakdown in the workflow artifact. The lone fail-stop in
+          # this workflow is the NetApp-IP scan a few steps down.
+          # This step itself only hard-fails on structural CSV
+          # breakage (no name column, zero rows).
+          #
+          # --repo-root points at release-branch/ (NOT $GITHUB_WORKSPACE)
+          # because the dependency manifests we classify against are
+          # the ones on the release branch the operator is publishing,
+          # not the ones on the dispatch ref where this workflow lives.
           REPORT="${STAGE_ROOT}/dependency-check.json"
-          EXTRA_ARG=""
-          if [[ "${SKIP_CHECK}" == "true" ]]; then
-            echo "::warning::skip_dependency_check=true — running the check in warn-only mode."
-            EXTRA_ARG="--warn-only"
-          fi
 
           python3 scripts/rts-ftp-posting/verify-components.py \
             --csv "${CSV_PATH}" \
-            --repo-root "${GITHUB_WORKSPACE}" \
-            --report "${REPORT}" \
-            ${EXTRA_ARG}
+            --repo-root "${GITHUB_WORKSPACE}/release-branch" \
+            --report "${REPORT}"
 
-      - name: Download all source archives referenced in the CSV
+      - name: Stage source archives by harvesting release-branch lockfiles
         id: stage
         env:
-          RTS_USER: ${{ secrets.RTS_USER }}
-          RTS_PASSWORD: ${{ secrets.RTS_PASSWORD }}
           RTS_PROJECT_NAME: ${{ github.event.inputs.rts_project_name }}
           RTS_PROJECT_VERSION: ${{ github.event.inputs.rts_project_version }}
           CSV_PATH: ${{ steps.paths.outputs.csv_path }}
@@ -250,17 +253,20 @@ jobs:
           LOG_DIR: ${{ steps.paths.outputs.log_dir }}
         run: |
           set -euo pipefail
+          # The data_retention filer holds RTS metadata (CSV); actual
+          # bytes are fetched by stage-sources.py from public registries
+          # (npm lockfile resolved URLs + integrity, Maven Central,
+          # Go proxy + sumdb, snapshot.debian.org for Docker base
+          # packages). manifest.json records per-row status for the
+          # workflow artifact.
           python3 scripts/rts-ftp-posting/stage-sources.py \
             --csv "${CSV_PATH}" \
             --project "${RTS_PROJECT_NAME}" \
             --version "${RTS_PROJECT_VERSION}" \
-            --rts-base-url "${RTS_BASE_URL}" \
-            --data-retention-root "${RTS_DATA_RETENTION_ROOT}" \
+            --release-branch "${GITHUB_WORKSPACE}/release-branch" \
             --output-dir "${PROJECT_DIR}" \
             --manifest "${MANIFEST_PATH}" \
-            --log-dir "${LOG_DIR}" \
-            ${RTS_USER:+--rts-user "${RTS_USER}"} \
-            ${RTS_PASSWORD:+--rts-password "${RTS_PASSWORD}"}
+            --log-dir "${LOG_DIR}"
 
       - name: Sanity-check staged content
         env:
@@ -269,7 +275,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Staged tree ==="
-          find "${PROJECT_DIR}" -type f -printf '%10s  %p\n' | head -n 200
+          # `head` exits after 200 lines and closes the pipe; `find` then
+          # gets SIGPIPE (exit 141). With `pipefail` that would fail the
+          # job even though this is only a preview — turn pipefail off
+          # for this subshell.
+          ( set +o pipefail
+            find "${PROJECT_DIR}" -type f -printf '%10s  %p\n' | head -n 200
+          )
           echo ""
           echo "=== Manifest summary ==="
           python3 - <<'PY'
@@ -299,20 +311,21 @@ jobs:
         env:
           PROJECT_DIR: ${{ steps.paths.outputs.project_dir }}
           STAGE_ROOT: ${{ steps.paths.outputs.stage_root }}
-          ALLOW_HITS: ${{ github.event.inputs.allow_ip_hit_sha256s }}
         run: |
           set -euo pipefail
 
           # This is the last line of defence before bytes leave the runner.
           # It hard-fails on ANY hit (copyright marker, NDM source-tree path,
-          # @NetApp-Cloud-DataMigrate scope, etc.); the only way past it is
-          # to record the sha256 of a reviewed false positive in the
-          # allow_ip_hit_sha256s workflow input after Legal sign-off.
+          # @NetApp-Cloud-DataMigrate scope, etc.). The check is always
+          # enforced — there is no operator allow-list. If the scanner
+          # flags a file that turns out to be a legitimate upstream
+          # reference, fix it in the source tree (rename, redact, exclude
+          # from the published archive at the source) rather than
+          # bypassing the guard.
           REPORT="${STAGE_ROOT}/ip-scan.json"
           python3 scripts/rts-ftp-posting/scan-for-netapp-ip.py \
             --root "${PROJECT_DIR}" \
-            --report "${REPORT}" \
-            --allow-hits "${ALLOW_HITS}"
+            --report "${REPORT}"
 
       - name: Publish to /x/eng/3rdparty/ftpstaging (skipped on dry_run)
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -366,7 +379,6 @@ jobs:
           MANIFEST_PATH: ${{ steps.paths.outputs.manifest_path }}
           STAGE_ROOT: ${{ steps.paths.outputs.stage_root }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-          SKIP_DEP: ${{ github.event.inputs.skip_dependency_check }}
         run: |
           set -euo pipefail
           DEP_REPORT="${STAGE_ROOT}/dependency-check.json"
@@ -388,7 +400,7 @@ jobs:
             if [[ -f "${DEP_REPORT}" ]]; then
               DEP_OK=$(python3 -c 'import json,os; r=json.load(open(os.environ["DEP_REPORT"])); print(len(r.get("ok",[])))')
               DEP_UNK=$(python3 -c 'import json,os; r=json.load(open(os.environ["DEP_REPORT"])); print(len(r.get("unknown",[])))')
-              echo "- Dependency verification: **${DEP_OK} matched / ${DEP_UNK} unknown** $([[ "${SKIP_DEP}" == "true" ]] && echo '(skip_dependency_check=true — warn-only)' || echo '(enforced)')"
+              echo "- Dependency verification: **${DEP_OK} matched / ${DEP_UNK} unknown** (enforced)"
             else
               echo "- Dependency verification: **not run** (job failed earlier)"
             fi
@@ -501,7 +513,7 @@ jobs:
 
       - name: Upload manifest and logs as workflow artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rts-ftp-posting-${{ github.event.inputs.rts_project_name }}-${{ github.event.inputs.rts_project_version }}
           path: |

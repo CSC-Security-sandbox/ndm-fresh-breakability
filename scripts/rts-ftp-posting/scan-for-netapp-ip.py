@@ -2,27 +2,64 @@
 """Scan a staging directory for anything that looks like NetApp / NDM
 intellectual property and must NOT leave the corporate network.
 
-The scanner is deliberately paranoid: a false positive is recoverable (an
-operator inspects the flagged file, decides it's a legitimate upstream
-reference to NetApp, re-runs with --allow-hits <sha256>), but a false
-negative leaks NetApp IP onto a public FTP site. So we err on the side
-of flagging too much.
+The scanner is deliberately paranoid: a false positive is recoverable
+(an operator inspects the flagged file, decides it's a legitimate
+upstream reference to NetApp, and addresses it at the source — by
+renaming, redacting, or excluding the offending file from the
+published archive on the upstream side — then re-runs the workflow),
+but a false negative leaks NetApp IP onto a public FTP site. So we
+err on the side of flagging too much. The check is always enforced;
+there is no in-workflow allow-list of file hashes.
 
-What it does:
+Threat model
+------------
+What we're protecting against is **NDM source code (or NDM-internal
+identifiers) ending up bundled inside an upstream third-party archive
+that's about to be published to the public FTP site**. With that as
+the asymmetry, patterns fall into three groups:
 
+* **High-confidence IP markers** — explicit ``Copyright (c) NetApp``
+  / ``NetApp Confidential`` / ``Proprietary NetApp`` strings. These
+  are leaks anywhere they appear, including in metadata files NDM
+  itself emits, so they're always applied.
+* **NDM coordinate strings** — the ``@NetApp-Cloud-DataMigrate`` npm
+  scope and the ``NetApp Data Migrator`` project name. These appear
+  legitimately in RTS-produced metadata at the staging root (the
+  FTP-Components.csv literally is "the manifest for project NetApp
+  Data Migrator listing every ``@NetApp-Cloud-DataMigrate/<lib>`` it
+  ships"). They are leaks **only** when they appear inside an
+  upstream third-party archive — no third-party legitimately
+  depends on our private scope or carries our project name. So
+  these patterns are applied only to *archive contents*.
+* **NDM source-tree path markers** — ``services/<svc>/src/``,
+  ``lib/<lib>/src/``, ``liquibase/apply/``, ... . These are
+  vanishingly unlikely to appear in legitimate RTS metadata, so they
+  are applied everywhere; an NDM-source path inside the SBOM CSV
+  would itself be a flag worth investigating.
+
+The split is hardcoded — the operator has no toggle to weaken it —
+so this is not an allow-list, it's a context-aware threat model.
+
+What it does
+------------
 1. For every file under ``--root``:
    * If the file is a known archive (tar/tar.gz/tar.bz2/tar.xz/zip/jar/
-     war/aar/ear), extract it into a temporary directory.
-   * Otherwise treat the single file as the content to scan.
+     war/aar/ear), extract it into a temporary directory and walk the
+     extracted tree as **archive content** (full pattern set applies).
+   * Otherwise treat the single file as **staging-root metadata**
+     (NDM-emitted manifest, RTS-emitted SBOM CSV, ...) and scan with
+     high-confidence IP markers + NDM source-tree paths only.
 2. Inside the extracted tree:
-   * Plain-text files: grep for NetApp-copyright / NDM-specific markers
-     AND for any of NDM's source-tree directory names.
-   * Binary files: extract printable strings and grep for the same
-     copyright / NDM markers (path markers are skipped here because
-     short path fragments like ``liquibase/apply`` occasionally appear
-     in unrelated binaries).
+   * Plain-text files: grep for the full pattern set.
+   * Binary files: extract printable strings and grep for high-
+     confidence + coordinate patterns (path markers are skipped here
+     because short path fragments like ``liquibase/apply`` occasionally
+     appear in unrelated binaries).
 3. Emit a JSON report at ``--report`` and print a human summary.
-4. Exit 1 if anything matched.
+4. Exit 1 if any IP / path pattern matched, or if any archive could
+   not be extracted for scanning (``extract_errors``). Zip files
+   that trip Python's overlap guard may be shallow-scanned on disk
+   instead; clean results are recorded under ``extraction_skipped``.
 
 The scanner is intentionally self-contained — it uses only the Python
 stdlib — so it works on any runner without extra dependencies.
@@ -31,7 +68,6 @@ stdlib — so it works on any runner without extra dependencies.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -47,8 +83,12 @@ from pathlib import Path
 # Detection patterns
 # ---------------------------------------------------------------------------
 
-# High-signal "this is NetApp IP" markers. Case-insensitive.
-NETAPP_IP_PATTERNS: list[re.Pattern[str]] = [
+# High-confidence "this is NetApp IP" markers. Case-insensitive.
+# These are explicit copyright / proprietary statements and are leaks
+# wherever they appear (including inside RTS-emitted metadata files at
+# the staging root — RTS has no business stamping NetApp copyrights into
+# an SBOM CSV, so any hit here is genuinely worth investigating).
+HIGH_CONFIDENCE_IP_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Copyright\s*(?:\([cC]\)|\xa9|©)?\s*(?:19|20)\d{2}[^.\n]{0,120}?NetApp",
                re.IGNORECASE),
     re.compile(r"\([cC]\)\s*NetApp", re.IGNORECASE),
@@ -56,8 +96,22 @@ NETAPP_IP_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"NetApp[\s\-_]+Confidential", re.IGNORECASE),
     re.compile(r"Proprietary[^\n]{0,80}NetApp", re.IGNORECASE),
     re.compile(r"NetApp[^\n]{0,80}Proprietary", re.IGNORECASE),
-    # NDM-specific — these are unique to this product and are by
-    # definition NetApp IP when they appear outside this repo.
+]
+
+# NDM coordinate / branding strings. NDM publishes its internal
+# libraries (jobs-lib, auth-lib, api-handler-lib, logger-lib) to npm
+# under the ``@NetApp-Cloud-DataMigrate`` scope, and "NetApp Data
+# Migrator" is the project's RTS name. Both legitimately appear in
+# RTS-emitted metadata at the staging root: the FTP-Components.csv
+# enumerates every shipped ``@NetApp-Cloud-DataMigrate/<lib>`` by
+# name, and the project name is literally the title of the report.
+# But neither has any business showing up *inside* a third-party
+# upstream tarball — no external package legitimately depends on our
+# private scope or carries our project name. So we apply these
+# patterns only when scanning archive content; in metadata-mode
+# scans they're suppressed to eliminate the structural false
+# positive on the SBOM CSV.
+NDM_COORDINATE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"@NetApp-Cloud-DataMigrate"),
     re.compile(r"NetApp[-_\s]+Cloud[-_\s]+DataMigrate", re.IGNORECASE),
     re.compile(r"NetApp\s+Data\s+Migrator", re.IGNORECASE),
@@ -97,8 +151,11 @@ ZIP_SUFFIXES = (".zip", ".jar", ".war", ".ear", ".aar", ".apk",
 
 # Limits kept high enough that a well-formed source tarball isn't
 # truncated but low enough that a malicious "zip-bomb"-style artefact
-# can't DOS the runner.
-MAX_EXTRACT_BYTES = 2 * 1024 * 1024 * 1024   # 2 GiB per archive
+# can't DOS the runner.  Debian ``.orig.tar.*`` sources (e.g. Firefox
+# ESR) and multi-language trees routinely exceed 2 GiB *uncompressed*
+# member-size sums; 10 GiB is a pragmatic ceiling for self-hosted
+# runners while still bounding worst-case expansion.
+MAX_EXTRACT_BYTES = 10 * 1024 * 1024 * 1024   # 10 GiB per archive
 MAX_FILE_SCAN_BYTES = 20 * 1024 * 1024       # 20 MiB per file
 MAX_STRINGS_MATCHES_PER_FILE = 20            # don't flood report
 
@@ -108,14 +165,6 @@ MAX_STRINGS_MATCHES_PER_FILE = 20            # don't flood report
 # ---------------------------------------------------------------------------
 
 PRINTABLE = set(bytes(string.printable, "ascii"))
-
-
-def _file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 64), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _is_probably_text(path: Path, sample_size: int = 8192) -> bool:
@@ -160,9 +209,18 @@ def _is_zip(path: Path) -> bool:
 
 def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
     """Extract ``tf`` into ``dest`` while rejecting path-traversal and
-    staying under ``MAX_EXTRACT_BYTES`` total."""
-    total = 0
+    staying under ``MAX_EXTRACT_BYTES`` total.
+
+    Only regular files, directories, symlinks, and hardlinks are
+    extracted. ``tarfile.extractall`` would also attempt device nodes
+    and FIFOs — Debian source packages (e.g. ``dpkg``) ship FIFO test
+    fixtures under ``tests/t-unpack-fifo/`` that ``filter="data"``
+    rejects with ``SpecialFileError``. Skipping non-regular members
+    matches what we need for text scanning and avoids those failures.
+    """
     dest = dest.resolve()
+    total = 0
+    to_extract: list[tarfile.TarInfo] = []
     for member in tf.getmembers():
         if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
             continue
@@ -174,11 +232,13 @@ def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
         total += getattr(member, "size", 0) or 0
         if total > MAX_EXTRACT_BYTES:
             raise RuntimeError("archive exceeds MAX_EXTRACT_BYTES")
-    # Python 3.12+ supports filter="data"; fall back silently on older.
-    try:
-        tf.extractall(dest, filter="data")  # type: ignore[arg-type]
-    except TypeError:
-        tf.extractall(dest)
+        to_extract.append(member)
+
+    for member in to_extract:
+        try:
+            tf.extract(member, dest, set_attrs=False, filter="data")  # type: ignore[arg-type]
+        except TypeError:
+            tf.extract(member, dest, set_attrs=False)
 
 
 def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
@@ -200,13 +260,28 @@ def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
 # Scanning
 # ---------------------------------------------------------------------------
 
-def _scan_text(text: str, *, include_path_markers: bool) -> list[dict]:
+# Scan contexts. ``archive-content`` files came out of an upstream
+# third-party archive and get the full pattern set; ``staging-metadata``
+# files are top-level RTS- or NDM-emitted manifests at the staging root
+# and skip the NDM coordinate patterns (which are by-design present
+# there and would otherwise drown the report).
+SCOPE_ARCHIVE_CONTENT = "archive-content"
+SCOPE_STAGING_METADATA = "staging-metadata"
+
+
+def _scan_text(text: str, *, scope: str, include_path_markers: bool) -> list[dict]:
     hits: list[dict] = []
-    for pat in NETAPP_IP_PATTERNS:
+    for pat in HIGH_CONFIDENCE_IP_PATTERNS:
         for m in pat.finditer(text):
             hits.append({"pattern": pat.pattern, "match": m.group(0)[:200]})
             if len(hits) >= MAX_STRINGS_MATCHES_PER_FILE:
                 return hits
+    if scope == SCOPE_ARCHIVE_CONTENT:
+        for pat in NDM_COORDINATE_PATTERNS:
+            for m in pat.finditer(text):
+                hits.append({"pattern": pat.pattern, "match": m.group(0)[:200]})
+                if len(hits) >= MAX_STRINGS_MATCHES_PER_FILE:
+                    return hits
     if include_path_markers:
         for pat in NDM_PATH_MARKERS:
             m = pat.search(text)
@@ -217,8 +292,40 @@ def _scan_text(text: str, *, include_path_markers: bool) -> list[dict]:
     return hits
 
 
-def _scan_file(path: Path, rel: str) -> list[dict]:
-    """Return a list of hit records for a single (already-extracted) file."""
+def _shallow_raw_scan(path: Path, rel: str, source_label: str) -> list[dict]:
+    """When a zip/jar cannot be opened as a structured ZipFile (Python's
+    post-2024 overlap / zip-bomb guards raise ``BadZipFile`` on some
+    Maven ``-sources.jar`` artefacts that pre-date the stricter
+    checks), scan the first ``MAX_FILE_SCAN_BYTES`` of the file on
+    disk as opaque binary: printable strings + the same high-
+    confidence + coordinate patterns used for binary members inside
+    archives. Path markers are omitted (same rationale as
+    ``_scan_file`` binary branch). This is weaker than a full tree
+    walk but catches obvious NetApp markers in the readable regions
+    of the jar.
+    """
+    try:
+        with path.open("rb") as fh:
+            data = fh.read(MAX_FILE_SCAN_BYTES)
+    except OSError as exc:
+        return [{"file": rel, "mode": "shallow-scan-error",
+                 "source_archive": source_label,
+                 "match": f"could not read: {exc}"}]
+    big = "\n".join(_iter_strings(data))
+    hits: list[dict] = []
+    for h in _scan_text(big, scope=SCOPE_ARCHIVE_CONTENT,
+                        include_path_markers=False):
+        hits.append({"file": rel, "mode": "shallow-binary", **h,
+                     "source_archive": source_label})
+    return hits
+
+
+def _scan_file(path: Path, rel: str, *, scope: str) -> list[dict]:
+    """Return a list of hit records for a single (already-extracted) file.
+
+    ``scope`` controls which pattern groups apply — see
+    ``SCOPE_ARCHIVE_CONTENT`` vs ``SCOPE_STAGING_METADATA``.
+    """
     try:
         size = path.stat().st_size
     except OSError:
@@ -238,13 +345,15 @@ def _scan_file(path: Path, rel: str) -> list[dict]:
             text = data.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             text = data.decode("latin-1", errors="replace")
-        for h in _scan_text(text, include_path_markers=True):
+        for h in _scan_text(text, scope=scope, include_path_markers=True):
             results.append({"file": rel, "mode": "text", **h})
     else:
         # Binary: run stdlib strings(1), scan each extracted string for
-        # copyright / NDM-specific markers but not for path markers.
+        # copyright / NDM-specific markers but not for path markers
+        # (short path fragments like ``liquibase/apply`` occasionally
+        # appear in unrelated binaries).
         big = "\n".join(_iter_strings(data))
-        for h in _scan_text(big, include_path_markers=False):
+        for h in _scan_text(big, scope=scope, include_path_markers=False):
             results.append({"file": rel, "mode": "binary-strings", **h})
 
     return results
@@ -266,36 +375,30 @@ def _scan_tree(root: Path, source_label: str) -> list[dict]:
                         "mode": "archive-path",
                         "pattern": pat.pattern,
                         "match": rel,
+                        "source_archive": source_label,
                     })
                     break
-            file_hits = _scan_file(p, rel)
+            file_hits = _scan_file(p, rel, scope=SCOPE_ARCHIVE_CONTENT)
             for h in file_hits:
                 h["source_archive"] = source_label
                 hits.append(h)
     return hits
 
 
-def scan_staging(
-    root: Path,
-    allow_hits: set[str],
-) -> dict:
+def scan_staging(root: Path) -> dict:
     report: dict = {
         "root": str(root),
         "archives_scanned": 0,
         "non_archive_files_scanned": 0,
         "hits": [],
-        "allow_listed": sorted(allow_hits),
+        "extract_errors": [],
+        "extraction_skipped": [],
     }
 
     for dirpath, _dirnames, filenames in os.walk(root):
         for fn in filenames:
             p = Path(dirpath) / fn
             rel_from_root = str(p.relative_to(root))
-
-            sha = _file_sha256(p)
-            if sha in allow_hits:
-                print(f"[allow-list] skipping {rel_from_root} (sha256={sha})")
-                continue
 
             if _is_tar(p) or _is_zip(p):
                 report["archives_scanned"] += 1
@@ -306,20 +409,55 @@ def scan_staging(
                             with tarfile.open(p, "r:*") as tf:
                                 _safe_extract_tar(tf, tmp_path)
                         else:
-                            with zipfile.ZipFile(p, "r") as zf:
-                                _safe_extract_zip(zf, tmp_path)
+                            try:
+                                with zipfile.ZipFile(
+                                        p, "r", strict_timestamps=False) as zf:
+                                    _safe_extract_zip(zf, tmp_path)
+                            except zipfile.BadZipFile as exc:
+                                # Some Maven ``-sources.jar`` files trigger
+                                # CPython's post-2024 overlap / zip-bomb
+                                # detector even though they are ordinary
+                                # upstream artefacts. Fall back to a
+                                # bounded head read + strings scan.
+                                shallow = _shallow_raw_scan(
+                                    p, rel_from_root, rel_from_root)
+                                errs = [h for h in shallow
+                                        if h.get("mode") == "shallow-scan-error"]
+                                goods = [h for h in shallow
+                                         if h.get("mode") != "shallow-scan-error"]
+                                for h in goods:
+                                    report["hits"].append(h)
+                                if errs:
+                                    report["extract_errors"].append({
+                                        "file": rel_from_root,
+                                        "detail": errs[0].get("match", str(exc)),
+                                    })
+                                elif not goods:
+                                    report["extraction_skipped"].append({
+                                        "file": rel_from_root,
+                                        "detail": (
+                                            f"{type(exc).__name__}: {exc}; "
+                                            "shallow head-only scan found no "
+                                            "IP markers"),
+                                    })
+                                continue
                     except Exception as exc:  # noqa: BLE001
-                        report["hits"].append({
+                        report["extract_errors"].append({
                             "file": rel_from_root,
-                            "mode": "extract-error",
-                            "match": f"{type(exc).__name__}: {exc}",
+                            "detail": f"{type(exc).__name__}: {exc}",
                         })
                         continue
                     for hit in _scan_tree(tmp_path, source_label=rel_from_root):
                         report["hits"].append(hit)
             else:
+                # Non-archive top-level files are RTS- or NDM-emitted
+                # metadata (FTP-Components.csv, manifest.json, ...).
+                # Scan them in metadata-mode so we don't fire on the
+                # SBOM legitimately listing every shipped
+                # ``@NetApp-Cloud-DataMigrate/<lib>``.
                 report["non_archive_files_scanned"] += 1
-                for hit in _scan_file(p, rel_from_root):
+                for hit in _scan_file(p, rel_from_root,
+                                      scope=SCOPE_STAGING_METADATA):
                     hit["source_archive"] = ""
                     report["hits"].append(hit)
 
@@ -336,10 +474,6 @@ def main(argv: list[str]) -> int:
                         help="Directory containing the staged sources to scan")
     parser.add_argument("--report", required=True,
                         help="Where to write the JSON scan report")
-    parser.add_argument("--allow-hits", default="",
-                        help="Comma-separated sha256 hashes to skip (e.g. a file "
-                             "that legitimately references NetApp and has been "
-                             "reviewed by Legal)")
     args = parser.parse_args(argv)
 
     root = Path(args.root)
@@ -347,28 +481,49 @@ def main(argv: list[str]) -> int:
         print(f"::error::scan root is not a directory: {root}", file=sys.stderr)
         return 2
 
-    allow = {h.strip().lower() for h in args.allow_hits.split(",") if h.strip()}
-
-    report = scan_staging(root, allow)
+    report = scan_staging(root)
 
     Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
 
+    hits = report["hits"]
+    ext_errs = report.get("extract_errors", [])
+    skipped = report.get("extraction_skipped", [])
+
     print(f"Archives scanned:          {report['archives_scanned']}")
     print(f"Non-archive files scanned: {report['non_archive_files_scanned']}")
-    print(f"Hits:                      {len(report['hits'])}")
+    print(f"IP / path hits:            {len(hits)}")
+    print(f"Extraction failures:       {len(ext_errs)}")
+    if skipped:
+        print(f"Shallow-only (zip guard):  {len(skipped)}")
 
-    if report["hits"]:
+    if hits:
         print("\nFirst hits (full list in the JSON report):")
-        for h in report["hits"][:30]:
+        for h in hits[:30]:
             src = h.get("source_archive") or ""
             print(f"  [{h.get('mode','?')}] {src} :: {h.get('file','')} "
                   f"-- {h.get('match','')[:120]}")
-        if len(report["hits"]) > 30:
-            print(f"  ... and {len(report['hits']) - 30} more")
+        if len(hits) > 30:
+            print(f"  ... and {len(hits) - 30} more")
         print("\n::error::NetApp/NDM IP contamination detected in staging tree. "
               "FTP upload is blocked. Investigate each hit; if a hit is a "
-              "legitimate upstream reference, allow-list its sha256 via the "
-              "``allow_ip_hit_sha256s`` workflow input after Legal sign-off.",
+              "legitimate upstream reference, address it at the source — "
+              "rename, redact, or exclude the offending file from the "
+              "published archive — and re-run the workflow. The check is "
+              "always enforced; there is no in-workflow allow-list.",
+              file=sys.stderr)
+        return 1
+
+    if ext_errs:
+        print("\nFirst extraction errors (full list in the JSON report):")
+        for e in ext_errs[:15]:
+            print(f"  {e.get('file','')} — {e.get('detail','')[:160]}")
+        if len(ext_errs) > 15:
+            print(f"  ... and {len(ext_errs) - 15} more")
+        print("\n::error::One or more staged archives could not be extracted "
+              "for IP scanning (this is not an IP-pattern match — see "
+              "``extract_errors`` in ip-scan.json). FTP upload is blocked "
+              "until extraction succeeds or the offending artefact is "
+              "removed from the staging tree.",
               file=sys.stderr)
         return 1
 

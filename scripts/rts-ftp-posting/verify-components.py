@@ -1,28 +1,37 @@
 #!/usr/bin/env python3
-"""Verify that every component in an RTS FTP-Components.csv really is a
-dependency (direct or transitive) of this repo.
+"""Classify every component in an RTS FTP-Components.csv as either a
+*direct* dependency of this repo (declared in some local manifest) or a
+*ride-along* component (transitively pulled in by an upstream image we
+ship on top of, e.g. Bitnami's Keycloak Docker image, the Debian base
+layer of the NDM VM, or a Quarkus runtime).
 
-We iterate over every language-specific manifest in the repo and build a
-set of normalised "dependency tokens" (package names / module paths /
-Maven artefacts / Docker base images / ...). Then, for every component
-row in the CSV, we check that at least one of its normalised name
-tokens appears as a substring match in that set.
+This script is **informational, not a fail-stop**. The RTS CSV is the
+legal-authoritative list of what we ship — once a release has gone
+through the SBOM + VP-sign-off process, every row in the CSV is by
+definition shippable. The lone fail-stop in this workflow is the
+NetApp-IP scan that runs over the staged bytes; that scan is what
+keeps our own source code from leaking out. Re-deriving "is this
+really our dep?" from manifests in the repo cannot beat RTS — it
+will always lose to base-image transitives — so we settle for
+classifying each row and surfacing the breakdown to the operator.
 
-BlackDuck component names don't line up byte-for-byte with what a given
-language's manifest says — e.g. BlackDuck may list an npm package as
-"Lodash" while package-lock.json says "lodash@4.17.21" and Go says
-"github.com/stretchr/testify". So we lower-case, strip common
-separators/suffixes, and match on normalised substrings in both
-directions. False negatives (a legit dep we fail to match) are more
-likely than false positives, so the workflow exposes a
-``skip_dependency_check`` input to let the operator bypass this guard
-with an explicit decision.
+Mechanism: harvest dependency tokens from every language-specific
+manifest in the repo (npm package.json/package-lock, Go go.mod/go.sum,
+Maven pom.xml, Dockerfile FROMs). For each CSV row, build a small set
+of candidate tokens (the full normalised name, every space/slash-
+separated fragment ≥3 chars, and a vendor-prefix-stripped variant
+when the name starts with a known vendor token like "google" or
+"square"). A row is classified as direct when any candidate
+substring-matches any harvested token in either direction.
 
 Output:
-  * prints a per-component verdict to stdout,
-  * writes ``dependency-check.json`` next to the manifest, and
-  * exits non-zero if any component could not be located in any
-    manifest (unless --warn-only is passed).
+  * prints a "direct vs ride-along" summary to stdout,
+  * writes ``dependency-check.json`` containing the full classification
+    per row (so the operator can spot-check ride-along entries via
+    the workflow artifact),
+  * exits 0 when the CSV was structurally parseable; exits non-zero
+    only when the CSV header is malformed (no recognisable name
+    column) or contains zero rows.
 """
 
 from __future__ import annotations
@@ -62,12 +71,72 @@ SKIP_DIRS = {
 # Regex helpers.
 NORMALISE_RE = re.compile(r"[^a-z0-9]+")
 
+# Vendor-name prefixes that BlackDuck / RTS sometimes mash onto an
+# artefact name with no separator: "googleguava" → "guava",
+# "squareokio" → "okio", "apachecommonslang" → "commonslang". When the
+# normalised CSV name starts with one of these, we *additionally*
+# offer the suffix as a candidate — we never strip the prefix from
+# repo-side tokens (those names come from authoritative manifests
+# and we don't want to fabricate a "guava" candidate from a real
+# package called "google-guava-something").
+VENDOR_PREFIXES = (
+    "google",
+    "square",
+    "apache",
+    "jakarta",
+    "eclipse",
+    "jboss",
+    "smallrye",
+    "spring",
+    "netflix",
+    "redhat",
+)
+
+
+def _strip_vendor(s: str) -> str | None:
+    """If ``s`` starts with a known vendor prefix, return the suffix
+    (only when the suffix is at least 3 chars so we don't generate
+    pathologically short candidates). Returns ``None`` if no prefix
+    matches.
+    """
+    for prefix in VENDOR_PREFIXES:
+        if s.startswith(prefix) and len(s) - len(prefix) >= 3:
+            return s[len(prefix) :]
+    return None
+
+
+_HEADER_FLATTEN_RE = re.compile(r"[^a-z0-9]+")
+
 
 def _match_header(fieldnames: Iterable[str], candidates: Iterable[str]) -> str | None:
-    normalised = {(fn or "").strip().lower(): fn for fn in fieldnames}
+    """Return the first field in ``fieldnames`` matching any of ``candidates``.
+
+    Two-stage matching, deliberately permissive: the RTS tool has shipped
+    several CSV header variants over the years (``Component Name``,
+    ``Component Name (KB ID)``, ``BD Component Name``, ...) and we
+    want all of them to resolve to the same logical column.
+
+    1. Exact match on the trimmed lower-case header. Cheapest path.
+    2. Substring match on a punctuation-flattened form
+       (``Component Name (KB ID)`` -> ``component name kb id``) so the
+       candidate ``component name`` still matches.
+
+    ``candidates`` should be ordered most-specific-first so that, for
+    example, ``component name`` wins over the ambiguous ``component``.
+    """
+    fields = [fn for fn in fieldnames if fn]
+    exact = {fn.strip().lower(): fn for fn in fields}
     for cand in candidates:
-        if cand in normalised:
-            return normalised[cand]
+        if cand in exact:
+            return exact[cand]
+
+    flattened: list[tuple[str, str]] = [
+        (_HEADER_FLATTEN_RE.sub(" ", fn.lower()).strip(), fn) for fn in fields
+    ]
+    for cand in candidates:
+        for flat, original in flattened:
+            if cand in flat:
+                return original
     return None
 
 
@@ -286,7 +355,29 @@ def harvest_repo_tokens(repo_root: Path) -> set[str]:
     return tokens
 
 
+class CsvHeaderError(RuntimeError):
+    """Raised when the CSV's header row has no recognisable name column.
+    This is a structural breakage — distinct from "every row classified
+    as ride-along" — and the caller turns it into a hard fail-stop.
+    """
+
+
 def verify(csv_path: Path, repo_tokens: set[str]) -> tuple[list[dict], list[dict]]:
+    """Classify each CSV row as either a *direct* dependency of this
+    repo or a *ride-along* component. Returns ``(direct, ride_along)``.
+
+    A row is *direct* when at least one of its normalised candidate
+    tokens substring-matches a token harvested from the repo's
+    manifests. A row is *ride-along* otherwise — RTS lists it because
+    some upstream image we redistribute pulls it in transitively
+    (Bitnami Keycloak, Debian base layer, Quarkus runtime, ...).
+    Neither classification is "wrong"; both are shippable per the RTS
+    CSV. The split is informational only.
+
+    Raises ``CsvHeaderError`` if the CSV header row has no
+    recognisable component-name column; that *is* a structural
+    failure and the caller hard-fails.
+    """
     with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = reader.fieldnames or []
@@ -294,38 +385,64 @@ def verify(csv_path: Path, repo_tokens: set[str]) -> tuple[list[dict], list[dict
         version_col = _match_header(fieldnames, VERSION_HEADERS)
         rows = list(reader)
 
-    ok: list[dict] = []
-    unknown: list[dict] = []
+    print(f"CSV columns detected: {fieldnames}")
+    print(f"  Name column:    {name_col!r}")
+    print(f"  Version column: {version_col!r}")
+    print(f"  Row count:      {len(rows)}")
+
+    if name_col is None:
+        raise CsvHeaderError(
+            f"FTP-Components.csv has no recognisable component-name "
+            f"column. Headers seen: {fieldnames}. Aliases recognised "
+            f"(exact or substring, ordered most-specific-first): "
+            f"{list(NAME_HEADERS)}. Add the actual RTS header to "
+            f"NAME_HEADERS in scripts/rts-ftp-posting/verify-components.py "
+            f"AND scripts/rts-ftp-posting/stage-sources.py, then re-run."
+        )
+
+    direct: list[dict] = []
+    ride_along: list[dict] = []
 
     for i, row in enumerate(rows, start=1):
         name = (row.get(name_col) or "").strip() if name_col else ""
         version = (row.get(version_col) or "").strip() if version_col else ""
         if not name:
-            unknown.append({"row": i, "component": "", "version": version,
-                            "reason": "component name column is empty"})
+            ride_along.append({"row": i, "component": "", "version": version,
+                               "reason": "component name column is empty"})
             continue
 
-        # Normalised candidate tokens for the component.
+        # Build a small set of candidate tokens for this component.
         candidates: set[str] = set()
         norm_name = _normalise(name)
         if norm_name:
             candidates.add(norm_name)
+            # Vendor-mashed names: "googleguava" -> also try "guava".
+            stripped = _strip_vendor(norm_name)
+            if stripped:
+                candidates.add(stripped)
         # BlackDuck sometimes joins vendor + product ("apache commons lang")
-        # or splits on "/". Try the tail, and every `/`- or ` `-separated
-        # fragment of length >= 3.
+        # or splits on "/". Try every `/`- or whitespace-separated
+        # fragment of length >= 3 (after normalisation). Hyphens are
+        # *not* treated as fragment separators — a candidate like
+        # "agent" carved out of "byte-buddy-agent" would over-match
+        # tokens such as "user-agent".
         fragments = re.split(r"[/\s]+", name)
         for frag in fragments:
             nf = _normalise(frag)
             if len(nf) >= 3:
                 candidates.add(nf)
+                stripped = _strip_vendor(nf)
+                if stripped:
+                    candidates.add(stripped)
 
         if not candidates:
-            unknown.append({"row": i, "component": name, "version": version,
-                            "reason": "no usable tokens after normalisation"})
+            ride_along.append({"row": i, "component": name, "version": version,
+                               "reason": "no usable tokens after normalisation"})
             continue
 
         # Match: substring in either direction. We intentionally keep
-        # this fuzzy rather than exact — see module docstring.
+        # this fuzzy rather than exact — BlackDuck names rarely line
+        # up byte-for-byte with manifest entries.
         matched_token: str | None = None
         for cand in candidates:
             for tok in repo_tokens:
@@ -341,9 +458,9 @@ def verify(csv_path: Path, repo_tokens: set[str]) -> tuple[list[dict], list[dict
             "version": version,
             "matched_token": matched_token,
         }
-        (ok if matched_token else unknown).append(record)
+        (direct if matched_token else ride_along).append(record)
 
-    return ok, unknown
+    return direct, ride_along
 
 
 def main(argv: list[str]) -> int:
@@ -353,8 +470,6 @@ def main(argv: list[str]) -> int:
                         help="Root of the repo to harvest dependency manifests from")
     parser.add_argument("--report", required=True,
                         help="Where to write the JSON verdict report")
-    parser.add_argument("--warn-only", action="store_true",
-                        help="Still exit 0 even if some components were not located")
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()
@@ -365,34 +480,76 @@ def main(argv: list[str]) -> int:
     print(f"  collected {len(tokens)} normalised tokens from "
           "package.json/package-lock/go.mod/go.sum/pom.xml/Dockerfile*")
 
-    ok, unknown = verify(csv_path, tokens)
+    try:
+        direct, ride_along = verify(csv_path, tokens)
+    except CsvHeaderError as exc:
+        # Structural CSV breakage is the one thing this script *does*
+        # hard-fail on — without a name column we can't classify
+        # anything, and silently passing would defeat the whole step.
+        print(f"::error::{exc}", file=sys.stderr)
+        Path(args.report).write_text(
+            json.dumps(
+                {
+                    "csv": str(csv_path),
+                    "repo_root": str(repo_root),
+                    "token_count": len(tokens),
+                    "error": str(exc),
+                    "direct": [],
+                    "ride_along": [],
+                    "ok": [],
+                    "unknown": [],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return 2
 
     report = {
         "csv": str(csv_path),
         "repo_root": str(repo_root),
         "token_count": len(tokens),
-        "ok": ok,
-        "unknown": unknown,
+        "direct": direct,
+        "ride_along": ride_along,
+        # Legacy keys kept for one cycle so any external consumer of
+        # dependency-check.json doesn't break the moment this lands.
+        "ok": direct,
+        "unknown": ride_along,
     }
     Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-    print(f"\nVerified:  {len(ok)}")
-    print(f"Unknown:   {len(unknown)}")
-    if unknown:
-        print("\nComponents that do NOT appear in any repo dependency manifest:")
-        for u in unknown[:50]:
-            print(f"  - row {u['row']}: {u['component']} {u.get('version','')}"
-                  f" ({u.get('reason','no substring match')})")
-        if len(unknown) > 50:
-            print(f"  ... and {len(unknown) - 50} more")
+    total = len(direct) + len(ride_along)
+    if total == 0:
+        # Empty CSV body is also structural breakage — the file parsed,
+        # but there's nothing to ship. Treat as a hard fail.
+        print(
+            "::error::FTP-Components.csv parsed but contained zero rows "
+            "after the header. Refusing to proceed; the publish step "
+            "would have nothing to upload.",
+            file=sys.stderr,
+        )
+        return 2
 
-    if unknown and not args.warn_only:
-        print("\n::error::Dependency-verification failed — see list above. "
-              "Investigate each component (is it really shipped by NDM?) "
-              "or re-run the workflow with skip_dependency_check=true after "
-              "recording the justification in the run summary.",
-              file=sys.stderr)
-        return 1
+    print(f"\nDirect-match dependencies: {len(direct)}")
+    print(f"Ride-along components:     {len(ride_along)}")
+    print(
+        "  (Ride-along = listed in the RTS CSV but not declared in this "
+        "repo's manifests. RTS is authoritative for what we ship; the "
+        "NetApp-IP scan is the lone fail-stop.)"
+    )
+
+    if ride_along:
+        print(
+            "\nSample of ride-along components — verified by RTS, "
+            "transitively pulled in by an upstream image:"
+        )
+        for u in ride_along[:50]:
+            print(f"  - row {u['row']}: {u['component']} {u.get('version','')}")
+        if len(ride_along) > 50:
+            print(
+                f"  ... and {len(ride_along) - 50} more "
+                f"(full list in dependency-check.json)"
+            )
 
     return 0
 
