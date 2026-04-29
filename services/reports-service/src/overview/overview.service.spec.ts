@@ -171,6 +171,7 @@ describe("OverviewService", () => {
                       sourceConfig: [
                         {
                           jobType: JobType.Discover,
+                          isDeleted: false,
                           jobRuns: [],
                         },
                       ],
@@ -220,6 +221,7 @@ describe("OverviewService", () => {
                       sourceConfig: [
                         {
                           jobType: JobType.Discover,
+                          isDeleted: false,
                           jobRuns: [
                             {
                               id: "run1",
@@ -311,6 +313,7 @@ describe("OverviewService", () => {
                       sourceConfig: [
                         {
                           jobType: JobType.Migrate,
+                          isDeleted: false,
                           jobRuns: [
                             {
                               id: "run2",
@@ -321,6 +324,7 @@ describe("OverviewService", () => {
                         },
                         {
                           jobType: JobType.CutOver,
+                          isDeleted: false,
                           jobRuns: [
                             {
                               id: "run3",
@@ -445,13 +449,6 @@ describe("OverviewService", () => {
         where: {
           configs: {
             id: "config1",
-            fileServers: {
-              volumes: {
-                sourceConfig: {
-                  isDeleted: false,
-                },
-              },
-            },
           },
         },
         relations: [
@@ -459,7 +456,6 @@ describe("OverviewService", () => {
           "configs.fileServers",
           "configs.fileServers.volumes",
           "configs.fileServers.volumes.sourceConfig",
-          "configs.fileServers.volumes.sourceConfig.jobRuns",
         ],
       });
     });
@@ -498,7 +494,6 @@ describe("OverviewService", () => {
           "configs.fileServers",
           "configs.fileServers.volumes",
           "configs.fileServers.volumes.sourceConfig",
-          "configs.fileServers.volumes.sourceConfig.jobRuns",
         ],
       });
     });
@@ -524,22 +519,12 @@ describe("OverviewService", () => {
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
         where: {
           id: "project1",
-          configs: {
-            fileServers: {
-              volumes: {
-                sourceConfig: {
-                  isDeleted: false,
-                },
-              },
-            },
-          },
         },
         relations: [
           "configs",
           "configs.fileServers",
           "configs.fileServers.volumes",
           "configs.fileServers.volumes.sourceConfig",
-          "configs.fileServers.volumes.sourceConfig.jobRuns",
         ],
       });
     });
@@ -558,23 +543,12 @@ describe("OverviewService", () => {
       await service.getStorageAndJobsOverview(null, null, null);
 
       expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {
-          configs: {
-            fileServers: {
-              volumes: {
-                sourceConfig: {
-                  isDeleted: false,
-                },
-              },
-            },
-          },
-        },
+        where: {},
         relations: [
           "configs",
           "configs.fileServers",
           "configs.fileServers.volumes",
           "configs.fileServers.volumes.sourceConfig",
-          "configs.fileServers.volumes.sourceConfig.jobRuns",
         ],
       });
     });
@@ -597,10 +571,10 @@ describe("OverviewService", () => {
                   volumes: [
                     {
                       sourceConfig: [
-                        { jobType: JobType.Discover },
-                        { jobType: JobType.Migrate },
-                        { jobType: JobType.CutOver },
-                        { jobType: JobType.Discover },
+                        { jobType: JobType.Discover, isDeleted: false },
+                        { jobType: JobType.Migrate, isDeleted: false },
+                        { jobType: JobType.CutOver, isDeleted: false },
+                        { jobType: JobType.Discover, isDeleted: false },
                       ],
                     },
                   ],
@@ -673,8 +647,8 @@ describe("OverviewService", () => {
                   volumes: [
                     {
                       sourceConfig: [
-                        { jobType: JobType.Discover },
-                        { jobType: JobType.Migrate },
+                        { jobType: JobType.Discover, isDeleted: false },
+                        { jobType: JobType.Migrate, isDeleted: false },
                       ],
                     },
                     {},
@@ -691,7 +665,7 @@ describe("OverviewService", () => {
                 {
                   volumes: [
                     {
-                      sourceConfig: [{ jobType: JobType.CutOver }],
+                      sourceConfig: [{ jobType: JobType.CutOver, isDeleted: false }],
                     },
                   ],
                 },

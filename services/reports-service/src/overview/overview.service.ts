@@ -67,19 +67,6 @@ export class OverviewService {
           },
         },
       };
-    } else {
-      // Exclude soft-deleted job configs from the overview
-      whereClause["configs"] = {
-        ...whereClause["configs"],
-        fileServers: {
-          ...whereClause["configs?.fileServers"],
-          volumes: {
-            sourceConfig: {
-              isDeleted: false,
-            },
-          },
-        },
-      };
     }
 
     const projectQueryStart = Date.now();
@@ -91,7 +78,6 @@ export class OverviewService {
         "configs.fileServers",
         "configs.fileServers.volumes",
         "configs.fileServers.volumes.sourceConfig",
-        "configs.fileServers.volumes.sourceConfig.jobRuns",
       ],
     });
 
@@ -108,6 +94,8 @@ export class OverviewService {
     let totalMigratedSize = 0;
     let totalFileServers = projectDetails?.flatMap(
       (project) => project?.configs ?? []
+    ).flatMap(
+      (config) => config?.fileServers ?? []
     ).length;
 
     this.logger.log(`totalFileServers - ${totalFileServers}`);
@@ -190,16 +178,19 @@ export class OverviewService {
 
   countAllJobTypes(projects: any) {
     try {
-      const allConfigs =
+      const allConfigs = (
         projects?.flatMap((project) =>
           project?.configs?.flatMap((config) =>
             config?.fileServers?.flatMap((fileServer) =>
               fileServer?.volumes?.flatMap((volume) =>
-                volume?.sourceConfig || []
+                (volume?.sourceConfig ?? []).filter(
+                  (sc: any) => sc && !sc.isDeleted
+                )
               )
             )
           )
-        ) || [];
+        ) || []
+      ).filter(Boolean);
 
       let totalDiscoverJobs = 0;
       let totalMigrationJobs = 0;
