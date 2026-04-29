@@ -271,7 +271,7 @@ jobs:
           VERSION_BASE="${DATE_BASE}${TIME_PART}"
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             BUILD_VERSION="${VERSION_BASE}-nightly"
-          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) ]]; then
+          elif [[ "${{ github.ref }}" =~ refs/heads/release/(.+) && -n "${{ inputs.build }}" ]]; then
             BUILD_VERSION="${{ inputs.build }}"
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             BUILD_VERSION="${VERSION_BASE}-adhoc"
@@ -431,7 +431,9 @@ jobs:
             REF_TYPE="releases"
             REF_NAME="${BASH_REMATCH[1]}"
             BASE_PATH="releases"
-            WORKER_TAG="${{ inputs.build }}"
+            if [[ -n "${{ inputs.build }}" ]]; then
+              WORKER_TAG="${{ inputs.build }}"
+            fi
           else
             REF_TYPE="branches"
             REF_NAME="${WORKER_BRANCH:-main}"
@@ -465,7 +467,7 @@ jobs:
             fi
             
             echo "Using latest worker version: $SELECTED_VERSION"
-          elif [[ -n "${{ inputs.build }}" && "$WORKER_TAG" == "${{ inputs.build }}" ]]; then
+          elif [[ -n "${{ inputs.build }}" && "$WORKER_TAG" == "${{ inputs.build }}" ]] || [[ "${{ github.ref }}" =~ refs/heads/release/(.+) && "$WORKER_TAG" != "latest" ]]; then
             echo "Using release worker tag: $WORKER_TAG"
             SELECTED_VERSION="${WORKER_TAG}"
           else
@@ -1732,7 +1734,7 @@ jobs:
           fi
 
   notify-build-completion:
-    if: ${{ github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' || startsWith(github.ref, 'refs/heads/release/') }}
     needs: [package-artifacts, packer, upload-windows-installer]
     runs-on: openlab
     steps:
