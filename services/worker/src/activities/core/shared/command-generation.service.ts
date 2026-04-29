@@ -223,11 +223,11 @@ export class CommandGenerationService {
           jobType: jobContext.jobConfig.jobType,
         });
         if (excludeOrSkipReason !== null) {
-          if (excludeOrSkipReason === 'excluded') {
-            result.excludedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
-          } else if (excludeOrSkipReason === 'skipped') {
-            result.skippedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
-          }
+          // if (excludeOrSkipReason === 'excluded') {
+          //   result.excludedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
+          // } else if (excludeOrSkipReason === 'skipped') {
+          //   result.skippedPaths!.push({ path: relativeSourcePath, isDirectory: sourceStat.isDirectory() });
+          // }
           if (itemData.originalCommandId) {
             const resolvedCommand: Cmd = this.buildResolvedCommand(relativePath, sourceStat.isDirectory(), itemData.originalCommandId);
             result.commands.push(resolvedCommand);

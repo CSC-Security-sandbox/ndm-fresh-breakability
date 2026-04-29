@@ -29,8 +29,8 @@ export type CocBundleFileEntry =
 
 export const COC_BUNDLE_ENTRIES: readonly CocBundleFileEntry[] = [
     { fileName: CSV_FILE_NAMES.COC, kind: 'inventory' },
-    { fileName: CSV_FILE_NAMES.EXCLUDED, kind: 'list', listType: 'excluded' },
-    { fileName: CSV_FILE_NAMES.SKIPPED, kind: 'list', listType: 'skipped' },
+    // { fileName: CSV_FILE_NAMES.EXCLUDED, kind: 'list', listType: 'excluded' }, // temporarily disabled
+    // { fileName: CSV_FILE_NAMES.SKIPPED, kind: 'list', listType: 'skipped' },  // temporarily disabled
     { fileName: CSV_FILE_NAMES.DELETED, kind: 'list', listType: 'deleted' },
 ];
 

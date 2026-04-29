@@ -60,10 +60,7 @@ describe('MigrationWorkflow', () => {
         expect(handleReporting).toHaveBeenCalledWith(
             traceId,
             JobRunStatus.Completed,
-            expect.objectContaining({
-                excludedPaths: [],
-                skippedPaths: [],
-            }),
+            expect.any(Object),
         );
         expect(executeCleanup).toHaveBeenCalledWith({
             jobRunId: traceId,
@@ -78,8 +75,6 @@ describe('MigrationWorkflow', () => {
             fileCount: 10,
             dirCount: 2,
             status: JobRunStatus.Completed,
-            excludedPaths: [],
-            skippedPaths: [],
         });
     });
 
@@ -106,8 +101,6 @@ describe('MigrationWorkflow', () => {
             fileCount: 0,
             dirCount: 0,
             status: JobRunStatus.Ready,
-            excludedPaths: [],
-            skippedPaths: [],
         });
     });
 

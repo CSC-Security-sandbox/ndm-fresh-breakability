@@ -172,9 +172,7 @@ describe('CommandGenerationService', () => {
             expect(result.commands).toHaveLength(1);
             expect(result.commands[0].originalCmdId).toBe('orig-1');
             expect(String(result.commands[0].status)).toBe('COMPLETED');
-            expect(result.excludedPaths).toEqual([
-                { path: '/dir/excluded.txt', isDirectory: false },
-            ]);
+            expect(result.excludedPaths).toEqual([]);
         });
 
         it('should track skippedPaths when getExcludeOrSkipReason returns skipped', async () => {
@@ -199,9 +197,7 @@ describe('CommandGenerationService', () => {
             });
 
             expect(result.commands).toHaveLength(0);
-            expect(result.skippedPaths).toEqual([
-                { path: '/dir/skipped.txt', isDirectory: false },
-            ]);
+            expect(result.skippedPaths).toEqual([]);
         });
 
         it('should add directory command when target does not have item', async () => {

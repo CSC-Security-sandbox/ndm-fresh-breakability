@@ -133,8 +133,8 @@ export class ScanService {
                         output.fileCount += result.fileCount;
                         output.dirCount += result.dirCount;
                         output.subDirs.push(...result.subDirs);
-                        if (result.excludedPaths?.length) output.excludedPaths!.push(...result.excludedPaths);
-                        if (result.skippedPaths?.length) output.skippedPaths!.push(...result.skippedPaths);
+                        // if (result.excludedPaths?.length) output.excludedPaths!.push(...result.excludedPaths);
+                        // if (result.skippedPaths?.length) output.skippedPaths!.push(...result.skippedPaths);
                         command.status = CommandStatus.COMPLETED;
                     }catch(error) {
                         command.status = CommandStatus.ERROR;

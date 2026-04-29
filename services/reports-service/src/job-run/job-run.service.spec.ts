@@ -939,8 +939,6 @@ describe("JobRunService", () => {
       path.resolve(cocReportsBaseDir, `${id}-coc-report.zip`);
     const cocCsvBundleForJob = (id: string) => ([
       path.resolve(cocReportsBaseDir, `${id}-coc-report/coc-report.csv`),
-      path.resolve(cocReportsBaseDir, `${id}-coc-report/excluded-report.csv`),
-      path.resolve(cocReportsBaseDir, `${id}-coc-report/skipped-report.csv`),
       path.resolve(cocReportsBaseDir, `${id}-coc-report/deleted-report.csv`),
     ]);
 
@@ -1012,13 +1010,11 @@ describe("JobRunService", () => {
         jobConfig: { jobType: JobType.Migrate },
       });
 
-      // ZIP not found, all 4 CSVs not found (fresh generation)
+      // ZIP not found, all 2 CSVs not found (fresh generation)
       jest
         .spyOn(service as any, "fileExists")
         .mockResolvedValueOnce(false)  // ZIP does not exist
         .mockResolvedValueOnce(false)  // coc-report.csv
-        .mockResolvedValueOnce(false)  // excluded-report.csv
-        .mockResolvedValueOnce(false)  // skipped-report.csv
         .mockResolvedValueOnce(false); // deleted-report.csv
       // ZIP verified present after creation
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
@@ -1034,9 +1030,9 @@ describe("JobRunService", () => {
 
       expect(result).toBe(expectedCocPath);
 
-      // All four CSVs generated via unified per-file loop (no generateCocCsvBundle)
+      // All 2 CSVs generated via unified per-file loop (excluded/skipped temporarily disabled)
       expect(mockCsvService.generateCsv).toHaveBeenCalledTimes(1);
-      expect(mockCsvService.generateListCsv).toHaveBeenCalledTimes(3);
+      expect(mockCsvService.generateListCsv).toHaveBeenCalledTimes(1);
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         expect.stringContaining("coc-report.csv"), jobRunId, 50000, JobType.Migrate, null,
       );
