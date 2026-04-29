@@ -216,7 +216,8 @@ export class WinOperationService {
       sourceAcl: validation.sourceSID,
       validationError: validation.inValid,
     };
-
+    this.logger.debug(`sidMap stored - sourceAcl: "${validation.sourceSID}" | targetAcl: "${validation.targetSID}"`);
+    
     return { output, errors };
   }
 
@@ -281,7 +282,7 @@ export class WinOperationService {
       targetSID: '',
       inValid: '',
     };
-    output.sourceSID = `Owner: ${acl1.Owner}, Group: ${acl1.Group},`;
+    output.sourceSID = `Owner: ${acl1.originalOwner ?? acl1.Owner}, Group: ${acl1.originalGroup ?? acl1.Group},`;
     output.targetSID = `Owner: ${acl2.Owner}, Group: ${acl2.Group}, `;
     if (acl1.Owner !== acl2.Owner)
       output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
@@ -295,7 +296,7 @@ export class WinOperationService {
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
     sourceAcls.forEach((ace) => {
-      output.sourceSID += `ACE in source: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
+      output.sourceSID += `ACE in source: SID(${ace.originalSid ?? ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
     });
 
     const targetAcls = (acl2.DaclAces || []).filter(
