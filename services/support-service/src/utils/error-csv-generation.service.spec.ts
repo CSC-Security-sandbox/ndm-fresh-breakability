@@ -83,7 +83,7 @@ describe('OperationErrorService', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1);
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
 
       expect(result).toEqual(mockOperationErrors);
@@ -102,7 +102,7 @@ describe('OperationErrorService', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1);
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toEqual([]);
     });
@@ -133,7 +133,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [projectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
     });
 
@@ -166,7 +166,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [singleProjectId, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [singleProjectId, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toEqual(singleProjectErrors);
       expect(result).toHaveLength(1);
@@ -184,7 +184,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [emptyProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [emptyProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toEqual([]);
     });
@@ -201,7 +201,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, sameDate, sameDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [projectIds, sameDate, sameDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toHaveLength(1);
     });
@@ -218,7 +218,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [multipleProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [multipleProjectIds, startDate, endDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toEqual(mockOperationErrors);
     });
@@ -236,7 +236,7 @@ describe('OperationErrorService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         GET_OPERATION_ERRORS_BY_DATE_RANGE,
-        [projectIds, earlyStartDate, futureEndDate, ['FATAL_ERROR', 'TRANSIENT_ERROR']],
+        [projectIds, earlyStartDate, futureEndDate, ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT']],
       );
       expect(result).toEqual([]);
     });
@@ -284,7 +284,7 @@ describe('OperationErrorService', () => {
         ['test-project'],
         '2023-05-01',
         '2023-05-31',
-        ['FATAL_ERROR', 'TRANSIENT_ERROR'],
+        ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT'],
       ]);
     });
   });

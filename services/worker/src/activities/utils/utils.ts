@@ -316,6 +316,8 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'ETRAILSPACE':
           // Filename contains trailing spaces
           return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
+      case 'METADATA_UPDATE_CONFLICT':
+        return 'METADATA_UPDATE_CONFLICT';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -377,7 +379,7 @@ const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ET
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
 // Transient errors that should not be retried
-const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION', 'PERM_STAMP_CTIME_CONFLICT']);
+const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION', 'METADATA_UPDATE_CONFLICT']);
 
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL

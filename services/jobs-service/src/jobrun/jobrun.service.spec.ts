@@ -16,6 +16,7 @@ import {
   JobType,
   PausedReason,
   Protocol,
+  USER_VISIBLE_ERROR_TYPES,
   WorkerStatus
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
@@ -2915,7 +2916,7 @@ describe("JobRunService", () => {
         
         expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
           "oe.errorType IN (:...errorTypes)", 
-          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
+          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR", "METADATA_UPDATE_CONFLICT"]) }
         );
         expect(result).toEqual(mockErrorCounts);
         expect(result.find(e => e.errortype === "RECOVERABLE_ERROR")).toBeUndefined();
