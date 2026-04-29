@@ -27,6 +27,7 @@ Source: "worker.env.j2"; DestDir: "{tmp}";
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd\fluent-package-5.2.0-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd.conf"; DestDir: "{tmp}";
+Source: "scripts\enable-smb-multichannel.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\logs"
@@ -142,6 +143,25 @@ begin
     ConfigControlPlaneIP := ConfigPage.Values[2];
     ConfigProjectID := ConfigPage.Values[3];
     ConfigTLSCert := ConfigPage.Values[4];
+  end;
+end;
+
+procedure EnableSmbMultichannel();
+var
+  ResultCode: Integer;
+  ScriptPath: String;
+begin
+  ScriptPath := ExpandConstant('{app}\scripts\enable-smb-multichannel.ps1');
+  Log('Enabling SMB Multichannel via: ' + ScriptPath);
+  if not Exec('powershell.exe',
+              '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('SMB Multichannel script failed to launch.');
+  end
+  else
+  begin
+    Log('SMB Multichannel script exited with code: ' + IntToStr(ResultCode));
   end;
 end;
 
@@ -425,6 +445,8 @@ begin
       CreateFluentdConfig();
       StartFluentdService();
     end;
+
+    EnableSmbMultichannel();
 
     Sleep(2000);
     if not WizardSilent() then
