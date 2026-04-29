@@ -339,8 +339,17 @@ export class WinOperationService {
     const usernameToSidMap = new Map<string, string>();
     const command = `Resolve-UsernamesToSid -Username ${usernames.join(',')}`;
     const output = await this.winShellService.executeCommand(command);
-    const sidMappings = JSON.parse(output.stdout);
 
+    if (output.stderr) {
+      this.logger.warn(`Resolve-UsernamesToSid stderr: ${output.stderr}`);
+    }
+
+    let sidMappings: any;
+    try {
+      sidMappings = JSON.parse(output.stdout);
+    } catch (err) {
+      throw new Error(`Failed to parse Resolve-UsernamesToSid output: ${output.stderr || err.message}; stdout=${output.stdout}`);
+    }
     if (Array.isArray(sidMappings)) {
       for (const mapping of sidMappings) {
         if (mapping?.username && mapping?.sid) {

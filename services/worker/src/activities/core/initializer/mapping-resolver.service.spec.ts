@@ -512,7 +512,7 @@ describe('MappingResolverService', () => {
         );
       });
 
-      it('should handle empty resolved SID map', async () => {
+      it('should skip setOwnerIdentity when resolved SID map is empty (both usernames unresolvable)', async () => {
         const sourceSIDs = ['testuser1'];
         redisService.getMappingKeys.mockResolvedValue(sourceSIDs);
         redisService.getOwnerIdentity.mockResolvedValue('testuser2');
@@ -523,15 +523,11 @@ describe('MappingResolverService', () => {
         expect(winOperationService.resolveUsernamesToSids).toHaveBeenCalledWith(
           ['testuser1', 'testuser2'],
         );
-        expect(redisService.setOwnerIdentity).toHaveBeenCalledWith(
-          mockJobRunId,
-          undefined,
-          'SID',
-          undefined,
-        );
+        // Both usernames unresolvable → sourceSid and targetSid are undefined → skip guard fires
+        expect(redisService.setOwnerIdentity).not.toHaveBeenCalled();
       });
 
-      it('should handle partial resolution in resolved SID map', async () => {
+      it('should skip setOwnerIdentity when target username cannot be resolved', async () => {
         const sourceSIDs = ['testuser1'];
         const resolvedSidMap = new Map([['testuser1', 'S-1-5-21-resolved-1']]);
 
@@ -543,12 +539,8 @@ describe('MappingResolverService', () => {
 
         await service.resolveUsernamesToSids(mockJobRunId);
 
-        expect(redisService.setOwnerIdentity).toHaveBeenCalledWith(
-          mockJobRunId,
-          'S-1-5-21-resolved-1',
-          'SID',
-          undefined, // testuser2 not resolved
-        );
+        // testuser2 not in resolvedSidMap → targetSid is undefined → skip guard fires
+        expect(redisService.setOwnerIdentity).not.toHaveBeenCalled();
       });
 
       it('should handle case where source is SID but destination is username', async () => {
@@ -690,9 +682,13 @@ describe('MappingResolverService', () => {
         ).rejects.toThrow('Failed to get owner identity');
       });
 
-      it('should handle setOwnerIdentity errors gracefully', async () => {
+      it('should propagate setOwnerIdentity errors when both SIDs resolve successfully', async () => {
         const sourceSIDs = ['testuser1'];
-        const resolvedSidMap = new Map([['testuser1', 'S-1-5-21-resolved-1']]);
+        // Both source and target resolve → guard passes → setOwnerIdentity called → error thrown
+        const resolvedSidMap = new Map([
+          ['testuser1', 'S-1-5-21-resolved-1'],
+          ['testuser2', 'S-1-5-21-resolved-2'],
+        ]);
         const jobContext = createMockJobContext();
 
         redisService.getJobManagerContext.mockResolvedValue(jobContext);

@@ -66,6 +66,10 @@ export class MappingResolverService {
             for (const [src, dst] of toResolve) {
                 const sourceSid = src.startsWith('S-') ? src : mappedSids.get(src);
                 const targetSid = dst.startsWith('S-') ? dst : mappedSids.get(dst);
+                if (!sourceSid || !targetSid) {
+                    this.logger.warn(`Could not resolve mapping pair: src=${src}->${sourceSid}, dst=${dst}->${targetSid}, skipping`);
+                    continue;
+                }
                 await this.redisService.setOwnerIdentity(jobRunId, sourceSid, 'SID', targetSid);
             }
         }

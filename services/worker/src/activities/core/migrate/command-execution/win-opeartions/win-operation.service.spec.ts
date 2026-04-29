@@ -222,6 +222,7 @@ describe('WinOperationService', () => {
         SourceAclError,
       );
     });
+
   });
 
   describe('setAclOperation', () => {
@@ -318,6 +319,7 @@ describe('WinOperationService', () => {
         TargetAclError,
       );
     });
+
   });
 
   describe('stampAclOperation', () => {
@@ -1206,6 +1208,32 @@ describe('WinOperationService', () => {
       const result = await service.resolveUsernamesToSids(usernames);
 
       expect(result.size).toBe(0);
+    });
+
+    it('should throw when stdout is unparseable', async () => {
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: 'not valid json',
+        stderr: '',
+      });
+
+      await expect(service.resolveUsernamesToSids(['bob'])).rejects.toThrow(
+        'Failed to parse Resolve-UsernamesToSid output',
+      );
+    });
+
+    it('should warn on stderr but succeed when stdout is valid JSON', async () => {
+      const mockOutput = [{ username: 'user1', sid: 'S-1-5-21-1001' }];
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify(mockOutput),
+        stderr: 'WARNING: deprecated parameter',
+      });
+
+      const result = await service.resolveUsernamesToSids(['user1']);
+
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Resolve-UsernamesToSid stderr'),
+      );
     });
   });
 
