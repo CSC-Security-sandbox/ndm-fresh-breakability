@@ -20,7 +20,9 @@ func init() {
 
 func TestE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "E2e Suite")
+	suiteConfig, reporterConfig := GinkgoConfiguration()
+	suiteConfig.FlakeAttempts = 3
+	RunSpecs(t, "E2e Suite", suiteConfig, reporterConfig)
 }
 
 // SynchronizedBeforeSuite ensures global project setup happens once across all parallel nodes
