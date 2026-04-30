@@ -96,7 +96,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                 try {
                     console.log(`SyncTaskActivity started for taskId: ${taskId}`);
                     const output = await SyncTaskActivity({ jobRunId, taskId });
-                    console.error(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
+                    console.log(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
                 } catch (error)  {
                     if(error instanceof wf.ActivityFailure && error.cause instanceof wf.ApplicationFailure){
@@ -106,8 +106,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                         }
                     }
                     console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${JSON.stringify(error)} retrying...`);
-                    throw error
-                    // TODO: handle FatalError 
+                    throw error 
                 }    
             })
         )      
@@ -133,7 +132,3 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
 
     return syncWorkflowOutput; 
 }
-
-
-
-

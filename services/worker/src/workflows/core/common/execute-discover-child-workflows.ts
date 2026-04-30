@@ -49,7 +49,7 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
 
     wf.setHandler(actionSignal, async (action:string) => {  
         if(action == JobRunStatus.Stopped){
-            await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
             output.status = JobRunStatus.Stopped;
             return;
         }
