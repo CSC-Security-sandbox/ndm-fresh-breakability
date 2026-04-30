@@ -173,7 +173,11 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 )
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
-  return !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+  if (!dFile) return true;
+  if (process.platform !== 'win32' && sFile.isDirectory()){
+      return (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+    }
+  return (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
 };
 
 export const isMetaUpdated = async (
