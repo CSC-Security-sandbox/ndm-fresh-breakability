@@ -138,7 +138,7 @@ export class CommandGenerationService {
     private readonly fileTypeDetectionService: FileTypeDetectionService,
     private readonly redisService: RedisService
   ) {
-    this.metaUpdatedToleranceMs = this.configService.get('worker.metaUpdatedToleranceMs') || 60000;
+    this.metaUpdatedToleranceMs = this.configService.get<number>('worker.metaUpdatedToleranceMs');
     this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
     this.logger = loggerFactory.create(CommandGenerationService.name);
   }

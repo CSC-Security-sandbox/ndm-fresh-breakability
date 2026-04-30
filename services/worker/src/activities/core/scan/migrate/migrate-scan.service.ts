@@ -37,7 +37,7 @@ export class MigrateScanService {
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-        this.metaUpdatedToleranceMs = this.configService.get('worker.metaUpdatedToleranceMs') || 60000;
+        this.metaUpdatedToleranceMs = this.configService.get<number>('worker.metaUpdatedToleranceMs') ;
         this.logger = loggerFactory.create(MigrateScanService.name);
     }
 
