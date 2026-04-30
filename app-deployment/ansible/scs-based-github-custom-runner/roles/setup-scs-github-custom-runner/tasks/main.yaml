@@ -88,6 +88,16 @@
     group: "{{ vm_user }}"
     mode: '0700'
 
+# Ansible uses remote_tmp (/tmp/.ansible-<user>) when modules run under become_user;
+# pre-create with correct ownership to avoid mixed root/ubuntu permission warnings.
+- name: Ensure Ansible remote_tmp exists for runner user
+  ansible.builtin.file:
+    path: "/tmp/.ansible-{{ vm_user }}"
+    state: directory
+    owner: "{{ vm_user }}"
+    group: "{{ vm_user }}"
+    mode: '0700'
+
 - name: Configure the runner
   ansible.builtin.command:
     cmd: >

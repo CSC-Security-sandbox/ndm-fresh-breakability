@@ -45,7 +45,7 @@ The playbook runs in two phases:
 This avoids network connectivity issues from the SCS V2 VM to external CDNs and GitHub.
 
 ```bash
-# 1. Change to the playbook directory
+# 1. Change to the playbook directory (Ansible auto-loads ./ansible.cfg from here)
 cd app-deployment/ansible/scs-based-github-custom-runner
 
 # 2. Copy the example inventory and fill in your VM details
@@ -62,6 +62,13 @@ ansible-playbook -i config/inventory.yaml playbooks/setup-scs-based-github-custo
 
 ### Optional flags
 
+Override inventory variables without editing `inventory.yaml` (for one-off runs):
+
+```bash
+ansible-playbook -i config/inventory.yaml playbooks/setup-scs-based-github-custom-runner.yaml \
+  --extra-vars "runner_token=<TOKEN> runner_labels=self-hosted,linux,scs-v2,my-label"
+```
+
 Run only prerequisites (skip runner registration):
 
 ```bash
@@ -75,17 +82,30 @@ ansible-playbook -i config/inventory.yaml playbooks/setup-scs-based-github-custo
   --extra-vars "runner_token=<TOKEN> tmp_tmpfs_size=8G tmp_cleanup_age=12h"
 ```
 
-### /tmp management
+### Troubleshooting
 
-SCS V2 VMs default to a 1GB tmpfs for `/tmp`, which is too small for tools like the BlackDuck Signature Scanner. Since tmpfs is RAM-backed, the playbook sets a conservative 5GB (configurable via `tmp_tmpfs_size`):
+**`404` / `Not Found` from `api.github.com/actions/runner-registration`**
 
-- **Larger tmpfs** — `/tmp` is resized from 1GB to 5GB
-- **Periodic cleanup** — `systemd-tmpfiles-clean.timer` runs every 6 hours and removes files older than 1 day (configurable via `tmp_cleanup_age`)
+Registration fails after `config.sh` talks to GitHub. Typical causes:
 
-To check the current state on a runner:
+1. **Expired token** — Tokens from **Settings → Actions → Runners → New self-hosted runner** are short-lived (often about one hour). Generate a new token and re-run immediately with `--extra-vars "runner_token=<TOKEN>"`.
+2. **Wrong repository** — `github_runner_url` in `config/group_vars/all.yaml` must match the repo where you opened the token page (same org/repo as in the browser). Do not add a trailing slash.
+3. **Wrong token type** — Use the **runner registration** value from the new self-hosted runner wizard, not a personal access token.
+
+Treat any token that appeared in logs or chat as exposed; revoke or rotate per GitHub guidance and register again with a fresh token.
+
+**`remote_tmp` / `.ansible-<user>` warning**
+
+Ansible uses `/tmp/.ansible-<user>` for module temp files when using `become_user`. The playbook creates `/tmp/.ansible-<ubuntu>` with correct ownership before runner registration to avoid permission warnings when the connection user is `root`.
+
+### Disk layout (LVM and /tmp tmpfs)
+
+The playbook extends LVM in this order: `/var` (+5G by default), `/home` (+80G for tool caches — change `home_lv_extend` in `config/group_vars/all.yaml` or pass `--extra-vars "home_lv_extend=+50G"`), then the root LV takes **remaining** VG free space. Extending `/home` before root is required so the home LV still has space in the volume group.
+
+`/tmp` is a tmpfs, resized to **5GB** by default (`tmp_tmpfs_size`, RAM-backed so keep it reasonable on 32G VMs). Periodic cleanup uses `tmp_cleanup_age` and a 6h tmpfiles timer.
 
 ```bash
-df -h /tmp
+df -h / /home /var /tmp
 systemctl status systemd-tmpfiles-clean.timer
 ```
 

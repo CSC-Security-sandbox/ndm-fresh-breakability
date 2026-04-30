@@ -15,7 +15,7 @@ vm_os_version: "24.04"
 runner_version: "2.333.1"
 runner_arch: "x64"
 runner_checksum: "18f8f68ed1892854ff2ab1bab4fcaa2f5abeedc98093b6cb13638991725cab74"
-# Installed under /opt (root filesystem) because /home is a small separate LV on SCS V2 VMs.
+# Installed under /opt (root LV). /home is grown via LVM (home_lv_extend).
 runner_install_dir: "/opt/actions-runner"
 ovftool_install_dir: "/opt/ovftool"
 
@@ -39,11 +39,11 @@ helm_version: ""  # empty = latest via get-helm-3 script; set e.g. "3.17.3" to p
 # /var — apt cache, Docker, logs (only ~1G used; +5G is plenty of headroom)
 var_lv_extend: "+5G"
 var_lv_path: "/dev/mapper/ubuntu--vg-var--lv"
-# /home — tool caches (~/.npm, ~/.m2, ~/go) written by setup-* actions at CI time.
-# The default SCS V2 /home LV is only 0.5G which is far too small.
+# /home — tool caches (~/.npm, ~/.m2, ~/go). Default SCS V2 /home LV is ~0.5G;
+# extend before root LV consumes remaining VG space (playbook order: /var → /home → /).
 home_lv_extend: "+80G"
 home_lv_path: "/dev/mapper/ubuntu--vg-home--lv"
-# / (root) — runner, tools, build workspace; gets all remaining VG free space
+# / (root) — runner, tools, remaining VG free space after /var and /home
 root_lv_path: "/dev/mapper/ubuntu--vg-ubuntu--lv"
 
 # ---- /tmp tmpfs ----

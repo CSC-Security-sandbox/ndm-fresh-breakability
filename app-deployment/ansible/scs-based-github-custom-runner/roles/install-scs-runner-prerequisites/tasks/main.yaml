@@ -92,6 +92,12 @@
     - vg_free_space.stdout | int > 0
     - var_extend_result is changed
 
+- name: Check if /home LV exists
+  ansible.builtin.shell: lvs --noheadings -o lv_path {{ home_lv_path }} 2>/dev/null
+  register: home_lv_check
+  failed_when: false
+  changed_when: false
+
 - name: Extend /home LV by {{ home_lv_extend }}
   ansible.builtin.command:
     cmd: lvextend -L {{ home_lv_extend }} {{ home_lv_path }}
@@ -101,13 +107,16 @@
     - "'insufficient free space' not in home_extend_result.stderr"
     - "'matches existing size' not in home_extend_result.stderr"
   changed_when: home_extend_result.rc == 0
-  when: vg_free_space.stdout | int > 0
+  when:
+    - vg_free_space.stdout | int > 0
+    - home_lv_check.rc == 0
 
 - name: Resize /home filesystem
   ansible.builtin.command:
     cmd: resize2fs {{ home_lv_path }}
   when:
     - vg_free_space.stdout | int > 0
+    - home_lv_check.rc == 0
     - home_extend_result is changed
 
 - name: Extend root LV with all remaining free space
@@ -435,7 +444,8 @@
       ovftool_archive is required. Set it in config/inventory.yaml under runners:vars:.
       Download the Linux ovftool bundle from
       https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
-  when: ovftool_archive is not defined or ovftool_archive | length == 0
+      Alternatively pass it once via --extra-vars "ovftool_archive=/path/to/VMware-ovftool-*.zip"
+  when: ovftool_archive is not defined or (ovftool_archive | default('') | length) == 0
 
 - name: Copy ovftool archive to VM
   ansible.builtin.copy:

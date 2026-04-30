@@ -11,9 +11,11 @@
 #      https://github.com/NetApp-Cloud-DataMigrate/ndm/settings/actions/runners
 #   3. Download the Linux ovftool archive from:
 #      https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
-#   4. Run (runner_name, runner_labels, ovftool_archive are set in the inventory):
+#   4. Run (runner_name, runner_labels, ovftool_archive are set in inventory.yaml):
 #      ansible-playbook -i config/inventory.yaml playbooks/setup-scs-based-github-custom-runner.yaml \
 #        --extra-vars "runner_token=<TOKEN>"
+#      You may override inventory vars in one shot via --extra-vars if needed, e.g.:
+#        --extra-vars "runner_token=<TOKEN> runner_labels=self-hosted,linux,scs-v2,yourname"
 
 # ---- Play 1: Stage downloads on Mac (localhost) ----
 
