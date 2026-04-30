@@ -98,7 +98,7 @@
     group: "{{ vm_user }}"
     mode: '0700'
 
-- name: Configure the runner
+- name: Run config.sh to register the GitHub Actions runner
   ansible.builtin.command:
     cmd: >
       ./config.sh
@@ -113,7 +113,31 @@
   become_user: "{{ vm_user }}"
   environment:
     HOME: /tmp/.ansible-tmp-{{ vm_user }}
+  register: runner_register
+  failed_when: false
   when: not runner_config_file.stat.exists
+
+- name: Fail with guidance if runner registration failed
+  ansible.builtin.fail:
+    msg: |
+      config.sh exited with rc={{ runner_register.rc }}. GitHub Actions runner
+      registration failed (see the previous task for stderr from GitHub).
+
+      If stderr mentions 404 or runner-registration:
+        • Registration tokens expire quickly (often about one hour). Generate a
+          new token from the repo runner wizard and pass it immediately:
+          {{ github_runner_url }}/settings/actions/runners
+          Re-run with: --extra-vars "runner_token=<NEW_TOKEN>"
+        • --url must be exactly the repo where you opened that page:
+          {{ github_runner_url }}
+        • Use the runner registration token from "New self-hosted runner",
+          not a Personal Access Token.
+
+      Treat any previously used token as stale; do not store tokens in git.
+  when:
+    - not runner_config_file.stat.exists
+    - runner_register is defined
+    - runner_register.rc != 0
 
 # ---- Install and start as a systemd service ----
 
