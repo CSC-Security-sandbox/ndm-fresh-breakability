@@ -190,6 +190,7 @@ export class CommandExecService {
     }
 
     async copyDirectory({command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
+        console.log(`======++++command: ${JSON.stringify(command)}, jobContext: ${JSON.stringify(jobContext)}, sourcePath: ${sourcePath}, targetPath: ${targetPath}, errorType: ${errorType}`);
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_DIR].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;

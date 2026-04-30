@@ -38,6 +38,7 @@ export class StampMetaService {
 
     @Timed(MetricsService.METRIC.STAMP_META)
     async stampMetaData(input: CommandExecInput): Promise<CommandOutput> {
+        console.log(`======++++stampMetaData: ${JSON.stringify(input.command)}`);
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
         if (

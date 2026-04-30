@@ -173,6 +173,7 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 )
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
+  console.log('isContentUpdate: sFile', sFile, 'dFile', dFile, 'fileName', fileName);
   return !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
 };
 
@@ -200,6 +201,7 @@ export const isNfsMetaUpdated = async (
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
   jobContext?: JobManagerContext
 ): Promise<boolean> => {
+  console.log('sFile.mode', sFile.mode, 'dFile.mode', dFile.mode);
   if (sFile.mode !== dFile.mode) return true;
     let gid = sFile.gid;
     let uid = sFile.uid;
@@ -211,6 +213,8 @@ export const isNfsMetaUpdated = async (
       gid = gid_res != null ? parseInt(gid_res) : gid;
       uid = uid_res != null ? parseInt(uid_res) : uid;
     }
+    console.log('gid', gid, 'dFile.gid', dFile.gid);
+    console.log('uid', uid, 'dFile.uid', dFile.uid);
     return uid !== dFile.uid || gid !== dFile.gid;
 };
 
