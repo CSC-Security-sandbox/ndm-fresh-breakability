@@ -11,6 +11,24 @@ export function getEnvOrThrow(key: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Navigation with Keycloak redirect retry
+// ---------------------------------------------------------------------------
+
+/**
+ * Navigate to a URL, retrying once if Keycloak intercepts and redirects to /home.
+ * The serial test suite runs long enough for sessions to expire mid-run.
+ */
+export async function safeGoto(page: Page, url: string) {
+  await page.goto(url);
+  await page.waitForLoadState("networkidle", { timeout: 30_000 });
+  if (!page.url().includes(url.replace(/^\//, ""))) {
+    console.log(`[safeGoto] Redirected to ${page.url()}, retrying ${url}`);
+    await page.goto(url);
+    await page.waitForLoadState("networkidle", { timeout: 30_000 });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar navigation
 // ---------------------------------------------------------------------------
 
@@ -267,14 +285,18 @@ export async function runBulkDiscovery(
   fileServerId: string,
   options: BulkDiscoveryOptions = {}
 ) {
-  await page.goto(`/file-server/${fileServerId}`);
-  await page.waitForTimeout(3_000);
+  await safeGoto(page, `/file-server/${fileServerId}`);
+
+  await expect(
+    page.getByText("File Server Overview").first()
+  ).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(2_000);
 
   // Click "Bulk Discover" button on file server overview.
   // The button is disabled when the file server is in Draft state (no workers associated).
   const bulkDiscoverBtn = page.getByRole("button", { name: "Bulk Discover" });
-  await expect(bulkDiscoverBtn).toBeVisible({ timeout: 15_000 });
-  await expect(bulkDiscoverBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(bulkDiscoverBtn).toBeVisible({ timeout: 30_000 });
+  await expect(bulkDiscoverBtn).toBeEnabled({ timeout: 60_000 });
   await bulkDiscoverBtn.click();
 
   await page.waitForURL(/bulk-discover/, { timeout: 10_000 });
@@ -496,6 +518,14 @@ export async function getJobConfigIds(
   serverNameOrId: string,
   jobType?: string
 ): Promise<string[]> {
+  // Ensure the app is loaded so window.env is available.
+  const hasEnv = await page.evaluate(() => !!(window as any).env?.VITE_JOBS_SERVICE_URL);
+  if (!hasEnv) {
+    console.log("[getJobConfigIds] window.env missing — navigating to /home to load app");
+    await page.goto("/home");
+    await page.waitForLoadState("networkidle", { timeout: 15_000 });
+  }
+
   const result = await page.evaluate(async ({ nameOrId, jt }) => {
     const env = (window as any).env || {};
     const jobsBaseUrl = env.VITE_JOBS_SERVICE_URL;
@@ -652,7 +682,7 @@ export async function getLatestJobRunId(
       const jobRuns: any[] = Array.isArray(data.jobRuns) ? data.jobRuns : [];
 
       if (jobRuns.length > 0) {
-        return jobRuns[0].id || jobRuns[0]._id || "";
+        return jobRuns[0].jobRunId || jobRuns[0].id || jobRuns[0]._id || "";
       }
       return "";
     } catch {
@@ -683,9 +713,8 @@ export async function navigateToDiscoveryReport(
   const jobRunId = await getLatestJobRunId(page, jobConfigId);
   if (!jobRunId) throw new Error("No job run found for job config " + jobConfigId);
 
-  // Navigate directly to discovery preview
-  await page.goto(`/job-discovery-preview/${jobRunId}`);
-  await page.waitForTimeout(5_000);
+  await safeGoto(page, `/job-discovery-preview/${jobRunId}`);
+  await page.waitForTimeout(3_000);
 }
 
 /**
@@ -694,10 +723,11 @@ export async function navigateToDiscoveryReport(
  * bar charts, pie charts, top-5 tables, and download button.
  */
 export async function verifyDiscoveryReport(page: Page) {
-  // Report Header
+  // Report Header — use { exact: true } for short labels that could
+  // substring-match hidden sidebar items (e.g. "File Server" vs "File Servers").
   await expect(page.getByText("Job Run Id").first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("File Server").first()).toBeVisible();
-  await expect(page.getByText("Path").first()).toBeVisible();
+  await expect(page.getByText("File Server", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Path", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Report Status").first()).toBeVisible();
   await expect(page.getByText("Scan Time").first()).toBeVisible();
   await expect(page.getByText("Scan Protocol").first()).toBeVisible();
@@ -705,7 +735,7 @@ export async function verifyDiscoveryReport(page: Page) {
   // Doughnut overview
   await expect(page.getByText("Total Items").first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Directories").first()).toBeVisible();
-  await expect(page.getByText("Files").first()).toBeVisible();
+  await expect(page.getByText("Files", { exact: true }).first()).toBeVisible();
 
   // Space metrics
   await expect(page.getByText("Total Space Used").first()).toBeVisible();
@@ -737,26 +767,35 @@ export async function verifyDiscoveryReport(page: Page) {
 // ---------------------------------------------------------------------------
 
 async function selectAllTableRows(page: Page) {
-  // BXP tables render checkboxes with role="checkbox" or as custom elements.
-  // The first checkbox on the page (in the header row) is the "select all" checkbox.
+  // BXP tables: the header checkbox opens a dropdown with
+  // "Select this page" / "Select all pages" / "Clear all".
   const allCheckboxes = page.locator('[role="checkbox"], input[type="checkbox"]');
   const count = await allCheckboxes.count();
   console.log(`[selectAll] Found ${count} checkboxes on page`);
 
   if (count > 0) {
-    // First checkbox is typically the "select all" in the header
     const selectAll = allCheckboxes.first();
-    const isChecked = (await selectAll.getAttribute("aria-checked")) === "true" ||
-      (await selectAll.isChecked().catch(() => false));
-    if (!isChecked) {
-      await selectAll.click();
-      console.log("[selectAll] Clicked select-all checkbox");
-      await page.waitForTimeout(1_000);
+    await selectAll.click();
+    console.log("[selectAll] Clicked header checkbox — waiting for dropdown");
+    await page.waitForTimeout(500);
+
+    // The dropdown shows "Select this page" / "Select all pages".
+    const selectAllPages = page.getByText("Select all pages");
+    const selectThisPage = page.getByText("Select this page");
+
+    if (await selectAllPages.isVisible().catch(() => false)) {
+      await selectAllPages.click();
+      console.log("[selectAll] Clicked 'Select all pages'");
+    } else if (await selectThisPage.isVisible().catch(() => false)) {
+      await selectThisPage.click();
+      console.log("[selectAll] Clicked 'Select this page'");
+    } else {
+      console.log("[selectAll] No dropdown appeared — checkbox may have toggled directly");
     }
+    await page.waitForTimeout(1_000);
     return;
   }
 
-  // Fallback: use page.evaluate to find and click the first checkbox-like element
   const clicked = await page.evaluate(() => {
     const el = document.querySelector('[class*="checkbox" i], [class*="Checkbox"]');
     if (el) {

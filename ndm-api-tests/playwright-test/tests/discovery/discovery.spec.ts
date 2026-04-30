@@ -8,6 +8,7 @@ import {
   getJobConfigIds,
   navigateToDiscoveryReport,
   verifyDiscoveryReport,
+  safeGoto,
 } from "../helpers/e2e-helpers";
 
 /**
@@ -352,7 +353,7 @@ test.describe.serial(
       page,
     }) => {
       await test.step("Navigate to file server overview", async () => {
-        await page.goto(`/file-server/${fileServerId}`);
+        await safeGoto(page, `/file-server/${fileServerId}`);
         await expect(
           page.getByText("File Server Overview").first()
         ).toBeVisible({ timeout: 15_000 });
