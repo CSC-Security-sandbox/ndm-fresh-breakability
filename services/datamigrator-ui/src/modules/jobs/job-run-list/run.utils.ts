@@ -63,6 +63,15 @@ export const getActionMenu = ({
           disabled: isDisabled,
         },
       ];
+    case JOB_STATUS_TYPE_ENUM.PAUSING:
+      return [
+        {
+          label: "Stop",
+          onClick: () =>
+            handleUpdateStatus(jobRunId, JOB_ACTION_STATUS_ENUM.STOP),
+          disabled: isDisabled,
+        },
+      ];
     default:
       return [];
   }
