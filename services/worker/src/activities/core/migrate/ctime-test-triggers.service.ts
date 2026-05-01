@@ -7,7 +7,7 @@ import * as path from "path";
 export class CtimeTestTriggersService {
     private readonly logger: LoggerService;
     private readonly enabled: boolean;
-    private readonly exhaustAllRetriesFile: string;
+    private readonly exhaustAllRetriesFiles: string[];
     private readonly changeBetweenT2AndT3File: string;
     private readonly changeBetweenT3AndDirRestampDir: string;
 
@@ -16,19 +16,21 @@ export class CtimeTestTriggersService {
     ) {
         this.logger = loggerFactory.create(CtimeTestTriggersService.name);
         this.enabled = process.env.CTIME_TEST_TRIGGER_ENABLED === 'true';
-        this.exhaustAllRetriesFile = process.env.CTIME_TEST_EXHAUST_RETRIES_FILE || '';
+        this.exhaustAllRetriesFiles = (process.env.CTIME_TEST_EXHAUST_RETRIES_FILE || '')
+            .split(',').map(f => f.trim()).filter(Boolean);
         this.changeBetweenT2AndT3File = process.env.CTIME_TEST_T2_T3_FILE || '';
         this.changeBetweenT3AndDirRestampDir = process.env.CTIME_TEST_T3_DIR_RESTAMP_DIR || '';
     }
 
     testExhaustAllRetries(sourcePath: string, attempt: number, cmdId: string): void {
-        if (!this.enabled || !this.exhaustAllRetriesFile || !sourcePath.endsWith(this.exhaustAllRetriesFile)) {
+        const matchedFile = this.exhaustAllRetriesFiles.find(f => sourcePath.endsWith(f));
+        if (!this.enabled || !matchedFile) {
             return;
         }
         const permByAttempt: Record<number, string> = { 1: 'Read', 2: 'Write', 3: 'FullControl' };
         const adding = permByAttempt[attempt] || 'Modify';
         this.logger.warn(
-            `[${cmdId}] TEST: testExhaustAllRetries | file=${this.exhaustAllRetriesFile} `
+            `[${cmdId}] TEST: testExhaustAllRetries | file=${matchedFile} `
             + `| permission is getting changed for kiran | current → setting ONLY ${adding} (Allow) `
             + `| attempt=${attempt} | ${sourcePath}`,
         );
@@ -38,9 +40,9 @@ export class CtimeTestTriggersService {
                 `powershell -ExecutionPolicy Bypass -File "${scriptPath}" -SharePath "${sourcePath}" -Attempt ${attempt}`,
                 { timeout: 15000, encoding: 'utf-8' },
             );
-            this.logger.warn(`[${cmdId}] TEST: testExhaustAllRetries completed | file=${this.exhaustAllRetriesFile} | permission set to ${adding} for kiran\n${result}`);
+            this.logger.warn(`[${cmdId}] TEST: testExhaustAllRetries completed | file=${matchedFile} | permission set to ${adding} for kiran\n${result}`);
         } catch (err) {
-            this.logger.warn(`[${cmdId}] TEST: testExhaustAllRetries failed | file=${this.exhaustAllRetriesFile}: ${err.message}`);
+            this.logger.warn(`[${cmdId}] TEST: testExhaustAllRetries failed | file=${matchedFile}: ${err.message}`);
         }
     }
 
