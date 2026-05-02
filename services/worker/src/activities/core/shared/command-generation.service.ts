@@ -282,7 +282,7 @@ export class CommandGenerationService {
             if (newCommand) result.commands.push(newCommand);
             // Record deferred mtime/atime stamping — child writes will clobber
             // anything the per-command STAMP_META does for this dir.
-            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
+            // await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           } else if (itemData.originalCommandId) {
             // CASE 2: stamp failed — directory already exists in target, retry with originalCommandId.
             // Generate a stamp-only command (target stat passed in → buildCommand emits STAMP_META only).
@@ -291,7 +291,7 @@ export class CommandGenerationService {
             const targetDirStat = await fs.promises.lstat(targetDirPath);
             const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId, jobContext);
             if (newCommand) result.commands.push(newCommand);
-            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
+            // await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           } else {
             // CASE 3: normal scan — directory exists in target, no originalCommandId.
             // Just recurse into children; no command needed for the directory itself.
@@ -305,7 +305,7 @@ export class CommandGenerationService {
                 const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, undefined, jobContext);
                 if (newCommand) result.commands.push(newCommand);  // STAMP_META only if needed
             }
-            await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
+            // await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           }
         } else if (sourceStat.isSymbolicLink()) {
           // Handle symbolic links
