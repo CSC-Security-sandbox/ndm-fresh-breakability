@@ -107,13 +107,11 @@ export class RestampDirectoriesService {
       );
       return output;
     } catch (error) {
-      // Restamping is a best-effort post-pass: if it fails wholesale the
-      // migration is still considered successful. Log and surface counts.
       this.logger.error(
-        `[${jobRunId}] Directory restamp pass aborted: ${error?.message ?? error}`,
+        `[${jobRunId}] Directory restamp pass failed: ${error?.message ?? error}`,
         error?.stack,
       );
-      return output;
+      throw error;
     } finally {
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       // Guaranteed cleanup so that an aborted pass doesn't leak the ZSET/
@@ -152,6 +150,9 @@ export class RestampDirectoriesService {
         this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);
         const currentStat = await fs.promises.lstat(sourcePath);
         const currentCtimeMs = Math.floor(currentStat.ctimeMs);
+        this.logger.log(
+          `########### [${jobRunId}] ${sourcePath} | storedCtime=${rec.sourceCtimeMs} | currentCtime=${currentCtimeMs}`,
+        );
         if (currentCtimeMs > rec.sourceCtimeMs) {
           this.logger.warn(
             `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
@@ -174,16 +175,45 @@ export class RestampDirectoriesService {
       }
     }
 
-    // Stamp mTime at destination regardless of conflict (both paths in design stamp mTime)
-    try {
-      await fs.promises.utimes(targetPath, atime, mtime);
-    } catch (error) {
-      if (error?.code === "ENOENT") {
-        this.logger.debug(`[${jobRunId}] Restamp skipped — target missing: ${targetPath}`);
-        return "skipped";
+    // Stamp mTime at destination regardless of conflict (both paths in design stamp mTime).
+    // Retries locally (3 attempts with linear backoff) since entries are already
+    // popped from Redis and cannot be re-processed by a Temporal activity retry.
+    const MAX_UTIMES_RETRIES = 2; // 0-indexed → 3 total attempts
+    let lastUtimesError: any;
+    for (let attempt = 0; attempt <= MAX_UTIMES_RETRIES; attempt++) {
+      try {
+        await fs.promises.utimes(targetPath, atime, mtime);
+        lastUtimesError = null;
+        break;
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          this.logger.debug(`[${jobRunId}] Restamp skipped — target missing: ${targetPath}`);
+          return "skipped";
+        }
+        lastUtimesError = error;
+        if (attempt < MAX_UTIMES_RETRIES) {
+          const delayMs = (attempt + 1) * 1000;
+          this.logger.warn(
+            `[${jobRunId}] utimes failed for ${targetPath} (attempt ${attempt + 1}/${MAX_UTIMES_RETRIES + 1}): ${error?.message} — retrying in ${delayMs}ms`,
+          );
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
       }
-      this.logger.warn(`[${jobRunId}] Restamp failed for ${targetPath}: ${error?.message ?? error}`);
-      throw error;
+    }
+
+    if (lastUtimesError) {
+      this.logger.error(
+        `[${jobRunId}] utimes failed for ${targetPath} after ${MAX_UTIMES_RETRIES + 1} attempts: ${lastUtimesError?.message}`,
+      );
+      const dmErr = dmError(
+        "OPERATION", Origin.DESTINATION, Operation.STAMP_TIME,
+        ErrorType.TRANSIENT_ERROR,
+        rec.commandId,
+        lastUtimesError,
+        { name: rec.fPath, path: targetPath },
+      );
+      await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+      throw lastUtimesError;
     }
 
     return ctimeConflictDetected ? "ctime_conflict" : "stamped";

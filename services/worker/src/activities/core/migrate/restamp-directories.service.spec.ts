@@ -41,7 +41,9 @@ describe('RestampDirectoriesService', () => {
     jobConfig: {
       destinationFileServer: { pathId: 'dest-path-id' },
       destinationDirectoryPath: '/dest',
+      jobRunId: 'job1',
     },
+    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
   };
 
   // Snapshot env so tests are deterministic across platforms.
@@ -147,7 +149,7 @@ describe('RestampDirectoriesService', () => {
     const utimes = fs.promises.utimes as unknown as jest.Mock;
     const eperm = new Error('perm denied') as any;
     eperm.code = 'EPERM';
-    utimes.mockRejectedValueOnce(eperm);
+    utimes.mockRejectedValue(eperm);
 
     deferredDirStampService.popBatch
       .mockResolvedValueOnce([
@@ -157,6 +159,7 @@ describe('RestampDirectoriesService', () => {
 
     const out = await service.restampDirectories({ jobRunId: 'job1' });
     expect(out).toEqual({ attempted: 1, stamped: 0, failed: 1, skipped: 0, ctimeConflicts: 0 });
+    expect(utimes).toHaveBeenCalledTimes(3);
   });
 
   it('skips records with invalid timestamps without invoking utimes', async () => {
@@ -187,8 +190,7 @@ describe('RestampDirectoriesService', () => {
   it('runs cleanup in finally even when restamp throws mid-pass', async () => {
     deferredDirStampService.popBatch.mockRejectedValueOnce(new Error('redis down'));
 
-    const out = await service.restampDirectories({ jobRunId: 'job1' });
-    expect(out).toEqual({ attempted: 0, stamped: 0, failed: 0, skipped: 0, ctimeConflicts: 0 });
+    await expect(service.restampDirectories({ jobRunId: 'job1' })).rejects.toThrow('redis down');
     expect(deferredDirStampService.cleanup).toHaveBeenCalledWith('job1');
     expect(mockLogger.error).toHaveBeenCalled();
   });
@@ -221,6 +223,59 @@ describe('RestampDirectoriesService', () => {
     deferredDirStampService.popBatch.mockResolvedValue([]);
     await service.restampDirectories({ jobRunId: 'job1', batchSize: 13 });
     expect(deferredDirStampService.popBatch).toHaveBeenCalledWith('job1', 13);
+  });
+
+  it('retries utimes and succeeds on second attempt', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    const eperm = new Error('perm denied') as any;
+    eperm.code = 'EPERM';
+    utimes.mockRejectedValueOnce(eperm).mockResolvedValueOnce(undefined);
+
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/retry-ok', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 1 },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const out = await service.restampDirectories({ jobRunId: 'job1' });
+    expect(out).toEqual({ attempted: 1, stamped: 1, failed: 0, skipped: 0, ctimeConflicts: 0 });
+    expect(utimes).toHaveBeenCalledTimes(2);
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('utimes failed for'));
+  });
+
+  it('publishes dmError only after all 3 utimes retries are exhausted', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    const eperm = new Error('perm denied') as any;
+    eperm.code = 'EPERM';
+    utimes.mockRejectedValue(eperm);
+
+    const publishMock = jest.fn().mockResolvedValue(undefined);
+    redisService.getJobManagerContext.mockResolvedValue({
+      jobConfig: {
+        destinationFileServer: { pathId: 'dest-path-id' },
+        destinationDirectoryPath: '/dest',
+        jobRunId: 'job1',
+      },
+      publishToErrorStream: publishMock,
+    });
+
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/perm-err', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 1, commandId: 'cmd-123' },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const out = await service.restampDirectories({ jobRunId: 'job1' });
+    expect(out.failed).toBe(1);
+    expect(utimes).toHaveBeenCalledTimes(3);
+    expect(publishMock).toHaveBeenCalledTimes(1);
+    expect(publishMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: expect.objectContaining({ operationId: 'cmd-123' }),
+      }),
+      'job1',
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('after 3 attempts'));
   });
 
   it('detects ctime conflict when source ctime changed since migration', async () => {

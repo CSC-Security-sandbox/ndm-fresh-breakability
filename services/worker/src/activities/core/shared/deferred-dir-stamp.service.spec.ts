@@ -257,6 +257,28 @@ describe('DeferredDirStampService', () => {
       await expect(service.updateSourceCtime('job1', '/foo', 12345)).resolves.toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalled();
     });
+
+    it('stores commandId when provided', async () => {
+      (redisClient as any).hGet = jest.fn().mockResolvedValue(JSON.stringify({ atime: 'A', mtime: 'M' }));
+      await service.updateSourceCtime('job1', '/foo/bar', 12345, 'cmd-99');
+      expect(redisClient.hSet).toHaveBeenCalledWith(
+        'job1:deferred-dir-stamps:meta',
+        '/foo/bar',
+        JSON.stringify({ atime: 'A', mtime: 'M', sourceCtimeMs: 12345, commandId: 'cmd-99' }),
+      );
+    });
+
+    it('does not overwrite commandId when not provided', async () => {
+      (redisClient as any).hGet = jest.fn().mockResolvedValue(
+        JSON.stringify({ atime: 'A', mtime: 'M', sourceCtimeMs: 1000, commandId: 'cmd-existing' }),
+      );
+      await service.updateSourceCtime('job1', '/foo/bar', 2000);
+      expect(redisClient.hSet).toHaveBeenCalledWith(
+        'job1:deferred-dir-stamps:meta',
+        '/foo/bar',
+        JSON.stringify({ atime: 'A', mtime: 'M', sourceCtimeMs: 2000, commandId: 'cmd-existing' }),
+      );
+    });
   });
 
   describe('popBatch edge cases', () => {
@@ -289,6 +311,17 @@ describe('DeferredDirStampService', () => {
       ]);
       const out = await service.popBatch('job1', 10);
       expect(out).toEqual([{ fPath: '/a', atime: 'A', mtime: 'M', depth: 1, sourceCtimeMs: 5000 }]);
+    });
+
+    it('includes commandId in records when present', async () => {
+      redisClient.zPopMinCount.mockResolvedValueOnce([
+        { value: '/a', score: -1 },
+      ]);
+      redisClient.hmGet.mockResolvedValueOnce([
+        JSON.stringify({ atime: 'A', mtime: 'M', sourceCtimeMs: 5000, commandId: 'cmd-42' }),
+      ]);
+      const out = await service.popBatch('job1', 10);
+      expect(out).toEqual([{ fPath: '/a', atime: 'A', mtime: 'M', depth: 1, sourceCtimeMs: 5000, commandId: 'cmd-42' }]);
     });
   });
 });
