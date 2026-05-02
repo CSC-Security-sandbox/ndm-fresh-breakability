@@ -32,13 +32,16 @@ import { FetchFailedOperationsActivity } from './core/retry/fetch-failed-operati
 import { ProcessRetryBatchActivity } from './core/retry/process-retry-batch.activity';
 import { CommandGenerationService } from './core/shared/command-generation.service';
 import { DirStreamingService } from './core/shared/dir-streaming.service';
+import { DeferredDirStampService } from './core/shared/deferred-dir-stamp.service';
+import { RestampDirectoriesService } from './core/migrate/restamp-directories.service';
+import { CtimeTestTriggersService } from './core/migrate/ctime-test-triggers.service';
 import { MetricsModule } from 'src/metrics/metrics.module';
 import { UpgradeActivityModule } from './upgrade/upgrade.activity.module';
 
 @Module({
   imports: [LoggerModule.forRoot(), HttpModule, ConfigModule, WorkerThreadModule, AuthModule, ProtocolsModule, UpgradeActivityModule, MetricsModule],
   controllers: [],
-  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, FileTypeDetectionService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService, DirStreamingService],
-  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService, UpgradeActivityModule, DirStreamingService],
+  providers: [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService, FileTypeDetectionService, MigrateScanService, ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities, RedisMemoryCheckActivity,  CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService, DirStreamingService, DeferredDirStampService, RestampDirectoriesService, CtimeTestTriggersService],
+  exports:  [ValidateConnectionActivity, ListPathActivity,  RedisService,  SetupActivityService,  FileTypeDetectionService, MigrateScanService,  ValidateWorkingDirectoryActivity,PrecheckActivity, CommonActivityService, SpeedTestActivities,RedisMemoryCheckActivity, CommonTaskService, DiscoveryScanService, ScanService, SyncService, CommandExecService, StampMetaService, ValidatePathActivity, WinShellService, WinOperationService, MappingResolverService, SetupExportsPathPermissionService, StorageClientFactory, FetchFailedOperationsActivity, ProcessRetryBatchActivity, CommandGenerationService, UpgradeActivityModule, DirStreamingService, DeferredDirStampService, RestampDirectoriesService, CtimeTestTriggersService],
 })
 export class ActivitiesModule {}

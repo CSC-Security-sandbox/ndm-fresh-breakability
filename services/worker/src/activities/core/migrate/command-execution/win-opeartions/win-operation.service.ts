@@ -216,7 +216,8 @@ export class WinOperationService {
       sourceAcl: validation.sourceSID,
       validationError: validation.inValid,
     };
-
+    this.logger.debug(`sidMap stored - sourceAcl: "${validation.sourceSID}" | targetAcl: "${validation.targetSID}"`);
+    
     return { output, errors };
   }
 
@@ -281,7 +282,7 @@ export class WinOperationService {
       targetSID: '',
       inValid: '',
     };
-    output.sourceSID = `Owner: ${acl1.Owner}, Group: ${acl1.Group},`;
+    output.sourceSID = `Owner: ${acl1.originalOwner ?? acl1.Owner}, Group: ${acl1.originalGroup ?? acl1.Group},`;
     output.targetSID = `Owner: ${acl2.Owner}, Group: ${acl2.Group}, `;
     if (acl1.Owner !== acl2.Owner)
       output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
@@ -295,7 +296,7 @@ export class WinOperationService {
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
     sourceAcls.forEach((ace) => {
-      output.sourceSID += `ACE in source: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
+      output.sourceSID += `ACE in source: SID(${ace.originalSid ?? ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
     });
 
     const targetAcls = (acl2.DaclAces || []).filter(
@@ -339,15 +340,29 @@ export class WinOperationService {
     const usernameToSidMap = new Map<string, string>();
     const command = `Resolve-UsernamesToSid -Username ${usernames.join(',')}`;
     const output = await this.winShellService.executeCommand(command);
-    const sidMappings = JSON.parse(output.stdout);
-    if (!Array.isArray(sidMappings) || sidMappings.length === 0) {
-      usernameToSidMap.set(sidMappings?.username, sidMappings?.sid);
+
+    if (output.stderr) {
+      this.logger.warn(`Resolve-UsernamesToSid stderr: ${output.stderr}`);
+    }
+
+    let sidMappings: any;
+    try {
+      sidMappings = JSON.parse(output.stdout);
+    } catch (err) {
+      throw new Error(`Failed to parse Resolve-UsernamesToSid output: ${output.stderr || err.message}; stdout=${output.stdout}`);
+    }
+    if (Array.isArray(sidMappings)) {
+      for (const mapping of sidMappings) {
+        if (mapping?.username && mapping?.sid) {
+          usernameToSidMap.set(mapping.username, mapping.sid);
+        }
+      }
       return usernameToSidMap;
     }
-    sidMappings.forEach((mapping) => {
-      usernameToSidMap.set(mapping.username, mapping.sid);
-    });
 
+    if (sidMappings?.username && sidMappings?.sid) {
+      usernameToSidMap.set(sidMappings.username, sidMappings.sid);
+    }
     return usernameToSidMap;
   }
 

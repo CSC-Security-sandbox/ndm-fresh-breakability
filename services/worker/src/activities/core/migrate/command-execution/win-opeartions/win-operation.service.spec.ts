@@ -222,6 +222,7 @@ describe('WinOperationService', () => {
         SourceAclError,
       );
     });
+
   });
 
   describe('setAclOperation', () => {
@@ -318,6 +319,7 @@ describe('WinOperationService', () => {
         TargetAclError,
       );
     });
+
   });
 
   describe('stampAclOperation', () => {
@@ -1093,6 +1095,131 @@ describe('WinOperationService', () => {
 
       expect(result.inValid).toBe(''); // Should be valid because audit ACE is ignored
     });
+
+    // SID mapping fix tests: after mapSIDToTarget, ace.Sid = target SID, ace.originalSid = source SID.
+    // sourceSID in CoC must use originalSid, not the mutated Sid.
+
+    it('should use originalSid for sourceSID when SID mapping was applied', async () => {
+      // Simulates state of acl after mapSIDToTarget: ace.Sid mutated to target, originalSid = source
+      const acl1: SecurityDescriptor = {
+        Owner: 'S-1-5-32-544',
+        Group: 'S-1-5-21-group',
+        DaclAces: [
+          {
+            Sid: 'S-1-5-21-2758',       // mapped target SID
+            originalSid: 'S-1-5-21-2757', // original source SID
+            AccessMask: 2032127,
+            AceType: 0,
+            AceFlags: 0,
+            IsInherited: false,
+          },
+        ],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-32-544',
+        originalGroup: 'S-1-5-21-group',
+      };
+
+      const acl2: SecurityDescriptor = {
+        Owner: 'S-1-5-32-544',
+        Group: 'S-1-5-21-group',
+        DaclAces: [
+          {
+            Sid: 'S-1-5-21-2758',
+            originalSid: 'S-1-5-21-2758',
+            AccessMask: 2032127,
+            AceType: 0,
+            AceFlags: 0,
+            IsInherited: false,
+          },
+        ],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-32-544',
+        originalGroup: 'S-1-5-21-group',
+      };
+
+      const result = await service.validateAclOperation(acl1, acl2);
+
+      // sourceSID must show original source SID (2757), not the mapped target SID (2758)
+      expect(result.sourceSID).toContain('SID(S-1-5-21-2757)');
+      expect(result.sourceSID).not.toContain('SID(S-1-5-21-2758)');
+      // targetSID must show target SID (2758)
+      expect(result.targetSID).toContain('SID(S-1-5-21-2758)');
+      expect(result.inValid).toBe('');
+    });
+
+    it('should fall back to Sid when originalSid is not set (no SID mapping configured)', async () => {
+      const acl1: SecurityDescriptor = {
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: [
+          {
+            Sid: 'S-1-5-21-ace',
+            originalSid: undefined, // not set — no SID mapping ran
+            AccessMask: 2032127,
+            AceType: 0,
+            AceFlags: 0,
+            IsInherited: false,
+          },
+        ],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: undefined,
+        originalGroup: undefined,
+      };
+
+      const acl2 = { ...acl1 };
+
+      const result = await service.validateAclOperation(acl1, acl2);
+
+      // Should fall back to Sid and Owner/Group since original* are undefined
+      expect(result.sourceSID).toContain('SID(S-1-5-21-ace)');
+      expect(result.sourceSID).toContain('Owner: S-1-5-21-owner');
+      expect(result.inValid).toBe('');
+    });
+
+    it('should use originalOwner and originalGroup for sourceSID when SID mapping was applied', async () => {
+      const acl1: SecurityDescriptor = {
+        Owner: 'S-1-5-21-mapped-owner',       // mutated by mapSIDToTarget
+        Group: 'S-1-5-21-mapped-group',        // mutated by mapSIDToTarget
+        DaclAces: [],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-21-source-owner', // original
+        originalGroup: 'S-1-5-21-source-group', // original
+      };
+
+      const acl2: SecurityDescriptor = {
+        Owner: 'S-1-5-21-mapped-owner',
+        Group: 'S-1-5-21-mapped-group',
+        DaclAces: [],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-21-mapped-owner',
+        originalGroup: 'S-1-5-21-mapped-group',
+      };
+
+      const result = await service.validateAclOperation(acl1, acl2);
+
+      // sourceSID must show original source Owner/Group
+      expect(result.sourceSID).toContain('Owner: S-1-5-21-source-owner');
+      expect(result.sourceSID).toContain('Group: S-1-5-21-source-group');
+      expect(result.sourceSID).not.toContain('mapped-owner');
+      // targetSID shows the actual target values
+      expect(result.targetSID).toContain('Owner: S-1-5-21-mapped-owner');
+      expect(result.inValid).toBe('');
+    });
   });
 
   describe('resetFileAttributes', () => {
@@ -1163,9 +1290,26 @@ describe('WinOperationService', () => {
       expect(result.size).toBe(1);
     });
 
-    it('should handle empty array response', async () => {
+    it('should return an empty map when PowerShell returns an empty array', async () => {
       const usernames = ['nonexistentuser'];
-      const mockOutput: any[] = [];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify([]),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
+    });
+
+    it('should skip array entries that are missing username or sid', async () => {
+      const usernames = ['user1', 'user2', 'user3'];
+      const mockOutput = [
+        { username: 'user1', sid: 'S-1-5-21-1001' },
+        { username: 'user2' },
+        { sid: 'S-1-5-21-1003' },
+      ];
 
       mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
         stdout: JSON.stringify(mockOutput),
@@ -1175,7 +1319,46 @@ describe('WinOperationService', () => {
       const result = await service.resolveUsernamesToSids(usernames);
 
       expect(result.size).toBe(1);
-      expect(result.get(undefined as any)).toBe(undefined);
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+    });
+
+    it('should return an empty map when single-object response is missing username or sid', async () => {
+      const usernames = ['nonexistentuser'];
+
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify({}),
+        stderr: '',
+      });
+
+      const result = await service.resolveUsernamesToSids(usernames);
+
+      expect(result.size).toBe(0);
+    });
+
+    it('should throw when stdout is unparseable', async () => {
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: 'not valid json',
+        stderr: '',
+      });
+
+      await expect(service.resolveUsernamesToSids(['bob'])).rejects.toThrow(
+        'Failed to parse Resolve-UsernamesToSid output',
+      );
+    });
+
+    it('should warn on stderr but succeed when stdout is valid JSON', async () => {
+      const mockOutput = [{ username: 'user1', sid: 'S-1-5-21-1001' }];
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: JSON.stringify(mockOutput),
+        stderr: 'WARNING: deprecated parameter',
+      });
+
+      const result = await service.resolveUsernamesToSids(['user1']);
+
+      expect(result.get('user1')).toBe('S-1-5-21-1001');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Resolve-UsernamesToSid stderr'),
+      );
     });
   });
 

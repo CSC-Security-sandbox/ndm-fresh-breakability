@@ -73,13 +73,13 @@ export const handleReporting = async (
     try {
       await wf.condition(() => !isBlocked);
       const jobRunStatus = getMappedJobRunStatus(status, reportType);
-      if (stats?.excludedPaths?.length || stats?.skippedPaths?.length) {
-        await addExcludedSkippedEntriesActivity(
-          traceId,
-          stats.excludedPaths ?? [],
-          stats.skippedPaths ?? [],
-        );
-      }
+      // if (stats?.excludedPaths?.length || stats?.skippedPaths?.length) {
+      //   await addExcludedSkippedEntriesActivity(
+      //     traceId,
+      //     stats.excludedPaths ?? [],
+      //     stats.skippedPaths ?? [],
+      //   );
+      // }
       await updateStatusActivity({
         jobRunId: traceId,
         status: jobRunStatus,

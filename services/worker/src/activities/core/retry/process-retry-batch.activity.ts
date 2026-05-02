@@ -11,6 +11,7 @@ import { dmError } from "src/activities/utils/utils";
 import { Origin, Operation } from "src/activities/utils/utils.types";
 import { CommandGenerationService, RedisSetLookup } from "../shared/command-generation.service";
 import { DirStreamingService } from "../shared/dir-streaming.service";
+import { DeferredDirStampService } from "../shared/deferred-dir-stamp.service";
 import { FatalError, RetryableError } from "src/errors/errors.types";
 import {
   ProcessRetryBatchInput,
@@ -44,6 +45,7 @@ export class ProcessRetryBatchActivity {
     private readonly redisService: RedisService,
     private readonly commandGenerationService: CommandGenerationService,
     private readonly dirStreamingService: DirStreamingService,
+    private readonly deferredDirStampService: DeferredDirStampService,
   ) {
     this.logger = loggerFactory.create(ProcessRetryBatchActivity.name);
     this.maxMigrationCommand = this.configService.get<number>('worker.maxMigrationCommand') || 100;
@@ -145,6 +147,7 @@ export class ProcessRetryBatchActivity {
           errorType: ErrorType.TRANSIENT_ERROR,
           targetContent: targetLookup,
           maxCommandsPerBatch: this.maxMigrationCommand,
+          deferredDirStampService: this.deferredDirStampService,
         });
 
         if (result.commands.length > 0) {
@@ -255,7 +258,8 @@ export class ProcessRetryBatchActivity {
               settings: { skipFile, excludePatterns },
               errorType: ErrorType.TRANSIENT_ERROR,
               targetContent: targetLookup,
-              maxCommandsPerBatch: this.maxMigrationCommand
+              maxCommandsPerBatch: this.maxMigrationCommand,
+              deferredDirStampService: this.deferredDirStampService,
             });
           
             if (result.commands.length > 0) {

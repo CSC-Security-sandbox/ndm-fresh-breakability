@@ -128,7 +128,8 @@ describe('MigrateScanService', () => {
             configService,
             mockLoggerFactory as LoggerFactory,
             fileTypeDetectionService as FileTypeDetectionService,
-            commandGenerationService as CommandGenerationService
+            commandGenerationService as CommandGenerationService,
+            { add: jest.fn() } as any,
         );
 
         jobContext = {
@@ -506,7 +507,7 @@ describe('MigrateScanService', () => {
 
     // --- buildCommand ---
     describe('buildCommand', () => {
-        it('should build command if content updated', () => {
+        it('should build command if content updated', async () => {
             const mockStat = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -520,11 +521,11 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
-            const result = service.buildCommand(mockStat as any, 'file/path');
+            const result = await service.buildCommand(mockStat as any, 'file/path');
             expect(result).toBeInstanceOf(Cmd);
         });
 
-        it('should build directory copy command if content updated and is directory', () => {
+        it('should build directory copy command if content updated and is directory', async () => {
             const mockStat = {
                 isDirectory: () => true,
                 isSymbolicLink: () => false,
@@ -538,11 +539,11 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
-            const result = service.buildCommand(mockStat as any, 'dir/path');
+            const result = await service.buildCommand(mockStat as any, 'dir/path');
             expect(result).toBeInstanceOf(Cmd);
         });
 
-        it('should build file copy command if content updated and is file', () => {
+        it('should build file copy command if content updated and is file', async () => {
             const mockStat = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -556,40 +557,40 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(true);
-            const result = service.buildCommand(mockStat as any, 'file/path');
+            const result = await service.buildCommand(mockStat as any, 'file/path');
             expect(result).toBeInstanceOf(Cmd);
         });
 
-        it('should return undefined if not content updated', () => {
+        it('should return undefined if not content updated', async () => {
             const mockSFile = {
                 isSymbolicLink: jest.fn().mockReturnValue(false),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
-            (isMetaUpdated as jest.Mock).mockReturnValue(false);
-            const result = service.buildCommand(mockSFile as any, 'file/path');
+            (isMetaUpdated as jest.Mock).mockResolvedValue(false);
+            const result = await service.buildCommand(mockSFile as any, 'file/path');
             expect(result).toBeUndefined();
         });
 
-        it('should build REMOVE_FILE command when sFile is undefined and dFile is undefined', () => {
+        it('should build REMOVE_FILE command when sFile is undefined and dFile is undefined', async () => {
             (isContentUpdate as jest.Mock).mockReturnValue(false);
-            const result = service.buildCommand(undefined as any, 'file/path');
+            const result = await service.buildCommand(undefined as any, 'file/path');
             expect(result).toBeDefined();
             expect(result!.isDir).toBe(false);
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_FILE);
         });
 
-        it('should build REMOVE_DIR command when sFile is undefined and dFile is directory', () => {
+        it('should build REMOVE_DIR command when sFile is undefined and dFile is directory', async () => {
             const dFile = {
                 isDirectory: () => true,
                 isSymbolicLink: () => false,
             };
-            const result = service.buildCommand(undefined as any, 'dir/path', dFile as any);
+            const result = await service.buildCommand(undefined as any, 'dir/path', dFile as any);
             expect(result).toBeDefined();
             expect(result!.isDir).toBe(true);
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.REMOVE_DIR);
         });
 
-        it('should build command with STAMP_META when isMetaUpdated true and isContentUpdate false', () => {
+        it('should build command with STAMP_META when isMetaUpdated true and isContentUpdate false', async () => {
             const mockSFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -603,8 +604,8 @@ describe('MigrateScanService', () => {
                 birthtime: new Date(),
             };
             (isContentUpdate as jest.Mock).mockReturnValue(false);
-            (isMetaUpdated as jest.Mock).mockReturnValue(true);
-            const result = service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
+            (isMetaUpdated as jest.Mock).mockResolvedValue(true);
+            const result = await service.buildCommand(mockSFile as any, 'file/path', mockSFile as any);
             expect(result).toBeDefined();
             expect(Object.keys(result!.ops)).toContain(OPS_CMD.STAMP_META);
         });
@@ -638,7 +639,7 @@ describe('MigrateScanService', () => {
     // --- scanDirectory ---
     describe('scanDirectory', () => {
         beforeEach(() => {
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
             (dmError as jest.Mock).mockImplementation((category, origin, operation, errorType, commandId, error, metadata) => ({
                 category,
                 origin,
@@ -1180,7 +1181,7 @@ describe('MigrateScanService', () => {
 
         it('should handle command publishing in chunks during delete processing', async () => {
             jobContext.jobConfig.skipDelete = false;
-            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+            service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
             (service as any).maxMigrationCommand = 2;
 
             jest.spyOn(service, 'getDirContents').mockImplementation(async ({ origin }) => {
@@ -1333,7 +1334,7 @@ describe('MigrateScanService', () => {
             }),
         } as Partial<CommandGenerationService>;
 
-        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService);
+        service = new MigrateScanService(configService, mockLoggerFactory as LoggerFactory, fileTypeDetectionService as FileTypeDetectionService, commandGenerationService as CommandGenerationService, { add: jest.fn() } as any);
 
         jobContext = {
             publishToErrorStream: jest.fn(),

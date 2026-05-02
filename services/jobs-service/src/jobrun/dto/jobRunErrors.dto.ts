@@ -72,7 +72,7 @@ export class JobErrorQueryDto {
   @ApiPropertyOptional({
     description: "Error type for filtering",
     example: "TRANSIENT_ERROR",
-    enum: ["FATAL_ERROR", "TRANSIENT_ERROR", "RECOVERABLE_ERROR"],
+    enum: ["FATAL_ERROR", "TRANSIENT_ERROR", "RECOVERABLE_ERROR", "METADATA_UPDATE_CONFLICT"],
   })
   @IsEnum(ErrorType)
   errorType?: ErrorType;

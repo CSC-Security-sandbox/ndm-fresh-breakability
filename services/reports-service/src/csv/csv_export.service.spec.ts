@@ -695,11 +695,314 @@ describe("CsvService", () => {
     });
   });
 
+  describe('getPermStampCtimeConflictQuery', () => {
+    beforeEach(() => {
+      process.env.SCHEMA = 'testSchema';
+    });
+
+    it('should join target volume and include Destination Path with five bound parameters', async () => {
+      const result = await service.getPermStampCtimeConflictQuery(
+        'jr-1',
+        100,
+        null,
+        'NFS',
+        '/source-dir',
+        '/target-dir',
+      );
+
+      expect(result.query).toContain(
+        'LEFT JOIN testSchema.volume v_target ON jc.target_path_id = v_target.id',
+      );
+      expect(result.query).toContain('AS "Destination Path"');
+      expect(result.query).toContain('COALESCE(v_target.volume_path, \'\') || $5 ||');
+      expect(result.query).toContain("oe.error_type IN ('METADATA_UPDATE_CONFLICT')");
+      expect(result.values).toEqual(['jr-1', null, 100, '/source-dir', '/target-dir']);
+    });
+
+    it('should use REPLACE for SMB f_path in source and destination columns', async () => {
+      const result = await service.getPermStampCtimeConflictQuery(
+        'jr-1',
+        50,
+        '/cursor-path',
+        'SMB',
+        '\\src',
+        '\\tgt',
+      );
+
+      expect(result.query).toContain('REPLACE(o.f_path');
+      expect(result.values).toEqual(['jr-1', '/cursor-path', 50, '\\src', '\\tgt']);
+    });
+  });
+
+  describe('getCutoverPermStampCtimeConflictQuery', () => {
+    beforeEach(() => {
+      process.env.SCHEMA = 'testSchema';
+    });
+
+    it('should join target volume and include Destination Path for cutover', async () => {
+      const result = await service.getCutoverPermStampCtimeConflictQuery(
+        'jr-cut',
+        200,
+        '/p',
+        'NFS',
+        '/s',
+        '/t',
+      );
+
+      expect(result.query).toContain(
+        'LEFT JOIN testSchema.volume v_target ON jc.target_path_id = v_target.id',
+      );
+      expect(result.query).toContain('AS "Destination Path"');
+      expect(result.query).toContain("oe.error_type IN ('METADATA_UPDATE_CONFLICT')");
+      expect(result.values).toEqual(['jr-cut', '/p', 200, '/s', '/t']);
+    });
+  });
+
+  describe('generatePermStampCtimeConflictCsv', () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+      process.env.SCHEMA = 'testSchema';
+    });
+
+    it('should pass formatted source and target suffixes to non-cutover conflict query', async () => {
+      (service as any).jobRunRepository.findOne.mockResolvedValue({
+        jobConfig: {
+          sourceDirectoryPath: '/src',
+          destinationDirectoryPath: '/tgt',
+          sourcePath: { fileServer: { protocol: 'NFS' } },
+        },
+      });
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => {
+          if (event === 'finish') cb();
+        }),
+        destroy: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, 'format').mockReturnValue(mockWriteStream as any);
+      mockDataSource.query.mockResolvedValue([]);
+
+      const qSpy = jest
+        .spyOn(service, 'getPermStampCtimeConflictQuery')
+        .mockResolvedValue({ query: 'SELECT 1', values: [] });
+
+      await service.generatePermStampCtimeConflictCsv('/tmp/metadata_conflict.csv', 'job-1', 100, 'MIGRATE');
+
+      expect(qSpy).toHaveBeenCalledWith('job-1', 100, null, 'NFS', '/src', '/tgt');
+      qSpy.mockRestore();
+    });
+
+    it('should call cutover conflict query when jobType is CUT_OVER', async () => {
+      (service as any).jobRunRepository.findOne.mockResolvedValue({
+        jobConfig: {
+          sourceDirectoryPath: '/a',
+          destinationDirectoryPath: '/b',
+          sourcePath: { fileServer: { protocol: 'NFS' } },
+        },
+      });
+
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event, cb) => {
+          if (event === 'finish') cb();
+        }),
+        destroy: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, 'format').mockReturnValue(mockWriteStream as any);
+      mockDataSource.query.mockResolvedValue([]);
+
+      const cutoverSpy = jest
+        .spyOn(service, 'getCutoverPermStampCtimeConflictQuery')
+        .mockResolvedValue({ query: 'SELECT 1', values: [] });
+
+      await service.generatePermStampCtimeConflictCsv('/tmp/metadata_conflict.csv', 'job-1', 100, 'CUT_OVER');
+
+      expect(cutoverSpy).toHaveBeenCalledWith('job-1', 100, null, 'NFS', '/a', '/b');
+      cutoverSpy.mockRestore();
+    });
+  });
+
   describe('getMigrationCoCColumns include status columns', () => {
     it('should include CopyContentStatus and StampMetaDataStatus columns when enabled', () => {
       const result = service.getMigrationCoCColumns('NFS', true);
       expect(result).toContain('"CopyContentStatus"');
       expect(result).toContain('"StampMetaDataStatus"');
+    });
+  });
+
+  describe('generateCsvCore - resume path', () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+    });
+
+    it('should open file in append mode and skip headers when resumeCursor is provided', async () => {
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish') cb();
+        }),
+        destroy: jest.fn(),
+      };
+      const createWsSpy = jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+      const formatSpy = jest.spyOn(fastCsv, 'format').mockReturnValue(mockWriteStream as any);
+      jest.spyOn(service, 'getInventoryData').mockResolvedValue([]);
+
+      await service.generateCsv('/tmp/resume.csv', 'job-1', 100, undefined, '/cursor/path');
+
+      expect(createWsSpy).toHaveBeenCalledWith('/tmp/resume.csv', { flags: 'a' });
+      expect(formatSpy).toHaveBeenCalledWith({ headers: false });
+    });
+  });
+
+  describe('generateCsvCore - backpressure drain', () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+    });
+
+    it('should wait for drain when write returns false', async () => {
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish' || event === 'drain') queueMicrotask(() => cb());
+        }),
+        destroy: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, 'format').mockReturnValue(mockWriteStream as any);
+      jest
+        .spyOn(service, 'getInventoryData')
+        .mockResolvedValueOnce([{ _cursor_path: '/a', col: '1' }])
+        .mockResolvedValueOnce([]);
+
+      await service.generateCsv('/tmp/drain.csv', 'job-1', 100);
+
+      expect(mockWriteStream.write).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('generateCsvCore - progress logging', () => {
+    beforeEach(() => {
+      jest.spyOn(validation, 'validateFilePath').mockReturnValue(true);
+    });
+
+    it('should log progress when totalRecords is a multiple of batchSize * 10', async () => {
+      const batchSize = 1;
+      // Return exactly 10 rows across batches so totalRecords hits batchSize*10=10
+      const rows = Array.from({ length: 10 }, (_, i) => ({ _cursor_path: `/p${i}`, c: `${i}` }));
+      const mockWriteStream = {
+        pipe: jest.fn(),
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn(),
+        once: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish') cb();
+        }),
+        destroy: jest.fn(),
+      };
+      jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+      jest.spyOn(fastCsv, 'format').mockReturnValue(mockWriteStream as any);
+
+      // Return 1 row per batch (batchSize=1), 10 times, then empty
+      const inventorySpy = jest.spyOn(service, 'getInventoryData');
+      for (const row of rows) {
+        inventorySpy.mockResolvedValueOnce([row]);
+      }
+      inventorySpy.mockResolvedValueOnce([]);
+
+      await service.generateCsv('/tmp/progress.csv', 'job-1', batchSize);
+
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining('Processed 10 records'),
+      );
+    });
+  });
+
+  describe('formatDirSuffix', () => {
+    it('should return empty string for null input', () => {
+      expect(service.formatDirSuffix(null, false)).toBe('');
+      expect(service.formatDirSuffix(undefined, false)).toBe('');
+      expect(service.formatDirSuffix(null, true)).toBe('');
+    });
+
+    it('should return rawDir as-is for NFS (isSmb=false)', () => {
+      expect(service.formatDirSuffix('/some/path', false)).toBe('/some/path');
+    });
+
+    it('should convert forward slashes to backslashes for SMB', () => {
+      expect(service.formatDirSuffix('/some/path', true)).toBe('\\some\\path');
+    });
+
+    it('should strip leading slashes and prepend backslash for SMB', () => {
+      expect(service.formatDirSuffix('///leading/slashes', true)).toBe('\\leading\\slashes');
+    });
+  });
+
+  describe('getJobRunContext', () => {
+    it('should return protocol and formatted dir suffixes from jobRun', async () => {
+      (service as any).jobRunRepository.findOne.mockResolvedValue({
+        jobConfig: {
+          sourceDirectoryPath: '/src/dir',
+          destinationDirectoryPath: '/dst/dir',
+          sourcePath: { fileServer: { protocol: 'SMB' } },
+        },
+      });
+
+      const result = await service.getJobRunContext('jr-1');
+      expect(result.protocol).toBe('SMB');
+      expect(result.sourceDirSuffix).toBe('\\src\\dir');
+      expect(result.targetDirSuffix).toBe('\\dst\\dir');
+    });
+
+    it('should default to NFS when jobRun has no protocol', async () => {
+      (service as any).jobRunRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.getJobRunContext('jr-2');
+      expect(result.protocol).toBe('NFS');
+      expect(result.sourceDirSuffix).toBe('');
+      expect(result.targetDirSuffix).toBe('');
+    });
+  });
+
+  describe('getListEntriesQuery with SMB protocol', () => {
+    beforeEach(() => { process.env.SCHEMA = 'testSchema'; });
+
+    it('should use REPLACE for path when protocol is SMB', async () => {
+      const result = await service.getListEntriesQuery('job-1', 50, null, 'excluded', 'SMB', '\\share');
+      expect(result.query).toContain("REPLACE(i.path");
+      expect(result.values).toEqual(['job-1', null, 50, '\\share']);
+    });
+
+    it('should use raw i.path when protocol is NFS', async () => {
+      const result = await service.getListEntriesQuery('job-1', 50, null, 'excluded', 'NFS', '/vol');
+      expect(result.query).not.toContain('REPLACE(i.path');
+      expect(result.values).toEqual(['job-1', null, 50, '/vol']);
+    });
+  });
+
+  describe('getCutoverPermStampCtimeConflictQuery with SMB', () => {
+    beforeEach(() => { process.env.SCHEMA = 'testSchema'; });
+
+    it('should use REPLACE for f_path when protocol is SMB', async () => {
+      const result = await service.getCutoverPermStampCtimeConflictQuery(
+        'jr-cut',
+        100,
+        null,
+        'SMB',
+        '\\src',
+        '\\tgt',
+      );
+      expect(result.query).toContain('REPLACE(o.f_path');
+      expect(result.values).toEqual(['jr-cut', null, 100, '\\src', '\\tgt']);
     });
   });
 });

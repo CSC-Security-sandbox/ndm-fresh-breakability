@@ -1,5 +1,7 @@
 import { ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 
+export const METADATA_UPDATE_CONFLICT = 'METADATA_UPDATE_CONFLICT' as const;
+
 export class RetryableError extends Error {
   constructor(message: string) {
     super(message);
@@ -34,5 +36,20 @@ export class E8Dot3CollisionError extends Error {
     this.filePath = filePath;
     // E8DOT3_COLLISION is a TRANSIENT_ERROR - file-specific issue that doesn't cancel the entire activity
     this.errorType = ErrorType.TRANSIENT_ERROR;
+  }
+}
+
+export class MetadataUpdateConflictError extends Error {
+  code: string;
+  filePath: string;
+  errorType: ErrorType;
+
+  constructor(filePath: string) {
+    const message = 'Metadata update conflict: Unable to apply permission changes';
+    super(message);
+    this.name = 'MetadataUpdateConflictError';
+    this.code = METADATA_UPDATE_CONFLICT;
+    this.filePath = filePath;
+    this.errorType = ErrorType.METADATA_UPDATE_CONFLICT;
   }
 }

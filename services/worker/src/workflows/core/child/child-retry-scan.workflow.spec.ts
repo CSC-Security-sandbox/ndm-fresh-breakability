@@ -3,6 +3,7 @@ import * as wf from '@temporalio/workflow';
 
 // Mock activity functions
 const mockUpdateJobStatusActivity = jest.fn();
+const mockResolveUsernamesToSidsActivity = jest.fn();
 const mockFetchFailedOperationsActivity = jest.fn();
 const mockProcessRetryBatchActivity = jest.fn();
 
@@ -33,9 +34,9 @@ jest.mock('@temporalio/workflow', () => ({
     condition: (...args: any[]) => mockCondition(...args),
     continueAsNew: (...args: any[]) => mockContinueAsNew(...args),
     proxyActivities: jest.fn((config) => {
-        // Return different mocks based on the activity type
         return {
             updateStatus: mockUpdateJobStatusActivity,
+            resolveUsernamesToSids: mockResolveUsernamesToSidsActivity,
             fetchFailedOperations: mockFetchFailedOperationsActivity,
             processRetryBatch: mockProcessRetryBatchActivity,
         };
@@ -63,6 +64,7 @@ describe('ChildRetryScanWorkflow', () => {
 
         // Default mocks
         mockUpdateJobStatusActivity.mockResolvedValue(undefined);
+        mockResolveUsernamesToSidsActivity.mockResolvedValue(undefined);
         mockValidateCommandStreamLength.mockResolvedValue(undefined);
         mockUpdateJobStatusIfNotRunning.mockResolvedValue(undefined);
         mockCondition.mockResolvedValue(true);
@@ -146,6 +148,81 @@ describe('ChildRetryScanWorkflow', () => {
             });
 
             expect(mockValidateCommandStreamLength).toHaveBeenCalledWith(jobRunId);
+        });
+    });
+
+    describe('SID mapping resolution', () => {
+        it('should call resolveUsernamesToSids with the retry jobRunId before processing batches', async () => {
+            const callOrder: string[] = [];
+            mockResolveUsernamesToSidsActivity.mockImplementation(async () => {
+                callOrder.push('resolveUsernamesToSids');
+            });
+            mockFetchFailedOperationsActivity.mockImplementation(async () => {
+                callOrder.push('fetchFailedOperations');
+                return { opsBatchIds: [], hasMore: false, settings: mockSettings };
+            });
+
+            await ChildRetryScanWorkflow({ jobRunId, originalJobRunId, actionState: JobRunStatus.Running });
+
+            expect(mockResolveUsernamesToSidsActivity).toHaveBeenCalledTimes(1);
+            expect(mockResolveUsernamesToSidsActivity).toHaveBeenCalledWith(jobRunId);
+            expect(callOrder.indexOf('resolveUsernamesToSids')).toBeLessThan(
+                callOrder.indexOf('fetchFailedOperations'),
+            );
+        });
+
+        it('should call resolveUsernamesToSids with jobRunId, not originalJobRunId', async () => {
+            await ChildRetryScanWorkflow({ jobRunId, originalJobRunId, actionState: JobRunStatus.Running });
+
+            expect(mockResolveUsernamesToSidsActivity).toHaveBeenCalledWith(jobRunId);
+            expect(mockResolveUsernamesToSidsActivity).not.toHaveBeenCalledWith(originalJobRunId);
+        });
+
+        it('should propagate error from resolveUsernamesToSids and not process batches', async () => {
+            mockResolveUsernamesToSidsActivity.mockRejectedValue(
+                new Error('Failed to parse Resolve-UsernamesToSid output'),
+            );
+
+            await expect(
+                ChildRetryScanWorkflow({ jobRunId, originalJobRunId, actionState: JobRunStatus.Running }),
+            ).rejects.toThrow('Failed to parse Resolve-UsernamesToSid output');
+
+            expect(mockFetchFailedOperationsActivity).not.toHaveBeenCalled();
+        });
+
+        it('should complete successfully after resolving username→SID mappings and processing batches', async () => {
+            // Simulates: buildJobContext wrote SID:domain\sourceUser → domain\targetUser to Redis.
+            // resolveUsernamesToSids reads those entries, calls PowerShell (SidToName / Resolve-UsernamesToSid),
+            // and writes back SID:S-1-5-21-source → S-1-5-21-target so stamp phase can look them up.
+            // The workflow's job is to call the activity with the right jobRunId — verified below.
+            const resolvedJobRunId = jobRunId;
+            mockResolveUsernamesToSidsActivity.mockResolvedValue(undefined); // resolution succeeded
+
+            mockFetchFailedOperationsActivity.mockResolvedValue({
+                opsBatchIds: ['batch-smb-001', 'batch-smb-002'],
+                hasMore: false,
+                settings: { ...mockSettings, isSMB: true },
+            });
+
+            const result = await ChildRetryScanWorkflow({
+                jobRunId,
+                originalJobRunId,
+                actionState: JobRunStatus.Running,
+            });
+
+            // SID resolution ran for the retry jobRunId (not the original)
+            expect(mockResolveUsernamesToSidsActivity).toHaveBeenCalledWith(resolvedJobRunId);
+
+            // Batch processing ran after resolution — stamps will use the resolved SID→SID entries
+            expect(mockProcessRetryBatchActivity).toHaveBeenCalledTimes(2);
+            expect(mockProcessRetryBatchActivity).toHaveBeenCalledWith(
+                expect.objectContaining({ jobRunId, batchId: 'batch-smb-001', type: 'ops' }),
+            );
+            expect(mockProcessRetryBatchActivity).toHaveBeenCalledWith(
+                expect.objectContaining({ jobRunId, batchId: 'batch-smb-002', type: 'ops' }),
+            );
+
+            expect(result.status).toBe(JobRunStatus.Completed);
         });
     });
 

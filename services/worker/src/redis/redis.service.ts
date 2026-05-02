@@ -336,6 +336,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async setOwnerIdentity(jobRunId: string, id: string, type: 'SID' | 'UID' | 'GID', owner: string) {
+    if (!id || !owner) {
+      this.logger.warn(`Skipping invalid identity mapping write: jobRunId=${jobRunId}, type=${type}, id=${id}, owner=${owner}`);
+      return;
+    }
     return await this.client.hSet(`${jobRunId}:mapping`, `${type}:${id}`, owner);
   }
 

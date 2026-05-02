@@ -10,7 +10,7 @@ import { isPathExists } from "../core/utils/utils";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
-import { E8Dot3CollisionError, FatalError } from "../../errors/errors.types";
+import { E8Dot3CollisionError, FatalError, METADATA_UPDATE_CONFLICT } from "../../errors/errors.types";
 
 const execAsync = promisify(exec);
 
@@ -172,10 +172,51 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
   ''
 )
 
-export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
+export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'unknown'): boolean => {
+  if (!dFile) return true;
+  if (sFile.isDirectory()) {
+    return sFile.mtime.toISOString() !== dFile.mtime.toISOString();
+  }
+  return (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
+};
 
-// added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+export const isMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile?: fs.Stats,
+  toleranceMs = 1000,
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  if (!dFile) return true;
+  if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
+  return isSmbMetaUpdated(sFile, dFile, toleranceMs);
+};
+
+const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
+  const sourceCtimeMs = sFile.ctimeMs;
+  const destinationCtimeMs = dFile.ctimeMs;
+  return (sourceCtimeMs + toleranceMs) > destinationCtimeMs;
+};
+
+export const isNfsMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile: fs.Stats,
+  redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
+  jobContext?: JobManagerContext
+): Promise<boolean> => {
+  if (sFile.mode !== dFile.mode) return true;
+    let gid = sFile.gid;
+    let uid = sFile.uid;
+    if (jobContext?.jobConfig?.options?.isIdentityMappingAvailable === true && redisService) {
+      const [gid_res, uid_res] = await Promise.all([
+          redisService.getOwnerIdentity(jobContext.jobRunId, gid.toString(), 'GID'),
+          redisService.getOwnerIdentity(jobContext.jobRunId, uid.toString(), 'UID'),
+      ]);
+      gid = gid_res != null ? parseInt(gid_res) : gid;
+      uid = uid_res != null ? parseInt(uid_res) : uid;
+    }
+    return uid !== dFile.uid || gid !== dFile.gid;
+};
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(
@@ -279,6 +320,8 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'ETRAILSPACE':
           // Filename contains trailing spaces
           return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
+      case 'METADATA_UPDATE_CONFLICT':
+        return 'METADATA_UPDATE_CONFLICT';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -299,14 +342,15 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
       error.code = 'EIO'; // Standardize code for known error
     }
     
-    // Check error.code for standard error codes
-    if(error.code) {
-      // Check for transient errors
-      if( isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
-        // Check for fatal errors (cancel activity)
-      if(origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-      if(origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-
+    // Check error.code for standard error codes (do not remap metadata conflict)
+    if (error.code) {
+      const metadataConflictError =
+        errorType === ErrorType.METADATA_UPDATE_CONFLICT || error.code === METADATA_UPDATE_CONFLICT;
+      if (!metadataConflictError) {
+        if (isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
+        if (origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+        if (origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      }
     }
   }
 
@@ -339,7 +383,9 @@ export const basePrefix = (jobRunId: string, pathId: string, directoryPath?: str
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
 const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
 
-// Transient errors that should not be retried
+// Transient errors for dmError / sync: codes here force ErrorType.TRANSIENT_ERROR in dmError.
+// METADATA_UPDATE_CONFLICT must NOT be listed — callers pass ErrorType.METADATA_UPDATE_CONFLICT and
+// dmError would otherwise overwrite it. Sync treats metadata conflict like "no retry" separately.
 const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
 
 // File server down errno numbers (negative values as reported by Node.js)

@@ -4,6 +4,7 @@ import { proxyActivities } from '@temporalio/workflow';
 import { JobRunStatus } from "src/activities/common/enums";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
+import { RestampDirectoriesService } from 'src/activities/core/migrate/restamp-directories.service';
 import { updateJobStatusIfNotRunning } from '../common/workflow-utils';
 import { SyncWorkflowOutput } from './chid-scan.workflow.type';
 
@@ -22,13 +23,24 @@ const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
     retry: { initialInterval: '10s', backoffCoefficient: 1,  maximumInterval: '30s', maximumAttempts: 10, nonRetryableErrorTypes: ['FatalError', 'RetryExceededError', 'ApplicationFailure', 'CancelledFailure'], },
-     startToCloseTimeout: '5h', heartbeatTimeout: '1m' });
+     startToCloseTimeout: '500h', heartbeatTimeout: '1m' });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
 }= proxyActivities<CommonTaskService>({
     retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '30s', nonRetryableErrorTypes: ['ActivityFailure','FatalError'] },
     startToCloseTimeout: '10m' });
+
+// Post-migration directory mtime/atime restamp pass — scheduled on the same
+// per-job task queue as the sync activities so it runs on the worker that
+// owns the destination filesystem mount.
+const {
+    restampDirectories: restampDirectoriesActivity,
+} = proxyActivities<RestampDirectoriesService>({
+    startToCloseTimeout: '500h',
+    heartbeatTimeout: '1m',
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '60s' },
+});
 
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('syncActionSignal');
@@ -84,7 +96,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                 try {
                     console.log(`SyncTaskActivity started for taskId: ${taskId}`);
                     const output = await SyncTaskActivity({ jobRunId, taskId });
-                    console.error(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
+                    console.log(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
                     return output;
                 } catch (error)  {
                     if(error instanceof wf.ActivityFailure && error.cause instanceof wf.ApplicationFailure){
@@ -94,8 +106,7 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
                         }
                     }
                     console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${JSON.stringify(error)} retrying...`);
-                    throw error
-                    // TODO: handle FatalError 
+                    throw error 
                 }    
             })
         )      
@@ -106,9 +117,18 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
     }
     
     syncWorkflowOutput.status = isManualStop ? JobRunStatus.Stopped : JobRunStatus.Completed;
+
+    // Post-pass: re-stamp directory mtime/atime now that all child writes are done.
+    // Skip when the user explicitly stopped the job — partial state isn't worth touching.
+    if (!isManualStop) {
+        try {
+            const restampOutput = await restampDirectoriesActivity({ jobRunId });
+            console.log(`SyncWorkflow ${jobRunId} dir restamp result: ${JSON.stringify(restampOutput)}`);
+        } catch (error) {
+            // Best-effort: a failed restamp pass should not fail the migration itself.
+            console.error(`SyncWorkflow ${jobRunId} directory restamp pass failed: ${error?.message ?? error}`);
+        }
+    }
+
     return syncWorkflowOutput; 
 }
-
-
-
-

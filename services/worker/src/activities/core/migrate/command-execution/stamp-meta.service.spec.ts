@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { StampMetaService } from './stamp-meta.service';
 import { RedisService } from 'src/redis/redis.service';
 import {
@@ -14,6 +15,8 @@ import * as fs from 'fs';
 import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
+import { DeferredDirStampService } from '../../shared/deferred-dir-stamp.service';
+import { CtimeTestTriggersService } from '../ctime-test-triggers.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -22,6 +25,7 @@ jest.mock('fs', () => ({
     chown: jest.fn(),
     utimes: jest.fn(),
     lutimes: jest.fn(),
+    lstat: jest.fn(),
   },
 }));
 
@@ -85,6 +89,13 @@ describe('StampMetaService', () => {
     (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
+    (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 1000000 });
+
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((_key: string, defaultValue?: any) => {
+        return defaultValue;
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,6 +104,9 @@ describe('StampMetaService', () => {
         { provide: LoggerFactory, useValue: loggerFactory },
         { provide: WinOperationService, useValue: winOperationService },
         { provide: MetricsService, useValue: mockMetricsService },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: DeferredDirStampService, useValue: { add: jest.fn(), updateSourceCtime: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
+        { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
       ],
     }).compile();
 
@@ -345,6 +359,78 @@ describe('StampMetaService', () => {
       expect(mockFs.promises.chown).not.toHaveBeenCalled();
     });
 
+    it('should stamp when GID is 0 (root) without identity mapping', async () => {
+      const input = createMockInput({ gid: 0, uid: 3001 }, { preservePermissions: true });
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        3001,
+        0,
+      );
+    });
+
+    it('should stamp when UID is 0 (root) without identity mapping', async () => {
+      const input = createMockInput({ gid: 1000, uid: 0 }, { preservePermissions: true });
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        0,
+        1000,
+      );
+    });
+
+    it('should apply mapped value of "0" from identity mapping', async () => {
+      const input = createMockInput(
+        { gid: 0, uid: 3001 },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
+      );
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+      redisService.getOwnerIdentity
+        .mockResolvedValueOnce('0')    // mapped gid stays 0
+        .mockResolvedValueOnce('0');   // mapped uid 3001 → 0
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        0,
+        0,
+      );
+    });
+
+    it('should fall back to source GID/UID when identity mapping returns null (no mapping in Redis)', async () => {
+      const input = createMockInput(
+        { gid: 1000, uid: 3001 },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
+      );
+      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+      redisService.getOwnerIdentity
+        .mockResolvedValueOnce(null) // no mapping for gid
+        .mockResolvedValueOnce(null); // no mapping for uid
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.chown).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        3001,
+        1000,
+      );
+    });
+
     it('should skip when GID or UID is missing', async () => {
       const input = createMockInput({ gid: undefined, uid: 1001 });
 
@@ -438,6 +524,27 @@ describe('StampMetaService', () => {
         error.stack,
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    // Directory mtimes/atimes are clobbered by every child write, so the per-command
+    // stamp is intentionally skipped — the deferred restamp pass at the end of
+    // ChildSyncWorkflow re-applies them deepest-first. See DeferredDirStampService.
+    it('should skip utimes/lutimes when command is a directory (deferred restamp owns it)', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+        },
+        {},
+        true, // isDir
+      );
+
+      const result = await service.stampAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect((mockFs.promises as any).lutimes).not.toHaveBeenCalled();
     });
   });
 
@@ -909,6 +1016,79 @@ describe('StampMetaService', () => {
         expect(result.targetErrors).toEqual([]);
         expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
       });
+    });
+  });
+
+  describe('ctime validation (win32 path)', () => {
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
+      winOperationService.stampAclOperation.mockResolvedValue({ output: null, errors: [] });
+    });
+
+    it('with preserveAccessTime=true: passes when T3 <= T2', async () => {
+      const input = createMockInput({}, { preserveAccessTime: true });
+      (mockFs.promises.lstat as jest.Mock)
+        .mockResolvedValueOnce({ ctimeMs: 1000 })  // T1
+        .mockResolvedValueOnce({ ctimeMs: 2000 })  // T2 (from preserveAccessAndModifiedTimeAndCaptureT2)
+        .mockResolvedValueOnce({ ctimeMs: 2000 }); // T3 = T2, no change
+      const result = await service.stampMetaData(input);
+      expect(result.sourceErrors).toEqual([]);
+      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+    });
+
+    it('with preserveAccessTime=true: retries and exhausts when T3 > T2', async () => {
+      const input = createMockInput({}, { preserveAccessTime: true });
+      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: Date.now() });
+      let callCount = 0;
+      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({ ctimeMs: callCount * 1000 });
+      });
+      const result = await service.stampMetaData(input);
+      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+    });
+
+    it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
+      const input = createMockInput({}, {}, true);
+      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 5000 });
+      const result = await service.stampMetaData(input);
+      expect(result.sourceErrors).toEqual([]);
+    });
+
+    it('updates deferred dir stamp when isDir=true and ctime exhausted', async () => {
+      const input = createMockInput({}, {}, true);
+      let callCount = 0;
+      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({ ctimeMs: callCount * 1000 });
+      });
+      const result = await service.stampMetaData(input);
+      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+    });
+  });
+
+  describe('symlink branches', () => {
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'linux', writable: true });
+    });
+
+    it('stampGIDandUID uses lchown for symlinks', async () => {
+      (mockFs.promises as any).lchown = jest.fn().mockResolvedValue(undefined);
+      const input = createMockInput(
+        { gid: 1000, uid: 1001, isSymLink: true },
+        { preservePermissions: true }
+      );
+      await service.stampMetaData(input);
+      expect((mockFs.promises as any).lchown).toHaveBeenCalled();
+    });
+
+    it('stampAccessAndModifiedTime uses lutimes for symlinks', async () => {
+      const input = createMockInput(
+        { isSymLink: true },
+        {}
+      );
+      await service.stampMetaData(input);
+      expect(mockFs.promises.lutimes).toHaveBeenCalled();
     });
   });
 });
