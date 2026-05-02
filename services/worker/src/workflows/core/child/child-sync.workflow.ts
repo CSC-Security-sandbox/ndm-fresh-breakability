@@ -121,15 +121,15 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
 
     // Post-pass: re-stamp directory mtime/atime now that all child writes are done.
     // Skip when the user explicitly stopped the job — partial state isn't worth touching.
-    if (!isManualStop) {
-        try {
-            const restampOutput = await restampDirectoriesActivity({ jobRunId });
-            console.log(`SyncWorkflow ${jobRunId} dir restamp result: ${JSON.stringify(restampOutput)}`);
-        } catch (error) {
-            // Best-effort: a failed restamp pass should not fail the migration itself.
-            console.error(`SyncWorkflow ${jobRunId} directory restamp pass failed: ${error?.message ?? error}`);
-        }
-    }
+    // if (!isManualStop) {
+    //     try {
+    //         const restampOutput = await restampDirectoriesActivity({ jobRunId });
+    //         console.log(`SyncWorkflow ${jobRunId} dir restamp result: ${JSON.stringify(restampOutput)}`);
+    //     } catch (error) {
+    //         // Best-effort: a failed restamp pass should not fail the migration itself.
+    //         console.error(`SyncWorkflow ${jobRunId} directory restamp pass failed: ${error?.message ?? error}`);
+    //     }
+    // }
 
     return syncWorkflowOutput; 
 }
