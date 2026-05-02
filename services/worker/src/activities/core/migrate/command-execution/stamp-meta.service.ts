@@ -163,7 +163,7 @@ export class StampMetaService {
                 output.postStampSourceCtimeMs = ctimeT3;
                 if (input.command.isDir) {
                     await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, ctimeT3,
+                        input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
                     );
                 }
                 return;
@@ -185,7 +185,7 @@ export class StampMetaService {
                 output.postStampSourceCtimeMs = ctimeT3;
                 if (input.command.isDir) {
                     await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, ctimeT3,
+                        input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
                     );
                 }
                 const error = new MetadataUpdateConflictError(input.sourcePath);

@@ -163,7 +163,7 @@ export class RestampDirectoriesService {
           const dmErr = dmError(
             "OPERATION", Origin.SOURCE, Operation.STAMP_META,
             ErrorType.METADATA_UPDATE_CONFLICT,
-            jobRunId,
+            rec.commandId,
             error,
             { name: rec.fPath, path: sourcePath },
           );

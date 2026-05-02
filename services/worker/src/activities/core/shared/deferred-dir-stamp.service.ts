@@ -23,6 +23,9 @@ export interface DeferredDirStamp {
   /** Source ctime in ms since epoch (floored) — used during post-migration restamp
    *  to detect permission changes that occurred after this folder was processed. */
   sourceCtimeMs?: number;
+  /** The command ID from the last stampMetaData pass — used as correlationId
+   *  when publishing dmErrors during the post-migration restamp. */
+  commandId?: string;
 }
 
 /**
@@ -95,15 +98,16 @@ export class DeferredDirStampService {
    * restamp pass compares against the post-stamp ctime (T3) rather than the
    * scan-time ctime.
    */
-  async updateSourceCtime(jobRunId: string, fPath: string, sourceCtimeMs: number): Promise<void> {
+  async updateSourceCtime(jobRunId: string, fPath: string, sourceCtimeMs: number, commandId?: string): Promise<void> {
     if (!fPath || sourceCtimeMs == null) return;
     try {
       const client = this.redisService.getClient();
       const metaKey = this.metaKey(jobRunId);
       const existing = await client.hGet(metaKey, fPath);
       if (!existing) return;
-      const meta = JSON.parse(existing) as { atime: string; mtime: string; sourceCtimeMs?: number };
+      const meta = JSON.parse(existing) as { atime: string; mtime: string; sourceCtimeMs?: number; commandId?: string };
       meta.sourceCtimeMs = sourceCtimeMs;
+      if (commandId) meta.commandId = commandId;
       await client.hSet(metaKey, fPath, JSON.stringify(meta));
     } catch (error) {
       this.logger.warn(`Failed to update sourceCtimeMs for ${fPath}: ${error?.message ?? error}`);
@@ -137,9 +141,9 @@ export class DeferredDirStampService {
       const payloadStr = payloads[i];
       if (!payloadStr) continue;
       try {
-        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string; sourceCtimeMs?: number };
+        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string; sourceCtimeMs?: number; commandId?: string };
         if (meta?.atime && meta?.mtime) {
-          records.push({ fPath, atime: meta.atime, mtime: meta.mtime, depth: -score, sourceCtimeMs: meta.sourceCtimeMs });
+          records.push({ fPath, atime: meta.atime, mtime: meta.mtime, depth: -score, sourceCtimeMs: meta.sourceCtimeMs, commandId: meta.commandId });
           fPathsToDelete.push(fPath);
         }
       } catch (error) {
