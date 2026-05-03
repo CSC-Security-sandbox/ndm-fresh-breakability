@@ -5,6 +5,7 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
+  Notification,
   useForm,
 } from "@netapp/bxp-design-system-react";
 import {
@@ -68,6 +69,15 @@ export default function CutoverConfirmationModal({
               </Button>
             </Box>
           </Box>
+
+          <Notification type="info">
+            Metadata update conflicts, if any, can be reviewed in
+            the <strong>metadata_conflict_errors.csv</strong> file available in the
+            COC report. Please run the
+            script <strong>stamp-metadata.ps1</strong> to fix them after the
+            cutover and before making the destination live. Refer to
+            documentation for the steps.
+          </Notification>
 
           <Checkbox
             form={confirmCutOverForm}
