@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { CommandStatus, ErrorType, ItemInfo, JobManagerContext, TaskInfo, TaskStatus } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ApplicationFailure, CancelledFailure, Context } from '@temporalio/activity';
 import { basePrefix, isFatalError, isSourceFatalError, isTransientError } from "src/activities/utils/utils";
-import { FatalError, RetryExceededError } from "src/errors/errors.types";
+import { FatalError, METADATA_UPDATE_CONFLICT, RetryExceededError } from "src/errors/errors.types";
 import { RedisService } from "src/redis/redis.service";
 import { CommonTaskService } from "../common/common-task.service";
 import { CommandExecService } from "./command-execution/command-execution.service";
@@ -158,9 +158,10 @@ export class SyncService {
     const hasFatalTargetError = errors.target.some(isFatalError);
     const isFatalErrored = hasFatalSourceError || hasFatalTargetError;
 
-    // Check for transient errors (non-retryable but don't cancel activity)
-    const hasTransientSourceError = errors.source.some(isTransientError);
-    const hasTransientTargetError = errors.target.some(isTransientError);
+    // Transient (e.g. E8DOT3) and metadata conflict: no task-level retries (delete + RetryExceeded).
+    const isNoRetryCode = (code: string) => isTransientError(code) || code === METADATA_UPDATE_CONFLICT;
+    const hasTransientSourceError = errors.source.some(isNoRetryCode);
+    const hasTransientTargetError = errors.target.some(isNoRetryCode);
     const hasTransientError = hasTransientSourceError || hasTransientTargetError;
 
     task.status = TaskStatus.ERRORED;

@@ -23,6 +23,7 @@ import { MappingResolverService } from 'src/activities/core/initializer/mapping-
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 import { FetchFailedOperationsActivity } from 'src/activities/core/retry/fetch-failed-operations.activity';
 import { ProcessRetryBatchActivity } from 'src/activities/core/retry/process-retry-batch.activity';
+import { RestampDirectoriesService } from 'src/activities/core/migrate/restamp-directories.service';
 import { UpgradeActivityService } from 'src/activities/upgrade/upgrade.activity.service';
 
 const bindMock = jest.fn().mockReturnValue({
@@ -115,6 +116,10 @@ const ProcessRetryBatchActivityMock = {
   processRetryBatch: bindMock,
 };
 
+const RestampDirectoriesServiceMock = {
+  restampDirectories: bindMock,
+};
+
 const upgradeActivityServiceMock = {
   downloadBundle: bindMock,
   isBinaryStaged: bindMock,
@@ -172,6 +177,10 @@ describe('WorkerOptionsService', () => {
         {
           provide: ProcessRetryBatchActivity,
           useValue: ProcessRetryBatchActivityMock,
+        },
+        {
+          provide: RestampDirectoriesService,
+          useValue: RestampDirectoriesServiceMock,
         },
         {
           provide: UpgradeActivityService,

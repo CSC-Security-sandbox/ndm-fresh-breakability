@@ -27,11 +27,14 @@ Source: "worker.env.j2"; DestDir: "{tmp}";
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd\fluent-package-5.2.0-x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "fluentd.conf"; DestDir: "{tmp}";
+Source: "stamp-metadata.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "README-stamp-metadata.md"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\logs"
 Name: "{app}\mnt"
 Name: "{app}\conf"
+Name: "{app}\scripts"
 
 [Code]
 var

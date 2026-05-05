@@ -15,7 +15,6 @@ import { MetricsService } from "src/metrics/metrics.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
-
 @Injectable()
 export class CommandExecService {
     readonly workerId: string;
@@ -70,7 +69,7 @@ export class CommandExecService {
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
        // Stamp Meta if needed
-        let metaResult: { shouldUpdateItemInfo: boolean; targetErrors: string[]; sourceErrors: string[] } | null = null;
+        let metaResult: CommandOutput | null = null;
         if (baseCmdRes.shouldStampMeta) {
             metaResult = await this.stampMetaService.stampMetaData(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;

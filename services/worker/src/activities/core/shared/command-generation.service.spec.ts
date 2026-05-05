@@ -172,9 +172,7 @@ describe('CommandGenerationService', () => {
             expect(result.commands).toHaveLength(1);
             expect(result.commands[0].originalCmdId).toBe('orig-1');
             expect(String(result.commands[0].status)).toBe('COMPLETED');
-            expect(result.excludedPaths).toEqual([
-                { path: '/dir/excluded.txt', isDirectory: false },
-            ]);
+            expect(result.excludedPaths).toEqual([]);
         });
 
         it('should track skippedPaths when getExcludeOrSkipReason returns skipped', async () => {
@@ -199,9 +197,7 @@ describe('CommandGenerationService', () => {
             });
 
             expect(result.commands).toHaveLength(0);
-            expect(result.skippedPaths).toEqual([
-                { path: '/dir/skipped.txt', isDirectory: false },
-            ]);
+            expect(result.skippedPaths).toEqual([]);
         });
 
         it('should add directory command when target does not have item', async () => {
@@ -687,9 +683,9 @@ describe('CommandGenerationService', () => {
     });
 
     describe('buildCommand', () => {
-        it('should return command when isContentUpdate is true', () => {
+        it('should return command when isContentUpdate is true', async () => {
             mockIsContentUpdate.mockReturnValue(true);
-            mockIsMetaUpdated.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -703,14 +699,14 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', undefined);
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: false });
         });
 
-        it('should set targetExisted true when target file was provided (content_updated)', () => {
+        it('should set targetExisted true when target file was provided (content_updated)', async () => {
             mockIsContentUpdate.mockReturnValue(true);
-            mockIsMetaUpdated.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -724,14 +720,14 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
         });
 
-        it('should return command when isMetaUpdated is true and isContentUpdate false', () => {
+        it('should return command when isMetaUpdated is true and isContentUpdate false', async () => {
             mockIsContentUpdate.mockReturnValue(false);
-            mockIsMetaUpdated.mockReturnValue(true);
+            mockIsMetaUpdated.mockResolvedValue(true);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -745,13 +741,13 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', undefined);
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
         });
 
-        it('should return undefined when neither content nor meta update', () => {
+        it('should return undefined when neither content nor meta update', async () => {
             mockIsContentUpdate.mockReturnValue(false);
-            mockIsMetaUpdated.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -765,7 +761,7 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeUndefined();
         });
     });

@@ -54,13 +54,13 @@ export const MigrationWorkflow = async ({
     output.fileCount = migrationWorkflowExecResult.fileCount;
     output.dirCount = migrationWorkflowExecResult.dirCount;
     output.status = migrationWorkflowExecResult.status;
-    output.excludedPaths = migrationWorkflowExecResult.excludedPaths ?? [];
-    output.skippedPaths = migrationWorkflowExecResult.skippedPaths ?? [];
+    // output.excludedPaths = migrationWorkflowExecResult.excludedPaths ?? [];
+    // output.skippedPaths = migrationWorkflowExecResult.skippedPaths ?? [];
 
     // Reporting and Report Generation
     await handleReporting(traceId, output.status, {
-      excludedPaths: output.excludedPaths,
-      skippedPaths: output.skippedPaths,
+      // excludedPaths: output.excludedPaths,
+      // skippedPaths: output.skippedPaths,
     });
 
     // Cleanup

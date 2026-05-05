@@ -29,6 +29,10 @@ export interface CommandOutput {
     sourceErrors: string[];
     targetErrors: string[];
     shouldUpdateItemInfo: boolean;
+    /** Source ctime (ms since epoch, floored) captured after stamp operations complete.
+     *  Used to update the deferred dir stamp record for directories
+     *  so the post-migration restamp pass compares against the correct baseline. */
+    postStampSourceCtimeMs?: number;
 }
 
 
