@@ -96,42 +96,41 @@ export const executeRetryMigrationChildWorkflows = async ({
       parentClosePolicy: wf.ParentClosePolicy.TERMINATE,
     });
 
-    // Wait for retry scan workflow to complete
+    // Signal sync when retry scan finishes so sync knows to drain remaining tasks and exit
+    retryScanWorkflow.result().then(
+      (scanResult) => signalIfRunning(syncWorkflow, 'scanResultSignal', scanResult.status),
+      () => signalIfRunning(syncWorkflow, 'scanResultSignal', JobRunStatus.Failed)
+    );
+
+    // Await both — Promise.all rejects immediately if either child fails
     try {
-      const retryScanWorkflowOutput = await retryScanWorkflow.result();
+      const [retryScanWorkflowOutput, syncWorkflowOutput] = await Promise.all([
+        retryScanWorkflow.result(),
+        syncWorkflow.result()
+      ]);
       output.retryScanJobStatus = retryScanWorkflowOutput.status;
-    } catch (error) {
-      if (wf.isCancellation(error.cause)) {
-        output.retryScanJobStatus = JobRunStatus.Stopped;
-      } else {
-        output.retryScanJobStatus = JobRunStatus.Failed;
-      }
-      syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
-    }
-
-    // Signal sync workflow that scan is complete
-    await signalIfRunning(syncWorkflow, 'scanResultSignal', output.retryScanJobStatus);
-
-    // Wait for sync workflow to complete
-    try {
-      const syncWorkflowOutput = await syncWorkflow.result();
       output.syncJobStatus = syncWorkflowOutput.status;
     } catch (error) {
+      await cancelWorkflowIfRunning(retryScanWorkflow.workflowId);
+      await cancelWorkflowIfRunning(syncWorkflow.workflowId);
+
       if (wf.isCancellation(error.cause)) {
+        output.retryScanJobStatus = JobRunStatus.Stopped;
         output.syncJobStatus = JobRunStatus.Stopped;
       } else {
+        output.retryScanJobStatus = JobRunStatus.Failed;
         output.syncJobStatus = JobRunStatus.Failed;
       }
+
       await updateWorkerResponseActivity(jobRunId, 'all', {
         status: output.syncJobStatus,
         code: 'RETRY_SYNC_FAILURE',
         operation: 'Retry Sync Workflow',
         occurrence: 1,
         origin: 'RetryMigrationWorkflow',
-        message: `Retry sync workflow failed with error: ${error.message}`,
+        message: `Child workflow failed with error: ${error.message}`,
         createdAt: new Date()
       });
-      retryScanWorkflow && await cancelWorkflowIfRunning(retryScanWorkflow.workflowId);
     }
   }
 
