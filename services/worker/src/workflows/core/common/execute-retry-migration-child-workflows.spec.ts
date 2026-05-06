@@ -26,6 +26,13 @@ jest.mock('@temporalio/workflow', () => ({
         updateWorkerResponse: jest.fn().mockResolvedValue(undefined),
     }),
     isCancellation: jest.fn((error) => error?.isCancellation === true),
+    condition: jest.fn(async (fn: () => boolean) => {
+        // Simulate Temporal's wf.condition: wait until predicate is true
+        for (let i = 0; i < 20; i++) {
+            await new Promise(resolve => setImmediate(resolve));
+            if (fn()) return;
+        }
+    }),
     ChildWorkflowCancellationType: { WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED' },
     ParentClosePolicy: { TERMINATE: 'TERMINATE' },
 }));
