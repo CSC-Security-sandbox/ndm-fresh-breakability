@@ -98,6 +98,10 @@ export  class JobManagerContext {
         return this.commandStream.getLength();
     }
 
+    async getFileStreamLen(): Promise<number> {
+        return this.fileStream.getLength();
+    }
+
     // Task Stream Methods
     async publishToTaskStream(task: TaskInfo): Promise<string> {
         return await this.taskStream.append(task);

@@ -7,6 +7,7 @@ const mockFileStream = {
     appendBulk: jest.fn(),
     groupReadWithoutAck: jest.fn(),
     ackAndPurge: jest.fn(),
+    getLength: jest.fn(),
 };
 const mockErrorStream = {
     append: jest.fn(),
@@ -363,6 +364,19 @@ describe("JobManagerContext", () => {
             const res = await ctx.publishToFileStreamBulk([]);
             expect(mockFileStream.appendBulk).toHaveBeenCalledWith([]);
             expect(res).toEqual([]);
+        });
+
+        it("getFileStreamLen should return stream length", async () => {
+            mockFileStream.getLength.mockResolvedValue(99);
+            const res = await ctx.getFileStreamLen();
+            expect(mockFileStream.getLength).toHaveBeenCalled();
+            expect(res).toBe(99);
+        });
+
+        it("getFileStreamLen should return 0 for empty stream", async () => {
+            mockFileStream.getLength.mockResolvedValue(0);
+            const res = await ctx.getFileStreamLen();
+            expect(res).toBe(0);
         });
     });
 
