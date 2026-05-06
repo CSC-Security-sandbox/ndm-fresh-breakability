@@ -1159,37 +1159,41 @@ export async function waitForJobRunStatus(
 // ---------------------------------------------------------------------------
 
 async function selectAllTableRows(page: Page) {
-  // BXP tables render checkboxes with role="checkbox" or as custom elements.
-  // The first checkbox on the page (in the header row) is the "select all" checkbox.
+  // BXP table header checkbox opens a dropdown with "Select this page",
+  // "Select all pages", and "Clear all". Click the checkbox then pick
+  // "Select all pages" from the dropdown.
   const allCheckboxes = page.locator('[role="checkbox"], input[type="checkbox"]');
   const count = await allCheckboxes.count();
   console.log(`[selectAll] Found ${count} checkboxes on page`);
 
   if (count > 0) {
-    // First checkbox is typically the "select all" in the header
     const selectAll = allCheckboxes.first();
-    const isChecked = (await selectAll.getAttribute("aria-checked")) === "true" ||
-      (await selectAll.isChecked().catch(() => false));
-    if (!isChecked) {
-      await selectAll.click();
-      console.log("[selectAll] Clicked select-all checkbox");
+    await selectAll.click();
+    console.log("[selectAll] Clicked header checkbox — looking for dropdown");
+    await page.waitForTimeout(1_000);
+
+    // BXP shows a dropdown menu — click "Select all pages" to select everything
+    const selectAllPages = page.getByText("Select all pages");
+    if (await selectAllPages.isVisible().catch(() => false)) {
+      await selectAllPages.click();
+      console.log("[selectAll] Clicked 'Select all pages' from dropdown");
       await page.waitForTimeout(1_000);
+      return;
     }
+
+    // Fallback: try "Select this page" if "Select all pages" not available
+    const selectThisPage = page.getByText("Select this page");
+    if (await selectThisPage.isVisible().catch(() => false)) {
+      await selectThisPage.click();
+      console.log("[selectAll] Clicked 'Select this page' from dropdown");
+      await page.waitForTimeout(1_000);
+      return;
+    }
+
+    // If no dropdown appeared, the click itself may have toggled selection
+    console.log("[selectAll] No dropdown appeared — checkbox click may have toggled directly");
     return;
   }
 
-  // Fallback: use page.evaluate to find and click the first checkbox-like element
-  const clicked = await page.evaluate(() => {
-    const el = document.querySelector('[class*="checkbox" i], [class*="Checkbox"]');
-    if (el) {
-      el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      return true;
-    }
-    return false;
-  });
-  if (clicked) {
-    console.log("[selectAll] Clicked checkbox via class selector fallback");
-  } else {
-    console.log("[selectAll] No checkboxes found on page");
-  }
+  console.log("[selectAll] No checkboxes found on page");
 }
