@@ -6,19 +6,22 @@ import path from "path";
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 /**
- * Live-mode Playwright config — runs tests against a real deployed CP.
+ * Live-mode Playwright config — runs tests against an NDM instance.
+ *
+ * Defaults to local Docker Compose setup (http://localhost:3111).
+ * Override BASE_URL to target a remote CP instead.
  *
  * Setup:
- *   cp .env.example .env   # then fill in your CP details
+ *   cp .env.example .env   # defaults work for local Docker
  *   npm run test:live:headed
  *
  * Environment variables can also be passed inline (they override .env):
  *   BASE_URL=https://172.30.205.220 npm run test:live:headed
  *
  * Required:
- *   BASE_URL          — CP URL, e.g. https://172.30.205.220
- *   NDM_TEST_USER     — Keycloak username
- *   NDM_TEST_PASSWORD — Keycloak password
+ *   BASE_URL          — CP URL (default: http://localhost:3111)
+ *   NDM_TEST_USER     — Keycloak username (default: admin@datamigrator.local)
+ *   NDM_TEST_PASSWORD — Keycloak password (default: welcome)
  *
  * For file server / discovery tests:
  *   SOURCE_HOST         — Source filer IP
@@ -36,7 +39,7 @@ export default defineConfig({
   reporter: [["html", { open: "never" }], ["list"]],
 
   use: {
-    baseURL: process.env.BASE_URL || "https://172.30.205.240",
+    baseURL: process.env.BASE_URL || "http://localhost:3111",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     ignoreHTTPSErrors: true,

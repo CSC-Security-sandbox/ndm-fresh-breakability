@@ -68,15 +68,9 @@ test.describe("Home Page", () => {
       '[data-testid="ps-sidebar-container-test-id"]'
     );
     await sidebar.hover();
-    await page.waitForTimeout(1_000);
+    await page.waitForTimeout(800);
 
-    const storageServersItem = sidebar
-      .locator("nav li")
-      .filter({ hasText: "Storage Servers" });
-    await storageServersItem.hover();
-    await storageServersItem.click();
-    await page.waitForTimeout(500);
-
+    await sidebar.getByText("Storage Servers").click();
     await sidebar.getByText("File Servers").click();
 
     await expect(page).toHaveURL(/\/file-server/);
@@ -93,16 +87,9 @@ test.describe("Home Page", () => {
       '[data-testid="ps-sidebar-container-test-id"]'
     );
     await sidebar.hover();
-    await page.waitForTimeout(1_000);
+    await page.waitForTimeout(800);
 
-    // The sidebar has an animation that can make elements "not stable".
-    // Re-hover to keep it expanded, then use the nav listitem to avoid
-    // matching the dashboard "Jobs" card heading.
-    const jobsNavItem = sidebar.locator("nav li").filter({ hasText: "Jobs" });
-    await jobsNavItem.hover();
-    await jobsNavItem.click();
-    await page.waitForTimeout(500);
-
+    await sidebar.getByText("Jobs", { exact: true }).click();
     await sidebar.getByText("Job Config List").click();
 
     await expect(page).toHaveURL(/\/jobs-list/);

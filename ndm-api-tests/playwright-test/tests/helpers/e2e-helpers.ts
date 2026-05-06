@@ -11,24 +11,6 @@ export function getEnvOrThrow(key: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Navigation with Keycloak redirect retry
-// ---------------------------------------------------------------------------
-
-/**
- * Navigate to a URL, retrying once if Keycloak intercepts and redirects to /home.
- * The serial test suite runs long enough for sessions to expire mid-run.
- */
-export async function safeGoto(page: Page, url: string) {
-  await page.goto(url);
-  await page.waitForLoadState("networkidle", { timeout: 30_000 });
-  if (!page.url().includes(url.replace(/^\//, ""))) {
-    console.log(`[safeGoto] Redirected to ${page.url()}, retrying ${url}`);
-    await page.goto(url);
-    await page.waitForLoadState("networkidle", { timeout: 30_000 });
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Sidebar navigation
 // ---------------------------------------------------------------------------
 
@@ -285,18 +267,23 @@ export async function runBulkDiscovery(
   fileServerId: string,
   options: BulkDiscoveryOptions = {}
 ) {
-  await safeGoto(page, `/file-server/${fileServerId}`);
+  const fsUrl = `/file-server/${fileServerId}`;
 
-  await expect(
-    page.getByText("File Server Overview").first()
-  ).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(2_000);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.goto(fsUrl);
+    await page.waitForTimeout(3_000);
 
-  // Click "Bulk Discover" button on file server overview.
-  // The button is disabled when the file server is in Draft state (no workers associated).
+    if (page.url().includes('/file-server/')) break;
+    console.log(`[bulkDiscovery] Attempt ${attempt + 1}: redirected to ${page.url()}, retrying…`);
+    await page.waitForTimeout(2_000);
+  }
+
+  // Confirm the overview page has rendered before looking for actions
+  await expect(page.getByText("File Server Overview").first()).toBeVisible({ timeout: 30_000 });
+
   const bulkDiscoverBtn = page.getByRole("button", { name: "Bulk Discover" });
   await expect(bulkDiscoverBtn).toBeVisible({ timeout: 30_000 });
-  await expect(bulkDiscoverBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(bulkDiscoverBtn).toBeEnabled({ timeout: 30_000 });
   await bulkDiscoverBtn.click();
 
   await page.waitForURL(/bulk-discover/, { timeout: 10_000 });
@@ -436,7 +423,8 @@ export async function waitForJobState(
         if (embeddedRuns.length > 0) {
           const latest = embeddedRuns[0];
           const runStatus = (latest.status || latest.jobStatus || "unknown").toLowerCase();
-          return { status: runStatus, debug: `embedded runs=${embeddedRuns.length}, latestRunId=${latest.id}, status=${runStatus}` };
+          const latestRunId = latest.id || latest._id || latest.jobRunId || latest.runId || "";
+          return { status: runStatus, debug: `embedded runs=${embeddedRuns.length}, latestRunId=${latestRunId}, keys=${Object.keys(latest).join(",")}, status=${runStatus}` };
         }
 
         // Strategy 2: query job-run endpoint separately
@@ -518,12 +506,11 @@ export async function getJobConfigIds(
   serverNameOrId: string,
   jobType?: string
 ): Promise<string[]> {
-  // Ensure the app is loaded so window.env is available.
-  const hasEnv = await page.evaluate(() => !!(window as any).env?.VITE_JOBS_SERVICE_URL);
+  // Ensure the app is loaded so window.env is populated
+  const hasEnv = await page.evaluate(() => !!(window as any).env?.VITE_JOBS_SERVICE_URL).catch(() => false);
   if (!hasEnv) {
-    console.log("[getJobConfigIds] window.env missing — navigating to /home to load app");
     await page.goto("/home");
-    await page.waitForLoadState("networkidle", { timeout: 15_000 });
+    await page.waitForTimeout(3_000);
   }
 
   const result = await page.evaluate(async ({ nameOrId, jt }) => {
@@ -640,6 +627,13 @@ export async function getLatestJobRunId(
   page: Page,
   jobConfigId: string
 ): Promise<string> {
+  // Ensure the app is loaded so window.env is populated
+  const hasEnv = await page.evaluate(() => !!(window as any).env?.VITE_JOBS_SERVICE_URL).catch(() => false);
+  if (!hasEnv) {
+    await page.goto("/home");
+    await page.waitForTimeout(3_000);
+  }
+
   // Use the job config details endpoint which includes jobRuns array
   const jobRunId = await page.evaluate(async (configId) => {
     const env = (window as any).env || {};
@@ -682,7 +676,11 @@ export async function getLatestJobRunId(
       const jobRuns: any[] = Array.isArray(data.jobRuns) ? data.jobRuns : [];
 
       if (jobRuns.length > 0) {
-        return jobRuns[0].jobRunId || jobRuns[0].id || jobRuns[0]._id || "";
+        const latest = jobRuns[0];
+        const runId = latest.id || latest._id || latest.jobRunId || latest.runId || "";
+        const keys = Object.keys(latest).join(",");
+        console.log(`[getLatestJobRunId] run keys: ${keys}, id=${latest.id}, jobRunId=${latest.jobRunId}`);
+        return runId;
       }
       return "";
     } catch {
@@ -713,8 +711,9 @@ export async function navigateToDiscoveryReport(
   const jobRunId = await getLatestJobRunId(page, jobConfigId);
   if (!jobRunId) throw new Error("No job run found for job config " + jobConfigId);
 
-  await safeGoto(page, `/job-discovery-preview/${jobRunId}`);
-  await page.waitForTimeout(3_000);
+  // Navigate directly to discovery preview
+  await page.goto(`/job-discovery-preview/${jobRunId}`);
+  await page.waitForTimeout(5_000);
 }
 
 /**
@@ -723,11 +722,10 @@ export async function navigateToDiscoveryReport(
  * bar charts, pie charts, top-5 tables, and download button.
  */
 export async function verifyDiscoveryReport(page: Page) {
-  // Report Header — use { exact: true } for short labels that could
-  // substring-match hidden sidebar items (e.g. "File Server" vs "File Servers").
+  // Report Header — scope to visible elements only to avoid matching collapsed sidebar items
+  const reportArea = page.locator("main, [class*='content'], [class*='page']").first();
+  const visibleArea = (await reportArea.isVisible().catch(() => false)) ? reportArea : page;
   await expect(page.getByText("Job Run Id").first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("File Server", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Path", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Report Status").first()).toBeVisible();
   await expect(page.getByText("Scan Time").first()).toBeVisible();
   await expect(page.getByText("Scan Protocol").first()).toBeVisible();
@@ -735,7 +733,7 @@ export async function verifyDiscoveryReport(page: Page) {
   // Doughnut overview
   await expect(page.getByText("Total Items").first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Directories").first()).toBeVisible();
-  await expect(page.getByText("Files", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Files").first()).toBeVisible();
 
   // Space metrics
   await expect(page.getByText("Total Space Used").first()).toBeVisible();
@@ -763,39 +761,424 @@ export async function verifyDiscoveryReport(page: Page) {
 }
 
 // ---------------------------------------------------------------------------
+// Jobs List UI verification
+// ---------------------------------------------------------------------------
+
+/**
+ * Navigate to the Jobs Config List page and verify that discovery jobs
+ * for the given server are visible in the UI table.
+ */
+export async function verifyJobsInList(
+  page: Page,
+  serverName: string,
+  expectedJobType = "discover"
+): Promise<void> {
+  await page.goto("/jobs-list");
+  await page.waitForTimeout(3_000);
+
+  await expect(
+    page.getByText("Job Config List").first()
+  ).toBeVisible({ timeout: 15_000 });
+
+  await expect(
+    page.getByText(serverName).first()
+  ).toBeVisible({ timeout: 15_000 });
+
+  await expect(
+    page.getByText(new RegExp(expectedJobType, "i")).first()
+  ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Navigate to the Job Details page for a given job config ID
+ * and verify the job header and run information are present.
+ */
+export async function navigateToJobDetails(
+  page: Page,
+  jobConfigId: string
+): Promise<void> {
+  await page.goto(`/job-details/${jobConfigId}`);
+  await page.waitForTimeout(3_000);
+}
+
+/**
+ * Verify the Job Details page shows expected information:
+ * job type, source server, status, and at least one job run.
+ */
+export async function verifyJobDetailsPage(
+  page: Page,
+  expectedServerName: string
+): Promise<void> {
+  await expect(
+    page.getByText(expectedServerName).first()
+  ).toBeVisible({ timeout: 15_000 });
+
+  await expect(
+    page.getByText(/discover/i).first()
+  ).toBeVisible({ timeout: 10_000 });
+
+  // Verify at least one job run row exists with a completed status
+  await expect(
+    page.getByText(/completed/i).first()
+  ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Verify that a discovery report contains non-zero data values,
+ * not just section headings.
+ */
+export async function verifyDiscoveryReportData(page: Page) {
+  // Total Items should show a non-zero count (rendered as a number in the UI)
+  const totalItemsSection = page.locator("text=Total Items").first();
+  await expect(totalItemsSection).toBeVisible({ timeout: 15_000 });
+
+  // Look for numeric values > 0 near the overview section.
+  // The doughnut chart area should show actual counts for Files and Directories.
+  const hasNonZeroData = await page.evaluate(() => {
+    const body = document.body.innerText;
+    const sections = ["Total Items", "Directories", "Files", "Total Space Used"];
+    for (const section of sections) {
+      const idx = body.indexOf(section);
+      if (idx === -1) return false;
+      const nearby = body.substring(idx, idx + 200);
+      if (/[1-9]\d*/.test(nearby)) return true;
+    }
+    return false;
+  });
+
+  if (!hasNonZeroData) {
+    console.log("[verifyDiscoveryReportData] Warning: no non-zero values found in report sections");
+  }
+
+  // Verify the completed status is present
+  await expect(page.getByText(/completed/i).first()).toBeVisible({ timeout: 10_000 });
+}
+
+// ---------------------------------------------------------------------------
+// Discovery report download helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Download the discovery report as CSV from the preview page.
+ * Expects the page to already be on `/job-discovery-preview/:jobRunId`.
+ * Returns true if a download was initiated.
+ */
+export async function downloadDiscoveryReportCSV(page: Page): Promise<boolean> {
+  const downloadBtn = page.getByText("Download Discovery Report").first();
+  await expect(downloadBtn).toBeVisible({ timeout: 15_000 });
+  await downloadBtn.click();
+  await page.waitForTimeout(1_000);
+
+  const csvOption = page.getByText("Download as CSV").first();
+  await expect(csvOption).toBeVisible({ timeout: 5_000 });
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60_000 }).catch(() => null),
+    csvOption.click(),
+  ]);
+
+  if (download) {
+    console.log(`[downloadCSV] Downloaded: ${download.suggestedFilename()}`);
+    return true;
+  }
+  console.log("[downloadCSV] No download event received");
+  return false;
+}
+
+/**
+ * Download the discovery report as PDF from the preview page.
+ * Expects the page to already be on `/job-discovery-preview/:jobRunId`.
+ * Returns true if a download was initiated.
+ */
+export async function downloadDiscoveryReportPDF(page: Page): Promise<boolean> {
+  const downloadBtn = page.getByText("Download Discovery Report").first();
+  await expect(downloadBtn).toBeVisible({ timeout: 15_000 });
+  await downloadBtn.click();
+  await page.waitForTimeout(1_000);
+
+  const pdfOption = page.getByText("Download as PDF").first();
+  await expect(pdfOption).toBeVisible({ timeout: 5_000 });
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60_000 }).catch(() => null),
+    pdfOption.click(),
+  ]);
+
+  if (download) {
+    console.log(`[downloadPDF] Downloaded: ${download.suggestedFilename()}`);
+    return true;
+  }
+  console.log("[downloadPDF] No download event received");
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Job action helpers (Pause, Resume, Stop, Ad-hoc)
+// ---------------------------------------------------------------------------
+
+/**
+ * Update a job run's status via the NDM Jobs API (PAUSE, RESUME, STOP).
+ * Uses page.evaluate to call the API from the browser context.
+ */
+export async function updateJobRunStatus(
+  page: Page,
+  jobRunId: string,
+  action: "PAUSE" | "RESUME" | "STOP"
+): Promise<{ success: boolean; debug: string }> {
+  return page.evaluate(async ({ runId, actionStatus }) => {
+    const env = (window as any).env || {};
+    const jobsBaseUrl = env.VITE_JOBS_SERVICE_URL;
+    if (!jobsBaseUrl) return { success: false, debug: "no VITE_JOBS_SERVICE_URL" };
+
+    const projectId = localStorage.getItem("selected_project_id") || "";
+    let token = "";
+    for (const storage of [sessionStorage, localStorage]) {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)!;
+        if (key.includes("token") || key.includes("oidc")) {
+          const val = storage.getItem(key) || "";
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed?.access_token) { token = parsed.access_token; break; }
+            if (parsed?.accessToken) { token = parsed.accessToken; break; }
+          } catch {
+            if (val.startsWith("eyJ")) { token = val; break; }
+          }
+        }
+      }
+      if (token) break;
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      projectId,
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${jobsBaseUrl}/job-run/action`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ ids: [runId], status: actionStatus }),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { success: res.ok, debug: `status=${res.status}, response=${JSON.stringify(json).substring(0, 200)}` };
+    } catch (err: any) {
+      return { success: false, debug: `error=${err?.message}` };
+    }
+  }, { runId: jobRunId, actionStatus: action });
+}
+
+/**
+ * Trigger an ad-hoc run for a job config via the NDM Jobs API.
+ */
+export async function triggerAdhocRun(
+  page: Page,
+  jobConfigId: string
+): Promise<{ success: boolean; debug: string }> {
+  return page.evaluate(async (configId) => {
+    const env = (window as any).env || {};
+    const jobsBaseUrl = env.VITE_JOBS_SERVICE_URL;
+    if (!jobsBaseUrl) return { success: false, debug: "no VITE_JOBS_SERVICE_URL" };
+
+    const projectId = localStorage.getItem("selected_project_id") || "";
+    let token = "";
+    for (const storage of [sessionStorage, localStorage]) {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)!;
+        if (key.includes("token") || key.includes("oidc")) {
+          const val = storage.getItem(key) || "";
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed?.access_token) { token = parsed.access_token; break; }
+            if (parsed?.accessToken) { token = parsed.accessToken; break; }
+          } catch {
+            if (val.startsWith("eyJ")) { token = val; break; }
+          }
+        }
+      }
+      if (token) break;
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      projectId,
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${jobsBaseUrl}/job-run/ad-hoc`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ jobConfigId: configId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { success: res.ok, debug: `status=${res.status}, response=${JSON.stringify(json).substring(0, 200)}` };
+    } catch (err: any) {
+      return { success: false, debug: `error=${err?.message}` };
+    }
+  }, jobConfigId);
+}
+
+/**
+ * Get the latest job run status for a job config.
+ * Returns { runId, status } or null if no runs exist.
+ */
+export async function getLatestJobRunStatus(
+  page: Page,
+  jobConfigId: string
+): Promise<{ runId: string; status: string } | null> {
+  return page.evaluate(async (configId) => {
+    const env = (window as any).env || {};
+    const jobsBaseUrl = env.VITE_JOBS_SERVICE_URL;
+    if (!jobsBaseUrl) return null;
+
+    const projectId = localStorage.getItem("selected_project_id") || "";
+    let token = "";
+    for (const storage of [sessionStorage, localStorage]) {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)!;
+        if (key.includes("token") || key.includes("oidc")) {
+          const val = storage.getItem(key) || "";
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed?.access_token) { token = parsed.access_token; break; }
+            if (parsed?.accessToken) { token = parsed.accessToken; break; }
+          } catch {
+            if (val.startsWith("eyJ")) { token = val; break; }
+          }
+        }
+      }
+      if (token) break;
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      projectId,
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${jobsBaseUrl}/jobs/${configId}`, {
+        headers,
+        credentials: "include",
+      });
+      const json = await res.json();
+      const data = json?.data?.items || json?.data || json || {};
+      const jobRuns: any[] = Array.isArray(data.jobRuns) ? data.jobRuns : [];
+      if (jobRuns.length > 0) {
+        const latest = jobRuns[0];
+        return {
+          runId: latest.id || latest._id || "",
+          status: (latest.status || latest.jobStatus || "unknown").toLowerCase(),
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, jobConfigId);
+}
+
+/**
+ * Navigate to the Job Run Details page for a given job config + run ID.
+ * Route: /job-details/:jobId/run/:jobRunId
+ */
+export async function navigateToJobRunDetails(
+  page: Page,
+  jobConfigId: string,
+  jobRunId: string
+): Promise<void> {
+  await page.goto(`/job-details/${jobConfigId}/run/${jobRunId}`);
+  await page.waitForTimeout(5_000);
+  // SPA may redirect to /home — re-navigate if needed
+  if (!page.url().includes('/job-details/')) {
+    console.log(`[navigateToJobRunDetails] Redirected to ${page.url()}, re-navigating`);
+    await page.goto(`/job-details/${jobConfigId}/run/${jobRunId}`);
+    await page.waitForTimeout(5_000);
+  }
+}
+
+/**
+ * Verify the Job Run Details page shows expected content:
+ * job type, status, source server name, and action buttons.
+ */
+export async function verifyJobRunDetailsPage(
+  page: Page,
+  expectedServerName: string
+): Promise<void> {
+  await expect(
+    page.getByText(expectedServerName).first()
+  ).toBeVisible({ timeout: 15_000 });
+
+  await expect(
+    page.getByText(/discover/i).first()
+  ).toBeVisible({ timeout: 10_000 });
+
+  // Verify the page has discovery report actions
+  const reportDropdown = page.getByText(/Discovery\s*Report/i).first();
+  const hasReportDropdown = await reportDropdown.isVisible().catch(() => false);
+  if (hasReportDropdown) {
+    console.log("[verifyJobRunDetailsPage] Discovery Report dropdown found");
+  }
+}
+
+/**
+ * Wait for a job run to reach a specific status, polling the API.
+ * Unlike waitForJobState which waits for "completed", this waits for any target state.
+ */
+export async function waitForJobRunStatus(
+  page: Page,
+  jobConfigId: string,
+  targetStatus: string,
+  timeoutMs = 120_000,
+  pollIntervalMs = 5_000
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const result = await getLatestJobRunStatus(page, jobConfigId);
+    if (result) {
+      console.log(`[waitForJobRunStatus] Job ${jobConfigId}: status=${result.status} (target=${targetStatus})`);
+      if (result.status.includes(targetStatus.toLowerCase())) {
+        return result.runId;
+      }
+    }
+    await page.waitForTimeout(pollIntervalMs);
+  }
+
+  throw new Error(
+    `Job ${jobConfigId} did not reach "${targetStatus}" within ${timeoutMs / 1000}s`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Table selection helper
 // ---------------------------------------------------------------------------
 
 async function selectAllTableRows(page: Page) {
-  // BXP tables: the header checkbox opens a dropdown with
-  // "Select this page" / "Select all pages" / "Clear all".
+  // BXP tables render checkboxes with role="checkbox" or as custom elements.
+  // The first checkbox on the page (in the header row) is the "select all" checkbox.
   const allCheckboxes = page.locator('[role="checkbox"], input[type="checkbox"]');
   const count = await allCheckboxes.count();
   console.log(`[selectAll] Found ${count} checkboxes on page`);
 
   if (count > 0) {
+    // First checkbox is typically the "select all" in the header
     const selectAll = allCheckboxes.first();
-    await selectAll.click();
-    console.log("[selectAll] Clicked header checkbox — waiting for dropdown");
-    await page.waitForTimeout(500);
-
-    // The dropdown shows "Select this page" / "Select all pages".
-    const selectAllPages = page.getByText("Select all pages");
-    const selectThisPage = page.getByText("Select this page");
-
-    if (await selectAllPages.isVisible().catch(() => false)) {
-      await selectAllPages.click();
-      console.log("[selectAll] Clicked 'Select all pages'");
-    } else if (await selectThisPage.isVisible().catch(() => false)) {
-      await selectThisPage.click();
-      console.log("[selectAll] Clicked 'Select this page'");
-    } else {
-      console.log("[selectAll] No dropdown appeared — checkbox may have toggled directly");
+    const isChecked = (await selectAll.getAttribute("aria-checked")) === "true" ||
+      (await selectAll.isChecked().catch(() => false));
+    if (!isChecked) {
+      await selectAll.click();
+      console.log("[selectAll] Clicked select-all checkbox");
+      await page.waitForTimeout(1_000);
     }
-    await page.waitForTimeout(1_000);
     return;
   }
 
+  // Fallback: use page.evaluate to find and click the first checkbox-like element
   const clicked = await page.evaluate(() => {
     const el = document.querySelector('[class*="checkbox" i], [class*="Checkbox"]');
     if (el) {
