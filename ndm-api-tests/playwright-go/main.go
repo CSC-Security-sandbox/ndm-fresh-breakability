@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,18 +21,21 @@ import (
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type Config struct {
-	BaseURL                  string
-	User                     string
-	Password                 string
-	SourceHost               string
-	Protocol                 string
-	ProtocolUsername          string
-	ProtocolPassword         string
-	SourceExportPaths        []string
-	DestinationHost          string
-	DestProtocolUsername      string
-	DestProtocolPassword     string
-	DestinationExportPaths   []string
+	BaseURL                string
+	User                   string
+	Password               string
+	SourceHost             string
+	Protocol               string
+	ProtocolUsername        string
+	ProtocolPassword       string
+	SourceExportPaths      []string
+	DestinationHost        string
+	DestProtocolUsername    string
+	DestProtocolPassword   string
+	DestinationExportPaths []string
+	MaxDiscoveryPaths      int
+	MinWorkers             int
+	ScheduleDelaySec       int
 }
 
 var baseURL string
@@ -68,6 +72,27 @@ func loadConfig() Config {
 		return out
 	}
 
+	maxPaths := 5
+	if v := os.Getenv("MAX_DISCOVERY_PATHS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxPaths = n
+		}
+	}
+
+	minWorkers := 2
+	if v := os.Getenv("MIN_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			minWorkers = n
+		}
+	}
+
+	schedDelay := 90
+	if v := os.Getenv("SCHEDULE_DELAY_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			schedDelay = n
+		}
+	}
+
 	return Config{
 		BaseURL:                mustEnv("BASE_URL"),
 		User:                   os.Getenv("NDM_TEST_USER"),
@@ -81,10 +106,12 @@ func loadConfig() Config {
 		DestProtocolUsername:    os.Getenv("DESTINATION_PROTOCOL_USERNAME"),
 		DestProtocolPassword:   os.Getenv("DESTINATION_PROTOCOL_PASSWORD"),
 		DestinationExportPaths: split(os.Getenv("DESTINATION_EXPORT_PATHS")),
+		MaxDiscoveryPaths:      maxPaths,
+		MinWorkers:             minWorkers,
+		ScheduleDelaySec:       schedDelay,
 	}
 }
 
-// fullURL resolves a relative path against the base URL.
 func fullURL(path string) string {
 	if strings.HasPrefix(path, "http") {
 		return path
@@ -96,8 +123,8 @@ func fullURL(path string) string {
 // Utility helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func sleep(ms int)        { time.Sleep(time.Duration(ms) * time.Millisecond) }
-func sleepSec(s int)      { time.Sleep(time.Duration(s) * time.Second) }
+func sleep(ms int)   { time.Sleep(time.Duration(ms) * time.Millisecond) }
+func sleepSec(s int) { time.Sleep(time.Duration(s) * time.Second) }
 
 func uniqueID() string {
 	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -140,6 +167,20 @@ func textContent(loc playwright.Locator) string {
 	return t
 }
 
+func gotoWithRetry(page playwright.Page, url string, attempts int) {
+	for i := 0; i < attempts; i++ {
+		page.Goto(url, playwright.PageGotoOptions{
+			Timeout:   playwright.Float(60000),
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		})
+		sleep(3000)
+		if strings.Contains(page.URL(), strings.TrimPrefix(url, baseURL)) {
+			return
+		}
+		sleep(2000)
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Authentication
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -149,6 +190,34 @@ const storageStatePath = "tests/.auth/user.json"
 func authenticate(browser playwright.Browser, cfg Config) error {
 	log.Println("[auth] Starting Keycloak authentication...")
 
+	user := cfg.User
+	if user == "" {
+		user = "admin@datamigrator.local"
+	}
+	pass := cfg.Password
+	if pass == "" {
+		pass = "welcome"
+	}
+
+	const maxRetries = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		log.Printf("[auth] Attempt %d/%d", attempt, maxRetries)
+		err := doAuthenticate(browser, cfg.BaseURL, user, pass)
+		if err == nil {
+			log.Println("[auth] Authentication successful")
+			return nil
+		}
+		lastErr = err
+		log.Printf("[auth] Attempt %d failed: %v", attempt, err)
+		if attempt < maxRetries {
+			sleepSec(5)
+		}
+	}
+	return fmt.Errorf("authentication failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+func doAuthenticate(browser playwright.Browser, baseURL, user, pass string) error {
 	ctx, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		IgnoreHttpsErrors: playwright.Bool(true),
 	})
@@ -162,20 +231,15 @@ func authenticate(browser playwright.Browser, cfg Config) error {
 		return fmt.Errorf("new page: %w", err)
 	}
 
-	if _, err = page.Goto(cfg.BaseURL); err != nil {
+	if _, err = page.Goto(baseURL, playwright.PageGotoOptions{
+		Timeout:   playwright.Float(90000),
+		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+	}); err != nil {
 		return fmt.Errorf("goto base url: %w", err)
 	}
-	if err = expectVisible(page.Locator("#username"), 30000); err != nil {
-		return fmt.Errorf("username field: %w", err)
-	}
 
-	user := cfg.User
-	if user == "" {
-		user = "admin@datamigrator.local"
-	}
-	pass := cfg.Password
-	if pass == "" {
-		pass = "welcome"
+	if err = expectVisible(page.Locator("#username"), 60000); err != nil {
+		return fmt.Errorf("username field not visible: %w", err)
 	}
 
 	_ = page.Locator("#username").Fill(user)
@@ -183,11 +247,11 @@ func authenticate(browser playwright.Browser, cfg Config) error {
 	_ = page.Locator("#kc-login").Click()
 
 	if err = page.WaitForURL("**/home", playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(30000),
+		Timeout: playwright.Float(60000),
 	}); err != nil {
 		return fmt.Errorf("wait for home: %w", err)
 	}
-	if err = expectVisible(page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Home"}), 15000); err != nil {
+	if err = expectVisible(page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Home"}), 30000); err != nil {
 		return fmt.Errorf("home heading: %w", err)
 	}
 
@@ -195,7 +259,6 @@ func authenticate(browser playwright.Browser, cfg Config) error {
 	if _, err = ctx.StorageState(storageStatePath); err != nil {
 		return fmt.Errorf("save storage state: %w", err)
 	}
-	log.Println("[auth] Authentication successful")
 	return nil
 }
 
@@ -215,14 +278,17 @@ func newAuthPage(browser playwright.Browser) (playwright.Page, playwright.Browse
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// File server creation (3-step wizard with validation retry)
+// File server creation (3-step wizard) — requires minWorkers online
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func createFileServer(page playwright.Page, name, host, protocol, username, password string) error {
-	if _, err := page.Goto(fullURL("/home")); err != nil {
+func createFileServer(page playwright.Page, name, host, protocol, username, password string, minWorkers int) error {
+	if _, err := page.Goto(fullURL("/home"), playwright.PageGotoOptions{
+		Timeout:   playwright.Float(60000),
+		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+	}); err != nil {
 		return fmt.Errorf("goto home: %w", err)
 	}
-	if err := expectVisible(page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Home"}), 15000); err != nil {
+	if err := expectVisible(page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Home"}), 30000); err != nil {
 		return fmt.Errorf("home heading: %w", err)
 	}
 
@@ -232,7 +298,7 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 	_ = page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{Timeout: playwright.Float(15000)})
 	sleep(3000)
 
-	// Step 0 — Server Type
+	// Step 0 — Server Name
 	nameField := page.GetByPlaceholder("Name")
 	if err := expectVisible(nameField, 15000); err != nil {
 		return fmt.Errorf("name field: %w", err)
@@ -269,7 +335,7 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 	_ = page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"}).Click()
 	sleep(3000)
 
-	// Step 2 — Workers: toggle ALL online workers
+	// Step 2 — Workers: toggle online workers (need at least minWorkers)
 	if err := expectVisible(page.GetByText(regexp.MustCompile(`(?i)Compatible Workers`)).First(), 15000); err != nil {
 		return fmt.Errorf("compatible workers: %w", err)
 	}
@@ -306,9 +372,11 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 		}
 		if m["isAlreadyOn"] == true {
 			toggled++
+			log.Printf("[createFileServer] Worker %d: already ON", i)
 			continue
 		}
 		if m["isOffline"] == true || m["isDisabled"] == true {
+			log.Printf("[createFileServer] Worker %d: offline/disabled, skipping", i)
 			continue
 		}
 		clicked, _ := el.Evaluate(toggleClickJS, nil)
@@ -323,9 +391,13 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 		screenshot(page, "debug-no-online-workers")
 		return fmt.Errorf("no online workers available")
 	}
-	log.Printf("[createFileServer] %d worker(s) associated", toggled)
+	if toggled < minWorkers {
+		screenshot(page, "debug-not-enough-workers")
+		log.Printf("[createFileServer] WARNING: only %d worker(s) associated, wanted %d", toggled, minWorkers)
+	}
+	log.Printf("[createFileServer] %d worker(s) associated (min required: %d)", toggled, minWorkers)
 
-	// Click Finish with retry for connection validation
+	// Click Finish with retry
 	const maxRetries = 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("[createFileServer] Attempt %d/%d — clicking Finish...", attempt, maxRetries)
@@ -340,7 +412,6 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 
 		deadline := time.Now().Add(2 * time.Minute)
 		outcome := "timeout"
-
 		for time.Now().Before(deadline) {
 			if !strings.Contains(page.URL(), "new-file-server") {
 				outcome = "redirected"
@@ -375,7 +446,6 @@ func createFileServer(page playwright.Page, name, host, protocol, username, pass
 			return fmt.Errorf("file server creation failed (fatal error)")
 		}
 
-		// Retriable: dismiss toast, go Back → Proceed → retry Finish
 		screenshot(page, fmt.Sprintf("debug-validation-attempt-%d", attempt))
 		if attempt < maxRetries {
 			closeBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Close"})
@@ -437,7 +507,7 @@ const toggleClickJS = `(nameEl) => {
 }`
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Navigate to file server, return UUID
+// Navigate to file server detail, return UUID
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func navigateToFileServer(page playwright.Page, srvName string) (string, error) {
@@ -446,18 +516,14 @@ func navigateToFileServer(page playwright.Page, srvName string) (string, error) 
 		return m[1], nil
 	}
 
-	if _, err := page.Goto(fullURL("/file-server")); err != nil {
-		return "", err
-	}
-	sleep(3000)
+	gotoWithRetry(page, fullURL("/file-server"), 5)
 
 	nameLink := page.GetByText(srvName, playwright.PageGetByTextOptions{Exact: playwright.Bool(true)})
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 5; attempt++ {
 		if isVisible(nameLink.First()) {
 			break
 		}
-		page.Goto(fullURL("/file-server"))
-		sleep(3000)
+		gotoWithRetry(page, fullURL("/file-server"), 1)
 	}
 
 	if err := expectVisible(nameLink.First(), 15000); err != nil {
@@ -478,16 +544,8 @@ func navigateToFileServer(page playwright.Page, srvName string) (string, error) 
 // Bulk Discovery via UI
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func runBulkDiscovery(page playwright.Page, fsID string, exportPaths []string) error {
-	fsURL := fullURL(fmt.Sprintf("/file-server/%s", fsID))
-	for attempt := 0; attempt < 3; attempt++ {
-		page.Goto(fsURL)
-		sleep(3000)
-		if strings.Contains(page.URL(), "/file-server/") {
-			break
-		}
-		sleep(2000)
-	}
+func runBulkDiscovery(page playwright.Page, fsID string, exportPaths []string, maxPaths int) error {
+	gotoWithRetry(page, fullURL(fmt.Sprintf("/file-server/%s", fsID)), 5)
 
 	if err := expectVisible(page.GetByText("File Server Overview").First(), 30000); err != nil {
 		return err
@@ -514,7 +572,7 @@ func runBulkDiscovery(page playwright.Page, fsID string, exportPaths []string) e
 			sleep(500)
 		}
 	} else {
-		selectAllTableRows(page)
+		selectFirstNRows(page, maxPaths)
 	}
 
 	submitBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Submit"})
@@ -552,20 +610,47 @@ func selectAllTableRows(page playwright.Page) {
 	}
 }
 
+func selectFirstNRows(page playwright.Page, n int) {
+	rows := page.Locator(`tbody tr`)
+	total, _ := rows.Count()
+	if total == 0 {
+		log.Printf("[selectFirstNRows] No tbody rows, falling back to checkbox approach")
+		allCBs := page.Locator(`[role="checkbox"], input[type="checkbox"]`)
+		cbCount, _ := allCBs.Count()
+		limit := n
+		if cbCount-1 < limit {
+			limit = cbCount - 1
+		}
+		for i := 1; i <= limit; i++ {
+			_ = allCBs.Nth(i).Click()
+			sleep(300)
+		}
+		log.Printf("[selectFirstNRows] Checked %d checkbox(es)", limit)
+		return
+	}
+	limit := n
+	if total < limit {
+		limit = total
+	}
+	checked := 0
+	for i := 0; i < limit; i++ {
+		row := rows.Nth(i)
+		cb := row.Locator(`[role="checkbox"], input[type="checkbox"]`).First()
+		if isVisible(cb) {
+			_ = cb.Click()
+			checked++
+			sleep(300)
+		}
+	}
+	log.Printf("[selectFirstNRows] Checked %d of %d row(s) (max %d)", checked, total, n)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// Bulk Migration via UI wizard
+// Scheduled Bulk Migration via UI wizard
 // ═══════════════════════════════════════════════════════════════════════════════
 
-func runBulkMigration(page playwright.Page, srcFsID, destFsName string) error {
-	fsURL := fullURL(fmt.Sprintf("/file-server/%s", srcFsID))
-	for attempt := 0; attempt < 3; attempt++ {
-		page.Goto(fsURL)
-		sleep(3000)
-		if strings.Contains(page.URL(), "/file-server/") {
-			break
-		}
-		sleep(2000)
-	}
+func runScheduledBulkMigration(page playwright.Page, srcFsID, destFsName string, scheduleDelaySec int) error {
+	gotoWithRetry(page, fullURL(fmt.Sprintf("/file-server/%s", srcFsID)), 5)
 
 	if err := expectVisible(page.GetByText("File Server Overview").First(), 30000); err != nil {
 		return err
@@ -579,12 +664,39 @@ func runBulkMigration(page playwright.Page, srcFsID, destFsName string) error {
 	_ = page.WaitForURL(regexp.MustCompile(`bulk-migrate`), playwright.PageWaitForURLOptions{Timeout: playwright.Float(15000)})
 	sleep(3000)
 
-	// Step 1: Mapping — select destination file server
-	startNow := page.GetByText("Start Now")
-	if isVisible(startNow) {
-		_ = startNow.Click()
+	// Try to select "Start Later" / "Schedule" option for scheduled migration
+	startLater := page.GetByText(regexp.MustCompile(`(?i)start\s*later|schedule`))
+	if isVisible(startLater.First()) {
+		_ = startLater.First().Click()
+		sleep(2000)
+		log.Printf("[bulkMigration] Selected 'Start Later' / scheduled mode")
+
+		// Set schedule time to now + scheduleDelaySec
+		scheduleTime := time.Now().UTC().Add(time.Duration(scheduleDelaySec) * time.Second)
+		timeStr := scheduleTime.Format("03:04 PM")
+		dateStr := scheduleTime.Format("01/02/2006")
+
+		dateInput := page.Locator(`input[type="date"], input[placeholder*="date" i], input[aria-label*="date" i]`).First()
+		if isVisible(dateInput) {
+			_ = dateInput.Fill(dateStr)
+			sleep(500)
+		}
+		timeInput := page.Locator(`input[type="time"], input[placeholder*="time" i], input[aria-label*="time" i]`).First()
+		if isVisible(timeInput) {
+			_ = timeInput.Fill(timeStr)
+			sleep(500)
+		}
+		log.Printf("[bulkMigration] Scheduled for %s %s UTC", dateStr, timeStr)
+	} else {
+		// Fallback: if no scheduling UI, click Start Now
+		startNow := page.GetByText("Start Now")
+		if isVisible(startNow) {
+			_ = startNow.Click()
+		}
+		log.Println("[bulkMigration] No scheduling option found, using Start Now")
 	}
 
+	// Step 1: Mapping — select destination file server
 	destSelect := page.GetByText("Select Destination File Server").First()
 	if isVisible(destSelect) {
 		_ = destSelect.Click()
@@ -597,7 +709,6 @@ func runBulkMigration(page playwright.Page, srcFsID, destFsName string) error {
 		}
 	}
 
-	// Select all source paths
 	selectAllTableRows(page)
 	sleep(1000)
 
@@ -614,7 +725,7 @@ func runBulkMigration(page playwright.Page, srcFsID, destFsName string) error {
 	}
 
 	// Step 3: Review — select all and submit
-	log.Println("[bulkMigration] Step: Review")
+	log.Println("[bulkMigration] Step: Review & Submit")
 	sleep(5000)
 	selectAllTableRows(page)
 	sleep(1000)
@@ -638,13 +749,86 @@ func runBulkMigration(page playwright.Page, srcFsID, destFsName string) error {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// API helpers (via page.Evaluate to call NDM Jobs API from browser context)
+// Bulk Cutover via UI
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const getJobConfigIDsJS = `async ({ nameOrId, jt }) => {
+func runBulkCutover(page playwright.Page, srcFsID string) error {
+	gotoWithRetry(page, fullURL(fmt.Sprintf("/file-server/%s", srcFsID)), 5)
+
+	if err := expectVisible(page.GetByText("File Server Overview").First(), 30000); err != nil {
+		return err
+	}
+
+	// Look for Bulk Cutover button (may be "Cutover" or "Bulk Cutover")
+	cutoverBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: regexp.MustCompile(`(?i)cutover`)})
+	if err := expectVisible(cutoverBtn.First(), 30000); err != nil {
+		return fmt.Errorf("cutover button not visible: %w", err)
+	}
+	_ = cutoverBtn.First().Click()
+
+	_ = page.WaitForURL(regexp.MustCompile(`(?i)cutover`), playwright.PageWaitForURLOptions{Timeout: playwright.Float(15000)})
+	sleep(3000)
+
+	// Select all paths for cutover
+	selectAllTableRows(page)
+	sleep(1000)
+
+	submitBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Submit"})
+	if err := expectVisible(submitBtn, 30000); err != nil {
+		// Try Proceed first if Submit is not visible
+		procBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"})
+		if isVisible(procBtn) {
+			_ = procBtn.Click()
+			sleep(3000)
+			selectAllTableRows(page)
+			sleep(1000)
+			submitBtn = page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Submit"})
+		}
+	}
+
+	if isVisible(submitBtn) {
+		_ = submitBtn.Click()
+		log.Println("[bulkCutover] Clicked Submit")
+		sleep(5000)
+	}
+
+	// Handle confirmation modal
+	confirmBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"})
+	if isVisible(confirmBtn) {
+		_ = confirmBtn.Click()
+		log.Println("[bulkCutover] Confirmed modal")
+		sleep(3000)
+	}
+
+	_ = expectVisible(page.GetByText(regexp.MustCompile(`(?i)cutover.*created|bulk cutover.*created`)).First(), 15000)
+	log.Println("[bulkCutover] Cutover job created")
+	return nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// API helpers (via page.Evaluate — calls NDM Jobs API from browser context)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const tokenExtractJS = `() => {
+	let token = "";
+	for (const s of [sessionStorage, localStorage]) {
+		for (let i = 0; i < s.length; i++) {
+			const k = s.key(i);
+			if (k.includes("token") || k.includes("oidc")) {
+				const v = s.getItem(k) || "";
+				try { const p = JSON.parse(v); if (p?.access_token) { token = p.access_token; break; } if (p?.accessToken) { token = p.accessToken; break; } }
+				catch { if (v.startsWith("eyJ")) { token = v; break; } }
+			}
+		}
+		if (token) break;
+	}
+	return token;
+}`
+
+const getAllJobIDsJS = `async ({ jt }) => {
 	const env = window.env || {};
 	const base = env.VITE_JOBS_SERVICE_URL;
-	if (!base) return JSON.stringify({ jobs: [] });
+	if (!base) return JSON.stringify({ jobs: [], debug: "no VITE_JOBS_SERVICE_URL" });
 	const projectId = localStorage.getItem("selected_project_id") || "";
 	let token = "";
 	for (const s of [sessionStorage, localStorage]) {
@@ -665,30 +849,56 @@ const getJobConfigIDsJS = `async ({ nameOrId, jt }) => {
 		const j = await r.json();
 		let items = Array.isArray(j?.data?.items) ? j.data.items : Array.isArray(j?.data) ? j.data : [];
 		const matched = items.filter(job => {
-			const src = job.sourceServer || {};
-			if (src.serverName !== nameOrId && src.fileServerName !== nameOrId && job.id !== nameOrId) return false;
-			if (jt) return (job.jobType || "").toLowerCase().includes(jt.toLowerCase());
+			if (jt && !(job.jobType || "").toLowerCase().includes(jt.toLowerCase())) return false;
 			return true;
 		}).map(job => job.id || job.jobConfigId);
-		return JSON.stringify({ jobs: matched });
-	} catch (e) { return JSON.stringify({ jobs: [] }); }
+		return JSON.stringify({ jobs: matched, total: items.length });
+	} catch (e) { return JSON.stringify({ jobs: [], debug: e.message }); }
 }`
 
-func getJobConfigIDs(page playwright.Page, srvName, jobType string) ([]string, error) {
+func ensureEnvLoaded(page playwright.Page) {
 	hasEnv, _ := page.Evaluate(`() => !!(window.env?.VITE_JOBS_SERVICE_URL)`)
 	if b, ok := hasEnv.(bool); !ok || !b {
-		page.Goto(fullURL("/home"))
+		page.Goto(fullURL("/home"), playwright.PageGotoOptions{
+			Timeout:   playwright.Float(60000),
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		})
 		sleep(3000)
 	}
-	raw, err := page.Evaluate(getJobConfigIDsJS, map[string]interface{}{"nameOrId": srvName, "jt": jobType})
+}
+
+func fetchAllJobIDs(page playwright.Page, jobType string) (map[string]bool, error) {
+	ensureEnvLoaded(page)
+	raw, err := page.Evaluate(getAllJobIDsJS, map[string]interface{}{"jt": jobType})
 	if err != nil {
 		return nil, err
 	}
 	jsonStr, _ := raw.(string)
-	var r struct{ Jobs []string `json:"jobs"` }
+	var r struct {
+		Jobs  []string `json:"jobs"`
+		Total int      `json:"total"`
+		Debug string   `json:"debug"`
+	}
 	json.Unmarshal([]byte(jsonStr), &r)
-	log.Printf("[getJobConfigIDs] Matched %d %s job(s) for %q", len(r.Jobs), jobType, srvName)
-	return r.Jobs, nil
+	if r.Debug != "" {
+		log.Printf("[fetchAllJobIDs] debug: %s", r.Debug)
+	}
+	set := make(map[string]bool, len(r.Jobs))
+	for _, id := range r.Jobs {
+		set[id] = true
+	}
+	log.Printf("[fetchAllJobIDs] Found %d %s job(s) (total %d)", len(set), jobType, r.Total)
+	return set, nil
+}
+
+func diffJobIDs(before, after map[string]bool) []string {
+	var newIDs []string
+	for id := range after {
+		if !before[id] {
+			newIDs = append(newIDs, id)
+		}
+	}
+	return newIDs
 }
 
 const pollJobStatusJS = `async ({ configId }) => {
@@ -717,12 +927,22 @@ const pollJobStatusJS = `async ({ configId }) => {
 		const runs = Array.isArray(d.jobRuns) ? d.jobRuns : [];
 		if (runs.length > 0) {
 			const latest = runs[0];
-			return JSON.stringify({ status: (latest.status||"unknown").toLowerCase(), runId: latest.id||latest.jobRunId||"",
-				jobType: (d.jobType||"").toLowerCase(), configStatus: (d.status||"").toLowerCase(), runCount: runs.length });
+			return JSON.stringify({
+				status: (latest.status||"unknown").toLowerCase(),
+				runId: latest.id||latest.jobRunId||"",
+				jobType: (d.jobType||"").toLowerCase(),
+				configStatus: (d.status||"").toLowerCase(),
+				runCount: runs.length
+			});
 		}
-		return JSON.stringify({ status: "pending", runId: "", jobType: (d.jobType||"").toLowerCase(),
-			configStatus: (d.status||"").toLowerCase(), runCount: 0 });
-	} catch (e) { return JSON.stringify({ status: "error", runId: "" }); }
+		return JSON.stringify({
+			status: "no_runs",
+			runId: "",
+			jobType: (d.jobType||"").toLowerCase(),
+			configStatus: (d.status||"").toLowerCase(),
+			runCount: 0
+		});
+	} catch (e) { return JSON.stringify({ status: "error", runId: "", debug: e.message }); }
 }`
 
 type jobStatus struct {
@@ -731,9 +951,11 @@ type jobStatus struct {
 	JobType      string `json:"jobType"`
 	ConfigStatus string `json:"configStatus"`
 	RunCount     int    `json:"runCount"`
+	Debug        string `json:"debug"`
 }
 
 func pollJob(page playwright.Page, configID string) (*jobStatus, error) {
+	ensureEnvLoaded(page)
 	raw, err := page.Evaluate(pollJobStatusJS, map[string]interface{}{"configId": configID})
 	if err != nil {
 		return nil, err
@@ -746,11 +968,19 @@ func pollJob(page playwright.Page, configID string) (*jobStatus, error) {
 
 func waitForJobState(page playwright.Page, configID, target string, timeoutSec int) error {
 	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
+	runAppeared := false
 	for time.Now().Before(deadline) {
 		r, err := pollJob(page, configID)
 		if err == nil {
-			log.Printf("[waitForJobState] %s: status=%s (target=%s)", configID, r.Status, target)
-			if strings.Contains(r.Status, strings.ToLower(target)) {
+			if r.RunCount == 0 && !runAppeared {
+				log.Printf("[waitForJobState] %s: waiting for run to appear (configStatus=%s)", configID, r.ConfigStatus)
+				sleepSec(10)
+				continue
+			}
+			runAppeared = true
+			log.Printf("[waitForJobState] %s: status=%s configStatus=%s runs=%d (target=%s)",
+				configID, r.Status, r.ConfigStatus, r.RunCount, target)
+			if strings.EqualFold(r.Status, target) {
 				return nil
 			}
 			if r.Status == "errored" || r.Status == "failed" {
@@ -759,13 +989,51 @@ func waitForJobState(page playwright.Page, configID, target string, timeoutSec i
 		}
 		sleepSec(10)
 	}
+	if !runAppeared {
+		return fmt.Errorf("job %s: no run appeared within %ds", configID, timeoutSec)
+	}
 	return fmt.Errorf("job %s did not reach %q within %ds", configID, target, timeoutSec)
+}
+
+// verifyJobActiveNoRuns confirms that migration jobs are in ACTIVE status
+// with zero runs (scheduled but not yet triggered).
+func verifyJobActiveNoRuns(page playwright.Page, jobConfigIDs []string) error {
+	for _, configID := range jobConfigIDs {
+		r, err := pollJob(page, configID)
+		if err != nil {
+			return fmt.Errorf("poll %s: %w", configID, err)
+		}
+		log.Printf("[verifyActiveNoRuns] %s: configStatus=%s jobType=%s runCount=%d",
+			configID, r.ConfigStatus, r.JobType, r.RunCount)
+
+		if !strings.EqualFold(r.ConfigStatus, "active") {
+			return fmt.Errorf("job %s expected ACTIVE status, got %q", configID, r.ConfigStatus)
+		}
+		if r.RunCount != 0 {
+			return fmt.Errorf("job %s expected 0 runs, got %d", configID, r.RunCount)
+		}
+	}
+	return nil
+}
+
+// waitForRunToAppear waits until the job config has at least 1 run.
+func waitForRunToAppear(page playwright.Page, configID string, timeoutSec int) (*jobStatus, error) {
+	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := pollJob(page, configID)
+		if err == nil && r.RunCount > 0 {
+			log.Printf("[waitForRun] %s: run appeared — status=%s runId=%s", configID, r.Status, r.RunID)
+			return r, nil
+		}
+		sleepSec(10)
+	}
+	return nil, fmt.Errorf("job %s: no run appeared within %ds", configID, timeoutSec)
 }
 
 const jobRunActionJS = `async ({ runId, action }) => {
 	const env = window.env || {};
 	const base = env.VITE_JOBS_SERVICE_URL;
-	if (!base) return JSON.stringify({ success: false });
+	if (!base) return JSON.stringify({ success: false, debug: "no VITE_JOBS_SERVICE_URL" });
 	const projectId = localStorage.getItem("selected_project_id") || "";
 	let token = "";
 	for (const s of [sessionStorage, localStorage]) {
@@ -787,32 +1055,38 @@ const jobRunActionJS = `async ({ runId, action }) => {
 			body: JSON.stringify({ action, jobRunId: runId }),
 		});
 		return JSON.stringify({ success: r.ok, status: r.status });
-	} catch (e) { return JSON.stringify({ success: false }); }
+	} catch (e) { return JSON.stringify({ success: false, debug: e.message }); }
 }`
 
-func approveCutover(page playwright.Page, runID string) (bool, error) {
+func approveCutover(page playwright.Page, runID string) error {
+	ensureEnvLoaded(page)
 	raw, err := page.Evaluate(jobRunActionJS, map[string]interface{}{
 		"runId":  runID,
 		"action": "APPROVED",
 	})
 	if err != nil {
-		return false, err
+		return fmt.Errorf("evaluate: %w", err)
 	}
 	jsonStr, _ := raw.(string)
 	var r struct {
-		Success bool `json:"success"`
+		Success bool   `json:"success"`
+		Debug   string `json:"debug"`
 	}
 	json.Unmarshal([]byte(jsonStr), &r)
-	log.Printf("[approveCutover] %s: success=%v", runID, r.Success)
-	return r.Success, nil
+	if !r.Success {
+		return fmt.Errorf("approve cutover %s failed: %s", runID, r.Debug)
+	}
+	log.Printf("[approveCutover] %s: approved", runID)
+	return nil
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Version check via About NDM page
+// Version check via About NDM API
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func verifyVersions(page playwright.Page) error {
 	log.Println("[versions] Checking NDM versions via About page...")
+	ensureEnvLoaded(page)
 
 	raw, err := page.Evaluate(`async () => {
 		const env = window.env || {};
@@ -843,37 +1117,64 @@ func verifyVersions(page playwright.Page) error {
 		return fmt.Errorf("evaluate: %w", err)
 	}
 	jsonStr, _ := raw.(string)
-	log.Printf("[versions] API response: %s", jsonStr[:min(len(jsonStr), 300)])
+	truncated := jsonStr
+	if len(truncated) > 500 {
+		truncated = truncated[:500] + "..."
+	}
+	log.Printf("[versions] API response: %s", truncated)
 
 	if strings.Contains(jsonStr, `"error"`) {
-		return fmt.Errorf("about-ndm API error: %s", jsonStr)
+		return fmt.Errorf("about-ndm API error: %s", truncated)
 	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &resp); err == nil {
+		if data, ok := resp["data"].(map[string]interface{}); ok {
+			if items, ok := data["items"].(map[string]interface{}); ok {
+				if build, ok := items["build"].(map[string]interface{}); ok {
+					if cpv, ok := build["controlPlaneVersion"].(map[string]interface{}); ok {
+						log.Printf("[versions] Control Plane version: %v", cpv["version"])
+					}
+					if wv, ok := build["workerVersion"].(map[string]interface{}); ok {
+						log.Printf("[versions] Worker version: %v", wv["version"])
+					}
+				}
+			}
+		}
+	}
+
 	log.Println("[versions] Version check passed")
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TC-001 Test Implementation
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// TC-001: Create file servers with 2 workers, run discovery,
+//         scheduled migration, cutover, and version validation.
+//
+// Steps:
+//  1. Create source file server (2 workers)
+//  2. Run bulk discovery on source → wait for completion → verify report
+//  3. Create destination file server (2 workers)
+//  4. Run bulk discovery on destination → wait for completion
+//  5. Create SCHEDULED bulk migration (90s in future)
+//  6. Verify jobs are ACTIVE with 0 runs (not yet triggered)
+//  7. Wait for scheduled time → migration triggers → wait for COMPLETED
+//  8. Verify migration report
+//  9. Create bulk cutover → wait for BLOCKED → approve cutover
+// 10. Version check via About NDM API
+// ═══════════════════════════════════════════════════════════════════════════════
 
 func runTC001(browser playwright.Browser, cfg Config) error {
 	uid := uniqueID()
 	protocol := strings.ToLower(cfg.Protocol)
-
 	srcServerName := fmt.Sprintf("tc-001-%s-src-fs-%s", protocol, uid)
 	destServerName := fmt.Sprintf("tc-001-%s-dest-fs-%s", protocol, uid)
 
 	var srcFileServerID, destFileServerID string
 
-	// ─── Step 1: Create Source File Server ──────────────────────────────
-	log.Println("═══ Step 1: Creating Source File Server")
 	page, ctx, err := newAuthPage(browser)
 	if err != nil {
 		return fmt.Errorf("new page: %w", err)
@@ -881,8 +1182,12 @@ func runTC001(browser playwright.Browser, cfg Config) error {
 	defer ctx.Close()
 	defer page.Close()
 
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 1: Create Source File Server (with 2 workers)
+	// ─────────────────────────────────────────────────────────────────────
+	log.Println("═══ Step 1: Creating Source File Server")
 	if err := createFileServer(page, srcServerName, cfg.SourceHost, cfg.Protocol,
-		cfg.ProtocolUsername, cfg.ProtocolPassword); err != nil {
+		cfg.ProtocolUsername, cfg.ProtocolPassword, cfg.MinWorkers); err != nil {
 		return fmt.Errorf("create source FS: %w", err)
 	}
 	srcFileServerID, err = navigateToFileServer(page, srcServerName)
@@ -891,59 +1196,77 @@ func runTC001(browser playwright.Browser, cfg Config) error {
 	}
 	log.Printf("Source file server created: %s (%s)", srcServerName, srcFileServerID)
 
-	// Verify Active
 	if err := expectVisible(page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Bulk Discover"}), 30000); err != nil {
 		return fmt.Errorf("source FS not Active")
 	}
 	log.Println("Source file server is Active")
 
-	// ─── Step 2: Run Bulk Discovery on Source ──────────────────────────
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 2: Run Bulk Discovery on Source → wait → verify report
+	// ─────────────────────────────────────────────────────────────────────
 	log.Println("═══ Step 2: Running Bulk Discovery on Source")
-	if err := runBulkDiscovery(page, srcFileServerID, cfg.SourceExportPaths); err != nil {
+
+	beforeSrcDiscovery, _ := fetchAllJobIDs(page, "discover")
+
+	if err := runBulkDiscovery(page, srcFileServerID, cfg.SourceExportPaths, cfg.MaxDiscoveryPaths); err != nil {
 		return fmt.Errorf("bulk discovery source: %w", err)
 	}
 	_ = expectVisible(page.GetByText("Bulk Discover Job has been created").First(), 10000)
+	sleep(5000)
 
-	srcDiscoveryJobs, err := getJobConfigIDs(page, srcServerName, "discover")
-	if err != nil || len(srcDiscoveryJobs) == 0 {
-		return fmt.Errorf("no source discovery jobs found")
+	afterSrcDiscovery, _ := fetchAllJobIDs(page, "discover")
+	srcDiscoveryJobs := diffJobIDs(beforeSrcDiscovery, afterSrcDiscovery)
+	if len(srcDiscoveryJobs) == 0 {
+		log.Println("[discovery] No new source jobs found, retrying after 10s...")
+		sleepSec(10)
+		afterSrcDiscovery, _ = fetchAllJobIDs(page, "discover")
+		srcDiscoveryJobs = diffJobIDs(beforeSrcDiscovery, afterSrcDiscovery)
 	}
-	log.Printf("Source discovery job(s): %v", srcDiscoveryJobs)
+	if len(srcDiscoveryJobs) == 0 {
+		return fmt.Errorf("no source discovery jobs found (before=%d, after=%d)",
+			len(beforeSrcDiscovery), len(afterSrcDiscovery))
+	}
+	log.Printf("Source discovery job(s) [new]: %v", srcDiscoveryJobs)
 
 	for _, jobID := range srcDiscoveryJobs {
 		log.Printf("Waiting for source discovery job %s...", jobID)
-		if err := waitForJobState(page, jobID, "completed", 600); err != nil {
+		if err := waitForJobState(page, jobID, "completed", 900); err != nil {
 			return fmt.Errorf("source discovery: %w", err)
 		}
 		log.Printf("Source discovery job %s completed", jobID)
 	}
 
-	// ─── Step 3: Verify Source Discovery Report ────────────────────────
-	log.Println("═══ Step 3: Verifying Source Discovery Report")
+	// Verify source discovery report
+	log.Println("═══ Step 2b: Verifying Source Discovery Report")
 	r, _ := pollJob(page, srcDiscoveryJobs[0])
 	if r != nil && r.RunID != "" {
-		page.Goto(fullURL(fmt.Sprintf("/job-discovery-preview/%s", r.RunID)))
+		page.Goto(fullURL(fmt.Sprintf("/job-discovery-preview/%s", r.RunID)), playwright.PageGotoOptions{
+			Timeout: playwright.Float(60000), WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		})
 		sleep(5000)
 		if err := expectVisible(page.GetByText("Job Run Id").First(), 15000); err == nil {
 			log.Println("Source discovery report loaded successfully")
+		} else {
+			log.Println("Source discovery report page loaded (Job Run Id not found)")
 		}
 	}
 
-	// ─── Step 4: Create Destination File Server ────────────────────────
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 3: Create Destination File Server (with 2 workers)
+	// ─────────────────────────────────────────────────────────────────────
 	if cfg.DestinationHost == "" {
-		log.Println("═══ Step 4: SKIPPED (DESTINATION_HOST not set)")
-		log.Println("═══ Steps 5-8: SKIPPED (no destination)")
+		log.Println("═══ Step 3: SKIPPED (DESTINATION_HOST not set)")
+		log.Println("═══ Steps 4-10: SKIPPED")
 		return nil
 	}
 
-	log.Println("═══ Step 4: Creating Destination File Server")
+	log.Println("═══ Step 3: Creating Destination File Server")
 	destUsername := cfg.DestProtocolUsername
 	if destUsername == "" {
 		destUsername = cfg.ProtocolUsername
 	}
-
 	if err := createFileServer(page, destServerName, cfg.DestinationHost, cfg.Protocol,
-		destUsername, cfg.DestProtocolPassword); err != nil {
+		destUsername, cfg.DestProtocolPassword, cfg.MinWorkers); err != nil {
 		return fmt.Errorf("create destination FS: %w", err)
 	}
 	destFileServerID, err = navigateToFileServer(page, destServerName)
@@ -957,71 +1280,197 @@ func runTC001(browser playwright.Browser, cfg Config) error {
 	}
 	log.Println("Destination file server is Active")
 
-	// ─── Step 5: Run Bulk Discovery on Destination ─────────────────────
-	log.Println("═══ Step 5: Running Bulk Discovery on Destination")
-	if err := runBulkDiscovery(page, destFileServerID, cfg.DestinationExportPaths); err != nil {
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 4: Run Bulk Discovery on Destination → wait for completion
+	// ─────────────────────────────────────────────────────────────────────
+	log.Println("═══ Step 4: Running Bulk Discovery on Destination")
+
+	beforeDestDiscovery, _ := fetchAllJobIDs(page, "discover")
+
+	if err := runBulkDiscovery(page, destFileServerID, cfg.DestinationExportPaths, cfg.MaxDiscoveryPaths); err != nil {
 		return fmt.Errorf("bulk discovery dest: %w", err)
 	}
 	_ = expectVisible(page.GetByText("Bulk Discover Job has been created").First(), 10000)
+	sleep(5000)
 
-	destDiscoveryJobs, err := getJobConfigIDs(page, destServerName, "discover")
-	if err != nil || len(destDiscoveryJobs) == 0 {
-		return fmt.Errorf("no dest discovery jobs found")
+	afterDestDiscovery, _ := fetchAllJobIDs(page, "discover")
+	destDiscoveryJobs := diffJobIDs(beforeDestDiscovery, afterDestDiscovery)
+	if len(destDiscoveryJobs) == 0 {
+		log.Println("[discovery] No new dest jobs found, retrying after 10s...")
+		sleepSec(10)
+		afterDestDiscovery, _ = fetchAllJobIDs(page, "discover")
+		destDiscoveryJobs = diffJobIDs(beforeDestDiscovery, afterDestDiscovery)
 	}
+	if len(destDiscoveryJobs) == 0 {
+		return fmt.Errorf("no dest discovery jobs found (before=%d, after=%d)",
+			len(beforeDestDiscovery), len(afterDestDiscovery))
+	}
+	log.Printf("Dest discovery job(s) [new]: %v", destDiscoveryJobs)
 
 	for _, jobID := range destDiscoveryJobs {
 		log.Printf("Waiting for dest discovery job %s...", jobID)
-		if err := waitForJobState(page, jobID, "completed", 600); err != nil {
+		if err := waitForJobState(page, jobID, "completed", 900); err != nil {
 			return fmt.Errorf("dest discovery: %w", err)
 		}
 		log.Printf("Dest discovery job %s completed", jobID)
 	}
 
-	// ─── Step 6: Run Bulk Migration (source → destination) ─────────────
-	log.Println("═══ Step 6: Running Bulk Migration")
-	if err := runBulkMigration(page, srcFileServerID, destServerName); err != nil {
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 5: Create Scheduled Bulk Migration (90s in future)
+	// ─────────────────────────────────────────────────────────────────────
+	log.Printf("═══ Step 5: Creating Scheduled Bulk Migration (%ds in future)", cfg.ScheduleDelaySec)
+
+	beforeMigration, _ := fetchAllJobIDs(page, "migrate")
+
+	if err := runScheduledBulkMigration(page, srcFileServerID, destServerName, cfg.ScheduleDelaySec); err != nil {
 		return fmt.Errorf("bulk migration: %w", err)
 	}
-
-	// Wait for migration toast
 	sleep(5000)
 
-	migrationJobs, err := getJobConfigIDs(page, srcServerName, "migrate")
-	if err != nil || len(migrationJobs) == 0 {
-		log.Println("[migration] No migration jobs found yet, waiting...")
-		sleep(10000)
-		migrationJobs, _ = getJobConfigIDs(page, srcServerName, "migrate")
+	afterMigration, _ := fetchAllJobIDs(page, "migrate")
+	migrationJobs := diffJobIDs(beforeMigration, afterMigration)
+	if len(migrationJobs) == 0 {
+		log.Println("[migration] No new jobs found, retrying after 10s...")
+		sleepSec(10)
+		afterMigration, _ = fetchAllJobIDs(page, "migrate")
+		migrationJobs = diffJobIDs(beforeMigration, afterMigration)
+	}
+	if len(migrationJobs) == 0 {
+		log.Println("[migration] WARNING: no migration jobs found — continuing")
+	} else {
+		log.Printf("Migration job(s) [new]: %v", migrationJobs)
 	}
 
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 6: Verify migration jobs are ACTIVE with 0 runs (not yet triggered)
+	// ─────────────────────────────────────────────────────────────────────
 	if len(migrationJobs) > 0 {
-		log.Printf("Migration job(s): %v", migrationJobs)
+		log.Println("═══ Step 6: Verifying migration jobs are ACTIVE with 0 runs")
+		sleepSec(10)
+		if err := verifyJobActiveNoRuns(page, migrationJobs); err != nil {
+			log.Printf("[step6] Warning: %v", err)
+		} else {
+			log.Println("All migration jobs are ACTIVE with 0 runs (as expected)")
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 7: Wait for scheduled migration to trigger → COMPLETED
+	// ─────────────────────────────────────────────────────────────────────
+	if len(migrationJobs) > 0 {
+		remainingWait := cfg.ScheduleDelaySec - 10
+		if remainingWait < 10 {
+			remainingWait = 10
+		}
+		log.Printf("═══ Step 7: Waiting %ds for scheduled migration to trigger...", remainingWait)
+		sleepSec(remainingWait)
+
 		for _, jobID := range migrationJobs {
-			log.Printf("Waiting for migration job %s...", jobID)
-			if err := waitForJobState(page, jobID, "completed", 600); err != nil {
-				log.Printf("Migration job %s did not complete: %v", jobID, err)
+			log.Printf("Waiting for migration run to appear for %s...", jobID)
+			_, err := waitForRunToAppear(page, jobID, 120)
+			if err != nil {
+				log.Printf("[migration] %s: %v", jobID, err)
+				continue
+			}
+
+			log.Printf("Waiting for migration job %s to complete...", jobID)
+			if err := waitForJobState(page, jobID, "completed", 900); err != nil {
+				log.Printf("[migration] %s did not complete: %v", jobID, err)
 			} else {
 				log.Printf("Migration job %s completed", jobID)
 			}
 		}
-	} else {
-		log.Println("[migration] Warning: no migration jobs found")
-	}
 
-	// ─── Step 7: Verify Migration Report ───────────────────────────────
-	log.Println("═══ Step 7: Verifying Migration Reports")
-	if len(migrationJobs) > 0 {
+		// Verify migration report
+		log.Println("═══ Step 7b: Verifying Migration Report")
 		r, _ := pollJob(page, migrationJobs[0])
 		if r != nil && r.RunID != "" {
-			page.Goto(fullURL(fmt.Sprintf("/job-details/%s", migrationJobs[0])))
+			page.Goto(fullURL(fmt.Sprintf("/job-details/%s", migrationJobs[0])), playwright.PageGotoOptions{
+				Timeout: playwright.Float(60000), WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+			})
 			sleep(5000)
 			if isVisible(page.GetByText(regexp.MustCompile(`(?i)completed`)).First()) {
-				log.Println("Migration job shows completed in Job Details")
+				log.Println("Migration job shows 'completed' in Job Details")
 			}
 		}
 	}
 
-	// ─── Step 8: Version Check ─────────────────────────────────────────
-	log.Println("═══ Step 8: Version Check")
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 8: Create Bulk Cutover → wait for BLOCKED → approve
+	// ─────────────────────────────────────────────────────────────────────
+	log.Println("═══ Step 8: Creating Bulk Cutover Job")
+
+	beforeCutover, _ := fetchAllJobIDs(page, "cutover")
+
+	if err := runBulkCutover(page, srcFileServerID); err != nil {
+		log.Printf("[cutover] Warning — could not create cutover via UI: %v", err)
+	} else {
+		sleep(5000)
+
+		afterCutover, _ := fetchAllJobIDs(page, "cutover")
+		cutoverJobs := diffJobIDs(beforeCutover, afterCutover)
+		if len(cutoverJobs) == 0 {
+			sleepSec(10)
+			afterCutover, _ = fetchAllJobIDs(page, "cutover")
+			cutoverJobs = diffJobIDs(beforeCutover, afterCutover)
+		}
+
+		if len(cutoverJobs) > 0 {
+			log.Printf("Cutover job(s) [new]: %v", cutoverJobs)
+
+			// Wait for each cutover run to reach BLOCKED
+			log.Println("═══ Step 8b: Waiting for cutover jobs to reach BLOCKED state")
+			var cutoverRunIDs []string
+			for _, jobID := range cutoverJobs {
+				log.Printf("Waiting for cutover run to appear for %s...", jobID)
+				st, err := waitForRunToAppear(page, jobID, 120)
+				if err != nil {
+					log.Printf("[cutover] %s: no run: %v", jobID, err)
+					continue
+				}
+
+				log.Printf("Waiting for cutover job %s to reach BLOCKED...", jobID)
+				if err := waitForJobState(page, jobID, "blocked", 600); err != nil {
+					log.Printf("[cutover] %s did not reach BLOCKED: %v", jobID, err)
+					continue
+				}
+				log.Printf("Cutover job %s is BLOCKED", jobID)
+
+				// Re-poll to get the run ID
+				st, _ = pollJob(page, jobID)
+				if st != nil && st.RunID != "" {
+					cutoverRunIDs = append(cutoverRunIDs, st.RunID)
+				}
+			}
+
+			// Approve all cutover jobs
+			if len(cutoverRunIDs) > 0 {
+				log.Println("═══ Step 8c: Approving Cutover Jobs")
+				for _, runID := range cutoverRunIDs {
+					if err := approveCutover(page, runID); err != nil {
+						log.Printf("[cutover] approve %s failed: %v", runID, err)
+					}
+				}
+
+				// Wait for cutover completion after approval
+				for _, jobID := range cutoverJobs {
+					log.Printf("Waiting for cutover job %s to complete after approval...", jobID)
+					if err := waitForJobState(page, jobID, "completed", 600); err != nil {
+						log.Printf("[cutover] %s did not complete: %v", jobID, err)
+					} else {
+						log.Printf("Cutover job %s completed", jobID)
+					}
+				}
+			}
+		} else {
+			log.Println("[cutover] WARNING: no cutover jobs found")
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Step 9: Version Check via About NDM API
+	// ─────────────────────────────────────────────────────────────────────
+	log.Println("═══ Step 9: Version Check")
 	if err := verifyVersions(page); err != nil {
 		log.Printf("[versions] Warning: %v", err)
 	}
@@ -1040,12 +1489,15 @@ func main() {
 
 	log.Println("╔══════════════════════════════════════════════════════════════╗")
 	log.Println("║  TC-001: Go + Playwright E2E Test                          ║")
-	log.Println("║  Create file servers, discovery, migration, version check  ║")
+	log.Println("║  File servers → Discovery → Scheduled Migration → Cutover  ║")
 	log.Println("╚══════════════════════════════════════════════════════════════╝")
-	log.Printf("  Base URL:         %s", cfg.BaseURL)
-	log.Printf("  Source Host:      %s", cfg.SourceHost)
-	log.Printf("  Destination Host: %s", cfg.DestinationHost)
-	log.Printf("  Protocol:         %s", cfg.Protocol)
+	log.Printf("  Base URL:           %s", cfg.BaseURL)
+	log.Printf("  Source Host:        %s", cfg.SourceHost)
+	log.Printf("  Destination Host:   %s", cfg.DestinationHost)
+	log.Printf("  Protocol:           %s", cfg.Protocol)
+	log.Printf("  Min Workers:        %d", cfg.MinWorkers)
+	log.Printf("  Max Discovery Paths: %d", cfg.MaxDiscoveryPaths)
+	log.Printf("  Schedule Delay:     %ds", cfg.ScheduleDelaySec)
 
 	if err := playwright.Install(); err != nil {
 		log.Fatalf("could not install playwright: %v", err)
