@@ -33,21 +33,58 @@ primary:
     runAsGroup: {{ vm_gid }}
 
   extendedConfiguration: |
-    max_connections = 1000
+{% if local_cluster is defined %}
+    # Local cluster: no custom parameters (PostgreSQL built-in defaults)
+{% else %}
+    # Connections
+    max_connections = 500
     tcp_keepalives_idle = 180
     tcp_keepalives_interval = 10
     tcp_keepalives_count = 5
-    shared_buffers = 768MB
-    work_mem = 32MB
-    maintenance_work_mem = 256MB
+
+    # Memory (targets ~8 GB peak)
+    shared_buffers = 2GB
+    effective_cache_size = 4GB
+    work_mem = 8MB
+    maintenance_work_mem = 512MB
+    temp_buffers = 16MB
+
+    # WAL / Checkpoints
+    max_wal_size = 4GB
+    min_wal_size = 512MB
+    checkpoint_timeout = 10min
+    checkpoint_completion_target = 0.9
+    wal_buffers = 32MB
+    wal_compression = lz4
+
+    # SSD tuning
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    maintenance_io_concurrency = 200
+
+    # Parallelism
+    max_worker_processes = 8
+    max_parallel_workers = 4
     max_parallel_workers_per_gather = 2
+    max_parallel_maintenance_workers = 2
     parallel_tuple_cost = 0.1
     parallel_setup_cost = 500
-    wal_buffers = 8MB
-    checkpoint_completion_target = 0.9
-    max_wal_size = 1GB
+
+    # Autovacuum
+    autovacuum_max_workers = 4
+    autovacuum_vacuum_cost_limit = 1000
+    autovacuum_naptime = 20s
+    autovacuum_vacuum_scale_factor = 0.1
+    autovacuum_analyze_scale_factor = 0.05
+
+    # Planner
+    default_statistics_target = 100
+    jit = off
+
+    # Observability
     shared_preload_libraries = 'pg_stat_statements'
-              
+{% endif %}
+
   initdb:
     scriptsConfigMap: postgres-init-config
     user: postgres
@@ -64,8 +101,8 @@ primary:
 {% else %}
   resources:
     requests:
-      cpu: "0.7"
-      memory: "786Mi"
+      cpu: "1"
+      memory: "4Gi"
 {% endif %}
 
 
