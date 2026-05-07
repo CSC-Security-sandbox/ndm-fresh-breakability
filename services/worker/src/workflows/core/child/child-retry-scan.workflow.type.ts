@@ -36,6 +36,7 @@ export interface ChildRetryScanWorkflowInput {
   /** Parallel retry batch activities; from getWorkerScanConfig (same as migration ChildScanWorkflow). */
   workerConcurrency?: number;
   settings?: RetryScanSettings; // Cached settings (populated on first fetch, passed on continueAsNew)
+  parentWorkflowId?: string;
 }
 
 /**

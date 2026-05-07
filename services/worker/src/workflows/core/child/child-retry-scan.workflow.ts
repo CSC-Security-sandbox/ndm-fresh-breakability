@@ -1,4 +1,5 @@
 import * as wf from '@temporalio/workflow';
+import { getExternalWorkflowHandle } from '@temporalio/workflow';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/common/enums";
@@ -73,6 +74,8 @@ const {
 
 
 const retryScanActionSignal = wf.defineSignal<[JobRunStatus]>('retryScanActionSignal');
+const childWorkflowDoneSignal = wf.defineSignal<[string, any]>('childWorkflowDone');
+const childWorkflowFailedSignal = wf.defineSignal<[string, string]>('childWorkflowFailed');
 
 /**
  * ChildRetryScanWorkflow - Handles batch processing of failed operations for retry.
@@ -94,18 +97,14 @@ export const ChildRetryScanWorkflow = async ({
                                                batchDirs = [],
                                                batchSize = DEFAULT_BATCH_SIZE,
                                                workerConcurrency = 10,
-                                               settings: inputSettings
+                                               settings: inputSettings,
+                                               parentWorkflowId
                                              }: ChildRetryScanWorkflowInput): Promise<ChildRetryScanWorkflowOutput> => {
 
-  // Use originalJobRunId to fetch failed operations, default to jobRunId if not provided
   const sourceJobRunId = originalJobRunId;
-  
-  // Settings will be populated on first fetch and reused for all subsequent activities
   let settings: RetryScanSettings | undefined = inputSettings;
 
-  // Update status to RUNNING at start
   await updateJobStatusActivity({ jobRunId, status: JobRunStatus.Running });
-
   await resolveUsernamesToSidsActivity(jobRunId);
 
   const retryScanWorkflowOutput: ChildRetryScanWorkflowOutput = {
@@ -114,7 +113,6 @@ export const ChildRetryScanWorkflow = async ({
     error: undefined,
   };
 
-  // Handle stop/pause signals
   wf.setHandler(retryScanActionSignal, async (action: JobRunStatus) => {
     actionState = action;
     console.log(jobRunId, `retry scan action signal called with value: ${action}`);
@@ -123,104 +121,118 @@ export const ChildRetryScanWorkflow = async ({
   let isStopRequested = false;
   let errors: string[] = [];
   let iterations = 0;
-  let hasMoreToFetch = true;  // Tracks if API has more pages
-  let hasMoreTasks = true;    // Tracks all pending work (API + batches + dirs)
+  let hasMoreToFetch = true;
+  let hasMoreTasks = true;
+  let shouldContinueAsNew = false;
+  let fatalError: any = null;
 
-  // Main processing loop - continues while there are tasks to process
-  while (hasMoreTasks) {
+  try {
+    while (hasMoreTasks) {
 
-    // Handle stop request
-    if (actionState === JobRunStatus.Stopped) {
-      isStopRequested = true;
-      console.log(`Stopping ChildRetryScanWorkflow ${jobRunId} as requested. ${actionState}`);
-      break;
-    }
+      if (actionState === JobRunStatus.Stopped) {
+        isStopRequested = true;
+        console.log(`Stopping ChildRetryScanWorkflow ${jobRunId} as requested. ${actionState}`);
+        break;
+      }
 
-    // Wait if paused
-    await updateJobStatusIfNotRunning(actionState, jobRunId);
-    await wf.condition(() => actionState !== JobRunStatus.Paused);
+      await updateJobStatusIfNotRunning(actionState, jobRunId);
+      await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    // PHASE 1: Fetch more failed operations if available
-    if (hasMoreToFetch) {
-      try {
-        const fetchResult: FetchFailedOperationsOutput = await fetchFailedOperationsActivity({
-          jobRunId,
-          originalJobRunId: sourceJobRunId
-        });
+      if (hasMoreToFetch) {
+        try {
+          const fetchResult: FetchFailedOperationsOutput = await fetchFailedOperationsActivity({
+            jobRunId,
+            originalJobRunId: sourceJobRunId
+          });
 
-        // Capture settings from first fetch (will be same for all subsequent fetches)
-        if (!settings) {
-          settings = fetchResult.settings;
+          if (!settings) {
+            settings = fetchResult.settings;
+          }
+
+          opsBatchIds.push(...fetchResult.opsBatchIds);
+          hasMoreToFetch = fetchResult.hasMore;
+          iterations++;
+
+          console.log(`Fetched ${fetchResult.opsBatchIds.length} ops batches, hasMoreToFetch: ${hasMoreToFetch}`);
+        } catch (error) {
+          console.error(`[ERROR] Error in fetchFailedOperationsActivity: ${error.message}`);
+          errors.push(error.message);
+          hasMoreToFetch = false;
+          throw error;
+        }
+      }
+
+      const currentOpsBatchIds = [...opsBatchIds];
+      const currentBatchDirs = [...batchDirs];
+      opsBatchIds = [];
+      batchDirs = [];
+
+      if (currentOpsBatchIds.length > 0 || currentBatchDirs.length > 0) {
+        let streamValidationSteps = 0;
+        try {
+          streamValidationSteps = await validateCommandStreamLength(jobRunId, () => actionState);
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+          throw error;
         }
 
-        // Add new opsBatchIds to the queue
-        opsBatchIds.push(...fetchResult.opsBatchIds);
-        hasMoreToFetch = fetchResult.hasMore;
-        iterations++;
+        const batchExecResults = await executeRetryBatches({
+          jobRunId,
+          opsBatchIds: currentOpsBatchIds,
+          batchDirIds: currentBatchDirs,
+          batchSize,
+          workerConcurrency,
+          settings,
+        });
 
-        console.log(`Fetched ${fetchResult.opsBatchIds.length} ops batches, hasMoreToFetch: ${hasMoreToFetch}`);
-      } catch (error) {
-        console.error(`[ERROR] Error in fetchFailedOperationsActivity: ${error.message}`);
-        errors.push(error.message);
-        hasMoreToFetch = false;
-        throw error;
+        batchDirs.push(...batchExecResults.batchDirs);
+        const totalBatchesProcessed = currentOpsBatchIds.length + currentBatchDirs.length;
+        iterations += Math.ceil(totalBatchesProcessed / workerConcurrency) + streamValidationSteps;
+
+        if (batchExecResults.error) {
+          errors.push(batchExecResults.error);
+        }
+      }
+
+      hasMoreTasks = hasMoreToFetch || opsBatchIds.length > 0 || batchDirs.length > 0;
+
+      if (iterations > ITERATIONS_LIMIT && hasMoreTasks) {
+        console.warn(`ChildRetryScanWorkflow ${jobRunId} has exceeded ${ITERATIONS_LIMIT} iterations, continuing as new.`);
+        shouldContinueAsNew = true;
+        break;
       }
     }
+  } catch (error) {
+    fatalError = error;
+  }
 
-    // PHASE 2: Process opsBatches and batchDirs in parallel
-    // Snapshot current batches and clear queues for new discoveries
-    const currentOpsBatchIds = [...opsBatchIds];
-    const currentBatchDirs = [...batchDirs];
-    opsBatchIds = [];
-    batchDirs = [];
+  // Handle continueAsNew (must be outside try-catch)
+  if (shouldContinueAsNew) {
+    await wf.continueAsNew({
+      jobRunId,
+      originalJobRunId: sourceJobRunId,
+      actionState,
+      opsBatchIds,
+      batchDirs,
+      batchSize,
+      workerConcurrency,
+      settings,
+      parentWorkflowId
+    });
+  }
 
-    if (currentOpsBatchIds.length > 0 || currentBatchDirs.length > 0) {
-      // Validate command stream length before processing (steps counted toward continueAsNew)
-      let streamValidationSteps = 0;
+  // Handle fatal error — signal parent before throwing
+  if (fatalError) {
+    if (parentWorkflowId) {
       try {
-        streamValidationSteps = await validateCommandStreamLength(jobRunId, () => actionState);
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
-        throw error;
-      }
-
-      const batchExecResults = await executeRetryBatches({
-        jobRunId,
-        opsBatchIds: currentOpsBatchIds,
-        batchDirIds: currentBatchDirs,
-        batchSize,
-        workerConcurrency,
-        settings,
-      });
-
-      // Collect newly discovered subdirectory batches
-      batchDirs.push(...batchExecResults.batchDirs);
-      const totalBatchesProcessed = currentOpsBatchIds.length + currentBatchDirs.length;
-      iterations += Math.ceil(totalBatchesProcessed / workerConcurrency) + streamValidationSteps;
-
-      if (batchExecResults.error) {
-        errors.push(batchExecResults.error);
+        const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+        await parentHandle.signal(childWorkflowFailedSignal, 'scan', fatalError?.message || 'Fatal error in retry scan workflow');
+      } catch (signalErr) {
+        console.error(`ChildRetryScanWorkflow ${jobRunId} failed to signal parent: ${signalErr?.message}`);
       }
     }
-
-    // Update hasMoreTasks: more to fetch OR pending batches OR discovered dirs
-    hasMoreTasks = hasMoreToFetch || opsBatchIds.length > 0 || batchDirs.length > 0;
-
-    // Check iteration limit for continueAsNew
-    if (iterations > ITERATIONS_LIMIT && hasMoreTasks) {
-      console.warn(`ChildRetryScanWorkflow ${jobRunId} has exceeded ${ITERATIONS_LIMIT} iterations, continuing as new.`);
-      await wf.continueAsNew({
-        jobRunId,
-        originalJobRunId: sourceJobRunId,
-        actionState,
-        opsBatchIds,
-        batchDirs,
-        batchSize,
-        workerConcurrency,
-        settings
-      });
-    }
+    throw fatalError;
   }
 
   // Determine final status
@@ -230,6 +242,16 @@ export const ChildRetryScanWorkflow = async ({
     retryScanWorkflowOutput.status = JobRunStatus.Errored;
   } else {
     retryScanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
+  }
+
+  // Signal parent with completion
+  if (parentWorkflowId) {
+    try {
+      const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+      await parentHandle.signal(childWorkflowDoneSignal, 'scan', retryScanWorkflowOutput);
+    } catch (signalErr) {
+      console.error(`ChildRetryScanWorkflow ${jobRunId} failed to signal parent completion: ${signalErr?.message}`);
+    }
   }
 
   return retryScanWorkflowOutput;

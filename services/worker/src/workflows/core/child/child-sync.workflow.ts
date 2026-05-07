@@ -1,6 +1,6 @@
 
 import * as wf from '@temporalio/workflow';
-import { proxyActivities } from '@temporalio/workflow';
+import { proxyActivities, getExternalWorkflowHandle } from '@temporalio/workflow';
 import { JobRunStatus } from "src/activities/common/enums";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { SyncService } from 'src/activities/core/migrate/sync-activity.service';
@@ -14,6 +14,7 @@ interface SyncWorkflowInput {
     scanWorkflowStatus: JobRunStatus;
     actionState: JobRunStatus; 
     workerConcurrency?: number;
+    parentWorkflowId?: string;
 }
 
 const ITERATION_LIMIT = 1000;
@@ -45,13 +46,15 @@ const {
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('syncActionSignal');
 const scanResultSignal = wf.defineSignal<[JobRunStatus]>('scanResultSignal');
+const childWorkflowDoneSignal = wf.defineSignal<[string, any]>('childWorkflowDone');
+const childWorkflowFailedSignal = wf.defineSignal<[string, string]>('childWorkflowFailed');
 
 
 function isScanFinished(scanWorkflowStatus: JobRunStatus) : boolean {
     return scanWorkflowStatus === JobRunStatus.Completed || scanWorkflowStatus === JobRunStatus.Failed;
 }
 
-export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running, workerConcurrency= 20 } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
+export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunStatus.Running, actionState = JobRunStatus.Running, workerConcurrency= 20, parentWorkflowId } : SyncWorkflowInput) : Promise<SyncWorkflowOutput>=> {
     console.log(`Starting SyncWorkflow ${jobRunId}`)
 
     
@@ -72,50 +75,76 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
     let continueSync = true; 
     let isManualStop = false;
     let iterations = 0;
-    while(continueSync) {
-        
-        await updateJobStatusIfNotRunning(actionState, jobRunId);
-        
-        await wf.condition(() => actionState !== JobRunStatus.Paused);
+    let shouldContinueAsNew = false;
+    let fatalError: any = null;
 
-        if(actionState === JobRunStatus.Stopped as JobRunStatus) {
-            console.log(`SyncWorkflow ${jobRunId} received stop signal.`);
-            isManualStop = true
-            break;
-        }
+    try {
+        while(continueSync) {
+            
+            await updateJobStatusIfNotRunning(actionState, jobRunId);
+            
+            await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-        const taskIds: string[] = await getGroupOfTasksActivity(jobRunId);
-        iterations+= taskIds.length + TASK_PROCESSING_ITERATIONS;
-        if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
-            console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
-            continueSync = false;
-            continue;
-        }
-        await Promise.all(
-            taskIds.map(async (taskId) => {
-                try {
-                    console.log(`SyncTaskActivity started for taskId: ${taskId}`);
-                    const output = await SyncTaskActivity({ jobRunId, taskId });
-                    console.log(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
-                    return output;
-                } catch (error)  {
-                    if(error instanceof wf.ActivityFailure && error.cause instanceof wf.ApplicationFailure){
-                        if (error.cause.type === 'RetryExceededError') {
-                            console.error(`SyncTaskActivity for taskId: ${taskId} has exceeded retry limit.`);
-                            return { taskId, error: error.message };
+            if(actionState === JobRunStatus.Stopped as JobRunStatus) {
+                console.log(`SyncWorkflow ${jobRunId} received stop signal.`);
+                isManualStop = true
+                break;
+            }
+
+            const taskIds: string[] = await getGroupOfTasksActivity(jobRunId);
+            iterations+= taskIds.length + TASK_PROCESSING_ITERATIONS;
+            if(taskIds.length === 0 && isScanFinished(scanWorkflowStatus)) {
+                console.log(`No more tasks to process in SyncWorkflow ${jobRunId}.`);
+                continueSync = false;
+                continue;
+            }
+            await Promise.all(
+                taskIds.map(async (taskId) => {
+                    try {
+                        console.log(`SyncTaskActivity started for taskId: ${taskId}`);
+                        const output = await SyncTaskActivity({ jobRunId, taskId });
+                        console.log(`SyncTaskActivity completed for taskId: ${taskId} with output: ${JSON.stringify(output)}`);
+                        return output;
+                    } catch (error)  {
+                        if(error instanceof wf.ActivityFailure && error.cause instanceof wf.ApplicationFailure){
+                            if (error.cause.type === 'RetryExceededError') {
+                                console.error(`SyncTaskActivity for taskId: ${taskId} has exceeded retry limit.`);
+                                return { taskId, error: error.message };
+                            }
                         }
-                    }
-                    console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${JSON.stringify(error)} retrying...`);
-                    throw error 
-                }    
-            })
-        )      
-        if(iterations > ITERATION_LIMIT){
-            console.warn(`SyncWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
-            await wf.continueAsNew({ jobRunId, scanWorkflowStatus, actionState });      
+                        console.error(`SyncTaskActivity failed for taskId: ${taskId} with error: ${JSON.stringify(error)} retrying...`);
+                        throw error 
+                    }    
+                })
+            )      
+            if(iterations > ITERATION_LIMIT){
+                console.warn(`SyncWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);
+                shouldContinueAsNew = true;
+                break;
+            }
         }
+    } catch (error) {
+        fatalError = error;
     }
-    
+
+    // Handle continueAsNew (must be outside try-catch)
+    if (shouldContinueAsNew) {
+        await wf.continueAsNew({ jobRunId, scanWorkflowStatus, actionState, parentWorkflowId });
+    }
+
+    // Handle fatal error — signal parent before throwing
+    if (fatalError) {
+        if (parentWorkflowId) {
+            try {
+                const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+                await parentHandle.signal(childWorkflowFailedSignal, 'sync', fatalError?.message || 'Fatal error in sync workflow');
+            } catch (signalErr) {
+                console.error(`SyncWorkflow ${jobRunId} failed to signal parent: ${signalErr?.message}`);
+            }
+        }
+        throw fatalError;
+    }
+
     syncWorkflowOutput.status = isManualStop ? JobRunStatus.Stopped : JobRunStatus.Completed;
 
     // Post-pass: re-stamp directory mtime/atime now that all child writes are done.
@@ -127,6 +156,16 @@ export const ChildSyncWorkflow = async ({jobRunId, scanWorkflowStatus = JobRunSt
         } catch (error) {
             // Best-effort: a failed restamp pass should not fail the migration itself.
             console.error(`SyncWorkflow ${jobRunId} directory restamp pass failed: ${error?.message ?? error}`);
+        }
+    }
+
+    // Signal parent with completion
+    if (parentWorkflowId) {
+        try {
+            const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+            await parentHandle.signal(childWorkflowDoneSignal, 'sync', syncWorkflowOutput);
+        } catch (signalErr) {
+            console.error(`SyncWorkflow ${jobRunId} failed to signal parent completion: ${signalErr?.message}`);
         }
     }
 

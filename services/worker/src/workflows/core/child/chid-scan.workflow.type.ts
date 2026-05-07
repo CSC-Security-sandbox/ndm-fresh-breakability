@@ -11,7 +11,8 @@ export interface ChildScanWorkflowInput {
     isMigration: boolean;
     actionState: JobRunStatus;
     isInitialScan?: boolean;  
-    workerConcurrency?: number
+    workerConcurrency?: number;
+    parentWorkflowId?: string;
 }
 
 export interface ChildScanWorkflowOutput {

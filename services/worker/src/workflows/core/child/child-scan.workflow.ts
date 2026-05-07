@@ -1,4 +1,5 @@
 import * as wf from '@temporalio/workflow';
+import { getExternalWorkflowHandle } from '@temporalio/workflow';
 import { CommonActivityService } from "src/activities/common/common.service";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
@@ -8,6 +9,9 @@ import { ITERATIONS_LIMIT } from '../common/workflow-constants';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
+
+const childWorkflowDoneSignal = wf.defineSignal<[string, any]>('childWorkflowDone');
+const childWorkflowFailedSignal = wf.defineSignal<[string, string]>('childWorkflowFailed');
 
 
 
@@ -55,7 +59,7 @@ const {
 
 const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
-export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
+export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20, parentWorkflowId}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
   await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
 
@@ -86,67 +90,107 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
   let isStopRequested = false;
   let iterations = 0; 
+  let shouldContinueAsNew = false;
+  let fatalError: any = null;
 
-  while(dirBatchIds.length > 0) {   
+  try {
+    while(dirBatchIds.length > 0) {   
 
-    if(actionState === JobRunStatus.Stopped) {
-      isStopRequested = true
-      console.log(`Stopping ChildScanWorkflow ${jobRunId} as requested. ${actionState}`);
-      break;
+      if(actionState === JobRunStatus.Stopped) {
+        isStopRequested = true
+        console.log(`Stopping ChildScanWorkflow ${jobRunId} as requested. ${actionState}`);
+        break;
+      }
+
+      // wait until the state is paused. 
+      await updateJobStatusIfNotRunning(actionState, jobRunId);
+      await wf.condition(() => actionState !== JobRunStatus.Paused);
+
+      const currentBatchIds = dirBatchIds;
+      const nextBatchIds: string[] = [];
+
+      for (let i = 0; i < currentBatchIds.length; i += workerConcurrency) {
+        try {
+          const validationSteps = isMigration
+            ? await validateCommandStreamLength(jobRunId, () => actionState)
+            : await validateFileStreamLength(jobRunId, () => actionState);
+            
+          iterations += validationSteps;
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+          throw error;
+        }
+
+        const batchSlice = currentBatchIds.slice(i, i + workerConcurrency);
+        iterations += batchSlice.length;
+        
+        const batchResults = await Promise.all(
+          batchSlice.map(async (batchId) => {
+              try {
+                return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
+              } catch (error) {
+                console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
+                throw error;
+              }
+            })
+          );
+
+        for (const result of batchResults) {
+          scanWorkflowOutput.fileCount += result.fileCount;
+          scanWorkflowOutput.dirCount += result.dirCount; 
+          nextBatchIds.push(...result.batchDirs);
+          if (result.excludedPaths?.length) scanWorkflowOutput.excludedPaths!.push(...result.excludedPaths);
+          if (result.skippedPaths?.length) scanWorkflowOutput.skippedPaths!.push(...result.skippedPaths);
+        }
+
+        if(iterations > ITERATIONS_LIMIT ){
+          const remainingBatchIds = currentBatchIds.slice(i + workerConcurrency);
+          const nextDirBatchIds = [...nextBatchIds, ...remainingBatchIds];
+          console.warn(`ChildScanWorkflow ${jobRunId} exceeded iteration budget (${iterations} > ${ITERATIONS_LIMIT}); continuing as new.`);
+          shouldContinueAsNew = true;
+          dirBatchIds = nextDirBatchIds;
+          break;
+        }
+      }
+      if (shouldContinueAsNew) break;
+      dirBatchIds = nextBatchIds;
     }
-
-    // wait until the state is paused. 
-    await updateJobStatusIfNotRunning(actionState, jobRunId);
-    await wf.condition(() => actionState !== JobRunStatus.Paused);
-
-    const currentBatchIds = dirBatchIds;
-    const nextBatchIds: string[] = [];
-
-    for (let i = 0; i < currentBatchIds.length; i += workerConcurrency) {
-      try {
-        const validationSteps = isMigration
-          ? await validateCommandStreamLength(jobRunId, () => actionState)
-          : await validateFileStreamLength(jobRunId, () => actionState);
-          
-        iterations += validationSteps;
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
-        throw error;
-      }
-
-      const batchSlice = currentBatchIds.slice(i, i + workerConcurrency);
-      iterations += batchSlice.length;
-      
-      const batchResults = await Promise.all(
-        batchSlice.map(async (batchId) => {
-            try {
-              return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
-            } catch (error) {
-              console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
-              throw error;
-            }
-          })
-        );
-
-      for (const result of batchResults) {
-        scanWorkflowOutput.fileCount += result.fileCount;
-        scanWorkflowOutput.dirCount += result.dirCount; 
-        nextBatchIds.push(...result.batchDirs);
-        if (result.excludedPaths?.length) scanWorkflowOutput.excludedPaths!.push(...result.excludedPaths);
-        if (result.skippedPaths?.length) scanWorkflowOutput.skippedPaths!.push(...result.skippedPaths);
-      }
-
-      if(iterations > ITERATIONS_LIMIT ){
-        const remainingBatchIds = currentBatchIds.slice(i + workerConcurrency);
-        const nextDirBatchIds = [...nextBatchIds, ...remainingBatchIds];
-        console.warn(`ChildScanWorkflow ${jobRunId} exceeded iteration budget (${iterations} > ${ITERATIONS_LIMIT}); continuing as new.`);                      
-        await wf.continueAsNew({ jobRunId, dirsToScan, dirBatchIds: nextDirBatchIds, batchSize, dirCount: scanWorkflowOutput.dirCount, fileCount: scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency });      
-      }
-    }
-    dirBatchIds = nextBatchIds;
+  } catch (error) {
+    fatalError = error;
   }
+
+  // Handle continueAsNew (must be outside try-catch)
+  if (shouldContinueAsNew) {
+    await wf.continueAsNew({ 
+      jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount: scanWorkflowOutput.dirCount, fileCount: scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency, parentWorkflowId 
+    });
+  }
+
+  // Handle fatal error — signal parent before throwing
+  if (fatalError) {
+    if (parentWorkflowId) {
+      try {
+        const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+        await parentHandle.signal(childWorkflowFailedSignal, 'scan', fatalError?.message || 'Fatal error in scan workflow');
+      } catch (signalErr) {
+        console.error(`ChildScanWorkflow ${jobRunId} failed to signal parent: ${signalErr?.message}`);
+      }
+    }
+    throw fatalError;
+  }
+
   scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
 
+  // Signal parent with completion
+  if (parentWorkflowId) {
+    try {
+      const parentHandle = getExternalWorkflowHandle(parentWorkflowId);
+      await parentHandle.signal(childWorkflowDoneSignal, 'scan', scanWorkflowOutput);
+    } catch (signalErr) {
+      console.error(`ChildScanWorkflow ${jobRunId} failed to signal parent completion: ${signalErr?.message}`);
+    }
+  }
+  
   return scanWorkflowOutput;
 }
