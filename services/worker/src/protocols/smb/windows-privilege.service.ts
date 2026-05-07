@@ -25,9 +25,11 @@ export class WindowsPrivilegeService {
         // Password is passed via NDM_SMB_PASSWORD env var so it never appears in the command line.
         const safeUsername = username.replace(/'/g, "''");
 
-        // Escape LDAP filter metacharacters (* ( ) \ NUL) in the sAMAccountName value.
+        // Uses Get-CimInstance (available on PS 3+, replaces deprecated Get-WmiObject).
+        // Nested group membership is resolved via the LDAP_MATCHING_RULE_IN_CHAIN OID (1.2.840.113556.1.4.1941),
+        // which makes AD walk the full transitive member-of chain server-side — no client-side recursion needed.
         const psScript = `
-$cs = Get-WmiObject Win32_ComputerSystem
+$cs = Get-CimInstance -ClassName Win32_ComputerSystem
 if ($cs.PartOfDomain -eq $false) {
     Write-Output 'NOT_DOMAIN_JOINED'
     exit
@@ -48,10 +50,15 @@ try {
     $userDN = $userResult.Properties["distinguishedName"][0]
     $groupSearcher = New-Object System.DirectoryServices.DirectorySearcher($cred)
     $groupSearcher.Filter = "(&(objectClass=group)(cn=Backup Operators))"
-    $groupSearcher.PropertiesToLoad.Add("member") | Out-Null
+    $groupSearcher.PropertiesToLoad.Add("distinguishedName") | Out-Null
     $groupResult = $groupSearcher.FindOne()
-    $isMember = $groupResult.Properties["member"] | Where-Object { $_ -eq $userDN }
-    if ($isMember) { Write-Output 'IS_MEMBER' } else { Write-Output 'NOT_MEMBER' }
+    if ($null -eq $groupResult) { Write-Output 'NOT_MEMBER'; exit }
+    $groupDN = $groupResult.Properties["distinguishedName"][0]
+    $nestedSearcher = New-Object System.DirectoryServices.DirectorySearcher($cred)
+    $nestedSearcher.Filter = "(&(objectClass=user)(distinguishedName=$userDN)(memberOf:1.2.840.113556.1.4.1941:=$groupDN))"
+    $nestedSearcher.PropertiesToLoad.Add("distinguishedName") | Out-Null
+    $nestedResult = $nestedSearcher.FindOne()
+    if ($nestedResult) { Write-Output 'IS_MEMBER' } else { Write-Output 'NOT_MEMBER' }
 } catch {
     Write-Output 'ERROR'
 }

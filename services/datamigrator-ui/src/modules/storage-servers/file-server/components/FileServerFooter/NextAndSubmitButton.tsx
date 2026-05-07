@@ -290,15 +290,23 @@ const NextAndSubmitButton = () => {
         handleFinish();
       } else {
         const resp = await handleValidateConnection();
-        // Stay on the page if there are any errors or warnings so the user can
-        // read them. On the next Finish click, areIdsEqual will be true (the
-        // workers are now in the validated set) and handleFinish() is called
-        // directly without re-running validation.
-        if (resp.errorMessageList.length === 0) {
+        const hasErrors = resp.errorMessageList.some(
+          (w: { errorMessage: string }) => w.errorMessage
+        );
+        const hasWarnings = resp.errorMessageList.some(
+          (w: { warnings?: string[] }) => w.warnings?.length > 0
+        );
+        if (!hasErrors) {
+          if (hasWarnings) {
+            notify.warning(
+              'Some workers have warnings (see details below). Validation succeeded — click Finish again to proceed.'
+            );
+          }
           // Remove handleFinish and enable goToNextStep once speed test is enabled
           // goToNextStep();
           handleFinish();
         }
+        // If there are real errors, stay on the page so the user can read them.
       }
     } else {
       goToNextStep();

@@ -295,6 +295,31 @@ describe('WindowsPrivilegeService', () => {
                 expect(decoded).toContain('distinguishedName');
             });
 
+            it('should use Get-CimInstance instead of the deprecated Get-WmiObject', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-cim', 'user', 'pass');
+
+                const calledArg = mockExecAsync.mock.calls[0][0] as string;
+                const encodedPart = calledArg.split('-EncodedCommand ')[1];
+                const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
+                expect(decoded).toContain('Get-CimInstance');
+                expect(decoded).not.toContain('Get-WmiObject');
+            });
+
+            it('should use the LDAP_MATCHING_RULE_IN_CHAIN OID for recursive (nested) group membership', async () => {
+                mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
+
+                await service.checkBackupOperatorMembership('trace-nested', 'user', 'pass');
+
+                const calledArg = mockExecAsync.mock.calls[0][0] as string;
+                const encodedPart = calledArg.split('-EncodedCommand ')[1];
+                const decoded = Buffer.from(encodedPart, 'base64').toString('utf16le');
+                // OID 1.2.840.113556.1.4.1941 enables recursive member-of resolution in AD
+                expect(decoded).toContain('1.2.840.113556.1.4.1941');
+                expect(decoded).toContain('memberOf:1.2.840.113556.1.4.1941:=');
+            });
+
             it('should escape single quotes in username to prevent script injection', async () => {
                 mockExecAsync.mockResolvedValue({ stdout: 'IS_MEMBER', stderr: '' });
 

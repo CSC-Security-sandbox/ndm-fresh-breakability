@@ -36,17 +36,25 @@ export class ValidateConnectionActivity {
       message: `[${protocolType}] Connection to ${payload.hostname} from ${this.workerId} validated successfully`,
     };
     const protocol: Protocol = this.protocols.getProtocol(ProtocolTypes[protocolType]);
+    let connectionEstablished = false;
     try {
       await protocol.validateConnection(traceId, payload);
+      connectionEstablished = true;
 
       if (protocolType === ProtocolTypes.SMB) {
-        const membershipResult = await this.windowsPrivilegeService.checkBackupOperatorMembership(
-          traceId, payload.username, payload.password,
-        );
-        if (membershipResult === 'NOT_DOMAIN_JOINED' || membershipResult === 'ERROR') {
+        const username = payload.username;
+        const password = payload.password;
+        if (!username || !password) {
           response.warnings.push('BACKUP_OPERATORS_CHECK_SKIPPED');
-        } else if (membershipResult === 'NOT_MEMBER') {
-          response.warnings.push('BACKUP_OPERATORS_NOT_MEMBER');
+        } else {
+          const membershipResult = await this.windowsPrivilegeService.checkBackupOperatorMembership(
+            traceId, username, password,
+          );
+          if (membershipResult === 'NOT_DOMAIN_JOINED' || membershipResult === 'ERROR') {
+            response.warnings.push('BACKUP_OPERATORS_CHECK_SKIPPED');
+          } else if (membershipResult === 'NOT_MEMBER') {
+            response.warnings.push('BACKUP_OPERATORS_NOT_MEMBER');
+          }
         }
       }
       if (feature.enablePreListPath) {
@@ -70,7 +78,7 @@ export class ValidateConnectionActivity {
         message: `Failed to validate connection for ${payload.hostname} of type ${protocolType}: ${error}`,
       };
     } finally {
-      if (protocolType === ProtocolTypes.SMB) {
+      if (protocolType === ProtocolTypes.SMB && connectionEstablished) {
         try {
           this.logger.log(`[${traceId}] disconnecting session for SMB`);
           const disconnectResponse = await protocol.disconnectSession(traceId, payload);

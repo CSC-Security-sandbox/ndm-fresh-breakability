@@ -117,6 +117,19 @@ describe('ValidateConnectionActivity', () => {
 
   // ── SMB disconnect ─────────────────────────────────────────────────────────
 
+  it('should NOT call disconnectSession when SMB validateConnection fails (connection never established)', async () => {
+    const mockProtocol = {
+      validateConnection: jest.fn().mockRejectedValue(new Error('connection refused')),
+      disconnectSession: jest.fn(),
+    };
+    (protocols.getProtocol as jest.Mock).mockReturnValue(mockProtocol);
+
+    const response = await service.validate('trace-smb-fail', 'SMB', { hostname: 'smb-host', username: 'u', password: 'p' }, { enablePreListPath: false, enableVersionFetch: false });
+
+    expect(response.status).toBe('error');
+    expect(mockProtocol.disconnectSession).not.toHaveBeenCalled();
+  });
+
   it('should call disconnectSession after successful validation for SMB protocol', async () => {
     const mockProtocol = {
       validateConnection: jest.fn().mockResolvedValue(undefined),
@@ -289,6 +302,41 @@ describe('ValidateConnectionActivity', () => {
 
       expect(mockWindowsPrivilegeService.checkBackupOperatorMembership).not.toHaveBeenCalled();
       expect(response.warnings).toEqual([]);
+    });
+
+    // ── Missing credentials — skip PS call entirely ────────────────────────
+
+    describe('SMB payload has no username or password (anonymous / guest share)', () => {
+      it('should push BACKUP_OPERATORS_CHECK_SKIPPED and NOT call PS when username is missing', async () => {
+        const response = await service.validate('trace-anon-1', 'SMB', { hostname: 'smb-host', password: 'p' }, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED']);
+        expect(mockWindowsPrivilegeService.checkBackupOperatorMembership).not.toHaveBeenCalled();
+      });
+
+      it('should push BACKUP_OPERATORS_CHECK_SKIPPED and NOT call PS when password is missing', async () => {
+        const response = await service.validate('trace-anon-2', 'SMB', { hostname: 'smb-host', username: 'u' }, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED']);
+        expect(mockWindowsPrivilegeService.checkBackupOperatorMembership).not.toHaveBeenCalled();
+      });
+
+      it('should push BACKUP_OPERATORS_CHECK_SKIPPED and NOT call PS when both credentials are missing', async () => {
+        const response = await service.validate('trace-anon-3', 'SMB', { hostname: 'smb-host' }, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(response.status).toBe('success');
+        expect(response.warnings).toEqual(['BACKUP_OPERATORS_CHECK_SKIPPED']);
+        expect(mockWindowsPrivilegeService.checkBackupOperatorMembership).not.toHaveBeenCalled();
+      });
+
+      it('should still call disconnectSession even when credentials are missing', async () => {
+        const response = await service.validate('trace-anon-4', 'SMB', { hostname: 'smb-host' }, { enablePreListPath: false, enableVersionFetch: false });
+
+        expect(response.status).toBe('success');
+        expect(mockProtocol.disconnectSession).toHaveBeenCalled();
+      });
     });
   });
 });
