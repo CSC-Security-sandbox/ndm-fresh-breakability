@@ -141,7 +141,7 @@ func RefreshAccessTokenUsingRefreshToken(refreshToken string) (string, string, e
 	}
 
 	tokenUrl := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, TOKEN_URL)
-	
+
 	data := url.Values{}
 	data.Set("client_id", CLIENT_ID)
 	data.Set("client_secret", CLIENT_SECRET)
@@ -156,7 +156,7 @@ func RefreshAccessTokenUsingRefreshToken(refreshToken string) (string, string, e
 		return "", "", err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode == http.StatusOK {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -660,10 +660,11 @@ func BuildFullURL(s parser.Scenario, sharedVars map[string]interface{}) string {
 }
 
 // EnsureValidToken checks if the current token is expired and refreshes it if needed
+// If forceRefresh is true, it will refresh regardless of TokenExpiresAt
 // This should be called before any API request to prevent "Jwt is expired" errors
-func EnsureValidToken() error {
+func EnsureValidToken(forceRefresh bool) error {
 	now := time.Now().Unix()
-	
+
 	// Debug logging to track token state
 	if TokenExpiresAt > 0 {
 		remaining := TokenExpiresAt - now
@@ -672,8 +673,11 @@ func EnsureValidToken() error {
 		LogDebug("[Token Check] TokenExpiresAt not set (0)")
 	}
 
-	// Check if token is expired or will expire soon
-	if TokenExpiresAt > 0 && now >= TokenExpiresAt {
+	// Check if token is expired, will expire soon, or force refresh requested
+	if forceRefresh || (TokenExpiresAt > 0 && now >= TokenExpiresAt) {
+		if forceRefresh {
+			LogDebug("[Token Refresh] Force refresh requested (likely due to 401 response)")
+		}
 		LogDebug(fmt.Sprintf("[Token Refresh] Token expired or expiring soon, initiating refresh..."))
 
 		// Try to refresh using refresh token first (preferred method - avoids credential issues)
@@ -776,33 +780,52 @@ func GetExtraHeaders(authToken string, extraHeaders map[string]string, sharedVar
 }
 
 // sendAPIRequest sends an HTTP request with the JSON payload.
+// Implements reactive token refresh: makes the request, and if it gets 401,
+// refreshes the token and retries once.
 func SendAPIRequest(method, url string, body []byte, headers map[string]string) (*http.Response, error) {
-	// Refresh token if needed RIGHT BEFORE making the request
-	// Only refresh when using the global AuthToken (not custom tokens for specific tests)
-	if authHeader, ok := headers[AuthHeader]; ok {
-		if AuthToken != "" {
-			// Check if this request is using the global AuthToken
-			expectedHeader := BearerPrefix + AuthToken
-			if authHeader == expectedHeader {
-				// This request uses global token - ensure it's fresh
-				LogDebug(fmt.Sprintf("[SendAPIRequest] Checking token freshness before %s %s", method, url))
-				oldToken := AuthToken
-				if err := EnsureValidToken(); err != nil {
-					LogError(fmt.Sprintf("[SendAPIRequest] Failed to refresh token before %s %s", method, url), err)
-					// Continue anyway - the API call will fail with a clear error
-				}
-				// Update header if token was refreshed
-				if oldToken != AuthToken {
-					headers[AuthHeader] = BearerPrefix + AuthToken
-					LogDebug(fmt.Sprintf("[SendAPIRequest] Updated request header with refreshed token"))
-				}
-			}
-		}
-	} else {
-		// No auth header - this is likely a token fetch request itself
-		LogDebug(fmt.Sprintf("[SendAPIRequest] No auth header for %s %s (likely token fetch)", method, url))
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   60 * time.Second,
 	}
 
+	// Make the initial request
+	resp, err := makeRequest(client, method, url, body, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if we got 401 Unauthorized and this request uses the global AuthToken
+	if resp.StatusCode == 401 {
+		if authHeader, ok := headers[AuthHeader]; ok && AuthToken != "" {
+			expectedHeader := BearerPrefix + AuthToken
+			if authHeader == expectedHeader {
+				// Close the first response body
+				resp.Body.Close()
+
+				LogDebug(fmt.Sprintf("[Token Refresh] Got 401 for %s %s, attempting token refresh", method, url))
+
+				// Force refresh the token (401 means token is invalid regardless of TokenExpiresAt)
+				if err := EnsureValidToken(true); err != nil {
+					LogError(fmt.Sprintf("[Token Refresh] Failed to refresh token after 401 for %s %s", method, url), err)
+					// Return the original 401 response (need to re-make the request to get a fresh response)
+					return makeRequest(client, method, url, body, headers)
+				}
+
+				// Update the Authorization header with the new token
+				headers[AuthHeader] = BearerPrefix + AuthToken
+				LogDebug(fmt.Sprintf("[Token Refresh] Retrying %s %s with refreshed token", method, url))
+
+				// Retry the request with the new token
+				return makeRequest(client, method, url, body, headers)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+// makeRequest is a helper function that creates and executes an HTTP request
+func makeRequest(client *http.Client, method, url string, body []byte, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequest(strings.ToUpper(method), url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
@@ -810,11 +833,6 @@ func SendAPIRequest(method, url string, body []byte, headers map[string]string) 
 
 	for key, value := range headers {
 		req.Header.Set(key, value)
-	}
-
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   60 * time.Second,
 	}
 
 	return client.Do(req)
