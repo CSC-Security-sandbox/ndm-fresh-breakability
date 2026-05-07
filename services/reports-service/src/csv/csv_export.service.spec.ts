@@ -9,6 +9,7 @@ import * as validation from '../utils/utils';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { CocMaterializationService } from './coc-materialization.service';
 
 jest.mock("fs");
 jest.mock("fast-csv");
@@ -56,6 +57,14 @@ describe("CsvService", () => {
           provide: ProjectIdCacheService,
           useValue: {
             getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
+        },
+        {
+          provide: CocMaterializationService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(false),
+            ensureCutoverInventoryMaterialized: jest.fn(),
+            dropMaterialized: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -323,6 +332,14 @@ describe("CsvService", () => {
           {
             provide: ProjectIdCacheService,
             useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue('project-123') },
+          },
+          {
+            provide: CocMaterializationService,
+            useValue: {
+              isEnabled: jest.fn().mockReturnValue(false),
+              ensureCutoverInventoryMaterialized: jest.fn(),
+              dropMaterialized: jest.fn().mockResolvedValue(undefined),
+            },
           },
           // Note: LoggerFactory is NOT provided, triggering fallback
         ],

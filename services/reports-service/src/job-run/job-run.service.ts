@@ -28,6 +28,7 @@ import * as path from "path";
 import * as os from "os";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { CocMaterializationService } from "../csv/coc-materialization.service";
 
 /** Job run states where persisted job_stats snapshot should drive UI counts (incl. cutover review states). */
 const TERMINAL_JOB_RUN_STATUSES: JobRunStatus[] = [
@@ -55,6 +56,7 @@ export class JobRunService {
     @InjectRepository(JobStatsSummaryMvEntity)
     private jobStatsSummaryMvRepo: Repository<JobStatsSummaryMvEntity>,
     private readonly projectIdCacheService: ProjectIdCacheService,
+    private readonly cocMaterialization: CocMaterializationService,
     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
   ) {
     if (loggerFactory) {
@@ -360,6 +362,10 @@ export class JobRunService {
         if (jobRun.jobConfig.jobType !== JobType.CutOver) {
           await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
         }
+        // Can happen when the drop failed because of pod crash. This is a fallback to delete if exists
+        if (jobRun.jobConfig.jobType === JobType.CutOver) {
+          await this.cocMaterialization.dropMaterialized(jobRunId);
+        }
         return zipFilePath;
       }
 
@@ -432,6 +438,10 @@ export class JobRunService {
       } catch (zipError) {
         this.logger.error(`projectId: ${projectId} Failed to create ZIP at: ${zipFilePath}`, zipError?.stack || zipError);
         throw zipError;
+      }
+
+      if (jobType === JobType.CutOver) {
+        await this.cocMaterialization.dropMaterialized(jobRunId);
       }
 
       // Bundle directory is no longer needed — ZIP is the canonical artifact

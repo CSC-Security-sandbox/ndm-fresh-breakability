@@ -1,12 +1,14 @@
 import { Logger } from "@nestjs/common";
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { ScheduleModule } from "@nestjs/schedule";
 import { JobRunController } from "./job-run.controller";
 import { JobRunService } from "./job-run.service";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { ReportsEntity } from "src/entities/reports.entity";
 import { CsvService } from "src/csv/csv_export.service";
 import { ErrorLogService } from "src/csv/error_log_csv.service";
+import { CocMaterializationService } from "src/csv/coc-materialization.service";
 import { OperationErrorEntity } from "src/entities/operation-error.entity";
 import { TaskEntity } from "src/entities/task.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
@@ -29,8 +31,9 @@ import { ProjectIdCacheService } from '../utils/project-id-cache.service';
     ]),
     AuthKeycloakModule,
     LoggerModule.forRoot(),
+    ScheduleModule.forRoot(),
   ],
   controllers: [JobRunController],
-  providers: [JobRunService, CsvService, Logger, ErrorLogService, ProjectIdCacheService],
+  providers: [JobRunService, CsvService, CocMaterializationService, Logger, ErrorLogService, ProjectIdCacheService],
 })
 export class JobRunModule {}

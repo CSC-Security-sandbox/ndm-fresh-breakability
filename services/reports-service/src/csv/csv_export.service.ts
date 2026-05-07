@@ -11,6 +11,7 @@ import {
 import { ProjectIdCacheService } from '../utils/project-id-cache.service';
 import { JobType } from 'src/constants/enums';
 import { JobRunEntity } from 'src/entities/jobrun.entity';
+import { CocMaterializationService } from './coc-materialization.service';
 
 export const CSV_FILE_NAMES = {
     COC: 'coc-report.csv',
@@ -56,10 +57,11 @@ export class CsvService {
     private static readonly ACE_TARGET_PATTERN = 'ACE in target:.*$';
     private readonly logger: LoggerService | Logger;
     constructor(
-        private readonly dataSource: DataSource, 
+        private readonly dataSource: DataSource,
         private readonly projectIdCacheService: ProjectIdCacheService,
         @InjectRepository(JobRunEntity)
         private readonly jobRunRepository: Repository<JobRunEntity>,
+        private readonly cocMaterialization: CocMaterializationService,
         @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory
     ) {
         if (loggerFactory) {
@@ -211,12 +213,34 @@ export class CsvService {
     }
 
     async getInventoryData(jobRunId: string, limit: number, cursor: string | null, jobType?: string, protocol?: string, sourceDirSuffix?: string, targetDirSuffix?: string) {
-        let query;
         if (jobType?.toUpperCase() === JobType.CutOver) {
-            query = await this.getCutoverInventoryDataQuery(jobRunId, limit, cursor, sourceDirSuffix, targetDirSuffix);
-        } else {
-            query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol, sourceDirSuffix, targetDirSuffix);
-        } 
+            if (this.cocMaterialization.isEnabled()) {
+                const tableFq = await this.cocMaterialization.ensureCutoverInventoryMaterialized(
+                    jobRunId,
+                    sourceDirSuffix ?? '',
+                    targetDirSuffix ?? '',
+                );
+                const query = `
+                    SELECT
+                        path AS _cursor_path,
+                        source_path AS "Source Path",
+                        destination_path AS "Destination Path",
+                        source_checksum AS "Source Checksum",
+                        destination_checksum AS "Destination Checksum",
+                        checksum_match_status AS "ChecksumMatchStatus",
+                        checksum_generated_ts_utc AS "Checksum Generated Timestamp (UTC)",
+                        type AS "Type"
+                    FROM ${tableFq}
+                    WHERE ($1::text IS NULL OR path > $1::text)
+                    ORDER BY path
+                    LIMIT $2
+                `;
+                return this.dataSource.query(query, [cursor, limit]);
+            }
+            const query = await this.getCutoverInventoryDataQuery(jobRunId, limit, cursor, sourceDirSuffix, targetDirSuffix);
+            return this.dataSource.query(query.query, query.values);
+        }
+        const query = await this.getInventoryDataQuery(jobRunId, limit, cursor, jobType, protocol, sourceDirSuffix, targetDirSuffix);
         return this.dataSource.query(query.query, query.values);
     }
 

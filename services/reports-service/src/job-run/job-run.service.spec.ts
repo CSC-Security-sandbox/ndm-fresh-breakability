@@ -8,6 +8,7 @@ import { TaskEntity } from "src/entities/task.entity";
 import { ReportsEntity } from "src/entities/reports.entity";
 import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
 import { CsvService } from "src/csv/csv_export.service";
+import { CocMaterializationService } from "src/csv/coc-materialization.service";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -165,6 +166,14 @@ describe("JobRunService", () => {
           provide: ProjectIdCacheService,
           useValue: {
             getProjectIdFromCache: jest.fn().mockResolvedValue('project-123'),
+          },
+        },
+        {
+          provide: CocMaterializationService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(false),
+            ensureCutoverInventoryMaterialized: jest.fn(),
+            dropMaterialized: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -1135,6 +1144,14 @@ describe("JobRunService", () => {
           { provide: getRepositoryToken(JobStatsSummaryMvEntity), useValue: mockJobSummaryMvRepo },
           { provide: getRepositoryToken(StorageOverviewSummaryEntity), useValue: mockStorageSummaryMvRepo },
           { provide: ProjectIdCacheService, useValue: { getProjectIdFromCache: jest.fn().mockResolvedValue("project-123") } },
+          {
+            provide: CocMaterializationService,
+            useValue: {
+              isEnabled: jest.fn().mockReturnValue(false),
+              ensureCutoverInventoryMaterialized: jest.fn(),
+              dropMaterialized: jest.fn().mockResolvedValue(undefined),
+            },
+          },
         ],
       }).compile();
 
