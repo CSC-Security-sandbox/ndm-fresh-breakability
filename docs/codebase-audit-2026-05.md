@@ -1,0 +1,316 @@
+# NDM Codebase Audit — May 2026
+
+**Scope:** Control Plane (`jobs-service`, `db-writer`, `admin-service`, `config-service`, `support-service`, `reports-service`) and Worker (`services/worker`), plus shared `lib/` packages.
+**Method:** Pattern-based static review (unhandled awaits, swallowed errors, unsafe parsing, missing input validation, Temporal determinism, race conditions, edge-case input handling). Findings verified against actual code at the cited file:line.
+**Author:** Cursor audit.
+
+**Priority legend**
+
+- **P0** — data corruption / crash / silent failure in production
+- **P1** — degraded UX or hidden failure mode
+- **P2** — hardening / cleanup
+
+**Estimation:** developer-hours assuming the engineer is familiar with the area.
+
+**Total estimates per table**
+
+- **Table 1 — Correctness & Error Handling:** 30 findings (16 P0, 11 P1, 3 P2) → **~62h**
+- **Table 2 — Edge Cases:** 20 findings (2 P0, 14 P1, 5 P2) → **~26h**
+- **Race conditions table:** 22 findings (R1–R22) + G1 prerequisite tooling → **~111.5h** (~14 dev-days; G1 alone ≈ 3d / 24h)
+- **Bulk hardening plan (rolled-up by group, 11 PRs):** **~55 dev-days** for one engineer; **~3 weeks** parallelized across three.
+
+---
+
+## Table 1 — Correctness & Error Handling (sorted by Group → Priority)
+
+> **Why Group 1 isn't in this table:** Group 1 is *prerequisite tooling* (build `lib/concurrency-lib`), not a bug. It appears as the first row of the race-conditions table (G1) and in the bulk-hardening plan, but no existing code is "wrong because of it" — the library simply doesn't exist yet. The first group containing real findings is **Group 2**.
+
+| # | Group | Issue | Why it matters | Component | File:Line | Priority | Est. |
+|---|-------|-------|----------------|-----------|-----------|----------|------|
+| 1 | **2** | Three sequential `update(...)` calls run **outside a transaction** | If any update after the first fails, DB is inconsistent (Active in one row, Inactive in another) | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:100-151` (`cutOverApproval`) | P0 | 4h |
+| 2 | **3** | `sendSignal()` followed by `update()` with no compensation | Signal succeeds but DB update fails → workflow paused but DB still shows `Running` | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:113-133` (`signalJobRuns`) | P0 | 4h |
+| 3 | **3** | DB updated to `Running` **before** signal is sent; if signal fails, DB lies | Job appears "Running" in UI but workflow still paused; never makes progress | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:135-156` (`resumeJobRuns`) | P0 | 3h |
+| 4 | **3** | `hasActivePollers` → `sendSignal` → `update` is check-then-act with no atomicity; `terminateWorkflow` failure logged but `updateJobRunStatus` runs anyway | Job marked Stopped while workflow still runs; or terminate succeeds but status update fails | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:60-88` (STOP case) | P0 | 6h |
+| 5 | **5** | `new Date()` / `new Date().toISOString()` used **inside Temporal workflow code** | Non-deterministic — breaks workflow replay; can cause `NonDeterminismError` and stuck workflows | Worker | `services/worker/src/workflows/core/common/handle-reporting.ts:115`, `…/execute-migration-child-workflows.ts:123`, `…/execute-discover-child-workflows.ts:91`, `…/execute-retry-migration-child-workflows.ts:132`, `…/execute-setup-workflow.ts:84`, `workflows/upgrade/upgrade-execution.workflow.ts:51,60`, `workflows/upgrade/binary-multicast.workflow.ts:86,100` | P0 | 6h |
+| 14 | **6** | Two `@Cron(EVERY_10_SECONDS)` jobs with no overlap protection | If a tick takes >10s, next tick runs in parallel → duplicated signals, double-counted health checks | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:56,233` | P1 | 3h |
+| 15 | **6** | Token refresh hardcoded at **23 hours** regardless of actual JWT `exp`; failure-retry path uses fire-and-forget `setTimeout(.., 30000)` with no max-retry cap and no single-flight guard | If KeyCloak issues a token with TTL < 24h (e.g., 1h short-TTL policy, clock skew, KeyCloak config change), the token expires ~22h before the scheduled refresh runs → blanket 401s for all CP↔CP and worker↔CP traffic. The 30s retry path also has no upper bound and stacks parallel refreshes (compounds R20). | CP | `services/jobs-service/src/auth/auth.service.ts:102-116`, `services/db-writer/src/auth/auth.service.ts:117` | P1 | 1.5h |
+| 16 | **6** | `Promise.race([allSettled(runPromises), 5s timeout])` — if timeout wins, in-flight worker promises are abandoned, not cancelled | Activities continue after process tries to shut down → leaked Temporal connections, half-completed file ops | Worker | `services/worker/src/work-manager/work-manager.service.ts:594-597` (`shutdownAllWorkers`) | P1 | 4h |
+| 6 | **7** | `latestJobRun.id !== jobRunId` — `latestJobRun` can be `null` | `TypeError: Cannot read property 'id' of null` → 500 to user instead of meaningful error | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:269` (`retryRun`) | P0 | 0.5h |
+| 7 | **7** | `JSON.parse(output.stdout)` with **no try/catch** | Malformed PowerShell stdout (warnings, banner) crashes activity, fails migration job | Worker | `services/worker/src/activities/core/migrate/command-execution/win-opeartions/win-operation.service.ts:342` (`resolveUsernamesToSids`) | P0 | 1h |
+| 8 | **7** | When result is **not** an array, calls `.set(sidMappings?.username, sidMappings?.sid)`; if `sidMappings` is null, `.set(undefined, undefined)` poisons the map | Silent corruption of identity map → wrong user mapping during migration | Worker | `services/worker/src/activities/core/migrate/command-execution/win-opeartions/win-operation.service.ts:343-345` (`resolveUsernamesToSids`) | P0 | 1h |
+| 26 | **7** | **5 unguarded `JSON.parse(serialized)` in stream-data deserializers** — Cmd, ItemInfo, Stats etc. | Corrupt or partially-written Redis stream entry (process killed mid-write, encoder bug, version skew) crashes worker / db-writer for entire job; loop never recovers | Both | `lib/jobs-lib/src/datatype/stream-datatypes.ts:63,112,180,195,213` | P0 | 1.5h |
+| 27 | **7** | **6 unguarded `JSON.parse(serialized)` in metadata-types deserializers** — JobConfig, FileServer, JobState, etc. | Corrupt metadata in Redis crashes ingestion; entire job halts at startup with no actionable error | Both | `lib/jobs-lib/src/types/metadata-types.ts:63,90,129,179,227,244` | P0 | 1.5h |
+| 28 | **7** | Unguarded `JSON.parse(json)` in `JobConfig.deserialize` | Bad row in `redis.jobConfig` blob crashes job startup; user must manually delete the key | Both | `lib/jobs-lib/src/types/job-config.ts:52` | P0 | 0.5h |
+| 29 | **7** | Unguarded `JSON.parse(value)` in hmap iterator and `JSON.parse(decompressedBuffer.toString)` | One bad hmap entry kills batch iteration; data loss until manual cleanup | Both | `lib/jobs-lib/src/redis/redis-hmap-collection.ts:80,110` | P0 | 1h |
+| 17 | **7** | `JSON.parse(value)` inside `.map()` — no try/catch | One corrupt entry in Redis sorted set kills entire API response | CP | `services/jobs-service/src/redis/redis.service.ts:203` (`getInProcessFiles`) | P1 | 1h |
+| 30 | **7** | Unguarded `JSON.parse(jsonString)` in workflow service config deserialization | Malformed config payload crashes config-service request | CP | `services/config-service/src/workflow/workflow.service.ts:143` | P1 | 0.5h |
+| 31 | **7** | **4 controllers parse `JSON.parse(filter)` directly from `?filter=` query string with no try/catch** | Any malformed `?filter=` (or `%`-encoded garbage) returns 500; trivial DoS; also a synchronous throw that bypasses Nest's async error filter in some setups | CP | `services/admin-service/src/project/project.controller.ts:100,157`, `…/account/account.controller.ts:117`, `…/user/user.controller.ts:101`, `…/role-permission/role-permission.controller.ts:100` | P1 | 2h |
+| 19 | **8** | Body typed as `Record<string, any>` — no DTO/validation pipe | Worker can post arbitrary payload; downstream service treats it as truth | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:249-254` (`updateWorkerResponse`) | P1 | 2h |
+| 20 | **8** | Body uses inline typing; no validator. Defaults via `?? []` mask missing keys but don't validate path strings | Empty/null path strings reach DB; potential SQL/path-traversal surface | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:191-204` (`addExcludedSkippedEntries`) | P1 | 2h |
+| 9 | **9** | `readable.on("data", async (mapping) => { … })` — async listener; rejections unhandled, `JSON.parse(mapping)` not guarded; `redisClient.hSet` errors not caught | Identity-mapping ingestion silently drops rows; unhandled rejection can crash worker | CP | `services/jobs-service/src/jobrun/jobrun.init.service.ts:602-621` | P0 | 4h |
+| 10 | **9** | Retry loop guard is `while (response.status !== 200 && count < 3)` and there is **no try/catch around the `axios.post`**. Axios' default `validateStatus` throws on 4xx/5xx, so the retry only ever fires when the server returns 2xx-but-not-200 (e.g., 201/202/204). For real failures (timeouts, 5xx, ECONNRESET) the throw escapes the while and bubbles up immediately. | Designed retry behaviour is silently inverted — successful 201/202 are retried unnecessarily; actual server/network failures are not retried at all and surface as 500 to the workflow caller. | CP | `services/jobs-service/src/jobrun/jobrun.init.service.ts:687-698` | P0 | 1h |
+| 11 | **9** | Reader error containing `"NOGROUP"` triggers `break` permanently without alerting CP | Transient Redis state (group dropped during failover) permanently halts consumer; jobs hang forever | CP | `services/db-writer/src/redis-consumer/redis-consumer.service.ts:835-836` | P0 | 3h |
+| 21 | **9** | `.catch(() => {})` on Redis cleanup operations | Cleanup failures swallowed → Redis key leakage, eventual memory pressure | Worker | `services/worker/src/activities/core/retry/process-retry-batch.activity.ts:172,281` | P1 | 2h |
+| 22 | **9** | `.catch(() => {})` on `fs.promises.rm` / `unlink` | Mount cleanup failures hidden → stale mount points accumulate | CP | `services/jobs-service/src/jobconfig/mount-tracker.service.ts:685,712` | P1 | 1h |
+| 23 | **9** | Catch handler registers a setTimeout, then **another setTimeout** to delete it after the same 5s; logic accidentally never deletes the registered timer in normal path | Memory leak in `errorRecoveryTimers` Set; O(n) cleanup on shutdown | CP | `services/db-writer/src/redis-consumer/redis-consumer.service.ts:840-854` | P1 | 2h |
+| 24 | **9** | `Promise.allSettled` returned but invalid IDs (filtered out at line 44-47) never surfaced to caller | UI shows "all paused" when some IDs were silently skipped | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:113-133` (`signalJobRuns`, PAUSE) | P2 | 1h |
+| 12 | **10** | `projectId` taken from `@Headers("projectId")` — header is trusted, no auth-side check | Cross-project state changes possible if header is spoofed | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:135` (`actions`) | P0 | 3h |
+| 25 | **11** | `console.log` in production code paths | Logs bypass logger formatter, project-id/trace-id missing | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:173`, `services/jobs-service/src/jobconfig/jobconfig.service.ts:677,682` | P2 | 1h |
+| 32 | **11** | **11 raw `console.log/error/warn/info` calls in production library code** (consumed by every service) | Logs miss trace-id / job-id / project-id; structured-log dashboards lose visibility; lint rule for `console.*` cannot be enabled until cleaned | All | `lib/jobs-lib/src/redis/redis-stream-collection.ts:36,42,45,86,116,136,139,189,193,270,279`, `lib/jobs-lib/src/redis/redis-collections.ts:113`, `services/config-service/src/utils/transformers.ts:17` | P2 | 2h |
+
+> **Numbering note:** the audit originally drafted #13 (PowerShell injection) and #18 (Isilon JSON.parse), both re-checked and found to be invalid (rationale in *Findings explicitly removed during validation* below). Those slots are intentionally absent so cross-references throughout the doc stay stable.
+
+**Table 1 totals — 30 findings: 16 P0, 11 P1, 3 P2 → ~62h.**
+
+---
+
+## Table 2 — Edge Cases (sorted by Group → Priority)
+
+> Same numbering note as Table 1 — Group 1 is prerequisite tooling, not a bug, so this table starts at Group 2. Slots **E2** and **E16** are intentionally absent (rationale in *Findings explicitly removed during validation* below).
+
+| # | Group | Edge case | Why it matters | Component | File:Line | Priority | Est. |
+|---|-------|-----------|----------------|-----------|-----------|----------|------|
+| E1 | **2** | Between `operationErrorCount === 0` check and `createJobRun`, db-writer could mark errors RESOLVED | Empty retry job created with nothing to retry; user confused | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:283-291` (`retryRun`) | P1 | 2h |
+| E3 | **6** | `Promise.race` with timeout — if `createClient()` succeeds **after** 10s timeout, connected client is leaked | Connection leak on flapping Redis startup | Worker | `services/worker/src/redis/redis.service.ts:48-53` (`onModuleInit`) | P1 | 1h |
+| E21 | **6** | `purgeDeletedJobConfigs` daily cron has no distributed lock — multi-replica jobs-service deployments will run it on every replica simultaneously | All replicas issue `DROP PARTITION` and bulk DELETEs concurrently → row-lock contention, partial deletes, error spam; in worst case two replicas' deletes interleave and leave the partition detached but un-dropped | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:1283` | P1 | 2h |
+| E4 | **7** | All prior runs are RETRY-type (or none exist) → `latestJobRun` is `null` | NPE during retry creation; user can't retry | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:269` (`retryRun`) | P0 | 0.5h |
+| E5 | **7** | `jobRun.jobConfig` is `null` (lazy-load missing, or jobConfig soft-deleted) | NPE on `.sourcePathId`; cutover approval API 500 | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:100` (`cutOverApproval`) | P1 | 1h |
+| E6 | **7** | `context` null OR `context.jobConfig.sourceFileServer.protocols[0]` when `protocols` is empty | `[0].type` → undefined → `getProtocol(undefined)` throws cryptic error | Worker | `services/worker/src/activities/setup-worker/setup.activity.service.ts:283` | P1 | 1h |
+| E7 | **7** | `result.stdout` contains substring `"unresolved_sids"` but isn't valid JSON | `JSON.parse` throws inside the `if`; not caught; ACL phase fails even when ACL was set | Worker | `services/worker/src/activities/core/migrate/command-execution/win-opeartions/win-operation.service.ts:185-194` | P1 | 1.5h |
+| E8 | **7** | `identityMappingIds` is empty array | `In([])` → `false` in TypeORM; unintended query | CP | `services/jobs-service/src/jobrun/jobrun.init.service.ts:593-595` | P1 | 1h |
+| E9 | **8** | Very large set with `all=true` returns millions of entries; no pagination, no streaming | OOM in CP under load | CP | `services/jobs-service/src/redis/redis.service.ts:191-211` (`getInProcessFiles`) | P0 | 3h |
+| E10 | **8** | Empty `jobRuns: []` array passed in body | `In([])` in TypeORM evaluates `false` and silently no-ops; user gets empty success | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:135` (`actions`) | P1 | 1h |
+| E11 | **8** | Job already in terminal state (`Completed`, `Failed`, `Stopped`) when STOP arrives | Filter excludes these — caller gets `[]` results, no message that "nothing to do" | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:55-58` (STOP) | P2 | 0.5h |
+| E12 | **8** | `body` itself is `null`/`undefined` (not just keys) | `body?.excluded ?? []` works, but no log/metric of malformed worker requests | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:191` (`addExcludedSkippedEntries`) | P2 | 0.5h |
+| E13 | **8** | Query param `?all` provided as string `"yes"` instead of `true`/`false` | `ParseBoolPipe({optional: true})` → `undefined`, defaults to `false`; user expecting "all" gets paginated 10 | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:277-283` (`getInProcessFiles`) | P2 | 0.5h |
+| E14 | **9** | Two concurrent `data` events both call `redisClient.connect()` | "Socket already opened" → unhandled rejection in stream listener | CP | `services/jobs-service/src/jobrun/jobrun.init.service.ts:615-617` | P1 | 1.5h |
+| E15 | **9** | `error.message` may be `undefined` if a non-Error is thrown (string, object) | `RetryableError(undefined)` produces opaque error; lost root cause | Worker | `services/worker/src/activities/core/retry/process-retry-batch.activity.ts:174-183` | P1 | 1h |
+| E17 | **9** | Job in transition (just completed, MV not yet refreshed) | UI shows live (Redis) data partially purged + DB doesn't have summary yet → flickering counts | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:295` (`getJobRunLiveStats`) | P1 | 3h |
+| E18 | **9** | `worker.shutdown()` is **not awaited** in the loop | Stale state seen at next iteration; multiple shutdowns triggered concurrently | Worker | `services/worker/src/work-manager/work-manager.service.ts:580-590` (`shutdownAllWorkers`) | P1 | 1h |
+| E19 | **9** | All `jobRunIds` valid paused, but if half fail to signal, `Promise.allSettled` returns mixed results — caller can't tell which succeeded | Inconsistent UI state; "Resumed" message shown for failed ones | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:96` (RESUME) | P1 | 2h |
+| E20 | **9** | Hardcoded 1000ms sleep between unmounts | If unmount takes >1s, second unmount races on still-mounted FS; if <100ms, sleep is wasted latency | Worker | `services/worker/src/activities/setup-worker/setup.activity.service.ts:295` | P2 | 1h |
+| E22 | **11** | Bootstrap and shutdown error logging uses `console.log`/`console.error` instead of logger | Crash diagnostics in admin-service bootstrap don't reach centralised logging | CP | `services/admin-service/src/main.ts:47,59,68,76,79,90` | P2 | 0.5h |
+
+**Table 2 totals — 2 P0, 14 P1, 5 P2 → ~26h.**
+
+---
+
+## Component split
+
+| Component | Correctness / Error Handling | Edge cases | Total findings | Total est. |
+|-----------|------------------------------|------------|----------------|------------|
+| **Control Plane (CP)** | 23 (jobs-service: 15, db-writer: 3, admin: 4, config: 1) | 15 | **38** | ~56h |
+| **Worker** | 6 | 5 | **11** | ~21h |
+| **Shared `lib/`** | 4 (jobs-lib JSON.parse + console.*) | 0 | **4** | ~6h |
+| **Combined** | **30** (Table 1) | **20** (Table 2) | **50** | **~83h** |
+
+---
+
+## P0 hotspots
+
+- **Control Plane**
+  - `jobrun.service.ts` and `jobrun-action.service.ts` — job-state transitions without transactions, header-trust authZ.
+  - `db-writer/redis-consumer.service.ts` — permanent halt on transient Redis `NOGROUP` error; concurrent flush data loss.
+  - `reports-service/asup-scheduler.service.ts` — daily ASUP transmission cron has no distributed lock (R22).
+- **Worker**
+  - `win-operation.service.ts` — three unguarded `JSON.parse` calls in `resolveUsernamesToSids` and ACL paths.
+  - All workflow files — `new Date()` non-determinism is a class-level issue affecting replay safety across migration, discovery, retry, setup, and upgrade workflows.
+- **Shared `lib/jobs-lib`**
+  - `stream-datatypes.ts` and `metadata-types.ts` — **11 unguarded `JSON.parse` calls in deserializers consumed by every service**. Single most-leveraged fix in the audit: one `safeJsonParse` helper guards the entire data-plane.
+
+---
+
+## Coverage notes
+
+- **`lib/jobs-lib`** scanned: 4 findings (JSON.parse safety, `console.*` in production lib). `auth-lib`, `api-handler-lib`, `logger-lib` checked at file level — no high-risk patterns found beyond what's in `jobs-lib`.
+- **`admin-service`** scanned: 4 controllers parse `?filter=` query string with raw `JSON.parse` (#31). Bootstrap uses `console.*` (E22).
+- **`config-service`** scanned: 1 unguarded `JSON.parse` in workflow service (#30). Isilon storage client mirrors worker's; same try/catch pattern (verified clean).
+- **`reports-service`** scanned: ASUP daily cron has no distributed lock (R22).
+- **`support-service`** scanned: no high-confidence findings.
+- **`db-writer`** all P0 paths verified — R13/R14 hold; #11 (NOGROUP break) holds; purge cron in jobs-service added as E21.
+- **No SQL/query review** — TypeORM relations and raw SQL not audited for N+1 / missing indexes / accidental cross-tenant leaks.
+- **No authZ matrix review** — only one finding (#12 in Table 1) on header trust; a full route-by-route auth review would likely surface several P0 issues.
+- **UI (`datamigrator-ui`)** was excluded.
+
+### Findings explicitly removed during validation (with rationale)
+
+| Original | Why removed |
+|----------|-------------|
+| **#13** PowerShell injection in `win-operation.service.ts:82,356` | Both call sites use `'${path.replace(/'/g, "''")}'` — PowerShell single-quoted strings are literal (no `$var`, `$( )`, backtick, or `\n` interpretation). The only escape is `''` for a literal single quote, which is correctly applied. This is the documented PowerShell-safe pattern. |
+| **#18** Isilon JSON.parse only on 2xx | Re-read of `isilon-storage-client.ts:739-749`: `JSON.parse(data)` IS already wrapped in try/catch (lines 740-746) and the non-2xx error message **does** include the response body verbatim (`Isilon API error: ${res.statusCode} - ${data}`). No silent loss. |
+| **E2** TZ-dependent `new Date()` in `addHocRun` | `new Date()` produces a JS Date object (UTC-anchored), passed to TypeORM, written to Postgres `timestamptz` — driver handles TZ correctly. Off-by-hours only happens when string-formatted dates are involved, which they are not here. |
+| **E16** "Hot loop on reader errors" in db-writer | The catch block at `redis-consumer.service.ts:833-856` registers a 5-second `setTimeout` (line 841) and `await`s it before the outer `while` resumes. So reader-error iterations *do* back off by 5s; there is no hot loop. Premise was wrong. |
+
+---
+
+# Part 2 — Race Condition Audit (Hidden Concurrency Bugs)
+
+## Why this exists
+
+The findings above are bugs that *will* surface in production. The findings below are bugs that **already exist** but haven't surfaced yet because the right interleaving hasn't happened. We want to harden NDM in bulk so these don't show up as production incidents.
+
+**Filtering rule applied:** scenarios that are not realistically reproducible were removed. JavaScript is single-threaded, so many "race-like" patterns are actually safe because the entire check-then-act block runs in one synchronous chunk between awaits. Only races that are **reproducible under realistic conditions** (multi-replica deployment, Temporal at-least-once retries, user double-click, process kill, network blip, DB connection loss, multiple workers) are kept.
+
+## Critical foundational finding
+
+```
+Searched for: redlock, acquireLock, SETNX, async-mutex, optimistic version columns,
+              outbox tables, distributed lock helpers, single-flight wrappers
+Result:       0 usages anywhere in services/ or lib/.
+
+Searched for: pessimistic_write (TypeORM FOR UPDATE), dataSource.transaction
+Result:       1 site uses pessimistic_write (db-writer/inventory.service.ts:616).
+              3 sites use dataSource.transaction (jobs-service jobrun & jobconfig,
+              db-writer inventory). Both patterns are ad-hoc, not abstracted.
+```
+
+**NDM has effectively no concurrency-control mechanism today.** TypeORM transactions are used in 3 places, row locks in 1; everything else relies on "we don't expect this to happen concurrently." There are no Redis distributed locks, no in-process mutexes (no `async-mutex` dep), no optimistic version columns, no outbox machinery, and no single-flight wrappers. The assumption holds in dev/single-pod/single-replica but breaks under production load (multiple CP replicas, multiple workers, Temporal at-least-once retries).
+
+The races below are not edge-case bugs — they are **systemic** and the foundation for the bulk hardening plan.
+
+---
+
+## What is the Outbox Pattern?
+
+Several findings (R10, R11, R12 in the table below) involve a "send signal, then update DB" or "update DB, then send signal" sequence. These can never be made atomic by ordering alone — the second step might always fail. The **Outbox Pattern** is the standard fix.
+
+### The problem
+
+```ts
+async pauseJob(jobRunId: string) {
+  await temporalClient.signalWorkflow(workflowId, "pause"); //  step 1
+  await jobRunRepo.update(jobRunId, { status: "Paused" });  //  step 2
+}
+```
+
+If step 1 succeeds and step 2 fails (CP crashes, DB connection drops), the workflow is paused but the DB still says "Running". This is **lost intent** — there's no record of what was supposed to happen, so we can never reconcile.
+
+Reversing the order has the same problem: if step 1 (DB update) succeeds and step 2 (signal) fails, the DB is wrong.
+
+### The solution
+
+Instead of doing the side-effect (signal) directly, **persist the intent to a database table inside the same transaction as the state change**, then have a separate process drain that table:
+
+```ts
+async pauseJob(jobRunId: string) {
+  await dataSource.transaction(async (manager) => {
+    await manager.update(JobRunEntity, jobRunId, { status: "Paused" });
+    await manager.insert(SignalOutboxEntity, {              //  same txn
+      workflowId,
+      signalName: "pause",
+      payload: { jobRunId },
+      status: "PENDING",
+    });
+  });
+  // commit guarantees: BOTH the status change AND the intent to signal are persisted atomically
+}
+```
+
+A separate worker (cron, every few seconds) reads the outbox table and actually delivers the signal:
+
+```ts
+async drainOutbox() {
+  const pending = await outboxRepo.find({ where: { status: "PENDING" }, take: 100 });
+  for (const row of pending) {
+    try {
+      await temporalClient.signalWorkflow(row.workflowId, row.signalName, row.payload);
+      await outboxRepo.update(row.id, { status: "SENT", sentAt: new Date() });
+    } catch (err) {
+      // Idempotent retry: leave row PENDING; next tick will retry.
+      // After N retries, mark FAILED and alert.
+      await outboxRepo.increment({ id: row.id }, "retries", 1);
+    }
+  }
+}
+```
+
+### Why this works
+
+1. **Atomicity** — the DB transaction commits *both* the state change *and* the recorded intent together, or neither.
+2. **Durability** — if CP crashes after the txn commits but before the drainer runs, the intent survives in the outbox and will be sent on next tick.
+3. **Idempotency** — the drainer can retry forever; signalling Temporal with the same `workflowId + signalName + payload` is safe (Temporal de-duplicates within the workflow's signal queue, or the workflow itself ignores stale signals via state machine).
+4. **Observability** — the outbox table is the audit log: every intent has a row, with status (PENDING/SENT/FAILED) and retry count. Stuck signals become a queryable metric.
+
+### What it costs
+
+- One new DB table (`signal_outbox`) and a Liquibase migration.
+- One new background cron in CP to drain it.
+- Slightly higher latency on the user action (signal is sent ~1 cron-tick later, typically <1s).
+
+### Where it applies in NDM
+
+| Finding | Current pattern | After outbox |
+|---------|-----------------|--------------|
+| R10 (`resumeJobRuns`) | DB update → signal | DB update + outbox insert in txn → drainer signals |
+| R11 (`signalJobRuns` PAUSE) | Signal → DB update | Same as above |
+| R12 (`actions` STOP) | Check pollers → signal → update | DB intent recorded → drainer terminates/signals idempotently |
+
+Every "the DB and Temporal must agree" path in NDM should use the outbox.
+
+---
+
+## Race conditions table (sorted by Group → Priority)
+
+| # | Group | Issue | Reproduction sketch | Blast radius | Component | File:Line | Priority | Est. |
+|---|-------|-------|---------------------|--------------|-----------|-----------|----------|------|
+| G1 | **1** | **Build `lib/concurrency-lib`** — `withMutex` (async-mutex wrapper), `withSingleFlight` (promise dedup), `withDistributedLock` (Redis `SET NX PX` + Lua release), `outbox` schema + `outboxConsumer` cron. **Skip `withDbLock` wrapper** — Group 2 PRs use TypeORM's native `lock: { mode: 'pessimistic_write' }` inline (already proven in `db-writer/inventory.service.ts:616`). | *Not a bug — prerequisite tooling. Verified state of NDM today: 1 use of `pessimistic_write` (db-writer), 3 uses of `dataSource.transaction()` (jobs-service, db-writer); ZERO uses of `async-mutex`, optimistic version columns, Redis distributed locks, single-flight, or outbox tables anywhere in `services/` or `lib/`.* | Without these primitives, R13/R14 (mutex), R10–R12 (outbox), R19/R21/R22/E3/E21 (distributed lock), R20 (single-flight) each have to invent their own locking → inconsistent semantics, latent bugs in the fixes themselves | CP & Worker | new dir: `lib/concurrency-lib` (depends on `async-mutex` npm package) | **P0 (prerequisite)** | ~3d |
+| R1 | **2** | `updateWorkerJobRunStatus` — read workerJobMap → set isActive → save (RMW) | Worker flapping during reconnect: "isActive=true" then "isActive=false" within ms; both reads happen, both writes happen → last-write-wins | Worker shows "active" when actually disconnected (or vice versa); job-routing decisions wrong | CP | `services/jobs-service/src/workers/workers.service.ts:106-118` | P0 | 1h |
+| R2 | **2** | `cutOverApproval` runs three sequential `update(...)` outside a transaction | T calls approve → updates jobConfig MIGRATE row OK → process killed / DB drop → never updates CUT_OVER row | DB inconsistent: MIGRATE Active + CUT_OVER still SCHEDULED → cutover runs again or never re-runs | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:100-151` | P0 | 4h |
+| R3 | **2** | `storeSpeedTestResult` — `findOne` → save 4 separate rows, no txn | Temporal retries activity → both attempts find no existing → both insert 4 rows each | Duplicate speed-test history; reports show wrong P95 latency; storage bloat | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:281-369` | P0 | 4h |
+| R4 | **2** | `createBulkCutover` — check `findOne(existingCutover)` → push to array → save, no DB constraint | Two browser tabs submit same payload → both see no existing → both insert → two CUT_OVER rows for same source+target tuple | Duplicate cutover jobs both run → double-write to target → file conflicts / overwrites | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:932-1002` | P0 | 6h |
+| R5 | **2** | `deleteJobConfig` — check `activeJobRuns.length > 0` → `save({isDeleted:true})`; no `SELECT … FOR UPDATE`, no transaction across check+save | Tab A submits `DELETE /jobconfig/:id` — `findOne(activeJobRuns)` sees `[]`. Concurrently, Tab B (or any user with `ManageJob`) submits `POST /jobrun/ad-hoc` for the same `jobConfigId` → `addHocRun` creates a new `JobRunEntity` in `Pending`. Tab A then completes its `save({isDeleted:true})` → orphan job run now references a deleted config | Orphan jobRun runs with deleted config; FK joins fail; UI hides job but worker still consumes capacity until the run completes | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:1233-1281` | P0 | 6h |
+| R6 | **2** | `updateJobRunStatus` — reads `jobRunDetails`/`jobConfig` outside the final transaction | Duplicate completion signal arrives (Temporal at-least-once); both reads see status=Running, both compute stats, both enter txn → second update overwrites first; emails sent twice | Duplicate completion emails; ASUP stats double-counted; endTime jitters | CP | `services/jobs-service/src/jobrun/jobrun.service.ts:703-816` | P0 | 6h |
+| R7 | **2** | `inheritIdentityMappingFromMigrateJobToCutover` called inside `Promise.all` — multiple inserts to identityCrossMapping with no unique constraint | Two parallel bulk-cutover requests for same migrate→cutover relationship → both insert mapping rows → duplicate mappings | Wrong identity mapping selected during cutover; SID resolution broken for some users | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:856-876, 1003-1009` | P1 | 2h |
+| R8 | **2** | `addExcludedSkippedEntries` — no DB-level dedup on `(job_run_id, path, entry_type)`; only an in-memory `Map` dedups within a single call | Temporal at-least-once retries the calling activity (worker crash, network blip after the HTTP POST already reached CP, scheduleToClose timeout) → same payload inserted twice → duplicate excluded/skipped rows for the same path | Excluded path counted twice; UI shows wrong "excluded files" total; partition row count drift | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:191-204` → `…/jobrun.service.ts:1202` | P1 | 3h |
+| R9 | **2** | `jobConfigRepo.update` calls in `jobconfig.service.ts:705-810` (bulk migrate) — multiple sequential updates outside any txn | Bulk migrate request mid-execution → process killed (k8s rollout, OOM). Some configs marked SCHEDULING, others not. | Half-applied bulk operations; user re-submits → duplicate work | CP | `services/jobs-service/src/jobconfig/jobconfig.service.ts:705-810` | P1 | 4h |
+| R10 | **3** | `resumeJobRuns` — DB updated to Running **before** signal sent | DB write succeeds → signal fails (Temporal blip) → DB lies about workflow state | Job hangs indefinitely with "Running" status; SLAs missed silently | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:135-156` | P0 | 6h |
+| R11 | **3** | `signalJobRuns` (PAUSE) — `sendSignal()` then `update()` with no compensation | Signal succeeds → CP crashes / Temporal timeout before DB write → DB still shows Running while workflow is paused | Phantom "running" jobs forever; resume logic checks DB status → can't resume | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:113-133` | P0 | 8h |
+| R12 | **3** | `actions` STOP — `hasActivePollers` → `sendSignal` → `update` (TOCTOU) | Check returns true → workflow completes naturally → `sendSignal` fails → catch path → `updateJobRunStatus(Stopped)` runs anyway | Wrong terminal state recorded; "Stop" overwrites "Completed" | CP | `services/jobs-service/src/jobrun/jobrun-action.service.ts:60-88` | P0 | 8h |
+| R13 | **4** | `processStreamData` — inline flush (`await this.flushInventory(...)` at L1213) and timer-driven flush (`setTimeout → flushInventory(...).catch(...)` at L1218-1228, fire-and-forget) both read/clear the same `context.records` array | Consumer pushes record N, length hits `batchSize`, awaits inline flush. While inline flush is running, the previously-armed `flushTimer` fires and calls `flushInventory` again concurrently — both flushes read the same `context.records` (depending on when each snapshots), one of them clears it; partial overlap causes the same rows to be inserted twice or one batch's records to be dropped | Inventory rows duplicated; FK uniqueness violations crash consumer; some records silently dropped without ack | CP (db-writer) | `services/db-writer/src/redis-consumer/redis-consumer.service.ts:1208-1228` (inline) and `1217-1229` (timer) | P0 | 4h |
+| R14 | **4** | `cleanupResources` iterates `jobConsumerMap` while live consumers may still be calling `processStreamData` | Shutdown begins → cleanup awaits `createInventory(records)` → simultaneously processStreamData pushes record N+1 → cleanup returns, sets `records.length = 0` → record N+1 silently lost | Records pending at shutdown silently dropped; on restart consumer resumes from acked stream IDs → permanent data loss | CP (db-writer) | `services/db-writer/src/redis-consumer/redis-consumer.service.ts:279-330` | P0 | 4h |
+| R15 | **5** | `waitForApproval` — signal handler has no idempotency latch; accepts every APPROVE/REJECT signal and overwrites `approval_status`. Workflow body only reads `approval_status` once `wf.condition` resolves, which doesn't happen until the next workflow task | (a) **Two approvers race** — User A clicks Approve, User B (also has `Permission.ManageJob`) clicks Reject within the workflow-task window (~500ms-2s). Both signals delivered in the next task; whichever ran last wins. <br> (b) **Frontend retry** — slow network leaves Approve button still enabled; user gets impatient and clicks Reject. Both POSTs hit CP; both signal Temporal. <br> (c) **API client / script** — anyone with a token can fire signals in a loop with no rate limit | User clicked Approve, system records Rejected (or vice versa); audit log mismatches user intent; cutover proceeds against last-decision-wins | Worker | `services/worker/src/workflows/core/common/waiting-approval.ts:30-36` | P0 | 2h |
+| R16 | **5** | Async work inside Temporal signal handlers (`await cancelWorkflowIfRunning(...)` in `actionSignal`) | Stop signal arrives mid-iteration → handler awaits → workflow body progresses past cancellation point during the await → cancellation lands on already-completed activity | "Stop" doesn't actually stop the job; runs to completion or extra batch | Worker | `services/worker/src/workflows/core/common/execute-migration-child-workflows.ts:55-62`, `…/execute-discover-child-workflows.ts:50-58`, `…/execute-retry-migration-child-workflows.ts:66-78` | P0 | 4h |
+| R17 | **5** | `cancelWorkflowIfRunning` — TOCTOU on workflow existence | `isWorkflowRunningActivity` returns true → workflow finishes naturally → `workflow.signal(...)` fails → catch logs misleading error, no recovery | Stop signals dropped silently; user perceives Stop didn't work | Worker | `services/worker/src/workflows/core/common/workflow-utils.ts:49-55` | P1 | 1h |
+| R18 | **5** | `child-sync.workflow.ts` — `actionState` and `scanWorkflowStatus` mutated by signal handlers; workflow body checks them across awaits without re-reading | Signal Stop fires after body passed the `if (actionState === Stopped)` check → completes one more batch unnecessarily; status can also be overwritten | Job runs longer than expected after Stop; small extra work; status briefly toggles | Worker | `services/worker/src/workflows/core/child/child-sync.workflow.ts:46-90` (and `child-scan.workflow.ts`, `child-retry-scan.workflow.ts`) | P1 | 4h |
+| R19 | **6** | Worker startup uses `Promise.race([Worker.create, 10s timeout])` — winner discarded if it arrives late | Redis flaps for 11s → race timeout wins → throw. Then Worker.create eventually succeeds → connected client leaked | Connection leak; eventually Redis hits maxClient limit → all services lose Redis | Worker | `services/worker/src/redis/redis.service.ts:48-53` | P1 | 1.5h |
+| R20 | **6** | `auth.service.ts` token refresh — multiple in-flight 401s all call `getAccessToken(true)` → race on token endpoint | Token expires → 5 parallel API calls all see expired → all call refresh → KeyCloak issues 5 tokens; old ones invalidated mid-flight | Cascading 401s for ~5s while tokens churn | CP & Worker | `services/jobs-service/src/auth/auth.service.ts:114`, `services/db-writer/src/auth/auth.service.ts:117` | P1 | 2h |
+| R21 | **6** | Two `@Cron(EVERY_10_SECONDS)` handlers in `jobrun.controller.ts` — multi-replica jobs-service races | Both replicas tick → both iterate same jobruns → both signal/update | Duplicate emails on completion; double counter increments; ASUP wrong; double signals to workflow | CP | `services/jobs-service/src/jobrun/jobrun.controller.ts:56,233` | P1 | 4h |
+| R22 | **6** | `handleAsupTransmission` daily cron in `reports-service` has no distributed lock — multi-replica deployment races | At midnight every replica reads same UNTRANSMITTED rows, every replica builds and PUTs the .7z to NetApp's ASUP endpoint, every replica marks rows `transmitted=true`; we get N duplicate ASUP submissions per day plus a write-write race on `last_transmitted_at` | NetApp sees duplicate metric submissions per customer site; rate-limit / abuse risk; potentially mis-attributed last-seen timestamps | CP | `services/reports-service/src/asup/asup-scheduler.service.ts:120` | P0 | 3h |
+
+---
+
+## Bulk hardening plan (groups → PRs, covers all 3 audits)
+
+The same groups span Part 1 (Tables 1 & 2) and Part 2 (race conditions). Each PR fixes one **mechanism** consistently across all findings in its group.
+
+| Group | PR | Covers (race + correctness + edge cases) | Priority | Est. |
+|-------|----|------------------------------------------|----------|------|
+| **1** | **Concurrency primitives library** — `lib/concurrency-lib` with `withMutex` (async-mutex), `withSingleFlight`, `withDistributedLock` (Redis `SET NX PX` + Lua release), `outbox` schema + `outboxConsumer` cron. *No `withDbLock` wrapper — Group 2 uses TypeORM's `lock: { mode: 'pessimistic_write' }` directly.* | *Prerequisite — no findings; enables every group below.* Verified scope reduction: TypeORM transaction & pessimistic-lock support already in repo (3 + 1 ad-hoc uses) so we don't reinvent those. | **P0** | ~3d |
+| **2** | **DB constraints + transactional state transitions** — Liquibase unique constraints; wrap state transitions in `dataSource.transaction`; `version` column + optimistic locking; replace RMW with single-statement updates | **Race**: R1, R2, R3, R4, R5, R6 (P0); R7, R8, R9 (P1) <br> **Table 1**: #1 <br> **Table 2**: E1 | **P0** | ~10d |
+| **3** | **Outbox pattern for signal+DB pairs** — new `signal_outbox` table; atomic write inside txn; idempotent background drainer | **Race**: R10, R11, R12 (3× P0) <br> **Table 1**: #2, #3, #4 | **P0** | ~6d |
+| **4** | **Per-job mutex in db-writer** — wrap `processStreamData` in `withMutex(jobRunId, ...)`; `shuttingDown` flag in `cleanupResources`; await all mutexes before iteration | **Race**: R13, R14 (2× P0) | **P0** | ~3d |
+| **5** | **Temporal correctness sweep** — synchronous signal handlers; single-shot `waitForApproval`; re-check signal-driven state after every `await`; idempotent `cancelWorkflowIfRunning`; replace `new Date()` in workflow code | **Race**: R15, R16 (P0); R17, R18 (P1) <br> **Table 1**: #5 (`new Date()` in workflows) | **P0** | ~5d |
+| **6** | **Multi-replica + connection hygiene** — distributed lock for CP `@Cron` handlers (incl. ASUP daily, jobconfig purge daily); `AbortController` for `Promise.race` timeouts; single-flight token refresh | **Race**: R19, R20, R21 (P1); R22 ASUP cron (P0) <br> **Table 1**: #14, #15, #16 <br> **Table 2**: E3, E21 | **P0/P1 mixed** | ~5d |
+| **7** | **Safe parsing & null-guard sweep** — central `safeJsonParse<T>(raw, fallback)` helper in `lib/jobs-lib`; replace every unguarded `JSON.parse` of external/stored data; null-guard before property access on DB results; defensive validation of external command stdout | **Table 1**: #6, #7, #8, #17, #26, #27, #28, #29, #30, #31 (10 findings) <br> **Table 2**: E4, E5, E6, E7, E8 (5 findings) | **P0/P1 mixed** | ~5d |
+| **8** | **DTO + input validation** — class-validator/Zod DTOs on every controller route (incl. `?filter=`); pagination caps; explicit empty-array handling; strict boolean parsing | **Table 1**: #19, #20 (2 findings) <br> **Table 2**: E9, E10, E11, E12, E13 (5 findings) | **P0/P1 mixed** | ~5d |
+| **9** | **Error handling & resilience hygiene** — replace silent `.catch(() => {})` with structured logging; preserve error context (`err.cause`, original stack); transient-error backoff; surface skipped/failed IDs to callers; remove dead retry loops; idempotent shutdown | **Table 1**: #9, #10, #11, #21, #22, #23, #24 (7 findings) <br> **Table 2**: E14, E15, E17, E18, E19, E20 (6 findings) | **P0/P1/P2 mixed** | ~6d |
+| **10** | **Security hardening** — remove header-trust authZ in favour of token-derived project scope; full route-by-route authZ matrix audit | **Table 1**: #12 | **P0** | ~3d |
+| **11** | **Observability & logging hygiene** — replace all `console.*` with structured logger (incl. `lib/jobs-lib` and `admin-service` bootstrap); ensure trace-id/project-id propagation; lint rule to ban `console.*` | **Table 1**: #25, #32 (2 findings) <br> **Table 2**: E22 (1 finding) | **P2** | ~2d |
+
+**Totals across all 11 groups:**
+- Race conditions: 22 findings (G1 prereq + R1–R22)
+- Table 1: 30 findings
+- Table 2: 20 findings
+- **Combined: 72 findings + 1 prerequisite → ~55 dev-days for one engineer; ~3 weeks parallelized across 3.** *(G1 trimmed from 5 → 3 days after verifying TypeORM's native `pessimistic_write` is already used in db-writer; no need for a `withDbLock` wrapper.)*
+
+The four `lib/jobs-lib` JSON.parse findings (#26–#29) collapse into a **single-helper fix** — one `safeJsonParse` helper guards all of them, so the implementation cost is far lower than the finding count suggests.
+
+### Sequencing
+
+- **G1 must land first for G3/G4/G6** — without `withMutex`, `withDistributedLock`, and `outbox` from `concurrency-lib`, those groups reinvent locking inconsistently. **G2 does NOT depend on G1** — Group 2 uses TypeORM's native `lock: { mode: 'pessimistic_write' }` and can ship in parallel with G1.
+- **G2, G3 in parallel** — different surfaces (DB schema + entities vs new outbox subsystem); together close most CP P0s.
+- **G4 isolated to db-writer** — depends only on `withMutex` from G1.
+- **G5 in worker** — independent of CP work; can run in parallel with G2/G3/G4.
+- **G7, G8, G9** — sweeping mechanical changes; can be split among 2–3 engineers and merged incrementally; depend on nothing.
+- **G10** — security; needs review with NetApp security team; treat as its own track.
+- **G6, G11** — P1/P2 polish; safe to defer until P0s are shipped.
