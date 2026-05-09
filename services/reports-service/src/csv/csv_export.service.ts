@@ -220,16 +220,40 @@ export class CsvService {
                     sourceDirSuffix ?? '',
                     targetDirSuffix ?? '',
                 );
+                // Materialized table holds NFS + SMB columns; project the
+                // protocol-relevant subset. CSV column order = SELECT order.
+                const isSmb = (protocol || CsvService.DEFAULT_PROTOCOL).toUpperCase() === CsvService.PROTOCOL_SMB;
+                const protocolColumns = isSmb
+                    ? `
+                        source_owner_sid              AS "Source Owner SID",
+                        source_group_sid              AS "Source Group SID",
+                        source_ace_details            AS "Source ACE Details",
+                        target_owner_sid              AS "Target Owner SID",
+                        target_group_sid              AS "Target Group SID",
+                        target_ace_details            AS "Target ACE Details"
+                    `
+                    : `
+                        source_uid                    AS "Source UID",
+                        destination_uid               AS "Destination UID",
+                        source_gid                    AS "Source GID",
+                        destination_gid               AS "Destination GID",
+                        source_unix_permissions       AS "Source Unix Permissions",
+                        destination_unix_permissions  AS "Destination Unix Permissions"
+                    `;
                 const query = `
                     SELECT
-                        path AS _cursor_path,
-                        source_path AS "Source Path",
-                        destination_path AS "Destination Path",
-                        source_checksum AS "Source Checksum",
-                        destination_checksum AS "Destination Checksum",
-                        checksum_match_status AS "ChecksumMatchStatus",
-                        checksum_generated_ts_utc AS "Checksum Generated Timestamp (UTC)",
-                        type AS "Type"
+                        path                         AS _cursor_path,
+                        source_path                  AS "Source Path",
+                        destination_path             AS "Destination Path",
+                        source_checksum              AS "Source Checksum",
+                        destination_checksum         AS "Destination Checksum",
+                        checksum_match_status        AS "ChecksumMatchStatus",
+                        checksum_generated_ts_utc    AS "Checksum Generated Timestamp (UTC)",
+                        copy_content_status          AS "CopyContentStatus",
+                        stamp_meta_data_status       AS "StampMetaDataStatus",
+                        type                         AS "Type",
+                        file_size                    AS "Size in Bytes",
+                        ${protocolColumns}
                     FROM ${tableFq}
                     WHERE ($1::text IS NULL OR path > $1::text)
                     ORDER BY path
