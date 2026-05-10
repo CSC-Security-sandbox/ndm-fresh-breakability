@@ -108,18 +108,6 @@ func GetBearerToken(userN, pass string) (string, string, error) {
 			return "", "", err
 		}
 		log.Printf("Refresh Token: Fetched")
-
-		// Extract and store token expiration time
-		if expiresIn, ok := jsonResponse["expires_in"].(float64); ok {
-			TokenExpiresAt = time.Now().Unix() + int64(expiresIn) - 60 // 60 second buffer before expiry
-			log.Printf("Token expires in %d seconds (at %d)", int64(expiresIn), TokenExpiresAt)
-		} else {
-			// If expires_in not provided, default to 20 minutes (1200 seconds) with buffer
-			// This matches KEYCLOAK_TOKEN_LIFESPAN_SECONDS default
-			TokenExpiresAt = time.Now().Unix() + 1140 // 19 minutes
-			log.Printf("Warning: expires_in not in token response, defaulting to 19 minutes")
-		}
-
 		return accessToken, refreshToken, nil
 	} else {
 		log.Printf("Failed to get token, HTTP response code: %d", resp.StatusCode)
@@ -130,77 +118,6 @@ func GetBearerToken(userN, pass string) (string, string, error) {
 			log.Printf("Error Response: %s", string(errorBytes))
 		}
 		return "", "", fmt.Errorf("failed to get token, HTTP response code: %d", resp.StatusCode)
-	}
-}
-
-// RefreshAccessTokenUsingRefreshToken uses the refresh token to get a new access token
-// This avoids re-authenticating with username/password which may have changed
-func RefreshAccessTokenUsingRefreshToken(refreshToken string) (string, string, error) {
-	if refreshToken == "" {
-		return "", "", fmt.Errorf("refresh token is empty")
-	}
-
-	tokenUrl := fmt.Sprintf("https://%s/%s", KEYCLOAK_IP, TOKEN_URL)
-
-	data := url.Values{}
-	data.Set("client_id", CLIENT_ID)
-	data.Set("client_secret", CLIENT_SECRET)
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", refreshToken)
-	requestBody := data.Encode()
-
-	headers := GetHeaders("", ContentTypeForm)
-	resp, err := SendAPIRequest("POST", tokenUrl, []byte(requestBody), headers)
-	if err != nil {
-		log.Printf("Error executing refresh token request: %v", err)
-		return "", "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("Error reading refresh token response: %v", err)
-			return "", "", err
-		}
-		var jsonResponse map[string]interface{}
-		if err = json.Unmarshal(bodyBytes, &jsonResponse); err != nil {
-			log.Printf("Error parsing refresh token JSON response: %v", err)
-			return "", "", err
-		}
-		accessToken, ok := jsonResponse["access_token"].(string)
-		if !ok {
-			log.Printf("access_token not found in refresh response")
-			return "", "", fmt.Errorf("access_token not found in response")
-		}
-		log.Printf("Access Token: Refreshed using refresh token")
-		newRefreshToken, ok := jsonResponse["refresh_token"].(string)
-		if !ok {
-			log.Printf("refresh_token not found in response")
-			return "", "", fmt.Errorf("refresh_token not found in response")
-		}
-		log.Printf("Refresh Token: Updated")
-
-		// Extract and store token expiration time
-		if expiresIn, ok := jsonResponse["expires_in"].(float64); ok {
-			TokenExpiresAt = time.Now().Unix() + int64(expiresIn) - 60 // 60 second buffer before expiry
-			log.Printf("Token expires in %d seconds (at %d)", int64(expiresIn), TokenExpiresAt)
-		} else {
-			// If expires_in not provided, default to 20 minutes (1200 seconds) with buffer
-			TokenExpiresAt = time.Now().Unix() + 1140 // 19 minutes
-			log.Printf("Warning: expires_in not in token response, defaulting to 19 minutes")
-		}
-
-		return accessToken, newRefreshToken, nil
-	} else {
-		log.Printf("Failed to refresh token, HTTP response code: %d", resp.StatusCode)
-		errorBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("Error reading error response: %v", err)
-		} else {
-			log.Printf("Error Response: %s", string(errorBytes))
-		}
-		return "", "", fmt.Errorf("failed to refresh token, HTTP response code: %d", resp.StatusCode)
 	}
 }
 
@@ -659,69 +576,6 @@ func BuildFullURL(s parser.Scenario, sharedVars map[string]interface{}) string {
 	return baseURL + apiPath
 }
 
-// EnsureValidToken checks if the current token is expired and refreshes it if needed
-// Note: This is not currently used for control plane requests.
-// Workers handle their own token refresh via JWT_REFRESH_INTERVAL_MINUTES.
-func EnsureValidToken() error {
-	now := time.Now().Unix()
-
-	// Debug logging to track token state
-	if TokenExpiresAt > 0 {
-		remaining := TokenExpiresAt - now
-		LogDebug(fmt.Sprintf("[Token Check] now=%d, expiresAt=%d, remaining=%d seconds", now, TokenExpiresAt, remaining))
-	} else {
-		LogDebug("[Token Check] TokenExpiresAt not set (0)")
-	}
-
-	// Check if token is expired or will expire soon
-	if TokenExpiresAt > 0 && now >= TokenExpiresAt {
-		LogDebug(fmt.Sprintf("[Token Refresh] Token expired or expiring soon, initiating refresh..."))
-
-		// Try to refresh using refresh token first (preferred method - avoids credential issues)
-		if RefreshToken != "" {
-			LogDebug("[Token Refresh] Attempting refresh using refresh token...")
-			newAuthToken, newRefreshToken, err := RefreshAccessTokenUsingRefreshToken(RefreshToken)
-			if err == nil {
-				// Successfully refreshed using refresh token
-				AuthToken = newAuthToken
-				RefreshToken = newRefreshToken
-				LogDebug(fmt.Sprintf("[Token Refresh] Successfully refreshed using refresh token, new expiration: %d", TokenExpiresAt))
-				return nil
-			}
-			// Refresh token method failed, log and try username/password fallback
-			LogError("[Token Refresh] Refresh token method failed, falling back to username/password", err)
-		} else {
-			LogDebug("[Token Refresh] No refresh token available, using username/password authentication")
-		}
-
-		// Fallback: Re-authenticate using username/password
-		// Verify credentials are available
-		if USERNAME == "" || PASSWORD == "" {
-			return fmt.Errorf("cannot refresh token: USERNAME or PASSWORD not set and refresh token unavailable")
-		}
-
-		LogDebug("[Token Refresh] Attempting refresh using username/password...")
-		newAuthToken, newRefreshToken, err := GetBearerToken("", "")
-		if err != nil {
-			LogError("[Token Refresh] Failed to refresh token using username/password", err)
-			return fmt.Errorf("failed to refresh token: %w", err)
-		}
-
-		// Update global token variables
-		AuthToken = newAuthToken
-		RefreshToken = newRefreshToken
-		LogDebug(fmt.Sprintf("[Token Refresh] Successfully refreshed using username/password, new expiration: %d", TokenExpiresAt))
-	} else if TokenExpiresAt == 0 {
-		// This shouldn't happen after initialization, but log it if it does
-		LogError("Warning: TokenExpiresAt is 0, token expiration tracking may not be working", nil)
-	} else {
-		remaining := TokenExpiresAt - now
-		LogDebug(fmt.Sprintf("[Token Check] Token still valid for %d seconds", remaining))
-	}
-
-	return nil
-}
-
 func GetHeaders(authToken, contentType string) map[string]string {
 	headers := make(map[string]string)
 
@@ -977,74 +831,6 @@ func GetKeyCloakAdminCredentials() (KeycloakCredentials, error) {
 	}
 
 	return creds, nil
-}
-
-// UpdateKeycloakTokenLifespan updates the accessTokenLifespan for the datamigrator realm in Keycloak
-// lifespanSeconds: token lifespan in seconds (e.g., 1200 for 20 minutes, 86400 for 24 hours)
-func UpdateKeycloakTokenLifespan(lifespanSeconds int) error {
-	// Validate environment variables
-	if NDM_VM_USER_NAME == "" || NDM_VM_HOST == "" || NDM_VM_PORT == "" || NDM_VM_PASSWORD == "" {
-		return fmt.Errorf("required CP SSH environment variables are not set")
-	}
-
-	// Convert port string to int
-	port, err := strconv.Atoi(NDM_VM_PORT)
-	if err != nil {
-		return fmt.Errorf("invalid NDM_VM_PORT value: %w", err)
-	}
-
-	// Create SSH config
-	sshConfig := &ssh.ClientConfig{
-		User: NDM_VM_USER_NAME,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(NDM_VM_PASSWORD),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	// Establish SSH connection
-	address := fmt.Sprintf("%s:%d", NDM_VM_HOST, port)
-	client, err := ssh.Dial("tcp", address, sshConfig)
-	if err != nil {
-		return fmt.Errorf("failed to dial SSH: %w", err)
-	}
-	defer client.Close()
-
-	// Create SSH session
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH session: %w", err)
-	}
-	defer session.Close()
-
-	// Build the command to update Keycloak token lifespan
-	script := fmt.Sprintf(`
-KEYCLOAK_POD="keycloak-0"
-KEYCLOAK_NS="keycloak"
-REALM_NAME="datamigrator"
-LIFESPAN=%d
-
-ADMIN_PASS=$(kubectl get secret -n $KEYCLOAK_NS keycloak-credentials -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)
-
-kubectl exec -n $KEYCLOAK_NS $KEYCLOAK_POD -- bash -c "
-TOKEN=\$(curl -sk http://localhost:8080/keycloak/realms/master/protocol/openid-connect/token \
-  -d 'username=kcadmin' -d 'password=$ADMIN_PASS' -d 'grant_type=password' -d 'client_id=admin-cli')
-ACCESS=\$(echo \"\$TOKEN\" | sed -n 's/.*\"access_token\":\"\([^\"]*\)\".*/\1/p')
-CONFIG=\$(curl -sk http://localhost:8080/keycloak/admin/realms/$REALM_NAME -H \"Authorization: Bearer \$ACCESS\")
-UPDATED=\$(echo \"\$CONFIG\" | sed 's/\"accessTokenLifespan\":[0-9]*/\"accessTokenLifespan\":$LIFESPAN/')
-curl -sk -X PUT http://localhost:8080/keycloak/admin/realms/$REALM_NAME \
-  -H \"Authorization: Bearer \$ACCESS\" -H 'Content-Type: application/json' -d \"\$UPDATED\"
-"
-`, lifespanSeconds)
-
-	// Execute the command
-	output, err := session.Output(script)
-	if err != nil {
-		return fmt.Errorf("failed to update Keycloak token lifespan: %w\nOutput: %s", err, string(output))
-	}
-
-	LogDebug(fmt.Sprintf("Keycloak accessTokenLifespan updated to %d seconds. Output: %s", lifespanSeconds, string(output)))
-	return nil
 }
 
 // getOpenBaoRootToken reads the JSON file from the remote host, parses it, and returns the root token.

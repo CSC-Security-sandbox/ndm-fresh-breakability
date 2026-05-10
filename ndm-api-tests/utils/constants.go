@@ -49,7 +49,6 @@ var (
 
 	RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ int
 	JWT_REFRESH_INTERVAL_MINUTES       int
-	KEYCLOAK_TOKEN_LIFESPAN_SECONDS    int
 
 	ProtocolVersion3 ProtocolVersion
 
@@ -282,13 +281,6 @@ func init() {
 	if envVal := os.Getenv("JWT_REFRESH_INTERVAL_MINUTES"); envVal != "" {
 		if parsedVal, err := strconv.Atoi(envVal); err == nil && parsedVal > 0 {
 			JWT_REFRESH_INTERVAL_MINUTES = parsedVal
-		}
-	}
-
-	KEYCLOAK_TOKEN_LIFESPAN_SECONDS = 1200
-	if val := os.Getenv("KEYCLOAK_TOKEN_LIFESPAN_SECONDS"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
-			KEYCLOAK_TOKEN_LIFESPAN_SECONDS = parsed
 		}
 	}
 }

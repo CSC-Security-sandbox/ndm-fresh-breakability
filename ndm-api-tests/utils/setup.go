@@ -20,8 +20,6 @@ var (
 	AccountId                                                                                            = DEFAULT_ACCOUNT_ID
 	AuthToken, RefreshToken, KeycloakUser, KeycloakPassword, AppAdminId, ProjectAdminId, ProjectViewerId string
 
-	TokenExpiresAt int64 // Unix timestamp when current token expires
-
 	// Global project and workers - created once in InitTestEnv and reused across all tests
 	GlobalProjectId             string
 	GlobalProjectName           string
@@ -48,26 +46,9 @@ func InitTestEnvForSMoke() {
 		LogFatalf("Error updating app admin: %v", err)
 	}
 
-	// Wait for Keycloak to propagate password changes
-	LogDebug("Waiting 3 seconds for Keycloak password update to propagate...")
-	Wait(3)
-
-	// Retry logic for initial token fetch
-	for attempt := 1; attempt <= 5; attempt++ {
-		LogDebug(fmt.Sprintf("[InitTestEnvForSMoke] Token fetch attempt %d/5", attempt))
-		AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
-		if tokenErr == nil {
-			LogDebug(fmt.Sprintf("[InitTestEnvForSMoke] Successfully obtained token on attempt %d", attempt))
-			break
-		}
-		LogError(fmt.Sprintf("[InitTestEnvForSMoke] Token fetch attempt %d/5 failed", attempt), tokenErr)
-		if attempt < 5 {
-			LogDebug(fmt.Sprintf("[InitTestEnvForSMoke] Retrying in 3 seconds..."))
-			Wait(3)
-		}
-	}
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
 	if tokenErr != nil {
-		LogFatalf("Error getting bearer token after 5 attempts: %v", tokenErr)
+		LogFatalf("Error getting bearer token: %v", tokenErr)
 	}
 
 	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
@@ -116,41 +97,15 @@ func InitTestEnv() {
 		CLIENT_SECRET = creds.ClientSecret
 	}
 
-	if JWT_REFRESH_INTERVAL_MINUTES > 0 {
-		LogDebug("Configuring Keycloak for JWT refresh testing...")
-		err := UpdateKeycloakTokenLifespan(KEYCLOAK_TOKEN_LIFESPAN_SECONDS) // 20 minutes for E2E JWT refresh testing
-		if err != nil {
-			LogFatalf("Failed to configure Keycloak token lifespan: %v", err)
-		}
-		LogDebug(fmt.Sprintf("Keycloak configured with %d-second token lifespan", KEYCLOAK_TOKEN_LIFESPAN_SECONDS))
-	}
-
 	// Update the app admin profile during the first login.
 	err := UpdateAppAdmin(KeycloakUser, KeycloakPassword)
 	if err != nil {
 		LogFatalf("Error updating app admin: %v", err)
 	}
 
-	// Wait for Keycloak to propagate password changes
-	LogDebug("Waiting 3 seconds for Keycloak password update to propagate...")
-	Wait(3)
-
-	// Retry logic for initial token fetch (Keycloak might need time)
-	for attempt := 1; attempt <= 5; attempt++ {
-		LogDebug(fmt.Sprintf("[InitTestEnv] Token fetch attempt %d/5", attempt))
-		AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
-		if tokenErr == nil {
-			LogDebug(fmt.Sprintf("[InitTestEnv] Successfully obtained token on attempt %d", attempt))
-			break
-		}
-		LogError(fmt.Sprintf("[InitTestEnv] Token fetch attempt %d/5 failed", attempt), tokenErr)
-		if attempt < 5 {
-			LogDebug(fmt.Sprintf("[InitTestEnv] Retrying in 3 seconds..."))
-			Wait(3)
-		}
-	}
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
 	if tokenErr != nil {
-		LogFatalf("Error getting bearer token after 5 attempts: %v", tokenErr)
+		LogFatalf("Error getting bearer token: %v", tokenErr)
 	}
 
 	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
@@ -187,26 +142,9 @@ func InitTestEnvWithoutWorkers() {
 		LogFatalf("Error updating app admin: %v", err)
 	}
 
-	// Wait for Keycloak to propagate password changes
-	LogDebug("Waiting 3 seconds for Keycloak password update to propagate...")
-	Wait(3)
-
-	// Retry logic for initial token fetch
-	for attempt := 1; attempt <= 5; attempt++ {
-		LogDebug(fmt.Sprintf("[InitTestEnvWithoutWorkers] Token fetch attempt %d/5", attempt))
-		AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
-		if tokenErr == nil {
-			LogDebug(fmt.Sprintf("[InitTestEnvWithoutWorkers] Successfully obtained token on attempt %d", attempt))
-			break
-		}
-		LogError(fmt.Sprintf("[InitTestEnvWithoutWorkers] Token fetch attempt %d/5 failed", attempt), tokenErr)
-		if attempt < 5 {
-			LogDebug(fmt.Sprintf("[InitTestEnvWithoutWorkers] Retrying in 3 seconds..."))
-			Wait(3)
-		}
-	}
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
 	if tokenErr != nil {
-		LogFatalf("Error getting bearer token after 5 attempts: %v", tokenErr)
+		LogFatalf("Error getting bearer token: %v", tokenErr)
 	}
 
 	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
@@ -302,7 +240,6 @@ func GetGlobalTestEnv() (string, string, map[string]SSHConfig, error) {
 type SharedSuiteData struct {
 	AuthToken                   string
 	RefreshToken                string
-	TokenExpiresAt              int64
 	KeycloakUser                string
 	KeycloakPassword            string
 	ClientSecret                string
@@ -319,7 +256,6 @@ type SharedSuiteData struct {
 func SetGlobalTestVariables(data SharedSuiteData) {
 	AuthToken = data.AuthToken
 	RefreshToken = data.RefreshToken
-	TokenExpiresAt = data.TokenExpiresAt
 	KeycloakUser = data.KeycloakUser
 	KeycloakPassword = data.KeycloakPassword
 	CLIENT_SECRET = data.ClientSecret
@@ -333,14 +269,6 @@ func SetGlobalTestVariables(data SharedSuiteData) {
 }
 
 func CleanupTestEnv() error {
-	if JWT_REFRESH_INTERVAL_MINUTES > 0 {
-		LogDebug("Restoring Keycloak default token lifespan...")
-		err := UpdateKeycloakTokenLifespan(86400) // Restore to 24 hours
-		if err != nil {
-			LogError("Failed to restore Keycloak token lifespan", err)
-		}
-	}
-
 	err := DetachAllWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to detach workers: %w", err)
