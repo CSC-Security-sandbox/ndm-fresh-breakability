@@ -32,32 +32,34 @@ on:
         default: true
         type: boolean
       control_plane_vm_size:
-        description: 'Control plane VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB)'
+        description: 'Control plane VM size (E8s_v5: 8vCPU/64GB, E16s_v5: 16vCPU/128GB, E32s_v5: 32vCPU/256GB, E64s_v5: 64vCPU/512GB)'
         required: false
-        default: 'Standard_D8s_v4'
+        default: 'Standard_E8s_v5'
         type: choice
         options:
-          - Standard_D4s_v4
-          - Standard_D8s_v4
-          - Standard_D16s_v4
+          - Standard_E8s_v5
+          - Standard_E16s_v5
+          - Standard_E32s_v5
+          - Standard_E64s_v5
       linux_worker_vm_size:
-        description: 'Linux worker VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB)'
+        description: 'Linux worker VM size (E4s_v5: 4vCPU/32GB, E8s_v5: 8vCPU/64GB, E16s_v5: 16vCPU/128GB)'
         required: false
-        default: 'Standard_D4s_v4'
+        default: 'Standard_E4s_v5'
         type: choice
         options:
-          - Standard_D4s_v4
-          - Standard_D8s_v4
-          - Standard_D16s_v4
+          - Standard_E4s_v5
+          - Standard_E8s_v5
+          - Standard_E16s_v5
       windows_worker_vm_size:
-        description: 'Windows worker VM size (D4s_v4: 4vCPU/16GB, D8s_v4: 8vCPU/32GB, D16s_v4: 16vCPU/64GB, D32s_v4: 32vCPU/128GB)'
+        description: 'Windows worker VM size (E8s_v5: 8vCPU/64GB, E16s_v5: 16vCPU/128GB, E32s_v5: 32vCPU/256GB, E64s_v5: 64vCPU/512GB)'
         required: false
-        default: 'Standard_D32s_v4'
+        default: 'Standard_E8s_v5'
         type: choice
         options:
-          - Standard_D4s_v4
-          - Standard_D8s_v4
-          - Standard_D16s_v4
+          - Standard_E8s_v5
+          - Standard_E16s_v5
+          - Standard_E32s_v5
+          - Standard_E64s_v5
       linux_worker_count:
         description: 'Number of Linux workers'
         required: false
@@ -153,17 +155,17 @@ on:
       control_plane_vm_size:
         description: 'Control plane VM size'
         required: false
-        default: 'Standard_D8s_v4'
+        default: 'Standard_E8s_v5'
         type: string
       linux_worker_vm_size:
         description: 'Linux worker VM size'
         required: false
-        default: 'Standard_D4s_v4'
+        default: 'Standard_E4s_v5'
         type: string
       windows_worker_vm_size:
         description: 'Windows worker VM size'
         required: false
-        default: 'Standard_D32s_v4'
+        default: 'Standard_E8s_v5'
         type: string
       linux_worker_count:
         description: 'Number of Linux workers'
@@ -312,9 +314,9 @@ jobs:
           terraform plan -out=tfplan \
             -var="linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" \
             -var="windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" \
-            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" \
-            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" \
-            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}"
+            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_E4s_v5' }}" \
+            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_E8s_v5' }}" \
+            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_E8s_v5' }}"
 
       - name: Apply Terraform Plan
         run: |
@@ -324,9 +326,9 @@ jobs:
       - name: Save VM Configuration Info
         id: vm-config
         run: |
-          echo "control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}" >> $GITHUB_OUTPUT
-          echo "linux_worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" >> $GITHUB_OUTPUT
-          echo "windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" >> $GITHUB_OUTPUT
+          echo "control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_E8s_v5' }}" >> $GITHUB_OUTPUT
+          echo "linux_worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_E4s_v5' }}" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_E8s_v5' }}" >> $GITHUB_OUTPUT
           echo "linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" >> $GITHUB_OUTPUT
           echo "windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" >> $GITHUB_OUTPUT
 
@@ -702,9 +704,9 @@ jobs:
           terraform destroy -auto-approve \
             -var="linux_worker_count=${{ inputs.linux_worker_count || github.event.inputs.linux_worker_count || 1 }}" \
             -var="windows_worker_count=${{ inputs.windows_worker_count || github.event.inputs.windows_worker_count || 1 }}" \
-            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_D4s_v4' }}" \
-            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_D32s_v4' }}" \
-            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_D8s_v4' }}"
+            -var="worker_vm_size=${{ inputs.linux_worker_vm_size || github.event.inputs.linux_worker_vm_size || 'Standard_E4s_v5' }}" \
+            -var="windows_worker_vm_size=${{ inputs.windows_worker_vm_size || github.event.inputs.windows_worker_vm_size || 'Standard_E8s_v5' }}" \
+            -var="control_plane_vm_size=${{ inputs.control_plane_vm_size || github.event.inputs.control_plane_vm_size || 'Standard_E8s_v5' }}"
 
       - name: Clean Up Temporary Files
         run: |
