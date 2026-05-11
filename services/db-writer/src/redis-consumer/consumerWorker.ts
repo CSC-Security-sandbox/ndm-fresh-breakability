@@ -51,6 +51,17 @@ async function performCleanup(projectId?: string | null) {
             redisConsumerService = null;
         }
 
+        // Close NestJS context
+        if (workerAppContext) {
+            logger.debug(`projectId: ${projectId} Closing worker NestJS application context`);
+            try {
+                await workerAppContext.close();
+            } catch (error) {
+                logger.error(`projectId: ${projectId} Error while closing worker NestJS application context:`, error);
+            }
+            workerAppContext = null;
+        }
+
         // Clean up service references
         if (inventoryService) {
             inventoryService = null;
@@ -58,6 +69,10 @@ async function performCleanup(projectId?: string | null) {
 
         if (workflowService) {
             workflowService = null;
+        }
+
+        if (authService) {
+            authService = null;
         }
 
         // Release database connection
