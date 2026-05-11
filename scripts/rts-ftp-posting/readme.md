@@ -89,7 +89,9 @@ The workflow automates the post-RTS FTP posting process described in
    name, so seeing those strings inside `lodash-x.y.z.tgz` is still a
    hard fail.
 5. Copy the staging tree onto the VED FTP staging filesystem at
-   `/x/eng/3rdparty/ftpstaging/<Project>/<Version>/` using `rsync`.
+   `/x/eng/3rdparty/ftpstaging/<Project_Subdir>/<Version>/` using `rsync`,
+   where `<Project_Subdir>` is the RTS project name with spaces replaced
+   by underscores (same segment layout as under `data_retention/`).
    This filesystem is mounted directly on the `scs-v2` runners and is
    what COSINE syncs from to the public FTP site, so we do **not**
    push to `ftp.netapp.com` directly — no FTP credentials needed.
@@ -235,12 +237,13 @@ Inputs:
   was launched from, normally `main` — because older dated
   release branches were cut before these scripts existed and do
   not contain them.
-- **rts_project_name** — exactly as it appears in the RTS tool. The
-  workflow pre-fills this with the canonical NDM project name
-  **`Netapp Data Migrator`**, which is the form RTS uses for our
-  project; only override it if RTS has been re-keyed to a different
-  string. Whatever value is passed must also match the project
-  directory under `/x/eng/3rdparty/data_retention/`.
+- **rts_project_name** — exactly as it appears in the RTS tool (typically
+  with spaces, e.g. **`NetApp Data Migrator`**). The workflow pre-fills the
+  canonical NDM name; only override if RTS has been re-keyed. **Filesystem
+  paths** (runner staging, VED `ftpstaging`, and `data_retention`) use the
+  same string with **spaces replaced by underscores**
+  (e.g. `NetApp_Data_Migrator/<Version>/`). CSV filenames still use the
+  spaced RTS form.
 - **rts_project_version** — exactly as it appears in the RTS tool (e.g.
   `2026.04.0_GA`).
 - **dry_run** — when `true`, the CSV and sources are still downloaded
@@ -285,7 +288,7 @@ Actions and is not removed by that step.
 ## Output
 
 Every run uploads a workflow artifact named
-`rts-ftp-posting-<project>-<version>` that contains:
+`rts-ftp-posting-<Project_Subdir>-<version>` (underscore form) that contains:
 
 - `manifest.json` — per-component download status (`ok` / `failed` /
   `skipped` / `duplicate`).
@@ -297,7 +300,7 @@ Every run uploads a workflow artifact named
   via shallow head-only scan with no markers found). Empty `hits` and
   `extract_errors` when the staging tree is fully scanned and clean.
 - `logs/publish-rsync.log` — the `rsync` transcript of the publish to
-  `/x/eng/3rdparty/ftpstaging/<Project>/<Version>/`.
+  `/x/eng/3rdparty/ftpstaging/<Project_Subdir>/<Version>/`.
 - `logs/cosine-notification.txt` — the exact subject + body to copy into
   your mail client and send to the COSINE team.
-- The original `<Project> <Version>-FTP-Components.csv`.
+- The original `<Project> <Version>-FTP-Components.csv` (RTS spaced project name in the filename).

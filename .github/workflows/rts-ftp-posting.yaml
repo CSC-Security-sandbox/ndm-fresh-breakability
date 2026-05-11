@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       rts_project_name:
-        description: "RTS Project Name (exactly as it appears on the data_retention filer — pre-filled with the canonical NDM name in the casing the filer uses; override only if RTS has been re-keyed)"
+        description: "RTS Project Name as RTS shows it (often with spaces, e.g. NetApp Data Migrator). Directory paths use spaces→underscores under data_retention, runner staging, and ftpstaging."
         required: true
         type: string
         default: "NetApp Data Migrator"
@@ -146,7 +146,9 @@ jobs:
             sudo mkdir -p "${STAGE_ROOT}"
             sudo chown "$(id -un):$(id -gn)" "${STAGE_ROOT}"
           fi
-          PROJECT_DIR="${STAGE_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}"
+          # Directory segments use underscores (matches data_retention + VED ftpstaging);
+          # RTS_PROJECT_NAME keeps spaces for CSV filenames and CLI labels.
+          PROJECT_DIR="${STAGE_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}"
           mkdir -p "${PROJECT_DIR}"
           CSV_NAME="${RTS_PROJECT_NAME} ${RTS_PROJECT_VERSION}-FTP-Components.csv"
           CSV_PATH="${PROJECT_DIR}/${CSV_NAME}"
@@ -351,6 +353,7 @@ jobs:
         env:
           RTS_PROJECT_NAME: ${{ github.event.inputs.rts_project_name }}
           RTS_PROJECT_VERSION: ${{ github.event.inputs.rts_project_version }}
+          PROJECT_SUBDIR: ${{ steps.paths.outputs.project_subdir }}
           PROJECT_DIR: ${{ steps.paths.outputs.project_dir }}
           LOG_DIR: ${{ steps.paths.outputs.log_dir }}
         run: |
@@ -366,7 +369,7 @@ jobs:
             exit 1
           fi
 
-          DEST_DIR="${FTP_STAGING_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}"
+          DEST_DIR="${FTP_STAGING_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}"
           LOG_FILE="${LOG_DIR}/publish-rsync.log"
 
           echo "Publishing ${PROJECT_DIR}/  ->  ${DEST_DIR}/"
@@ -388,13 +391,14 @@ jobs:
           echo ""
           echo "Publish complete:"
           echo "  Filesystem path: ${DEST_DIR}"
-          echo "  (COSINE will sync this to ftp://ftp.netapp.com/frm-ntap/opensource/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}/ on receipt of the e-mail rendered below.)"
+          echo "  (COSINE will sync this to ftp://ftp.netapp.com/frm-ntap/opensource/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}/ on receipt of the e-mail rendered below.)"
 
       - name: Summary
         if: ${{ always() }}
         env:
           RTS_PROJECT_NAME: ${{ github.event.inputs.rts_project_name }}
           RTS_PROJECT_VERSION: ${{ github.event.inputs.rts_project_version }}
+          PROJECT_SUBDIR: ${{ steps.paths.outputs.project_subdir }}
           MANIFEST_PATH: ${{ steps.paths.outputs.manifest_path }}
           STAGE_ROOT: ${{ steps.paths.outputs.stage_root }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -435,8 +439,8 @@ jobs:
               echo "- NetApp/NDM IP contamination scan: **not run** (job failed earlier)"
             fi
             echo "- Dry run: **${DRY_RUN}**"
-            echo "- VED staging path: \`${FTP_STAGING_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}\`"
-            echo "- Public FTP target (after COSINE sync): \`ftp://ftp.netapp.com/frm-ntap/opensource/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}/\`"
+            echo "- VED staging path: \`${FTP_STAGING_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}\`"
+            echo "- Public FTP target (after COSINE sync): \`ftp://ftp.netapp.com/frm-ntap/opensource/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}/\`"
             echo "- COSINE notification: **render-only — send manually (see section below)**"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -445,6 +449,7 @@ jobs:
         env:
           RTS_PROJECT_NAME: ${{ github.event.inputs.rts_project_name }}
           RTS_PROJECT_VERSION: ${{ github.event.inputs.rts_project_version }}
+          PROJECT_SUBDIR: ${{ steps.paths.outputs.project_subdir }}
           MANIFEST_PATH: ${{ steps.paths.outputs.manifest_path }}
           LOG_DIR: ${{ steps.paths.outputs.log_dir }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -457,8 +462,8 @@ jobs:
           # exact subject + body the operator can paste into their mail
           # client and send to ${COSINE_NOTIFY_EMAIL}.
 
-          DEST_DIR="${FTP_STAGING_ROOT}/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}"
-          PUBLIC_FTP_PATH="ftp://ftp.netapp.com/frm-ntap/opensource/${RTS_PROJECT_NAME}/${RTS_PROJECT_VERSION}/"
+          DEST_DIR="${FTP_STAGING_ROOT}/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}"
+          PUBLIC_FTP_PATH="ftp://ftp.netapp.com/frm-ntap/opensource/${PROJECT_SUBDIR}/${RTS_PROJECT_VERSION}/"
           EMAIL_FILE="${LOG_DIR}/cosine-notification.txt"
 
           if [[ -f "${MANIFEST_PATH}" ]]; then
@@ -534,7 +539,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: rts-ftp-posting-${{ github.event.inputs.rts_project_name }}-${{ github.event.inputs.rts_project_version }}
+          name: rts-ftp-posting-${{ steps.paths.outputs.project_subdir }}-${{ github.event.inputs.rts_project_version }}
           path: |
             ${{ steps.paths.outputs.stage_root }}/manifest.json
             ${{ steps.paths.outputs.stage_root }}/dependency-check.json
