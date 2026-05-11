@@ -266,7 +266,8 @@ export class InventoryService {
         continue;
       }
       
-      await this.markDirectoryTreeAsDeleted(deletedDir, jobRunId, pathId, schema);
+      const deletionFailures = await this.markDirectoryTreeAsDeleted(deletedDir, jobRunId, pathId, schema);
+      failedRecords.push(...deletionFailures);
     }
 
     if (failedRecords.length > 0) {
@@ -280,13 +281,18 @@ export class InventoryService {
    * Marks all inventory rows under a deleted directory path, and ensures a row exists
    * for the directory itself when the worker reports a directory delete but nothing was
    * returned from inventory (e.g. empty folder or no prior directory row).
+   *
+   * Returns the deleted-directory marker in an array if any batch upsert failed so the
+   * caller can surface it in failedRecords — mirrors the regular-item batch pattern.
+   * Returns an empty array on full success.
    */
-  async markDirectoryTreeAsDeleted(deletedDir: ItemInfo, jobRunId: string, pathId: string, schema: string): Promise<void> {
+  async markDirectoryTreeAsDeleted(deletedDir: ItemInfo, jobRunId: string, pathId: string, schema: string): Promise<ItemInfo[]> {
     const directoryPath = deletedDir.fileName ?? '';
+    let hadBatchFailure = false;
     try {
         if (!directoryPath) {
           this.logger.warn('markDirectoryTreeAsDeleted: missing fileName on deleted directory marker');
-          return;
+          return [];
         }
 
         const relatedJobsResult = await this.dataSource.query(`
@@ -305,7 +311,7 @@ export class InventoryService {
 
         if (!relatedJobsResult.length) {
           this.logger.error(`Job config not found for job run: ${jobRunId}`);
-          return;
+          return [];
         }
         
         const isWindowsDirectoryPath = directoryPath.startsWith('\\');
@@ -404,6 +410,7 @@ export class InventoryService {
           this.logger.debug(`Batch ${batchNumber} processed: ${deletedEntries.length} items marked as deleted (${processedCount} total) for directory: ${directoryPath}`);
           } catch (batchError) {
             this.logger.error(`Failed to process batch ${batchNumber} for directory ${directoryPath}: ${batchError.message}`, batchError.stack);
+            hadBatchFailure = true;
           }
         }
 
@@ -431,7 +438,14 @@ export class InventoryService {
         this.logger.log(`Successfully marked ${processedCount} items (files and directories) as deleted for directory: ${directoryPath}`);
     } catch (error) {
       this.logger.error(`Failed to mark directory tree as deleted ${directoryPath}: ${error.message}`, error.stack);
+      return [deletedDir];
     }
+
+    if (hadBatchFailure) {
+      this.logger.warn(`One or more batches failed while marking directory tree as deleted for: ${directoryPath}`);
+      return [deletedDir];
+    }
+    return [];
   }
 
   async saveOperationError(data: OperationError) {
