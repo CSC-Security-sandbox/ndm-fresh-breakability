@@ -1557,10 +1557,10 @@ jobs:
           cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
           echo "Snapshot cleanup completed"
 
-      - name: Destroy Terraform Resources
-        run: |
-          cd $TF_DIR
-          terraform destroy -auto-approve
+      # - name: Destroy Terraform Resources
+      #   run: |
+      #     cd $TF_DIR
+      #     terraform destroy -auto-approve
 
       - name: Clean Up Temporary Files
         run: |
