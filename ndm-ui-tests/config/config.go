@@ -39,10 +39,11 @@ var (
 	FileServerNameNew  string // name for a newly created file server
 
 	// SMB file server creation
-	SMBHost     string // IP/hostname of the SMB server (e.g. "172.30.202.20")
-	SMBUsername string // SMB username (e.g. "DOMAIN\\user")
-	SMBPassword string // SMB password
-	SMBShare    string // SMB share name to select in Bulk Discover (e.g. "master_smb_vol_dnd_src_automation_1")
+	SMBHost       string // IP/hostname of the SMB server (e.g. "172.30.202.20")
+	SMBAdServerIP string // AD Server IP for SMB authentication (e.g. "172.30.202.5")
+	SMBUsername   string // SMB username (e.g. "DOMAIN\\user")
+	SMBPassword   string // SMB password
+	SMBShare      string // SMB share name to select in Bulk Discover (e.g. "master_smb_vol_dnd_src_automation_1")
 
 	// Isilon file server creation
 	IsilonHost         string // Management console IP (e.g. "10.192.7.105")
@@ -99,9 +100,10 @@ func init() {
 	FileServerNameNew = getEnvStr("NDM_FILE_SERVER_NAME_NEW", "auto-test-fs")
 
 	// SMB file server creation
-	SMBHost     = getEnvStr("NDM_SMB_HOST", "")
-	SMBUsername = getEnvStr("NDM_SMB_USERNAME", "")
-	SMBPassword = getEnvStr("NDM_SMB_PASSWORD", "")
+	SMBHost       = getEnvStr("NDM_SMB_HOST", "")
+	SMBAdServerIP = getEnvStr("NDM_SMB_AD_SERVER_IP", "")
+	SMBUsername   = getEnvStr("NDM_SMB_USERNAME", "")
+	SMBPassword   = getEnvStr("NDM_SMB_PASSWORD", "")
 	SMBShare    = getEnvStr("NDM_SMB_SHARE", "")
 
 	// Isilon file server creation

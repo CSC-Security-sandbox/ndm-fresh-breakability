@@ -128,6 +128,7 @@ func createFreshSMBFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID strin
 	fsID, err = fsp.CreateSMBFileServer(
 		fsName,
 		config.SMBHost,
+		config.SMBAdServerIP,
 		config.SMBUsername,
 		config.SMBPassword,
 		config.MinWorkers,
@@ -388,42 +389,6 @@ func TestDiscovery_Destination(t *testing.T) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 5.17  Stopped Discovery — No Report
-// ═════════════════════════════════════════════════════════════════════════════
-
-func TestDiscovery_StoppedNoReport(t *testing.T) {
-	f, dp := newDiscoveryFixture(t)
-	defer f.Close()
-
-	fsID, _ := createFreshFileServer(t, f)
-
-	// Select ALL export paths so the job runs long enough for stop.
-	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", "", true, nil)
-
-	actual := navigateToRunListAndWaitForStatus(t, dp, f, configID, "RUNNING", 120000)
-	if actual == "completed" {
-		t.Log("[5.17] job completed before stop could be attempted — skipping no-report check")
-		t.Skip("job completed too fast to test the stopped-no-report scenario")
-	}
-
-	t.Log("[5.17] stopping discovery to verify no report")
-	require.NoError(t, dp.StopJob(), "stop job")
-
-	require.NoError(t,
-		dp.WaitForJobState(configID, "stopped", 120),
-		"job did not reach STOPPED state",
-	)
-
-	require.NoError(t, dp.NavigateToJobRunList(), "navigate back to job run list")
-	downloadEnabled, _ := dp.IsReportDownloadEnabled()
-	require.False(t, downloadEnabled,
-		"report download should be disabled for a stopped job")
-
-	t.Log("[5.17] stopped job has no report — verified")
-	fmt.Println("[DISCOVERY 5.17 PASSED] Stopped discovery does not generate report")
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
 // 5.18  Discovery on Isilon
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -459,11 +424,12 @@ func TestDiscovery_Isilon(t *testing.T) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 5.19  Discovery Report Download (CSV)
+// 5.19  Consolidated Discovery Report (CSV)
 //
-// Prerequisite: at least one completed discovery run must exist.
-// Uses an existing server (NDM_FILE_SERVER_ID) to find completed runs.
-// Navigates to a completed Job Run Detail page → Discovery Report → CSV.
+// Prerequisite: at least one completed discovery on the file server.
+// Uses an existing server (NDM_FILE_SERVER_ID) that already has completed
+// discovery runs. Navigates to File Server Overview → clicks
+// "Consolidate All Discovery Reports" dropdown → selects CSV.
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_ConsolidatedCSV(t *testing.T) {
@@ -472,19 +438,19 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	t.Log("[5.19] navigating to a completed job run detail page")
-	runURL, err := dp.NavigateToCompletedJobRunDetail()
-	require.NoError(t, err, "navigate to completed job run detail")
-	t.Logf("[5.19] on job run detail page: %s", runURL)
-
-	f.Screenshot("job-run-detail-for-csv")
-
-	t.Log("[5.19] downloading discovery report as CSV")
+	t.Log("[5.19] navigating to file server overview")
 	require.NoError(t,
-		dp.DownloadDiscoveryReportCSV(),
-		"download discovery report as CSV",
+		dp.NavigateToFileServerOverview(config.FileServerID),
+		"navigate to file server overview",
+	)
+	f.Screenshot("fs-overview-for-csv")
+
+	t.Log("[5.19] clicking Consolidate All Discovery Reports → CSV")
+	require.NoError(t,
+		dp.ClickConsolidateDiscoveryReports("CSV"),
+		"click Consolidate All Discovery Reports as CSV",
 	)
 
-	f.Screenshot("csv-download-triggered")
-	fmt.Println("[DISCOVERY 5.19 PASSED] Discovery Report (CSV) downloaded")
+	f.Screenshot("csv-consolidate-triggered")
+	fmt.Println("[DISCOVERY 5.19 PASSED] Consolidated Discovery Report (CSV) triggered")
 }

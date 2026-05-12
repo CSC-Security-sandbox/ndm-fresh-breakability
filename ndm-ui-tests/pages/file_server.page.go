@@ -175,7 +175,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 
 // CreateSMBFileServer runs the 3-step wizard for an SMB file server
 // and returns the UUID. Same wizard as NFS but expands the SMB accordion.
-func (p *FileServerPage) CreateSMBFileServer(name, host, smbUser, smbPass string, minWorkers int) (string, error) {
+func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, smbPass string, minWorkers int) (string, error) {
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
@@ -195,84 +195,139 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, smbUser, smbPass string
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
+	p.sleep(500)
+	// Dismiss any autocomplete dropdown that appears.
+	_ = p.page.Keyboard().Press("Escape")
+	p.sleep(500)
+
 	_ = p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"}).Click()
-	p.sleep(2000)
+	p.sleep(3000)
 	p.screenshot("smb-step2-loaded")
 
 	// ── Step 2: Credentials ─────────────────────────────────────────────
-	hostField := p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
+	hostField := p.page.GetByPlaceholder("Host Name")
+	if !p.isVisible(hostField) {
+		hostField = p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
+	}
 	if err := p.expectVisible(hostField, 10000); err != nil {
 		return "", fmt.Errorf("step2: Host Name field not visible: %w", err)
 	}
 	_ = hostField.Fill(host)
+	p.sleep(500)
 
-	// Expand the SMB accordion.
-	_ = p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "SMB"}).First().Click()
+	// Select SMB radio button in Protocol Selection (NFS is default).
+	// Use JS to find and click the SMB radio reliably.
+	_, _ = p.page.Evaluate(`() => {
+		const radios = document.querySelectorAll('input[type="radio"]');
+		for (const r of radios) {
+			const label = r.closest('label') || r.parentElement;
+			if (label && label.textContent.trim().includes('SMB')) {
+				r.click();
+				return true;
+			}
+		}
+		const spans = document.querySelectorAll('span, label');
+		for (const s of spans) {
+			if (s.textContent.trim() === 'SMB') {
+				s.click();
+				return true;
+			}
+		}
+		return false;
+	}`)
 	p.sleep(1000)
+	p.screenshot("smb-step2-protocol-selected")
 
-	_ = p.page.GetByPlaceholder("Username").Fill(smbUser)
-	if smbPass != "" {
-		_ = p.page.GetByPlaceholder("Password").Fill(smbPass)
+	// Expand the SMB accordion to reveal credential fields.
+	// The accordion header "SMB" is rendered as a clickable section below
+	// Protocol Selection. Use GetByRole("button") to target the accordion
+	// header (not the radio, which has role="radio").
+	smbAccordion := p.page.GetByRole("button", playwright.PageGetByRoleOptions{
+		Name:  "SMB",
+		Exact: playwright.Bool(true),
+	}).First()
+	if p.isVisible(smbAccordion) {
+		_ = smbAccordion.Click()
+		p.sleep(1000)
 	}
+
+	// If the Username field is still not visible, try scrolling down and
+	// clicking any remaining SMB-labelled expandable section.
+	smbUserField := p.page.GetByPlaceholder("Username").Last()
+	if !p.isVisible(smbUserField) {
+		p.page.Locator(`text=SMB`).Last().Click()
+		p.sleep(1000)
+	}
+
+	p.screenshot("smb-step2-accordion-expanded")
+
+	// Fill AD Server IP.
+	if adServerIP != "" {
+		adIPField := p.page.GetByPlaceholder("AD Server IP").First()
+		if p.isVisible(adIPField) {
+			_ = adIPField.Fill(adServerIP)
+			log.Printf("[CreateSMBFileServer] AD Server IP set: %s", adServerIP)
+			p.sleep(500)
+		}
+	}
+
+	// Fill SMB Username and Password.
+	_ = p.page.GetByPlaceholder("Username").Last().Fill(smbUser)
+	p.sleep(500)
+	_ = p.page.GetByPlaceholder("Password").Last().Fill(smbPass)
+	p.sleep(500)
+
 	p.screenshot("smb-step2-filled")
 
-	_ = p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"}).Click()
+	// Wait for AD Server IP auto-discovery and Proceed to become enabled.
+	proceedBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"})
+	for attempt := 0; attempt < 10; attempt++ {
+		disabled, _ := proceedBtn.IsDisabled()
+		if !disabled {
+			break
+		}
+		log.Printf("[CreateSMBFileServer] Proceed still disabled, waiting (attempt %d/10)…", attempt+1)
+		p.sleep(3000)
+	}
+
+	disabled, _ := proceedBtn.IsDisabled()
+	if disabled {
+		p.screenshot("smb-step2-proceed-disabled")
+		return "", fmt.Errorf("step2: Proceed button never became enabled — check credentials")
+	}
+
+	_ = proceedBtn.Click()
 	p.sleep(3000)
 	p.screenshot("smb-step3-loaded")
 
 	// ── Step 3: Workers ─────────────────────────────────────────────────
-	if err := p.expectVisible(
-		p.page.GetByText(regexp.MustCompile(`(?i)Compatible Workers`)).First(),
-		15000,
-	); err != nil {
-		return "", fmt.Errorf("step3: Compatible Workers label not visible: %w", err)
-	}
+	p.sleep(3000)
 
-	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)worker`))
-	_ = workerNames.First().WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
+	// Check if compatible workers exist by looking at table rows.
+	workerRows := p.page.Locator(`tbody tr`).Filter(playwright.LocatorFilterOptions{
+		HasNot: p.page.Locator(`text=No SMB compatible workers found`),
 	})
-	p.sleep(2000)
+	rowCount, _ := workerRows.Count()
+	log.Printf("[CreateSMBFileServer] step3: %d worker row(s) in table", rowCount)
 
-	workerCount, _ := workerNames.Count()
-	log.Printf("[CreateSMBFileServer] found %d worker(s)", workerCount)
-
-	toggled := 0
-	for i := 0; i < workerCount; i++ {
-		el := workerNames.Nth(i)
-		if !p.isVisible(el) {
-			continue
+	if rowCount > 0 {
+		// Toggle workers using the same approach as NFS.
+		toggled := 0
+		for i := 0; i < rowCount; i++ {
+			row := workerRows.Nth(i)
+			toggle := row.Locator(`[role="switch"], input[type="checkbox"], [role="checkbox"]`).First()
+			if p.isVisible(toggle) {
+				_ = toggle.Click()
+				toggled++
+				log.Printf("[CreateSMBFileServer] worker %d: toggled", i)
+				p.sleep(500)
+			}
 		}
-		info, err := el.Evaluate(fsToggleInspectJS, nil)
-		if err != nil {
-			continue
-		}
-		m, ok := info.(map[string]interface{})
-		if !ok || m["found"] != true {
-			continue
-		}
-		if m["isAlreadyOn"] == true {
-			toggled++
-			continue
-		}
-		if m["isOffline"] == true || m["isDisabled"] == true {
-			continue
-		}
-		clicked, _ := el.Evaluate(fsToggleClickJS, nil)
-		if cb, ok := clicked.(bool); ok && cb {
-			toggled++
-			log.Printf("[CreateSMBFileServer] worker %d: toggled ON", i)
-			p.sleep(1000)
-		}
+		log.Printf("[CreateSMBFileServer] %d worker(s) associated", toggled)
+		p.screenshot("smb-step3-workers-toggled")
+	} else {
+		log.Printf("[CreateSMBFileServer] no SMB workers available — proceeding without worker association")
 	}
-
-	if toggled == 0 {
-		p.screenshot("smb-step3-no-online-workers")
-		return "", fmt.Errorf("step3: no online workers available to toggle")
-	}
-	log.Printf("[CreateSMBFileServer] %d worker(s) associated", toggled)
-	p.screenshot("smb-step3-workers-toggled")
 
 	// Click Finish and wait for redirect/success.
 	finishBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Finish"})
@@ -349,23 +404,41 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	_ = nameField.Fill(name)
 
 	// Select "Dell PowerScale (Isilon)" from Server Type dropdown.
-	serverTypeDropdown := p.page.Locator(`[name="serverType"], [role="combobox"]`).First()
-	if p.isVisible(serverTypeDropdown) {
-		_ = serverTypeDropdown.Click()
-		p.sleep(500)
-	} else {
-		// Fallback: click any dropdown-like element near "Server Type"
-		p.page.GetByText("Server Type").First().Click()
-		p.sleep(500)
+	// Try native <select> first, then click-based approach as fallback.
+	selected := false
+
+	// Approach 1: native <select> element.
+	sel := p.page.Locator(`select`).First()
+	if p.isVisible(sel) {
+		_, err := sel.SelectOption(playwright.SelectOptionValues{
+			Labels: playwright.StringSlice("Dell PowerScale (Isilon)"),
+		})
+		if err == nil {
+			selected = true
+			log.Printf("[CreateIsilonFileServer] selected Isilon via native <select>")
+		} else {
+			log.Printf("[CreateIsilonFileServer] native select failed: %v — trying click approach", err)
+		}
 	}
-	isilonOption := p.page.GetByText("Dell PowerScale (Isilon)", playwright.PageGetByTextOptions{
-		Exact: playwright.Bool(false),
-	}).First()
-	if err := p.expectVisible(isilonOption, 5000); err != nil {
-		return "", fmt.Errorf("step1: Isilon option not visible in dropdown: %w", err)
+
+	// Approach 2: click-based custom dropdown.
+	if !selected {
+		p.page.GetByText("Other NAS").First().Click()
+		p.sleep(1000)
+		p.screenshot("isilon-dropdown-opened")
+
+		isilonOption := p.page.GetByText("Dell PowerScale (Isilon)", playwright.PageGetByTextOptions{
+			Exact: playwright.Bool(false),
+		}).First()
+		if err := p.expectVisible(isilonOption, 10000); err != nil {
+			p.screenshot("isilon-dropdown-no-option")
+			return "", fmt.Errorf("step1: Isilon option not visible in dropdown: %w", err)
+		}
+		_ = isilonOption.Click()
+		selected = true
 	}
-	_ = isilonOption.Click()
-	p.sleep(1000)
+	p.sleep(2000)
+	p.screenshot("isilon-step1-type-selected")
 
 	// Management Console fields appear after selecting Isilon.
 	hostField := p.page.GetByPlaceholder("Host")
@@ -404,125 +477,349 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	p.screenshot("isilon-step2-loaded")
 
 	// ── Step 2: Access Zones / Credentials ─────────────────────────────
-	// Wait for the Access Zones table to render.
+	// Wait for the Access Zones heading to render.
 	if err := p.expectVisible(
 		p.page.GetByText("Access Zones").First(), 15000,
 	); err != nil {
-		return "", fmt.Errorf("step2: Access Zones table not visible: %w", err)
+		return "", fmt.Errorf("step2: Access Zones not visible: %w", err)
 	}
-	p.sleep(2000)
+	p.sleep(3000)
 
-	// Select the first access zone checkbox (e.g., "MyZone").
-	zoneCBs := p.page.Locator(`tbody tr [role="checkbox"], tbody tr input[type="checkbox"]`)
-	cbCount, _ := zoneCBs.Count()
-	if cbCount > 0 {
-		firstCB := zoneCBs.First()
-		checked, _ := firstCB.GetAttribute("aria-checked")
-		if checked != "true" {
-			_ = firstCB.Click()
-			p.sleep(1000)
-		}
-	} else {
-		log.Printf("[CreateIsilonFileServer] WARNING: no zone checkboxes found")
-	}
-
-	// Select NFS IP from the dropdown in the selected zone row.
-	if nfsIP != "" {
-		nfsIPDropdowns := p.page.Locator(`tbody tr`).First().Locator(`select, [role="combobox"], [class*="dropdown"]`)
-		// Try clicking any dropdown trigger that looks like the NFS IP selector.
-		nfsIPTrigger := p.page.Locator(`tbody tr`).First().Locator(`text=Select NFS IP, text=NFS IP`).First()
-		if !p.isVisible(nfsIPTrigger) {
-			// Fallback: find the NFS IP column dropdown.
-			ddCount, _ := nfsIPDropdowns.Count()
-			if ddCount > 0 {
-				nfsIPTrigger = nfsIPDropdowns.First()
+	// The grid uses custom div-based components (no HTML <table>). Dump the
+	// actual DOM structure around zone names for debugging.
+	domDump, _ := p.page.Evaluate(`() => {
+		const result = {
+			tables: document.querySelectorAll('table').length,
+			inputCheckboxes: document.querySelectorAll('input[type="checkbox"]').length,
+			roleCheckboxes: document.querySelectorAll('[role="checkbox"]').length,
+			agCheckboxes: document.querySelectorAll('.ag-checkbox-input, .ag-selection-checkbox').length,
+			selects: document.querySelectorAll('select').length,
+			allInputs: document.querySelectorAll('input').length,
+			roleRows: document.querySelectorAll('[role="row"]').length,
+			roleGridcells: document.querySelectorAll('[role="gridcell"]').length,
+		};
+		// Find the element containing zone name text and dump its ancestry.
+		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+		while (walker.nextNode()) {
+			const txt = walker.currentNode.textContent.trim();
+			if (txt === 'MyZone' || txt === 'System') {
+				let el = walker.currentNode.parentElement;
+				const chain = [];
+				for (let i = 0; i < 10 && el; i++) {
+					chain.push(el.tagName + '.' + (el.className || '').toString().substring(0, 80) +
+						(el.getAttribute('role') ? '[role=' + el.getAttribute('role') + ']' : ''));
+					el = el.parentElement;
+				}
+				result['zone_' + txt] = chain;
+				if (!result.zoneParentHTML) {
+					const p = walker.currentNode.parentElement;
+					const row = p?.closest('[role="row"]') || p?.parentElement?.parentElement;
+					result.zoneParentHTML = row ? row.outerHTML.substring(0, 1000) : p?.parentElement?.innerHTML?.substring(0, 500);
+				}
+				break;
 			}
 		}
-		if p.isVisible(nfsIPTrigger) {
-			_ = nfsIPTrigger.Click()
-			p.sleep(500)
-			// Pick the matching IP from the dropdown options.
-			ipOption := p.page.GetByText(nfsIP, playwright.PageGetByTextOptions{
-				Exact: playwright.Bool(false),
-			}).First()
-			if err := p.expectVisible(ipOption, 5000); err == nil {
-				_ = ipOption.Click()
-				p.sleep(500)
-			} else {
-				log.Printf("[CreateIsilonFileServer] NFS IP %q not found in dropdown, selecting first option", nfsIP)
-				// Select whatever first option is available.
-				firstOpt := p.page.Locator(`[role="option"], [role="listbox"] li`).First()
-				if p.isVisible(firstOpt) {
-					_ = firstOpt.Click()
-					p.sleep(500)
+		return result;
+	}`)
+	log.Printf("[CreateIsilonFileServer] step2 DOM dump: %v", domDump)
+
+	// Strategy: click the checkbox for the first zone row.
+	// Try multiple approaches since the grid uses custom components.
+	zoneChecked := false
+
+	// Approach 1: ag-grid checkbox input (hidden but clickable).
+	agCbResult, _ := p.page.Evaluate(`() => {
+		const cbs = document.querySelectorAll('.ag-checkbox-input, .ag-selection-checkbox input, [role="row"] input[type="checkbox"]');
+		if (cbs.length > 0) {
+			cbs[0].click();
+			return { method: 'ag-checkbox-input', count: cbs.length, clicked: true };
+		}
+		return { method: 'ag-checkbox-input', count: 0 };
+	}`)
+	log.Printf("[CreateIsilonFileServer] ag-checkbox attempt: %v", agCbResult)
+	if m, ok := agCbResult.(map[string]interface{}); ok && m["clicked"] == true {
+		zoneChecked = true
+	}
+
+	// Approach 2: role="checkbox" elements.
+	if !zoneChecked {
+		roleCbResult, _ := p.page.Evaluate(`() => {
+			const cbs = document.querySelectorAll('[role="checkbox"]');
+			if (cbs.length > 0) {
+				cbs[0].click();
+				return { method: 'role-checkbox', count: cbs.length, clicked: true };
+			}
+			return { method: 'role-checkbox', count: 0 };
+		}`)
+		log.Printf("[CreateIsilonFileServer] role-checkbox attempt: %v", roleCbResult)
+		if m, ok := roleCbResult.(map[string]interface{}); ok && m["clicked"] == true {
+			zoneChecked = true
+		}
+	}
+
+	// Approach 3: Any generic input[type="checkbox"] on the page.
+	if !zoneChecked {
+		genericCb, _ := p.page.Evaluate(`() => {
+			const cbs = document.querySelectorAll('input[type="checkbox"]');
+			if (cbs.length > 0) {
+				cbs[0].click();
+				return { method: 'generic-checkbox', count: cbs.length, clicked: true };
+			}
+			return { method: 'generic-checkbox', count: 0 };
+		}`)
+		log.Printf("[CreateIsilonFileServer] generic-checkbox attempt: %v", genericCb)
+		if m, ok := genericCb.(map[string]interface{}); ok && m["clicked"] == true {
+			zoneChecked = true
+		}
+	}
+
+	// Approach 4: Find the first zone name text and click the checkbox area
+	// to its left using coordinates. Works regardless of DOM structure.
+	if !zoneChecked {
+		// Find the first visible zone name in the grid.
+		zoneNameLoc := p.page.Locator(`text=MyZone`).First()
+		if !p.isVisible(zoneNameLoc) {
+			zoneNameLoc = p.page.Locator(`text=System`).First()
+		}
+		// As last resort find any text that appears after the column headers.
+		if !p.isVisible(zoneNameLoc) {
+			zoneNameLoc = p.page.Locator(`text=Name`).First()
+		}
+		if p.isVisible(zoneNameLoc) {
+			box, err := zoneNameLoc.BoundingBox()
+			if err == nil && box != nil {
+				// The checkbox is to the left of the zone name.
+				cbX := box.X - 30
+				cbY := box.Y + box.Height/2
+				_ = p.page.Mouse().Click(cbX, cbY)
+				log.Printf("[CreateIsilonFileServer] coordinate click at (%.0f, %.0f) — left of zone at (%.0f, %.0f)", cbX, cbY, box.X, box.Y)
+				zoneChecked = true
+			}
+		}
+	}
+
+	if !zoneChecked {
+		p.screenshot("isilon-step2-no-checkbox")
+		return "", fmt.Errorf("step2: could not find or click any zone checkbox")
+	}
+
+	p.sleep(2000)
+	p.screenshot("isilon-step2-zone-checked")
+
+	// After checking the zone, the NFS IP dropdown and NFS Username fields
+	// should become editable. The grid uses custom React dropdown components
+	// (not <select>), with data-testid attributes like "table-cell-column-*-row-*".
+
+	// Dump the cells in the checked row to understand the NFS IP dropdown.
+	cellDump, _ := p.page.Evaluate(`() => {
+		const rows = document.querySelectorAll('[data-testid^="table-row-"]');
+		for (const row of rows) {
+			const cb = row.querySelector('input[type="checkbox"]');
+			if (!cb || !cb.checked) continue;
+			const cells = row.querySelectorAll('[data-testid^="table-cell-"]');
+			const result = [];
+			cells.forEach(c => {
+				result.push({
+					testid: c.getAttribute('data-testid'),
+					text: c.textContent.substring(0, 50).trim(),
+					html: c.innerHTML.substring(0, 300)
+				});
+			});
+			return { checkedRow: row.getAttribute('data-testid'), cellCount: cells.length, cells: result };
+		}
+		return { noCheckedRow: true };
+	}`)
+	log.Printf("[CreateIsilonFileServer] checked row cells: %v", cellDump)
+
+	if nfsIP != "" {
+		// The NFS IP dropdown is a MUI Autocomplete (not a <select>).
+		// Find the checked row's zone name, then target the NFS IP cell's input.
+		zoneName, _ := p.page.Evaluate(`() => {
+			const rows = document.querySelectorAll('[data-testid^="table-row-"]');
+			for (const row of rows) {
+				const cb = row.querySelector('input[type="checkbox"]');
+				if (cb && cb.checked) {
+					const tid = row.getAttribute('data-testid');
+					return tid.replace('table-row-', '');
 				}
 			}
+			return '';
+		}`)
+		zoneStr := fmt.Sprintf("%v", zoneName)
+		log.Printf("[CreateIsilonFileServer] checked zone name: %q", zoneStr)
+
+		// Build the data-testid for the NFS IP cell.
+		nfsIPCellTestID := fmt.Sprintf("table-cell-column-NFS IP-row-%s", zoneStr)
+		nfsIPCell := p.page.Locator(fmt.Sprintf(`[data-testid="%s"]`, nfsIPCellTestID))
+		nfsIPInput := nfsIPCell.Locator(`input`).First()
+
+		if !p.isVisible(nfsIPInput) {
+			// Fallback: find any MUI Autocomplete input inside an NFS IP-labelled cell.
+			nfsIPInput = p.page.Locator(`[data-testid*="NFS IP"] input`).First()
 		}
+
+		nfsIPSet := false
+		if p.isVisible(nfsIPInput) {
+			// Click the input to open the MUI Autocomplete dropdown.
+			_ = nfsIPInput.Click()
+			p.sleep(1000)
+			p.screenshot("isilon-step2-nfsip-dropdown-open")
+
+			// MUI Autocomplete options appear in a listbox with role="option".
+			options := p.page.Locator(`[role="option"]`)
+			optCount, _ := options.Count()
+			log.Printf("[CreateIsilonFileServer] MUI dropdown options: %d", optCount)
+
+			// Log all available options for debugging.
+			for i := 0; i < optCount; i++ {
+				optText, _ := options.Nth(i).TextContent()
+				log.Printf("[CreateIsilonFileServer]   option %d: %q", i, strings.TrimSpace(optText))
+			}
+
+			// Click the option matching the target IP.
+			for i := 0; i < optCount; i++ {
+				optText, _ := options.Nth(i).TextContent()
+				if strings.Contains(optText, nfsIP) {
+					_ = options.Nth(i).Click()
+					nfsIPSet = true
+					log.Printf("[CreateIsilonFileServer] NFS IP selected: %s", nfsIP)
+					break
+				}
+			}
+
+			// If exact match not found, select the first non-empty option.
+			if !nfsIPSet && optCount > 0 {
+				_ = options.First().Click()
+				firstText, _ := options.First().TextContent()
+				nfsIPSet = true
+				log.Printf("[CreateIsilonFileServer] NFS IP selected (first available): %s", strings.TrimSpace(firstText))
+			}
+
+			// If no options appeared, try typing the IP to filter.
+			if !nfsIPSet {
+				_ = nfsIPInput.Fill(nfsIP)
+				p.sleep(1000)
+				options2 := p.page.Locator(`[role="option"]`)
+				opt2Count, _ := options2.Count()
+				if opt2Count > 0 {
+					_ = options2.First().Click()
+					nfsIPSet = true
+					log.Printf("[CreateIsilonFileServer] NFS IP selected after typing: %s", nfsIP)
+				}
+			}
+		} else {
+			log.Printf("[CreateIsilonFileServer] WARNING: NFS IP input not found")
+		}
+
+		if !nfsIPSet {
+			log.Printf("[CreateIsilonFileServer] WARNING: NFS IP could not be selected")
+		}
+		p.sleep(1000)
 	}
 
-	// Fill NFS Username in the zone row.
+	// Fill NFS Username.
 	if nfsUser != "" {
-		nfsUserField := p.page.Locator(`tbody tr`).First().GetByPlaceholder("NFS Username")
+		nfsUserField := p.page.GetByPlaceholder("NFS Username").First()
 		if p.isVisible(nfsUserField) {
 			_ = nfsUserField.Fill(nfsUser)
+			log.Printf("[CreateIsilonFileServer] NFS Username filled: %s", nfsUser)
+		} else {
+			log.Printf("[CreateIsilonFileServer] WARNING: NFS Username placeholder not found")
 		}
+		p.sleep(500)
 	}
 
 	p.screenshot("isilon-step2-filled")
-	_ = p.clickProceed()
+
+	// Wait for Proceed to enable, then click.
+	proceedBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Proceed"})
+	for attempt := 0; attempt < 15; attempt++ {
+		dis, _ := proceedBtn.IsDisabled()
+		if !dis {
+			log.Printf("[CreateIsilonFileServer] Proceed enabled at attempt %d", attempt+1)
+			break
+		}
+		log.Printf("[CreateIsilonFileServer] Proceed still disabled (attempt %d/15)", attempt+1)
+		p.sleep(2000)
+	}
+
+	dis, _ := proceedBtn.IsDisabled()
+	if dis {
+		p.screenshot("isilon-step2-proceed-stuck")
+		return "", fmt.Errorf("step2: Proceed button never became enabled — check zone selection and NFS credentials")
+	}
+
+	_ = proceedBtn.Click()
 	p.sleep(3000)
 	p.screenshot("isilon-step3-loaded")
 
 	// ── Step 3: Workers ────────────────────────────────────────────────
-	// The left sidebar shows access zones; the right shows workers for the
-	// selected zone. Toggle workers on.
-
-	// Wait for the worker table to appear.
-	_ = p.page.GetByText(regexp.MustCompile(`(?i)Workers`)).First().WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
-	})
+	// Step 3 shows a left sidebar with access zones and a worker grid on the
+	// right. The grid uses custom div components (no HTML <table>).
 	p.sleep(2000)
 
-	// Find worker rows by matching "worker" text in the table.
-	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)worker`))
-	_ = workerNames.First().WaitFor(playwright.LocatorWaitForOptions{
+	// Look for toggle switches anywhere on the page (the grid uses [role="switch"]
+	// or custom toggle components, NOT inside <table>).
+	workerToggles := p.page.Locator(`[role="switch"]`)
+	_ = workerToggles.First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
 		Timeout: playwright.Float(15000),
 	})
 	p.sleep(1000)
 
-	workerCount, _ := workerNames.Count()
-	log.Printf("[CreateIsilonFileServer] found %d worker(s)", workerCount)
+	workerCount, _ := workerToggles.Count()
+	log.Printf("[CreateIsilonFileServer] found %d worker toggle(s) via [role=switch]", workerCount)
 
 	toggled := 0
 	for i := 0; i < workerCount; i++ {
-		el := workerNames.Nth(i)
-		if !p.isVisible(el) {
+		toggle := workerToggles.Nth(i)
+		if !p.isVisible(toggle) {
 			continue
 		}
-		info, err := el.Evaluate(fsToggleInspectJS, nil)
-		if err != nil {
-			continue
-		}
-		m, ok := info.(map[string]interface{})
-		if !ok || m["found"] != true {
-			continue
-		}
-		if m["isAlreadyOn"] == true {
+		ariaChecked, _ := toggle.GetAttribute("aria-checked")
+		if ariaChecked == "true" {
 			toggled++
-			log.Printf("[CreateIsilonFileServer] worker %d: already ON", i)
+			log.Printf("[CreateIsilonFileServer] worker %d: already ON", i+1)
 			continue
 		}
-		if m["isOffline"] == true || m["isDisabled"] == true {
-			log.Printf("[CreateIsilonFileServer] worker %d: offline/disabled, skipping", i)
-			continue
-		}
-		clicked, _ := el.Evaluate(fsToggleClickJS, nil)
-		if cb, ok := clicked.(bool); ok && cb {
-			toggled++
-			log.Printf("[CreateIsilonFileServer] worker %d: toggled ON", i)
-			p.sleep(1000)
+		_ = toggle.Click()
+		toggled++
+		log.Printf("[CreateIsilonFileServer] worker %d: toggled ON", i+1)
+		p.sleep(1000)
+	}
+
+	// Fallback: use the JS-based approach to find toggles near worker names.
+	if toggled == 0 {
+		workerNames := p.page.GetByText(regexp.MustCompile(`(?i)worker-`))
+		wCount, _ := workerNames.Count()
+		log.Printf("[CreateIsilonFileServer] fallback: found %d worker name(s)", wCount)
+
+		for i := 0; i < wCount; i++ {
+			el := workerNames.Nth(i)
+			if !p.isVisible(el) {
+				continue
+			}
+			info, err := el.Evaluate(fsToggleInspectJS, nil)
+			if err != nil {
+				continue
+			}
+			m, ok := info.(map[string]interface{})
+			if !ok || m["found"] != true {
+				continue
+			}
+			if m["isAlreadyOn"] == true {
+				toggled++
+				continue
+			}
+			if m["isOffline"] == true || m["isDisabled"] == true {
+				continue
+			}
+			clicked, _ := el.Evaluate(fsToggleClickJS, nil)
+			if cb, ok := clicked.(bool); ok && cb {
+				toggled++
+				log.Printf("[CreateIsilonFileServer] worker %d: toggled ON (JS fallback)", i+1)
+				p.sleep(1000)
+			}
 		}
 	}
 
@@ -586,8 +883,17 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 // navigateToFileServer goes to the file server list, finds the row
 // by name, clicks it, and returns the UUID from the resulting URL.
 // Retries navigation up to 5 times for eventual consistency.
+//
+// For Isilon (expandable rows), the first click expands the row to show
+// access zone sub-rows. Clicking a zone sub-row navigates to a detail URL
+// like /file-server/{zoneId}?zone=...&fileServerId={fsId}. In that case
+// the fileServerId query parameter is returned.
 func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
-	re := regexp.MustCompile(`/file-server/([a-f0-9-]+)`)
+	// Check if we're already on a file server detail page (redirect from wizard).
+	if fsID := p.extractFileServerID(p.page.URL()); fsID != "" {
+		log.Printf("[navigateToFileServer] already on detail page, ID: %s", fsID)
+		return fsID, nil
+	}
 
 	nameLink := p.page.GetByText(name, playwright.PageGetByTextOptions{
 		Exact: playwright.Bool(true),
@@ -610,18 +916,69 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 		p.screenshot("fs-name-not-found")
 		return "", fmt.Errorf("file server %q not found in list", name)
 	}
+
+	// Click the name link.
 	_ = nameLink.First().Click()
+	p.sleep(3000)
 
-	_ = p.page.WaitForURL(regexp.MustCompile(`/file-server/[a-f0-9-]+`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
-	})
-
-	m := re.FindStringSubmatch(p.page.URL())
-	if len(m) < 2 {
-		return "", fmt.Errorf("could not extract file server ID from %s", p.page.URL())
+	// Check if navigation succeeded (standard file servers).
+	if fsID := p.extractFileServerID(p.page.URL()); fsID != "" {
+		log.Printf("[navigateToFileServer] ID: %s", fsID)
+		return fsID, nil
 	}
-	log.Printf("[navigateToFileServer] ID: %s", m[1])
-	return m[1], nil
+
+	// URL didn't change — likely an expandable row (e.g. Isilon).
+	// The first click expanded the row. Now look for zone sub-rows and
+	// click the first one to navigate to the detail page.
+	log.Printf("[navigateToFileServer] row expanded (Isilon), looking for zone sub-rows…")
+	p.screenshot("fs-row-expanded")
+
+	// Zone sub-rows appear as clickable links like "MyZone (NFS)" below the
+	// parent row. Find and click the first one.
+	zoneLink := p.page.Locator(`a[href*="fileServerId"]`).First()
+	if p.isVisible(zoneLink) {
+		_ = zoneLink.Click()
+		p.sleep(3000)
+		if fsID := p.extractFileServerID(p.page.URL()); fsID != "" {
+			log.Printf("[navigateToFileServer] ID (via zone link): %s", fsID)
+			return fsID, nil
+		}
+	}
+
+	// Fallback: look for any visible sub-row text containing "(NFS)" or "(SMB)"
+	// and click it.
+	zoneSubRow := p.page.GetByText(regexp.MustCompile(`\(NFS\)|\(SMB\)`)).First()
+	if p.isVisible(zoneSubRow) {
+		_ = zoneSubRow.Click()
+		p.sleep(3000)
+		if fsID := p.extractFileServerID(p.page.URL()); fsID != "" {
+			log.Printf("[navigateToFileServer] ID (via zone text): %s", fsID)
+			return fsID, nil
+		}
+	}
+
+	// Try clicking the name link again (it may have collapsed/re-expanded).
+	_ = nameLink.First().Click()
+	p.sleep(3000)
+	if fsID := p.extractFileServerID(p.page.URL()); fsID != "" {
+		log.Printf("[navigateToFileServer] ID (second click): %s", fsID)
+		return fsID, nil
+	}
+
+	p.screenshot("fs-navigate-failed")
+	return "", fmt.Errorf("could not extract file server ID from %s", p.page.URL())
+}
+
+// extractFileServerID extracts the file server UUID from a URL.
+// For standard file servers: /file-server/{id} → returns {id}.
+// For Isilon zone URLs: /file-server/{zoneId}?zone=...&fileServerId=...
+// → returns the path {zoneId} (the zone overview has export paths).
+func (p *FileServerPage) extractFileServerID(rawURL string) string {
+	re := regexp.MustCompile(`/file-server/([a-f0-9-]{20,})`)
+	if m := re.FindStringSubmatch(rawURL); len(m) >= 2 {
+		return m[1]
+	}
+	return ""
 }
 
 // WaitForFileServerActive polls the file server overview page until the

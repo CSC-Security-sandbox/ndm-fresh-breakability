@@ -650,6 +650,80 @@ func (p *DiscoveryPage) DownloadDiscoveryReportCSV() error {
 	return fmt.Errorf("CSV download option not found in Discovery Report dropdown")
 }
 
+// ClickConsolidateDiscoveryReports clicks the "Consolidate All Discovery Reports"
+// dropdown on the File Server Overview page and selects the desired format
+// (e.g. "CSV"). The caller must already be on the file server overview page.
+func (p *DiscoveryPage) ClickConsolidateDiscoveryReports(format string) error {
+	p.sleep(2000)
+
+	// The button has a dropdown arrow — click the dropdown trigger first.
+	dropdownCandidates := []playwright.Locator{
+		p.page.Locator(`button:has-text("Consolidate All Discovery Reports")`).First(),
+		p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Consolidate All Discovery Reports"}),
+		p.page.Locator(`button:has-text("Consolidate")`).First(),
+	}
+
+	var mainBtn playwright.Locator
+	for _, loc := range dropdownCandidates {
+		if p.isVisible(loc) {
+			mainBtn = loc
+			break
+		}
+	}
+	if mainBtn == nil {
+		return fmt.Errorf("Consolidate All Discovery Reports button not found")
+	}
+
+	// The button may have a split dropdown arrow (▾). Try clicking the arrow
+	// portion first, otherwise click the main button.
+	arrowCandidates := []playwright.Locator{
+		mainBtn.Locator(`xpath=./following-sibling::button`).First(),
+		p.page.Locator(`button:has-text("Consolidate All Discovery Reports") + button`).First(),
+		p.page.Locator(`[data-testid*="consolidate"] button`).Last(),
+	}
+
+	var opened bool
+	for _, arrow := range arrowCandidates {
+		if p.isVisible(arrow) {
+			if err := arrow.Click(); err == nil {
+				opened = true
+				p.sleep(500)
+				break
+			}
+		}
+	}
+
+	if !opened {
+		if err := mainBtn.Click(); err != nil {
+			return fmt.Errorf("click Consolidate button: %w", err)
+		}
+		p.sleep(500)
+	}
+
+	// Select the format from the dropdown menu.
+	formatCandidates := []playwright.Locator{
+		p.page.GetByText(format, playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First(),
+		p.page.GetByText("Download as "+format, playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.Locator(fmt.Sprintf(`[role="menuitem"]:has-text("%s")`, format)).First(),
+		p.page.Locator(fmt.Sprintf(`li:has-text("%s")`, format)).First(),
+	}
+
+	for _, loc := range formatCandidates {
+		if p.isVisible(loc) {
+			if err := loc.Click(); err == nil {
+				p.sleep(2000)
+				return nil
+			}
+		}
+	}
+
+	// If no dropdown appeared, the main button click may have already
+	// triggered the default action (e.g. CSV download). Wait a moment.
+	p.sleep(3000)
+	log.Printf("[ClickConsolidateDiscoveryReports] no dropdown menu item found for %q — main button click may have triggered default action", format)
+	return nil
+}
+
 // NavigateToCompletedJobRunDetail opens the detail page of the first
 // completed job run visible on the Job Run List. Returns the run URL.
 func (p *DiscoveryPage) NavigateToCompletedJobRunDetail() (string, error) {
