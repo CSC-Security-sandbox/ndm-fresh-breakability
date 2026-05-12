@@ -24,6 +24,8 @@ package tests
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -445,12 +447,23 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 	)
 	f.Screenshot("fs-overview-for-csv")
 
-	t.Log("[5.19] clicking Consolidate All Discovery Reports → CSV")
-	require.NoError(t,
-		dp.ClickConsolidateDiscoveryReports("CSV"),
-		"click Consolidate All Discovery Reports as CSV",
+	downloadDir := filepath.Join("test-results", "downloads")
+	require.NoError(t, os.MkdirAll(downloadDir, 0o755), "create download dir")
+
+	t.Log("[5.19] triggering consolidated CSV generation and downloading")
+	csvPath, err := dp.GenerateAndDownloadConsolidatedCSV(downloadDir, 300000)
+	require.NoError(t, err, "generate and download consolidated CSV")
+
+	f.Screenshot("csv-download-complete")
+
+	info, statErr := os.Stat(csvPath)
+	require.NoError(t, statErr, "CSV file should exist at %s", csvPath)
+	require.Greater(t, info.Size(), int64(0), "CSV file should not be empty")
+	require.True(t,
+		strings.HasSuffix(csvPath, ".csv"),
+		"downloaded file should have .csv extension, got: %s", csvPath,
 	)
 
-	f.Screenshot("csv-consolidate-triggered")
-	fmt.Println("[DISCOVERY 5.19 PASSED] Consolidated Discovery Report (CSV) triggered")
+	t.Logf("[5.19] CSV downloaded: %s (%d bytes)", csvPath, info.Size())
+	fmt.Println("[DISCOVERY 5.19 PASSED] Consolidated Discovery Report CSV downloaded and verified")
 }

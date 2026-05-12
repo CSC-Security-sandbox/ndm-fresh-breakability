@@ -650,78 +650,129 @@ func (p *DiscoveryPage) DownloadDiscoveryReportCSV() error {
 	return fmt.Errorf("CSV download option not found in Discovery Report dropdown")
 }
 
-// ClickConsolidateDiscoveryReports clicks the "Consolidate All Discovery Reports"
-// dropdown on the File Server Overview page and selects the desired format
-// (e.g. "CSV"). The caller must already be on the file server overview page.
-func (p *DiscoveryPage) ClickConsolidateDiscoveryReports(format string) error {
+// GenerateAndDownloadConsolidatedCSV performs the full Consolidated Discovery
+// Report flow on the File Server Overview page:
+//  1. Click the "Consolidate All Discovery Reports" button to trigger generation.
+//  2. Verify the toast notification and "Generating..." button state.
+//  3. Wait for the download-ready "Consolidated Discovery Report" button.
+//  4. Click the download button and save the CSV via Playwright's download API.
+//
+// Returns the path to the saved CSV file, or an error if any step fails.
+// The timeoutMs parameter controls how long to wait for generation to complete.
+func (p *DiscoveryPage) GenerateAndDownloadConsolidatedCSV(downloadDir string, timeoutMs float64) (string, error) {
 	p.sleep(2000)
 
-	// The button has a dropdown arrow — click the dropdown trigger first.
-	dropdownCandidates := []playwright.Locator{
+	// ── Step 1: Click the main "Consolidate All Discovery Reports" button ─
+	// This is a split button. Clicking the main text area triggers generation.
+	// The small dropdown arrow on the right is for format selection — we skip it
+	// and let the default (CSV) action fire.
+	triggerCandidates := []playwright.Locator{
 		p.page.Locator(`button:has-text("Consolidate All Discovery Reports")`).First(),
 		p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Consolidate All Discovery Reports"}),
 		p.page.Locator(`button:has-text("Consolidate")`).First(),
 	}
 
-	var mainBtn playwright.Locator
-	for _, loc := range dropdownCandidates {
+	var triggerBtn playwright.Locator
+	for _, loc := range triggerCandidates {
 		if p.isVisible(loc) {
-			mainBtn = loc
+			triggerBtn = loc
 			break
 		}
 	}
-	if mainBtn == nil {
-		return fmt.Errorf("Consolidate All Discovery Reports button not found")
+	if triggerBtn == nil {
+		return "", fmt.Errorf("Consolidate All Discovery Reports button not found")
 	}
 
-	// The button may have a split dropdown arrow (▾). Try clicking the arrow
-	// portion first, otherwise click the main button.
-	arrowCandidates := []playwright.Locator{
-		mainBtn.Locator(`xpath=./following-sibling::button`).First(),
-		p.page.Locator(`button:has-text("Consolidate All Discovery Reports") + button`).First(),
-		p.page.Locator(`[data-testid*="consolidate"] button`).Last(),
+	if err := triggerBtn.Click(); err != nil {
+		return "", fmt.Errorf("click Consolidate trigger button: %w", err)
+	}
+	log.Printf("[GenerateAndDownloadConsolidatedCSV] dropdown trigger clicked — looking for Generate as CSV option")
+	p.sleep(1000)
+
+	// The button is an ActionMenu trigger. Clicking it opens a dropdown with
+	// "Generate as PDF" and "Generate as CSV". Click the CSV option.
+	csvOptionCandidates := []playwright.Locator{
+		p.page.GetByText("Generate as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.Locator(`li:has-text("Generate as CSV")`).First(),
+		p.page.Locator(`[role="menuitem"]:has-text("CSV")`).First(),
+		p.page.GetByText("CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First(),
 	}
 
-	var opened bool
-	for _, arrow := range arrowCandidates {
-		if p.isVisible(arrow) {
-			if err := arrow.Click(); err == nil {
-				opened = true
-				p.sleep(500)
+	var csvClicked bool
+	for _, loc := range csvOptionCandidates {
+		if err := loc.WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateVisible,
+			Timeout: playwright.Float(5000),
+		}); err == nil {
+			if err := loc.Click(); err == nil {
+				csvClicked = true
+				log.Printf("[GenerateAndDownloadConsolidatedCSV] 'Generate as CSV' clicked — generation triggered")
 				break
 			}
 		}
 	}
+	if !csvClicked {
+		return "", fmt.Errorf("'Generate as CSV' option not found in dropdown menu")
+	}
+	p.sleep(1000)
 
-	if !opened {
-		if err := mainBtn.Click(); err != nil {
-			return fmt.Errorf("click Consolidate button: %w", err)
-		}
-		p.sleep(500)
+	// ── Step 2: Verify toast notification ───────────────────────────────
+	toast := p.page.Locator(`text=Generating consolidated discovery report`).First()
+	if err := toast.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(10000),
+	}); err == nil {
+		log.Printf("[GenerateAndDownloadConsolidatedCSV] toast notification visible")
+	} else {
+		log.Printf("[GenerateAndDownloadConsolidatedCSV] toast not detected — proceeding")
 	}
 
-	// Select the format from the dropdown menu.
-	formatCandidates := []playwright.Locator{
-		p.page.GetByText(format, playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First(),
-		p.page.GetByText("Download as "+format, playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
-		p.page.Locator(fmt.Sprintf(`[role="menuitem"]:has-text("%s")`, format)).First(),
-		p.page.Locator(fmt.Sprintf(`li:has-text("%s")`, format)).First(),
+	// ── Step 3: Wait for button state transitions ───────────────────────
+	// Button states: "Consolidate All Discovery Reports" → "Generating" → "Consolidated Discovery Report"
+	// "Consolidated" (past tense) only appears in the download-ready state,
+	// never in the trigger "Consolidate All Discovery Reports", so this
+	// locator is unambiguous.
+	downloadBtn := p.page.Locator(`button:has-text("Consolidated")`).First()
+
+	// First check if "Generating" state is visible (may already have passed).
+	generatingBtn := p.page.Locator(`button:has-text("Generating")`).First()
+	if err := generatingBtn.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(5000),
+	}); err == nil {
+		log.Printf("[GenerateAndDownloadConsolidatedCSV] button is in 'Generating' state")
+	} else {
+		log.Printf("[GenerateAndDownloadConsolidatedCSV] 'Generating' state not caught (may be fast)")
 	}
 
-	for _, loc := range formatCandidates {
-		if p.isVisible(loc) {
-			if err := loc.Click(); err == nil {
-				p.sleep(2000)
-				return nil
-			}
-		}
+	// Wait for the download-ready "Consolidated Discovery Report" button.
+	log.Printf("[GenerateAndDownloadConsolidatedCSV] waiting for 'Consolidated Discovery Report' button (up to %.0fs)…", timeoutMs/1000)
+	if err := downloadBtn.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(timeoutMs),
+	}); err != nil {
+		return "", fmt.Errorf("'Consolidated Discovery Report' button did not appear within %.0fs: %w", timeoutMs/1000, err)
+	}
+	log.Printf("[GenerateAndDownloadConsolidatedCSV] download button ready")
+
+	// ── Step 4: Click the download button and capture the file ──────────
+	download, err := p.page.ExpectDownload(func() error {
+		return downloadBtn.Click()
+	})
+	if err != nil {
+		return "", fmt.Errorf("download did not start after clicking: %w", err)
 	}
 
-	// If no dropdown appeared, the main button click may have already
-	// triggered the default action (e.g. CSV download). Wait a moment.
-	p.sleep(3000)
-	log.Printf("[ClickConsolidateDiscoveryReports] no dropdown menu item found for %q — main button click may have triggered default action", format)
-	return nil
+	suggestedName := download.SuggestedFilename()
+	log.Printf("[GenerateAndDownloadConsolidatedCSV] download started — file: %s", suggestedName)
+
+	savePath := downloadDir + "/" + suggestedName
+	if err := download.SaveAs(savePath); err != nil {
+		return "", fmt.Errorf("save downloaded CSV to %s: %w", savePath, err)
+	}
+
+	log.Printf("[GenerateAndDownloadConsolidatedCSV] CSV saved to %s", savePath)
+	return savePath, nil
 }
 
 // NavigateToCompletedJobRunDetail opens the detail page of the first
