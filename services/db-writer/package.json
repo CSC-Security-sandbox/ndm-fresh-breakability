@@ -35,7 +35,7 @@
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.6",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.16",
     "@temporalio/client": "^1.11.7",
-    "axios": "1.15.0",
+    "axios": "1.15.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "crypto": "^1.0.1",
@@ -46,8 +46,11 @@
     "typeorm": "^0.3.21"
   },
   "overrides": {
+    "fast-uri": "3.1.2",
+    "follow-redirects": "1.16.0",
     "flatted": "3.4.2",
     "picomatch": "4.0.4",
+    "postcss": "8.5.10",
     "multer": "2.1.1",
     "lodash": "4.18.1",
     "@nestjs/common": "^11.0.1",
