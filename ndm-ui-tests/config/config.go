@@ -29,6 +29,39 @@ var (
 	Timeout       float64
 	VideoDir      string
 	ScreenshotDir string
+
+	// File server creation (when NDM_FILE_SERVER_ID is empty the test
+	// creates one via the wizard using these values)
+	SourceHost         string // IP/hostname of the NFS server
+	ProtocolUsername   string // NFS user (e.g. "root")
+	ProtocolPassword   string // NFS password (often empty)
+	MinWorkers         int    // workers to associate (default: 1)
+	FileServerNameNew  string // name for a newly created file server
+
+	// SMB file server creation
+	SMBHost     string // IP/hostname of the SMB server (e.g. "172.30.202.20")
+	SMBUsername string // SMB username (e.g. "DOMAIN\\user")
+	SMBPassword string // SMB password
+	SMBShare    string // SMB share name to select in Bulk Discover (e.g. "master_smb_vol_dnd_src_automation_1")
+
+	// Isilon file server creation
+	IsilonHost         string // Management console IP (e.g. "10.192.7.105")
+	IsilonMgmtUsername string // Management console username (e.g. "root")
+	IsilonMgmtPassword string // Management console password
+	IsilonNfsIP        string // NFS IP to select in Access Zone dropdown (e.g. "10.192.7.117")
+	IsilonNfsUsername  string // NFS username for access zone (e.g. "root")
+
+	// Discovery test configuration — IDs for existing file servers
+	FileServerID            string // UUID of the primary file server config
+	FileServerName          string // display name shown in the UI (configName)
+	SMBFileServerID         string // UUID of an SMB file server (for test 5.2; auto-skips if empty)
+	DestinationFileServerID string // UUID of the destination file server (for test 5.16; auto-skips if empty)
+	IsilonFileServerID      string // UUID of an Isilon file server (for test 5.18; auto-skips if empty)
+	NfsExportPath           string // NFS export path to select in the table (e.g. "/vol1")
+	SmbShareName            string // SMB share name (for test 5.2; auto-skips if empty)
+
+	// Discovery timeouts (overridable for slow environments)
+	DiscoveryTimeoutMs float64 // max wait for a discovery run to complete
 )
 
 // init loads .env then reads every config var from the environment.
@@ -57,6 +90,36 @@ func init() {
 	Timeout       = getEnvFloat("NDM_TIMEOUT", 30000)
 	VideoDir      = getEnvStr("NDM_VIDEO_DIR", "test-results/videos")
 	ScreenshotDir = getEnvStr("NDM_SCREENSHOT_DIR", "test-results/screenshots")
+
+	// File server creation
+	SourceHost        = getEnvStr("NDM_SOURCE_HOST", "")
+	ProtocolUsername  = getEnvStr("NDM_PROTOCOL_USERNAME", "root")
+	ProtocolPassword  = getEnvStr("NDM_PROTOCOL_PASSWORD", "")
+	MinWorkers        = getEnvInt("NDM_MIN_WORKERS", 1)
+	FileServerNameNew = getEnvStr("NDM_FILE_SERVER_NAME_NEW", "auto-test-fs")
+
+	// SMB file server creation
+	SMBHost     = getEnvStr("NDM_SMB_HOST", "")
+	SMBUsername = getEnvStr("NDM_SMB_USERNAME", "")
+	SMBPassword = getEnvStr("NDM_SMB_PASSWORD", "")
+	SMBShare    = getEnvStr("NDM_SMB_SHARE", "")
+
+	// Isilon file server creation
+	IsilonHost         = getEnvStr("NDM_ISILON_HOST", "")
+	IsilonMgmtUsername = getEnvStr("NDM_ISILON_MGMT_USERNAME", "root")
+	IsilonMgmtPassword = getEnvStr("NDM_ISILON_MGMT_PASSWORD", "")
+	IsilonNfsIP        = getEnvStr("NDM_ISILON_NFS_IP", "")
+	IsilonNfsUsername  = getEnvStr("NDM_ISILON_NFS_USERNAME", "root")
+
+	// Discovery — existing file server IDs
+	FileServerID            = getEnvStr("NDM_FILE_SERVER_ID", "")
+	FileServerName          = getEnvStr("NDM_FILE_SERVER_NAME", "")
+	SMBFileServerID         = getEnvStr("NDM_SMB_FILE_SERVER_ID", "")
+	DestinationFileServerID = getEnvStr("NDM_DESTINATION_FILE_SERVER_ID", "")
+	IsilonFileServerID      = getEnvStr("NDM_ISILON_FILE_SERVER_ID", "")
+	NfsExportPath           = getEnvStr("NDM_NFS_EXPORT_PATH", "")
+	SmbShareName            = getEnvStr("NDM_SMB_SHARE_NAME", "")
+	DiscoveryTimeoutMs      = getEnvFloat("NDM_DISCOVERY_TIMEOUT_MS", 600000)
 }
 
 // ── .env loader ──────────────────────────────────────────────────────────────
@@ -124,6 +187,18 @@ func getEnvBool(key string, fallback bool) bool {
 		return false
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return i
 }
 
 func getEnvFloat(key string, fallback float64) float64 {
