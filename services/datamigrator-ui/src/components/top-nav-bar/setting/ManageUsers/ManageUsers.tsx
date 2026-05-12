@@ -124,7 +124,10 @@ const ManageUsers = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateUser}
             >
-              <Button onClick={() => setIsCreateFormVisible(true)}>
+              <Button
+                onClick={() => setIsCreateFormVisible(true)}
+                data-testid="add-user"
+              >
                 Add User
               </Button>
             </PermissionAuth>

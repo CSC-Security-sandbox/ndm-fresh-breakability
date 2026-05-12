@@ -206,13 +206,19 @@ const CreateProjectForm = ({
     <Layout.Page>
       <Layout.Content>
         <Card className="p-6 flex flex-col gap-6 w-full">
-          <Heading level="20">{editMode ? "Edit" : "Add"} Project</Heading>
+          <Heading
+            level="20"
+            data-testid="project-form-heading"
+          >
+            {editMode ? "Edit" : "Add"} Project
+          </Heading>
           <Box className="flex pt-4 flex-row gap-4 justify-end w-full">
             <FormFieldInputNew
               form={createProjectForm}
               label="Project Name"
               placeholder="Project Name"
               name="project_name"
+              data-testid="project-name"
               onChange={(e: any) => {
                 createProjectForm.resetForm({
                   ...createProjectForm?.formState,
@@ -232,6 +238,7 @@ const CreateProjectForm = ({
               label="Project Description"
               placeholder="Project Description"
               name="project_description"
+              data-testid="project-description"
               isOptional={true}
               charCount={true}
               maxChars={500}
@@ -273,6 +280,7 @@ const CreateProjectForm = ({
             color="secondary"
             onClick={handleClose}
             disabled={isLoading}
+            data-testid="cancel-project"
           >
             Cancel
           </Button>
@@ -286,6 +294,7 @@ const CreateProjectForm = ({
               failedToFetchAssociateUsers
             }
             isSubmitting={isLoading}
+            data-testid="submit-project"
           >
             Submit
             <Show.When isTrue={failedToFetchAssociateUsers}>

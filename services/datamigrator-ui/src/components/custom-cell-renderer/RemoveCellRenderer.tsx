@@ -10,7 +10,13 @@ const RemoveCellRenderer = ({
 }: RemoveCellRendererPropType) => {
   return (
     <Box className="flex gap-2 items-center">
-      <Button variant="icon" onClick={deleteRow} disabled={disabled}>
+      <Button
+        variant="icon"
+        onClick={deleteRow}
+        disabled={disabled}
+        data-testid="remove-association"
+        aria-label="Remove association"
+      >
         <CloseIcon color={disabled ? "disabled" : "text"} />
       </Button>
     </Box>

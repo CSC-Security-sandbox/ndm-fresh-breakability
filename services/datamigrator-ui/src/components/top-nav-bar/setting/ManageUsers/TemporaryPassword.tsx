@@ -42,7 +42,10 @@ const TemporaryPassword = ({
               Password copied to clipboard
             </Notification>
           </Collapse>
-          <Heading level="20">
+          <Heading
+            level="20"
+            data-testid="temporary-password-heading"
+          >
             {isAddUser
               ? "User Added Successfully"
               : "Password Reset Successfully"}
@@ -59,10 +62,13 @@ const TemporaryPassword = ({
               type="password"
               name="password"
               label="Password"
+              data-testid="temporary-password"
             />
             <Box
               className="text-text-title underline cursor-pointer"
               onClick={copyToClipboardWrapper}
+              data-testid="copy-temporary-password"
+              role="button"
             >
               Copy
             </Box>
@@ -71,7 +77,12 @@ const TemporaryPassword = ({
       </Card>
       <WizardFooter>
         <Box className="flex w-full justify-end gap-4 mr-4">
-          <Button onClick={handlePasswordClose}>Close</Button>
+          <Button
+            onClick={handlePasswordClose}
+            data-testid="close-temporary-password"
+          >
+            Close
+          </Button>
         </Box>
       </WizardFooter>
     </Layout.Content>

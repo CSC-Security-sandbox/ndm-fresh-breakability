@@ -113,6 +113,7 @@ const CreateUserForm = ({
                   form={form}
                   name="first_name"
                   label="First Name"
+                  data-testid="first-name"
                   onBlur={(e: any) => {
                     form.resetForm({
                       ...form?.formState,
@@ -124,6 +125,7 @@ const CreateUserForm = ({
                   form={form}
                   name="last_name"
                   label="Last Name"
+                  data-testid="last-name"
                   onBlur={(e: any) => {
                     form.resetForm({
                       ...form?.formState,
@@ -132,8 +134,18 @@ const CreateUserForm = ({
                   }}
                 />
               </Box>
-              <FormFieldInputNew form={form} name="email" label="Email" />
-              <Checkbox form={form} name="is_app_admin" key="is_app_admin">
+              <FormFieldInputNew
+                form={form}
+                name="email"
+                label="Email"
+                data-testid="email"
+              />
+              <Checkbox
+                form={form}
+                name="is_app_admin"
+                key="is_app_admin"
+                data-testid="is-app-admin"
+              >
                 App Admin
               </Checkbox>
             </Box>
@@ -145,6 +157,7 @@ const CreateUserForm = ({
               style={{ width: 150 }}
               color="secondary"
               onClick={handleClose}
+              data-testid="cancel-user"
             >
               Cancel
             </Button>
@@ -153,6 +166,7 @@ const CreateUserForm = ({
               onClick={form.handleFormSubmit(handleCreateUser)}
               disabled={!(form.isValid && form.dirty)}
               isSubmitting={isCreateFormSubmitting || isAssociateFormSubmitting}
+              data-testid="submit-user"
             >
               Submit
             </Button>

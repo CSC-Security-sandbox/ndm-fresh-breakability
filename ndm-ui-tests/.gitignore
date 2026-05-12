@@ -1,0 +1,8 @@
+# Environment — contains credentials, never commit
+.env
+
+# Test artifacts
+test-results/
+
+# Go build cache
+*.test

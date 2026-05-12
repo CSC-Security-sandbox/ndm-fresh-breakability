@@ -80,7 +80,10 @@ const ManageProject = () => {
             <PermissionAuth
               permissionName={USER_PERMISSION_TYPE_ENUM.CreateProject}
             >
-              <Button onClick={() => setIsCreateFormVisible(true)}>
+              <Button
+                onClick={() => setIsCreateFormVisible(true)}
+                data-testid="add-project"
+              >
                 Add Project
               </Button>
             </PermissionAuth>

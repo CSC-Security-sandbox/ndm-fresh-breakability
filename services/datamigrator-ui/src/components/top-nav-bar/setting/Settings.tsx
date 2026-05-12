@@ -18,11 +18,21 @@ const Settings = () => {
   const showHelp = () => openDrawer("help", <Help />);
   return (
     <>
-      <Button onClick={showSettings} variant="icon">
+      <Button
+        onClick={showSettings}
+        variant="icon"
+        data-testid="settings-button"
+        aria-label="Open settings"
+      >
         <IAMIcon className="filter-white-color" />
       </Button>
 
-      <Button onClick={showHelp} variant="icon">
+      <Button
+        onClick={showHelp}
+        variant="icon"
+        data-testid="help-button"
+        aria-label="Open help"
+      >
         <HelpIcon color="on-color" />
       </Button>
     </>

@@ -43,6 +43,7 @@ const SettingsContent = () => {
                 isActive={currentTab === 1}
                 onClick={() => setCurrentTab(1)}
                 style={{ paddingTop: 16, paddingBottom: 16 }}
+                data-testid="settings-tab-Users"
               >
                 <Span color="text-title">Users</Span>
               </InnerTab.Button>
@@ -55,6 +56,7 @@ const SettingsContent = () => {
                 isActive={currentTab === 2}
                 onClick={() => setCurrentTab(2)}
                 style={{ paddingTop: 16, paddingBottom: 16 }}
+                data-testid="settings-tab-Projects"
               >
                 <Span color="text-title">Projects</Span>
               </InnerTab.Button>
@@ -65,6 +67,7 @@ const SettingsContent = () => {
                 isActive={currentTab === 3}
                 onClick={() => setCurrentTab(3)}
                 style={{ paddingTop: 16, paddingBottom: 16 }}
+                data-testid="settings-tab-SMTP"
               >
                 <Span color="text-title">SMTP</Span>
               </InnerTab.Button>
