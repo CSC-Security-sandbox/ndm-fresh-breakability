@@ -15,8 +15,6 @@ import * as os from "os";
 import { Repository } from "typeorm";
 import * as fs from "fs";
 import * as archiver from "archiver";
-import puppeteer from "puppeteer";
-import * as hbs from 'hbs';
 
 import { ReportsEntity } from "src/entities/reports.entity";
 import { InventoryEntity } from "../entities/inventory.entity";
@@ -31,6 +29,8 @@ import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
+import { PDFTemplate } from 'src/generator/pdf-generator.type';
 
 const DOWNLOAD_TOKEN_TTL_MS = 60_000;
 
@@ -45,6 +45,7 @@ export class DiscoveryService {
     private readonly inventoryRepo: Repository<InventoryEntity>,
     @InjectRepository(ReportsEntity)
     private readonly reportsRepo: Repository<ReportsEntity>,
+    private readonly pdfGenerator: PDFGeneratorService,
     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
   ) {
     if (loggerFactory) {
@@ -135,31 +136,19 @@ export class DiscoveryService {
   }
 
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
-    const template = hbs.compile(templateSource);
-
-    const categories: { [key: string]: any[] } = groupAndOrder(reportData, ReportType.DISCOVERY);
-
-    // Step 2: Generate HTML from template and data
-    const htmlOutput = template(categories);
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-      ],
-      protocolTimeout: 60000,
+    const categories: { [key: string]: any[] } = groupAndOrder(
+      reportData,
+      ReportType.DISCOVERY,
+    );
+    return this.pdfGenerator.generatePDF({
+      data: categories,
+      template: PDFTemplate.DISCOVERY_REPORT,
+      pdfOptions: {
+        pageSize: 'A4',
+        pageOrientation: 'portrait',
+        pageMargins: [9, 9, 9, 9],
+      },
     });
-    const page = await browser.newPage();
-    await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-
-    await browser.close();
-    return Buffer.from(pdfBuffer);
   }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {

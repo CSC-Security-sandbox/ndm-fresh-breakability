@@ -1,6 +1,5 @@
-import { Module } from "@nestjs/common";
-import { PDFGeneratorService } from "./pdf-generator.service";
-import { OnModuleInit } from "@nestjs/common";
+import { Module } from '@nestjs/common';
+import { PDFGeneratorService } from './pdf-generator.service';
 import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 
 @Module({
@@ -8,10 +7,4 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
   providers: [PDFGeneratorService],
   exports: [PDFGeneratorService],
 })
-export class GeneratorModule implements OnModuleInit {
-  constructor(private readonly pdfGenerator: PDFGeneratorService) {}
-
-  onModuleInit() {
-    this.pdfGenerator.initBrowser();
-  }
-}
+export class GeneratorModule {}

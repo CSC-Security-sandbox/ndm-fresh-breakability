@@ -39,8 +39,6 @@ describe("PdfService", () => {
 
     mockPdfGeneratorService = {
       generatePDF: jest.fn().mockResolvedValue(Buffer.from("mockPdfGeneratorBuffer")),
-      initBrowser: jest.fn().mockResolvedValue(undefined),
-      onApplicationShutdown: jest.fn().mockResolvedValue(undefined),
     };
 
     mockLogger = {
@@ -218,11 +216,10 @@ describe("PdfService", () => {
         }),
         template: PDFTemplate.JOBS_REPORT,
         pdfOptions: {
-          format: 'A0',
-          printBackground: true,
-          scale: 0.5,
-          landscape: true,
-        }
+          pageSize: "A2",
+          pageOrientation: "landscape",
+          pageMargins: [36, 44, 36, 44],
+        },
       });
     });
 

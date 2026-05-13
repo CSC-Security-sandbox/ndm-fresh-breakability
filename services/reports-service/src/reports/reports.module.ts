@@ -9,12 +9,14 @@ import { LoggerModule } from '@netapp-cloud-datamigrate/logger-lib';
 import { TemporalClientService } from 'src/temporal/temporal-client.service';
 import { ConsolidatedReportService } from 'src/activities/consolidated-report/consolidated-report.service';
 import { DiscoveryService } from 'src/discovery/discovery.service';
+import { GeneratorModule } from 'src/generator/generator.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([ReportsEntity, InventoryEntity, FileServerEntity]),
         AuthKeycloakModule,
-        LoggerModule.forRoot()
+        LoggerModule.forRoot(),
+        GeneratorModule,
     ],
     providers: [TemporalClientService, ConsolidatedReportService, DiscoveryService],
     controllers: [ReportsController],

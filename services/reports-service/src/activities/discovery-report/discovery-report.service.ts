@@ -44,6 +44,15 @@ export class DiscoveryReportService {
         }
         this.basePath = this.configService.get<string>('app.baseDir') ;
         this.schemaName = this.configService.get<string>('typeorm.schema') || 'datamigrator';
+        this.ensureBaseDir();
+    }
+
+    private async ensureBaseDir(): Promise<void> {
+        try {
+            await fs.promises.mkdir(this.basePath, { recursive: true });
+        } catch (error) {
+            this.logger.error(`Failed to create base directory ${this.basePath}: ${error.message}`);
+        }
     }
 
     async getSection({ jobRunId, section, updateSection }: GetDiscoverySectionInput): Promise<DiscoveryReportSection[]> {
@@ -80,19 +89,18 @@ export class DiscoveryReportService {
             }
             
             const categories = groupAndOrder(JSON.parse(report.reportData), ReportType.DISCOVERY);
-            this.logger.log(`projectId: ${projectId} Parsed report data with ${Object.keys(categories).length} categories for jobRunId: ${jobRunId}`);
+            // groupAndOrder returns null for empty/invalid data — use empty object so pdfmake still renders a valid document
+            const safeCategories = categories ?? {};
+            this.logger.log(`projectId: ${projectId} Parsed report data with ${Object.keys(safeCategories).length} categories for jobRunId: ${jobRunId}`);
             
             // Generate PDF using the PDF generator service
             const pdfBuffer = await this.pdfGenerator.generatePDF({
-              data: categories,
+              data: safeCategories,
               template: PDFTemplate.DISCOVERY_REPORT,
               pdfOptions: {
-                format: 'A2',
-                printBackground: true,
-                scale: 0.5,
-                landscape: false,
-                width: '420mm', // A2 width
-                height: '594mm', // A2 height
+                pageSize: 'A2',
+                pageOrientation: 'portrait',
+                pageMargins: [9, 9, 9, 9],
               },
               context: {
                 jobRunId,
@@ -122,7 +130,9 @@ export class DiscoveryReportService {
                 throw new Error(`No discovery report found for jobRunId: ${jobRunId}`);
             }
             
-            const reportData = Object.values(groupAndOrder(JSON.parse(report.reportData), ReportType.DISCOVERY)).flat();
+            const grouped = groupAndOrder(JSON.parse(report.reportData), ReportType.DISCOVERY);
+            // groupAndOrder returns null for empty/invalid data — guard before Object.values()
+            const reportData = grouped ? Object.values(grouped).flat() : [];
             this.logger.log(`projectId: ${projectId} Processing ${reportData.length} data entries for CSV generation, jobRunId: ${jobRunId}`);
 
             // Dynamically determine headers based on sub_category

@@ -1,5 +1,4 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { DiscoveryService } from "./discovery.service";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { InventoryEntity } from "../entities/inventory.entity";
 import { ReportsEntity } from "../entities/reports.entity";
@@ -12,28 +11,17 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as validation from "../utils/utils";
-import * as puppeteer from "puppeteer";
-
-jest.mock("puppeteer", () => {
-  const mockPuppeteer = {
-    launch: jest.fn().mockResolvedValue({
-      newPage: jest.fn().mockResolvedValue({
-        setContent: jest.fn().mockResolvedValue(null),
-        pdf: jest.fn().mockResolvedValue(Buffer.from("mock pdf")),
-      }),
-      close: jest.fn().mockResolvedValue(null),
-    }),
-  };
-  return {
-    ...mockPuppeteer,
-    default: mockPuppeteer,
-  };
-});
+import { DiscoveryService } from "./discovery.service";
+import { PDFGeneratorService } from "src/generator/pdf-generator.service";
+import { PDFTemplate } from "src/generator/pdf-generator.type";
 
 describe("DiscoveryService", () => {
   let service: DiscoveryService;
   let mockInventoryRepo;
   let mockReportsRepo;
+  const mockPdfGenerator = {
+    generatePDF: jest.fn().mockResolvedValue(Buffer.from("mock pdf")),
+  };
 
   const mockInventoryData = [
     {
@@ -93,6 +81,10 @@ describe("DiscoveryService", () => {
         {
           provide: "ESCAPE_HTML",
           useValue: mockEscapeHtml,
+        },
+        {
+          provide: PDFGeneratorService,
+          useValue: mockPdfGenerator,
         },
       ],
     }).compile();
@@ -984,33 +976,26 @@ describe("DiscoveryService", () => {
   });
 
   describe("generatePdfFromData", () => {
-    it("should sanitize and escape HTML in report data", async () => {
-      const maliciousData = [
+    it("should delegate to PDFGeneratorService with discovery template and A4 options", async () => {
+      mockPdfGenerator.generatePDF.mockClear();
+      const data = [
         {
-          category: '<script>alert("xss")</script>',
-          sub_category: "Total <b>Files</b>",
-          value: "<img src=x onerror=alert(1)>",
+          category: "Files",
+          sub_category: "Total Files",
+          valueType: "count",
+          value: "100",
         },
       ];
-
-      const mockPdfBuffer = Buffer.from("mock pdf");
-      const mockSetContent = jest.fn().mockResolvedValue(undefined);
-      const mockPdf = jest.fn().mockResolvedValue(mockPdfBuffer);
-      const mockNewPage = jest.fn().mockResolvedValue({
-        setContent: mockSetContent,
-        pdf: mockPdf,
-      });
-      const mockClose = jest.fn().mockResolvedValue(undefined);
-      (puppeteer.launch as jest.Mock).mockResolvedValue({
-        newPage: mockNewPage,
-        close: mockClose,
-      });
-
-      await service.generatePdfFromData(maliciousData);
-
-      const htmlArg = mockSetContent.mock.calls[0][0];
-      expect(htmlArg).not.toContain("<script>");
-      expect(htmlArg).not.toContain("<img");
+      await service.generatePdfFromData(data);
+      expect(mockPdfGenerator.generatePDF).toHaveBeenCalledWith(
+        expect.objectContaining({
+          template: PDFTemplate.DISCOVERY_REPORT,
+          pdfOptions: expect.objectContaining({
+            pageSize: "A4",
+            pageOrientation: "portrait",
+          }),
+        }),
+      );
     });
   });
 });

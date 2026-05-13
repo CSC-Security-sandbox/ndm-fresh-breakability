@@ -5,8 +5,6 @@ import { json } from "express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
-import * as hbs from "hbs";
-import { join } from "path";
 import { CustomResponseInterceptor } from './interceptors/custom-response.interceptor';
 import {
   customErrorDTOList,
@@ -54,10 +52,6 @@ async function bootstrap() {
   });
   app.enableShutdownHooks();
   app.set("trust proxy", true);
-  app.setBaseViewsDir(join(__dirname, "..", "views"));
-  app.setViewEngine("hbs");
-  hbs.registerPartials(join(__dirname, "../templates/views/partials"));
-  hbs.registerHelper("sum", (a, b) => a + b);
 
   Logger.log("Service Queue Microservice is listening...");
   app.enableCors();

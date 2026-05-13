@@ -6,28 +6,16 @@ import { InventoryEntity } from "src/entities/inventory.entity";
 import { FileServerEntity } from "src/entities/fileserver.entity";
 import { Repository } from "typeorm";
 import * as fs from "fs";
-import { promises as fsPromises } from "fs";
 import { PDFDocument } from "pdf-lib";
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
-import * as hbs from "hbs";
+import { PDFGeneratorService } from "src/generator/pdf-generator.service";
 
 jest.mock("fs");
-jest.mock("hbs");
 jest.mock("pdf-lib");
-jest.mock("puppeteer", () => ({
-  default: {
-    launch: jest.fn().mockResolvedValue({
-      newPage: jest.fn().mockResolvedValue({
-        setContent: jest.fn(),
-        setViewport: jest.fn(),
-        pdf: jest.fn().mockResolvedValue(Buffer.from("mock-pdf")),
-        close: jest.fn(),
-      }),
-      close: jest.fn(),
-      version: jest.fn().mockResolvedValue("120.0"),
-    }),
-  },
-}));
+
+const mockPdfGeneratorService = {
+  generatePDF: jest.fn().mockResolvedValue(Buffer.from("mock-pdf")),
+};
 
 describe("ConsolidatedReportService", () => {
   let service: ConsolidatedReportService;
@@ -46,10 +34,10 @@ describe("ConsolidatedReportService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockPdfGeneratorService.generatePDF.mockClear();
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (fs.unlinkSync as jest.Mock).mockImplementation(() => {});
     (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
-    (hbs.compile as jest.Mock).mockReturnValue((data: any) => "<html>mocked</html>");
     
     // Mock fs.promises methods
     const mockFsPromises = {
@@ -64,6 +52,10 @@ describe("ConsolidatedReportService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ConsolidatedReportService,
+        {
+          provide: PDFGeneratorService,
+          useValue: mockPdfGeneratorService,
+        },
         {
           provide: getRepositoryToken(InventoryEntity),
           useValue: {
@@ -107,6 +99,7 @@ describe("ConsolidatedReportService", () => {
       const moduleNoLogger = await Test.createTestingModule({
         providers: [
           ConsolidatedReportService,
+          { provide: PDFGeneratorService, useValue: mockPdfGeneratorService },
           { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
           { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
           { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
@@ -122,6 +115,7 @@ describe("ConsolidatedReportService", () => {
       const moduleCustom = await Test.createTestingModule({
         providers: [
           ConsolidatedReportService,
+          { provide: PDFGeneratorService, useValue: mockPdfGeneratorService },
           { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
           { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
           { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
@@ -148,6 +142,7 @@ describe("ConsolidatedReportService", () => {
       const mod = await Test.createTestingModule({
         providers: [
           ConsolidatedReportService,
+          { provide: PDFGeneratorService, useValue: mockPdfGeneratorService },
           { provide: getRepositoryToken(InventoryEntity), useValue: { query: jest.fn(), find: jest.fn() } },
           { provide: getRepositoryToken(ReportsEntity), useValue: { find: jest.fn() } },
           { provide: getRepositoryToken(FileServerEntity), useValue: { update: jest.fn(), findOne: jest.fn() } },
@@ -428,7 +423,6 @@ describe("ConsolidatedReportService", () => {
       ]);
 
       (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
-      (fs.readFileSync as jest.Mock).mockReturnValue("<html>template</html>");
 
       const result = await service.generatePdfForJobRun({
         jobRunId: "test-job",
@@ -438,6 +432,7 @@ describe("ConsolidatedReportService", () => {
       expect(result).toBeTruthy();
       expect(result).toContain(".pdf");
       expect(fs.promises.writeFile).toHaveBeenCalled();
+      expect(mockPdfGeneratorService.generatePDF).toHaveBeenCalled();
     });
   });
 
@@ -718,30 +713,6 @@ describe("ConsolidatedReportService", () => {
           consolidatedReportWorkflowId: null,
         })
       );
-    });
-  });
-
-  describe("onModuleDestroy", () => {
-    it("should close browser on module destroy", async () => {
-      const mockCloseFn = jest.fn().mockResolvedValue(undefined);
-      (service as any).browserInstance = {
-        close: mockCloseFn,
-      };
-      await service.onModuleDestroy();
-      expect(mockCloseFn).toHaveBeenCalled();
-    });
-
-    it("should handle browser close errors gracefully", async () => {
-      const mockCloseFn = jest.fn().mockRejectedValue(new Error("Close failed"));
-      (service as any).browserInstance = {
-        close: mockCloseFn,
-      };
-      await expect(service.onModuleDestroy()).resolves.not.toThrow();
-    });
-
-    it("should do nothing when browser instance is null", async () => {
-      (service as any).browserInstance = null;
-      await expect(service.onModuleDestroy()).resolves.not.toThrow();
     });
   });
 });

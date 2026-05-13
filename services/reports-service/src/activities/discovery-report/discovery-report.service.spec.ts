@@ -172,12 +172,9 @@ describe("DiscoveryReportService", () => {
                 data: { category: [] },
                 template: PDFTemplate.DISCOVERY_REPORT,
                 pdfOptions: {
-                    format: 'A2',
-                    printBackground: true,
-                    scale: 0.5,
-                    landscape: false,
-                    width: '420mm',
-                    height: '594mm',
+                    pageSize: 'A2',
+                    pageOrientation: 'portrait',
+                    pageMargins: [9, 9, 9, 9],
                 }
             });
             expect(fs.promises.writeFile).toHaveBeenCalledWith("/tmp/42-discover-report.pdf", fakeBuffer);

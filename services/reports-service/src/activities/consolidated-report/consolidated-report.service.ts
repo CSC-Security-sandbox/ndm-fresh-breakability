@@ -2,11 +2,8 @@ import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as path from 'path';
-import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import { PDFDocument } from 'pdf-lib';
-import puppeteer from 'puppeteer';
-import * as hbs from 'hbs';
 import { ReportsEntity } from 'src/entities/reports.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { FileServerEntity, ConsolidatedReportStatus } from 'src/entities/fileserver.entity';
@@ -18,6 +15,8 @@ import {
   LoggerService,
   LoggerFactory,
 } from '@netapp-cloud-datamigrate/logger-lib';
+import { PDFGeneratorService } from 'src/generator/pdf-generator.service';
+import { PDFTemplate } from 'src/generator/pdf-generator.type';
 
 /** Same header order as normal discovery report CSV (ReportHeaders enum) */
 const DISCOVERY_CSV_HEADER_ORDER: string[] = Object.values(ReportHeaders);
@@ -78,7 +77,6 @@ export class ConsolidatedReportService {
   private readonly logger: LoggerService | Logger;
   private readonly reportsDirectory: string;
   private readonly tempDirectory: string;
-  private browserInstance: any = null;
 
   constructor(
     @InjectRepository(InventoryEntity)
@@ -87,6 +85,7 @@ export class ConsolidatedReportService {
     private readonly reportsRepo: Repository<ReportsEntity>,
     @InjectRepository(FileServerEntity)
     private readonly fileServerRepo: Repository<FileServerEntity>,
+    private readonly pdfGenerator: PDFGeneratorService,
     @Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory,
   ) {
     if (loggerFactory) {
@@ -160,7 +159,17 @@ export class ConsolidatedReportService {
       const reportData = JSON.parse(latestReport[0].reportData);
       const tempFileName = `temp-${jobRunId}-${Date.now()}.pdf`;
       const tempFilePath = path.join(this.tempDirectory, tempFileName);
-      const pdfBuffer = await this.generatePdfFromData(reportData);
+      const categories = groupAndOrder(reportData, ReportType.DISCOVERY);
+      const pdfBuffer = await this.pdfGenerator.generatePDF({
+        data: categories,
+        template: PDFTemplate.DISCOVERY_REPORT,
+        pdfOptions: {
+          pageSize: 'A2',
+          pageOrientation: 'portrait',
+          pageMargins: [9, 9, 9, 9],
+        },
+        context: { jobRunId },
+      });
 
       await fsPromises.writeFile(tempFilePath, pdfBuffer);
     
@@ -169,69 +178,6 @@ export class ConsolidatedReportService {
     } catch (error) {
       this.logger.error(`Failed to generate PDF for jobRunId: ${jobRunId}: ${error.message}`);
       throw error;
-    }
-  }
-
-  private async getBrowser() {
-    if (this.browserInstance) {
-      try {
-        await this.browserInstance.version();
-        this.logger.log(`Reusing existing browser instance`);
-        return this.browserInstance;
-      } catch (error) {
-        this.logger.warn(`Browser instance is dead, creating new one: ${error.message}`);
-        this.browserInstance = null;
-      }
-    }
-
-    this.logger.log(`Launching new Puppeteer browser instance`);
-    this.browserInstance = await puppeteer.launch({
-      headless: true, 
-      browser: 'firefox', 
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-extensions',
-        '--disable-sync',
-        '--disable-default-apps',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-features=IsolateOrigins,site-per-process',
-      ],
-      protocolTimeout: 30000, 
-    });
-
-    return this.browserInstance;
-  }
-
-  private async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const templatePath = path.join(__dirname, '../../../templates/views/discovery_pdf_report.hbs');
-    const templateSource = await fsPromises.readFile(templatePath, 'utf8');
-    const template = hbs.compile(templateSource);
-
-    const categories = groupAndOrder(reportData, ReportType.DISCOVERY);
-
-    const htmlOutput = template(categories);
-    const browser = await this.getBrowser();
-    const page = await browser.newPage();
-    try {
-      await page.setViewport({ width: 1200, height: 1600 });
-      await page.setContent(htmlOutput, { waitUntil: 'load' });
-      const pdfBuffer = await page.pdf({
-        format: 'A2',              
-        printBackground: true,
-        scale: 0.5,                
-        width: '420mm',            
-        height: '594mm',           
-        landscape: false,
-        timeout: 20000,
-      });
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await page.close();
     }
   }
 
@@ -509,14 +455,4 @@ export class ConsolidatedReportService {
     this.logger.log(`Cleared consolidated report status for fileServerId: ${fileServerId}`);
   }
 
-  async onModuleDestroy() {
-    if (this.browserInstance) {
-      try {
-        await this.browserInstance.close();
-        this.logger.log(`Closed Puppeteer browser instance on module destroy`);
-      } catch (error) {
-        this.logger.warn(`Failed to close browser on shutdown: ${error.message}`);
-      }
-    }
-  }
 }

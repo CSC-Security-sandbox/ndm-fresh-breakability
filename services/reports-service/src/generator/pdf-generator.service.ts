@@ -1,145 +1,104 @@
 import {
   Injectable,
-  OnApplicationShutdown,
+  Logger,
   Inject,
   Optional,
-  Logger,
-} from "@nestjs/common";
-import puppeteer, { PDFOptions, Browser, Page } from "puppeteer";
-import * as fs from "fs";
-import * as hbs from "hbs";
-import { GeneratePDFInput, PDF_TEMPLATE_PATHS } from "./pdf-generator.type";
+} from '@nestjs/common';
+import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import type { PdfGenerationOptions } from './pdf-generator.options';
+import { GeneratePDFInput, PDFTemplate } from './pdf-generator.type';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
+import { buildDiscoveryPdfDefinition } from './pdf-documents/discovery-pdf.document';
+import { buildJobsReportPdfDefinition } from './pdf-documents/jobs-report-pdf.document';
 
 @Injectable()
-export class PDFGeneratorService implements OnApplicationShutdown {
-  private browser: Browser | null = null;
+export class PDFGeneratorService {
+  private readonly printer: InstanceType<any>;
   private readonly logger: LoggerService;
-  private readonly defaultPdfOptions: PDFOptions = {
-    format: "A3", // use only format for natural scaling
-    printBackground: true,
-    margin: { top: "3mm", right: "3mm", bottom: "3mm", left: "3mm" }, // optional
-    width: "297mm", // A3 width
-    height: "420mm", // A3 height
-    scale: 0.6, // Adjust scale for better fit
-  };
 
   constructor(@Optional() @Inject(LoggerFactory) loggerFactory?: LoggerFactory) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PdfPrinter = require('pdfmake');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getReportPdfFonts } = require('./pdf-fonts');
+    this.printer = new PdfPrinter(getReportPdfFonts());
     if (loggerFactory) {
       this.logger = loggerFactory.create(PDFGeneratorService.name);
     } else {
-      // Fallback to basic NestJS Logger
-      this.logger = new Logger('PDFGeneratorService') as any;
+      this.logger = new Logger('PDFGeneratorService') as unknown as LoggerService;
     }
   }
 
-  async initBrowser(): Promise<void> {
-    if (!this.browser) {
-      this.logger.debug('Initializing Puppeteer browser for PDF generation');
-      try {
-        this.browser = await puppeteer.launch({
-          headless: true,
-          browser: 'firefox',
-          args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--disable-accelerated-2d-canvas",
-          ],
-          protocolTimeout: 60000,
-        });
-        this.logger.log('Puppeteer browser initialized successfully during application startup');
-      } catch (error) {
-        this.logger.error('Failed to initialize Puppeteer browser', error);
-        throw error;
-      }
-    }
-  }
-
-  private getBrowser(): Browser {
-    if (!this.browser) {
-      this.logger.error('Attempted to get browser before initialization');
-      throw new Error("Puppeteer browser is not initialized yet.");
-    }
-    return this.browser;
-  }
-
-  private async getNewPage(): Promise<Page> {
-    return this.getBrowser().newPage();
-  }
-
-  private async compileTemplate(template: keyof typeof PDF_TEMPLATE_PATHS, data: any, context?: { projectId?: string; jobRunId?: string }): Promise<string> {
-    try {
-      const projectId = context?.projectId;
-      const templatePath = PDF_TEMPLATE_PATHS[template];
-      this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}Compiling PDF template: ${template} from path: ${templatePath}`);
-      
-      const templateSource = await fs.promises.readFile(templatePath, "utf8");
-      const compiler = hbs.compile(templateSource);
-      const compiledHtml = compiler(data);
-      
-      this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}Template compilation successful for: ${template}`);
-      return compiledHtml;
-    } catch (error) {
-      const projectId = context?.projectId;
-      this.logger.error(`${projectId ? `projectId: ${projectId} ` : ''}Failed to compile template: ${template}`, error);
-      throw error;
-    }
-  }
-
-  async generatePDF({ data, template, pdfOptions, context }: GeneratePDFInput): Promise<Buffer> {
+  async generatePDF({
+    data,
+    template,
+    pdfOptions,
+    context,
+  }: GeneratePDFInput): Promise<Buffer> {
     const projectId = context?.projectId;
     const jobRunId = context?.jobRunId;
-    
-    this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}${jobRunId ? `jobRunId: ${jobRunId} ` : ''}Starting PDF generation for template: ${template}`);
+    this.logger.log(
+      `${projectId ? `projectId: ${projectId} ` : ''}${
+        jobRunId ? `jobRunId: ${jobRunId} ` : ''
+      }Starting PDF generation for template: ${template}`,
+    );
     const startTime = Date.now();
-    
-    await this.initBrowser();
-    let page: Page | null = null;
     try {
-      const html = await this.compileTemplate(template, data, context);
-      page = await this.getNewPage();
-
-      this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}Setting page viewport and content for PDF generation`);
-      // Set viewport to match A3 at 150 DPI: width = 1754px, height = 2480px
-      await page.setViewport({ width: 0, height: 0, deviceScaleFactor: 1, isMobile: false });
-
-      await page.setContent(html, { waitUntil: 'load' });
-      const options = { ...this.defaultPdfOptions, ...pdfOptions };
-      
-      this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}Generating PDF with options:`, JSON.stringify(options));
-      const pdfBuffer = await page.pdf(options);
-      
+      const docDefinition = this.buildDocumentDefinition(
+        template,
+        data as Record<string, unknown>,
+        pdfOptions,
+      );
+      const buffer = await this.renderToBuffer(docDefinition);
       const duration = Date.now() - startTime;
-      this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}${jobRunId ? `jobRunId: ${jobRunId} ` : ''}PDF generation completed successfully for template: ${template} in ${duration}ms`);
-      
-      return Buffer.from(pdfBuffer);
+      this.logger.log(
+        `${projectId ? `projectId: ${projectId} ` : ''}${
+          jobRunId ? `jobRunId: ${jobRunId} ` : ''
+        }PDF generation completed for template: ${template} in ${duration}ms, bytes: ${buffer.length}`,
+      );
+      return buffer;
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`${projectId ? `projectId: ${projectId} ` : ''}${jobRunId ? `jobRunId: ${jobRunId} ` : ''}PDF generation failed for template: ${template} after ${duration}ms`, error);
+      this.logger.error(
+        `${projectId ? `projectId: ${projectId} ` : ''}${
+          jobRunId ? `jobRunId: ${jobRunId} ` : ''
+        }PDF generation failed for template: ${template} after ${duration}ms`,
+        error,
+      );
       throw error;
-    } finally {
-      if (page && !page.isClosed()) {
-        this.logger.log(`${projectId ? `projectId: ${projectId} ` : ''}Closing page after PDF generation`);
-        await page.close();
-      }
     }
   }
 
-  async onApplicationShutdown(): Promise<void> {
-    if (this.browser && this.browser.connected) {
-      this.logger.log('Shutting down Puppeteer browser');
-      try {
-        await this.browser.close();
-        this.browser = null;
-        this.logger.log('Puppeteer browser shutdown completed successfully');
-      } catch (error) {
-        this.logger.error('Error during Puppeteer browser shutdown', error);
-        throw error;
-      }
-    } else {
-      this.logger.log('No active browser to shutdown');
+  private buildDocumentDefinition(
+    template: PDFTemplate,
+    data: Record<string, unknown>,
+    pdfOptions?: PdfGenerationOptions,
+  ): TDocumentDefinitions {
+    switch (template) {
+      case PDFTemplate.DISCOVERY_REPORT:
+        return buildDiscoveryPdfDefinition(
+          data as Record<string, unknown[]>,
+          pdfOptions,
+        );
+      case PDFTemplate.JOBS_REPORT:
+        return buildJobsReportPdfDefinition(data, pdfOptions);
+      default:
+        throw new Error(`Unsupported PDF template: ${template}`);
     }
+  }
+
+  private renderToBuffer(docDefinition: TDocumentDefinitions): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const pdfDoc = this.printer.createPdfKitDocument(docDefinition);
+        const chunks: Buffer[] = [];
+        pdfDoc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        pdfDoc.on('end', () => resolve(Buffer.concat(chunks)));
+        pdfDoc.on('error', reject);
+        pdfDoc.end();
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
 }

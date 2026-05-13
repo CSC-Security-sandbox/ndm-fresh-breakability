@@ -64,12 +64,22 @@ export const GenerateDiscoveryReportWorkflow = async ({ jobRunId, projectId }: G
   // ----------------- Dynamic Section Process End -------------- //
 
   log.info(`${logPrefix} Generating PDF and CSV reports for jobRunId: ${jobRunId}`);
-  await Promise.allSettled(
-    [
-      generateDiscoveryPdfReport({ jobRunId }),
-      generateDiscoveryCsvReport({ jobRunId }),
-    ]
-  );
+  const fileResults = await Promise.allSettled([
+    generateDiscoveryPdfReport({ jobRunId }),
+    generateDiscoveryCsvReport({ jobRunId }),
+  ]);
+
+  const [pdfResult, csvResult] = fileResults;
+  if (pdfResult.status === 'rejected') {
+    log.error(`${logPrefix} PDF generation failed for jobRunId: ${jobRunId}: ${pdfResult.reason}`);
+  } else {
+    log.info(`${logPrefix} PDF generation succeeded for jobRunId: ${jobRunId}`);
+  }
+  if (csvResult.status === 'rejected') {
+    log.error(`${logPrefix} CSV generation failed for jobRunId: ${jobRunId}: ${csvResult.reason}`);
+  } else {
+    log.info(`${logPrefix} CSV generation succeeded for jobRunId: ${jobRunId}`);
+  }
 
   log.info(`${logPrefix} Updating final status for jobRunId: ${jobRunId}`);
   await updateDiscoveryReport({
