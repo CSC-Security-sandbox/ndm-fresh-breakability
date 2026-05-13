@@ -5,7 +5,7 @@ import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-l
 import * as fs from "fs";
 import * as path from "path";
 import { CtimeTestTriggersService } from "../ctime-test-triggers.service";
-import { dmError } from "src/activities/utils/utils";
+import { dmError, getErrorCode } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
 import { SourceAclError } from "./win-opeartions/acl-operation.error";
@@ -15,7 +15,7 @@ import { StampMetaOutput } from "./stamp-meta.type";
 import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
-import { MetadataUpdateConflictError } from "src/errors/errors.types";
+import { IDENTITY_MAPPING_NOT_FOUND, IdentityMappingNotFoundError, MetadataUpdateConflictError } from "src/errors/errors.types";
 
 const MAX_CTIME_RETRIES = 2;
 
@@ -233,7 +233,7 @@ export class StampMetaService {
                 this.logger.error(`Stamping Permission from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
-                output.targetErrors.push(error.code);
+                output.targetErrors.push(error.code ?? getErrorCode(error, 'OPERATION'));
             }
         }
         return output;
@@ -248,23 +248,43 @@ export class StampMetaService {
                 let gid = command.metadata.gid?.toString();
                 let uid = command.metadata.uid?.toString();
                 if (jobContext.jobConfig.options.isIdentityMappingAvailable) {
-                    let [gid_res, uid_res] = await Promise.all([
+                    const [gid_res, uid_res] = await Promise.all([
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID'),
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID'),
                     ]);
-                    gid = gid_res != null ? gid_res : gid;  
-                    uid = uid_res != null ? uid_res : uid;
+                    const gidMissing = gid_res == null || gid_res === '';
+                    const uidMissing = uid_res == null || uid_res === '';
+                    if (gidMissing || uidMissing) {
+                        const missing: string[] = [];
+                        if (gidMissing) {
+                            missing.push(`GID '${command.metadata.gid}'`);
+                        }
+                        if (uidMissing) {
+                            missing.push(`UID '${command.metadata.uid}'`);
+                        }
+                        throw new IdentityMappingNotFoundError(
+                            `Identity mapping not found for ${missing.join(' and ')}. ` +
+                            `Ensure the uploaded GID/UID mapping CSV includes entries for these values.`,
+                        );
+                    }
+                    gid = gid_res;
+                    uid = uid_res;
                 }
                 if (command?.metadata?.isSymLink) {
                     await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
                 } else {
                     await fs.promises.chown(targetPath, parseInt(uid), parseInt(gid));
                 }
-            } catch (error) {
-                this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${error.message}`, error.stack);
-                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, error, { name: command.fPath, path: targetPath });
+            } catch (error: unknown) {
+                const err = error instanceof Error ? error : new Error(String(error));
+                this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${err.message}`, err.stack);
+                const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, err, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
-                output.targetErrors.push(error.code);
+                const opCode =
+                    error instanceof IdentityMappingNotFoundError
+                        ? IDENTITY_MAPPING_NOT_FOUND
+                        : (err as NodeJS.ErrnoException).code ?? getErrorCode(err, 'OPERATION');
+                output.targetErrors.push(opCode);
             }
         }
         return output;
@@ -290,7 +310,7 @@ export class StampMetaService {
                 this.logger.error(`Stamping Access and Modified Time  to ${targetPath}, Error: ${error.message}`, error.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_TIME, errorType, command.id, error, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
-                output.targetErrors.push(error.code);
+                output.targetErrors.push(error.code ?? getErrorCode(error, 'OPERATION'));
             }
         }
         return output;

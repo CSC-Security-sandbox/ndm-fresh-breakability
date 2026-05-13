@@ -29,11 +29,12 @@ jest.mock('fs', () => ({
   },
 }));
 
-// Mock utils functions
+// Mock utils functions (keep getErrorCode real; dmError is asserted via mockReturnValue)
 jest.mock('src/activities/utils/utils', () => ({
+  ...jest.requireActual<typeof import('src/activities/utils/utils')>(
+    'src/activities/utils/utils',
+  ),
   dmError: jest.fn(),
-  formatDate: jest.fn(),
-  getUserACLs: jest.fn(),
 }));
 
 // Mock command config
@@ -410,12 +411,12 @@ describe('StampMetaService', () => {
       );
     });
 
-    it('should fall back to source GID/UID when identity mapping returns null (no mapping in Redis)', async () => {
+    it('should publish error and not chown when identity mapping is missing in Redis', async () => {
       const input = createMockInput(
         { gid: 1000, uid: 3001 },
         { isIdentityMappingAvailable: true, preservePermissions: true },
       );
-      (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
+      dmError.mockReturnValue({});
       redisService.getOwnerIdentity
         .mockResolvedValueOnce(null) // no mapping for gid
         .mockResolvedValueOnce(null); // no mapping for uid
@@ -423,12 +424,9 @@ describe('StampMetaService', () => {
       const result = await service.stampGIDandUID(input);
 
       expect(result.sourceErrors).toEqual([]);
-      expect(result.targetErrors).toEqual([]);
-      expect(mockFs.promises.chown).toHaveBeenCalledWith(
-        '/target/test-file.txt',
-        3001,
-        1000,
-      );
+      expect(result.targetErrors).toEqual(['IDENTITY_MAPPING_NOT_FOUND']);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+      expect(mockFs.promises.chown).not.toHaveBeenCalled();
     });
 
     it('should skip when GID or UID is missing', async () => {
@@ -441,11 +439,12 @@ describe('StampMetaService', () => {
       expect(mockFs.promises.chown).not.toHaveBeenCalled();
     });
 
-    it('should skip when identity mapping returns null values', async () => {
+    it('should publish error and not chown when identity mapping returns null values', async () => {
       const input = createMockInput(
         { gid: 1000, uid: 1001 },
-        { isIdentityMappingAvailable: true },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
       );
+      dmError.mockReturnValue({});
       redisService.getOwnerIdentity
         .mockResolvedValueOnce(null) // mapped gid is null
         .mockResolvedValueOnce('2001'); // mapped uid
@@ -453,7 +452,24 @@ describe('StampMetaService', () => {
       const result = await service.stampGIDandUID(input);
 
       expect(result.sourceErrors).toEqual([]);
-      expect(result.targetErrors).toEqual([]);
+      expect(result.targetErrors).toEqual(['IDENTITY_MAPPING_NOT_FOUND']);
+      expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+      expect(mockFs.promises.chown).not.toHaveBeenCalled();
+    });
+
+    it('should publish error and not chown when Redis returns empty string mapping', async () => {
+      const input = createMockInput(
+        { gid: 1000, uid: 1001 },
+        { isIdentityMappingAvailable: true, preservePermissions: true },
+      );
+      dmError.mockReturnValue({});
+      redisService.getOwnerIdentity
+        .mockResolvedValueOnce('')
+        .mockResolvedValueOnce('2001');
+
+      const result = await service.stampGIDandUID(input);
+
+      expect(result.targetErrors).toEqual(['IDENTITY_MAPPING_NOT_FOUND']);
       expect(mockFs.promises.chown).not.toHaveBeenCalled();
     });
 

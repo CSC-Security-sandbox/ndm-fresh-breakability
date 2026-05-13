@@ -4081,31 +4081,65 @@ describe("JobConfigService", () => {
 
     it("should parse blob data for GID template type", async () => {
       const blobData =
-        "source gid,target gid,source uid,target uid\nsource1,target1,uid1,gid1\nsource2,target2,uid2,gid2\nsource3,target3,uid3,gid3";
+        "source gid,target gid,source uid,target uid\n1000,2000,1001,2001\n1002,2002,1003,2003\n1004,2004,1005,2005";
       const templateType = TemplateType.GID;
 
       const result = await service.parseBlobData(blobData, templateType);
 
       expect(result).toEqual([
         {
-          sourceMappingGid: "source1",
-          targetMappingGid: "target1",
-          sourceMappingUid: "uid1",
-          targetMappingUid: "gid1",
+          sourceMappingGid: "1000",
+          targetMappingGid: "2000",
+          sourceMappingUid: "1001",
+          targetMappingUid: "2001",
         },
         {
-          sourceMappingGid: "source2",
-          targetMappingGid: "target2",
-          sourceMappingUid: "uid2",
-          targetMappingUid: "gid2",
+          sourceMappingGid: "1002",
+          targetMappingGid: "2002",
+          sourceMappingUid: "1003",
+          targetMappingUid: "2003",
         },
         {
-          sourceMappingGid: "source3",
-          targetMappingGid: "target3",
-          sourceMappingUid: "uid3",
-          targetMappingUid: "gid3",
+          sourceMappingGid: "1004",
+          targetMappingGid: "2004",
+          sourceMappingUid: "1005",
+          targetMappingUid: "2005",
         },
       ]);
+    });
+
+    it("should trim and validate integer values for GID template type", async () => {
+      const blobData =
+        "source gid,target gid,source uid,target uid\n 1000 , 2000 , 1001 , 2001 ";
+      const templateType = TemplateType.GID;
+
+      const result = await service.parseBlobData(blobData, templateType);
+
+      expect(result).toEqual([
+        {
+          sourceMappingGid: "1000",
+          targetMappingGid: "2000",
+          sourceMappingUid: "1001",
+          targetMappingUid: "2001",
+        },
+      ]);
+    });
+
+    it("should throw BadRequestException for non-integer GID/UID values", async () => {
+      const blobData =
+        "source gid,target gid,source uid,target uid\n1000,2000,abc,2001";
+      const templateType = TemplateType.GID;
+
+      await expect(service.parseBlobData(blobData, templateType)).rejects.toThrow(
+        BadRequestException
+      );
+    });
+
+    it("should throw BadRequestException for unsupported template type", async () => {
+      const blobData = "h1,h2\nv1,v2";
+      await expect(
+        service.parseBlobData(blobData, "unknown" as TemplateType),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it("should return an empty array if blob data is empty", async () => {
@@ -5890,6 +5924,18 @@ describe("JobConfigService", () => {
       await expect(
         service.updateJobIdentityMappings(jobConfigId, mappingData)
       ).rejects.toThrow(HttpException);
+    });
+
+    it('should rethrow BadRequestException when GID mapping CSV is invalid', async () => {
+      const jobConfigId = 'test-job-config-id';
+      const mappingData = { gidMapping: 'data:text/csv;base64,c29tZWhlYWRlcgo=' };
+      jest.spyOn(identityCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(service as any, 'decodeBase64').mockResolvedValue(
+        'source gid,target gid,source uid,target uid\n1000,2000,not-a-number,2001',
+      );
+      await expect(
+        service.updateJobIdentityMappings(jobConfigId, mappingData),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

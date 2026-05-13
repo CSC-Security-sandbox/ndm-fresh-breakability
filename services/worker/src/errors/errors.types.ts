@@ -2,6 +2,19 @@ import { ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 
 export const METADATA_UPDATE_CONFLICT = 'METADATA_UPDATE_CONFLICT' as const;
 
+export const IDENTITY_MAPPING_NOT_FOUND = 'IDENTITY_MAPPING_NOT_FOUND' as const;
+
+export class IdentityMappingNotFoundError extends Error {
+  readonly code: typeof IDENTITY_MAPPING_NOT_FOUND;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdentityMappingNotFoundError';
+    // Assign in constructor so `code` is always present on the instance (incl. odd TS targets / `catch` sites).
+    this.code = IDENTITY_MAPPING_NOT_FOUND;
+  }
+}
+
 export class RetryableError extends Error {
   constructor(message: string) {
     super(message);

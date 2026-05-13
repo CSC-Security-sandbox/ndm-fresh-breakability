@@ -322,6 +322,10 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
           return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
       case 'METADATA_UPDATE_CONFLICT':
         return 'METADATA_UPDATE_CONFLICT';
+      case 'IDENTITY_MAPPING_NOT_FOUND':
+        return context === 'TASK'
+          ? 'TASK_IDENTITY_MAPPING_NOT_FOUND'
+          : 'OP_IDENTITY_MAPPING_NOT_FOUND';
       default:
         // Unknown error
         return context === 'TASK' ? 'TASK_UNKNOWN_ERROR' : 'OP_UNKNOWN_ERROR';
@@ -381,7 +385,16 @@ export const basePrefix = (jobRunId: string, pathId: string, directoryPath?: str
 }
 
 const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
-const FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'EROFS', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED']);
+const FATAL_CODE = new Set<string>([
+  'EACCES',
+  'ENOSPC',
+  'EROFS',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENETDOWN',
+  'ECONNREFUSED',
+  'IDENTITY_MAPPING_NOT_FOUND',
+]);
 
 // Transient errors for dmError / sync: codes here force ErrorType.TRANSIENT_ERROR in dmError.
 // METADATA_UPDATE_CONFLICT must NOT be listed — callers pass ErrorType.METADATA_UPDATE_CONFLICT and

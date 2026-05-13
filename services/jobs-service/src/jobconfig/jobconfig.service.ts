@@ -2050,41 +2050,64 @@ export class JobConfigService {
       throw error;
     }
   }
-  /* istanbul ignore next */
   async parseBlobData(
     blobData: string,
     templateType: TemplateType
   ): Promise<ParsedMapping[]> {
-    const parsedData = blobData
-      ?.trim()
-      ?.split("\n")
-      ?.slice(1)
-      ?.map((line) => line.split(","))
-      ?.map((columns) => {
-        if (templateType === TemplateType.SID) {
-          if (columns.length !== 2) {
-            throw new Error("Invalid SID mapping data: Expected 2 columns.");
-          }
-          const [sourceMapping, targetMapping] = columns;
-          return { sourceMapping, targetMapping };
-        } else if (templateType === TemplateType.GID) {
-          if (columns.length !== 4) {
-            throw new Error("Invalid GID mapping data: Expected 4 columns.");
-          }
-          const [
-            sourceMappingGid,
-            targetMappingGid,
-            sourceMappingUid,
-            targetMappingUid,
-          ] = columns;
-          return {
-            sourceMappingGid,
-            targetMappingGid,
-            sourceMappingUid,
-            targetMappingUid,
-          };
+    const isValidInteger = (val: string) => /^\d+$/.test(val);
+
+    const dataRows = blobData?.trim()?.split("\n")?.slice(1) ?? [];
+
+    const parsedData = dataRows.map((line, rowIndex) => {
+      const columns = line.split(",").map((col) => col.trim());
+      const rowNumber = rowIndex + 2; // +2 because row 1 is the header
+
+      if (templateType === TemplateType.SID) {
+        if (columns.length !== 2) {
+          throw new BadRequestException(
+            `Invalid SID mapping data on row ${rowNumber}: Expected 2 columns, got ${columns.length}.`
+          );
         }
-      });
+        const [sourceMapping, targetMapping] = columns;
+        return { sourceMapping, targetMapping };
+      } else if (templateType === TemplateType.GID) {
+        if (columns.length !== 4) {
+          throw new BadRequestException(
+            `Invalid GID/UID mapping data on row ${rowNumber}: Expected 4 columns, got ${columns.length}.`
+          );
+        }
+        const [
+          sourceMappingGid,
+          targetMappingGid,
+          sourceMappingUid,
+          targetMappingUid,
+        ] = columns;
+        const fields: [string, string][] = [
+          ["SourceGID", sourceMappingGid],
+          ["TargetGID", targetMappingGid],
+          ["SourceUID", sourceMappingUid],
+          ["TargetUID", targetMappingUid],
+        ];
+        for (const [label, val] of fields) {
+          if (!isValidInteger(val)) {
+            throw new BadRequestException(
+              `Invalid GID/UID mapping on row ${rowNumber}: '${label}' value '${val}' is not a valid non-negative integer. Remove any extra spaces or non-numeric characters.`
+            );
+          }
+        }
+        return {
+          sourceMappingGid,
+          targetMappingGid,
+          sourceMappingUid,
+          targetMappingUid,
+        };
+      } else {
+        throw new BadRequestException(
+          `Unsupported template type '${templateType}' for identity mapping parsing.`,
+        );
+      }
+    });
+
     return parsedData;
   }
 
@@ -2471,6 +2494,9 @@ export class JobConfigService {
       return await this.getIdentityMappingsForJob(jobConfigId, manager);
     } catch (error) {
       this.logger.error(`Error updating identity mappings for job ${jobConfigId}:`, error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         {
           status: "failed",

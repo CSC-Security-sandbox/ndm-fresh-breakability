@@ -157,7 +157,36 @@ export const OPTIONS_FORM = Yup.object().shape({
     fileSize: Yup.number(),
   }),
   upload_uid_mapping: Yup.object().shape({
-    contents: Yup.string(),
+    contents: Yup.string().test(
+      "valid-gid-uid-csv-contents",
+      "Invalid GID/UID mapping CSV",
+      (value) => {
+        if (!value) return true;
+        const isValidInteger = (v: string) => /^\d+$/.test(v);
+        const rows = value.trim().split("\n").slice(1).filter((r) => r.trim());
+        for (let i = 0; i < rows.length; i++) {
+          const cols = rows[i].split(",").map((c) => c.trim());
+          if (cols.length !== 4) {
+            return new Yup.ValidationError(
+              `Row ${i + 2}: Expected 4 columns (SourceGID, TargetGID, SourceUID, TargetUID), got ${cols.length}.`,
+              value,
+              "upload_uid_mapping.contents"
+            );
+          }
+          const labels = ["SourceGID", "TargetGID", "SourceUID", "TargetUID"];
+          for (let j = 0; j < cols.length; j++) {
+            if (!isValidInteger(cols[j])) {
+              return new Yup.ValidationError(
+                `Row ${i + 2}: '${labels[j]}' value '${cols[j]}' is not a valid integer. Remove extra spaces or non-numeric characters.`,
+                value,
+                "upload_uid_mapping.contents"
+              );
+            }
+          }
+        }
+        return true;
+      }
+    ),
     fileName: Yup.string().matches(/^.*\.csv$/, "Only CSV file is supported."),
     fileSize: Yup.number(),
   }),

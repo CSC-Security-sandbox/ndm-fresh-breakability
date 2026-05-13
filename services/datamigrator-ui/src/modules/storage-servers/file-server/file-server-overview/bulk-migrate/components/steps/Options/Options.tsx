@@ -118,10 +118,14 @@ const Options = () => {
                 </Box>
               }
               errorMessage={
-                optionForm?.formErrors?.["upload_uid_mapping.fileName"]
+                optionForm?.formErrors?.["upload_uid_mapping.fileName"] ||
+                optionForm?.formErrors?.["upload_uid_mapping.contents"]
               }
               showError={
-                optionForm?.formErrors?.["upload_uid_mapping.fileName"] ?? false
+                !!(
+                  optionForm?.formErrors?.["upload_uid_mapping.fileName"] ||
+                  optionForm?.formErrors?.["upload_uid_mapping.contents"]
+                )
               }
             />
           ) : (

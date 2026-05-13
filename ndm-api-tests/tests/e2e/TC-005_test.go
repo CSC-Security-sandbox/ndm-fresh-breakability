@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/base64"
 	"fmt"
 	. "ndm-api-tests/utils"
 	"strings"
@@ -73,9 +74,15 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 			sourceUserId = 1001
 			destinationUserId = 1002
 			fileWithGroup = "sample.txt"
-			// Base64 encoded CSV data for sourceGrpId=1033, destinationGrpId=1034, sourceUserId=1001, destinationUserId=1002
-			csvData =
-				"data:text/csv;charset=utf-8;base64,Z2lkX3NvdXJjZSxnaWRfdGFyZ2V0LHVpZF9zb3VyY2UsdWlkX3RhcmdldA0KMTAzMywxMDM0LDEwMDEsMTAwMg0K"
+			csvPlain := strings.Join([]string{
+				"gid_source,gid_target,uid_source,uid_target",
+				"1033,1034,1001,1002",
+				"0,0,0,0",
+			}, "\n") + "\n"
+			csvData = fmt.Sprintf(
+				"data:text/csv;charset=utf-8;base64,%s",
+				base64.StdEncoding.EncodeToString([]byte(csvPlain)),
+			)
 
 		})
 
@@ -237,7 +244,7 @@ var _ = Describe("TC-005: Run migration with 'Upload GID/UID Mapping' option", f
 		AfterEach(func() {
 			testEndTime := time.Now()
 			testDuration := testEndTime.Sub(testStartTime)
-			
+
 			By("Cleanup started")
 			// Note: This is redundant with DeferCleanup in BeforeEach, but provides defense in depth
 			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
