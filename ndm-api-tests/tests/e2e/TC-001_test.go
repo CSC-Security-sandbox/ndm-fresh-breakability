@@ -341,6 +341,21 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
 
+			By("Waiting for cutover jobs to complete and validating file counts")
+			for i, cutoverRunID := range cutoverRunIDs {
+				err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
+
+				expected := BaselineCutoverFileCount(i) + DeltaFilesInCutoverCoC
+				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC))
+				cutoverRowCount, err := CountMigrationReportRows(cutoverRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting cutover CoC report rows for run %s", cutoverRunID)
+				Expect(cutoverRowCount).To(Equal(expected),
+					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC, cutoverRowCount),
+				)
+				LogDebug(fmt.Sprintf("Cutover run %s correctly shows %d files in CoC report", cutoverRunID, cutoverRowCount))
+			}
+
 			By("########################## TC-001 end ################################")
 		})
 

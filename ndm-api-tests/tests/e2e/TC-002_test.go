@@ -233,6 +233,7 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 				}
 			}
 
+			baseMigrationRowCounts := make([]int, len(migrationJobConfigIDs))
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
@@ -251,6 +252,14 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 				)
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				By(fmt.Sprintf("validate report result : %s", result))
+
+				// TC-002 uses excludeOlderThan + excludeFilePatterns so the effective file count
+				// differs from the unfiltered baseline. Capture it dynamically and use it to
+				// assert the cutover CoC later: cutoverCount == baseMigrationCount + DeltaFilesInCutoverCoC.
+				baseCount, err := CountMigrationReportRows(migrationJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting baseline migration CoC rows for vol%d", i+1)
+				baseMigrationRowCounts[i] = baseCount
+				LogDebug(fmt.Sprintf("TC-002 baseline migration vol%d: %d rows in CoC report", i+1, baseCount))
 			}
 
 			By("Adding Delta Data")
@@ -307,6 +316,22 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
 			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
 			// }
+
+			By("Waiting for cutover jobs to complete and validating file counts")
+			for i, cutoverRunID := range cutoverRunIDs {
+				err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
+
+				// TC-002 uses exclude filters so the baseline count varies — use dynamically captured value.
+				expected := baseMigrationRowCounts[i] + DeltaFilesInCutoverCoC
+				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", i+1, expected, baseMigrationRowCounts[i], DeltaFilesInCutoverCoC))
+				cutoverRowCount, err := CountMigrationReportRows(cutoverRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting cutover CoC report rows for run %s", cutoverRunID)
+				Expect(cutoverRowCount).To(Equal(expected),
+					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", i+1, expected, baseMigrationRowCounts[i], DeltaFilesInCutoverCoC, cutoverRowCount),
+				)
+				LogDebug(fmt.Sprintf("Cutover run %s correctly shows %d files in CoC report", cutoverRunID, cutoverRowCount))
+			}
 
 			By("########################## TC-002 end ################################")
 		})

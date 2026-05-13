@@ -732,3 +732,65 @@ func cleanup(f *os.File) {
 	f.Close()
 	os.Remove(f.Name())
 }
+
+// countCocBundleCSVRows is a shared helper that downloads the CoC ZIP for the
+// given job run, finds a CSV whose base name contains csvNameContains, and
+// returns the number of data rows (header excluded).
+func countCocBundleCSVRows(jobRunID, csvNameContains string) (int, error) {
+	data, err := fetchCocCSV(jobRunID)
+	if err != nil {
+		return 0, fmt.Errorf("countCocBundleCSVRows(%s): fetch CoC ZIP for job %s: %w", csvNameContains, jobRunID, err)
+	}
+
+	csvFiles, err := extractCSVFilesFromZip(data)
+	if err != nil {
+		return 0, fmt.Errorf("countCocBundleCSVRows(%s): extract ZIP for job %s: %w", csvNameContains, jobRunID, err)
+	}
+
+	needle := strings.ToLower(csvNameContains)
+	var csvBytes []byte
+	for zipPath, b := range csvFiles {
+		if strings.Contains(strings.ToLower(path.Base(normalizeZipEntryPath(zipPath))), needle) {
+			csvBytes = b
+			break
+		}
+	}
+	if csvBytes == nil {
+		return 0, fmt.Errorf("countCocBundleCSVRows: %q not found in CoC ZIP for job %s", csvNameContains, jobRunID)
+	}
+
+	reader := csv.NewReader(bytes.NewReader(csvBytes))
+	// Skip header row
+	if _, err := reader.Read(); err != nil {
+		return 0, fmt.Errorf("countCocBundleCSVRows(%s): read header for job %s: %w", csvNameContains, jobRunID, err)
+	}
+
+	count := 0
+	for {
+		if _, err := reader.Read(); err != nil {
+			break
+		}
+		count++
+	}
+	return count, nil
+}
+
+// CountMigrationReportRows returns the number of rows in coc-report.csv
+func CountMigrationReportRows(jobRunID string) (int, error) {
+	count, err := countCocBundleCSVRows(jobRunID, "coc-report.csv")
+	if err != nil {
+		return 0, fmt.Errorf("CountMigrationReportRows: %w", err)
+	}
+	LogDebug(fmt.Sprintf("CountMigrationReportRows: job %s transferred %d files", jobRunID, count))
+	return count, nil
+}
+
+// CountDeletedReportRows returns the number of rows in deleted-report.csv
+func CountDeletedReportRows(jobRunID string) (int, error) {
+	count, err := countCocBundleCSVRows(jobRunID, "deleted-report.csv")
+	if err != nil {
+		return 0, fmt.Errorf("CountDeletedReportRows: %w", err)
+	}
+	LogDebug(fmt.Sprintf("CountDeletedReportRows: job %s deleted %d files from destination", jobRunID, count))
+	return count, nil
+}

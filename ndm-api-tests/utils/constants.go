@@ -228,6 +228,17 @@ const (
 	FileServerStatusInProgress           FileServerStatus = "IN_PROGRESS"
 	FileServerStatusErrored              FileServerStatus = "ERRORED"
 	DeltaFolder                                           = "delta"
+
+	// AddDataToVolume creates exactly 1 directory + 100 zero-byte files each call.
+	DeltaFilesAdded               = 100
+	DeltaEntriesInMigrationCoC    = 101 // 1 dir + 100 files 
+	DeltaFilesInCutoverCoC        = 100 // dirs excluded from cutover CoC
+
+	// Baseline file counts (files only, no directories) for each volume in the cloned test dataset.
+	NFS_VOL1_BASELINE_CUTOVER_FILES = 20221
+	NFS_VOL2_BASELINE_CUTOVER_FILES = 17764
+	SMB_VOL1_BASELINE_CUTOVER_FILES = 378
+	SMB_VOL2_BASELINE_CUTOVER_FILES = 368
 	ConfigTypeFile                       ConfigType       = "FILE"
 	ServerTypeOtherNAS                   ServerType       = "OtherNAS"
 	ProtocolNFS                          Protocol         = "NFS"
@@ -462,4 +473,21 @@ func UpdateConfVariables(protocolType, environment string) {
 	InitWorkers(NDM_WORKERS_HOST, NDM_WORKERS_PORT, NDM_WORKERS_PASSWORD, NDM_WORKERS_USER_NAME)
 	InitFileServer(SOURCE_VOLUMES_LIST, DESTINATION_VOLUMES_LIST, SOURCE_HOST_IP, DESTINATION_HOST_IP, 2)
 	LogDebug("UpdateConfVariables: Successfully completed InitWorkers and InitFileServer")
+}
+
+// BaselineCutoverFileCount returns the expected number of files in the cutover CoC report
+func BaselineCutoverFileCount(volIndex int) int {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		if volIndex == 0 {
+			return NFS_VOL1_BASELINE_CUTOVER_FILES
+		}
+		return NFS_VOL2_BASELINE_CUTOVER_FILES
+	case ProtocolSMB:
+		if volIndex == 0 {
+			return SMB_VOL1_BASELINE_CUTOVER_FILES
+		}
+		return SMB_VOL2_BASELINE_CUTOVER_FILES
+	}
+	return 0
 }

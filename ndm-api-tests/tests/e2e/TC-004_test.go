@@ -246,6 +246,14 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Addition migration job did not complete")
 				LogDebug(fmt.Sprintf("Addition sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
+
+				By(fmt.Sprintf("Step 2.2: Validating addition incremental run migrated ONLY delta entries (%d = 1 dir + %d files), not all files", DeltaEntriesInMigrationCoC, DeltaFilesAdded))
+				incrementalRowCount, err := CountMigrationReportRows(migrationJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting rows in addition incremental migration report")
+				Expect(incrementalRowCount).To(Equal(DeltaEntriesInMigrationCoC),
+					fmt.Sprintf("Addition incremental run should have migrated exactly %d entries (1 dir + %d files) but got %d — this may indicate a full re-migration bug", DeltaEntriesInMigrationCoC, DeltaFilesAdded, incrementalRowCount),
+				)
+				LogDebug(fmt.Sprintf("Addition incremental run %s correctly migrated %d entries", migrationJobRunID, incrementalRowCount))
 			}
 
 			By("Step 2.1: Discovering destination to verify addition sync migrated delta data")
@@ -315,6 +323,14 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Deletion migration job did not complete")
 				LogDebug(fmt.Sprintf("Deletion sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
+
+				By(fmt.Sprintf("Step 4.1: Validating deletion incremental run deleted exactly %d entries (1 dir + %d files) from destination", DeltaEntriesInMigrationCoC, DeltaFilesAdded))
+				deletedRowCount, err := CountDeletedReportRows(migrationJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting rows in deleted-report.csv for deletion incremental run")
+				Expect(deletedRowCount).To(Equal(DeltaEntriesInMigrationCoC),
+					fmt.Sprintf("Deletion incremental run should have deleted exactly %d entries (1 dir + %d files) from destination but got %d — this may indicate a full re-migration or missing deletion bug", DeltaEntriesInMigrationCoC, DeltaFilesAdded, deletedRowCount),
+				)
+				LogDebug(fmt.Sprintf("Deletion incremental run %s correctly deleted %d entries from destination", migrationJobRunID, deletedRowCount))
 			}
 
 			By("Step 5: Discovering destination to verify deletion was mirrored (reusing existing discovery jobs)")
