@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { CommandGenerationService, LocalSetLookup } from './command-generation.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileTypeDetectionService } from '../utils/file-type-detection.service';
-import { ErrorType, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { ErrorType, OPS_CMD, OPS_STATUS } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FileType } from 'src/activities/types/tasks';
@@ -68,6 +68,8 @@ describe('CommandGenerationService', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        mockJobContext.jobConfig.jobType = 'MIGRATE';
+        mockJobContext.jobConfig.options = {};
         mockLogger = { debug: jest.fn(), error: jest.fn(), warn: jest.fn(), log: jest.fn() } as any;
         loggerFactory = { create: jest.fn().mockReturnValue(mockLogger) } as any;
         configService = {
@@ -767,6 +769,363 @@ describe('CommandGenerationService', () => {
             } as fs.Stats;
             const result = service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeUndefined();
+        });
+
+        it('should return undefined when atimeMs differs but jobType is omitted (backward compatible)', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date('2020-05-01T00:00:00.000Z'),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: new Date('2020-05-01T00:00:00.000Z'),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date('2020-05-01T00:00:00.000Z'),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: new Date('2020-05-01T00:00:00.000Z'),
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile);
+            expect(result).toBeUndefined();
+        });
+
+        it('should emit STAMP_ATIME (not STAMP_META) command when atimeMs differs and jobType is MIGRATE', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
+            expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
+        });
+
+        it('should not emit atime-only command for DISCOVER even when atimeMs differs', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'DISCOVER');
+            expect(result).toBeUndefined();
+        });
+
+        it('atime reconcile uses COPY_DIR completed + STAMP_ATIME when directory and atimeMs differs (MIGRATE)', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o755,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o755,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/dir', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.COPY_DIR].status).toBe(OPS_STATUS.COMPLETED);
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
+        });
+
+        it('should emit STAMP_ATIME with COPY_SYMLINK COMPLETED when symlink atimeMs differs (MIGRATE)', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => true,
+                size: 0,
+                mtime,
+                mode: 0o777,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => true,
+                size: 0,
+                mtime,
+                mode: 0o777,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/sym', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.COPY_SYMLINK].status).toBe(OPS_STATUS.COMPLETED);
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
+        });
+
+        it('should emit STAMP_ATIME when atimeMs differs and jobType is CUT_OVER', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'CUT_OVER');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+        });
+
+        it('isContentUpdate suppresses STAMP_ATIME even when atimeMs also differs', () => {
+            mockIsContentUpdate.mockReturnValue(true);
+            mockIsMetaUpdated.mockReturnValue(false);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 200,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
+        });
+
+        it('isMetaUpdated suppresses STAMP_ATIME even when atimeMs also differs', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(true);
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: new Date(Date.now() - 86400000),
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
+        });
+
+        it('atime-only reconcile does not read preserveAccessTime (still emits STAMP_ATIME when jobType is MIGRATE)', () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockReturnValue(false);
+            (mockJobContext as any).jobConfig.options = { preserveAccessTime: false };
+            const sAtime = new Date('2023-01-02T00:00:00.000Z');
+            const dAtime = new Date('2022-06-01T00:00:00.000Z');
+            const mtime = new Date('2020-05-01T00:00:00.000Z');
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: sAtime,
+                atimeMs: sAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime,
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: dAtime,
+                atimeMs: dAtime.getTime(),
+                ctime: mtime,
+                birthtime: new Date(),
+                ino: 2,
+            } as fs.Stats;
+            const result = service.buildCommand(sFile, 'path/file.txt', dFile, undefined, 'MIGRATE');
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
         });
     });
 

@@ -1,0 +1,20 @@
+schema: spec-driven
+
+# Project context (optional) — shown when creating artifacts
+context: |
+  Tech stack: TypeScript, React, Node.js, Go
+  API conventions: RESTful, JSON responses
+  Testing: Vitest for unit tests; Go with Ginkgo v2 + Gomega; ndm-api-tests e2e
+  Style: ESLint with Prettier, strict TypeScript
+  Coding guidelines: follow existing naming conventions
+
+rules:
+  proposal:
+    - Keep proposals under 500 words
+    - Always include a "Non-goals" section
+  specs:
+    - Use Given/When/then format for scenarios
+  design:
+    - Include sequence diagrams for complex flows
+  tasks:
+    - Break tasks into chunks of max 2 hours

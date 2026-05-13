@@ -10,6 +10,7 @@ import { WorkerThreadService } from 'src/thread/worker.thread.service';
 import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecService } from './command-execution.service';
 import { StampMetaService } from './stamp-meta.service';
+import { StampAtimeService } from './stamp-atime.service';
 import { createDirectory } from 'src/activities/utils/directory.utils';
 
 // Mock fs module
@@ -61,6 +62,7 @@ describe('CommandExecService', () => {
     let loggerFactory: jest.Mocked<LoggerFactory>;
     let workerThreadService: jest.Mocked<WorkerThreadService>;
     let stampMetaService: jest.Mocked<StampMetaService>;
+    let stampAtimeService: jest.Mocked<StampAtimeService>;
     let mockJobContext: any;
 
     const mockFs = fs as jest.Mocked<typeof fs>;
@@ -89,6 +91,10 @@ describe('CommandExecService', () => {
             resetFileAttributes: jest.fn(),
         } as any;
 
+        stampAtimeService = {
+            stampAtime: jest.fn().mockResolvedValue({ shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true }),
+        } as any;
+
         const mockMetricsService = {
             runWithTiming: jest.fn().mockImplementation((_workflowId: string, _spec: string, fn: () => unknown) =>
                 typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
@@ -107,6 +113,7 @@ describe('CommandExecService', () => {
                 { provide: LoggerFactory, useValue: loggerFactory },
                 { provide: WorkerThreadService, useValue: workerThreadService },
                 { provide: StampMetaService, useValue: stampMetaService },
+                { provide: StampAtimeService, useValue: stampAtimeService },
                 { provide: MetricsService, useValue: mockMetricsService },
             ],
         }).compile();
@@ -667,6 +674,77 @@ describe('CommandExecService', () => {
 
                 const callInput = buildFileInfoSpy.mock.calls[0][0];
                 expect(callInput.stampMetaDataStatus).toBe('failed');
+            });
+        });
+
+        describe('STAMP_ATIME routing', () => {
+            const buildAtimeOnlyCommand = () => ({
+                id: 'cmd-atime',
+                fPath: '/test.txt',
+                status: CommandStatus.READY,
+                isDir: false,
+                ops: {
+                    [OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: { targetExisted: true } },
+                    [OPS_CMD.STAMP_ATIME]: { status: OPS_STATUS.READY, params: {} },
+                },
+                metadata: {
+                    size: 1024,
+                    mtime: new Date('2024-01-01T00:00:00.000Z'),
+                    atime: new Date('2024-06-01T00:00:00.000Z'),
+                    ctime: new Date('2024-01-01T00:00:00.000Z'),
+                    birthtime: new Date(),
+                    mode: 644,
+                    uid: 1000,
+                    gid: 1000,
+                    sid: 'test-sid',
+                    inode: 123456,
+                },
+                serialize: jest.fn(),
+            });
+
+            it('should invoke stampAtimeService.stampAtime (not stampMetaService) when STAMP_ATIME op is present', async () => {
+                stampAtimeService.stampAtime.mockResolvedValue({
+                    shouldStampMeta: false,
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldUpdateItemInfo: true,
+                });
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+
+                await service.executeCommand({
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: buildAtimeOnlyCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                });
+
+                expect(stampAtimeService.stampAtime).toHaveBeenCalledTimes(1);
+                expect(stampMetaService.stampMetaData).not.toHaveBeenCalled();
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.stampMetaDataStatus).toBe('success');
+            });
+
+            it('should mark stampMetaDataStatus failed when stampAtime returns errors', async () => {
+                stampAtimeService.stampAtime.mockResolvedValue({
+                    shouldStampMeta: false,
+                    sourceErrors: [],
+                    targetErrors: ['EPERM'],
+                    shouldUpdateItemInfo: true,
+                });
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+
+                const result = await service.executeCommand({
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: buildAtimeOnlyCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                });
+
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.stampMetaDataStatus).toBe('failed');
+                expect(result.cmd.status).toBe(CommandStatus.ERROR);
             });
         });
 

@@ -661,6 +661,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   public static readonly METRIC = {
     FILE_COPY: 'file_copy',
     STAMP_META: 'stamp_meta',
+    STAMP_ATIME: 'stamp_atime',
     COPY_DIR: 'copy_dir',
   } as const;
 

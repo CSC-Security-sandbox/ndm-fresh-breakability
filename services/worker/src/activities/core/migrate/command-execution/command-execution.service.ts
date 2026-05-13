@@ -14,6 +14,7 @@ import { WorkerThreadService } from "src/thread/worker.thread.service";
 import { MetricsService } from "src/metrics/metrics.service";
 import { CommandExecInput, CommandExecOutput, CommandOutput, ValidateCommandInput } from "./command-execution.type";
 import { StampMetaService } from "./stamp-meta.service";
+import { StampAtimeService } from "./stamp-atime.service";
 import { isNotWritable, isPathExists } from "../../utils/utils";
 
 @Injectable()
@@ -26,6 +27,7 @@ export class CommandExecService {
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
         private readonly workerThreadService: WorkerThreadService,
         private readonly stampMetaService: StampMetaService,
+        private readonly stampAtimeService: StampAtimeService,
         private readonly metricsService: MetricsService,
     ) {
         this.workerId = this.configService?.get<string>('worker.workerId') ?? '';
@@ -69,18 +71,30 @@ export class CommandExecService {
         output.sourceErrors.push(...baseCmdRes.sourceErrors);
         output.targetErrors.push(...baseCmdRes.targetErrors);
 
-       // Stamp Meta if needed
+       // Atime-only restamp branch (mutually exclusive with STAMP_META on a single command).
+       // Emitted by migrate-scan when content and metadata already match but atimeMs drifted
+       // between source and destination on a non-discovery job.
+        const hasAtimeOnlyOp = !!input.command.ops?.[OPS_CMD.STAMP_ATIME];
         let metaResult: { shouldUpdateItemInfo: boolean; targetErrors: string[]; sourceErrors: string[] } | null = null;
-        if (baseCmdRes.shouldStampMeta) {
+        if (hasAtimeOnlyOp) {
+            metaResult = await this.stampAtimeService.stampAtime(input);
+            baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
+            output.targetErrors.push(...metaResult.targetErrors);
+            output.sourceErrors.push(...metaResult.sourceErrors);
+        } else if (baseCmdRes.shouldStampMeta) {
             metaResult = await this.stampMetaService.stampMetaData(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
             output.sourceErrors.push(...metaResult.sourceErrors);
         }
 
-        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo
+        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo.
+        // STAMP_ATIME results are reported on the same column as STAMP_META (single-op-per-command
+        // invariant). Reusing the column keeps db-writer free of new op-enum knowledge and
+        // avoids a Liquibase migration; the distinction is recoverable from worker metrics.
         input.copyContentStatus = this.getCopyContentStatus(input.command);
-        input.stampMetaDataStatus = baseCmdRes.shouldStampMeta
+        const ranStamp = hasAtimeOnlyOp || baseCmdRes.shouldStampMeta;
+        input.stampMetaDataStatus = ranStamp
             ? (metaResult && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0))
                 ? 'failed'
                 : 'success'
