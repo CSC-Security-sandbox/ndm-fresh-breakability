@@ -1,0 +1,21 @@
+{
+  "$schema": "./release-branches.schema.json",
+  "version": 1,
+  "_comment": "Single source of truth for the release-branch lifecycle. The create-release-branch workflow appends new entries here via PR; the nightly-release-branches workflow reads from here to fan out nightly builds. Curators may flip 'lifecycle' to 'maintenance' or 'eol' as branches age, and may toggle 'nightly_enabled' to opt a branch out of automated nightly fan-out without removing it.",
+  "branches": [
+    {
+      "name": "release/2026.04.0",
+      "type": "ga",
+      "parent": "main",
+      "lifecycle": "active",
+      "nightly_enabled": false
+    },
+    {
+      "name": "release/2026.04.1",
+      "type": "patch",
+      "parent": "release/2026.04.0",
+      "lifecycle": "active",
+      "nightly_enabled": false
+    }
+  ]
+}

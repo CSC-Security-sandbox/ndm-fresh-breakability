@@ -1,0 +1,181 @@
+name: Nightly Builds — Release Branches
+
+# GitHub Actions schedule triggers only run from the default branch.
+# That means a `schedule:` block inside a release branch's workflow
+# file never fires — nightlies for release branches must be dispatched
+# from main. This workflow reads .github/release-branches.json on main
+# and dispatches the VM image build (and any other nightly-scoped
+# workflows) against every release branch flagged active +
+# nightly_enabled, supplying the right ref and a services_config that
+# pins every component to that same release branch.
+#
+# Existing main-branch nightlies (the schedule entries in
+# ndm-vm-image-build.yaml, wiz-container-scan.yaml,
+# bds-security-scan.yaml, bds-security-docker-image-scan.yaml) are
+# unaffected — they keep running against main on their own cron.
+
+on:
+  schedule:
+    # 00:30 UTC — 6 hours after main's 18:30 UTC nightly start. Main
+    # typically finishes inside that 6-hour window, so this fan-out
+    # starts right as main wraps up. If main starts running long
+    # (more than 6 hours), the two will overlap on shared runners —
+    # push this cron later if that becomes a recurring problem.
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Optional: dispatch nightly builds for a single release branch (e.g. release/2026.04.1). Leave blank to fan out to every active + nightly_enabled branch in the manifest."
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: "Resolve targets and print the dispatch plan (matrix + services_config per branch) without actually dispatching the downstream VM image builds."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  resolve-targets:
+    name: Read manifest and resolve target branches
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.read.outputs.targets }}
+      target_count: ${{ steps.read.outputs.target_count }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+
+      - name: Read manifest
+        id: read
+        env:
+          TARGET_OVERRIDE: ${{ github.event.inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          MANIFEST=".github/release-branches.json"
+          if [[ ! -f "${MANIFEST}" ]]; then
+            echo "::error::${MANIFEST} not found on main. Did the create-release-branch workflow run?"
+            exit 1
+          fi
+
+          if [[ -n "${TARGET_OVERRIDE}" ]]; then
+            # Manual override: dispatch only for the named branch, even
+            # if it's marked inactive in the manifest. Useful for
+            # one-off re-runs during incident triage.
+            TARGETS=$(jq -c --arg name "${TARGET_OVERRIDE}" '[.branches[] | select(.name == $name)]' "${MANIFEST}")
+            if [[ "$(echo "${TARGETS}" | jq 'length')" -eq 0 ]]; then
+              echo "::error::target_branch='${TARGET_OVERRIDE}' is not in the manifest. Add it via the create-release-branch workflow first."
+              exit 1
+            fi
+          else
+            TARGETS=$(jq -c '[.branches[] | select(.lifecycle == "active" and .nightly_enabled == true)]' "${MANIFEST}")
+          fi
+
+          COUNT=$(echo "${TARGETS}" | jq 'length')
+          echo "targets=${TARGETS}" >> "${GITHUB_OUTPUT}"
+          echo "target_count=${COUNT}" >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "## Nightly targets"
+            echo ""
+            echo "${COUNT} release branch(es) eligible:"
+            echo ""
+            echo "${TARGETS}" | jq -r '.[] | "- `\(.name)` (type: \(.type), parent: \(.parent))"'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  dispatch:
+    name: Dispatch nightly VM image build
+    needs: resolve-targets
+    if: needs.resolve-targets.outputs.target_count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.resolve-targets.outputs.targets) }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Build services_config for ${{ matrix.target.name }}
+        id: build-config
+        env:
+          RELEASE_BRANCH: ${{ matrix.target.name }}
+        run: |
+          set -euo pipefail
+          # ndm-vm-image-build expects a services_config JSON keyed by
+          # service name with tag + branch fields. For a release-branch
+          # nightly we want every service built from the same release
+          # branch so the resulting VM image is internally consistent.
+          SERVICES_CONFIG=$(jq -n --arg branch "${RELEASE_BRANCH}" '{
+            "worker":                  {"tag": "latest", "branch": $branch},
+            "admin-service":           {"tag": "latest", "branch": $branch},
+            "config-service":          {"tag": "latest", "branch": $branch},
+            "datamigrator-ui":         {"tag": "latest", "branch": $branch},
+            "db-writer":               {"tag": "latest", "branch": $branch},
+            "jobs-service":            {"tag": "latest", "branch": $branch},
+            "keycloak-customizations": {"tag": "latest", "branch": $branch},
+            "reports-service":         {"tag": "latest", "branch": $branch},
+            "db-migrations":           {"tag": "latest", "branch": $branch},
+            "support-service":         {"tag": "latest", "branch": $branch}
+          }')
+          # Persist to a file because the JSON contains characters that
+          # are awkward to shuttle through -f flag values.
+          echo "${SERVICES_CONFIG}" > services_config.json
+          echo "Config for ${RELEASE_BRANCH}:"
+          cat services_config.json
+
+      - name: Dispatch ndm-vm-image-build for ${{ matrix.target.name }}
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ matrix.target.name }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          # --ref makes the dispatched run check out the release branch
+          # itself, and the services_config JSON pins each service to
+          # the same branch so transitive builds stay on the release line.
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            {
+              echo "### Dry run — ${RELEASE_BRANCH}"
+              echo ""
+              echo "Would dispatch \`ndm-vm-image-build.yaml\` with:"
+              echo ""
+              echo "- \`--ref ${RELEASE_BRANCH}\`"
+              echo "- \`component=all\`"
+              echo "- \`provider=all\`"
+              echo "- \`run_e2e=true\`"
+              echo "- \`volume_clone_provider=anf\`"
+              echo "- \`vm_resources=default\`"
+              echo ""
+              echo "Generated \`services_config\`:"
+              echo ""
+              echo '```json'
+              cat services_config.json
+              echo ''
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "Dry run: skipping gh workflow run for ${RELEASE_BRANCH}."
+            exit 0
+          fi
+          gh workflow run ndm-vm-image-build.yaml \
+            --ref "${RELEASE_BRANCH}" \
+            -f component=all \
+            -f provider=all \
+            -f services_config="$(cat services_config.json)" \
+            -f run_e2e=true \
+            -f volume_clone_provider=anf \
+            -f vm_resources=default
+          echo "Dispatched VM image build for ${RELEASE_BRANCH}." >> "${GITHUB_STEP_SUMMARY}"

@@ -1,0 +1,360 @@
+name: Create Release Branch
+
+# One-shot helper for cutting a new release branch with the right
+# parentage and post-creation automation.
+#
+# Naming convention enforced here:
+#   release/YYYY.MM.N
+#     N = 0    -> GA, parented off main
+#     N >= 1   -> patch, parented off release/YYYY.MM.(N-1) by default
+#
+# After creation the workflow:
+#   1. Opens a PR against main that adds the new branch to
+#      .github/release-branches.json so the nightly fan-out picks it up.
+#   2. Kicks off the first build-push-service-images run against the
+#      new branch so artifacts exist for downstream VM image builds.
+#
+# Subsequent commits to the new branch will auto-build because the
+# build-push-service-images workflow's push trigger includes
+# release/**, and nightly VM image / security scans are dispatched
+# by nightly-release-branches.yaml using the manifest.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version (YYYY.MM.N). N=0 is a GA, N>=1 is a patch. Examples: 2026.04.0, 2026.04.2, 2026.05.0."
+        required: true
+        type: string
+      parent:
+        description: "Parent branch. 'auto' picks main for a .0 release and release/YYYY.MM.(N-1) for a patch. Override with an explicit branch name (e.g. 'main', 'release/2026.04.1') for unusual scenarios like respins."
+        required: false
+        type: string
+        default: 'auto'
+      nightly_enabled:
+        description: "Register this branch for nightly VM image build and security scan fan-out."
+        required: false
+        type: boolean
+        default: true
+      kick_off_first_build:
+        description: "Dispatch build-push-service-images against the new branch immediately after creation."
+        required: false
+        type: boolean
+        default: true
+      dry_run:
+        description: "Validate inputs and print the plan without creating the branch, the manifest PR, or any downstream dispatch."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  plan:
+    name: Validate inputs and resolve parent
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.parse.outputs.release_version }}
+      release_branch: ${{ steps.parse.outputs.release_branch }}
+      release_type: ${{ steps.parse.outputs.release_type }}
+      parent_branch: ${{ steps.parse.outputs.parent_branch }}
+      parent_sha: ${{ steps.resolve-parent.outputs.parent_sha }}
+      dry_run: ${{ steps.parse.outputs.dry_run }}
+      nightly_enabled: ${{ steps.parse.outputs.nightly_enabled }}
+      kick_off_first_build: ${{ steps.parse.outputs.kick_off_first_build }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout main (read-only baseline for manifest + workflow code)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Parse and validate inputs
+        id: parse
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.release_version }}
+          PARENT_INPUT: ${{ github.event.inputs.parent }}
+          NIGHTLY: ${{ github.event.inputs.nightly_enabled }}
+          KICK_OFF: ${{ github.event.inputs.kick_off_first_build }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Canonical shape: YYYY.MM.N with YYYY=4 digits, MM=01..12, N=non-negative integer.
+          if [[ ! "${RELEASE_VERSION}" =~ ^([0-9]{4})\.(0[1-9]|1[0-2])\.([0-9]+)$ ]]; then
+            echo "::error::release_version='${RELEASE_VERSION}' is not in YYYY.MM.N form. Expected e.g. 2026.04.0 (GA) or 2026.04.2 (patch)."
+            exit 1
+          fi
+          YEAR="${BASH_REMATCH[1]}"
+          MONTH="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+
+          # Strip any leading zero so '02' becomes 2 for arithmetic, but
+          # keep PATCH as the literal string for display / branch names.
+          PATCH_NUM=$((10#${PATCH}))
+
+          RELEASE_BRANCH="release/${RELEASE_VERSION}"
+
+          if [[ "${PATCH_NUM}" -eq 0 ]]; then
+            RELEASE_TYPE="ga"
+            DEFAULT_PARENT="main"
+          else
+            RELEASE_TYPE="patch"
+            DEFAULT_PARENT="release/${YEAR}.${MONTH}.$((PATCH_NUM - 1))"
+          fi
+
+          if [[ "${PARENT_INPUT}" == "auto" || -z "${PARENT_INPUT}" ]]; then
+            PARENT_BRANCH="${DEFAULT_PARENT}"
+          else
+            PARENT_BRANCH="${PARENT_INPUT}"
+          fi
+
+          # Parent must be either 'main' or a release/* branch. We do not
+          # allow forking from a feature branch or an arbitrary commit
+          # because every release branch needs a clear traceable ancestor.
+          if [[ "${PARENT_BRANCH}" != "main" && ! "${PARENT_BRANCH}" =~ ^release/ ]]; then
+            echo "::error::parent='${PARENT_BRANCH}' is not 'main' or a release/* branch. Refusing to fork from an arbitrary ref."
+            exit 1
+          fi
+
+          # Semantic guard rails: warn if .0 is forked from a release
+          # branch, or if .N>=1 is forked from main — both are valid in
+          # unusual scenarios (e.g. respin) but should be a conscious
+          # override, not the default.
+          if [[ "${RELEASE_TYPE}" == "ga" && "${PARENT_BRANCH}" != "main" ]]; then
+            echo "::warning::GA release ${RELEASE_VERSION} is being forked from '${PARENT_BRANCH}' instead of main. Continuing because parent was explicitly overridden."
+          fi
+          if [[ "${RELEASE_TYPE}" == "patch" && "${PARENT_BRANCH}" == "main" ]]; then
+            echo "::warning::Patch release ${RELEASE_VERSION} is being forked from main. This is unusual — patches normally fork from the previous patch (${DEFAULT_PARENT}). Continuing because parent was explicitly overridden."
+          fi
+
+          {
+            echo "release_version=${RELEASE_VERSION}"
+            echo "release_branch=${RELEASE_BRANCH}"
+            echo "release_type=${RELEASE_TYPE}"
+            echo "parent_branch=${PARENT_BRANCH}"
+            echo "dry_run=${DRY_RUN}"
+            echo "nightly_enabled=${NIGHTLY}"
+            echo "kick_off_first_build=${KICK_OFF}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "## Plan"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Release version | \`${RELEASE_VERSION}\` |"
+            echo "| Release branch | \`${RELEASE_BRANCH}\` |"
+            echo "| Release type | \`${RELEASE_TYPE}\` |"
+            echo "| Parent branch | \`${PARENT_BRANCH}\` (default for type: \`${DEFAULT_PARENT}\`) |"
+            echo "| Nightly enabled | \`${NIGHTLY}\` |"
+            echo "| Kick off first build | \`${KICK_OFF}\` |"
+            echo "| Dry run | \`${DRY_RUN}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Verify new branch does not already exist
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ steps.parse.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/branches/${RELEASE_BRANCH}" --silent 2>/dev/null; then
+            echo "::error::Branch '${RELEASE_BRANCH}' already exists on origin. Refusing to clobber. Use a different release_version or delete the existing branch first."
+            exit 1
+          fi
+          echo "Confirmed '${RELEASE_BRANCH}' does not exist yet."
+
+      - name: Resolve parent branch HEAD SHA
+        id: resolve-parent
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          PARENT_BRANCH: ${{ steps.parse.outputs.parent_branch }}
+        run: |
+          set -euo pipefail
+          # Fail fast with a precise error if the parent branch is
+          # missing or has been renamed/deleted.
+          PARENT_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${PARENT_BRANCH}" --jq '.commit.sha' 2>/dev/null || true)
+          if [[ -z "${PARENT_SHA}" ]]; then
+            echo "::error::Parent branch '${PARENT_BRANCH}' does not exist on origin. For patches, ensure the previous release branch has not been deleted or renamed."
+            exit 1
+          fi
+          echo "parent_sha=${PARENT_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "Parent '${PARENT_BRANCH}' resolves to ${PARENT_SHA}."
+
+  create-branch:
+    name: Create release branch
+    needs: plan
+    if: needs.plan.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      branch_url: ${{ steps.create.outputs.branch_url }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Create branch ref via GitHub API
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ needs.plan.outputs.release_branch }}
+          PARENT_SHA: ${{ needs.plan.outputs.parent_sha }}
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/heads/${RELEASE_BRANCH}" \
+            -f "sha=${PARENT_SHA}"
+          BRANCH_URL="https://github.com/${GITHUB_REPOSITORY}/tree/${RELEASE_BRANCH}"
+          echo "branch_url=${BRANCH_URL}" >> "${GITHUB_OUTPUT}"
+          echo "Created branch ${RELEASE_BRANCH} at ${PARENT_SHA}."
+          echo "## Branch created" >> "${GITHUB_STEP_SUMMARY}"
+          echo "[${RELEASE_BRANCH}](${BRANCH_URL}) at \`${PARENT_SHA}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+  register-in-manifest:
+    name: Register branch in .github/release-branches.json
+    needs: [plan, create-branch]
+    if: needs.plan.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      manifest_pr_url: ${{ steps.open-pr.outputs.manifest_pr_url }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+
+      - name: Update manifest and open PR
+        id: open-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.release_version }}
+          RELEASE_BRANCH: ${{ needs.plan.outputs.release_branch }}
+          RELEASE_TYPE: ${{ needs.plan.outputs.release_type }}
+          PARENT_BRANCH: ${{ needs.plan.outputs.parent_branch }}
+          NIGHTLY_ENABLED: ${{ needs.plan.outputs.nightly_enabled }}
+        run: |
+          set -euo pipefail
+
+          MANIFEST=".github/release-branches.json"
+          if [[ ! -f "${MANIFEST}" ]]; then
+            echo "::error::${MANIFEST} is missing on main; cannot register the new branch."
+            exit 1
+          fi
+
+          # Idempotency guard: if a previous run already added this
+          # branch (e.g. a retry after a transient failure later in the
+          # workflow), skip the PR instead of creating duplicate noise.
+          if jq -e --arg name "${RELEASE_BRANCH}" '.branches[] | select(.name == $name)' "${MANIFEST}" >/dev/null; then
+            echo "::warning::${RELEASE_BRANCH} already present in ${MANIFEST}; skipping manifest PR."
+            echo "manifest_pr_url=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          BOT_BRANCH="bot/register-${RELEASE_BRANCH//\//-}"
+
+          NEW_ENTRY=$(jq -n \
+            --arg name "${RELEASE_BRANCH}" \
+            --arg type "${RELEASE_TYPE}" \
+            --arg parent "${PARENT_BRANCH}" \
+            --argjson nightly "${NIGHTLY_ENABLED}" \
+            '{name: $name, type: $type, parent: $parent, lifecycle: "active", nightly_enabled: $nightly}')
+
+          jq --argjson entry "${NEW_ENTRY}" '.branches += [$entry]' "${MANIFEST}" > "${MANIFEST}.tmp"
+          mv "${MANIFEST}.tmp" "${MANIFEST}"
+
+          git config user.name "ndm-release-bot"
+          git config user.email "ndm-release-bot@netapp.com"
+          git checkout -b "${BOT_BRANCH}"
+          git add "${MANIFEST}"
+
+          COMMIT_MSG_FILE="$(mktemp)"
+          {
+            echo "chore(release): register ${RELEASE_BRANCH} in release-branches manifest"
+            echo ""
+            echo "The create-release-branch workflow opened this PR after cutting"
+            echo "${RELEASE_BRANCH} from ${PARENT_BRANCH}. Merging it registers the"
+            echo "branch for the nightly fan-out (VM image build, security scans) so"
+            echo "no manual config change is needed when a release branch is added."
+          } > "${COMMIT_MSG_FILE}"
+          git commit -F "${COMMIT_MSG_FILE}"
+
+          git push origin "${BOT_BRANCH}"
+
+          PR_BODY_FILE="$(mktemp)"
+          {
+            echo "Auto-generated by [create-release-branch](https://github.com/${GITHUB_REPOSITORY}/actions/workflows/create-release-branch.yaml)."
+            echo ""
+            echo "Branch [\`${RELEASE_BRANCH}\`](https://github.com/${GITHUB_REPOSITORY}/tree/${RELEASE_BRANCH}) was cut from \`${PARENT_BRANCH}\` (type: \`${RELEASE_TYPE}\`, nightly: \`${NIGHTLY_ENABLED}\`)."
+            echo ""
+            echo "Merging this PR makes the nightly fan-out workflow pick up the new branch on its next run."
+          } > "${PR_BODY_FILE}"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "${BOT_BRANCH}" \
+            --title "chore(release): register ${RELEASE_BRANCH} in release-branches manifest" \
+            --body-file "${PR_BODY_FILE}")
+          echo "manifest_pr_url=${PR_URL}" >> "${GITHUB_OUTPUT}"
+          echo "## Manifest PR" >> "${GITHUB_STEP_SUMMARY}"
+          echo "${PR_URL}" >> "${GITHUB_STEP_SUMMARY}"
+
+  kick-off-first-build:
+    name: Kick off first build on the new branch
+    needs: [plan, create-branch]
+    if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.kick_off_first_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Dispatch build-push-service-images
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ needs.plan.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          # --ref makes the dispatched run check out the release branch,
+          # and all-services=true (the workflow's own default) builds
+          # every service image from that branch's source in one go.
+          gh workflow run build-push-service-images.yaml \
+            --ref "${RELEASE_BRANCH}" \
+            -f all-services=true
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/workflows/build-push-service-images.yaml"
+          echo "## First build dispatched" >> "${GITHUB_STEP_SUMMARY}"
+          echo "[build-push-service-images on ${RELEASE_BRANCH}](${RUN_URL})" >> "${GITHUB_STEP_SUMMARY}"
+
+  dry-run-summary:
+    name: Dry-run summary
+    needs: plan
+    if: needs.plan.outputs.dry_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        run: |
+          {
+            echo "## Dry run — no changes made"
+            echo ""
+            echo "Would create branch \`${{ needs.plan.outputs.release_branch }}\` from \`${{ needs.plan.outputs.parent_branch }}\` at \`${{ needs.plan.outputs.parent_sha }}\`."
+            echo ""
+            echo "Re-run with \`dry_run=false\` to actually create the branch and open the manifest PR."
+          } >> "${GITHUB_STEP_SUMMARY}"
