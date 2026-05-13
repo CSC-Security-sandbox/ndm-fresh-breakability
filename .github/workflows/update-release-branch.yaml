@@ -1,0 +1,224 @@
+name: Update Release Branch Lifecycle
+
+# Companion to create-release-branch.yaml. Once a release is shipped
+# and the release branch is frozen, its nightly builds become noise:
+# the branch can no longer receive fixes, so re-running the VM image
+# build every night just burns compute and pollutes notifications.
+#
+# This workflow flips the manifest entry for a branch — disable the
+# nightly, mark it maintenance-only, or mark it EOL — and opens a PR
+# against main with the change. The next scheduled run of
+# nightly-release-branches.yaml picks up the new state after the PR
+# merges.
+#
+# All edits happen via PR so there is a reviewable audit trail of
+# every lifecycle transition; the workflow never pushes directly to
+# main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Release branch to update (e.g. release/2026.04.0). Must already be present in .github/release-branches.json."
+        required: true
+        type: string
+      action:
+        description: "Lifecycle change to apply. mark-eol also sets nightly_enabled=false because an EOL branch is never built."
+        required: true
+        type: choice
+        options:
+          - disable-nightly
+          - enable-nightly
+          - mark-maintenance
+          - mark-active
+          - mark-eol
+      reason:
+        description: "Free-form reason recorded in the PR body. Example: 'release/2026.04.0 GA shipped to customers on YYYY-MM-DD; freezing branch.'"
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: "Compute the manifest change and print the proposed diff in the step summary without opening a PR."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  apply:
+    name: Apply manifest change
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+
+      - name: Apply lifecycle change and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.inputs.branch }}
+          ACTION: ${{ github.event.inputs.action }}
+          REASON: ${{ github.event.inputs.reason }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          MANIFEST=".github/release-branches.json"
+          if [[ ! -f "${MANIFEST}" ]]; then
+            echo "::error::${MANIFEST} is missing on main."
+            exit 1
+          fi
+
+          # Require the branch to already be in the manifest. We do
+          # not silently insert it here because the create workflow is
+          # the only legitimate way to add a new entry, and any branch
+          # we are managing lifecycle for must have been created
+          # through that path.
+          if ! jq -e --arg name "${BRANCH}" '.branches[] | select(.name == $name)' "${MANIFEST}" >/dev/null; then
+            echo "::error::Branch '${BRANCH}' is not in ${MANIFEST}. If this branch was created outside the create-release-branch workflow, add it there first."
+            exit 1
+          fi
+
+          # Capture the current entry for the PR body so reviewers can
+          # see the before/after without digging through file history.
+          BEFORE=$(jq --arg name "${BRANCH}" '.branches[] | select(.name == $name)' "${MANIFEST}")
+
+          # Translate the high-level action into the concrete field
+          # mutation. mark-eol intentionally also sets
+          # nightly_enabled=false because an EOL branch is by
+          # definition not a build target.
+          case "${ACTION}" in
+            disable-nightly)
+              JQ_EXPR='.branches |= map(if .name == $name then .nightly_enabled = false else . end)'
+              ;;
+            enable-nightly)
+              JQ_EXPR='.branches |= map(if .name == $name then .nightly_enabled = true else . end)'
+              ;;
+            mark-maintenance)
+              JQ_EXPR='.branches |= map(if .name == $name then .lifecycle = "maintenance" else . end)'
+              ;;
+            mark-active)
+              JQ_EXPR='.branches |= map(if .name == $name then .lifecycle = "active" else . end)'
+              ;;
+            mark-eol)
+              JQ_EXPR='.branches |= map(if .name == $name then .lifecycle = "eol" | .nightly_enabled = false else . end)'
+              ;;
+            *)
+              echo "::error::Unknown action '${ACTION}'."
+              exit 1
+              ;;
+          esac
+
+          jq --arg name "${BRANCH}" "${JQ_EXPR}" "${MANIFEST}" > "${MANIFEST}.tmp"
+          mv "${MANIFEST}.tmp" "${MANIFEST}"
+
+          AFTER=$(jq --arg name "${BRANCH}" '.branches[] | select(.name == $name)' "${MANIFEST}")
+
+          # If the action is a no-op (e.g. disable-nightly on a branch
+          # that is already disabled), bail out cleanly without
+          # opening a noise PR.
+          if [[ "${BEFORE}" == "${AFTER}" ]]; then
+            {
+              echo "## No-op"
+              echo ""
+              echo "Branch \`${BRANCH}\` is already in the desired state for action \`${ACTION}\`. No PR was opened."
+              echo ""
+              echo '```json'
+              echo "${AFTER}"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          {
+            echo "## Proposed manifest change"
+            echo ""
+            echo "Branch: \`${BRANCH}\`  |  Action: \`${ACTION}\`"
+            echo ""
+            echo "### Before"
+            echo '```json'
+            echo "${BEFORE}"
+            echo '```'
+            echo ""
+            echo "### After"
+            echo '```json'
+            echo "${AFTER}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "Dry run: not opening a PR."
+            exit 0
+          fi
+
+          # Branch name combines the action and the target branch so a
+          # second simultaneous lifecycle change (e.g. disabling
+          # nightly on a different release) does not collide on the
+          # same bot branch.
+          BOT_BRANCH="bot/lifecycle-${ACTION}-${BRANCH//\//-}"
+
+          git config user.name "ndm-release-bot"
+          git config user.email "ndm-release-bot@netapp.com"
+          git checkout -b "${BOT_BRANCH}"
+          git add "${MANIFEST}"
+
+          COMMIT_MSG_FILE="$(mktemp)"
+          {
+            echo "chore(release): ${ACTION} for ${BRANCH}"
+            echo ""
+            echo "Updates .github/release-branches.json so the nightly fan-out"
+            echo "honours the new lifecycle state for ${BRANCH}."
+            if [[ -n "${REASON}" ]]; then
+              echo ""
+              echo "Reason: ${REASON}"
+            fi
+          } > "${COMMIT_MSG_FILE}"
+          git commit -F "${COMMIT_MSG_FILE}"
+
+          git push origin "${BOT_BRANCH}"
+
+          PR_BODY_FILE="$(mktemp)"
+          {
+            echo "Auto-generated by [update-release-branch](https://github.com/${GITHUB_REPOSITORY}/actions/workflows/update-release-branch.yaml)."
+            echo ""
+            echo "Action: \`${ACTION}\` against \`${BRANCH}\`."
+            if [[ -n "${REASON}" ]]; then
+              echo ""
+              echo "**Reason:** ${REASON}"
+            fi
+            echo ""
+            echo "### Before"
+            echo '```json'
+            echo "${BEFORE}"
+            echo '```'
+            echo ""
+            echo "### After"
+            echo '```json'
+            echo "${AFTER}"
+            echo '```'
+            echo ""
+            echo "Merging this PR makes the next scheduled run of \`nightly-release-branches.yaml\` honour the new lifecycle state."
+          } > "${PR_BODY_FILE}"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "${BOT_BRANCH}" \
+            --title "chore(release): ${ACTION} for ${BRANCH}" \
+            --body-file "${PR_BODY_FILE}")
+
+          {
+            echo ""
+            echo "## PR opened"
+            echo "${PR_URL}"
+          } >> "${GITHUB_STEP_SUMMARY}"
