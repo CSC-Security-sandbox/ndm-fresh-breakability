@@ -79,14 +79,19 @@ func (p *DiscoveryPage) gotoWithRetry(url string, retries int) {
 // NavigateToFileServerOverview opens the file server overview page.
 func (p *DiscoveryPage) NavigateToFileServerOverview(fileServerID string) error {
 	url := fmt.Sprintf("%s/file-server/%s", config.BaseURL, fileServerID)
-	p.gotoWithRetry(url, 3)
 
-	if err := p.expectVisible(
-		p.page.GetByText("File Server Overview").First(), 30000,
-	); err != nil {
-		return fmt.Errorf("File Server Overview did not appear: %w", err)
+	for attempt := 1; attempt <= 3; attempt++ {
+		p.gotoWithRetry(url, 2)
+		err := p.expectVisible(
+			p.page.GetByText("File Server Overview").First(), 30000,
+		)
+		if err == nil {
+			return nil
+		}
+		log.Printf("[NavigateToFileServerOverview] attempt %d: overview not visible, retrying…", attempt)
+		p.sleep(3000)
 	}
-	return nil
+	return fmt.Errorf("File Server Overview did not appear after 3 attempts")
 }
 
 // OpenBulkDiscoverForm clicks "Bulk Discover" and waits for the form URL.
@@ -648,6 +653,72 @@ func (p *DiscoveryPage) DownloadDiscoveryReportCSV() error {
 	}
 
 	return fmt.Errorf("CSV download option not found in Discovery Report dropdown")
+}
+
+// DownloadDiscoveryReportFromJobRunList navigates to the Job Run List,
+// finds the first completed discovery row, opens its overflow menu (⋯),
+// and clicks "Download Discovery Report as CSV". Returns the saved file path.
+func (p *DiscoveryPage) DownloadDiscoveryReportFromJobRunList(downloadDir string, rowIndex int) (string, error) {
+	p.sleep(3000)
+
+	// The Job Run List uses the bxp Table component (div-based rows with
+	// data-testid="table-row-*"), NOT native <table>/<tbody>/<tr>.
+	rowSelector := `[data-testid^="table-row-"]`
+
+	_ = p.page.Locator(rowSelector).First().WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(20000),
+	})
+	p.sleep(1000)
+
+	rows, err := p.page.Locator(rowSelector).All()
+	if err != nil || len(rows) == 0 {
+		return "", fmt.Errorf("no rows found in Job Run List table (selector: %s)", rowSelector)
+	}
+	log.Printf("[DownloadDiscoveryReportFromJobRunList] found %d row(s)", len(rows))
+	if rowIndex >= len(rows) {
+		return "", fmt.Errorf("row index %d out of range (table has %d rows)", rowIndex, len(rows))
+	}
+
+	targetRow := rows[rowIndex]
+
+	overflowBtn := targetRow.Locator(`button`).Last()
+	if err := overflowBtn.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+		return "", fmt.Errorf("click overflow menu on row %d: %w", rowIndex, err)
+	}
+	p.sleep(1000)
+
+	csvOptionCandidates := []playwright.Locator{
+		p.page.GetByText("Download Discovery Report as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.Locator(`[role="menuitem"]:has-text("CSV")`).First(),
+		p.page.GetByText("Download as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+	}
+
+	var downloadStarted bool
+	var savePath string
+	for _, loc := range csvOptionCandidates {
+		if p.isVisible(loc) {
+			download, dlErr := p.page.ExpectDownload(func() error {
+				return loc.Click()
+			})
+			if dlErr == nil {
+				suggestedName := download.SuggestedFilename()
+				savePath = downloadDir + "/" + suggestedName
+				if err := download.SaveAs(savePath); err != nil {
+					return "", fmt.Errorf("save downloaded CSV to %s: %w", savePath, err)
+				}
+				downloadStarted = true
+				log.Printf("[DownloadDiscoveryReportFromJobRunList] CSV saved to %s", savePath)
+				break
+			}
+		}
+	}
+
+	if !downloadStarted {
+		return "", fmt.Errorf("'Download Discovery Report as CSV' option not found in overflow menu")
+	}
+
+	return savePath, nil
 }
 
 // GenerateAndDownloadConsolidatedCSV performs the full Consolidated Discovery

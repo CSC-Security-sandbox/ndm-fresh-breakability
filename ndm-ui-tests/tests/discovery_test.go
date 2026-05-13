@@ -19,7 +19,8 @@
 //	5.16 TestDiscovery_Destination         — Scan destination for baseline
 //	5.17 TestDiscovery_StoppedNoReport     — Stopped job → no report
 //	5.18 TestDiscovery_Isilon              — Isilon paths auto-listed
-//	5.19 TestDiscovery_ConsolidatedCSV     — Discovery report as CSV
+//	5.19 TestDiscovery_ConsolidatedCSV     — Consolidated report as CSV
+//	5.20 TestDiscovery_IndividualReportCSV — Individual report CSV from Job Run List
 package tests
 
 import (
@@ -432,6 +433,51 @@ func TestDiscovery_Isilon(t *testing.T) {
 	f.Screenshot("isilon-after-completion")
 	t.Log("[5.18] Isilon discovery completed — paths auto-listed, .snapshot excluded")
 	fmt.Println("[DISCOVERY 5.18 PASSED] Discovery on Isilon completed")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5.20  Individual Discovery Report CSV (per job run)
+//
+// Prerequisite: at least one completed discovery on the file server.
+// Downloads the discovery report CSV from the Job Run List overflow menu
+// (⋯ → "Download Discovery Report as CSV") for a single completed run.
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestDiscovery_IndividualReportCSV(t *testing.T) {
+	fsID := lastDiscoveredFSID
+	if fsID == "" {
+		fsID = config.FileServerID
+	}
+	if fsID == "" {
+		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
+	}
+	t.Logf("[5.20] using file server %s", fsID)
+
+	f, dp := newDiscoveryFixture(t)
+	defer f.Close()
+
+	t.Log("[5.20] navigating to Job Run List")
+	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List")
+	f.Screenshot("individual-report-job-run-list")
+
+	downloadDir := filepath.Join("test-results", "downloads")
+	require.NoError(t, os.MkdirAll(downloadDir, 0o755), "create download dir")
+
+	t.Log("[5.20] downloading individual discovery report CSV from overflow menu")
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir, 0)
+	require.NoError(t, err, "download individual discovery report CSV")
+	f.Screenshot("individual-report-downloaded")
+
+	info, statErr := os.Stat(csvPath)
+	require.NoError(t, statErr, "CSV file should exist at %s", csvPath)
+	require.Greater(t, info.Size(), int64(0), "CSV file should not be empty")
+	require.True(t,
+		strings.HasSuffix(csvPath, ".csv") || strings.HasSuffix(csvPath, ".zip"),
+		"downloaded file should have .csv or .zip extension, got: %s", csvPath,
+	)
+
+	t.Logf("[5.20] individual report CSV downloaded: %s (%d bytes)", csvPath, info.Size())
+	fmt.Println("[DISCOVERY 5.20 PASSED] Individual Discovery Report CSV downloaded and verified")
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
