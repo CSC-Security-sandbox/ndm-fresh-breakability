@@ -34,6 +34,7 @@ import (
 	"ndm-ui-tests/config"
 	"ndm-ui-tests/fixtures"
 	"ndm-ui-tests/pages"
+	"ndm-ui-tests/utils"
 
 	"github.com/stretchr/testify/require"
 )
@@ -528,4 +529,72 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 
 	t.Logf("[5.19] CSV downloaded: %s (%d bytes)", csvPath, info.Size())
 	fmt.Println("[DISCOVERY 5.19 PASSED] Consolidated Discovery Report CSV downloaded and verified")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5.21  Validate Discovery Report against actual volume data
+//
+// Downloads the individual discovery report CSV, then SSHes into the worker,
+// mounts the NFS volume read-only, counts real files/dirs, and compares
+// the totals against the report. Zero diff = report is accurate.
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
+	requireEnv(t, config.WorkerHost, "NDM_WORKER_HOST")
+	requireEnv(t, config.WorkerPassword, "NDM_WORKER_PASSWORD")
+	requireEnv(t, config.SourceHost, "NDM_SOURCE_HOST")
+	requireEnv(t, config.NfsExportPath, "NDM_NFS_EXPORT_PATH")
+
+	fsID := lastDiscoveredFSID
+	if fsID == "" {
+		fsID = config.FileServerID
+	}
+	if fsID == "" {
+		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
+	}
+	t.Logf("[5.21] using file server %s", fsID)
+
+	workerSSH := utils.SSHConfig{
+		Host:     config.WorkerHost,
+		Port:     config.WorkerPort,
+		Username: config.WorkerUsername,
+		Password: config.WorkerPassword,
+	}
+
+	// ── Step 1: download report CSV via browser ──
+	f, dp := newDiscoveryFixture(t)
+	defer f.Close()
+
+	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List")
+
+	downloadDir := filepath.Join("test-results", "downloads")
+	require.NoError(t, os.MkdirAll(downloadDir, 0o755))
+
+	t.Log("[5.21] downloading individual discovery report CSV")
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir, 0)
+	require.NoError(t, err, "download discovery report CSV")
+	t.Logf("[5.21] report downloaded: %s", csvPath)
+
+	// ── Step 2: scan actual volume via SSH ──
+	nfsExport := fmt.Sprintf("%s:%s", config.SourceHost, config.NfsExportPath)
+	t.Logf("[5.21] scanning volume %s via worker %s", nfsExport, config.WorkerHost)
+
+	scan, err := utils.ScanNFSVolumeForDiscovery(workerSSH, nfsExport)
+	require.NoError(t, err, "scan NFS volume for discovery metadata")
+	t.Logf("[5.21] volume scan: total=%d, files=%d, dirs=%d, symlinks=%d",
+		scan.TotalCount, scan.RegularFilesCount, scan.DirectoriesCount, scan.SymlinksCount)
+
+	// ── Step 3: compare ──
+	diffs, err := utils.CompareDiscoveryReport(csvPath, scan)
+	require.NoError(t, err, "compare discovery report with volume scan")
+
+	if len(diffs) > 0 {
+		for _, d := range diffs {
+			t.Logf("[5.21] DIFF: %s", d)
+		}
+		t.Fatalf("[5.21] discovery report does not match actual volume data: %d differences", len(diffs))
+	}
+
+	t.Log("[5.21] discovery report matches actual volume data — zero diff")
+	fmt.Println("[DISCOVERY 5.21 PASSED] Report validated against real volume data")
 }

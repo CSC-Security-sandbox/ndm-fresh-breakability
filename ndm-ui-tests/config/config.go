@@ -63,6 +63,14 @@ var (
 
 	// Discovery timeouts (overridable for slow environments)
 	DiscoveryTimeoutMs float64 // max wait for a discovery run to complete
+
+	// Worker SSH — for volume-mount-based report validation.
+	// The test SSHes into the worker to mount the volume read-only,
+	// collects real file metadata, and compares against the report CSV.
+	WorkerHost     string
+	WorkerPort     int
+	WorkerUsername string
+	WorkerPassword string
 )
 
 // init loads .env then reads every config var from the environment.
@@ -122,6 +130,12 @@ func init() {
 	NfsExportPath           = getEnvStr("NDM_NFS_EXPORT_PATH", "")
 	SmbShareName            = getEnvStr("NDM_SMB_SHARE_NAME", "")
 	DiscoveryTimeoutMs      = getEnvFloat("NDM_DISCOVERY_TIMEOUT_MS", 600000)
+
+	// Worker SSH for volume validation
+	WorkerHost     = getEnvStr("NDM_WORKER_HOST", "")
+	WorkerPort     = getEnvInt("NDM_WORKER_PORT", 22)
+	WorkerUsername = getEnvStr("NDM_WORKER_USERNAME", "ubuntu")
+	WorkerPassword = getEnvStr("NDM_WORKER_PASSWORD", "")
 }
 
 // ── .env loader ──────────────────────────────────────────────────────────────

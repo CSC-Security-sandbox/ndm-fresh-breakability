@@ -75,6 +75,11 @@ on:
         required: false
         default: true
         type: boolean
+      run_ui_tests:
+        description: 'Run UI E2E tests (headless Playwright)'
+        required: false
+        default: false
+        type: boolean
 
   workflow_call: 
     inputs:
@@ -131,6 +136,11 @@ on:
         description: 'Whether to run regression tests (true/false)'
         required: false
         default: true
+        type: boolean
+      run_ui_tests:
+        description: 'Run UI E2E tests (headless Playwright)'
+        required: false
+        default: false
         type: boolean
 
 permissions: 
@@ -790,6 +800,82 @@ jobs:
           path: ndm-api-tests/reports/
           retention-days: 30
 
+  run-ui-tests:
+    name: Run UI E2E Tests (Headless Playwright)
+    runs-on: openlab
+    needs: setup-infrastructure
+    if: ${{ inputs.run_ui_tests == true || github.event.inputs.run_ui_tests == 'true' }}
+    env:
+      # NDM UI base URL — the CP exposes the web UI on HTTPS
+      NDM_BASE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      NDM_PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      # Browser settings — headless for CI, no slow-mo
+      NDM_HEADLESS: 'true'
+      NDM_SLOWMO: '0'
+      NDM_TIMEOUT: '60000'
+      NDM_VIDEO_DIR: ndm-ui-tests/test-results/videos
+      NDM_SCREENSHOT_DIR: ndm-ui-tests/test-results/screenshots
+
+      # NFS file server creation
+      NDM_SOURCE_HOST: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      NDM_NFS_EXPORT_PATH: ${{ vars.AZURE_NFS_UI_EXPORT_PATH }}
+      NDM_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      NDM_MIN_WORKERS: '1'
+
+      # SMB file server creation
+      NDM_SMB_HOST: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      NDM_SMB_AD_SERVER_IP: ${{ vars.AZURE_SMB_AD_SERVER_IP }}
+      NDM_SMB_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      NDM_SMB_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      NDM_SMB_SHARE: ${{ vars.AZURE_SMB_UI_SHARE }}
+
+      # Worker SSH — for volume-mount report validation
+      NDM_WORKER_HOST: ${{ fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses)[0] }}
+      NDM_WORKER_PORT: '22'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Playwright browsers
+        run: |
+          cd ndm-ui-tests
+          go run github.com/playwright-community/playwright-go/cmd/playwright@latest install --with-deps chromium
+
+      - name: Setup worker SSH credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "NDM_WORKER_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "NDM_WORKER_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Run UI E2E Tests
+        run: |
+          cd ndm-ui-tests
+          go test -v -run "TestDiscovery_" ./tests/ -timeout 45m
+        continue-on-error: true
+
+      - name: Upload UI Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ui-test-results-${{ github.run_id }}
+          path: |
+            ndm-ui-tests/test-results/
+          retention-days: 30
+
   send-workflow-card:
     name: Parse Test Results & Send Notifications
     runs-on: openlab
@@ -1333,7 +1419,7 @@ jobs:
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-observability-tests, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    needs: [setup-infrastructure, run-observability-tests, run-nfs-tests, run-smb-tests, run-ui-tests, upload-support-bundle]
     if: always()
     steps:
       - name: Harden the runner (Audit all outbound calls)
