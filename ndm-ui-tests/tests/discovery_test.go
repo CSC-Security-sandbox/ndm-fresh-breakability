@@ -37,6 +37,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// lastDiscoveredFSID holds the file server ID from the most recent test that
+// completed a successful discovery run. TestDiscovery_ConsolidatedCSV picks
+// this up automatically so it doesn't need NDM_FILE_SERVER_ID when running
+// as part of the full suite.
+var lastDiscoveredFSID string
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 func requireEnv(t *testing.T, value, name string) {
@@ -303,6 +309,9 @@ func TestDiscovery_BasicNFS(t *testing.T) {
 	visible, err := dp.IsReportVisible()
 	require.NoError(t, err)
 	t.Logf("[5.1] report visible = %t", visible)
+
+	lastDiscoveredFSID = fsID
+	t.Logf("[5.1] stored file server %s for downstream tests (e.g. ConsolidatedCSV)", fsID)
 	fmt.Println("[DISCOVERY 5.1 PASSED] Basic NFS discovery completed with report")
 }
 
@@ -429,20 +438,27 @@ func TestDiscovery_Isilon(t *testing.T) {
 // 5.19  Consolidated Discovery Report (CSV)
 //
 // Prerequisite: at least one completed discovery on the file server.
-// Uses an existing server (NDM_FILE_SERVER_ID) that already has completed
-// discovery runs. Navigates to File Server Overview → clicks
-// "Consolidate All Discovery Reports" dropdown → selects CSV.
+// Automatically uses the file server created by an earlier test in the suite
+// (e.g. TestDiscovery_BasicNFS). Falls back to NDM_FILE_SERVER_ID for
+// standalone runs.
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_ConsolidatedCSV(t *testing.T) {
-	requireEnv(t, config.FileServerID, "NDM_FILE_SERVER_ID")
+	fsID := lastDiscoveredFSID
+	if fsID == "" {
+		fsID = config.FileServerID
+	}
+	if fsID == "" {
+		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
+	}
+	t.Logf("[5.19] using file server %s", fsID)
 
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
 	t.Log("[5.19] navigating to file server overview")
 	require.NoError(t,
-		dp.NavigateToFileServerOverview(config.FileServerID),
+		dp.NavigateToFileServerOverview(fsID),
 		"navigate to file server overview",
 	)
 	f.Screenshot("fs-overview-for-csv")
