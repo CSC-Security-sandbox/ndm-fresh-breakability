@@ -18,6 +18,7 @@ on:
   push:
     branches:
       - main
+      - 'release/**'
     paths:
       - 'services/admin-service/**'
       - 'services/config-service/**'
