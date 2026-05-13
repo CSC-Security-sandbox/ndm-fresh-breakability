@@ -11,7 +11,7 @@ import { useDrawerNavigation } from "@hooks/useDrawerNavigation";
 import AsupHelpItem from "@modules/Help/components/asup-metrics/components/AsupHelpItem";
 
 const HELP_SUPPORT_URL = "https://mysupport.netapp.com/site/";
-const HELP_DOCUMENTATION_URL = "https://docs.netapp.com/us-en/data-migrator/index.htm";
+const HELP_DOCUMENTATION_URL = "https://docs.netapp.com/us-en/data-migrator/index.html";
 
 const HelpContent = () => {
   const { isHelpListVisible, setGetItemIndex } = useContext(HelpContext);
