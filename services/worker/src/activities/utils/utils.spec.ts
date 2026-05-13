@@ -500,7 +500,255 @@ describe('utils', () => {
         });
     });
 
- 
+    describe('isMetaUpdated — atime detection', () => {
+        const originalPlatform = process.platform;
+
+        const setPlatform = (platform: NodeJS.Platform) => {
+            Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+        };
+
+        afterEach(() => {
+            Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+        });
+
+        /** Build a minimal fs.Stats-like object with explicit atime, ctime, mode, uid, gid. */
+        const makeStats = (overrides: {
+            atime?: Date;
+            ctimeMs?: number;
+            mode?: number;
+            uid?: number;
+            gid?: number;
+            isDirectory?: boolean;
+        } = {}): fs.Stats => ({
+            atime:       overrides.atime    ?? new Date('2024-01-01T00:00:00.000Z'),
+            atimeMs:     overrides.atime    ? overrides.atime.getTime()    : new Date('2024-01-01T00:00:00.000Z').getTime(),
+            ctimeMs:     overrides.ctimeMs  ?? 1000,
+            mode:        overrides.mode     ?? 0o644,
+            uid:         overrides.uid      ?? 1001,
+            gid:         overrides.gid      ?? 1001,
+            isDirectory: () => overrides.isDirectory ?? false,
+            isSymbolicLink: () => false,
+        } as unknown as fs.Stats);
+
+        // ─── Baseline: no destination file ────────────────────────────────────────
+
+        it('returns true immediately when dFile is missing (no destination)', async () => {
+            setPlatform('linux');
+            const src = makeStats();
+            expect(await isMetaUpdated(src, undefined)).toBe(true);
+        });
+
+        // ─── NFS (linux) — atime-only scenarios ───────────────────────────────────
+
+        describe('NFS (linux)', () => {
+            beforeEach(() => setPlatform('linux'));
+
+            it('returns true when source atime is newer than dest atime (user cat)', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z') });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z') });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns true when source atime is older than dest atime (clock skew / rollback)', async () => {
+                const src = makeStats({ atime: new Date('2023-01-01T00:00:00.000Z') });
+                const dst = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z') });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns false when atime, mode, uid, gid are all identical', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const src = makeStats({ atime: sharedAtime, mode: 0o644, uid: 1001, gid: 1001 });
+                const dst = makeStats({ atime: new Date(sharedAtime), mode: 0o644, uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(false);
+            });
+
+            it('returns true when atime differs even though mode, uid, gid are identical', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T12:00:00.000Z'), mode: 0o644, uid: 1001, gid: 1001 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), mode: 0o644, uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns true when atime matches but mode differs', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const src = makeStats({ atime: sharedAtime, mode: 0o755 });
+                const dst = makeStats({ atime: new Date(sharedAtime), mode: 0o644 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns true when atime matches but uid differs', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const src = makeStats({ atime: sharedAtime, uid: 2000, gid: 1001 });
+                const dst = makeStats({ atime: new Date(sharedAtime), uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns true when atime matches but gid differs', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const src = makeStats({ atime: sharedAtime, uid: 1001, gid: 2000 });
+                const dst = makeStats({ atime: new Date(sharedAtime), uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns true when both atime and mode differ', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T12:00:00.000Z'), mode: 0o755 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), mode: 0o644 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('detects sub-second atime differences', async () => {
+                const src = makeStats({ atime: new Date('2024-01-01T00:00:00.999Z') });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z') });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns false for identical sub-second atime values', async () => {
+                const t = new Date('2024-01-01T00:00:00.500Z');
+                const src = makeStats({ atime: t });
+                const dst = makeStats({ atime: new Date(t) });
+                expect(await isMetaUpdated(src, dst)).toBe(false);
+            });
+
+            it('is stable after stamp: same atime on source and dest', async () => {
+                // Simulates state after a successful restamp — next scan should see no diff
+                const stampedAt = new Date('2024-06-01T10:00:00.000Z');
+                const src = makeStats({ atime: stampedAt, mode: 0o644, uid: 1001, gid: 1001 });
+                const dst = makeStats({ atime: new Date(stampedAt), mode: 0o644, uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(false);
+            });
+
+            it('works correctly for directories (atime changed by ls)', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z'), isDirectory: true });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), isDirectory: true });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('returns false for directories when atime is identical', async () => {
+                const t = new Date('2024-03-01T08:00:00.000Z');
+                const src = makeStats({ atime: t, isDirectory: true, mode: 0o755, uid: 0, gid: 0 });
+                const dst = makeStats({ atime: new Date(t), isDirectory: true, mode: 0o755, uid: 0, gid: 0 });
+                expect(await isMetaUpdated(src, dst)).toBe(false);
+            });
+
+            it('atime check fires before NFS uid/gid check (short-circuits)', async () => {
+                // uid differs AND atime differs — both would return true;
+                // verify atime path fires (no redisService needed)
+                const src = makeStats({ atime: new Date('2024-06-01T00:00:00.000Z'), uid: 999 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), uid: 1001 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+        });
+
+        // ─── SMB (win32) — atime-only scenarios ───────────────────────────────────
+
+        describe('SMB (win32)', () => {
+            beforeEach(() => setPlatform('win32'));
+
+            const TOLERANCE_MS = 1000;
+
+            it('returns true when atime differs and ctime is within tolerance', async () => {
+                // Key case: user reads file on source → atime changes but ctime stays within tolerance
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z'), ctimeMs: 1500 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: 1000 });
+                // (1500 + 1000) = 2500 > 1000 (dest ctime) → ctime check also fires; but atime fires first
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('returns true when atime differs and ctime change is EXACTLY within tolerance boundary', async () => {
+                // sourceCtime + tolerance == destCtime → ctime check returns false; only atime saves us
+                const srcCtimeMs = 1000;
+                const dstCtimeMs = srcCtimeMs + TOLERANCE_MS; // exactly at boundary → (1000+1000)>2000 is false
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z'), ctimeMs: srcCtimeMs });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('returns false when atime identical and ctime within tolerance', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const srcCtimeMs = 1000;
+                const dstCtimeMs = srcCtimeMs + TOLERANCE_MS; // boundary — ctime check false
+                const src = makeStats({ atime: sharedAtime, ctimeMs: srcCtimeMs });
+                const dst = makeStats({ atime: new Date(sharedAtime), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(false);
+            });
+
+            it('returns true when atime identical but ctime exceeds tolerance', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+                const src = makeStats({ atime: sharedAtime, ctimeMs: 5000 });
+                const dst = makeStats({ atime: new Date(sharedAtime), ctimeMs: 1000 });
+                // (5000 + 1000) > 1000 → ctime check fires
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('returns true when both atime and ctime changed', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z'), ctimeMs: 9000 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: 1000 });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('is stable after stamp: same atime, ctime within tolerance', async () => {
+                const stampedAt = new Date('2024-06-01T10:00:00.000Z');
+                const srcCtimeMs = 2000;
+                const dstCtimeMs = srcCtimeMs + TOLERANCE_MS; // boundary — ctime check false
+                const src = makeStats({ atime: stampedAt, ctimeMs: srcCtimeMs });
+                const dst = makeStats({ atime: new Date(stampedAt), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(false);
+            });
+
+            it('works for directories on SMB when atime changed', async () => {
+                const src = makeStats({ atime: new Date('2024-06-01T10:00:00.000Z'), ctimeMs: 1500, isDirectory: true });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: 1000, isDirectory: true });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('detects sub-second atime differences on SMB', async () => {
+                const sharedCtimeMs = 1000;
+                const dstCtimeMs   = sharedCtimeMs + TOLERANCE_MS; // ctime check: false
+                const src = makeStats({ atime: new Date('2024-01-01T00:00:00.999Z'), ctimeMs: sharedCtimeMs });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+        });
+
+        // ─── Cross-platform guard: atime check is before platform dispatch ─────────
+
+        describe('platform-agnostic atime guard', () => {
+            it('fires on linux before NFS uid/gid logic when atime differs', async () => {
+                setPlatform('linux');
+                const src = makeStats({ atime: new Date('2024-06-01T00:00:00.000Z'), uid: 1001, gid: 1001, mode: 0o644 });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), uid: 1001, gid: 1001, mode: 0o644 });
+                expect(await isMetaUpdated(src, dst)).toBe(true);
+            });
+
+            it('fires on win32 before SMB ctime logic when atime differs', async () => {
+                setPlatform('win32');
+                const TOLERANCE_MS = 1000;
+                // ctime at boundary → SMB ctime check = false; only atime check should fire
+                const srcCtimeMs = 1000;
+                const dstCtimeMs = srcCtimeMs + TOLERANCE_MS;
+                const src = makeStats({ atime: new Date('2024-06-01T00:00:00.000Z'), ctimeMs: srcCtimeMs });
+                const dst = makeStats({ atime: new Date('2024-01-01T00:00:00.000Z'), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(src, dst, TOLERANCE_MS)).toBe(true);
+            });
+
+            it('returns false on both platforms when atime identical and no other diffs', async () => {
+                const sharedAtime = new Date('2024-01-01T00:00:00.000Z');
+
+                setPlatform('linux');
+                const srcNfs = makeStats({ atime: sharedAtime, mode: 0o644, uid: 1001, gid: 1001 });
+                const dstNfs = makeStats({ atime: new Date(sharedAtime), mode: 0o644, uid: 1001, gid: 1001 });
+                expect(await isMetaUpdated(srcNfs, dstNfs)).toBe(false);
+
+                setPlatform('win32');
+                const TOLERANCE_MS = 1000;
+                const srcCtimeMs = 1000;
+                const dstCtimeMs = srcCtimeMs + TOLERANCE_MS; // boundary → SMB ctime check false
+                const srcSmb = makeStats({ atime: sharedAtime, ctimeMs: srcCtimeMs });
+                const dstSmb = makeStats({ atime: new Date(sharedAtime), ctimeMs: dstCtimeMs });
+                expect(await isMetaUpdated(srcSmb, dstSmb, TOLERANCE_MS)).toBe(false);
+            });
+        });
+    });
+
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {

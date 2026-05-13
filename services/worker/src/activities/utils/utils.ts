@@ -188,6 +188,7 @@ export const isMetaUpdated = async (
   jobContext?: JobManagerContext
 ): Promise<boolean> => {
   if (!dFile) return true;
+  if (sFile.atime.toISOString() !== dFile.atime.toISOString()) return true;
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
   return isSmbMetaUpdated(sFile, dFile, toleranceMs);
 };
