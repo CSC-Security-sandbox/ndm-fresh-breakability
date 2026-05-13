@@ -818,18 +818,10 @@ jobs:
       NDM_VIDEO_DIR: ndm-ui-tests/test-results/videos
       NDM_SCREENSHOT_DIR: ndm-ui-tests/test-results/screenshots
 
-      # NFS file server creation
-      NDM_SOURCE_HOST: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
-      NDM_NFS_EXPORT_PATH: ${{ vars.AZURE_NFS_UI_EXPORT_PATH }}
+      # NFS / SMB values are extracted from comma-separated API vars
+      # in the "Extract UI test config" step below.
       NDM_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
       NDM_MIN_WORKERS: '1'
-
-      # SMB file server creation
-      NDM_SMB_HOST: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
-      NDM_SMB_AD_SERVER_IP: ${{ vars.AZURE_SMB_AD_SERVER_IP }}
-      NDM_SMB_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
-      NDM_SMB_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
-      NDM_SMB_SHARE: ${{ vars.AZURE_SMB_UI_SHARE }}
 
       # Worker SSH — for volume-mount report validation
       NDM_WORKER_HOST: ${{ fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses)[0] }}
@@ -847,6 +839,27 @@ jobs:
         uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Extract UI test config from API vars
+        run: |
+          # NFS: extract first IP and first volume from comma-separated lists
+          NFS_HOST="${{ vars.AZURE_NFS_SOURCE_HOST_IP }}"
+          echo "NDM_SOURCE_HOST=${NFS_HOST%%,*}" >> $GITHUB_ENV
+
+          NFS_VOLS="${{ vars.AZURE_NFS_SOURCE_VOLUMES }}"
+          echo "NDM_NFS_EXPORT_PATH=${NFS_VOLS%%,*}" >> $GITHUB_ENV
+
+          # SMB: extract first IP and first share
+          SMB_HOST="${{ vars.AZURE_SMB_SOURCE_HOST_IP }}"
+          echo "NDM_SMB_HOST=${SMB_HOST%%,*}" >> $GITHUB_ENV
+
+          SMB_VOLS="${{ vars.AZURE_SMB_SOURCE_VOLUMES }}"
+          echo "NDM_SMB_SHARE=${SMB_VOLS%%,*}" >> $GITHUB_ENV
+
+          echo "NDM_SMB_AD_SERVER_IP=${{ vars.AZURE_SMB_AD_SERVER_IP }}" >> $GITHUB_ENV
+          echo "NDM_SMB_USERNAME=${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}" >> $GITHUB_ENV
+          echo "::add-mask::${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}"
+          echo "NDM_SMB_PASSWORD=${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}" >> $GITHUB_ENV
 
       - name: Install Playwright browsers
         run: |
