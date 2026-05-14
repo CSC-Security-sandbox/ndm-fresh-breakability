@@ -127,7 +127,7 @@ export class CommandExecService {
     }
     
 
-    async copyFile({command , jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<CommandOutput> {
+    async copyFile({command , jobContext, sourcePath, targetPath, errorType, sPathId }: CommandExecInput): Promise<CommandOutput> {
         const output: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [] , shouldUpdateItemInfo: false };
         if(command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED) {
             output.shouldStampMeta = true;
@@ -155,6 +155,9 @@ export class CommandExecService {
                     operationId: command.id,
                     size: command.metadata?.size ?? 0,
                     jobRunId: jobContext.jobRunId,
+                    preserveAccessTime:
+                        jobContext.jobConfig?.options?.preserveAccessTime,
+                    sPathId,
                 });
 
                 // Capture the timestamp when checksum was generated

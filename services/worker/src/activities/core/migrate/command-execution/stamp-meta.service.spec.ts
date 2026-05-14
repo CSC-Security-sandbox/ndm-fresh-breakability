@@ -17,15 +17,18 @@ import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
 import { DeferredDirStampService } from '../../shared/deferred-dir-stamp.service';
 import { CtimeTestTriggersService } from '../ctime-test-triggers.service';
+import { AtimeReadSessionService } from 'src/thread/atime-read-session.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
+  constants: { W_OK: 2 },
   promises: {
     chmod: jest.fn(),
     chown: jest.fn(),
     utimes: jest.fn(),
     lutimes: jest.fn(),
     lstat: jest.fn(),
+    access: jest.fn(),
   },
 }));
 
@@ -61,6 +64,7 @@ describe('StampMetaService', () => {
   let redisService: jest.Mocked<RedisService>;
   let loggerFactory: jest.Mocked<LoggerFactory>;
   let winOperationService: jest.Mocked<WinOperationService>;
+  let configGetMock: jest.Mock;
 
   const mockFs = fs as jest.Mocked<typeof fs>;
   const { dmError } = require('src/activities/utils/utils');
@@ -85,18 +89,35 @@ describe('StampMetaService', () => {
       ),
     };
 
+    configGetMock = jest.fn().mockImplementation((key: string) => {
+      if (key === 'worker.atimeRelatimeWindowMs') return 86400000;
+      if (key === 'worker.atimeRelatimeGateEnabled') return true;
+      return undefined;
+    });
+    const mockConfigService = { get: configGetMock };
+
+    const mockAtimeReadSession: jest.Mocked<
+      Pick<
+        AtimeReadSessionService,
+        | 'logStampConfigOnce'
+        | 'logStampReadonlySourceOnce'
+        | 'logReadAtimeStrategyOnce'
+        | 'logONoatimeSessionDemotionOnce'
+      >
+    > = {
+      logStampConfigOnce: jest.fn(),
+      logStampReadonlySourceOnce: jest.fn(),
+      logReadAtimeStrategyOnce: jest.fn(),
+      logONoatimeSessionDemotionOnce: jest.fn(),
+    };
+
     // Setup fs.promises mocks
     (mockFs.promises.chmod as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.chown as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.lutimes as jest.Mock).mockResolvedValue(undefined);
     (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 1000000 });
-
-    const mockConfigService = {
-      get: jest.fn().mockImplementation((_key: string, defaultValue?: any) => {
-        return defaultValue;
-      }),
-    };
+    (mockFs.promises.access as jest.Mock).mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -108,6 +129,7 @@ describe('StampMetaService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: DeferredDirStampService, useValue: { add: jest.fn(), updateSourceCtime: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
         { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
+        { provide: AtimeReadSessionService, useValue: mockAtimeReadSession },
       ],
     }).compile();
 
@@ -140,7 +162,8 @@ describe('StampMetaService', () => {
         uid: 1001,
         sid: 'test-sid-123',
         mtime: new Date('2023-01-02T12:00:00Z'),
-        atime: new Date('2023-01-02T14:00:00Z'),
+        atime: new Date('2023-01-01T14:00:00Z'),
+        ctime: new Date('2023-01-02T12:00:00Z'),
         ...metadata,
       },
       serialize: jest.fn(),
@@ -569,7 +592,8 @@ describe('StampMetaService', () => {
       const input = createMockInput(
         {
           mtime: new Date('2023-01-02T12:00:00Z'),
-          atime: new Date('2023-01-02T14:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+          ctime: new Date('2023-01-02T12:00:00Z'),
         },
         { preserveAccessTime: true },
       );
@@ -581,7 +605,7 @@ describe('StampMetaService', () => {
       expect(result.targetErrors).toEqual([]);
       expect(mockFs.promises.utimes).toHaveBeenCalledWith(
         '/source/test-file.txt',
-        new Date('2023-01-02T14:00:00Z'),
+        new Date('2023-01-01T14:00:00Z'),
         new Date('2023-01-02T12:00:00Z'),
       );
     });
@@ -590,7 +614,8 @@ describe('StampMetaService', () => {
       const input = createMockInput(
         {
           mtime: new Date('2023-01-02T12:00:00Z'),
-          atime: new Date('2023-01-02T14:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+          ctime: new Date('2023-01-02T12:00:00Z'),
           isSymLink: true,
         },
         { preserveAccessTime: true },
@@ -603,7 +628,7 @@ describe('StampMetaService', () => {
       expect(result.targetErrors).toEqual([]);
       expect(mockFs.promises.lutimes).toHaveBeenCalledWith(
         '/source/test-file.txt',
-        new Date('2023-01-02T14:00:00Z'),
+        new Date('2023-01-01T14:00:00Z'),
         new Date('2023-01-02T12:00:00Z'),
       );
       expect(mockFs.promises.utimes).not.toHaveBeenCalled();
@@ -638,11 +663,84 @@ describe('StampMetaService', () => {
       expect(mockFs.promises.utimes).not.toHaveBeenCalled();
     });
 
+    it('should skip preserve when source is not writable (read-only / snapshot)', async () => {
+      (mockFs.promises.access as jest.Mock).mockRejectedValueOnce(
+        Object.assign(new Error('EACCES'), { code: 'EACCES' }),
+      );
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+        },
+        { preserveAccessTime: true },
+      );
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    it('should skip source restore when relatime gate is on and rules say no restore', async () => {
+      const now = 1_720_000_000_000;
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        const input = createMockInput(
+          {
+            mtime: new Date(now - 2 * 60 * 60 * 1000),
+            ctime: new Date(now - 2 * 60 * 60 * 1000),
+            atime: new Date(now - 30 * 60 * 1000),
+          },
+          { preserveAccessTime: true },
+        );
+
+        const result = await service.preserveAccessAndModifiedTime(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
+    it('should utimes source when relatime would skip but relatime gate is off', async () => {
+      configGetMock.mockImplementation((key: string) => {
+        if (key === 'worker.atimeRelatimeGateEnabled') return false;
+        if (key === 'worker.atimeRelatimeWindowMs') return 86400000;
+        return undefined;
+      });
+      const now = 1_720_000_000_000;
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        const at = new Date(now - 30 * 60 * 1000);
+        const mt = new Date(now - 2 * 60 * 60 * 1000);
+        const input = createMockInput(
+          {
+            mtime: mt,
+            ctime: mt,
+            atime: at,
+          },
+          { preserveAccessTime: true },
+        );
+
+        const result = await service.preserveAccessAndModifiedTime(input);
+
+        expect(result.sourceErrors).toEqual([]);
+        expect(mockFs.promises.utimes).toHaveBeenCalledWith(
+          '/source/test-file.txt',
+          at,
+          mt,
+        );
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
     it('should handle utimes errors gracefully', async () => {
       const input = createMockInput(
         {
           mtime: new Date('2023-01-02T12:00:00Z'),
-          atime: new Date('2023-01-02T14:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
         },
         { preserveAccessTime: true },
       );

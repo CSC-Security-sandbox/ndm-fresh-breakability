@@ -46,6 +46,7 @@ export class SetupActivityService {
     server: FileServerDetails,
     protocol: Protocol,
     jobRunId: string,
+    preserveAccessTime?: boolean,
   ) {
     await protocol.mountPath(jobRunId, {
       hostname: server.hostname,
@@ -56,6 +57,7 @@ export class SetupActivityService {
       mountBasePath: this.baseWorkingPath,
       pathId: server.pathId,
       jobRunId,
+      preserveAccessTime,
     }, true);
     console.log(
       `[${jobRunId}] - Worker ${this.workerId} set up for ${server.hostname}/${server.path}`,
@@ -166,6 +168,7 @@ export class SetupActivityService {
         context.jobConfig.sourceFileServer,
         protocol,
         jobRunId,
+        context.jobConfig.options?.preserveAccessTime,
       );
 
       // mount destination path if exists
@@ -174,6 +177,7 @@ export class SetupActivityService {
           context.jobConfig.destinationFileServer,
           protocol,
           jobRunId,
+          context.jobConfig.options?.preserveAccessTime,
         );
 
       // validate domain join for SMB migrations

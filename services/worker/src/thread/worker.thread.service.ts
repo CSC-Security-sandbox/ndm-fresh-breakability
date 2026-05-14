@@ -17,6 +17,8 @@ import {
 } from '@netapp-cloud-datamigrate/logger-lib';
 import { MetricsService } from '../metrics/metrics.service';
 import { Timed } from '../metrics/timed.decorator';
+import { AtimeReadSessionService } from './atime-read-session.service';
+import { ATIME_DIAG } from '../activities/core/migrate/atime-preserve.utils';
 
 @Injectable()
 export class WorkerThreadService {
@@ -43,6 +45,7 @@ export class WorkerThreadService {
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly metricsService: MetricsService,
+    private readonly atimeReadSession: AtimeReadSessionService,
   ) {
     const defaultSizes = [
       { name: '1kb', maxFetch: 1500 },
@@ -122,6 +125,24 @@ export class WorkerThreadService {
           if (result.isResolved && result.data) {
             const workflowId = result.data.jobRunId || 'unknown';
             this.metricsService.recordCopyPhaseResults(workflowId, result.data.copyStreamMs, result.data.checksumTargetMs);
+            if (result.data.sourceNoatimeOpenDegraded && workflowId !== 'unknown') {
+              const firstInSession =
+                this.atimeReadSession.markSourceOpenNoatimeIneffective(workflowId);
+              if (firstInSession) {
+                this.atimeReadSession.logONoatimeSessionDemotionOnce(workflowId);
+              }
+            }
+            if (
+              result.data.preserveAccessTime &&
+              result.data.atimeReadStrategy &&
+              result.data.atimeReadStrategy !== ATIME_DIAG.READ_NOT_REQUESTED
+            ) {
+              this.atimeReadSession.logReadAtimeStrategyOnce(
+                workflowId,
+                result.data.sPathId,
+                result.data.atimeReadStrategy,
+              );
+            }
           }
 
           // resolve the task
@@ -221,10 +242,19 @@ export class WorkerThreadService {
         }
         const input: ThreadTaskInput[] = tasks.map((task: ThreadTask) => {
           this.activeTasks.set(task.id, task);
+          // Re-evaluate `skipSourceOpenNoatime` at dispatch (not at enqueue):
+          // if some earlier file in this job has already proven O_NOATIME
+          // ineffective, every subsequent dispatch — including tasks that
+          // were queued before the demotion was learned — must take the
+          // session-skip path. Computing the flag here uses the latest
+          // session state instead of a stale snapshot from `migrateWorkerThread`.
+          const skipSourceOpenNoatime = this.atimeReadSession.shouldSkipSourceOpenNoatime(
+            task.data?.jobRunId,
+          );
           const detail: ThreadTaskInput = {
             id: task.id,
             Operation: task.Operation,
-            data: task.data,
+            data: { ...task.data, skipSourceOpenNoatime },
           };
           return detail;
         });
@@ -247,13 +277,28 @@ export class WorkerThreadService {
     operationId,
     size,
     jobRunId,
+    preserveAccessTime,
+    sPathId,
   }: MigrateFile): Promise<any> {
     return new Promise((resolve, reject) => {
       const operationBand = this.getTaskBand(size);
       const maxBufferSize = this.maxBufferSize;
+      // NOTE: `skipSourceOpenNoatime` is intentionally NOT set here. It is
+      // re-evaluated against the live session state in `processQueue` at
+      // dispatch time, so already-queued tasks correctly inherit a mid-job
+      // O_NOATIME demotion learned by an earlier file's worker callback.
       this.operationBands.get(operationBand).task.push({
         id: operationId,
-        data: { sourcePath, destinationPath, operationId, size, maxBufferSize, jobRunId },
+        data: {
+          sourcePath,
+          destinationPath,
+          operationId,
+          size,
+          maxBufferSize,
+          jobRunId,
+          preserveAccessTime,
+          sPathId,
+        },
         Operation: ThreadOperation.COPY_FILE,
         resolve,
         reject,

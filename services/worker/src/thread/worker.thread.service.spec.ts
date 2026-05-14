@@ -4,11 +4,16 @@ import { WorkerThreadOutput, ThreadOperation, MigrateFile } from './worker.threa
 import { ConfigService } from '@nestjs/config';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { MetricsService } from '../metrics/metrics.service';
+import { AtimeReadSessionService } from './atime-read-session.service';
 import { mockLogger } from 'src/auth/auth.service.spec';
 
+// Note: do NOT `require('./worker.thread.service')` inside this mock factory.
+// jest-worker serialises the factory's closure across thread boundaries, and
+// loading the real service module here pulls a reference to ConfigService
+// (via @nestjs/config) into the closure — that class instance is not
+// structured-cloneable and surfaces as DataCloneError at suite report time.
 jest.mock('worker_threads', () => {
   const EventEmitter = require('events');
-const WorkerThreadServiceModule = require('./worker.thread.service').WorkerThreadService;
   class FakeWorker extends EventEmitter {
     threadId = Math.floor(Math.random() * 1000);
     postMessage = jest.fn();
@@ -19,6 +24,13 @@ const WorkerThreadServiceModule = require('./worker.thread.service').WorkerThrea
   }
   return { Worker: FakeWorker };
 });
+
+const mockAtimeReadSession = {
+  markSourceOpenNoatimeIneffective: jest.fn().mockReturnValue(false),
+  shouldSkipSourceOpenNoatime: jest.fn().mockReturnValue(false),
+  logONoatimeSessionDemotionOnce: jest.fn(),
+  logReadAtimeStrategyOnce: jest.fn(),
+};
 
 describe('WorkerThreadService', () => {
   let service: WorkerThreadService;
@@ -50,6 +62,10 @@ describe('WorkerThreadService', () => {
             recordTaskQueueWait: jest.fn(),
             recordCopyPhaseResults: jest.fn(),
           },
+        },
+        {
+          provide: AtimeReadSessionService,
+          useValue: mockAtimeReadSession,
         },
       ],
     }).compile();
@@ -226,7 +242,12 @@ describe('WorkerThreadService', () => {
     };
 
     const WorkerThreadServiceModule = (await import('./worker.thread.service')).WorkerThreadService;
-    const service = new WorkerThreadServiceModule(configServiceMock as any, loggerFactoryMock as any, metricsServiceMock as any);
+    const service = new WorkerThreadServiceModule(
+      configServiceMock as any,
+      loggerFactoryMock as any,
+      metricsServiceMock as any,
+      mockAtimeReadSession as any,
+    );
 
     // Assert
     expect(service['sizes']).toBeDefined()
@@ -323,6 +344,141 @@ describe('WorkerThreadService', () => {
     expect(metrics).toHaveProperty('activeTasks');
     expect(metrics).toHaveProperty('queueDepths');
     expect(typeof metrics.queueDepths).toBe('object');
+  });
+
+  it('marks O_NOATIME ineffective and logs demotion when first worker message reports source noatime degradation', () => {
+    const worker = service['workers'][0];
+    const task = {
+      id: 'op-noatime-1',
+      data: {},
+      Operation: ThreadOperation.COPY_FILE,
+      resolve: jest.fn(),
+      reject: jest.fn(),
+    };
+    service['activeTasks'].set('op-noatime-1', task);
+
+    worker.emit('message', [
+      {
+        isResolved: true,
+        id: 'op-noatime-1',
+        Operation: ThreadOperation.COPY_FILE,
+        data: {
+          jobRunId: 'job-noatime-A',
+          sourceNoatimeOpenDegraded: true,
+          copyStreamMs: 5,
+          checksumTargetMs: 1,
+          sourceChecksum: 'x',
+          targetChecksum: 'x',
+        },
+      },
+    ]);
+
+    expect(mockAtimeReadSession.markSourceOpenNoatimeIneffective).toHaveBeenCalledWith(
+      'job-noatime-A',
+    );
+    // markSource* mock returns false in the default mock; force the
+    // first-in-session branch by re-emitting with a returning-true mock.
+    mockAtimeReadSession.markSourceOpenNoatimeIneffective.mockReturnValueOnce(true);
+    worker.emit('message', [
+      {
+        isResolved: true,
+        id: 'op-noatime-1',
+        Operation: ThreadOperation.COPY_FILE,
+        data: {
+          jobRunId: 'job-noatime-B',
+          sourceNoatimeOpenDegraded: true,
+        },
+      },
+    ]);
+    expect(mockAtimeReadSession.logONoatimeSessionDemotionOnce).toHaveBeenCalledWith(
+      'job-noatime-B',
+    );
+  });
+
+  it('logs read-atime strategy once when worker reports preserveAccessTime + concrete strategy', () => {
+    const worker = service['workers'][0];
+
+    worker.emit('message', [
+      {
+        isResolved: true,
+        id: 'op-strat-1',
+        Operation: ThreadOperation.COPY_FILE,
+        data: {
+          jobRunId: 'job-strat-A',
+          sPathId: 'src-1',
+          preserveAccessTime: true,
+          atimeReadStrategy: 'read_path:strategy_2_o_noatime',
+        },
+      },
+    ]);
+
+    expect(mockAtimeReadSession.logReadAtimeStrategyOnce).toHaveBeenCalledWith(
+      'job-strat-A',
+      'src-1',
+      'read_path:strategy_2_o_noatime',
+    );
+  });
+
+  it('does not log read-atime strategy when atimeReadStrategy is the not-requested sentinel', () => {
+    const worker = service['workers'][0];
+    mockAtimeReadSession.logReadAtimeStrategyOnce.mockClear();
+
+    worker.emit('message', [
+      {
+        isResolved: true,
+        id: 'op-strat-2',
+        Operation: ThreadOperation.COPY_FILE,
+        data: {
+          jobRunId: 'job-strat-B',
+          preserveAccessTime: true,
+          atimeReadStrategy: 'read_path:not_requested',
+        },
+      },
+    ]);
+
+    expect(mockAtimeReadSession.logReadAtimeStrategyOnce).not.toHaveBeenCalled();
+  });
+
+  it('parses worker.thread.threadBand config string into sizes when valid', async () => {
+    const configServiceMock = {
+      get: jest.fn((key: string) => {
+        if (key === 'worker.thread.threadBand')
+          return '1kb,1500;1mb,1000;10mb,100;100mb,10;1gb,1';
+        // threadCount > 5 so assignThreads does not mutate this.sizes via
+        // the totalThreads<=5 reverse() branch.
+        if (key === 'worker.thread.threadCount') return 6;
+        if (key === 'worker.thread.maxBufferSize') return 1024;
+        return undefined;
+      }),
+    };
+    const loggerFactoryMock = {
+      create: jest.fn().mockReturnValue({
+        log: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+        debug: jest.fn(),
+      }),
+    };
+    const metricsServiceMock = {
+      recordWorkerThreadError: jest.fn(),
+      setWorkerThreadService: jest.fn(),
+    };
+
+    const Module = (await import('./worker.thread.service')).WorkerThreadService;
+    const svc = new Module(
+      configServiceMock as any,
+      loggerFactoryMock as any,
+      metricsServiceMock as any,
+      mockAtimeReadSession as any,
+    );
+
+    expect(svc['sizes']).toEqual([
+      { name: '1kb', maxFetch: 1500 },
+      { name: '1mb', maxFetch: 1000 },
+      { name: '10mb', maxFetch: 100 },
+      { name: '100mb', maxFetch: 10 },
+      { name: '1gb', maxFetch: 1 },
+    ]);
   });
 
 });

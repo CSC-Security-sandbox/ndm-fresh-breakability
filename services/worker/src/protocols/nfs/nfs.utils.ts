@@ -1,3 +1,19 @@
+/**
+ * Strategy 3 — add `noatime,nodiratime` to plain `mount -t nfs` templates (Linux client hygiene).
+ * If the template already contains these options or is not NFS, returns the pattern unchanged.
+ */
+export function nfsMountCommandWithNoatime(commandPattern: string): string {
+  if (!commandPattern || /noatime|nodiratime/i.test(commandPattern)) {
+    return commandPattern;
+  }
+  if (!/\bmount\s+-t\s+nfs\b/i.test(commandPattern)) {
+    return commandPattern;
+  }
+  return commandPattern.replace(
+    /\bmount\s+-t\s+nfs\b/i,
+    'mount -t nfs -o noatime,nodiratime',
+  );
+}
 
 export const  handleConnectionError = (error: any, host: string, port: number) => {
     switch (error.code) {

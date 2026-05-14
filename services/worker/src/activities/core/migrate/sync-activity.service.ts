@@ -89,6 +89,7 @@ export class SyncService {
         const scanInput: CommandExecInput = {
           sourcePath: `${baseSourcePrefixPath}${command.fPath}`,
           targetPath: `${baseTargetPrefixPath}${command.fPath}`,
+          sPathId: task.sPathId,
           command,
           jobContext,
           errorType

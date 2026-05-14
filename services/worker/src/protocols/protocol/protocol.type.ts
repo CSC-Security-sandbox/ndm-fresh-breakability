@@ -10,6 +10,8 @@ export interface ProtocolPayload{
     jobRunId?: string
     pathId?: string;
     mountBasePath?: string;
+    /** When false, skip NFS mount noatime/nodiratime attempts for this job. */
+    preserveAccessTime?: boolean;
 }
 
 export interface CommandOutput{

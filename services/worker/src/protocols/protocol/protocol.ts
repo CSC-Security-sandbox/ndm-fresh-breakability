@@ -31,6 +31,75 @@ export abstract class Protocol {
       this.logger = loggerFactory.create(this.constructor.name);
     }
 
+    protected buildSubstitutedCommand(
+      payload: ProtocolPayload,
+      commandPattern: string,
+    ): string {
+      const directoryPath = `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
+      return commandPattern
+        ?.replaceAll('${HOST}', payload?.hostname)
+        ?.replaceAll('${USERNAME}', payload?.username)
+        ?.replaceAll('${PASSWORD}', payload?.password)
+        ?.replaceAll('${MOUNT_PATH}', payload?.path)
+        ?.replaceAll('${DIR_PATH}', directoryPath)
+        ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion);
+    }
+
+    private credentialFieldsToSanitize(payload: ProtocolPayload): string[] {
+      const fieldsToSanitize: string[] = [];
+      const trimmedPassword = payload.password?.trim();
+      if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
+      const trimmedUsername = payload.username?.trim();
+      if (trimmedUsername) fieldsToSanitize.push(trimmedUsername);
+      return fieldsToSanitize;
+    }
+
+    protected async runShellCommand(
+      traceId: string,
+      protocolType: string,
+      payload: ProtocolPayload,
+      command: string,
+      commandDescription: string,
+    ): Promise<any> {
+      const response = {
+        traceId: traceId,
+        status: 'success',
+        protocolType: protocolType,
+        hostname: payload.hostname,
+        workerId: this.workerId,
+        message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
+      };
+      const fieldsToSanitize = this.credentialFieldsToSanitize(payload);
+      const sanitizedCommand = sanitize(command, fieldsToSanitize);
+      this.logger.debug(`command: ${sanitizedCommand}`);
+
+      try {
+        const { stdout, stderr } = await execAsync(command, {
+          timeout: 5000,
+          maxBuffer: 1024 * 1024,
+          encoding: 'utf8',
+        });
+
+        if (stderr && stderr.trim().length > 0) {
+          const sanitizedStderr = sanitize(stderr, fieldsToSanitize);
+          throw new Error(sanitizedStderr);
+        }
+        this.logger.log(
+          `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}`,
+        );
+
+        response.message = `${stdout}`;
+        return response;
+      } catch (error: any) {
+        const sanitizedErrorMsg = sanitize(error.message, fieldsToSanitize);
+        error.message = sanitizedErrorMsg;
+        this.logger.error(
+          `[${traceId}] command: ${sanitizedCommand}, error: ${error}`,
+        );
+        throw error;
+      }
+    }
+
     public async executeCommand(
         traceId: string,
         protocolType: string,
@@ -38,59 +107,14 @@ export abstract class Protocol {
         commandPattern: string,
         commandDescription: string,
       ): Promise<any> {
-      const directoryPath= `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
-        const response = {
-          traceId: traceId,
-          status: 'success',
-          protocolType: protocolType,
-          hostname: payload.hostname,
-          workerId: this.workerId,
-          message: `[${protocolType}] [${commandDescription}] Successful. Hostname: ${payload?.hostname} Worker: ${this.workerId}`,
-        };
-        const command = commandPattern
-          ?.replaceAll('${HOST}', payload?.hostname)
-          ?.replaceAll('${USERNAME}', payload?.username)
-          ?.replaceAll('${PASSWORD}', payload?.password)
-          ?.replaceAll('${MOUNT_PATH}', payload?.path)
-          ?.replaceAll('${DIR_PATH}', directoryPath)
-          ?.replaceAll('${PROTOCOL_VERSION}', payload?.protocolVersion)
-        
-        const fieldsToSanitize: string[] = [];
-        const trimmedPassword = payload.password?.trim();
-        if (trimmedPassword) fieldsToSanitize.push(trimmedPassword);
-        const trimmedUsername = payload.username?.trim();
-        if (trimmedUsername) fieldsToSanitize.push(trimmedUsername);
-        const sanitizedCommand = sanitize(command, fieldsToSanitize);
-        this.logger.debug(`command: ${sanitizedCommand}`)
-        
-        try {
-          // NON-BLOCKING: Use promisified exec with timeout
-          const { stdout, stderr } = await execAsync(command, {
-            timeout: 5000, // 5 second timeout
-            maxBuffer: 1024 * 1024, // 1MB buffer
-            encoding: 'utf8'
-          });
-
-          if (stderr && stderr.trim().length > 0) {
-            const sanitizedStderr = sanitize(stderr, fieldsToSanitize);                                
-            throw new Error(sanitizedStderr);
-        
-          }
-          this.logger.log(
-            `[${traceId}] command: ${sanitizedCommand}, stdout: ${stdout}`
-          );
-
-          response.message = `${stdout}`;
-          return response;
-
-        } catch (error) {                 
-          const sanitizedErrorMsg = sanitize(error.message, fieldsToSanitize);
-          error.message = sanitizedErrorMsg;   
-          this.logger.error(
-            `[${traceId}] command: ${sanitizedCommand}, error: ${error}`
-          );
-          throw error;
-        }
+        const command = this.buildSubstitutedCommand(payload, commandPattern);
+        return this.runShellCommand(
+          traceId,
+          protocolType,
+          payload,
+          command,
+          commandDescription,
+        );
       }
 
 }

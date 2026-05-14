@@ -485,3 +485,136 @@ describe("calculateChecksum", () => {
     expect(destroyedStream.destroy).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// createSourceReadStream branch coverage (exercised through smartCopy with
+// atimeOpts). Each test pins exactly one of the seven strategy outcomes
+// from atime-preserve.utils ATIME_DIAG, so the corresponding branch in
+// worker.thread.ts createSourceReadStream() is hit at least once.
+//
+// We mock fs.constants.O_NOATIME on/off per case; on Windows the Win32
+// platform branch fires before the O_NOATIME check, so the host platform
+// of the test runner is overridden via Object.defineProperty for the
+// Windows-fallback case.
+// ---------------------------------------------------------------------------
+describe("smartCopy atimeOpts → createSourceReadStream strategy branches", () => {
+  const sourcePath = "source.txt";
+  const destPath = "dest/target.txt";
+  const size = 1024;
+  const maxBufferSize = 1024 * 1024;
+  const data = Buffer.from("payload");
+
+  const makeReadable = () => {
+    const r = new Readable({
+      read() {
+        this.push(data);
+        this.push(null);
+      },
+    });
+    return r;
+  };
+  const makeWritable = () => {
+    const w = new Writable();
+    w._write = (_c, _e, cb) => cb();
+    return w;
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    (fs as any).promises = {
+      ...(fs as any).promises,
+      access: jest.fn().mockResolvedValue(undefined),
+    };
+    (fs.createReadStream as jest.Mock).mockImplementation(() => makeReadable());
+    (fs.createWriteStream as jest.Mock).mockImplementation(() => makeWritable());
+    (createDirectory as jest.MockedFunction<typeof createDirectory>).mockResolvedValue(
+      undefined,
+    );
+    const fakeHash = {
+      update: jest.fn(),
+      digest: jest.fn().mockReturnValue("checksum"),
+    } as any;
+    (crypto.createHash as jest.Mock)
+      .mockReturnValueOnce(fakeHash)
+      .mockReturnValueOnce(fakeHash);
+    Object.defineProperty(fs.constants, "O_RDONLY", { value: 0, configurable: true });
+  });
+
+  it("READ_NOT_REQUESTED when preserveAccessTime is false (no atime work)", async () => {
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: false,
+    });
+    expect(result.atimeReadStrategy).toBe("read_path:not_requested");
+    expect(result.sourceNoatimeOpenDegraded).toBeUndefined();
+  });
+
+  it("WIN_READ_STAMP_FALLBACK on Windows even when preserveAccessTime is true", async () => {
+    const original = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    try {
+      const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+        preserveAccessTime: true,
+      });
+      expect(result.atimeReadStrategy).toBe(
+        "read_path:strategy_1_smb_fallback_standard_read_then_stamp",
+      );
+    } finally {
+      Object.defineProperty(process, "platform", { value: original, configurable: true });
+    }
+  });
+
+  it("STRATEGY_2_SESSION_SKIP when skipSourceOpenNoatime is true (session learned ineffective)", async () => {
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: true,
+      skipSourceOpenNoatime: true,
+    });
+    expect(result.atimeReadStrategy).toBe("read_path:strategy_2_session_skip_o_noatime");
+  });
+
+  it("STRATEGY_2_KERNEL_NO_FLAG when fs.constants.O_NOATIME is unavailable on this kernel", async () => {
+    delete (fs.constants as any).O_NOATIME;
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: true,
+    });
+    expect(result.atimeReadStrategy).toBe("read_path:strategy_2_o_noatime_unavailable_kernel");
+  });
+
+  it("STRATEGY_2_O_NOATIME when fs.promises.open(O_NOATIME) succeeds", async () => {
+    Object.defineProperty(fs.constants, "O_NOATIME", { value: 0o1000000, configurable: true });
+    const handle = {
+      createReadStream: jest.fn(() => makeReadable()),
+    };
+    (fs as any).promises.open = jest.fn().mockResolvedValue(handle);
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: true,
+    });
+    expect(result.atimeReadStrategy).toBe("read_path:strategy_2_o_noatime");
+    expect(handle.createReadStream).toHaveBeenCalled();
+  });
+
+  it("STRATEGY_2_FALLBACK_STD_SESSION + sourceNoatimeOpenDegraded when O_NOATIME open fails with EPERM", async () => {
+    Object.defineProperty(fs.constants, "O_NOATIME", { value: 0o1000000, configurable: true });
+    const epermErr: NodeJS.ErrnoException = Object.assign(new Error("perm"), { code: "EPERM" });
+    (fs as any).promises.open = jest.fn().mockRejectedValue(epermErr);
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: true,
+    });
+    expect(result.atimeReadStrategy).toBe(
+      "read_path:strategy_2_o_noatime_fallback_session_skip_next",
+    );
+    expect(result.sourceNoatimeOpenDegraded).toBe(true);
+  });
+
+  it("STRATEGY_2_FALLBACK_STD_SAME_FILE when O_NOATIME open fails with non-systemic error", async () => {
+    Object.defineProperty(fs.constants, "O_NOATIME", { value: 0o1000000, configurable: true });
+    const nonSystemicErr: NodeJS.ErrnoException = Object.assign(new Error("io"), { code: "EIO" });
+    (fs as any).promises.open = jest.fn().mockRejectedValue(nonSystemicErr);
+    const result = await smartCopy(sourcePath, destPath, size, maxBufferSize, {
+      preserveAccessTime: true,
+    });
+    expect(result.atimeReadStrategy).toBe(
+      "read_path:strategy_2_o_noatime_fallback_same_file",
+    );
+    expect(result.sourceNoatimeOpenDegraded).toBeFalsy();
+  });
+});

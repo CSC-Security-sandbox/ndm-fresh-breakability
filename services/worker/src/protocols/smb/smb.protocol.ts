@@ -2,12 +2,14 @@ import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { Protocol } from '../protocol/protocol';
 import { CommandOutput, ProtocolPayload } from '../protocol/protocol.type';
-import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
+import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares, smbMountCommandWithNoatime } from './smb.utils';
 import * as fs from 'fs';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
 import { WindowsPrivilegeService } from './windows-privilege.service';
+import { AtimeReadSessionService } from 'src/thread/atime-read-session.service';
+import { ATIME_DIAG } from 'src/activities/core/migrate/atime-preserve.utils';
 
 @Injectable()
 export class SMBProtocol extends Protocol {
@@ -20,7 +22,8 @@ export class SMBProtocol extends Protocol {
   }
 
   constructor(
-    private readonly loggerFactory: LoggerFactory
+    private readonly loggerFactory: LoggerFactory,
+    @Optional() private readonly atimeReadSession?: AtimeReadSessionService,
   ) {
     super(loggerFactory); // Pass to abstract class protocol
   }
@@ -202,12 +205,21 @@ export class SMBProtocol extends Protocol {
       `[${traceId}] Mounting path for ${payload.hostname} of type ${ProtocolTypes.SMB} from ${this.workerId}`,
     );
 
-    // Enable Windows backup privileges for SMB on Windows platform
+    // Enable Windows backup privileges for SMB on Windows platform.
+    // This is the prerequisite for atime Strategy 1 (SMB backup intent on
+    // the read path); we log the strategy-1 diagnostic once per job here
+    // even though the privilege itself is process-wide and not yet
+    // requested per-file by Node's stream APIs — a future native binding
+    // upgrade can flip the read path to FILE_FLAG_BACKUP_SEMANTICS without
+    // changing this scaffolding. See docs/atime-preservation-strategies.md.
     if (this.platform === 'win32' && this.windowsPrivilegeService && manageMount) {
       try {
         this.logger.log(`[${traceId}] Enabling Windows backup privileges for SMB access`);
         await this.windowsPrivilegeService.enableBackupPrivileges(payload.jobRunId);
         this.logger.log(`[${traceId}] Backup privileges enabled successfully for SMB`);
+        if (this.atimeReadSession && payload.preserveAccessTime !== false) {
+          this.atimeReadSession.logSmbBackupIntentOnce(payload.jobRunId);
+        }
       } catch (error) {
         this.logger.error(`[${traceId}] Failed to enable Windows backup privileges: ${error.message}`);
         throw new Error(`Failed to enable Windows backup privileges required for SMB operations: ${error.message}`);
@@ -245,15 +257,65 @@ export class SMBProtocol extends Protocol {
       if(!saveCredsResult?.message?.toLowerCase().includes("successfully."))
         throw new Error(`Save credentials operation failed: ${saveCredsResult.message}`);
 
-      const result = await this.executeCommand(
-        traceId,
-        ProtocolTypes.SMB,
-        payload,
-        this.getCommandPattern(CommandPattern.MOUNT_PATH),
-        'SMB Mount',
-      );
-      
+      // Strategy 3 (SMB) — only meaningful on Linux/Mac CIFS / smbfs templates.
+      // Windows mounts via `net use`, which has no atime knob, so we leave it alone
+      // and let Strategy 1 (backup privileges) cover that path.
+      const baseMountPattern = this.getCommandPattern(CommandPattern.MOUNT_PATH);
+      const noatimeMountPattern = smbMountCommandWithNoatime(baseMountPattern);
+      const wantNoatimeMount =
+        (this.platform === 'linux' || this.platform === 'darwin') &&
+        payload.preserveAccessTime !== false &&
+        (this.atimeReadSession?.shouldAttemptSmbMountNoatime(payload.jobRunId) ?? true) &&
+        noatimeMountPattern !== baseMountPattern;
+
+      let result: any;
+      let recoveredMountAfterNoatimeRejected = false;
+      try {
+        result = await this.executeCommand(
+          traceId,
+          ProtocolTypes.SMB,
+          payload,
+          wantNoatimeMount ? noatimeMountPattern : baseMountPattern,
+          'SMB Mount',
+        );
+      } catch (firstErr: any) {
+        if (wantNoatimeMount && this.atimeReadSession) {
+          // Disambiguate via plain-mount retry before demoting noatime for
+          // the rest of this job: if the plain mount also fails we have no
+          // evidence that the noatime option was the rejected ingredient
+          // (likely an auth/connectivity issue), so propagate the original
+          // error and leave the flag intact for subsequent mounts.
+          this.logger.warn(`[${traceId}] SMB mount with noatime failed; retrying without to disambiguate cause: ${firstErr?.message}`);
+          try {
+            result = await this.executeCommand(
+              traceId,
+              ProtocolTypes.SMB,
+              payload,
+              baseMountPattern,
+              'SMB Mount',
+            );
+          } catch (secondErr: any) {
+            this.logger.error(`[${traceId}] SMB plain-mount retry also failed; not demoting noatime for job ${payload.jobRunId}. Surfacing original error.`);
+            throw firstErr;
+          }
+          recoveredMountAfterNoatimeRejected = true;
+          const firstFallback = this.atimeReadSession.markSmbMountNoatimeUnsupported(payload.jobRunId);
+          if (firstFallback) {
+            this.logger.log(`[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_SMB_MOUNT_FALLBACK} detail=noatime_rejected_further_smb_mounts_use_standard`);
+          }
+        } else {
+          throw firstErr;
+        }
+      }
+
       if(result?.message?.toLowerCase().includes("successfully.")){
+        if (!recoveredMountAfterNoatimeRejected) {
+          if (wantNoatimeMount) {
+            this.logger.log(`[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_SMB_MOUNT_NOATIME_OK}`);
+          } else if (this.platform === 'linux' || this.platform === 'darwin') {
+            this.logger.log(`[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_SMB_MOUNT_STANDARD_ONLY}`);
+          }
+        }
         const response = await this.executeCommand(
           traceId,
           ProtocolTypes.SMB,

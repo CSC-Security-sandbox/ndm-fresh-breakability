@@ -7,6 +7,8 @@ export type CocOperationStatus = 'success' | 'failed' | 'not_applicable';
 export interface CommandExecInput {
     sourcePath: string;
     targetPath: string;
+    /** Task source path id — used for atime diagnostics (one log line per source per job). */
+    sPathId?: string;
     jobContext: JobManagerContext;
     command: Cmd;
     errorType?: ErrorType | undefined;

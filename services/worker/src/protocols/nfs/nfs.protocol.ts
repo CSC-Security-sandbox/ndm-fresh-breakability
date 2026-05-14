@@ -1,13 +1,15 @@
 import { CommandConfig, CommandPattern } from 'src/config/command.config';
 import { Protocol } from 'src/protocols/protocol/protocol';
-import { handleConnectionError, parseExports, parseProtocolVersions } from './nfs.utils';
+import { handleConnectionError, nfsMountCommandWithNoatime, parseExports, parseProtocolVersions } from './nfs.utils';
 import * as net from 'net';
 import * as fs from 'fs';
 import { ProtocolTypes } from 'src/protocols/protocols';
 import { ProtocolPayload } from 'src/protocols/protocol/protocol.type'; 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { isPathExists } from 'src/activities/core/utils/utils';
+import { AtimeReadSessionService } from 'src/thread/atime-read-session.service';
+import { ATIME_DIAG } from 'src/activities/core/migrate/atime-preserve.utils';
 
 @Injectable()
 export class NFSProtocol extends Protocol {
@@ -20,7 +22,10 @@ export class NFSProtocol extends Protocol {
     return CommandConfig.getFstabPath(this.platform, path);
   }
 
-  constructor(private readonly loggerFactory: LoggerFactory) {
+  constructor(
+    private readonly loggerFactory: LoggerFactory,
+    @Optional() private readonly atimeReadSession?: AtimeReadSessionService,
+  ) {
     super(loggerFactory); // Pass to abstract class protocol
   }
 
@@ -225,15 +230,78 @@ export class NFSProtocol extends Protocol {
         }
       }
     }
-    const mountResult = await this.executeCommand(
-      traceId,
-      ProtocolTypes.NFS,
-      payload,
-      this.getCommandPattern(CommandPattern.MOUNT_PATH),
-      'NFS Mount',
-    );
+    const baseMountPattern = this.getCommandPattern(CommandPattern.MOUNT_PATH);
+    const noatimeMountPattern = nfsMountCommandWithNoatime(baseMountPattern);
+    const wantNoatimeMount =
+      this.platform === 'linux' &&
+      payload.preserveAccessTime !== false &&
+      (this.atimeReadSession?.shouldAttemptNfsMountNoatime(payload.jobRunId) ??
+        true) &&
+      noatimeMountPattern !== baseMountPattern;
+
+    let mountResult;
+    let recoveredMountAfterNoatimeRejected = false;
+    try {
+      mountResult = await this.executeCommand(
+        traceId,
+        ProtocolTypes.NFS,
+        payload,
+        wantNoatimeMount ? noatimeMountPattern : baseMountPattern,
+        'NFS Mount',
+      );
+    } catch (firstErr: any) {
+      if (wantNoatimeMount && this.atimeReadSession) {
+        // Try the plain mount before deciding whether to demote noatime for
+        // the rest of this job. If the plain mount also fails, the original
+        // failure was almost certainly NOT caused by the extra mount option
+        // (auth/network/server-side), so we propagate the original error
+        // and leave the noatime flag intact for subsequent mounts in the
+        // same job. Only when the plain mount succeeds do we have evidence
+        // that noatime was the rejected ingredient.
+        this.logger.warn(
+          `[${traceId}] NFS mount with noatime/nodiratime failed; retrying without to disambiguate cause: ${firstErr?.message}`,
+        );
+        try {
+          mountResult = await this.executeCommand(
+            traceId,
+            ProtocolTypes.NFS,
+            payload,
+            baseMountPattern,
+            'NFS Mount',
+          );
+        } catch (secondErr: any) {
+          this.logger.error(
+            `[${traceId}] NFS plain-mount retry also failed; not demoting noatime for job ${payload.jobRunId}. Surfacing original error.`,
+          );
+          throw firstErr;
+        }
+        recoveredMountAfterNoatimeRejected = true;
+        const firstFallback = this.atimeReadSession.markNfsMountNoatimeUnsupported(
+          payload.jobRunId,
+        );
+        if (firstFallback) {
+          this.logger.log(
+            `[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_MOUNT_FALLBACK} detail=noatime_nodiratime_rejected_further_nfs_mounts_use_standard`,
+          );
+        }
+      } else {
+        throw firstErr;
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, 5000));
     this.logger.log(`[${traceId}] Mount result: ${JSON.stringify(mountResult)}`);
+
+    if (mountResult?.status === 'success' && !recoveredMountAfterNoatimeRejected) {
+      if (wantNoatimeMount) {
+        this.logger.log(
+          `[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_MOUNT_NOATIME_OK}`,
+        );
+      } else {
+        this.logger.log(
+          `[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_MOUNT_STANDARD_ONLY}`,
+        );
+      }
+    }
 
     if (manageMount && mountResult.status === 'success') {
       this.updateBootMounts(

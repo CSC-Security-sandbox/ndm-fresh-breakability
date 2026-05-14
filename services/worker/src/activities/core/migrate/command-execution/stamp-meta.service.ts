@@ -16,6 +16,11 @@ import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
 import { IDENTITY_MAPPING_NOT_FOUND, IdentityMappingNotFoundError, MetadataUpdateConflictError } from "src/errors/errors.types";
+import {
+  DEFAULT_ATIME_RELATIME_WINDOW_MS,
+  shouldRestoreSourceAtimeRelatime,
+} from "../atime-preserve.utils";
+import { AtimeReadSessionService } from "src/thread/atime-read-session.service";
 
 const MAX_CTIME_RETRIES = 2;
 
@@ -30,8 +35,9 @@ export class StampMetaService {
         private readonly metricsService: MetricsService,
         private readonly deferredDirStampService: DeferredDirStampService,
         private readonly ctimeTestTriggers: CtimeTestTriggersService,
+        private readonly atimeReadSession: AtimeReadSessionService,
         @Inject(LoggerFactory) loggerFactory: LoggerFactory,
-        @Inject(ConfigService) configService: ConfigService,
+        @Inject(ConfigService) private readonly configService: ConfigService,
     ) {
         this.logger = loggerFactory.create(StampMetaService.name);
     }
@@ -317,10 +323,59 @@ export class StampMetaService {
     }
 
     @Timed({ category: 'stamp_phase', phase: 'preserve_time' })
-    async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
+    async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType, sPathId }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
             try {
+                const canWriteSource = await this.sourcePathAllowsWrite(sourcePath);
+                if (!canWriteSource) {
+                    this.atimeReadSession.logStampReadonlySourceOnce(
+                        jobContext.jobRunId,
+                        sPathId,
+                        sourcePath,
+                    );
+                    return output;
+                }
+
+                const useRelatimeGate =
+                    this.configService.get<boolean>(
+                        'worker.atimeRelatimeGateEnabled',
+                    ) ?? true;
+
+                const relatimeWindowMs =
+                    this.configService.get<number>(
+                        'worker.atimeRelatimeWindowMs',
+                    ) ?? DEFAULT_ATIME_RELATIME_WINDOW_MS;
+
+                this.atimeReadSession.logStampConfigOnce(
+                    jobContext.jobRunId,
+                    sPathId,
+                    {
+                        relatimeGateEnabled: useRelatimeGate,
+                        relatimeWindowMs,
+                    },
+                );
+
+                if (useRelatimeGate) {
+                    const atimeMs = new Date(command.metadata.atime).getTime();
+                    const mtimeMs = new Date(command.metadata.mtime).getTime();
+                    const ctimeRaw = command.metadata.ctime
+                        ? new Date(command.metadata.ctime).getTime()
+                        : mtimeMs;
+
+                    if (
+                        !shouldRestoreSourceAtimeRelatime({
+                            atimeMs,
+                            mtimeMs,
+                            ctimeMs: ctimeRaw,
+                            relatimeWindowMs,
+                            nowMs: Date.now(),
+                        })
+                    ) {
+                        return output;
+                    }
+                }
+
                 if (command?.metadata?.isSymLink) {
                     await fs.promises.lutimes(sourcePath, new Date(command.metadata.atime), new Date(command.metadata.mtime));
                 } else {
@@ -334,6 +389,30 @@ export class StampMetaService {
             }
         }
         return output;
+    }
+
+    /**
+     * Strategy 6 hint: read-only / snapshot sources cannot be stamped and
+     * should not be retried.
+     *
+     * `access(W_OK)` is an imperfect oracle in both directions — owners can
+     * still `utimes` write-protected files, and unrelated errors like
+     * ENOENT/ESTALE/EIO would otherwise look like "readonly" here and cause
+     * `preserveAccessTime` to silently no-op without surfacing the real
+     * source-side problem. We therefore only treat genuinely read-only-style
+     * errors (EACCES from Linux/macOS DAC and EROFS from snapshot/RO mounts)
+     * as "skip restore". Any other failure mode is reported as writable so
+     * that the caller's subsequent `utimes` invocation throws and the error
+     * goes through the normal `dmError` → publishToErrorStream path.
+     */
+    private async sourcePathAllowsWrite(sourcePath: string): Promise<boolean> {
+        try {
+            await fs.promises.access(sourcePath, fs.constants.W_OK);
+            return true;
+        } catch (err: any) {
+            if (err?.code === 'EACCES' || err?.code === 'EROFS') return false;
+            return true;
+        }
     }
 
     @Timed({ category: 'stamp_phase', phase: 'acl' })

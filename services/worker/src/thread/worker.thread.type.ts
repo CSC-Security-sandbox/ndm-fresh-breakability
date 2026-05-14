@@ -48,4 +48,8 @@ export interface MigrateFile {
     operationId: string;
     size: number;
     jobRunId?: string;
+    /** When true, prefer read paths that avoid advancing source atime (Linux O_NOATIME; Windows falls back to stamp). */
+    preserveAccessTime?: boolean;
+    /** Task source path id — atime diagnostics keyed per source (not per file). */
+    sPathId?: string;
 }

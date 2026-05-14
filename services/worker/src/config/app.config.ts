@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigObject, ConfigService, registerAs } from '@nestjs/config';
+import { DEFAULT_ATIME_RELATIME_WINDOW_MS } from 'src/activities/core/migrate/atime-preserve.utils';
 
 // Platform constants
 export const WINDOWS = 'win32';
@@ -59,6 +60,38 @@ export default registerAs(
       threadCount: parseInt(process.env.THREAD_COUNT || '5'),
       maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE) || 1048576,
     },
+
+    /**
+     * When true, apply Strategy 4b (relatime-style) before source utimes to skip redundant
+     * metadata writes. When false, always attempt source restore whenever preserveAccessTime applies
+     * (subject to RO skip). Env ATIME_RELATIME_GATE_ENABLED=false disables.
+     */
+    atimeRelatimeGateEnabled: (() => {
+      const raw = process.env.ATIME_RELATIME_GATE_ENABLED;
+      if (raw === undefined || raw === '') return true;
+      return !/^(0|false|no|off)$/i.test(raw.trim());
+    })(),
+
+    /**
+     * Strategy 4b (last fallback before source utimes): max age of atime for "must restore" rule.
+     *
+     * A bare `parseInt(env || String(default), 10)` returns NaN for malformed
+     * input (e.g. `ATIME_RELATIME_WINDOW_MS=abc`). NaN then propagates into
+     * `shouldRestoreSourceAtimeRelatime` where every comparison against it
+     * is `false`, so the gate silently flips to "never restore" without any
+     * indication that the env var is bad. Validate explicitly and fall back
+     * to the documented default; we do not throw because this config lives
+     * inside `registerAs` and a throw would crash app bootstrap on a stray
+     * env value, which is worse than the silent default.
+     */
+    atimeRelatimeWindowMs: (() => {
+      const raw = process.env.ATIME_RELATIME_WINDOW_MS;
+      if (!raw) return DEFAULT_ATIME_RELATIME_WINDOW_MS;
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) && parsed >= 0
+        ? parsed
+        : DEFAULT_ATIME_RELATIME_WINDOW_MS;
+    })(),
 
     // metrics
     metrics: {

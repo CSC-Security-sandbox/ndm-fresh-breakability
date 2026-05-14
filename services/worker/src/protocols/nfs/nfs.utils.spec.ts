@@ -1,4 +1,4 @@
-import { handleConnectionError, parseExports, parseProtocolVersions } from "./nfs.utils";
+import { handleConnectionError, nfsMountCommandWithNoatime, parseExports, parseProtocolVersions } from "./nfs.utils";
 
 
 describe('handleConnectionError', () => {
@@ -182,4 +182,17 @@ describe('parseExports', () => {
     const result = parseExports(output);
     expect(result).toEqual(['/export/1', '/export/2', '/export/3']);
     });
+});
+
+describe('nfsMountCommandWithNoatime', () => {
+  it('inserts -o noatime,nodiratime for plain nfs mount templates', () => {
+    expect(nfsMountCommandWithNoatime('mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}')).toBe(
+      'mount -t nfs -o noatime,nodiratime ${HOST}:${MOUNT_PATH} ${DIR_PATH}',
+    );
+  });
+
+  it('returns unchanged when options already present', () => {
+    const cmd = 'mount -t nfs -o rw,noatime host:/x /y';
+    expect(nfsMountCommandWithNoatime(cmd)).toBe(cmd);
+  });
 });

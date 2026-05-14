@@ -1,5 +1,46 @@
 import { SmbErrors } from "./smb.protocol.type";
 
+/**
+ * Strategy 3 (SMB) — add a `noatime` mount option to plain CIFS / SMB mount
+ * templates so the kernel does not touch atime when the mounted share is read.
+ * Mirrors the equivalent rewriter for NFS (`nfsMountCommandWithNoatime`).
+ *
+ * Coverage:
+ *   - Linux:  `mount -t cifs ...`     → `mount -t cifs -o noatime,nodiratime ...`
+ *             `mount.cifs ...`        → `mount.cifs -o noatime,nodiratime ...`
+ *   - macOS:  `mount -t smbfs ...`    → `mount -t smbfs -o noatime ...`
+ *             `mount_smbfs ...`       → `mount_smbfs -o noatime ...`
+ *
+ * Rationale for the per-platform option set: Linux's CIFS module honours
+ * both `noatime` and `nodiratime`; macOS's smbfs only honours `noatime`,
+ * so we deliberately do not add `nodiratime` on the smbfs branches. Windows
+ * mounts go through `net use`, which has no atime-related flag — those
+ * templates are returned unchanged so the standard mount path is used and
+ * Strategy 1 (Windows backup intent on the read path) handles atime.
+ *
+ * Idempotent: returns the input unchanged if it already mentions `noatime`
+ * (in any option list), or if the template is not a recognised SMB mount
+ * shape. Safe to call on every code path — no-ops are cheap.
+ */
+export function smbMountCommandWithNoatime(commandPattern: string): string {
+    if (!commandPattern || /noatime|nodiratime/i.test(commandPattern)) {
+        return commandPattern;
+    }
+    if (/\bmount\s+-t\s+cifs\b/i.test(commandPattern)) {
+        return commandPattern.replace(/\bmount\s+-t\s+cifs\b/i, 'mount -t cifs -o noatime,nodiratime');
+    }
+    if (/\bmount\.cifs\b/i.test(commandPattern)) {
+        return commandPattern.replace(/\bmount\.cifs\b/i, 'mount.cifs -o noatime,nodiratime');
+    }
+    if (/\bmount\s+-t\s+smbfs\b/i.test(commandPattern)) {
+        return commandPattern.replace(/\bmount\s+-t\s+smbfs\b/i, 'mount -t smbfs -o noatime');
+    }
+    if (/\bmount_smbfs\b/i.test(commandPattern)) {
+        return commandPattern.replace(/\bmount_smbfs\b/i, 'mount_smbfs -o noatime');
+    }
+    return commandPattern;
+}
+
 
 export const handleConnectionError = (errorCode: string) => {
     switch (errorCode) {

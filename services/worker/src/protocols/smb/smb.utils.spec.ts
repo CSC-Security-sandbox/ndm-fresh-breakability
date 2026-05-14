@@ -1,6 +1,6 @@
 
 import { SmbErrors } from './smb.protocol.type';
-import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares } from './smb.utils';
+import { handleConnectionError, parseLinMacShares, parseProtocolVersions, parseWindowsShares, smbMountCommandWithNoatime } from './smb.utils';
 
 describe('handleConnectionError', () => {
     it('should return the correct error message for ACCESS_DENIED', () => {
@@ -244,5 +244,64 @@ describe('parseWindowsShares', () => {
         const input = 'Some irrelevant text without any shares';
         const result = parseWindowsShares(input);
         expect(result).toEqual([]);
+    });
+});
+
+describe('smbMountCommandWithNoatime', () => {
+    it('inserts -o noatime,nodiratime for plain `mount -t cifs` templates (Linux)', () => {
+        expect(
+            smbMountCommandWithNoatime('mount -t cifs //${HOST}${MOUNT_PATH} ${DIR_PATH} -o user=${USERNAME}'),
+        ).toBe('mount -t cifs -o noatime,nodiratime //${HOST}${MOUNT_PATH} ${DIR_PATH} -o user=${USERNAME}');
+    });
+
+    it('inserts -o noatime,nodiratime for `mount.cifs` templates (Linux)', () => {
+        expect(
+            smbMountCommandWithNoatime('mount.cifs //${HOST}${MOUNT_PATH} ${DIR_PATH}'),
+        ).toBe('mount.cifs -o noatime,nodiratime //${HOST}${MOUNT_PATH} ${DIR_PATH}');
+    });
+
+    it('inserts -o noatime (only) for `mount -t smbfs` templates (macOS)', () => {
+        // macOS smbfs honours noatime but not nodiratime; do not add the latter.
+        expect(
+            smbMountCommandWithNoatime('mount -t smbfs //${USERNAME}@${HOST}${MOUNT_PATH} ${DIR_PATH}'),
+        ).toBe('mount -t smbfs -o noatime //${USERNAME}@${HOST}${MOUNT_PATH} ${DIR_PATH}');
+    });
+
+    it('inserts -o noatime for `mount_smbfs` templates (macOS)', () => {
+        expect(
+            smbMountCommandWithNoatime('mount_smbfs //${USERNAME}@${HOST}${MOUNT_PATH} ${DIR_PATH}'),
+        ).toBe('mount_smbfs -o noatime //${USERNAME}@${HOST}${MOUNT_PATH} ${DIR_PATH}');
+    });
+
+    it('returns unchanged when noatime is already present in the option list', () => {
+        const cmd = 'mount -t cifs -o rw,noatime //host/share /mnt';
+        expect(smbMountCommandWithNoatime(cmd)).toBe(cmd);
+    });
+
+    it('returns unchanged when nodiratime is already present', () => {
+        const cmd = 'mount -t cifs -o rw,nodiratime //host/share /mnt';
+        expect(smbMountCommandWithNoatime(cmd)).toBe(cmd);
+    });
+
+    it('returns unchanged for Windows `net use` style templates (no atime knob)', () => {
+        const cmd = 'net use Z: \\\\${HOST}${MOUNT_PATH} ${PASSWORD} /USER:${USERNAME}';
+        expect(smbMountCommandWithNoatime(cmd)).toBe(cmd);
+    });
+
+    it('returns unchanged for unrelated commands (e.g. NFS templates) so callers can apply both rewriters safely', () => {
+        const cmd = 'mount -t nfs ${HOST}:${MOUNT_PATH} ${DIR_PATH}';
+        expect(smbMountCommandWithNoatime(cmd)).toBe(cmd);
+    });
+
+    it('returns the input unchanged when null/empty', () => {
+        expect(smbMountCommandWithNoatime('')).toBe('');
+        expect(smbMountCommandWithNoatime(undefined as unknown as string)).toBe(undefined);
+    });
+
+    it('is idempotent: applying twice yields the same result as once', () => {
+        const original = 'mount -t cifs //host/share /mnt';
+        const once = smbMountCommandWithNoatime(original);
+        const twice = smbMountCommandWithNoatime(once);
+        expect(twice).toBe(once);
     });
 });

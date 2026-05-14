@@ -5,6 +5,11 @@ import { createDirectory } from "../activities/utils/directory.utils";
 import { E8Dot3CollisionError } from "../errors/errors.types";
 import { WorkerThreadInput, WorkerThreadOutput } from "./worker.thread.type";
 import { WINDOWS } from "../config/app.config";
+import {
+  ATIME_DIAG,
+  isNoatimeOpenCapabilityError,
+  isNoatimeOpenPermissionStyleError,
+} from "../activities/core/migrate/atime-preserve.utils";
 const { parentPort, workerData } = require('worker_threads');
 
 console.log(`Worker Thread - Starting Worker Thread  ${workerData?.threadNumber} for operationBand: ${workerData?.operationBand}`); 
@@ -23,6 +28,79 @@ export async function calculateChecksum(filePath) {
     }
   }
   
+}
+
+export type SmartCopyAtimeOptions = {
+  preserveAccessTime?: boolean;
+  /** When true, skip O_NOATIME (session learned open is ineffective). */
+  skipSourceOpenNoatime?: boolean;
+};
+
+async function createSourceReadStream(
+  source: string,
+  bufferSize: number,
+  opts: SmartCopyAtimeOptions,
+): Promise<{
+  stream: fs.ReadStream;
+  sourceNoatimeOpenDegraded?: boolean;
+  atimeReadStrategy: string;
+}> {
+  const preserve = opts.preserveAccessTime;
+  const skipNoatime = opts.skipSourceOpenNoatime;
+
+  if (!preserve) {
+    return {
+      stream: fs.createReadStream(source, { highWaterMark: bufferSize }),
+      atimeReadStrategy: ATIME_DIAG.READ_NOT_REQUESTED,
+    };
+  }
+
+  if (process.platform === WINDOWS) {
+    return {
+      stream: fs.createReadStream(source, { highWaterMark: bufferSize }),
+      atimeReadStrategy: ATIME_DIAG.WIN_READ_STAMP_FALLBACK,
+    };
+  }
+
+  if (skipNoatime) {
+    return {
+      stream: fs.createReadStream(source, { highWaterMark: bufferSize }),
+      atimeReadStrategy: ATIME_DIAG.STRATEGY_2_SESSION_SKIP,
+    };
+  }
+
+  const O_NOATIME = (fs.constants as typeof fs.constants & { O_NOATIME?: number })
+    .O_NOATIME;
+  if (typeof O_NOATIME !== 'number') {
+    return {
+      stream: fs.createReadStream(source, { highWaterMark: bufferSize }),
+      atimeReadStrategy: ATIME_DIAG.STRATEGY_2_KERNEL_NO_FLAG,
+    };
+  }
+
+  try {
+    const handle = await fs.promises.open(
+      source,
+      fs.constants.O_RDONLY | O_NOATIME,
+    );
+    // Prefer FileHandle#createReadStream over passing fd + autoClose: Node owns handle
+    // lifecycle with the stream (same guarantees as path-based createReadStream).
+    return {
+      stream: handle.createReadStream({ highWaterMark: bufferSize }),
+      atimeReadStrategy: ATIME_DIAG.STRATEGY_2_O_NOATIME,
+    };
+  } catch (err) {
+    const sessionSkipReason =
+      isNoatimeOpenPermissionStyleError(err) ||
+      isNoatimeOpenCapabilityError(err);
+    return {
+      stream: fs.createReadStream(source, { highWaterMark: bufferSize }),
+      ...(sessionSkipReason ? { sourceNoatimeOpenDegraded: true } : {}),
+      atimeReadStrategy: sessionSkipReason
+        ? ATIME_DIAG.STRATEGY_2_FALLBACK_STD_SESSION
+        : ATIME_DIAG.STRATEGY_2_FALLBACK_STD_SAME_FILE,
+    };
+  }
 }
 
 function getOptimalBufferSize(fileSize: number, maxBufferSize: number): number {
@@ -62,7 +140,13 @@ async function getWriteStreamFlags(target: string): Promise<string> {
   }
 }
 
-export async function smartCopy(source:string, target:string, filesize:number, maxBufferSize :number) {
+export async function smartCopy(
+  source: string,
+  target: string,
+  filesize: number,
+  maxBufferSize: number,
+  atimeOpts?: SmartCopyAtimeOptions,
+) {
   let readStream: fs.ReadStream = null; 
   let writeStream: fs.WriteStream = null; 
   
@@ -82,8 +166,9 @@ export async function smartCopy(source:string, target:string, filesize:number, m
     // Create destination directory with collision detection
     await createDirectory(destDir);
 
-    //Read Stream from Source
-    readStream = fs.createReadStream(source, { highWaterMark: bufferSize });
+    const { stream: rs, sourceNoatimeOpenDegraded, atimeReadStrategy } =
+      await createSourceReadStream(source, bufferSize, atimeOpts ?? {});
+    readStream = rs;
 
     // Determine appropriate write flags (handles 8.3 collision prevention for Windows tilde files)
     let flag = await getWriteStreamFlags(target);
@@ -138,6 +223,8 @@ export async function smartCopy(source:string, target:string, filesize:number, m
       targetChecksum: targetCheckSum,
       copyStreamMs,
       checksumTargetMs,
+      sourceNoatimeOpenDegraded,
+      atimeReadStrategy,
     };
   }catch(error){
     console.error(`Worker Thread - ${workerData?.threadNumber} - Error during smartCopy from ${source} to ${target}:`, error);
@@ -156,8 +243,27 @@ export async function smartCopy(source:string, target:string, filesize:number, m
 parentPort.on('message', async (tasks: WorkerThreadInput[]) => {
   const result:WorkerThreadOutput[] = await Promise.all(tasks.map(async(task)=> {
     try {
-        const result = await smartCopy(task.data.sourcePath, task.data.destinationPath, task.data.size, task.data.maxBufferSize);
-        return { isResolved: true, id: task.id, data: { ...result, jobRunId: task.data?.jobRunId }, Operation: task.Operation };
+        const result = await smartCopy(
+          task.data.sourcePath,
+          task.data.destinationPath,
+          task.data.size,
+          task.data.maxBufferSize,
+          {
+            preserveAccessTime: task.data.preserveAccessTime,
+            skipSourceOpenNoatime: task.data.skipSourceOpenNoatime,
+          },
+        );
+        return {
+          isResolved: true,
+          id: task.id,
+          data: {
+            ...result,
+            jobRunId: task.data?.jobRunId,
+            preserveAccessTime: task.data?.preserveAccessTime,
+            sPathId: task.data?.sPathId,
+          },
+          Operation: task.Operation,
+        };
     } catch (error) {
         console.error(`Worker Thread - ${workerData?.threadNumber} - Error processing task ${task.id}:`, error);
         return {  isRejected: true, id: task.id, data: {code: error?.code, message:error?.message }, Operation: task.Operation };
