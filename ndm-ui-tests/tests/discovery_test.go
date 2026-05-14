@@ -576,7 +576,11 @@ func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
 	t.Logf("[5.21] report downloaded: %s", csvPath)
 
 	// ── Step 2: scan actual volume via SSH ──
-	nfsExport := fmt.Sprintf("%s:%s", config.SourceHost, config.NfsExportPath)
+	exportPath := config.NfsExportPath
+	if !strings.HasPrefix(exportPath, "/") {
+		exportPath = "/" + exportPath
+	}
+	nfsExport := fmt.Sprintf("%s:%s", config.SourceHost, exportPath)
 	t.Logf("[5.21] scanning volume %s via worker %s", nfsExport, config.WorkerHost)
 
 	scan, err := utils.ScanNFSVolumeForDiscovery(workerSSH, nfsExport)

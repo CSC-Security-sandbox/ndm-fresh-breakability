@@ -41,10 +41,10 @@ func ScanNFSVolumeForDiscovery(cfg SSHConfig, nfsExport string) (*DiscoverySumma
 sudo mkdir -p "%[1]s"
 sudo mount -o ro -t nfs "%[2]s" "%[1]s"
 
-total=$(sudo find "%[1]s" -not -path '*/.snapshot/*' -mindepth 1 | wc -l)
-files=$(sudo find "%[1]s" -type f -not -path '*/.snapshot/*' | wc -l)
-dirs=$(sudo find "%[1]s" -type d -not -path '*/.snapshot/*' -mindepth 1 | wc -l)
-links=$(sudo find "%[1]s" -type l -not -path '*/.snapshot/*' | wc -l)
+total=$(sudo find "%[1]s" -mindepth 1 -not -path '*/.snapshot/*' | wc -l)
+files=$(sudo find "%[1]s" -mindepth 1 -type f -not -path '*/.snapshot/*' | wc -l)
+dirs=$(sudo find "%[1]s" -mindepth 1 -type d -not -path '*/.snapshot/*' | wc -l)
+links=$(sudo find "%[1]s" -mindepth 1 -type l -not -path '*/.snapshot/*' | wc -l)
 
 sudo umount "%[1]s" || sudo umount -l "%[1]s"
 sudo rm -rf "%[1]s"
@@ -92,7 +92,7 @@ func ScanNFSVolumeForMigration(cfg SSHConfig, nfsExport string) ([]VolumeScanRow
 sudo mkdir -p "%[1]s"
 sudo mount -o ro -t nfs "%[2]s" "%[1]s"
 
-sudo find "%[1]s" -not -path '*/.snapshot/*' -mindepth 1 \
+sudo find "%[1]s" -mindepth 1 -not -path '*/.snapshot/*' \
   -printf '%%P\t%%y\t%%s\t%%m\t%%U\t%%G\t%%A@\t%%T@\t%%C@\n' | sort
 
 sudo umount "%[1]s" || sudo umount -l "%[1]s"
