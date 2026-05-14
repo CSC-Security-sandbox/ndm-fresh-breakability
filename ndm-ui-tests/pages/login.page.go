@@ -20,10 +20,11 @@ func NewLoginPage(page playwright.Page) *LoginPage {
 }
 
 // Navigate opens the NDM base URL and waits for the login form to appear.
-// NDM redirects to Keycloak, so we wait for any URL under the CP and for
-// the username input to be visible rather than waiting for full page load.
+// NDM may redirect to Keycloak or show its own login form. A fresh Chrome
+// profile can take 90-120s on the first load (redirect chain + JS bundle).
 func (p *LoginPage) Navigate() error {
-	navTimeout := float64(60000)
+	// 120s timeout — first launch with a clean Chrome profile is slow.
+	navTimeout := float64(120000)
 
 	if _, err := p.page.Goto(config.BaseURL, playwright.PageGotoOptions{
 		Timeout:   playwright.Float(navTimeout),
@@ -32,8 +33,10 @@ func (p *LoginPage) Navigate() error {
 		return fmt.Errorf("navigate to %s: %w", config.BaseURL, err)
 	}
 
+	// Wait for any username/email input — covers Keycloak and NDM's own form.
 	_, err := p.page.WaitForSelector(
-		`input[name="username"], input[type="email"], input[id="username"]`,
+		`input[name="username"], input[type="email"], input[id="username"], `+
+			`input[name="email"], input[placeholder*="Email"], input[placeholder*="Username"]`,
 		playwright.PageWaitForSelectorOptions{
 			Timeout: playwright.Float(navTimeout),
 			State:   playwright.WaitForSelectorStateVisible,

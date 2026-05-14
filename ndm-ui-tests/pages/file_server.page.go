@@ -23,10 +23,14 @@ func NewFileServerPage(page playwright.Page) *FileServerPage {
 
 // CreateNFSFileServer runs the 3-step wizard and returns the UUID.
 func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string, minWorkers int) (string, error) {
+	// Wait for the app-level loading screen ("Authenticated, checking permissions...")
+	// which appears after login before the React app is fully ready.
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -177,10 +181,12 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 // CreateSMBFileServer runs the 3-step wizard for an SMB file server
 // and returns the UUID. Same wizard as NFS but expands the SMB accordion.
 func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, smbPass string, minWorkers int) (string, error) {
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -421,10 +427,12 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 // Step 2: Access Zones table — select zone, NFS IP dropdown, NFS Username
 // Step 3: Workers — toggle worker association per access zone → Finish
 func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPass, nfsIP, nfsUser string, minWorkers int) (string, error) {
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -918,6 +926,20 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	return fsID, nil
 }
 
+// waitForAppReady waits for the NDM app-level loading screen to disappear.
+// After login the app shows "Authenticated, checking permissions, kindly wait..."
+// which must clear before any navigation is reliable.
+func (p *FileServerPage) waitForAppReady() {
+	loadingMsg := p.page.Locator(`text=checking permissions`)
+	for i := 0; i < 20; i++ {
+		if v, _ := loadingMsg.First().IsVisible(); !v {
+			return
+		}
+		log.Printf("[waitForAppReady] app still loading, waiting (attempt %d/20)…", i+1)
+		p.sleep(3000)
+	}
+}
+
 // navigateToFileServer goes to the file server list, finds the row
 // by name, clicks it, and returns the UUID from the resulting URL.
 // Retries navigation up to 5 times for eventual consistency.
@@ -933,6 +955,9 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 		return fsID, nil
 	}
 
+	// Wait for the loading screen to clear before navigating to the list.
+	p.waitForAppReady()
+
 	nameLink := p.page.GetByText(name, playwright.PageGetByTextOptions{
 		Exact: playwright.Bool(true),
 	})
@@ -943,6 +968,7 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 			Timeout:   playwright.Float(30000),
 		})
 		p.sleep(5000)
+		p.waitForAppReady()
 
 		if p.isVisible(nameLink.First()) {
 			break
@@ -1019,9 +1045,9 @@ func (p *FileServerPage) extractFileServerID(rawURL string) string {
 	return ""
 }
 
-// WaitForFileServerActive polls the file server overview page until the
-// "Bulk Discover" button is visible and enabled (server is Active with
-// export paths retrieved).
+// WaitForFileServerActive polls the file server overview page until it is
+// ready for migration — the "Bulk Migrate" button is visible and enabled,
+// meaning the file server is Active and its export paths have been retrieved.
 func (p *FileServerPage) WaitForFileServerActive(fsID string, timeoutMs float64) error {
 	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
 	attempt := 0
@@ -1032,35 +1058,39 @@ func (p *FileServerPage) WaitForFileServerActive(fsID string, timeoutMs float64)
 			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 			Timeout:   playwright.Float(30000),
 		})
-		p.sleep(5000)
+		// Wait for app-level loading screen to clear, then give React time to render.
+		p.waitForAppReady()
+		p.sleep(8000)
 
 		overview := p.page.GetByText("File Server Overview").First()
 		if !p.isVisible(overview) {
-			log.Printf("[WaitForFileServerActive] attempt %d: overview not visible", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: overview not visible, retrying…", attempt)
 			p.sleep(10000)
 			continue
 		}
 
-		bulkBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{
-			Name: "Bulk Discover",
-		})
-		if p.isVisible(bulkBtn) {
-			disabled, _ := bulkBtn.IsDisabled()
+		// Check "Bulk Migrate" button (data-testid added in JobsAction.tsx; falls back to role).
+		migrateBtn := p.page.Locator(`[data-testid="btn-bulk-migrate"]`)
+		if !p.isVisible(migrateBtn) {
+			migrateBtn = p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Bulk Migrate"})
+		}
+		if p.isVisible(migrateBtn) {
+			disabled, _ := migrateBtn.IsDisabled()
 			if !disabled {
-				log.Printf("[WaitForFileServerActive] file server active on attempt %d", attempt)
+				log.Printf("[WaitForFileServerActive] file server ready for migration (attempt %d)", attempt)
 				p.screenshot("fs-active")
 				return nil
 			}
-			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Discover disabled", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Migrate button still disabled", attempt)
 		} else {
-			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Discover not visible", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Migrate button not visible", attempt)
 		}
 
 		p.sleep(15000)
 	}
 
 	p.screenshot("fs-not-active-timeout")
-	return fmt.Errorf("file server %s did not become active within %.0fs", fsID, timeoutMs/1000)
+	return fmt.Errorf("file server %s did not become ready for migration within %.0fs", fsID, timeoutMs/1000)
 }
 
 // ── JS helpers for worker toggle ─────────────────────────────────────────────

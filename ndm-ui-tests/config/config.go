@@ -32,11 +32,35 @@ var (
 
 	// File server creation (when NDM_FILE_SERVER_ID is empty the test
 	// creates one via the wizard using these values)
-	SourceHost         string // IP/hostname of the NFS server
+	SourceHost         string // IP/hostname of the NFS source server
 	ProtocolUsername   string // NFS user (e.g. "root")
 	ProtocolPassword   string // NFS password (often empty)
 	MinWorkers         int    // workers to associate (default: 1)
 	FileServerNameNew  string // name for a newly created file server
+
+	// NFS source file server
+	NfsSourceHost                   string // IP/hostname of the NFS source server
+	NfsSourceProtocolUsername       string // NFS username for source (e.g. "root")
+	NfsSourceProtocolPassword       string // NFS password for source (often empty)
+	NfsSourceFileServerNamePrefix   string // prefix for auto-generated source FS names
+	NfsSourceExportPath             string // export path to select in migration mapping (e.g. "/vol1")
+	NfsSourceFileServerID           string // existing source FS UUID — skips wizard if set
+
+	// NFS destination file server
+	NfsDestinationHost                   string // IP/hostname of the NFS destination server
+	NfsDestinationProtocolUsername       string // NFS username for destination (e.g. "root")
+	NfsDestinationProtocolPassword       string // NFS password for destination (often empty)
+	NfsDestinationFileServerNamePrefix   string // prefix for auto-generated destination FS names
+	NfsDestinationExportPath             string // export path to select in migration mapping (e.g. "/vol1")
+	NfsDestinationFileServerID          string // existing destination FS UUID — skips wizard if set
+
+	// Migration timeouts
+	MigrationTimeoutMs float64 // max wait for a migration run to complete
+
+	// Destination file server creation (legacy)
+	DestinationHost             string // IP/hostname of the NFS destination server
+	DestinationProtocolUsername string // NFS user for destination (e.g. "root")
+	DestinationProtocolPassword string // NFS password for destination (often empty)
 
 	// SMB file server creation
 	SMBHost       string // IP/hostname of the SMB server (e.g. "172.30.202.20")
@@ -136,6 +160,30 @@ func init() {
 	ProtocolPassword  = getEnvStr("NDM_PROTOCOL_PASSWORD", "")
 	MinWorkers        = getEnvInt("NDM_MIN_WORKERS", 1)
 	FileServerNameNew = getEnvStr("NDM_FILE_SERVER_NAME_NEW", "auto-test-fs")
+
+	// NFS source file server
+	NfsSourceHost                 = getEnvStr("NDM_NFS_SOURCE_HOST", "")
+	NfsSourceProtocolUsername     = getEnvStr("NDM_NFS_PROTOCOL_USERNAME", "root")
+	NfsSourceProtocolPassword     = getEnvStr("NDM_NFS_PROTOCOL_PASSWORD", "")
+	NfsSourceFileServerNamePrefix = getEnvStr("NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX", "nfs-src")
+	NfsSourceExportPath           = getEnvStr("NDM_NFS_SOURCE_EXPORT_PATH", "")
+	NfsSourceFileServerID         = getEnvStr("NDM_NFS_SOURCE_FILE_SERVER_ID", "")
+
+	// NFS destination file server
+	NfsDestinationHost                 = getEnvStr("NDM_NFS_DESTINATION_HOST", "")
+	NfsDestinationProtocolUsername     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_USERNAME", "root")
+	NfsDestinationProtocolPassword     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_PASSWORD", "")
+	NfsDestinationFileServerNamePrefix = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX", "nfs-dst")
+	NfsDestinationExportPath           = getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATH", "")
+	NfsDestinationFileServerID         = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_ID", "")
+
+	// Migration timeouts
+	MigrationTimeoutMs = getEnvFloat("NDM_MIGRATION_TIMEOUT_MS", 600000)
+
+	// Destination file server creation (legacy)
+	DestinationHost             = getEnvStr("NDM_DESTINATION_HOST", "")
+	DestinationProtocolUsername = getEnvStr("NDM_DESTINATION_PROTOCOL_USERNAME", "root")
+	DestinationProtocolPassword = getEnvStr("NDM_DESTINATION_PROTOCOL_PASSWORD", "")
 
 	// SMB file server creation
 	SMBHost       = getEnvStr("NDM_SMB_HOST", "")
