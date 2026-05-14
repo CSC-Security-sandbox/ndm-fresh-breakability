@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/csv"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -28,6 +29,51 @@ type DiscoverySummary struct {
 	RegularFilesCount int
 	DirectoriesCount  int
 	SymlinksCount     int
+}
+
+// LocalScanNFSVolumeForDiscovery mounts the NFS export read-only on the
+// local machine (the CI runner), counts files/dirs/symlinks using find,
+// and returns aggregate totals. The mount is cleaned up before returning.
+func LocalScanNFSVolumeForDiscovery(nfsExport string) (*DiscoverySummary, error) {
+	uid := fmt.Sprintf("%d", time.Now().UnixNano())
+	mp := fmt.Sprintf("/mnt/scan_discovery_%s", uid)
+
+	script := fmt.Sprintf(`set -e
+sudo mkdir -p "%[1]s"
+sudo mount -o ro -t nfs "%[2]s" "%[1]s"
+
+total=$(sudo find "%[1]s" -mindepth 1 -not -path '*/.snapshot/*' | wc -l)
+files=$(sudo find "%[1]s" -mindepth 1 -type f -not -path '*/.snapshot/*' | wc -l)
+dirs=$(sudo find "%[1]s" -mindepth 1 -type d -not -path '*/.snapshot/*' | wc -l)
+links=$(sudo find "%[1]s" -mindepth 1 -type l -not -path '*/.snapshot/*' | wc -l)
+
+sudo umount "%[1]s" || sudo umount -l "%[1]s"
+sudo rm -rf "%[1]s"
+
+echo "${total},${files},${dirs},${links}"
+`, mp, nfsExport)
+
+	cmd := exec.Command("bash", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("local discovery scan failed: %w\noutput: %s", err, string(out))
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lastLine := lines[len(lines)-1]
+
+	var total, files, dirs, links int
+	_, err = fmt.Sscanf(lastLine, "%d,%d,%d,%d", &total, &files, &dirs, &links)
+	if err != nil {
+		return nil, fmt.Errorf("parse scan output %q: %w", lastLine, err)
+	}
+
+	return &DiscoverySummary{
+		TotalCount:        total,
+		RegularFilesCount: files,
+		DirectoriesCount:  dirs,
+		SymlinksCount:     links,
+	}, nil
 }
 
 // ScanNFSVolumeForDiscovery SSHes into the worker, mounts the NFS export

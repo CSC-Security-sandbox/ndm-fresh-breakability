@@ -540,8 +540,6 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
-	requireEnv(t, config.WorkerHost, "NDM_WORKER_HOST")
-	requireEnv(t, config.WorkerPassword, "NDM_WORKER_PASSWORD")
 	requireEnv(t, config.SourceHost, "NDM_SOURCE_HOST")
 	requireEnv(t, config.NfsExportPath, "NDM_NFS_EXPORT_PATH")
 
@@ -553,13 +551,6 @@ func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
 		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
 	}
 	t.Logf("[5.21] using file server %s", fsID)
-
-	workerSSH := utils.SSHConfig{
-		Host:     config.WorkerHost,
-		Port:     config.WorkerPort,
-		Username: config.WorkerUsername,
-		Password: config.WorkerPassword,
-	}
 
 	// ── Step 1: download report CSV via browser ──
 	f, dp := newDiscoveryFixture(t)
@@ -575,15 +566,15 @@ func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
 	require.NoError(t, err, "download discovery report CSV")
 	t.Logf("[5.21] report downloaded: %s", csvPath)
 
-	// ── Step 2: scan actual volume via SSH ──
+	// ── Step 2: mount NFS volume locally on the runner and scan ──
 	exportPath := config.NfsExportPath
 	if !strings.HasPrefix(exportPath, "/") {
 		exportPath = "/" + exportPath
 	}
 	nfsExport := fmt.Sprintf("%s:%s", config.SourceHost, exportPath)
-	t.Logf("[5.21] scanning volume %s via worker %s", nfsExport, config.WorkerHost)
+	t.Logf("[5.21] scanning volume %s locally on runner", nfsExport)
 
-	scan, err := utils.ScanNFSVolumeForDiscovery(workerSSH, nfsExport)
+	scan, err := utils.LocalScanNFSVolumeForDiscovery(nfsExport)
 	require.NoError(t, err, "scan NFS volume for discovery metadata")
 	t.Logf("[5.21] volume scan: total=%d, files=%d, dirs=%d, symlinks=%d",
 		scan.TotalCount, scan.RegularFilesCount, scan.DirectoriesCount, scan.SymlinksCount)
