@@ -52,20 +52,49 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         skippedPaths: [],
     };
 
-    wf.setHandler(actionSignal, async (action:string) => {  
+    wf.setHandler(actionSignal, async (action:string) => {
         if(action == JobRunStatus.Stopped){
-            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
-            syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
-            output.status = JobRunStatus.Stopped;
-            output.scanJobStatus = JobRunStatus.Stopped;
-            output.syncJobStatus = JobRunStatus.Stopped;
+            try {
+                scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+                syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
+                output.status = JobRunStatus.Stopped;
+                output.scanJobStatus = JobRunStatus.Stopped;
+                output.syncJobStatus = JobRunStatus.Stopped;
+            } catch (error) {
+                console.error(`[${jobRunId}] Failed to cancel child workflows on stop: ${error.message}`);
+                output.status = JobRunStatus.Failed;
+                output.scanJobStatus = JobRunStatus.Failed;
+                output.syncJobStatus = JobRunStatus.Failed;
+                await updateWorkerResponse(jobRunId, 'all', {
+                    status: JobRunStatus.Failed,
+                    code: 'SIGNAL_FAILURE',
+                    operation: 'Stop Workflow',
+                    occurrence: 1,
+                    origin: 'MigrationWorkflow',
+                    message: `Failed to stop child workflows: ${error.message}`,
+                    createdAt: new Date(),
+                });
+            }
             return;
         }
-        await signalIfRunning(scanWorkflow, 'scanActionSignal', action);    
-        await signalIfRunning(syncWorkflow, 'syncActionSignal', action);
+        try {
+            await signalIfRunning(scanWorkflow, 'scanActionSignal', action);
+            await signalIfRunning(syncWorkflow, 'syncActionSignal', action);
+        } catch (error) {
+            console.error(`[${jobRunId}] Failed to forward signal '${action}' to child workflows: ${error.message}`);
+            await updateWorkerResponse(jobRunId, 'all', {
+                status: JobRunStatus.Failed,
+                code: 'SIGNAL_FAILURE',
+                operation: 'Forward Signal',
+                occurrence: 1,
+                origin: 'MigrationWorkflow',
+                message: `Failed to forward '${action}' signal to child workflows: ${error.message}`,
+                createdAt: new Date(),
+            });
+        }
     });
 
-    if(output.status !== JobRunStatus.Stopped){
+    if(output.status !== JobRunStatus.Stopped && output.status !== JobRunStatus.Failed){
         scanWorkflow = await wf.startChild('ChildScanWorkflow', {
             args: [ { jobRunId: jobRunId, failedWorkers: [] , isMigration: true } ],
             workflowId: `ScanWorkflow-${jobRunId}`,
@@ -75,7 +104,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         });
     }
 
-    if(output.status !== JobRunStatus.Stopped){
+    if(output.status !== JobRunStatus.Stopped && output.status !== JobRunStatus.Failed){
         syncWorkflow = await wf.startChild('ChildSyncWorkflow', {
             args: [ { jobRunId: jobRunId, scanWorkflowStatus: JobRunStatus.Running } ],
             workflowId: `SyncWorkflow-${jobRunId}`,
@@ -85,7 +114,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         });
     }
 
-    if(output.status !== JobRunStatus.Stopped){
+    if(output.status !== JobRunStatus.Stopped && output.status !== JobRunStatus.Failed){
         try {
             const scanWorkflowOutput = await scanWorkflow.result();
             output.fileCount = scanWorkflowOutput.fileCount;
@@ -99,12 +128,31 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             }else {
                 output.scanJobStatus = JobRunStatus.Failed; 
             }
-            syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
+            try { syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId); }
+            catch (cancelErr) { console.error(`[${jobRunId}] Failed to cancel sync workflow after scan failure: ${cancelErr.message}`); }
         }
 
-        await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
+        try {
+            await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
+        } catch (error) {
+            console.error(`[${jobRunId}] Failed to send scanResultSignal to sync workflow: ${error.message}`);
+            output.scanJobStatus = JobRunStatus.Failed;
+            output.syncJobStatus = JobRunStatus.Failed;
+            output.status = JobRunStatus.Failed;
+            await updateWorkerResponse(jobRunId, 'all', {
+                status: JobRunStatus.Failed,
+                code: 'SIGNAL_FAILURE',
+                operation: 'Scan Result Signal',
+                occurrence: 1,
+                origin: 'MigrationWorkflow',
+                message: `Failed to notify sync workflow that scan completed: ${error.message}`,
+                createdAt: new Date(),
+            });
+            try { syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId); }
+            catch (cancelErr) { console.error(`[${jobRunId}] Failed to cancel sync workflow after scanResultSignal failure: ${cancelErr.message}`); }
+        }
 
-        if(syncWorkflow){
+        if(syncWorkflow && output.status !== JobRunStatus.Failed){
             try{
                 const syncWorkflowOutput = await syncWorkflow.result(); 
                 
@@ -124,7 +172,8 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
                     message: `Sync workflow failed with error: ${error.message}`,
                     createdAt: new Date()
                 });
-                scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+                try { scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId); }
+                catch (cancelErr) { console.error(`[${jobRunId}] Failed to cancel scan workflow after sync failure: ${cancelErr.message}`); }
             }
         }
     }

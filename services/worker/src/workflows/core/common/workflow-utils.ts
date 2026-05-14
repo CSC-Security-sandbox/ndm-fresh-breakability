@@ -1,8 +1,9 @@
 import * as wf from '@temporalio/workflow';
-import { getExternalWorkflowHandle } from '@temporalio/workflow';
+import { getExternalWorkflowHandle, WorkflowNotFoundError } from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/common/enums';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
+import { SIGNAL_MAX_ATTEMPTS, SIGNAL_RETRY_DELAY } from './workflow-constants';
 
 
 const {
@@ -30,28 +31,59 @@ export const updateJobStatusIfNotRunning = async (state: JobRunStatus, jobRunId:
   }
 }
 
-export const cancelWorkflowIfRunning = async (workflowId: string) =>{
-  try{  
-    const isWorkflowRunning  =  await isWorkflowRunningActivity(workflowId);
-    if(!isWorkflowRunning){
-      console.log(`${workflowId} is not running`);
+export const cancelWorkflowIfRunning = async (workflowId: string): Promise<void> => {
+  const isWorkflowRunning = await isWorkflowRunningActivity(workflowId);
+  if (!isWorkflowRunning) {
+    console.log(`${workflowId} is not running`);
+    return;
+  }
+
+  const handle = getExternalWorkflowHandle(workflowId);
+  for (let attempt = 1; attempt <= SIGNAL_MAX_ATTEMPTS; attempt++) {
+    try {
+      await handle.cancel();
+      console.log(`${workflowId} cancelled successfully`);
       return;
-    }          
-    const handle = getExternalWorkflowHandle(workflowId);
-    await handle.cancel();
-    console.log(`${workflowId} is cancelled sucessfully`);
-  }catch(error){
-    console.log(`Failed to cancel workflow ${workflowId}`);
-  } 
+    } catch (error) {
+      if (error instanceof WorkflowNotFoundError) {
+        console.log(`${workflowId} already completed before cancel could be sent`);
+        return;
+      }
+      if (attempt === SIGNAL_MAX_ATTEMPTS) {
+        console.error(`Failed to cancel ${workflowId} after ${SIGNAL_MAX_ATTEMPTS} attempts: ${error.message}`);
+        throw error;
+      }
+      console.warn(`Cancel attempt ${attempt} for ${workflowId} failed: ${error.message}. Retrying in ${SIGNAL_RETRY_DELAY}...`);
+      await wf.sleep(SIGNAL_RETRY_DELAY);
+    }
+  }
 }
 
-export const signalIfRunning = async (workflow: any, signalName: string, payload: any) => {
-  try {
-    if (workflow && await isWorkflowRunningActivity(workflow.workflowId)) {
+export const signalIfRunning = async (workflow: any, signalName: string, payload: any): Promise<void> => {
+  if (!workflow) return;
+
+  const isRunning = await isWorkflowRunningActivity(workflow.workflowId);
+  if (!isRunning) {
+    console.log(`Workflow ${workflow.workflowId} is not running, skipping signal '${signalName}'`);
+    return;
+  }
+
+  for (let attempt = 1; attempt <= SIGNAL_MAX_ATTEMPTS; attempt++) {
+    try {
       await workflow.signal(signalName, payload);
+      return;
+    } catch (error) {
+      if (error instanceof WorkflowNotFoundError) {
+        console.log(`Workflow ${workflow.workflowId} already completed before signal '${signalName}' could be sent`);
+        return;
+      }
+      if (attempt === SIGNAL_MAX_ATTEMPTS) {
+        console.error(`Failed to signal workflow ${workflow.workflowId} with signal '${signalName}' after ${SIGNAL_MAX_ATTEMPTS} attempts: ${error.message}`);
+        throw error;
+      }
+      console.warn(`Signal attempt ${attempt} for ${workflow.workflowId} ('${signalName}') failed: ${error.message}. Retrying in ${SIGNAL_RETRY_DELAY}...`);
+      await wf.sleep(SIGNAL_RETRY_DELAY);
     }
-  } catch (error) {
-    console.log(`Failed to signal workflow ${workflow?.workflowId} with signal ${signalName}: ${error.message}`);
   }
 }
 

@@ -35,3 +35,14 @@ export const DEFAULT_BATCH_SIZE = 100;
  * Controls parallelism in ValidatePathWorkerWorkflow.
  */
 export const VALIDATE_PATH_CONCURRENCY = 10;
+
+/**
+ * Maximum number of attempts for cancelling or signalling a child workflow
+ * before surfacing the failure to the caller.
+ */
+export const SIGNAL_MAX_ATTEMPTS = 3;
+
+/**
+ * Delay between retry attempts when cancelling or signalling a child workflow.
+ */
+export const SIGNAL_RETRY_DELAY = '30s';

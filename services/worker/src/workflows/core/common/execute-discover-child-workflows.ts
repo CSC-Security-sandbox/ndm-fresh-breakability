@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/common/enums';
 import { ChildScanWorkflowOutput } from '../child/chid-scan.workflow.type';
-import { cancelWorkflowIfRunning } from './workflow-utils';
+import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 
 
 interface DiscoveryWorkflowExecutorInput {
@@ -47,17 +47,45 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
     };
 
 
-    wf.setHandler(actionSignal, async (action:string) => {  
+    wf.setHandler(actionSignal, async (action:string) => {
         if(action == JobRunStatus.Stopped){
-            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
-            output.status = JobRunStatus.Stopped;
+            try {
+                scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+                output.status = JobRunStatus.Stopped;
+            } catch (error) {
+                console.error(`[${jobRunId}] Failed to cancel child workflows on stop: ${error.message}`);
+                output.status = JobRunStatus.Failed;
+                await updateWorkerResponse(jobRunId, 'all', {
+                    status: JobRunStatus.Failed,
+                    code: 'SIGNAL_FAILURE',
+                    operation: 'Stop Workflow',
+                    occurrence: 1,
+                    origin: 'DiscoveryWorkflow',
+                    message: `Failed to stop child workflows: ${error.message}`,
+                    createdAt: new Date(),
+                });
+            }
             return;
         }
-        if(isScanIsRunning)    
-            scanWorkflow.signal('scanActionSignal', action);    
+        if(isScanIsRunning) {
+            try {
+                await signalIfRunning(scanWorkflow, 'scanActionSignal', action);
+            } catch (error) {
+                console.error(`[${jobRunId}] Failed to forward signal '${action}' to scan workflow: ${error.message}`);
+                await updateWorkerResponse(jobRunId, 'all', {
+                    status: JobRunStatus.Failed,
+                    code: 'SIGNAL_FAILURE',
+                    operation: 'Forward Signal',
+                    occurrence: 1,
+                    origin: 'DiscoveryWorkflow',
+                    message: `Failed to forward '${action}' signal to scan workflow: ${error.message}`,
+                    createdAt: new Date(),
+                });
+            }
+        }
     });
 
-    if(output.status !== JobRunStatus.Stopped) {    
+    if(output.status !== JobRunStatus.Stopped && output.status !== JobRunStatus.Failed) {
         scanWorkflow = await wf.startChild('ChildScanWorkflow', {
             args: [ { jobRunId,  isMigration: false } ],
             workflowId: `ScanWorkflow-${jobRunId}`,

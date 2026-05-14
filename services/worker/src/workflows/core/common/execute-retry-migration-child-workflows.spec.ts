@@ -12,18 +12,21 @@ jest.mock('./workflow-utils', () => ({
     getUnifiedJobStatus: (...args: any[]) => mockGetUnifiedJobStatus(...args),
 }));
 
+// Stable references so tests can assert on calls to these activities
+const mockUpdateWorkerResponse = jest.fn().mockResolvedValue(undefined);
+const mockUpdateLastEntry = jest.fn().mockResolvedValue(undefined);
+
 // Mock Temporal workflow module
 const mockSetHandler = jest.fn();
 const mockStartChild = jest.fn();
-const mockProxyActivities = jest.fn();
 
 jest.mock('@temporalio/workflow', () => ({
     defineSignal: jest.fn(() => 'actionSignal'),
     setHandler: (...args: any[]) => mockSetHandler(...args),
     startChild: (...args: any[]) => mockStartChild(...args),
     proxyActivities: () => ({
-        updateLastEntry: jest.fn().mockResolvedValue(undefined),
-        updateWorkerResponse: jest.fn().mockResolvedValue(undefined),
+        updateLastEntry: (...args: any[]) => mockUpdateLastEntry(...args),
+        updateWorkerResponse: (...args: any[]) => mockUpdateWorkerResponse(...args),
     }),
     isCancellation: jest.fn((error) => error?.isCancellation === true),
     ChildWorkflowCancellationType: { WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED' },
@@ -42,6 +45,11 @@ describe('executeRetryMigrationChildWorkflows', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+
+        // Reset default behaviour for mocks whose implementations may be overridden per-test
+        mockSignalIfRunning.mockResolvedValue(undefined);
+        mockCancelWorkflowIfRunning.mockResolvedValue(undefined);
+        mockUpdateWorkerResponse.mockResolvedValue(undefined);
 
         // Setup mock workflow handles
         mockRetryScanWorkflowHandle = {
@@ -199,6 +207,104 @@ describe('executeRetryMigrationChildWorkflows', () => {
             const result = await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
 
             expect(result.retryScanJobStatus).toBe(JobRunStatus.Stopped);
+        });
+
+        it('should report SIGNAL_FAILURE and set Failed when cancelling child workflows throws on stop', async () => {
+            mockCancelWorkflowIfRunning.mockRejectedValue(new Error('Cancel timed out'));
+
+            let capturedHandler: (action: string) => Promise<void>;
+            mockSetHandler.mockImplementation((_signal, handler) => {
+                capturedHandler = handler;
+            });
+
+            const workflowPromise = executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+            await new Promise(resolve => setImmediate(resolve));
+
+            await capturedHandler!(JobRunStatus.Stopped);
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId, 'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                })
+            );
+
+            await workflowPromise;
+        });
+
+        it('should report SIGNAL_FAILURE when forwarding pause signal to children throws', async () => {
+            mockSignalIfRunning.mockRejectedValue(new Error('Signal delivery failed'));
+
+            let capturedHandler: (action: string) => Promise<void>;
+            mockSetHandler.mockImplementation((_signal, handler) => {
+                capturedHandler = handler;
+            });
+
+            const workflowPromise = executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+            await new Promise(resolve => setImmediate(resolve));
+
+            await capturedHandler!(JobRunStatus.Paused);
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId, 'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                })
+            );
+
+            // Resolve mocked workflows so the test can complete
+            mockSignalIfRunning.mockResolvedValue(undefined);
+            await workflowPromise;
+        });
+
+        it('should report SIGNAL_FAILURE and not await sync result when scanResultSignal throws', async () => {
+            // Make scanResultSignal throw, all other signals succeed
+            mockSignalIfRunning.mockImplementation((_wf, signalName) => {
+                if (signalName === 'scanResultSignal') return Promise.reject(new Error('Signal lost'));
+                return Promise.resolve();
+            });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId, 'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                })
+            );
+            // sync workflow result should not be awaited once status is Failed
+            expect(mockSyncWorkflowHandle.result).not.toHaveBeenCalled();
+        });
+
+        it('should complete successfully even if cleanup cancel throws after scan failure', async () => {
+            // Scan workflow fails, and the cleanup cancel also fails
+            mockRetryScanWorkflowHandle.result.mockRejectedValue(new Error('Scan crashed'));
+            mockCancelWorkflowIfRunning.mockRejectedValue(new Error('Cancel also failed'));
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            // Should not propagate the cancel error — workflow completes cleanly
+            await expect(
+                executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId })
+            ).resolves.toBeDefined();
+        });
+
+        it('should report SIGNAL_FAILURE when sync workflow throws', async () => {
+            mockSyncWorkflowHandle.result.mockRejectedValue(new Error('Sync crashed'));
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId, 'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                })
+            );
         });
     });
 
