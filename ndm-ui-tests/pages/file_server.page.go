@@ -30,14 +30,14 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("fs-step1-loaded")
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -47,7 +47,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 
 	// ── Step 2: Credentials ─────────────────────────────────────────────
 	hostField := p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
-	if err := p.expectVisible(hostField, 10000); err != nil {
+	if err := p.expectVisible(hostField, 30000); err != nil {
 		return "", fmt.Errorf("step2: Host Name field not visible: %w", err)
 	}
 	_ = hostField.Fill(host)
@@ -69,7 +69,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 	// ── Step 3: Workers ─────────────────────────────────────────────────
 	if err := p.expectVisible(
 		p.page.GetByText(regexp.MustCompile(`(?i)Compatible Workers`)).First(),
-		15000,
+		30000,
 	); err != nil {
 		return "", fmt.Errorf("step3: Compatible Workers label not visible: %w", err)
 	}
@@ -77,7 +77,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)nfs-worker`))
 	_ = workerNames.First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(30000),
 	})
 	p.sleep(2000)
 
@@ -184,14 +184,14 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("smb-step1-loaded")
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -209,7 +209,7 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 	if !p.isVisible(hostField) {
 		hostField = p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
 	}
-	if err := p.expectVisible(hostField, 10000); err != nil {
+	if err := p.expectVisible(hostField, 30000); err != nil {
 		return "", fmt.Errorf("step2: Host Name field not visible: %w", err)
 	}
 	_ = hostField.Fill(host)
@@ -391,14 +391,14 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("isilon-step1-loaded")
 
 	// ── Step 1: Server Type ────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -468,7 +468,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	acceptBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{
 		Name: "Accept and Continue",
 	})
-	if err := p.expectVisible(acceptBtn, 15000); err == nil {
+	if err := p.expectVisible(acceptBtn, 30000); err == nil {
 		p.screenshot("isilon-certificate-dialog")
 		_ = acceptBtn.Click()
 		p.sleep(3000)
@@ -479,7 +479,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	// ── Step 2: Access Zones / Credentials ─────────────────────────────
 	// Wait for the Access Zones heading to render.
 	if err := p.expectVisible(
-		p.page.GetByText("Access Zones").First(), 15000,
+		p.page.GetByText("Access Zones").First(), 30000,
 	); err != nil {
 		return "", fmt.Errorf("step2: Access Zones not visible: %w", err)
 	}
@@ -763,7 +763,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	workerToggles := p.page.Locator(`[role="switch"]`)
 	_ = workerToggles.First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(30000),
 	})
 	p.sleep(1000)
 
@@ -912,7 +912,7 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 		log.Printf("[navigateToFileServer] attempt %d: %q not visible in list, retrying…", attempt+1, name)
 	}
 
-	if err := p.expectVisible(nameLink.First(), 15000); err != nil {
+	if err := p.expectVisible(nameLink.First(), 30000); err != nil {
 		p.screenshot("fs-name-not-found")
 		return "", fmt.Errorf("file server %q not found in list", name)
 	}

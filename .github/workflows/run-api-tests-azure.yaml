@@ -815,8 +815,8 @@ jobs:
       NDM_HEADLESS: 'true'
       NDM_SLOWMO: '0'
       NDM_TIMEOUT: '60000'
-      NDM_VIDEO_DIR: ndm-ui-tests/test-results/videos
-      NDM_SCREENSHOT_DIR: ndm-ui-tests/test-results/screenshots
+      NDM_VIDEO_DIR: test-results/videos
+      NDM_SCREENSHOT_DIR: test-results/screenshots
 
       # NFS / SMB values are extracted from comma-separated API vars
       # in the "Extract UI test config" step below.
@@ -873,6 +873,21 @@ jobs:
           echo "NDM_WORKER_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
           echo "::add-mask::$VM_PASSWORD"
           echo "NDM_WORKER_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Wait for NDM UI to be reachable
+        run: |
+          CP_IP="${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}"
+          echo "Waiting for NDM UI at https://$CP_IP to be reachable..."
+          for i in $(seq 1 30); do
+            if curl -sk -o /dev/null -w '%{http_code}' "https://$CP_IP" | grep -qE '200|302|301'; then
+              echo "NDM UI is reachable (attempt $i)"
+              break
+            fi
+            echo "Attempt $i: not ready, waiting 10s..."
+            sleep 10
+          done
+          echo "Waiting an extra 30s for all services to stabilize..."
+          sleep 30
 
       - name: Run UI E2E Tests
         run: |
