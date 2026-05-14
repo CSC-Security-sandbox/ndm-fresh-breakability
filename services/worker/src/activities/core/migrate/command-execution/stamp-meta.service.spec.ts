@@ -103,12 +103,16 @@ describe('StampMetaService', () => {
         | 'logStampReadonlySourceOnce'
         | 'logReadAtimeStrategyOnce'
         | 'logONoatimeSessionDemotionOnce'
+        | 'isMountNoatimeAppliedForSource'
+        | 'logStampStrategy5SkippedOnce'
       >
     > = {
       logStampConfigOnce: jest.fn(),
       logStampReadonlySourceOnce: jest.fn(),
       logReadAtimeStrategyOnce: jest.fn(),
       logONoatimeSessionDemotionOnce: jest.fn(),
+      isMountNoatimeAppliedForSource: jest.fn().mockReturnValue(false),
+      logStampStrategy5SkippedOnce: jest.fn().mockReturnValue(true),
     };
 
     // Setup fs.promises mocks
@@ -679,6 +683,122 @@ describe('StampMetaService', () => {
 
       expect(result.sourceErrors).toEqual([]);
       expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The new Strategy 5 elision: when the read-side strategies guaranteed
+     * the kernel did not bump source atime, the source `utimes` becomes a
+     * redundant write. These tests pin the contract:
+     *   - per-file Strategy 2 success (`STRATEGY_2_O_NOATIME`) → skip,
+     *   - mount-time Strategy 3 in effect for the source → skip,
+     *   - Strategy 2 fallback alone → still restore (mount might not be
+     *     noatime, so the kernel did move atime forward),
+     *   - read-only source (Strategy 6) wins over both — the readonly log
+     *     fires and the strategy-5-skipped log MUST NOT fire (otherwise
+     *     operators would see two contradictory "skip" reasons for one
+     *     file).
+     */
+    it('skips source utimes when per-file Strategy 2 (O_NOATIME) succeeded', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+          ctime: new Date('2023-01-02T12:00:00Z'),
+        },
+        { preserveAccessTime: true },
+      );
+      input.atimeReadStrategy = 'read_path:strategy_2_o_noatime';
+      input.sPathId = 'src-1';
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      const session = (service as any).atimeReadSession;
+      expect(session.logStampStrategy5SkippedOnce).toHaveBeenCalledWith(
+        'job-run-123',
+        'src-1',
+        'per_file_o_noatime_succeeded',
+      );
+      // The relatime config log must not fire — we returned before it.
+      expect(session.logStampConfigOnce).not.toHaveBeenCalled();
+    });
+
+    it('skips source utimes when mount-time Strategy 3 is in effect for the source', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+          ctime: new Date('2023-01-02T12:00:00Z'),
+        },
+        { preserveAccessTime: true },
+      );
+      input.sPathId = 'src-1';
+      input.atimeReadStrategy = 'read_path:strategy_2_o_noatime_fallback_same_file';
+      const session = (service as any).atimeReadSession;
+      session.isMountNoatimeAppliedForSource.mockReturnValue(true);
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect(session.logStampStrategy5SkippedOnce).toHaveBeenCalledWith(
+        'job-run-123',
+        'src-1',
+        'mount_noatime_in_effect',
+      );
+    });
+
+    it('still calls utimes when Strategy 2 fell back AND mount-noatime is not in effect', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+          ctime: new Date('2023-01-02T12:00:00Z'),
+        },
+        { preserveAccessTime: true },
+      );
+      input.sPathId = 'src-1';
+      input.atimeReadStrategy = 'read_path:strategy_2_o_noatime_fallback_same_file';
+      const session = (service as any).atimeReadSession;
+      session.isMountNoatimeAppliedForSource.mockReturnValue(false);
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(mockFs.promises.utimes).toHaveBeenCalledWith(
+        '/source/test-file.txt',
+        new Date('2023-01-01T14:00:00Z'),
+        new Date('2023-01-02T12:00:00Z'),
+      );
+      expect(session.logStampStrategy5SkippedOnce).not.toHaveBeenCalled();
+    });
+
+    it('Strategy 6 (read-only) takes precedence over Strategy 5 elision', async () => {
+      // Even with both read-only AND noatime-guaranteed signals true, only
+      // the read-only branch should fire; Strategy 5 elision must not
+      // double-log.
+      (mockFs.promises.access as jest.Mock).mockRejectedValueOnce(
+        Object.assign(new Error('EROFS'), { code: 'EROFS' }),
+      );
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-01T14:00:00Z'),
+        },
+        { preserveAccessTime: true },
+      );
+      input.sPathId = 'src-1';
+      input.atimeReadStrategy = 'read_path:strategy_2_o_noatime';
+      const session = (service as any).atimeReadSession;
+      session.isMountNoatimeAppliedForSource.mockReturnValue(true);
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect(session.logStampReadonlySourceOnce).toHaveBeenCalled();
+      expect(session.logStampStrategy5SkippedOnce).not.toHaveBeenCalled();
     });
 
     it('should skip source restore when relatime gate is on and rules say no restore', async () => {

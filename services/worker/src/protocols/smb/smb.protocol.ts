@@ -219,6 +219,13 @@ export class SMBProtocol extends Protocol {
         this.logger.log(`[${traceId}] Backup privileges enabled successfully for SMB`);
         if (this.atimeReadSession && payload.preserveAccessTime !== false) {
           this.atimeReadSession.logSmbBackupIntentOnce(payload.jobRunId);
+          // Record once per job that mount-time noatime is structurally
+          // unavailable on Windows SMB (`net use` exposes no atime knob),
+          // leaving Strategies 1 (partial), 4b, 5, and 6 as the realistic
+          // ladder. Operators correlating Strategy 5 frequency with mount
+          // configuration need this signal — without it, the absence of a
+          // STRATEGY_3 mount log on Windows reads as ambiguous.
+          this.atimeReadSession.logSmbWindowsStrategy3UnavailableOnce(payload.jobRunId);
         }
       } catch (error) {
         this.logger.error(`[${traceId}] Failed to enable Windows backup privileges: ${error.message}`);
@@ -312,6 +319,13 @@ export class SMBProtocol extends Protocol {
         if (!recoveredMountAfterNoatimeRejected) {
           if (wantNoatimeMount) {
             this.logger.log(`[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_SMB_MOUNT_NOATIME_OK}`);
+            // Strategy 3 (Linux CIFS / macOS smbfs) confirmed in effect for
+            // this source; the stamp phase will skip Strategy 5 utimes for
+            // files served from this mount. See atime-preserve.utils.
+            this.atimeReadSession?.markMountNoatimeApplied(
+              payload.jobRunId,
+              payload.pathId,
+            );
           } else if (this.platform === 'linux' || this.platform === 'darwin') {
             this.logger.log(`[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_SMB_MOUNT_STANDARD_ONLY}`);
           }

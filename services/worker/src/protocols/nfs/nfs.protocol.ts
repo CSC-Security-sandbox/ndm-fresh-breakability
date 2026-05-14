@@ -296,6 +296,14 @@ export class NFSProtocol extends Protocol {
         this.logger.log(
           `[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_MOUNT_NOATIME_OK}`,
         );
+        // Strategy 3 is now in effect for this source — record so the stamp
+        // phase can short-circuit Strategy 5 source utimes (the kernel will
+        // not bump atime under a noatime mount, regardless of how reads open
+        // individual files).
+        this.atimeReadSession?.markMountNoatimeApplied(
+          payload.jobRunId,
+          payload.pathId,
+        );
       } else {
         this.logger.log(
           `[atime-diagnostic] traceId=${traceId} jobRunId=${payload.jobRunId} ${ATIME_DIAG.STRATEGY_3_MOUNT_STANDARD_ONLY}`,

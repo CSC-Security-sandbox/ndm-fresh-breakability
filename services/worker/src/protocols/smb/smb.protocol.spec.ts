@@ -719,6 +719,76 @@ describe('SMBProtocol', () => {
             // Should not attempt to log privilege messages
             expect(loggerMock.log).not.toHaveBeenCalledWith(expect.stringContaining('Enabling Windows backup privileges'));
           });
+
+          it('records the Windows-SMB Strategy 3 unavailability once when preserveAccessTime is requested', async () => {
+            // Windows SMB mounts via `net use`, which has no atime knob —
+            // Strategy 3 is structurally unavailable. The protocol must
+            // emit the diagnostic so operators correlating Strategy 5
+            // frequency with mount config can see it; the absence of a
+            // STRATEGY_3 line on Windows would otherwise look like a
+            // missed code path.
+            const mockPrivilegeService = {
+              enableBackupPrivileges: jest.fn().mockResolvedValue(true),
+              logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
+            };
+            const mockSession = {
+              logSmbBackupIntentOnce: jest.fn(),
+              logSmbWindowsStrategy3UnavailableOnce: jest.fn(),
+              shouldAttemptSmbMountNoatime: jest.fn().mockReturnValue(true),
+              markSmbMountNoatimeUnsupported: jest.fn(),
+              markMountNoatimeApplied: jest.fn(),
+            };
+            (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+            (smbProtocol as any).atimeReadSession = mockSession;
+            (smbProtocol as any).platform = 'win32';
+
+            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'credentials saved successfully.' })
+              .mockResolvedValueOnce({ message: 'mounted successfully.' })
+              .mockResolvedValueOnce({ message: 'link created successfully.' });
+
+            const payload = { ...mockPayload, preserveAccessTime: true };
+            await smbProtocol.mountPath(mockTraceId, payload, true);
+
+            expect(mockSession.logSmbBackupIntentOnce).toHaveBeenCalledWith(payload.jobRunId);
+            expect(mockSession.logSmbWindowsStrategy3UnavailableOnce).toHaveBeenCalledWith(
+              payload.jobRunId,
+            );
+            // The successful mount path on Windows must NOT call
+            // markMountNoatimeApplied, because no noatime mount was
+            // attempted — the wantNoatimeMount gate is `linux || darwin`.
+            expect(mockSession.markMountNoatimeApplied).not.toHaveBeenCalled();
+          });
+
+          it('does not emit the Windows-SMB Strategy 3 diagnostic when preserveAccessTime is disabled', async () => {
+            const mockPrivilegeService = {
+              enableBackupPrivileges: jest.fn().mockResolvedValue(true),
+              logCurrentPrivileges: jest.fn().mockResolvedValue(undefined),
+            };
+            const mockSession = {
+              logSmbBackupIntentOnce: jest.fn(),
+              logSmbWindowsStrategy3UnavailableOnce: jest.fn(),
+              shouldAttemptSmbMountNoatime: jest.fn().mockReturnValue(true),
+              markSmbMountNoatimeUnsupported: jest.fn(),
+              markMountNoatimeApplied: jest.fn(),
+            };
+            (smbProtocol as any).windowsPrivilegeService = mockPrivilegeService;
+            (smbProtocol as any).atimeReadSession = mockSession;
+            (smbProtocol as any).platform = 'win32';
+
+            jest.spyOn(require('src/activities/core/utils/utils'), 'isPathExists').mockResolvedValue(true);
+            (smbProtocol as any).executeCommand
+              .mockResolvedValueOnce({ message: 'credentials saved successfully.' })
+              .mockResolvedValueOnce({ message: 'mounted successfully.' })
+              .mockResolvedValueOnce({ message: 'link created successfully.' });
+
+            const payload = { ...mockPayload, preserveAccessTime: false };
+            await smbProtocol.mountPath(mockTraceId, payload, true);
+
+            expect(mockSession.logSmbBackupIntentOnce).not.toHaveBeenCalled();
+            expect(mockSession.logSmbWindowsStrategy3UnavailableOnce).not.toHaveBeenCalled();
+          });
         });
       });
     });

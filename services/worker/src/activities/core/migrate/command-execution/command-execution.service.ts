@@ -71,6 +71,13 @@ export class CommandExecService {
        // Stamp Meta if needed
         let metaResult: CommandOutput | null = null;
         if (baseCmdRes.shouldStampMeta) {
+            // Forward the read-side atime strategy outcome (set by copyFile
+            // when the worker thread resolves) so preserveAccessAndModifiedTime
+            // can short-circuit Strategy 5 source utimes when an earlier
+            // strategy already kept the kernel from bumping atime.
+            if (baseCmdRes.atimeReadStrategy) {
+                input.atimeReadStrategy = baseCmdRes.atimeReadStrategy;
+            }
             metaResult = await this.stampMetaService.stampMetaData(input);
             baseCmdRes.shouldUpdateItemInfo = metaResult.shouldUpdateItemInfo;
             output.targetErrors.push(...metaResult.targetErrors);
@@ -162,6 +169,12 @@ export class CommandExecService {
 
                 // Capture the timestamp when checksum was generated
                 const checksumTime = new Date();
+
+                // Surface the read-side atime strategy outcome so executeCommand
+                // can hand it to the stamp phase. preserveAccessAndModifiedTime
+                // uses it to skip the redundant Strategy 5 source utimes when
+                // the kernel already preserved atime under Strategy 2 / 3.
+                output.atimeReadStrategy = checksums?.atimeReadStrategy;
 
                 output.shouldUpdateItemInfo = true;
                 

@@ -26,9 +26,12 @@ export class AtimeReadSessionService {
   private readonly nfsMountNoatimeSkip = new Set<string>();
   private readonly smbMountNoatimeSkip = new Set<string>();
   private readonly smbBackupIntentLogged = new Set<string>();
+  private readonly smbWinStrategy3UnavailableLogged = new Set<string>();
   private readonly readStrategyLogged = new Set<string>();
   private readonly stampConfigLogged = new Set<string>();
   private readonly stampReadonlyLogged = new Set<string>();
+  private readonly stampStrategy5SkippedLogged = new Set<string>();
+  private readonly mountNoatimeApplied = new Set<string>();
   private readonly oNoatimeJobDemotionLogged = new Set<string>();
   private readonly logger: LoggerService;
 
@@ -72,6 +75,7 @@ export class AtimeReadSessionService {
     this.nfsMountNoatimeSkip.delete(jobRunId);
     this.smbMountNoatimeSkip.delete(jobRunId);
     this.smbBackupIntentLogged.delete(jobRunId);
+    this.smbWinStrategy3UnavailableLogged.delete(jobRunId);
     this.oNoatimeJobDemotionLogged.delete(jobRunId);
     const prefix = `${jobRunId}\u001f`;
     for (const k of this.readStrategyLogged) {
@@ -82,6 +86,12 @@ export class AtimeReadSessionService {
     }
     for (const k of this.stampReadonlyLogged) {
       if (k.startsWith(prefix)) this.stampReadonlyLogged.delete(k);
+    }
+    for (const k of this.stampStrategy5SkippedLogged) {
+      if (k.startsWith(prefix)) this.stampStrategy5SkippedLogged.delete(k);
+    }
+    for (const k of this.mountNoatimeApplied) {
+      if (k.startsWith(prefix)) this.mountNoatimeApplied.delete(k);
     }
   }
 
@@ -182,5 +192,68 @@ export class AtimeReadSessionService {
     this.logger.log(
       `[atime-diagnostic] jobRunId=${jobRunId} sourcePathId=${sourcePathId ?? 'n/a'} stamp_atime=strategy_6_readonly_skip_restore example=${examplePath}`,
     );
+  }
+
+  /**
+   * Positive signal that Strategy 3 (mount-time `noatime`/`nodiratime`) is
+   * actually in effect for this source. Set by the protocol layer immediately
+   * after a successful noatime mount and consulted by the stamp phase to
+   * short-circuit Strategy 5 — the kernel won't bump atime under a noatime
+   * mount, so source `utimes` would just be a redundant write.
+   *
+   * Per (jobRunId, sourcePathId) — the same source path is normally mounted
+   * once per job, but keying by both lets the same worker handle disjoint
+   * sources within one job without bleeding state.
+   */
+  markMountNoatimeApplied(
+    jobRunId: string | undefined,
+    sourcePathId: string | undefined,
+  ): void {
+    if (!jobRunId) return;
+    this.boundedAdd(this.mountNoatimeApplied, this.sourceKey(jobRunId, sourcePathId));
+  }
+
+  /** Inverse of {@link markMountNoatimeApplied}; consulted by the stamp phase. */
+  isMountNoatimeAppliedForSource(
+    jobRunId: string | undefined,
+    sourcePathId: string | undefined,
+  ): boolean {
+    if (!jobRunId) return false;
+    return this.mountNoatimeApplied.has(this.sourceKey(jobRunId, sourcePathId));
+  }
+
+  /**
+   * One info line per (jobRunId, sourcePathId) the first time the stamp phase
+   * decides Strategy 5 source `utimes` is unnecessary because an earlier
+   * strategy already prevented the kernel atime bump. Quiet by design — the
+   * absence of Strategy-5 logs on subsequent files is the operator signal.
+   */
+  logStampStrategy5SkippedOnce(
+    jobRunId: string | undefined,
+    sourcePathId: string | undefined,
+    reason: string,
+  ): boolean {
+    if (!jobRunId) return false;
+    const k = this.sourceKey(jobRunId, sourcePathId) + '\u001fs5skip';
+    if (!this.boundedAdd(this.stampStrategy5SkippedLogged, k)) return false;
+    this.logger.log(
+      `[atime-diagnostic] jobRunId=${jobRunId} sourcePathId=${sourcePathId ?? 'n/a'} stamp_atime=strategy_5_skipped_kernel_noatime_guaranteed reason=${reason}`,
+    );
+    return true;
+  }
+
+  /**
+   * One info line per job the first time SMB mount is invoked on Windows
+   * with `preserveAccessTime` requested. Windows SMB mounts via `net use`,
+   * which exposes no atime knob; this records the structural unavailability
+   * so log readers don't mistake the silence for a missed mount attempt.
+   */
+  logSmbWindowsStrategy3UnavailableOnce(jobRunId: string | undefined): boolean {
+    if (!jobRunId) return false;
+    if (!this.boundedAdd(this.smbWinStrategy3UnavailableLogged, jobRunId)) return false;
+    this.logger.log(
+      `[atime-diagnostic] jobRunId=${jobRunId} mount_smb:strategy_3_not_applicable_windows_net_use_no_atime_option`,
+    );
+    return true;
   }
 }

@@ -240,8 +240,90 @@ describe('AtimeReadSessionService', () => {
         relatimeWindowMs: 1000,
       });
       service.logStampReadonlySourceOnce('job-1', 'src-1', '/a');
-      // Three distinct channel keys, all should fire once.
-      expect(loggerLog).toHaveBeenCalledTimes(3);
+      service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'mount_noatime_in_effect');
+      // Four distinct channel keys, all should fire once.
+      expect(loggerLog).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('markMountNoatimeApplied / isMountNoatimeAppliedForSource', () => {
+    it('returns false before any mark and true after marking the same source', () => {
+      expect(service.isMountNoatimeAppliedForSource('job-1', 'src-1')).toBe(false);
+      service.markMountNoatimeApplied('job-1', 'src-1');
+      expect(service.isMountNoatimeAppliedForSource('job-1', 'src-1')).toBe(true);
+    });
+
+    it('isolates state per (jobRunId, sourcePathId)', () => {
+      service.markMountNoatimeApplied('job-1', 'src-1');
+      // Same source under a different job should not see the mark.
+      expect(service.isMountNoatimeAppliedForSource('job-2', 'src-1')).toBe(false);
+      // Same job, different source should not see the mark.
+      expect(service.isMountNoatimeAppliedForSource('job-1', 'src-2')).toBe(false);
+    });
+
+    it('handles undefined sourcePathId as a stable key (single-source jobs)', () => {
+      service.markMountNoatimeApplied('job-1', undefined);
+      expect(service.isMountNoatimeAppliedForSource('job-1', undefined)).toBe(true);
+      // A named source on the same job is a different key — must be isolated.
+      expect(service.isMountNoatimeAppliedForSource('job-1', 'src-1')).toBe(false);
+    });
+
+    it('is a no-op when jobRunId is missing', () => {
+      service.markMountNoatimeApplied(undefined, 'src-1');
+      expect(service.isMountNoatimeAppliedForSource(undefined, 'src-1')).toBe(false);
+    });
+  });
+
+  describe('logStampStrategy5SkippedOnce', () => {
+    it('logs once per (jobRunId, sourcePathId) and includes the reason', () => {
+      expect(
+        service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'mount_noatime_in_effect'),
+      ).toBe(true);
+      expect(
+        service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'mount_noatime_in_effect'),
+      ).toBe(false);
+      expect(loggerLog).toHaveBeenCalledTimes(1);
+      expect(loggerLog).toHaveBeenCalledWith(
+        expect.stringContaining('strategy_5_skipped_kernel_noatime_guaranteed'),
+      );
+      expect(loggerLog).toHaveBeenCalledWith(
+        expect.stringContaining('reason=mount_noatime_in_effect'),
+      );
+    });
+
+    it('logs separately for distinct sourcePathIds within the same job', () => {
+      service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'r');
+      service.logStampStrategy5SkippedOnce('job-1', 'src-2', 'r');
+      expect(loggerLog).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not log when jobRunId is missing', () => {
+      expect(service.logStampStrategy5SkippedOnce(undefined, 'src-1', 'r')).toBe(false);
+      expect(loggerLog).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('logSmbWindowsStrategy3UnavailableOnce', () => {
+    it('logs the structural-unavailability line exactly once per job', () => {
+      expect(service.logSmbWindowsStrategy3UnavailableOnce('job-1')).toBe(true);
+      expect(service.logSmbWindowsStrategy3UnavailableOnce('job-1')).toBe(false);
+      expect(loggerLog).toHaveBeenCalledTimes(1);
+      expect(loggerLog).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'mount_smb:strategy_3_not_applicable_windows_net_use_no_atime_option',
+        ),
+      );
+    });
+
+    it('logs separately for distinct jobs', () => {
+      service.logSmbWindowsStrategy3UnavailableOnce('job-1');
+      service.logSmbWindowsStrategy3UnavailableOnce('job-2');
+      expect(loggerLog).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not log when jobRunId is missing', () => {
+      expect(service.logSmbWindowsStrategy3UnavailableOnce(undefined)).toBe(false);
+      expect(loggerLog).not.toHaveBeenCalled();
     });
   });
 
@@ -251,7 +333,10 @@ describe('AtimeReadSessionService', () => {
       service.markNfsMountNoatimeUnsupported('job-1');
       service.markSmbMountNoatimeUnsupported('job-1');
       service.logSmbBackupIntentOnce('job-1');
+      service.logSmbWindowsStrategy3UnavailableOnce('job-1');
       service.logONoatimeSessionDemotionOnce('job-1');
+      service.markMountNoatimeApplied('job-1', 'src-1');
+      service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'r');
 
       service.clearJob('job-1');
 
@@ -260,10 +345,13 @@ describe('AtimeReadSessionService', () => {
       expect(service.shouldSkipSourceOpenNoatime('job-1')).toBe(false);
       expect(service.shouldAttemptNfsMountNoatime('job-1')).toBe(true);
       expect(service.shouldAttemptSmbMountNoatime('job-1')).toBe(true);
+      expect(service.isMountNoatimeAppliedForSource('job-1', 'src-1')).toBe(false);
       expect(service.markSourceOpenNoatimeIneffective('job-1')).toBe(true);
       expect(service.markNfsMountNoatimeUnsupported('job-1')).toBe(true);
       expect(service.markSmbMountNoatimeUnsupported('job-1')).toBe(true);
       expect(service.logSmbBackupIntentOnce('job-1')).toBe(true);
+      expect(service.logSmbWindowsStrategy3UnavailableOnce('job-1')).toBe(true);
+      expect(service.logStampStrategy5SkippedOnce('job-1', 'src-1', 'r')).toBe(true);
     });
 
     it('drops only entries belonging to the cleared job, leaving siblings untouched', () => {

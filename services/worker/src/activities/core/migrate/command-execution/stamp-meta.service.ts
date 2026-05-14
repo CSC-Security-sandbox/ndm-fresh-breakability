@@ -18,6 +18,7 @@ import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service
 import { IDENTITY_MAPPING_NOT_FOUND, IdentityMappingNotFoundError, MetadataUpdateConflictError } from "src/errors/errors.types";
 import {
   DEFAULT_ATIME_RELATIME_WINDOW_MS,
+  atimeKernelGuaranteed,
   shouldRestoreSourceAtimeRelatime,
 } from "../atime-preserve.utils";
 import { AtimeReadSessionService } from "src/thread/atime-read-session.service";
@@ -323,7 +324,7 @@ export class StampMetaService {
     }
 
     @Timed({ category: 'stamp_phase', phase: 'preserve_time' })
-    async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType, sPathId }: CommandExecInput): Promise<StampMetaOutput> {
+    async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType, sPathId, atimeReadStrategy }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
         if (command.metadata.mtime && command.metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
             try {
@@ -333,6 +334,45 @@ export class StampMetaService {
                         jobContext.jobRunId,
                         sPathId,
                         sourcePath,
+                    );
+                    return output;
+                }
+
+                // Strategy 5 elision: when an earlier read-side strategy
+                // already guaranteed the source kernel did not bump atime
+                // (Strategy 2 O_NOATIME success or Strategy 3 mount-noatime
+                // in effect for this source), the source `utimes` below
+                // would just be a redundant write — every file on the source
+                // would be touched and pushed back through the source's
+                // metadata/journal path. Skip it; the relatime gate and
+                // utimes branch only matter when the kernel actually moved
+                // atime forward on the read.
+                //
+                // The check honors Strategy 6 above (read-only source still
+                // wins), and a falling-back O_NOATIME (e.g.
+                // STRATEGY_2_FALLBACK_STD_*) does NOT short-circuit here on
+                // its own — only an active mount-noatime turns those
+                // fallbacks into safe skips, because the kernel-level mount
+                // option suppresses atime regardless of the per-file open
+                // flag.
+                const mountNoatimeApplied =
+                    this.atimeReadSession.isMountNoatimeAppliedForSource(
+                        jobContext.jobRunId,
+                        sPathId,
+                    );
+                if (
+                    atimeKernelGuaranteed({
+                        atimeReadStrategy,
+                        mountNoatimeApplied,
+                    })
+                ) {
+                    const reason = mountNoatimeApplied
+                        ? 'mount_noatime_in_effect'
+                        : 'per_file_o_noatime_succeeded';
+                    this.atimeReadSession.logStampStrategy5SkippedOnce(
+                        jobContext.jobRunId,
+                        sPathId,
+                        reason,
                     );
                     return output;
                 }
