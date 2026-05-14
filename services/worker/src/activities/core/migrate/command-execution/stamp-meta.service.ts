@@ -44,10 +44,24 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_META] &&
             input.command.ops[OPS_CMD.STAMP_META].status !== OPS_STATUS.COMPLETED
         ) {
-            const shouldValidateCtime = process.platform === 'win32';
-
-            if (shouldValidateCtime) {
-                await this.stampMetaWithCtimeValidation(input, output);
+            if (process.platform === 'win32') {
+                const [aclStampOutput, preserveTimeOutput] = await Promise.all([
+                    this.stampObjectACL(input),
+                    this.preserveAccessAndModifiedTime(input)
+                ]);
+                if (input.command.isDir) {
+                    const sourceCtime = await this.fetchSourceCtimeMs(input.sourcePath);
+                    await this.deferredDirStampService.updateSourceCtime(
+                        input.jobContext.jobRunId, input.command.fPath, sourceCtime, input.command.id,
+                    );
+                }
+                output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
+                output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
+                if (aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length === 0) {
+                    const timeOutput = await this.stampAccessAndModifiedTime(input);
+                    output.sourceErrors.push(...timeOutput.sourceErrors);
+                    output.targetErrors.push(...timeOutput.targetErrors);
+                }
             } else {
                 await this.executeStampMeta(input, output);
             }
