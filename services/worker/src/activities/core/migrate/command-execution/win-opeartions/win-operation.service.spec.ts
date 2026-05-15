@@ -1658,4 +1658,70 @@ describe('WinOperationService', () => {
       );
     });
   });
+
+  describe('prefetchAclsForCostMeasurement', () => {
+    const srcPath = '/src/file.txt';
+    const dstPath = '/dst/file.txt';
+
+    it('calls getAclOperation for both paths in parallel with correct isSource flags', async () => {
+      const getSpy = jest
+        .spyOn(service, 'getAclOperation')
+        .mockResolvedValue({ Owner: 'O' } as any);
+
+      await service.prefetchAclsForCostMeasurement(srcPath, dstPath);
+
+      expect(getSpy).toHaveBeenCalledTimes(2);
+      expect(getSpy).toHaveBeenCalledWith(srcPath, true, '');
+      expect(getSpy).toHaveBeenCalledWith(dstPath, false, '');
+    });
+
+    it('threads jobRunId into both getAclOperation calls when jobContext is supplied', async () => {
+      const getSpy = jest
+        .spyOn(service, 'getAclOperation')
+        .mockResolvedValue({} as any);
+      const jobContext = { jobRunId: 'wf-42' } as any;
+
+      await service.prefetchAclsForCostMeasurement(srcPath, dstPath, jobContext);
+
+      expect(getSpy).toHaveBeenCalledWith(srcPath, true, 'wf-42');
+      expect(getSpy).toHaveBeenCalledWith(dstPath, false, 'wf-42');
+    });
+
+    it('resolves to void even when source and destination descriptors differ (no comparison happens)', async () => {
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) =>
+          (isSource ? { Owner: 'A' } : { Owner: 'B' }) as any,
+        );
+
+      const result = await service.prefetchAclsForCostMeasurement(srcPath, dstPath);
+      expect(result).toBeUndefined();
+    });
+
+    it('propagates SourceAclError from getAclOperation', async () => {
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) => {
+          if (isSource) throw new SourceAclError('src boom');
+          return {} as any;
+        });
+
+      await expect(
+        service.prefetchAclsForCostMeasurement(srcPath, dstPath),
+      ).rejects.toBeInstanceOf(SourceAclError);
+    });
+
+    it('propagates TargetAclError from getAclOperation', async () => {
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) => {
+          if (!isSource) throw new TargetAclError('dst boom');
+          return {} as any;
+        });
+
+      await expect(
+        service.prefetchAclsForCostMeasurement(srcPath, dstPath),
+      ).rejects.toBeInstanceOf(TargetAclError);
+    });
+  });
 });

@@ -15,7 +15,7 @@ import { MetricsService } from 'src/metrics/metrics.service';
 import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
-import { dmError } from 'src/activities/utils/utils';
+import { AclPrefetcher, dmError } from 'src/activities/utils/utils';
 
 // Windows API initialization for ADS detection
 let FindFirstStreamW: any;
@@ -26,7 +26,7 @@ let WIN32_FIND_STREAM_DATA: any;
 
 
 @Injectable()
-export class WinOperationService {
+export class WinOperationService implements AclPrefetcher {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
 
@@ -94,6 +94,30 @@ export class WinOperationService {
           `Failed to get ACL for ${path}: ${error.message}`,
         );
     }
+  }
+
+  /**
+   * Perf-measurement entry point for the `FETCH_ACLS_ONLY_INCREMENTAL` POC.
+   * Reads source and destination ACLs in parallel through the existing
+   * persistent PowerShell pool and discards both results. The point is to
+   * measure the cost of the two PS round-trips per incremental item without
+   * letting the result influence any stamp decision — the caller
+   * (`isMetaUpdated`) hardcodes `false` afterwards so no `STAMP_META`
+   * commands are emitted as a consequence of this call.
+   *
+   * Errors from `getAclOperation` propagate unchanged (already logged at
+   * ERROR with full path context inside that method).
+   */
+  async prefetchAclsForCostMeasurement(
+    sourcePath: string,
+    targetPath: string,
+    jobContext?: JobManagerContext,
+  ): Promise<void> {
+    const workflowId = jobContext?.jobRunId ?? '';
+    await Promise.all([
+      this.getAclOperation(sourcePath, true, workflowId),
+      this.getAclOperation(targetPath, false, workflowId),
+    ]);
   }
 
   async setAclOperation(

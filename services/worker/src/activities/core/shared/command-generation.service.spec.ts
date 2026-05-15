@@ -42,6 +42,7 @@ describe('CommandGenerationService', () => {
     let configService: jest.Mocked<ConfigService>;
     let loggerFactory: jest.Mocked<LoggerFactory>;
     let fileTypeDetectionService: jest.Mocked<FileTypeDetectionService>;
+    let winOperationService: { prefetchAclsForCostMeasurement: jest.Mock };
     let mockLogger: jest.Mocked<LoggerService>;
 
     const mockJobContext = {
@@ -80,6 +81,9 @@ describe('CommandGenerationService', () => {
         fileTypeDetectionService = {
             detectFileType: jest.fn().mockResolvedValue('FILE'),
         } as any;
+        winOperationService = {
+            prefetchAclsForCostMeasurement: jest.fn().mockResolvedValue(undefined),
+        };
         mockIsExists.mockResolvedValue(true);
         mockGetFileInfo.mockResolvedValue({ path: 'rel/path' });
         mockRemovePrefix.mockImplementation((full: string, prefix: string) => (full.startsWith(prefix) ? full.slice(prefix.length) : full));
@@ -113,7 +117,7 @@ describe('CommandGenerationService', () => {
             birthtime: new Date(),
             ino: 1,
         });
-        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService);
+        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService, winOperationService as any);
     });
 
     describe('processItems', () => {
@@ -687,7 +691,7 @@ describe('CommandGenerationService', () => {
     });
 
     describe('buildCommand', () => {
-        it('should return command when isContentUpdate is true', () => {
+        it('should return command when isContentUpdate is true', async () => {
             mockIsContentUpdate.mockReturnValue(true);
             mockIsMetaUpdated.mockReturnValue(false);
             const sFile = {
@@ -703,12 +707,12 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', undefined);
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: false });
         });
 
-        it('should set targetExisted true when target file was provided (content_updated)', () => {
+        it('should set targetExisted true when target file was provided (content_updated)', async () => {
             mockIsContentUpdate.mockReturnValue(true);
             mockIsMetaUpdated.mockReturnValue(false);
             const sFile = {
@@ -724,12 +728,12 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
         });
 
-        it('should return command when isMetaUpdated is true and isContentUpdate false', () => {
+        it('should return command when isMetaUpdated is true and isContentUpdate false', async () => {
             mockIsContentUpdate.mockReturnValue(false);
             mockIsMetaUpdated.mockReturnValue(true);
             const sFile = {
@@ -745,11 +749,11 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', undefined);
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
             expect(result).toBeDefined();
         });
 
-        it('should return undefined when neither content nor meta update', () => {
+        it('should return undefined when neither content nor meta update', async () => {
             mockIsContentUpdate.mockReturnValue(false);
             mockIsMetaUpdated.mockReturnValue(false);
             const sFile = {
@@ -765,7 +769,7 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = service.buildCommand(sFile, 'path/file.txt', sFile);
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeUndefined();
         });
     });

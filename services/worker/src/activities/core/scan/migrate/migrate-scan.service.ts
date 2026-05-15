@@ -145,7 +145,7 @@ export class MigrateScanService {
                         })) continue;
 
                         const relativeSourcePath = removePrefix(targetContentPath, targetPrefix);
-                        const deleteCommand = this.buildCommand(null, relativeSourcePath, targetStat);
+                        const deleteCommand = await this.buildCommand(null, relativeSourcePath, targetStat);
                         if (deleteCommand) {
                             commands.push(deleteCommand);
                         }
@@ -164,7 +164,7 @@ export class MigrateScanService {
         }
     }
 
-    buildCommand = (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Cmd | undefined => {
+    buildCommand = async (sFile: fs.Stats | undefined, fPath: string, dFile?: fs.Stats): Promise<Cmd | undefined> => {
 
         // Add extra info here based on which we will generate OPS_CMD COPY_STREAMS.
         // OPS_CMD.COPY_STREAM_DIRS and then deelete the file and delete the STREAM_DIRs as well.
@@ -211,7 +211,7 @@ export class MigrateScanService {
         }
       
 
-        if (isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+        if (await isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),

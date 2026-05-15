@@ -592,3 +592,82 @@ describe('basePrefix', () => {
 });
 
 
+describe('isMetaUpdated', () => {
+    const originalPlatform = process.platform;
+    const originalEnv = process.env.FETCH_ACLS_ONLY_INCREMENTAL;
+
+    const setPlatform = (platform: NodeJS.Platform) => {
+        Object.defineProperty(process, 'platform', {
+            value: platform,
+            configurable: true,
+        });
+    };
+
+    const mkStat = (ctimeMs: number): fs.Stats => ({ ctimeMs } as fs.Stats);
+
+    afterEach(() => {
+        setPlatform(originalPlatform);
+        if (originalEnv === undefined) {
+            delete process.env.FETCH_ACLS_ONLY_INCREMENTAL;
+        } else {
+            process.env.FETCH_ACLS_ONLY_INCREMENTAL = originalEnv;
+        }
+        jest.clearAllMocks();
+    });
+
+    it('returns true when destination stat is undefined (first-time stamp)', async () => {
+        const sFile = mkStat(0);
+        await expect(isMetaUpdated(sFile, undefined)).resolves.toBe(true);
+    });
+
+    it('falls back to ctime tolerance on non-win32 regardless of env var', async () => {
+        setPlatform('linux');
+        process.env.FETCH_ACLS_ONLY_INCREMENTAL = 'true'; // should be ignored on non-win32
+        const prefetcher = { prefetchAclsForCostMeasurement: jest.fn() };
+        const within = await isMetaUpdated(mkStat(1000), mkStat(1500), 1000, prefetcher as any, '/s', '/d');
+        const outside = await isMetaUpdated(mkStat(1000), mkStat(3000), 1000, prefetcher as any, '/s', '/d');
+        expect(within).toBe(false);
+        expect(outside).toBe(true);
+        expect(prefetcher.prefetchAclsForCostMeasurement).not.toHaveBeenCalled();
+    });
+
+    it('uses ctime tolerance on win32 when FETCH_ACLS_ONLY_INCREMENTAL is unset', async () => {
+        setPlatform('win32');
+        delete process.env.FETCH_ACLS_ONLY_INCREMENTAL;
+        const prefetcher = { prefetchAclsForCostMeasurement: jest.fn() };
+        const result = await isMetaUpdated(mkStat(1000), mkStat(5000), 1000, prefetcher as any, '/s', '/d');
+        expect(result).toBe(true);
+        expect(prefetcher.prefetchAclsForCostMeasurement).not.toHaveBeenCalled();
+    });
+
+    it('uses ctime tolerance on win32 when FETCH_ACLS_ONLY_INCREMENTAL is "false"', async () => {
+        setPlatform('win32');
+        process.env.FETCH_ACLS_ONLY_INCREMENTAL = 'false';
+        const prefetcher = { prefetchAclsForCostMeasurement: jest.fn() };
+        const result = await isMetaUpdated(mkStat(1000), mkStat(1500), 1000, prefetcher as any, '/s', '/d');
+        expect(result).toBe(false);
+        expect(prefetcher.prefetchAclsForCostMeasurement).not.toHaveBeenCalled();
+    });
+
+    it('prefetches source+destination ACLs and returns false when FETCH_ACLS_ONLY_INCREMENTAL=true on win32', async () => {
+        setPlatform('win32');
+        process.env.FETCH_ACLS_ONLY_INCREMENTAL = 'true';
+        const prefetcher = { prefetchAclsForCostMeasurement: jest.fn().mockResolvedValue(undefined) };
+        const jobContext = { jobRunId: 'wf-1' } as any;
+        // ctime delta of 99999ms — would normally trip the ctime path — must be ignored in fetch-only mode
+        const result = await isMetaUpdated(mkStat(1000), mkStat(100000), 1000, prefetcher as any, '/s/a', '/d/a', jobContext);
+        expect(result).toBe(false);
+        expect(prefetcher.prefetchAclsForCostMeasurement).toHaveBeenCalledTimes(1);
+        expect(prefetcher.prefetchAclsForCostMeasurement).toHaveBeenCalledWith('/s/a', '/d/a', jobContext);
+    });
+
+    it('throws when FETCH_ACLS_ONLY_INCREMENTAL=true on win32 but prefetcher/paths are missing', async () => {
+        setPlatform('win32');
+        process.env.FETCH_ACLS_ONLY_INCREMENTAL = 'true';
+        await expect(isMetaUpdated(mkStat(1000), mkStat(2000))).rejects.toThrow(
+            /FETCH_ACLS_ONLY_INCREMENTAL=true requires aclPrefetcher, sourcePath, and targetPath/,
+        );
+    });
+});
+
+

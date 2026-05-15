@@ -174,8 +174,58 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext: JobC
 
 export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats) => !dFile || (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString())
 
-// added  1 second tolerance to avoid false positives due to minor time differences
-export const isMetaUpdated = (sFile: fs.Stats, dFile?: fs.Stats, toleranceMs = 1000) => !dFile || Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+/**
+ * Minimal contract `isMetaUpdated` needs from `WinOperationService` when the
+ * `FETCH_ACLS_ONLY_INCREMENTAL` perf-measurement mode is enabled. Kept
+ * structural rather than a class reference to avoid pulling a heavy DI graph
+ * into the utils module.
+ */
+export interface AclPrefetcher {
+  prefetchAclsForCostMeasurement(
+    sourcePath: string,
+    targetPath: string,
+    jobContext?: JobManagerContext,
+  ): Promise<void>;
+}
+
+/**
+ * Returns whether the destination's metadata needs to be re-stamped.
+ *
+ * Behavior matrix:
+ *  - `dFile` undefined (first-time stamp)                  → true
+ *  - non-win32                                              → ctime tolerance compare
+ *  - win32 + `FETCH_ACLS_ONLY_INCREMENTAL` !== 'true'       → ctime tolerance compare (same as main)
+ *  - win32 + `FETCH_ACLS_ONLY_INCREMENTAL` === 'true'       → fetch source+dst ACLs in parallel,
+ *                                                             discard the results, return `false`
+ *                                                             (perf-measurement POC; ctime is bypassed)
+ *
+ * The 1-second tolerance avoids false positives from minor timestamp drift
+ * on the ctime path.
+ */
+export const isMetaUpdated = async (
+  sFile: fs.Stats,
+  dFile?: fs.Stats,
+  toleranceMs = 1000,
+  aclPrefetcher?: AclPrefetcher,
+  sourcePath?: string,
+  targetPath?: string,
+  jobContext?: JobManagerContext,
+): Promise<boolean> => {
+  if (!dFile) return true;
+  if (process.platform !== 'win32') {
+    return Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+  }
+  if (process.env.FETCH_ACLS_ONLY_INCREMENTAL === 'true') {
+    if (!aclPrefetcher || !sourcePath || !targetPath) {
+      throw new Error(
+        'isMetaUpdated: FETCH_ACLS_ONLY_INCREMENTAL=true requires aclPrefetcher, sourcePath, and targetPath',
+      );
+    }
+    await aclPrefetcher.prefetchAclsForCostMeasurement(sourcePath, targetPath, jobContext);
+    return false;
+  }
+  return Math.abs(sFile.ctimeMs - dFile.ctimeMs) > toleranceMs;
+};
 
 export const generateDummyFileEntry: FileInfo = new FileInfo("LAST_FILE", "", "", false,  2048, true, new Date(), new Date(), new Date(), "", "", "", 0, 1001, 1001);
 export const generateDummyItemEntry: ItemInfo = new ItemInfo(
