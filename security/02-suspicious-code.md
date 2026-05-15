@@ -97,8 +97,7 @@ if (fileServerId) {
 ```ts name=services/jobs-service/src/jobconfig/mount-tracker.service.ts url=https://github.com/NetApp-Cloud-DataMigrate/ndm/blob/53ffaf744457d63743694e2bb2acdbeb86889e89/services/jobs-service/src/jobconfig/mount-tracker.service.ts#L855-L875
 const resolvedIp = await this.performDnsResolution(hostname, fileServerId);
 ...
-const entry = `${resolvedIp} ${hostname}
-`;
+const entry = `${resolvedIp} ${hostname}\n`;
 await fs.promises.appendFile("/etc/hosts", entry);
 ```
 
