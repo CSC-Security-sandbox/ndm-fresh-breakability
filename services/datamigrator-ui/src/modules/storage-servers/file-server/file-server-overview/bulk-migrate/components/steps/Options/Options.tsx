@@ -28,7 +28,7 @@ const Options = () => {
 
   return (
     <FormFrame>
-      <Box className="p-6 flex">
+      <Box data-testid="bulk-migrate-options-step" className="p-6 flex">
         <Box className="w-3/6 flex flex-col gap-10">
           <Box className="flex gap-6 items-center">
             <Box className="flex gap-2 items-center">

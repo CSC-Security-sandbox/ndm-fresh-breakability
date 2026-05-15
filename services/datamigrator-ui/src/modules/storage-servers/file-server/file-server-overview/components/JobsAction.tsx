@@ -73,7 +73,7 @@ const JobsAction = ({
   return (
       <Box className="flex justify-between align-middle">
       <Box className="text-xl flex gap-3">
-        <Box className="text-lg">File Server Overview:</Box>
+        <Box className="text-lg" data-testid="file-server-overview">File Server Overview:</Box>
         <Box className="text-lg font-semibold flex gap-3">
           {displayName}
           <PermissionAuth
@@ -97,6 +97,7 @@ const JobsAction = ({
             Bulk Discover
           </Button>
           <Button
+            data-testid="btn-bulk-migrate"
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-migrate${queryString}`)}
             style={{ whiteSpace: "nowrap" }}

@@ -746,6 +746,7 @@ const Mapping = () => {
 
         <Box className="flex justify-center mt-8">
           <Button
+            data-testid="btn-add-mapping"
             color="primary"
             disabled={!canAddMapping}
             onClick={handleAddMapping}

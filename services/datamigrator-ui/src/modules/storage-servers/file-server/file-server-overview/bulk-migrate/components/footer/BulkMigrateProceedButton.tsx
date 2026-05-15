@@ -77,6 +77,7 @@ const BulkMigrateProceedButton = () => {
 
   return (
     <Button
+      data-testid="btn-bulk-migrate-proceed"
       onClick={handleNextOrSubmit}
       style={{ width: 152 }}
       disabled={Boolean(isSubmitDisabled())}

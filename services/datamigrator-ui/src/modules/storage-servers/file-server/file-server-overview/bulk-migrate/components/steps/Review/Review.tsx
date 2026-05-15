@@ -72,7 +72,7 @@ const Review = () => {
   );
 
   return (
-    <Box className="h-3/5 w-9/12 mx-auto">
+    <Box data-testid="bulk-migrate-review-step" className="h-3/5 w-9/12 mx-auto">
       <PreCheckErrors errorData={rows} />
       <TableWrapper
         tableStateProps={tableStateProps}

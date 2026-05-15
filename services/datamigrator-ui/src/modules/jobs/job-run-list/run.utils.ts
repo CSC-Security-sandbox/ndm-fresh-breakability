@@ -144,6 +144,7 @@ export const getReportActions = (
       return [
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
+          "data-testid": "menu-download-coc-report",
           onClick: () => {
             handleDownloadCocReport(prepareDownloadApi, row?.jobRunId);
           },
@@ -154,6 +155,7 @@ export const getReportActions = (
       return [
         {
           label: type === "rowMenu" ? "Download CoC Report" : "CoC Report",
+          "data-testid": "menu-download-coc-report",
           onClick: () => {
             handleDownloadCocReport(prepareDownloadApi, row?.jobRunId);
           },

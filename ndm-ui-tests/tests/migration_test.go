@@ -16,7 +16,8 @@
 //
 // Test index:
 //
-//	M-001 TestMigration_BasicNFS — full Bulk Migrate flow (NFS → NFS)
+//	M-001 TestMigration_BasicNFS              — full Bulk Migrate flow (NFS → NFS)
+//	M-002 TestMigration_IncrementalSyncCron   — Bulk Migrate with cron-based incremental sync
 package tests
 
 import (
@@ -222,6 +223,131 @@ func TestMigration_BasicNFS(t *testing.T) {
 	t.Logf("[M-001] CoC Report saved: %s (%d bytes)", cocPath, info.Size())
 	fmt.Printf("[M-001] src=%s dst=%s coc=%s\n", mf.srcFSName, mf.dstFSName, cocPath)
 	fmt.Println("[MIGRATION M-001 PASSED] NFS migration completed and CoC Report downloaded")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// M-002  Incremental Sync via Cron Expression (NFS → NFS)
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestMigration_IncrementalSyncCron(t *testing.T) {
+	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
+	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+
+	f, mp := newMigrationBrowserFixture(t)
+	defer f.Close()
+
+	mf := &migrationFixture{}
+
+	// ── 1. Create source file server ─────────────────────────────────────────
+	By(t, "Creating source NFS file server")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f)
+	f.Screenshot("incr-src-fs-active")
+	t.Logf("[M-002] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
+
+	// ── 2. Create destination file server ────────────────────────────────────
+	By(t, "Creating destination NFS file server")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f)
+	f.Screenshot("incr-dst-fs-active")
+	t.Logf("[M-002] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
+
+	// ── 3. Navigate to source file server overview ───────────────────────────
+	By(t, "Navigating to source file server overview")
+	require.NoError(t,
+		mp.NavigateToFileServerOverview(mf.srcFSID),
+		"navigate to source file server overview",
+	)
+	f.Screenshot("incr-src-overview")
+
+	// ── 4. Open Bulk Migrate wizard ──────────────────────────────────────────
+	By(t, "Opening Bulk Migrate wizard")
+	require.NoError(t, mp.OpenBulkMigrateForm(), "open Bulk Migrate form")
+	f.Screenshot("incr-wizard-mapping-step")
+
+	// ── 5. Mapping step ──────────────────────────────────────────────────────
+	By(t, "Selecting source export path")
+	require.NoError(t,
+		mp.SelectSourcePath(config.NfsSourceExportPath),
+		"select source path %s", config.NfsSourceExportPath,
+	)
+
+	By(t, "Selecting destination file server in mapping")
+	require.NoError(t,
+		mp.SelectDestinationFileServer(mf.dstFSName),
+		"select destination file server %s", mf.dstFSName,
+	)
+
+	By(t, "Selecting destination export path")
+	require.NoError(t,
+		mp.SelectDestinationPath(config.NfsDestinationExportPath),
+		"select destination path %s", config.NfsDestinationExportPath,
+	)
+
+	By(t, "Adding path mapping")
+	require.NoError(t, mp.AddMapping(), "add mapping")
+	f.Screenshot("incr-mapping-row-added")
+
+	// ── 6. Proceed from Mapping step ─────────────────────────────────────────
+	By(t, "Proceeding from Mapping step")
+	require.NoError(t, mp.ProceedFromMapping(), "proceed from mapping step")
+	f.Screenshot("incr-options-step")
+
+	// ── 7. Options step — set cron expression to every 5 minutes ─────────────
+	By(t, "Setting incremental sync cron expression to */5 * * * *")
+	require.NoError(t,
+		mp.SetIncrementalSyncCronExpression("*/5 * * * *"),
+		"set cron expression",
+	)
+	f.Screenshot("incr-options-cron-set")
+
+	By(t, "Proceeding from Options step")
+	require.NoError(t, mp.ProceedFromOptions(), "proceed from options step")
+	f.Screenshot("incr-review-step")
+
+	// ── 8. Review step — select all, submit ──────────────────────────────────
+	By(t, "Selecting all mappings on Review step")
+	require.NoError(t, mp.SelectAllMappingsOnReview(), "select all mappings on review")
+
+	By(t, "Submitting migration job")
+	require.NoError(t, mp.SubmitMigration(), "submit migration job")
+
+	// ── 9. Navigate to Job Run List ──────────────────────────────────────────
+	By(t, "Navigating to Job Run List")
+	require.NoError(t, mp.NavigateToJobRunList(), "navigate to job run list")
+	f.Screenshot("incr-job-run-list")
+
+	// ── 10. Wait for first migration job to complete ─────────────────────────
+	By(t, "Waiting for first migration job to complete")
+	require.NoError(t,
+		mp.WaitForMigrationCompleted(config.MigrationTimeoutMs),
+		"first migration job did not complete within timeout",
+	)
+	f.Screenshot("incr-first-job-completed")
+	t.Log("[M-002] first migration job completed")
+
+	// Count migration rows after first job completes.
+	initialCount := mp.CountMigrationJobRuns()
+	t.Logf("[M-002] migration rows after first job: %d", initialCount)
+
+	// ── 11. Wait for incremental sync job to appear and complete ─────────────
+	// Cron is */5 * * * * so a new job should appear within ~5-6 minutes.
+	By(t, "Waiting for incremental sync job (cron: */5 * * * *)")
+	t.Log("[M-002] waiting up to 8 minutes for incremental sync job to appear and complete…")
+	require.NoError(t,
+		mp.WaitForNewMigrationJobRun(initialCount, 480000),
+		"incremental sync job did not appear/complete within 8 minutes",
+	)
+	f.Screenshot("incr-sync-job-completed")
+	t.Log("[M-002] incremental sync job completed successfully")
+
+	finalCount := mp.CountMigrationJobRuns()
+	t.Logf("[M-002] migration rows after incremental sync: %d (was %d)", finalCount, initialCount)
+	require.Greater(t, finalCount, initialCount,
+		"expected more migration job runs after incremental sync (got %d, started with %d)", finalCount, initialCount,
+	)
+
+	fmt.Printf("[M-002] src=%s dst=%s cron=*/5 initial_jobs=%d final_jobs=%d\n",
+		mf.srcFSName, mf.dstFSName, initialCount, finalCount)
+	fmt.Println("[MIGRATION M-002 PASSED] Incremental sync via cron expression verified")
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
