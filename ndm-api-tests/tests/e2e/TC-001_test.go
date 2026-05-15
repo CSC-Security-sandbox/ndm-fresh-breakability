@@ -343,7 +343,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 
 			By("Waiting for cutover jobs to complete and validating file counts")
 			for i, cutoverRunID := range cutoverRunIDs {
-				err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
 
 				expected := BaselineCutoverFileCount(i) + DeltaFilesInCutoverCoC

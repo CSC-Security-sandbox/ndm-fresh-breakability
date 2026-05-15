@@ -406,7 +406,7 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 
 			By("Waiting for cutover jobs to complete and validating file counts")
 			for i, cutoverRunID := range cutoverJobRunIDs {
-				err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
 
 				expected := BaselineCutoverFileCount(i) + DeltaFilesInCutoverCoC

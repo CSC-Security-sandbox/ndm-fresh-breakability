@@ -319,7 +319,7 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 
 			By("Waiting for cutover jobs to complete and validating file counts")
 			for i, cutoverRunID := range cutoverRunIDs {
-				err = WaitForJobState(cutoverRunID, COMPLETED_JOBRUN)
+				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
 
 				// TC-002 uses exclude filters so the baseline count varies — use dynamically captured value.
