@@ -183,22 +183,40 @@ export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'u
   return (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
 };
 
+export interface SecurityDescriptorChangeDetector {
+  hasSecurityDescriptorChanged(
+    sourcePath: string,
+    targetPath: string,
+    jobContext?: JobManagerContext,
+    applyInheritanceMode?: boolean,
+  ): Promise<boolean>;
+}
+
 export const isMetaUpdated = async (
   sFile: fs.Stats,
   dFile?: fs.Stats,
-  toleranceMs = 1000,
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
-  jobContext?: JobManagerContext
+  jobContext?: JobManagerContext,
+  securityDescriptorChangeDetector?: SecurityDescriptorChangeDetector,
+  sourcePath?: string,
+  targetPath?: string,
+  applyInheritanceMode = false,
 ): Promise<boolean> => {
   if (!dFile) return true;
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
-  return isSmbMetaUpdated(sFile, dFile, toleranceMs);
-};
-
-const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
-  const sourceCtimeMs = sFile.ctimeMs;
-  const destinationCtimeMs = dFile.ctimeMs;
-  return (sourceCtimeMs + toleranceMs) > destinationCtimeMs;
+  // SMB: direct source vs destination security descriptor comparison. Caller
+  // is responsible for supplying the detector and both paths — without them
+  // we have no way to make a correctness-preserving decision, so we fail
+  // loudly rather than silently falling back to the old ctime heuristic.
+  if (!securityDescriptorChangeDetector || !sourcePath || !targetPath) {
+    throw new Error('isMetaUpdated on win32 requires securityDescriptorChangeDetector, sourcePath, and targetPath');
+  }
+  return securityDescriptorChangeDetector.hasSecurityDescriptorChanged(
+    sourcePath,
+    targetPath,
+    jobContext,
+    applyInheritanceMode,
+  );
 };
 
 export const isAtimeUpdated = (sFile: fs.Stats, dFile: fs.Stats): boolean => {

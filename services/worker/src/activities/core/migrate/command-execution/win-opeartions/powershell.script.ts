@@ -80,19 +80,6 @@ function Get-FileSecurityFast([string]$path) {
     $owner = $sd.Owner.Value
     $group = $sd.Group.Value
 
-    $daclAces = @()
-    if ($sd.DiscretionaryAcl) {
-        foreach ($ace in $sd.DiscretionaryAcl) {
-            $daclAces += [PSCustomObject]@{
-                Sid         = $ace.SecurityIdentifier.Value
-                AccessMask  = $ace.AccessMask
-                AceType     = [int]$ace.AceType
-                AceFlags    = [int]$ace.AceFlags
-                IsInherited = $ace.IsInherited
-            }
-        }
-    }
-
     $attributes = [System.IO.File]::GetAttributes($path).ToString()
 
     # Check control flags for inheritance status
@@ -102,29 +89,63 @@ function Get-FileSecurityFast([string]$path) {
     $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
     $daclProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
     $daclAutoInherit = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
+
+    # Three-state DaclAces representation, in lockstep with DaclPresent:
+    #   DaclPresent=$false  → DaclAces=$null  (NULL DACL; ignore any
+    #                          leftover DACL bytes the kernel keeps around
+    #                          even when SE_DACL_PRESENT is cleared — they
+    #                          are not enumerated during access checks, so
+    #                          surfacing them here only produces a phantom
+    #                          ACE that the gate and validator would chase
+    #                          on every incremental scan).
+    #   DaclPresent=$true   → DaclAces=@() if no ACEs (empty DACL = deny
+    #                          all), or an array of ACE objects otherwise.
+    # This matches Win32 semantics: SE_DACL_PRESENT alone decides whether
+    # the object has a DACL at all; the array contents only matter when it
+    # does.
+    if ($daclPresent -and $sd.DiscretionaryAcl) {
+        $daclAces = @()
+        foreach ($ace in $sd.DiscretionaryAcl) {
+            $daclAces += [PSCustomObject]@{
+                Sid         = $ace.SecurityIdentifier.Value
+                AccessMask  = $ace.AccessMask
+                AceType     = [int]$ace.AceType
+                AceFlags    = [int]$ace.AceFlags
+                IsInherited = $ace.IsInherited
+            }
+        }
+    } elseif ($daclPresent) {
+        # SE_DACL_PRESENT=1 but DiscretionaryAcl is $null (rare; some
+        # filesystems hand back an empty-but-present DACL this way) →
+        # represent as an empty array to preserve "DACL present, no ACEs".
+        $daclAces = @()
+    } else {
+        # SE_DACL_PRESENT=0 → NULL DACL → there is no DACL to enumerate.
+        $daclAces = $null
+    }
     
     # If we have DACL ACEs but daclPresent is false, there might be a flag detection issue
     # Force daclPresent to true if we actually have ACEs
-    if ($sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
-        $daclPresent = $true
-    }
+    # if ($sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
+    #     $daclPresent = $true
+    # }
     
     # Additional check: if file has inheritance disabled, daclProtected should be true
     # This handles cases where Windows doesn't set the flag correctly
-    $hasInheritedAces = $false
-    if ($sd.DiscretionaryAcl) {
-        foreach ($ace in $sd.DiscretionaryAcl) {
-            if ($ace.IsInherited) {
-                $hasInheritedAces = $true
-                break
-            }
-        }
-    }
+    # $hasInheritedAces = $false
+    # if ($sd.DiscretionaryAcl) {
+    #     foreach ($ace in $sd.DiscretionaryAcl) {
+    #         if ($ace.IsInherited) {
+    #             $hasInheritedAces = $true
+    #             break
+    #         }
+    #     }
+    # }
     
     # If no inherited ACEs are present and we have explicit ACEs, inheritance is likely disabled (protected)
-    if (-not $hasInheritedAces -and $daclPresent -and $sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
-        $daclProtected = $true
-    }
+    # if (-not $hasInheritedAces -and $daclPresent -and $sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
+    #     $daclProtected = $true
+    # }
 
     # Optional: free the security descriptor allocated by GetNamedSecurityInfo
     # [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pSD) # can't use FreeHGlobal; should call LocalFree. Skipping to avoid crash.
@@ -141,11 +162,31 @@ function Get-FileSecurityFast([string]$path) {
 }
 
 function Set-FileSecurityFast([string]$path, [string]$aclJson) {
+    # Operator-facing diagnostic trail. Each entry is a free-form string;
+    # the wrapper script emits the list as a JSON "logs" array alongside
+    # the existing success/error payload so the worker can forward each
+    # line to its own logger. Script scope so the wrapper's catch block
+    # can still surface whatever we accumulated before the throw.
+    $script:setAclLogs = [System.Collections.Generic.List[string]]::new()
+    $script:setAclLogs.Add("start path=$path aclJsonLen=$($aclJson.Length)")
+
     $securityInfo = $aclJson | ConvertFrom-Json
     $unresolved_sids = @()
     # Convert owner and group SIDs
     $ownerSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Owner)
     $groupSid = New-Object System.Security.Principal.SecurityIdentifier($securityInfo.Group)
+    # DaclAces follows the three-state contract documented on the
+    # SecurityDescriptor type: $null = NULL DACL (no DACL on disk), @() =
+    # empty present DACL (deny all), array = populated DACL. Log all three
+    # distinctly so the operator can tell which one we were asked to write.
+    if ($null -eq $securityInfo.DaclAces) {
+        $daclAcesShape = 'null'
+        $aceCount = 0
+    } else {
+        $daclAcesShape = 'array'
+        $aceCount = @($securityInfo.DaclAces).Count
+    }
+    $script:setAclLogs.Add("parsed Owner=$($securityInfo.Owner) Group=$($securityInfo.Group) DaclPresent=$($securityInfo.DaclPresent) DaclProtected=$($securityInfo.DaclProtected) DaclAutoInherit=$($securityInfo.DaclAutoInherit) DaclAces=$daclAcesShape DaclAceCount=$aceCount Attributes=$($securityInfo.Attributes)")
 
     # Build a new RawSecurityDescriptor with exact control flags
     $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor('O:BAG:BAD:')
@@ -160,50 +201,85 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $unresolved_sids += $groupSid
     }
 
-    # Create DACL with exact ACEs from source in proper order
-    $aces = $securityInfo.DaclAces
-    $dacl = New-Object System.Security.AccessControl.RawAcl(2, $aces.Count)
-    
-    # Insert ACEs in exact order from source
-    for ($i = 0; $i -lt $aces.Count; $i++) {
-        $ace = $aces[$i]
-        $sid = New-Object System.Security.Principal.SecurityIdentifier($ace.Sid)
-        $is_resolved = Map-Sid $sid
-        if ($is_resolved -eq $false) {
-            $unresolved_sids += $sid
+    # Honor source NULL DACL semantics (SE_DACL_PRESENT=0 on source means
+    # "grant all access to all callers"). Without this branch we would
+    # silently stamp an empty-but-present DACL on the destination, which
+    # has the opposite meaning (deny-all). Strict equality on $false so
+    # legacy JSON without the field defaults to "DACL present".
+    $stampNullDacl = ($securityInfo.DaclPresent -eq $false)
+    $script:setAclLogs.Add("stampNullDacl=$stampNullDacl")
+
+    if (-not $stampNullDacl) {
+        # Create DACL with exact ACEs from source in proper order.
+        # $securityInfo.DaclAces may be $null even when DaclPresent=true
+        # if the source happened to be an empty present DACL — treat as
+        # zero ACEs so we still stamp SE_DACL_PRESENT=1 with AceCount=0
+        # (the "deny all" state, distinct from NULL DACL).
+        $aces = if ($null -eq $securityInfo.DaclAces) { @() } else { @($securityInfo.DaclAces) }
+        $dacl = New-Object System.Security.AccessControl.RawAcl(2, $aces.Count)
+
+        # Insert ACEs in exact order from source
+        for ($i = 0; $i -lt $aces.Count; $i++) {
+            $ace = $aces[$i]
+            $sid = New-Object System.Security.Principal.SecurityIdentifier($ace.Sid)
+            $is_resolved = Map-Sid $sid
+            if ($is_resolved -eq $false) {
+                $unresolved_sids += $sid
+            }
+            $qualifier = if ($ace.AceType -eq 0) {
+                [System.Security.AccessControl.AceQualifier]::AccessAllowed
+            } elseif ($ace.AceType -eq 1) {
+                [System.Security.AccessControl.AceQualifier]::AccessDenied
+            } else {
+                throw "Unsupported ACE type: $($ace.AceType)"
+            }
+
+            # Create CommonAce with exact flags and properties from source.
+            #
+            # 5th arg is .NET's isCallback (NOT "IsInherited"). When true,
+            # CommonAce promotes the on-disk ACE type from
+            # AccessAllowed (0) / AccessDenied (1) to
+            # AccessAllowedCallback (9) / AccessDeniedCallback (10) via
+            # TypeFromQualifier(isCallback, qualifier). NDM never emits
+            # callback ACEs (the reader and the validator filter
+            # AceType not in {0, 1} everywhere), so this must stay $false.
+            # The "inherited" semantic the source intends to carry is
+            # already encoded in AceFlags bit 0x10 (INHERITED_ACE) and
+            # round-trips through the AceFlags cast on the line above.
+            $commonAce = New-Object System.Security.AccessControl.CommonAce (
+                [System.Security.AccessControl.AceFlags]$ace.AceFlags,
+                $qualifier,
+                [int]$ace.AccessMask,
+                $sid,
+                $false,
+                $null
+            )
+
+            # Insert at specific position to maintain order
+            $dacl.InsertAce($i, $commonAce)
         }
-        $qualifier = if ($ace.AceType -eq 0) {
-            [System.Security.AccessControl.AceQualifier]::AccessAllowed
-        } elseif ($ace.AceType -eq 1) {
-            [System.Security.AccessControl.AceQualifier]::AccessDenied
-        } else {
-            throw "Unsupported ACE type: $($ace.AceType)"
+        $sd.DiscretionaryAcl = $dacl
+    }
+
+    # Set control flags to match source exactly. SE_DACL_PROTECTED and
+    # SE_DACL_AUTO_INHERITED are *per-DACL* flags (describe behaviour of
+    # an existing DACL) — with no DACL there is nothing for either flag
+    # to attach to or affect, so both are gated behind the present branch
+    # alongside DiscretionaryAclPresent itself. Windows also clears these
+    # bits whenever SE_DACL_PRESENT is cleared, so this mirrors the
+    # reader's symmetric round-trip.
+    $flags = [System.Security.AccessControl.ControlFlags]::SelfRelative
+    if (-not $stampNullDacl) {
+        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent
+        if ($securityInfo.DaclProtected) {
+            $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected
         }
-        
-        # Create CommonAce with exact flags and properties from source
-        $commonAce = New-Object System.Security.AccessControl.CommonAce (
-            [System.Security.AccessControl.AceFlags]$ace.AceFlags,
-            $qualifier,
-            [int]$ace.AccessMask,
-            $sid,
-            $ace.IsInherited,
-            $null
-        )
-        
-        # Insert at specific position to maintain order
-        $dacl.InsertAce($i, $commonAce)
-    }
-    $sd.DiscretionaryAcl = $dacl
-    
-    # Set control flags to match source exactly
-    $flags = [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent -bor [System.Security.AccessControl.ControlFlags]::SelfRelative
-    if ($securityInfo.DaclProtected) {
-        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected
-    }
-    if ($securityInfo.DaclAutoInherit) {
-        $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherit
+        if ($securityInfo.DaclAutoInherit) {
+            $flags = $flags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherit
+        }
     }
     $sd.SetFlags($flags)
+    $script:setAclLogs.Add("computed ControlFlags=$flags")
 
     # Marshal and set security
     $ownerBytes = New-Object byte[] ($sd.Owner.BinaryLength)
@@ -216,10 +292,17 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $ptrGroup = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($groupBytes.Length)
     [System.Runtime.InteropServices.Marshal]::Copy($groupBytes, 0, $ptrGroup, $groupBytes.Length)
 
-    $daclBytes = New-Object byte[] ($dacl.BinaryLength)
-    $dacl.GetBinaryForm($daclBytes, 0)
-    $ptrDacl = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($daclBytes.Length)
-    [System.Runtime.InteropServices.Marshal]::Copy($daclBytes, 0, $ptrDacl, $daclBytes.Length)
+    # Marshal the DACL only when we have one. For NULL DACL the Win32
+    # contract is pDacl = IntPtr.Zero with DACL_SECURITY_INFORMATION still
+    # set ("explicitly set DACL to NULL").
+    if ($stampNullDacl) {
+        $ptrDacl = [IntPtr]::Zero
+    } else {
+        $daclBytes = New-Object byte[] ($dacl.BinaryLength)
+        $dacl.GetBinaryForm($daclBytes, 0)
+        $ptrDacl = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($daclBytes.Length)
+        [System.Runtime.InteropServices.Marshal]::Copy($daclBytes, 0, $ptrDacl, $daclBytes.Length)
+    }
 
     $ptrSacl = [IntPtr]::Zero
 
@@ -230,15 +313,20 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
     $UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000
 
-    # Include protection flag to always disable inheritance
+    # DACL protection flags only apply to present DACLs. For NULL DACL,
+    # leave both PROTECTED_/UNPROTECTED_ out — there is nothing to
+    # protect/unprotect from inheritance.
     $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
-    if ($securityInfo.DaclProtected) {
-        # Convert to signed int32 to handle the flag properly (matches working set.ps1)
-        $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
-    } else {
-        $securityInfoFlags = [int]$securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
+    if (-not $stampNullDacl) {
+        if ($securityInfo.DaclProtected) {
+            # Convert to signed int32 to handle the flag properly (matches working set.ps1)
+            $securityInfoFlags = [int]($securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION)
+        } else {
+            $securityInfoFlags = [int]$securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
+        }
     }
 
+    $script:setAclLogs.Add("calling SetNamedSecurityInfo securityInfoFlags=$securityInfoFlags ptrDaclIsZero=$($ptrDacl -eq [IntPtr]::Zero)")
     $result = [FastAcl]::SetNamedSecurityInfo(
         $path,
         $SE_FILE_OBJECT,
@@ -248,6 +336,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $ptrDacl,
         $ptrSacl
     )
+    $script:setAclLogs.Add("SetNamedSecurityInfo returned $result")
 
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
@@ -259,6 +348,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     if ($securityInfo.Attributes) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
+        $script:setAclLogs.Add("applied attributes=$($securityInfo.Attributes)")
     }
         
     $unresolved_sid_values = @()
@@ -266,10 +356,18 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
         # Manually build JSON array
         $json_array = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
-        Write-Output ('{"success":true, "unresolved_sids":' + $json_array + '}')
     } else {
-        Write-Output '{"success":true, "unresolved_sids":[]}'
+        $json_array = '[]'
     }
+    $script:setAclLogs.Add("done unresolvedSidCount=$($unresolved_sid_values.Count)")
+
+    # Build the "logs" array by JSON-encoding each entry (handles embedded
+    # quotes/backslashes correctly) and joining inside [ ... ]. Emit it
+    # alongside the existing fields so downstream parsers (which already
+    # JSON.parse the stdout for the unresolved_sids field) pick it up
+    # without any contract change.
+    $log_json = '[' + ((@($script:setAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
+    Write-Output ('{"success":true, "unresolved_sids":' + $json_array + ',"logs":' + $log_json + '}')
 }
 
 function Resolve-UsernamesToSid {
@@ -424,7 +522,17 @@ try {
     if (!(Test-Path $dstFile)) { throw "File not found: $dstFile" }
     Set-FileSecurityFast $dstFile $aclJson
 } catch {
-    Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + '}')
+    # Preserve whatever Set-FileSecurityFast accumulated before the throw —
+    # the operator's only window into how far we got. $script:setAclLogs is
+    # initialized at the top of Set-FileSecurityFast so it will exist if
+    # the function was entered, and be $null only for pre-call failures
+    # (e.g. Test-Path threw above).
+    $logsField = ''
+    if ($script:setAclLogs -and $script:setAclLogs.Count -gt 0) {
+        $log_json = '[' + ((@($script:setAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
+        $logsField = ',"logs":' + $log_json
+    }
+    Write-Output ('{"error":' + (($_.Exception.Message | ConvertTo-Json -Compress)) + $logsField + '}')
 }
 `;
 

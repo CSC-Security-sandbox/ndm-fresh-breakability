@@ -16,7 +16,6 @@ import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
 import { DeferredDirStampService } from '../../shared/deferred-dir-stamp.service';
-import { CtimeTestTriggersService } from '../ctime-test-triggers.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -106,8 +105,7 @@ describe('StampMetaService', () => {
         { provide: WinOperationService, useValue: winOperationService },
         { provide: MetricsService, useValue: mockMetricsService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: DeferredDirStampService, useValue: { add: jest.fn(), updateSourceCtime: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
-        { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
+        { provide: DeferredDirStampService, useValue: { add: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
       ],
     }).compile();
 
@@ -1035,53 +1033,13 @@ describe('StampMetaService', () => {
     });
   });
 
-  describe('ctime validation (win32 path)', () => {
-    beforeEach(() => {
-      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
-      winOperationService.stampAclOperation.mockResolvedValue({ output: null, errors: [] });
-    });
-
-    it('with preserveAccessTime=true: passes when T3 <= T2', async () => {
-      const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock)
-        .mockResolvedValueOnce({ ctimeMs: 1000 })  // T1
-        .mockResolvedValueOnce({ ctimeMs: 2000 })  // T2 (from preserveAccessAndModifiedTimeAndCaptureT2)
-        .mockResolvedValueOnce({ ctimeMs: 2000 }); // T3 = T2, no change
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toEqual([]);
-      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
-    });
-
-    it('with preserveAccessTime=true: retries and exhausts when T3 > T2', async () => {
-      const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: Date.now() });
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
-    });
-
-    it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
-      const input = createMockInput({}, {}, true);
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 5000 });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toEqual([]);
-    });
-
-    it('updates deferred dir stamp when isDir=true and ctime exhausted', async () => {
-      const input = createMockInput({}, {}, true);
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
-    });
-  });
+  // NOTE: The `ctime validation (win32 path)` describe block from main was
+  // intentionally dropped during this rebase. The ACL-comparison refactor on
+  // this branch replaces the ctime-retry-loop (T1/T2/T3, MetadataUpdateConflictError,
+  // CtimeTestTriggersService) with source-vs-target ACL comparison performed by
+  // SecurityDescriptorChangeDetectorService at the next incremental scan in
+  // CommandGenerationService. Re-introducing those tests would assert behavior
+  // that no longer exists.
 
   describe('executeStampAtimeAndPreserveSource (via STAMP_ATIME op)', () => {
     const createAtimeInput = (

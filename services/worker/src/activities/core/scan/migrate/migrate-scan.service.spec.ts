@@ -1484,13 +1484,45 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
     });
 
-    it('calls publishDlmRootPermissionStamp when preservePermissions is true', async () => {
+    it('calls publishDlmRootPermissionStamp when preservePermissions is true, threading abs paths through', async () => {
         jobContext.jobConfig.options.preservePermissions = true;
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
         const permSpy = jest.spyOn(service as any, 'publishDlmRootPermissionStamp').mockResolvedValue(undefined);
         jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(permSpy).toHaveBeenCalled();
+        // Abs paths must be threaded through so buildCommand can hand them
+        // to isMetaUpdated -> hasSecurityDescriptorChanged on win32.
+        expect(permSpy).toHaveBeenCalledWith(rootStat, rootStat, jobContext, '/src', '/dst');
+    });
+
+    it('publishDlmRootPermissionStamp invokes buildCommand with abs paths AND applyInheritanceMode=true (single source of truth for DLM-root flag)', async () => {
+        // Regression tests two things at once:
+        //   1. Abs paths in positions 6/7 — without them, isMetaUpdated
+        //      throws on win32 for every incremental run after the first
+        //      (target mtime matches source after the previous run's
+        //      deferred dir-stamp, so isContentUpdate returns false and
+        //      the gate path is exercised).
+        //   2. applyInheritanceMode=true in position 8 — this is the only
+        //      place the DLM-root flag is decided. buildCommand must not
+        //      re-derive it; if this test fails because the flag isn't
+        //      being passed, the gate's expected-destination SD will not
+        //      match what stamp writes and the root will re-stamp every
+        //      incremental.
+        jobContext.jobConfig.options.preservePermissions = true;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        (commandGenerationService.buildCommand as jest.Mock).mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/abs/src/root', '/abs/dst/root');
+        expect(commandGenerationService.buildCommand).toHaveBeenCalledWith(
+            rootStat,
+            '/',
+            rootStat,
+            undefined,
+            jobContext,
+            '/abs/src/root',
+            '/abs/dst/root',
+            true,
+        );
     });
 
     it('skips publishDlmRootPermissionStamp when preservePermissions is false', async () => {
