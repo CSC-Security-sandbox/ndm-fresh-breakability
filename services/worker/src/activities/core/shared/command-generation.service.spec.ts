@@ -113,7 +113,9 @@ describe('CommandGenerationService', () => {
             birthtime: new Date(),
             ino: 1,
         });
-        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService);
+        const redisService = {} as any;
+        const winOperationService = { hasAclChanged: jest.fn().mockResolvedValue(false) } as any;
+        service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService, redisService, winOperationService);
     });
 
     describe('processItems', () => {

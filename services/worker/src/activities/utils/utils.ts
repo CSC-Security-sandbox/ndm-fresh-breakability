@@ -180,22 +180,34 @@ export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'u
   return (sFile.size !== dFile.size) || (sFile.mtime.toISOString() !== dFile.mtime.toISOString());
 };
 
+/**
+ * Minimal contract `isMetaUpdated` needs from `WinOperationService` for the
+ * SMB branch. Kept structural rather than a class reference to avoid pulling
+ * a heavy DI graph into the utils module.
+ */
+export interface AclChangeDetector {
+  hasAclChanged(sourcePath: string, targetPath: string, jobContext?: JobManagerContext): Promise<boolean>;
+}
+
 export const isMetaUpdated = async (
   sFile: fs.Stats,
   dFile?: fs.Stats,
-  toleranceMs = 1000,
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
-  jobContext?: JobManagerContext
+  jobContext?: JobManagerContext,
+  aclChangeDetector?: AclChangeDetector,
+  sourcePath?: string,
+  targetPath?: string,
 ): Promise<boolean> => {
   if (!dFile) return true;
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
-  return isSmbMetaUpdated(sFile, dFile, toleranceMs);
-};
-
-const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number): boolean => {
-  const sourceCtimeMs = sFile.ctimeMs;
-  const destinationCtimeMs = dFile.ctimeMs;
-  return (sourceCtimeMs + toleranceMs) > destinationCtimeMs;
+  // SMB: direct source vs destination ACL comparison. Caller is responsible
+  // for supplying the detector and both paths — without them we have no way
+  // to make a correctness-preserving decision, so we fail loudly rather
+  // than silently falling back to the old ctime heuristic.
+  if (!aclChangeDetector || !sourcePath || !targetPath) {
+    throw new Error('isMetaUpdated on win32 requires aclChangeDetector, sourcePath, and targetPath');
+  }
+  return aclChangeDetector.hasAclChanged(sourcePath, targetPath, jobContext);
 };
 
 export const isNfsMetaUpdated = async (

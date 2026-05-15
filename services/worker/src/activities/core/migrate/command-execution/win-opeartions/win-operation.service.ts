@@ -15,7 +15,7 @@ import { MetricsService } from 'src/metrics/metrics.service';
 import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
-import { dmError } from 'src/activities/utils/utils';
+import { AclChangeDetector, dmError } from 'src/activities/utils/utils';
 
 // Windows API initialization for ADS detection
 let FindFirstStreamW: any;
@@ -23,10 +23,86 @@ let FindNextStreamW: any;
 let FindClose: any;
 let WIN32_FIND_STREAM_DATA: any;
 
+/**
+ * Numeric values from `System.IO.FileAttributes`. Only the attributes
+ * `[System.IO.File]::SetAttributes` can actually write end up in the
+ * comparison mask; attributes that require separate Win32 syscalls
+ * (`FSCTL_SET_COMPRESSION`, `EncryptFile`, `FSCTL_SET_SPARSE`, etc.) are
+ * deliberately excluded so a missing-on-destination value cannot trigger
+ * an infinite stamp loop. See plan: "Comparison principle" → "Fields we
+ * cannot compare".
+ */
+const FILE_ATTRIBUTE_FLAGS: Readonly<Record<string, number>> = Object.freeze({
+  ReadOnly: 0x0001,
+  Hidden: 0x0002,
+  System: 0x0004,
+  Directory: 0x0010,
+  Archive: 0x0020,
+  Device: 0x0040,
+  Normal: 0x0080,
+  Temporary: 0x0100,
+  SparseFile: 0x0200,
+  ReparsePoint: 0x0400,
+  Compressed: 0x0800,
+  Offline: 0x1000,
+  NotContentIndexed: 0x2000,
+  Encrypted: 0x4000,
+  IntegrityStream: 0x8000,
+  NoScrubData: 0x20000,
+});
+
+const STAMPABLE_ATTR_MASK =
+  FILE_ATTRIBUTE_FLAGS.ReadOnly |
+  FILE_ATTRIBUTE_FLAGS.Hidden |
+  FILE_ATTRIBUTE_FLAGS.System |
+  FILE_ATTRIBUTE_FLAGS.Archive |
+  FILE_ATTRIBUTE_FLAGS.Normal |
+  FILE_ATTRIBUTE_FLAGS.Temporary |
+  FILE_ATTRIBUTE_FLAGS.Offline |
+  FILE_ATTRIBUTE_FLAGS.NotContentIndexed;
+
+function parseStampableAttributes(attrs: string | undefined): number {
+  if (!attrs) return 0;
+  let mask = 0;
+  for (const raw of attrs.split(',')) {
+    const tok = raw.trim();
+    const bit = FILE_ATTRIBUTE_FLAGS[tok];
+    if (bit !== undefined) mask |= bit;
+  }
+  return mask & STAMPABLE_ATTR_MASK;
+}
+
+type AceCanonical = Pick<Ace, 'Sid' | 'AccessMask' | 'AceType' | 'AceFlags'>;
+
+function canonicalizeAces(aces: Ace[] | undefined): AceCanonical[] {
+  if (!aces || aces.length === 0) return [];
+  const filtered: AceCanonical[] = [];
+  for (const a of aces) {
+    if (a.AceType !== 0 && a.AceType !== 1) continue;
+    filtered.push({
+      Sid: a.Sid,
+      AccessMask: a.AccessMask,
+      AceType: a.AceType,
+      AceFlags: a.AceFlags,
+    });
+  }
+  filtered.sort((a, b) => {
+    if (a.Sid !== b.Sid) return a.Sid < b.Sid ? -1 : 1;
+    if (a.AceType !== b.AceType) return a.AceType - b.AceType;
+    if (a.AccessMask !== b.AccessMask) return a.AccessMask - b.AccessMask;
+    return a.AceFlags - b.AceFlags;
+  });
+  return filtered;
+}
+
+function aceKey(a: AceCanonical): string {
+  return `${a.Sid}|${a.AceType}|${a.AccessMask}|${a.AceFlags}`;
+}
+
 
 
 @Injectable()
-export class WinOperationService {
+export class WinOperationService implements AclChangeDetector {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
 
@@ -271,6 +347,96 @@ export class WinOperationService {
     } catch {
       throw new Error(`Failed to reset file attributes for ${path}`);
     }
+  }
+
+  /**
+   * Bidirectional strict comparison of source vs destination NTFS ACLs.
+   *
+   * Compares only the fields the production stamp pipeline can actually
+   * write to destination: `Owner`, `Group`, `DaclProtected`, `DaclAutoInherit`,
+   * the settable subset of `Attributes`, and ACEs of type 0/1 with their
+   * `AceFlags` byte intact (sorted before element-wise compare so insertion
+   * order doesn't cause false mismatches).
+   *
+   * Short-circuits on the first mismatch and returns the offending field
+   * inside `reason` so the caller can log a structured single line without
+   * a second pass over the data.
+   */
+  aclEquals(src: SecurityDescriptor, dst: SecurityDescriptor): AclCompareResult {
+    if (src.Owner !== dst.Owner) {
+      return { equal: false, reason: { field: 'owner', srcValue: src.Owner, dstValue: dst.Owner } };
+    }
+    if (src.Group !== dst.Group) {
+      return { equal: false, reason: { field: 'group', srcValue: src.Group, dstValue: dst.Group } };
+    }
+    if (!!src.DaclProtected !== !!dst.DaclProtected) {
+      return { equal: false, reason: { field: 'daclProtected', srcValue: !!src.DaclProtected, dstValue: !!dst.DaclProtected } };
+    }
+    // Watch-list: Windows' inheritance engine can set/clear this bit on its
+    // own. Compared strictly by default; mask this branch off if real testing
+    // surfaces a stable round-trip mismatch.
+    if (!!src.DaclAutoInherit !== !!dst.DaclAutoInherit) {
+      return { equal: false, reason: { field: 'daclAutoInherit', srcValue: !!src.DaclAutoInherit, dstValue: !!dst.DaclAutoInherit } };
+    }
+    const srcAttrs = parseStampableAttributes(src.Attributes);
+    const dstAttrs = parseStampableAttributes(dst.Attributes);
+    if (srcAttrs !== dstAttrs) {
+      return { equal: false, reason: { field: 'attributes', srcValue: srcAttrs, dstValue: dstAttrs } };
+    }
+    const srcAces = canonicalizeAces(src.DaclAces);
+    const dstAces = canonicalizeAces(dst.DaclAces);
+    if (srcAces.length !== dstAces.length) {
+      const dstKeys = new Set(dstAces.map(aceKey));
+      const srcKeys = new Set(srcAces.map(aceKey));
+      if (srcAces.length > dstAces.length) {
+        const missing = srcAces.find(a => !dstKeys.has(aceKey(a))) ?? srcAces[0];
+        return { equal: false, reason: { field: 'aceRemoved', srcValue: missing, dstValue: null } };
+      }
+      const extra = dstAces.find(a => !srcKeys.has(aceKey(a))) ?? dstAces[0];
+      return { equal: false, reason: { field: 'aceAdded', srcValue: null, dstValue: extra } };
+    }
+    for (let i = 0; i < srcAces.length; i++) {
+      const s = srcAces[i];
+      const d = dstAces[i];
+      if (s.Sid !== d.Sid || s.AccessMask !== d.AccessMask || s.AceType !== d.AceType || s.AceFlags !== d.AceFlags) {
+        return { equal: false, reason: { field: 'aceFieldDiff', srcValue: s, dstValue: d } };
+      }
+    }
+    return { equal: true };
+  }
+
+  /**
+   * Scan-time entry point for SMB metadata-change detection. Reads source
+   * and destination ACLs in parallel, runs `aclEquals`, and on mismatch
+   * emits one structured INFO log line per item with the offending field.
+   *
+   * First-time-stamp case (destination object does not yet exist) is
+   * handled by callers — `isMetaUpdated` short-circuits before this method
+   * is invoked when `dFile` is undefined, so this method is only reached
+   * when destination metadata already exists. That means a log here always
+   * reflects a genuine drift between source and destination, not an
+   * initial-stamp event.
+   */
+  async hasAclChanged(
+    sourcePath: string,
+    targetPath: string,
+    jobContext?: JobManagerContext,
+  ): Promise<boolean> {
+    const workflowId = jobContext?.jobRunId ?? '';
+    const [srcAcl, dstAcl] = await Promise.all([
+      this.getAclOperation(sourcePath, true, workflowId),
+      this.getAclOperation(targetPath, false, workflowId),
+    ]);
+    const result = this.aclEquals(srcAcl, dstAcl);
+    if (!result.equal && result.reason) {
+      this.logger.log(
+        `[${workflowId}] ACL mismatch on destination - target=${targetPath} source=${sourcePath} ` +
+        `field=${result.reason.field} ` +
+        `srcValue=${JSON.stringify(result.reason.srcValue)} ` +
+        `dstValue=${JSON.stringify(result.reason.dstValue)}`,
+      );
+    }
+    return !result.equal;
   }
 
   async validateAclOperation(

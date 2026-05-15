@@ -25,6 +25,31 @@ interface ValidatorOutput {
   inValid: string;
 }
 
+/**
+ * Field key for the first ACL mismatch surfaced by `aclEquals`. Use these
+ * as stable log/grep keys; do not switch on free-form strings.
+ */
+type AclMismatchField =
+  | 'owner'
+  | 'group'
+  | 'daclProtected'
+  | 'daclAutoInherit'
+  | 'attributes'
+  | 'aceAdded'
+  | 'aceRemoved'
+  | 'aceFieldDiff';
+
+interface AclMismatchReason {
+  field: AclMismatchField;
+  srcValue: unknown;
+  dstValue: unknown;
+}
+
+interface AclCompareResult {
+  equal: boolean;
+  reason?: AclMismatchReason;
+}
+
 interface ADSInfo {
   hasADS: boolean;
   streamCount: number;
