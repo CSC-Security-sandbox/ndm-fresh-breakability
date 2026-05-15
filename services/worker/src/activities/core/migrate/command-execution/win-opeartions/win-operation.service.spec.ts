@@ -347,6 +347,59 @@ describe('WinOperationService', () => {
       );
     });
 
+    describe('Set-FileSecurityFast log forwarding', () => {
+      it('forwards each entry in the JSON `logs` array as a worker info log keyed to workflowId + targetPath', async () => {
+        const testPath = 'C:\\test\\target';
+        const psLogs = [
+          'start path=C:\\test\\target aclJsonLen=512',
+          'parsed Owner=S-1-5-21-A Group=S-1-5-21-G DaclPresent=False DaclProtected=False DaclAutoInherit=False DaclAceCount=0 Attributes=Archive',
+          'stampNullDacl=True',
+          'SetNamedSecurityInfo returned 0',
+          'done unresolvedSidCount=0',
+        ];
+        mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+          stdout: JSON.stringify({ success: true, unresolved_sids: [], logs: psLogs }),
+          stderr: '',
+        });
+
+        await service.setAclOperation(testPath, mockAcl, 'wf-fwd-1');
+
+        for (const line of psLogs) {
+          expect(mockLogger.log).toHaveBeenCalledWith(
+            `[wf-fwd-1] [Set-FileSecurityFast] ${line} targetPath=${testPath}`,
+          );
+        }
+      });
+
+      it('is a no-op when stdout is not JSON', async () => {
+        const testPath = 'C:\\test\\target';
+        mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+          stdout: 'not-json',
+          stderr: '',
+        });
+        const before = (mockLogger.log as jest.Mock).mock.calls.length;
+
+        await service.setAclOperation(testPath, mockAcl, 'wf-fwd-2');
+
+        const after = (mockLogger.log as jest.Mock).mock.calls.length;
+        expect(after).toBe(before);
+      });
+
+      it('is a no-op when stdout JSON has no `logs` field', async () => {
+        const testPath = 'C:\\test\\target';
+        mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+          stdout: JSON.stringify({ success: true, unresolved_sids: [] }),
+          stderr: '',
+        });
+        const before = (mockLogger.log as jest.Mock).mock.calls.length;
+
+        await service.setAclOperation(testPath, mockAcl, 'wf-fwd-3');
+
+        const after = (mockLogger.log as jest.Mock).mock.calls.length;
+        expect(after).toBe(before);
+      });
+    });
+
   });
 
   describe('stampAclOperation', () => {
@@ -852,7 +905,7 @@ describe('WinOperationService', () => {
         Group: 'S-1-5-21-target-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
         'Group mismatch: Expected(S-1-5-21-source-group) Target(S-1-5-21-target-group). ',
@@ -886,10 +939,10 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
-        'Missing ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
+        'Missing ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0), AceFlags(0x0). ',
       );
     });
 
@@ -922,7 +975,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toContain('Owner mismatch');
       expect(result.inValid).toContain('Group mismatch');
@@ -947,7 +1000,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe('');
     });
@@ -988,7 +1041,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe('');
     });
@@ -1020,7 +1073,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-3-0), AceType(0). ',
@@ -1063,10 +1116,10 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
-        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0). ',
+        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0), AceFlags(0x0). ',
       );
     });
 
@@ -1114,7 +1167,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(''); // Should be valid because audit ACE is ignored
     });
@@ -1166,7 +1219,7 @@ describe('WinOperationService', () => {
         originalGroup: 'S-1-5-21-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2, acl1);
+      const result = await service.validateAclOperation(acl1, acl2);
 
       // sourceSID must show original source SID (2757), not the mapped target SID (2758)
       expect(result.sourceSID).toContain('SID(S-1-5-21-2757)');
@@ -1207,6 +1260,327 @@ describe('WinOperationService', () => {
       expect(result.inValid).toBe('');
     });
 
+    // ─────── Whole-DACL shape checks (added 2026-05) ───────
+    // Locked in to match the gate comparator's strict equality for the
+    // same fields. A passing post-stamp validator + a passing gate together
+    // give end-to-end coverage that the stamp preserved these flags.
+    describe('whole-DACL shape checks', () => {
+      const baseAcl = (): SecurityDescriptor => ({
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: [],
+        Attributes: 'Archive',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: 'S-1-5-21-owner',
+        originalGroup: 'S-1-5-21-group',
+      });
+
+      it('detects DaclPresent mismatch (true → false)', async () => {
+        const src = baseAcl();
+        const tgt = { ...baseAcl(), DaclPresent: false };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe(
+          'DaclPresent mismatch: Expected(true) Target(false). ',
+        );
+      });
+
+      it('detects DaclProtected mismatch (false → true)', async () => {
+        const src = baseAcl();
+        const tgt = { ...baseAcl(), DaclProtected: true };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe(
+          'DaclProtected mismatch: Expected(false) Target(true). ',
+        );
+      });
+
+      it('does NOT detect DaclAutoInherit drift (Windows-controlled bit; symmetric with gate)', async () => {
+        // SE_DACL_AUTO_INHERITED is set/cleared by Windows' inheritance
+        // engine independently of what the stamp writes, so validating
+        // it would produce false-positive post-stamp errors. Drift on
+        // this bit alone leaves `inValid` empty.
+        const src = baseAcl();
+        const tgt = { ...baseAcl(), DaclAutoInherit: false };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe('');
+      });
+
+      it('detects Attributes mismatch on a stampable bit (ReadOnly added on source only)', async () => {
+        const src = { ...baseAcl(), Attributes: 'Archive, ReadOnly' };
+        const tgt = { ...baseAcl(), Attributes: 'Archive' };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toContain('Attributes mismatch');
+        // ReadOnly = 0x1, Archive = 0x20 → 0x21 vs 0x20
+        expect(result.inValid).toContain('Expected(0x21)');
+        expect(result.inValid).toContain('Target(0x20)');
+      });
+
+      it('ignores Attributes mismatch on non-stampable bits (Compressed on source only)', async () => {
+        // Compressed (0x800) is not in the stampable subset — the stamp
+        // pipeline can't write it, so the validator must not alarm on it.
+        const src = { ...baseAcl(), Attributes: 'Archive, Compressed' };
+        const tgt = { ...baseAcl(), Attributes: 'Archive' };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe('');
+      });
+
+      it('accumulates all whole-DACL drifts in one inValid string (no short-circuit)', async () => {
+        // Note: DaclAutoInherit drift is intentionally excluded from the
+        // validator (Windows-controlled bit; see in-source rationale and
+        // the `does NOT detect DaclAutoInherit drift` test above), so
+        // flipping it in the fixture must NOT contribute to `inValid`.
+        const src = baseAcl();
+        const tgt = {
+          ...baseAcl(),
+          DaclPresent: false,
+          DaclProtected: true,
+          DaclAutoInherit: false,
+          Attributes: 'Archive, Hidden',
+        };
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toContain('DaclPresent mismatch');
+        expect(result.inValid).toContain('DaclProtected mismatch');
+        expect(result.inValid).not.toContain('DaclAutoInherit mismatch');
+        expect(result.inValid).toContain('Attributes mismatch');
+      });
+
+      it('byte-identical descriptors → empty inValid (no false positives)', async () => {
+        const src = baseAcl();
+        const tgt = baseAcl();
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe('');
+      });
+    });
+
+    // ─────── Per-ACE AceFlags strict equality (added 2026-05) ───────
+    // The validator is invoked with `filteredAcl` (post inheritance-mode
+    // transform), so AceFlags on each ACE must match the destination
+    // byte-for-byte. Drift here changes inheritance shape (which children
+    // the ACE applies to, whether it propagates, whether it is treated as
+    // inherited). Implicitly covers IsInherited (bit 0x10).
+    describe('per-ACE AceFlags strict equality', () => {
+      const baseAcl = (ace: Partial<{ Sid: string; AccessMask: number; AceType: number; AceFlags: number; IsInherited: boolean }> = {}): SecurityDescriptor => ({
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: [{
+          Sid: 'S-1-5-21-user',
+          AccessMask: 0x1f01ff,
+          AceType: 0,
+          AceFlags: 0x03,
+          IsInherited: false,
+          originalSid: 'S-1-5-21-user',
+          ...ace,
+        }],
+        Attributes: 'Archive',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: 'S-1-5-21-owner',
+        originalGroup: 'S-1-5-21-group',
+      });
+
+      it('flags AceFlags drift: CONTAINER_INHERIT|OBJECT_INHERIT (0x03) → 0x00 (propagation broken)', async () => {
+        const src = baseAcl({ AceFlags: 0x03 });
+        const tgt = baseAcl({ AceFlags: 0x00 });
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toContain('Missing ACE in target');
+        expect(result.inValid).toContain('AceFlags(0x3)');
+      });
+
+      it('flags AceFlags drift: INHERITED_ACE bit (0x10) appears on target only (lineage wrong)', async () => {
+        // Source is explicit (post-transform). Target picked up bit 0x10
+        // somehow → destination thinks the ACE is inherited.
+        const src = baseAcl({ AceFlags: 0x03, IsInherited: false });
+        const tgt = baseAcl({ AceFlags: 0x13, IsInherited: true });
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toContain('Missing ACE in target');
+        expect(result.inValid).toContain('AceFlags(0x3)');
+      });
+
+      it('flags AceFlags drift: INHERIT_ONLY bit (0x08) cleared on target (wrong scope)', async () => {
+        // Source: applies to children only. Target: applies here too.
+        const src = baseAcl({ AceFlags: 0x0b }); // CONTAINER|OBJECT|INHERIT_ONLY
+        const tgt = baseAcl({ AceFlags: 0x03 }); // CONTAINER|OBJECT (no INHERIT_ONLY)
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toContain('Missing ACE in target');
+        expect(result.inValid).toContain('AceFlags(0xb)');
+      });
+
+      it('TOLERATES AceFlags drift on CREATOR OWNER (S-1-3-0) — Sid+AceType only', async () => {
+        // CREATOR OWNER is intentionally exempt from AceFlags strict
+        // equality: the validator matches on Sid + AceType only. Policy is
+        // symmetric with `securityDescriptorEquals` (the gate comparator),
+        // which applies the same per-AceType tolerance because the kernel
+        // rewrites S-1-3-0 mask/flags post-stamp and strict compare on
+        // either surface would induce a restamp loop. Add/remove of CO
+        // ACEs still surfaces on both surfaces.
+        const src = baseAcl({ Sid: 'S-1-3-0', AccessMask: 0x1f01ff, AceFlags: 0x0b });
+        const tgt = baseAcl({ Sid: 'S-1-3-0', AccessMask: 0x40000000, AceFlags: 0x03 });
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe('');
+      });
+
+      it('passes when AceFlags matches exactly even with AccessMask superset on target (subset semantics preserved)', async () => {
+        // Regression guard: tightening AceFlags must NOT tighten the
+        // existing AccessMask-subset behaviour.
+        const src = baseAcl({ AccessMask: 0x120089, AceFlags: 0x03 }); // R+X
+        const tgt = baseAcl({ AccessMask: 0x1f01ff, AceFlags: 0x03 }); // Full
+
+        const result = await service.validateAclOperation(src, tgt);
+
+        expect(result.inValid).toBe('');
+      });
+    });
+
+    describe('mismatch log emission', () => {
+      it('logs sourceSd and destinationSd in full on mismatch when logContext is supplied', async () => {
+        const src: SecurityDescriptor = {
+          Owner: 'S-1-5-21-source-owner',
+          Group: 'S-1-5-21-group',
+          DaclAces: [],
+          Attributes: 'SE_DACL_PRESENT',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: false,
+          originalOwner: 'S-1-5-21-source-owner',
+          originalGroup: 'S-1-5-21-group',
+        };
+        const tgt: SecurityDescriptor = { ...src, Owner: 'S-1-5-21-target-owner' };
+        const logSpy = jest.spyOn((service as any).logger, 'log');
+
+        const result = await service.validateAclOperation(src, tgt, {
+          workflowId: 'wf-1',
+          sourcePath: 'C:\\src',
+          targetPath: 'C:\\dst',
+        });
+
+        expect(result.inValid).toContain('Owner mismatch');
+        const logCall = logSpy.mock.calls.find((c) =>
+          String(c[0] ?? '').includes('ACL post-stamp validation mismatch'),
+        );
+        expect(logCall).toBeDefined();
+        const line = String(logCall![0]);
+        expect(line).toContain('[wf-1]');
+        expect(line).toContain('sourcePath=C:\\src');
+        expect(line).toContain('targetPath=C:\\dst');
+        expect(line).toContain(`sourceSd=${JSON.stringify(src)}`);
+        expect(line).toContain(`destinationSd=${JSON.stringify(tgt)}`);
+      });
+
+      it('does not emit the mismatch log when validation is clean', async () => {
+        const src: SecurityDescriptor = {
+          Owner: 'S-1-5-21-owner',
+          Group: 'S-1-5-21-group',
+          DaclAces: [],
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: false,
+        } as any;
+        const logSpy = jest.spyOn((service as any).logger, 'log');
+
+        await service.validateAclOperation(src, { ...src }, {
+          workflowId: 'wf-1',
+          sourcePath: 'C:\\src',
+          targetPath: 'C:\\dst',
+        });
+
+        const logCall = logSpy.mock.calls.find((c) =>
+          String(c[0] ?? '').includes('ACL post-stamp validation mismatch'),
+        );
+        expect(logCall).toBeUndefined();
+      });
+    });
+
+    describe('NULL DACL handling (SE_DACL_PRESENT=0 on both sides)', () => {
+      // The reader normalizes NULL-DACL objects to `DaclAces: null` to
+      // keep the validator from chasing phantom ACE bytes the kernel
+      // sometimes surfaces after `SE_DACL_PRESENT` is cleared. The
+      // validator therefore short-circuits its ACE walk when both sides
+      // are NULL DACL — Win32 access checks bypass the DACL entirely in
+      // that state, so byte-level ACE drift is meaningless. These tests
+      // pin that contract so a future regression that re-introduces the
+      // ACE walk is caught immediately.
+      const mkNullDaclSd = (over: Partial<SecurityDescriptor> = {}): SecurityDescriptor => ({
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: null as any,
+        Attributes: 'Archive',
+        DaclPresent: false,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-21-owner',
+        originalGroup: 'S-1-5-21-group',
+        ...over,
+      });
+
+      it('returns clean validation for canonical NULL DACL on both sides (DaclAces=null)', async () => {
+        const src = mkNullDaclSd();
+        const tgt = mkNullDaclSd();
+        const result = await service.validateAclOperation(src, tgt);
+        expect(result.inValid).toBe('');
+      });
+
+      it('returns clean validation when only one side has phantom ACE bytes (kernel leftover)', async () => {
+        const src = mkNullDaclSd();
+        const tgt = mkNullDaclSd({
+          DaclAces: [
+            {
+              Sid: 'S-1-5-21-phantom',
+              AccessMask: 0x1f01ff,
+              AceType: 0,
+              AceFlags: 0x10,
+              IsInherited: true,
+              originalSid: 'S-1-5-21-phantom',
+            },
+          ] as any,
+        });
+        const result = await service.validateAclOperation(src, tgt);
+        expect(result.inValid).toBe('');
+      });
+
+      it('still surfaces Owner/Group/Attributes drift when both sides are NULL DACL', async () => {
+        // The ACE walk is skipped, but the prior field checks
+        // (Owner / Group / DaclPresent / DaclProtected / Attributes)
+        // stand on their own. Verify they still fire.
+        const src = mkNullDaclSd({ Owner: 'S-1-5-21-srcOwner' });
+        const tgt = mkNullDaclSd({ Owner: 'S-1-5-21-tgtOwner' });
+        const result = await service.validateAclOperation(src, tgt);
+        expect(result.inValid).toContain('Owner mismatch');
+      });
+
+      it('still flags DaclPresent drift when only one side is NULL DACL (semantically opposite)', async () => {
+        // NULL DACL (allow all) and empty present DACL (deny all) are
+        // semantically opposite; the validator must not treat them as
+        // equivalent just because one side happens to have no ACEs.
+        const src = mkNullDaclSd();
+        const tgt = mkNullDaclSd({ DaclPresent: true, DaclAces: [] });
+        const result = await service.validateAclOperation(src, tgt);
+        expect(result.inValid).toContain('DaclPresent mismatch');
+      });
+    });
   });
 
   describe('applySmbInheritanceMode', () => {
@@ -1418,10 +1792,13 @@ describe('WinOperationService', () => {
 
       await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
 
-      // sourceAcl = filteredAcl (only explicitAce), targetAcl = destAcl
+      // sourceAcl = filteredAcl (only explicitAce), targetAcl = destAcl.
+      // Third arg is the optional logContext (workflowId/source/target paths)
+      // used purely for the post-stamp validation mismatch log line.
       expect(validateSpy).toHaveBeenCalledWith(
         expect.objectContaining({ DaclAces: [explicitAce] }),
         destAcl,
+        { workflowId: 'test-job', sourcePath: 'C:\\src', targetPath: 'C:\\dst' },
       );
       expect(command.ops[OPS_CMD.STAMP_META].params.sidMap.sourceAcl).toBe('Owner: S-1-5-21-owner, Group: S-1-5-21-group,full-source-sid-string');
     });
@@ -1446,9 +1823,46 @@ describe('WinOperationService', () => {
 
       await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
 
-      // No mode applied — applySmbInheritanceMode returns acl unchanged, so filteredAcl === sourceAcl
-      expect(validateSpy).toHaveBeenCalledWith(sourceAcl, sourceAcl);
+      // No mode applied — applySmbInheritanceMode returns acl unchanged, so
+      // filteredAcl === sourceAcl. Third arg is the optional logContext.
+      expect(validateSpy).toHaveBeenCalledWith(
+        sourceAcl,
+        sourceAcl,
+        { workflowId: 'test-job', sourcePath: 'C:\\src', targetPath: 'C:\\dst' },
+      );
       expect(command.ops[OPS_CMD.STAMP_META].params.sidMap.sourceAcl).toBe('Owner: S-1-5-21-owner, Group: S-1-5-21-group,no-mode-source-sid');
+    });
+
+    it('stampAclOperation logs the exact security descriptor being stamped on the destination', async () => {
+      const sourceAcl: any = {
+        Owner: 'S-1-5-21-owner', Group: 'S-1-5-21-group', DaclAces: [], DaclProtected: false,
+      };
+      const command: any = { ops: { [OPS_CMD.STAMP_META]: { params: {} } } };
+      const jobCtx: any = {
+        jobRunId: 'wf-stamp-log',
+        jobConfig: { options: { isIdentityMappingAvailable: false } },
+      };
+
+      jest.spyOn(service, 'getAclOperation').mockResolvedValue(sourceAcl);
+      jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: '' });
+      jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
+        sourceSID: '', targetSID: '', inValid: '',
+      });
+      const logSpy = jest.spyOn((service as any).logger, 'log');
+
+      await service.stampAclOperation({
+        command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst',
+      } as any);
+
+      const stampLog = logSpy.mock.calls.find((c) =>
+        String(c[0] ?? '').includes('Stamping ACL on destination'),
+      );
+      expect(stampLog).toBeDefined();
+      const line = String(stampLog![0]);
+      expect(line).toContain('[wf-stamp-log]');
+      expect(line).toContain('targetPath=C:\\dst');
+      expect(line).toContain('sourcePath=C:\\src');
+      expect(line).toContain(`sd=${JSON.stringify(sourceAcl)}`);
     });
 
   });
@@ -2072,4 +2486,5 @@ describe('WinOperationService', () => {
       );
     });
   });
+
 });

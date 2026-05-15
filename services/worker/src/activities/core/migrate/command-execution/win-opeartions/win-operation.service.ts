@@ -16,6 +16,7 @@ import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { dmError } from 'src/activities/utils/utils';
+import { parseStampableAttributes } from './file-attributes';
 
 export enum SmbPermissionInheritanceMode {
   INHERIT_PERMS_AS_IS       = 'INHERIT_PERMS_AS_IS',
@@ -27,8 +28,6 @@ let FindFirstStreamW: any;
 let FindNextStreamW: any;
 let FindClose: any;
 let WIN32_FIND_STREAM_DATA: any;
-
-
 
 @Injectable()
 export class WinOperationService {
@@ -111,6 +110,7 @@ export class WinOperationService {
       const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;
       const output = await this.winShellService.executeCommand(script, workflowId);
       if (output.stderr) throw new Error(output.stderr);
+      this.forwardSetAclScriptLogs(output?.stdout, workflowId, targetPath);
       return output;
     } catch (error) {
       this.logger.error(
@@ -118,6 +118,37 @@ export class WinOperationService {
       );
       throw new TargetAclError(
         `Failed to set ACL for ${targetPath}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Forward the diagnostic `logs` array that `Set-FileSecurityFast` packs
+   * into its stdout JSON to the worker logger so each PowerShell-side
+   * decision (parsed SD, NULL-DACL branch, computed control flags, kernel
+   * call result, attribute apply) shows up as a normal info line keyed to
+   * the same `workflowId` and `targetPath` as the surrounding TS logs.
+   *
+   * Silent on non-JSON stdout or absent/non-array `logs` — keeps this safe
+   * to call against any historical PowerShell payload shape and against
+   * any future stdout shape change without breaking the stamp path.
+   */
+  private forwardSetAclScriptLogs(
+    stdout: string | undefined,
+    workflowId: string,
+    targetPath: string,
+  ): void {
+    if (!stdout) return;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(parsed?.logs)) return;
+    for (const line of parsed.logs) {
+      this.logger.log(
+        `[${workflowId}] [Set-FileSecurityFast] ${line} targetPath=${targetPath}`,
       );
     }
   }
@@ -183,6 +214,16 @@ export class WinOperationService {
     // 2c. Apply SMB inheritance mode for the DLM root (no-op for all other commands).
     const filteredAcl = this.applySmbInheritanceMode(acl, command, jobContext);
 
+    // Operator-facing: log the exact security descriptor we are about to hand
+    // to `Set-FileSecurityFast`. This is the *post-mapping, post-inheritance-
+    // transform* descriptor — i.e., the bytes the kernel will actually see —
+    // so an operator can reproduce stamp behaviour from logs alone.
+    this.logger.log(
+      `[${workflowId}] Stamping ACL on destination handed to Set-FileSecurityFast - targetPath=${targetPath} ` +
+      `sourcePath=${sourcePath} ` +
+      `sd=${JSON.stringify(filteredAcl)}`,
+    );
+
     // 3. Set target ACL (PowerShell Set-FileSecurityFast)
     const result = await this.metricsService.runWithTiming(
       workflowId,
@@ -214,7 +255,7 @@ export class WinOperationService {
     const validation = await this.metricsService.runWithTiming(
       workflowId,
       { category: 'stamp_phase', phase: 'acl_validate' },
-      () => this.validateAclOperation(filteredAcl, targetAcl),
+      () => this.validateAclOperation(filteredAcl, targetAcl, { workflowId, sourcePath, targetPath }),
     );
     if (validation.inValid.length > 0){
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
@@ -233,17 +274,32 @@ export class WinOperationService {
     return { output, errors };
   }
 
-  
-  applySmbInheritanceMode(
-    acl: SecurityDescriptor,
-    command: Cmd,
-    jobContext: JobManagerContext,
-  ): SecurityDescriptor {
-    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
-    if (!acl.DaclAces) return acl;
+  /**
+   * Resolve the configured inheritance mode for a job, defaulting to
+   * `INHERIT_PERMS_AS_EXPLICIT` when none is set. Shared by stamp and the
+   * scan-time comparison gate so the two paths can't drift on the default.
+   */
+  resolveSmbInheritanceMode(jobContext?: JobManagerContext): SmbPermissionInheritanceMode {
+    return ((jobContext?.jobConfig?.options as any)?.smbPermissionInheritanceMode
+      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) as SmbPermissionInheritanceMode;
+  }
 
-    const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
-      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+  /**
+   * Pure transform — applies the configured inheritance mode to a security
+   * descriptor's DACL. Caller is responsible for deciding *when* to invoke
+   * this (DLM root only in both stamp and gate paths).
+   *
+   *   - `INHERIT_PERMS_AS_EXPLICIT`: flip inherited ACEs to explicit
+   *     (clear `IsInherited`, clear `INHERITED_ACE` bit `0x10`).
+   *   - `INHERIT_PERMS_AS_IS` (and any unknown mode): drop inherited ACEs.
+   *
+   * Returns the input unchanged when `DaclAces` is absent. Does not mutate.
+   */
+  applySmbInheritanceModeTransform(
+    acl: SecurityDescriptor,
+    mode: SmbPermissionInheritanceMode,
+  ): SecurityDescriptor {
+    if (!acl.DaclAces) return acl;
 
     if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) {
       return {
@@ -257,6 +313,20 @@ export class WinOperationService {
     }
 
     return { ...acl, DaclAces: acl.DaclAces.filter(ace => !ace.IsInherited) };
+  }
+
+  /**
+   * Stamp-path wrapper: applies the inheritance-mode transform iff the
+   * command was flagged by `initDlmRootStamp` as the DLM root. Non-root
+   * commands pass through unchanged.
+   */
+  applySmbInheritanceMode(
+    acl: SecurityDescriptor,
+    command: Cmd,
+    jobContext: JobManagerContext,
+  ): SecurityDescriptor {
+    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
+    return this.applySmbInheritanceModeTransform(acl, this.resolveSmbInheritanceMode(jobContext));
   }
 
   async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {
@@ -276,30 +346,34 @@ export class WinOperationService {
   }
 
   async mapSIDToTarget(
-    acl: SecurityDescriptor,
+    sourceAcl: SecurityDescriptor,
     jobRunId: string,
   ): Promise<SecurityDescriptor> {
-    acl.originalOwner = acl.Owner;
-    acl.originalGroup = acl.Group;
-
-    // Parallelize owner, group, and all ACE SID lookups in a single batch
-    const [owner, group] = await Promise.all([
-      this.getSIDMapping(acl.Owner, jobRunId),
-      this.getSIDMapping(acl.Group, jobRunId),
+    const sourceDaclAces = sourceAcl.DaclAces ?? [];
+    const [mappedOwnerSid, mappedGroupSid, mappedDaclAces] = await Promise.all([
+      this.getSIDMapping(sourceAcl.Owner, jobRunId),
+      this.getSIDMapping(sourceAcl.Group, jobRunId),
+      Promise.all(
+        sourceDaclAces.map(async (sourceAce) => {
+          const mappedAceSid = await this.getSIDMapping(sourceAce.Sid, jobRunId);
+          this.logger.debug(`Mapping SID ${sourceAce.Sid} to ${mappedAceSid}`);
+          return {
+            ...sourceAce,
+            originalSid: sourceAce.Sid,
+            Sid: mappedAceSid ?? sourceAce.Sid,
+          };
+        }),
+      ),
     ]);
-    if (owner) acl.Owner = owner;
-    if (group) acl.Group = group;
 
-    acl.DaclAces = await Promise.all(
-      acl.DaclAces.map(async (ace) => {
-        ace.originalSid = ace.Sid;
-        const targetSid = await this.getSIDMapping(ace.Sid, jobRunId);
-        this.logger.debug(`Mapping SID ${ace.Sid} to ${targetSid}`);
-        if (targetSid) ace.Sid = targetSid;
-        return ace;
-      }),
-    );
-    return acl;
+    return {
+      ...sourceAcl,
+      originalOwner: sourceAcl.Owner,
+      originalGroup: sourceAcl.Group,
+      Owner: mappedOwnerSid ?? sourceAcl.Owner,
+      Group: mappedGroupSid ?? sourceAcl.Group,
+      DaclAces: mappedDaclAces,
+    };
   }
 
   async resetFileAttributes(path: string): Promise<boolean> {
@@ -314,6 +388,7 @@ export class WinOperationService {
   async validateAclOperation(
     sourceAcl: SecurityDescriptor,
     targetAcl: SecurityDescriptor,
+    logContext?: { workflowId?: string; sourcePath?: string; targetPath?: string },
   ): Promise<ValidatorOutput> {
     const output: ValidatorOutput = {
       sourceSID: '',
@@ -324,6 +399,51 @@ export class WinOperationService {
       output.inValid += `Owner mismatch: Expected(${sourceAcl.Owner}) Target(${targetAcl.Owner}). `;
     if (sourceAcl.Group !== targetAcl.Group)
       output.inValid += `Group mismatch: Expected(${sourceAcl.Group}) Target(${targetAcl.Group}). `;
+
+
+    if (!!sourceAcl.DaclPresent !== !!targetAcl.DaclPresent)
+      output.inValid += `DaclPresent mismatch: Expected(${!!sourceAcl.DaclPresent}) Target(${!!targetAcl.DaclPresent}). `;
+    if (!!sourceAcl.DaclProtected !== !!targetAcl.DaclProtected)
+      output.inValid += `DaclProtected mismatch: Expected(${!!sourceAcl.DaclProtected}) Target(${!!targetAcl.DaclProtected}). `;
+
+    // NULL DACL on both sides → there is no DACL to compare ACE-by-ACE on
+    // either object (Win32 `SE_DACL_PRESENT=0` means access checks bypass
+    // the DACL entirely). Walking `DaclAces` here is not just wasted work —
+    // it's actively wrong: the reader sometimes surfaces phantom inherited
+    // ACE bytes the kernel keeps around even after `SE_DACL_PRESENT` is
+    // cleared, which would otherwise drive false-positive
+    // "Missing ACE in target" findings on every incremental scan.
+    //
+    // Owner / Group / DaclPresent / DaclProtected / Attributes were already
+    // checked above and stand on their own; we still log Source/Target SID
+    // strings (empty here, by definition) for CoC parity.
+    if (!sourceAcl.DaclPresent && !targetAcl.DaclPresent) {
+      if (output.inValid.length > 0) {
+        this.logger.log(
+          `[${logContext?.workflowId ?? ''}] ACL post-stamp validation mismatch (NULL DACL both sides; ACE walk skipped) - ` +
+          `sourcePath=${logContext?.sourcePath ?? ''} targetPath=${logContext?.targetPath ?? ''} ` +
+          `inValid="${output.inValid.trim()}" ` +
+          `sourceSd=${JSON.stringify(sourceAcl)} ` +
+          `destinationSd=${JSON.stringify(targetAcl)}`,
+        );
+      }
+      return output;
+    }
+    // `DaclAutoInherit` is intentionally NOT validated. Windows'
+    // inheritance engine sets/clears this bit on its own, so the value
+    // we read back is not guaranteed to equal what we wrote even on a
+    // successful stamp. Validating it would generate false-positive
+    // post-stamp errors. Symmetric with `securityDescriptorEquals`.
+
+    // Attributes are compared on the stampable subset only — same mask the
+    // stamp pipeline can actually write. Bits outside this subset
+    // (Compressed, Encrypted, SparseFile, etc.) require separate Win32
+    // syscalls that NDM does not invoke, so flagging them here would
+    // alarm on every stamp without giving the operator anything to act on.
+    const expectedAttrs = parseStampableAttributes(sourceAcl.Attributes);
+    const actualAttrs   = parseStampableAttributes(targetAcl.Attributes);
+    if (expectedAttrs !== actualAttrs)
+      output.inValid += `Attributes mismatch: Expected(0x${expectedAttrs.toString(16)}) Target(0x${actualAttrs.toString(16)}). `;
 
     // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
     // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.
@@ -343,7 +463,10 @@ export class WinOperationService {
     });
 
     // For each source ACE, check if any target ACE with same SID and AceType has all required AccessMask bits
-    // For S-1-3-0 (Creator Owner), only require SID and AceType match, ignore AccessMask
+    // and an exactly equal AceFlags byte (AceFlags packs inheritance shape: OBJECT_INHERIT 0x01,
+    // CONTAINER_INHERIT 0x02, NO_PROPAGATE 0x04, INHERIT_ONLY 0x08, INHERITED_ACE 0x10 — drift here
+    // silently changes propagation; strict equality implicitly covers IsInherited which mirrors bit 0x10).
+    // For S-1-3-0 (Creator Owner), only require SID and AceType match, ignore AccessMask and AceFlags.
     for (const srcAce of sourceAcls) {
       if (srcAce.Sid === 'S-1-3-0') {
         const found = targetAcls.some(
@@ -360,12 +483,29 @@ export class WinOperationService {
         );
         const found = matchingTargetAces.some(
           (tgtAce) =>
-            (tgtAce.AccessMask & srcAce.AccessMask) === srcAce.AccessMask,
+            (tgtAce.AccessMask & srcAce.AccessMask) === srcAce.AccessMask &&
+            tgtAce.AceFlags === srcAce.AceFlags,
         );
         if (!found) {
-          output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AccessMask(${srcAce.AccessMask}), AceType(${srcAce.AceType}). `;
+          output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AccessMask(${srcAce.AccessMask}), AceType(${srcAce.AceType}), AceFlags(0x${(srcAce.AceFlags ?? 0).toString(16)}). `;
         }
       }
+    }
+
+    // Operator-facing: when post-stamp validation finds drift, dump the full
+    // source and destination security descriptors so the operator can diff
+    // them directly from logs without re-fetching from disk. `sourceAcl`
+    // here is the *post-mapping, post-inheritance-transform* descriptor
+    // (i.e., what stamp actually wrote), and `targetAcl` is what we read
+    // back from the destination immediately after `Set-FileSecurityFast`.
+    if (output.inValid.length > 0) {
+      this.logger.log(
+        `[${logContext?.workflowId ?? ''}] ACL post-stamp validation mismatch - ` +
+        `sourcePath=${logContext?.sourcePath ?? ''} targetPath=${logContext?.targetPath ?? ''} ` +
+        `inValid="${output.inValid.trim()}" ` +
+        `sourceSd=${JSON.stringify(sourceAcl)} ` +
+        `destinationSd=${JSON.stringify(targetAcl)}`,
+      );
     }
     return output;
   }
