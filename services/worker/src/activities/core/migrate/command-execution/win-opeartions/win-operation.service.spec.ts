@@ -2072,4 +2072,269 @@ describe('WinOperationService', () => {
       );
     });
   });
+
+  describe('aclEquals', () => {
+    const mkAce = (over: Partial<Ace> = {}): Ace => ({
+      Sid: 'S-1-5-21-AAA',
+      AccessMask: 0x1f01ff,
+      AceType: 0,
+      AceFlags: 0,
+      IsInherited: false,
+      originalSid: '',
+      ...over,
+    });
+
+    const mkSd = (over: Partial<SecurityDescriptor> = {}): SecurityDescriptor => ({
+      Owner: 'S-1-5-21-OWNER',
+      Group: 'S-1-5-21-GROUP',
+      DaclAces: [mkAce()],
+      Attributes: 'Archive',
+      DaclPresent: true,
+      DaclProtected: false,
+      DaclAutoInherit: true,
+      originalOwner: '',
+      originalGroup: '',
+      ...over,
+    });
+
+    it('returns equal=true for byte-identical descriptors', () => {
+      const a = mkSd();
+      const b = mkSd();
+      const result = service.aclEquals(a as any, b as any);
+      expect(result.equal).toBe(true);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('flags owner SID mismatch', () => {
+      const src = mkSd({ Owner: 'S-1-5-21-AAA' });
+      const dst = mkSd({ Owner: 'S-1-5-21-BBB' });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('owner');
+      expect(result.reason?.srcValue).toBe('S-1-5-21-AAA');
+      expect(result.reason?.dstValue).toBe('S-1-5-21-BBB');
+    });
+
+    it('flags group SID mismatch', () => {
+      const src = mkSd({ Group: 'S-1-5-21-G1' });
+      const dst = mkSd({ Group: 'S-1-5-21-G2' });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('group');
+    });
+
+    it('flags DaclProtected mismatch', () => {
+      const src = mkSd({ DaclProtected: true });
+      const dst = mkSd({ DaclProtected: false });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('daclProtected');
+    });
+
+    it('flags DaclAutoInherit mismatch (watch-list, compared strictly by default)', () => {
+      const src = mkSd({ DaclAutoInherit: true });
+      const dst = mkSd({ DaclAutoInherit: false });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('daclAutoInherit');
+    });
+
+    it('considers ACEs equal regardless of insertion order', () => {
+      const src = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
+          mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
+        ],
+      });
+      const dst = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
+          mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
+        ],
+      });
+      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+    });
+
+    it('flags ACE missing on destination (source has extra ACE)', () => {
+      const src = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-A' }),
+          mkAce({ Sid: 'S-1-5-21-B' }),
+        ],
+      });
+      const dst = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceRemoved');
+    });
+
+    it('flags extra ACE on destination', () => {
+      const src = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
+      const dst = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-A' }),
+          mkAce({ Sid: 'S-1-5-21-B' }),
+        ],
+      });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceAdded');
+    });
+
+    it('flags ACE AccessMask drift', () => {
+      const src = mkSd({ DaclAces: [mkAce({ AccessMask: 0x1f01ff })] });
+      const dst = mkSd({ DaclAces: [mkAce({ AccessMask: 0x120089 })] });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
+    });
+
+    it('flags ACE AceFlags drift (Inherited bit) — strict by default', () => {
+      const src = mkSd({ DaclAces: [mkAce({ AceFlags: 0x00 })] });
+      const dst = mkSd({ DaclAces: [mkAce({ AceFlags: 0x10 })] });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
+    });
+
+    it('ignores audit/object ACE types (only AceType 0/1 are compared)', () => {
+      const src = mkSd({
+        DaclAces: [
+          mkAce({ AceType: 0 }),
+          mkAce({ AceType: 2 }), // SystemAudit — excluded
+          mkAce({ AceType: 5 }), // AccessAllowedObject — excluded
+        ],
+      });
+      const dst = mkSd({ DaclAces: [mkAce({ AceType: 0 })] });
+      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+    });
+
+    it('masks non-settable attribute bits before compare', () => {
+      // Compressed is not in the keep-mask, so its presence on src only
+      // must not flag a mismatch.
+      const src = mkSd({ Attributes: 'Archive, Compressed' });
+      const dst = mkSd({ Attributes: 'Archive' });
+      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+    });
+
+    it('flags a settable attribute drift (ReadOnly on src only)', () => {
+      const src = mkSd({ Attributes: 'Archive, ReadOnly' });
+      const dst = mkSd({ Attributes: 'Archive' });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('attributes');
+    });
+
+    it('short-circuits on the first mismatch (owner reported before group)', () => {
+      const src = mkSd({ Owner: 'S-1-5-21-A', Group: 'S-1-5-21-X' });
+      const dst = mkSd({ Owner: 'S-1-5-21-B', Group: 'S-1-5-21-Y' });
+      const result = service.aclEquals(src as any, dst as any);
+      expect(result.reason?.field).toBe('owner');
+    });
+
+    it('treats directories the same as files (no folder-specific bypass)', () => {
+      // The comparator is shape-agnostic — a directory descriptor with
+      // different DaclAutoInherit is still flagged the same way as a file.
+      const src = mkSd({ DaclAutoInherit: true });
+      const dst = mkSd({ DaclAutoInherit: false });
+      expect(service.aclEquals(src as any, dst as any).equal).toBe(false);
+    });
+  });
+
+  describe('hasAclChanged', () => {
+    const srcPath = '/src/file.txt';
+    const dstPath = '/dst/file.txt';
+
+    it('returns false and emits no log when source and destination ACLs match', async () => {
+      const acl = {
+        Owner: 'S-1-5-21-O',
+        Group: 'S-1-5-21-G',
+        DaclAces: [],
+        Attributes: '',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: '',
+        originalGroup: '',
+      };
+      const getSpy = jest
+        .spyOn(service, 'getAclOperation')
+        .mockResolvedValue(acl as any);
+      const changed = await service.hasAclChanged(srcPath, dstPath);
+      expect(changed).toBe(false);
+      expect(getSpy).toHaveBeenCalledTimes(2);
+      expect(getSpy).toHaveBeenCalledWith(srcPath, true, '');
+      expect(getSpy).toHaveBeenCalledWith(dstPath, false, '');
+      expect(mockLogger.log).not.toHaveBeenCalled();
+    });
+
+    it('returns true and emits one structured INFO log on mismatch', async () => {
+      const srcAcl = {
+        Owner: 'S-1-5-21-A',
+        Group: 'S-1-5-21-G',
+        DaclAces: [],
+        Attributes: '',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: '',
+        originalGroup: '',
+      };
+      const dstAcl = { ...srcAcl, Owner: 'S-1-5-21-B' };
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) =>
+          (isSource ? srcAcl : dstAcl) as any,
+        );
+      const changed = await service.hasAclChanged(srcPath, dstPath);
+      expect(changed).toBe(true);
+      expect(mockLogger.log).toHaveBeenCalledTimes(1);
+      const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
+      expect(msg).toContain('ACL mismatch on destination');
+      expect(msg).toContain(`target=${dstPath}`);
+      expect(msg).toContain(`source=${srcPath}`);
+      expect(msg).toContain('field=owner');
+      expect(msg).toContain('S-1-5-21-A');
+      expect(msg).toContain('S-1-5-21-B');
+    });
+
+    it('threads workflowId from jobContext into getAclOperation and log line', async () => {
+      const acl = {
+        Owner: 'S-1-5-21-A',
+        Group: 'S-1-5-21-G',
+        DaclAces: [],
+        Attributes: '',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: '',
+        originalGroup: '',
+      };
+      const dstAcl = { ...acl, Group: 'S-1-5-21-Z' };
+      const getSpy = jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) =>
+          (isSource ? acl : dstAcl) as any,
+        );
+      const jobContext = { jobRunId: 'wf-123' } as any;
+      await service.hasAclChanged(srcPath, dstPath, jobContext);
+      expect(getSpy).toHaveBeenCalledWith(srcPath, true, 'wf-123');
+      expect(getSpy).toHaveBeenCalledWith(dstPath, false, 'wf-123');
+      const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
+      expect(msg).toContain('[wf-123]');
+    });
+
+    it('propagates SourceAclError from getAclOperation', async () => {
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockImplementation(async (_p: string, isSource: boolean) => {
+          if (isSource) throw new SourceAclError('boom');
+          return {} as any;
+        });
+      await expect(service.hasAclChanged(srcPath, dstPath)).rejects.toBeInstanceOf(
+        SourceAclError,
+      );
+      expect(mockLogger.log).not.toHaveBeenCalled();
+    });
+  });
 });

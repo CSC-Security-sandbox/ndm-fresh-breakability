@@ -22,7 +22,6 @@ export class MigrateScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
-    readonly metaUpdatedToleranceMs: number;
     private readonly logger: LoggerService;
 
     constructor(
@@ -37,7 +36,6 @@ export class MigrateScanService {
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-        this.metaUpdatedToleranceMs = this.configService.get<number>('worker.metaUpdatedToleranceMs') ;
         this.logger = loggerFactory.create(MigrateScanService.name);
     }
 
@@ -267,7 +265,7 @@ export class MigrateScanService {
         }
       
 
-        if (await isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+        if (await isMetaUpdated(sFile, dFile)) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),

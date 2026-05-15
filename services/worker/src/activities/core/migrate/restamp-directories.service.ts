@@ -5,11 +5,9 @@ import { LoggerFactory, LoggerService } from "@netapp-cloud-datamigrate/logger-l
 import { Context } from "@temporalio/activity";
 import * as fs from "fs";
 import * as path from "path";
-import { CtimeTestTriggersService } from "./ctime-test-triggers.service";
 import { basePrefix, dmError } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { RedisService } from "src/redis/redis.service";
-import { MetadataUpdateConflictError } from "src/errors/errors.types";
 import { DeferredDirStamp, DeferredDirStampService } from "../shared/deferred-dir-stamp.service";
 
 export interface RestampDirectoriesInput {
@@ -23,7 +21,6 @@ export interface RestampDirectoriesOutput {
   stamped: number;
   failed: number;
   skipped: number;
-  ctimeConflicts: number;
 }
 
 /**
@@ -46,7 +43,6 @@ export class RestampDirectoriesService {
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly redisService: RedisService,
     private readonly deferredDirStampService: DeferredDirStampService,
-    private readonly ctimeTestTriggers: CtimeTestTriggersService,
   ) {
     this.logger = loggerFactory.create(RestampDirectoriesService.name);
     this.defaultBatchSize = this.configService.get<number>("worker.restampDirBatchSize") || 500;
@@ -55,7 +51,7 @@ export class RestampDirectoriesService {
   async restampDirectories(input: RestampDirectoriesInput): Promise<RestampDirectoriesOutput> {
     const { jobRunId } = input;
     const batchSize = input.batchSize ?? this.defaultBatchSize;
-    const output: RestampDirectoriesOutput = { attempted: 0, stamped: 0, failed: 0, skipped: 0, ctimeConflicts: 0 };
+    const output: RestampDirectoriesOutput = { attempted: 0, stamped: 0, failed: 0, skipped: 0 };
 
     const ctx = (() => {
       try { return Context.current(); } catch { return undefined; }
@@ -76,10 +72,6 @@ export class RestampDirectoriesService {
 
       const baseTargetPrefixPath = basePrefix(jobRunId, tPathId, destDirectoryPath);
 
-      const sPathId = jobContext.jobConfig?.sourceFileServer?.pathId;
-      const sourceDirectoryPath = jobContext.jobConfig?.sourceDirectoryPath;
-      const baseSourcePrefixPath = sPathId ? basePrefix(jobRunId, sPathId, sourceDirectoryPath) : null;
-
       const initialCount = await this.deferredDirStampService.count(jobRunId).catch(() => 0);
       this.logger.log(`[${jobRunId}] Starting deferred directory restamp pass: ${initialCount} entries (batch size ${batchSize}).`);
 
@@ -88,14 +80,13 @@ export class RestampDirectoriesService {
         if (!batch || batch.length === 0) break;
 
         const results = await Promise.allSettled(
-          batch.map(rec => this.applyStamp(baseTargetPrefixPath, baseSourcePrefixPath, rec, jobRunId, jobContext)),
+          batch.map(rec => this.applyStamp(baseTargetPrefixPath, rec, jobRunId, jobContext)),
         );
         for (const r of results) {
           output.attempted += 1;
           if (r.status === "fulfilled") {
             if (r.value === "stamped") output.stamped += 1;
             else if (r.value === "skipped") output.skipped += 1;
-            else if (r.value === "ctime_conflict") { output.stamped += 1; output.ctimeConflicts += 1; }
           } else {
             output.failed += 1;
           }
@@ -103,7 +94,7 @@ export class RestampDirectoriesService {
       }
 
       this.logger.log(
-        `[${jobRunId}] Directory restamp pass complete — attempted=${output.attempted}, stamped=${output.stamped}, skipped=${output.skipped}, failed=${output.failed}, ctimeConflicts=${output.ctimeConflicts}.`,
+        `[${jobRunId}] Directory restamp pass complete — attempted=${output.attempted}, stamped=${output.stamped}, skipped=${output.skipped}, failed=${output.failed}.`,
       );
       return output;
     } catch (error) {
@@ -123,11 +114,10 @@ export class RestampDirectoriesService {
 
   private async applyStamp(
     baseTargetPrefixPath: string,
-    baseSourcePrefixPath: string | null,
     rec: DeferredDirStamp,
     jobRunId: string,
     jobContext: JobManagerContext,
-  ): Promise<"stamped" | "skipped" | "ctime_conflict"> {
+  ): Promise<"stamped" | "skipped"> {
     if (!rec?.fPath || !rec?.atime || !rec?.mtime) return "skipped";
 
     // path.join handles separator normalization across platforms and trims
@@ -141,43 +131,9 @@ export class RestampDirectoriesService {
       return "skipped";
     }
 
-    // Per design: fetch source cTime BEFORE stamping mTime
-    // at destination, so we capture the source state at the moment of restamp.
-    let ctimeConflictDetected = false;
-    if (baseSourcePrefixPath && rec.sourceCtimeMs != null) {
-      try {
-        const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
-        this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);
-        const currentStat = await fs.promises.lstat(sourcePath);
-        const currentCtimeMs = Math.floor(currentStat.ctimeMs);
-        this.logger.log(
-          `########### [${jobRunId}] ${sourcePath} | storedCtime=${rec.sourceCtimeMs} | currentCtime=${currentCtimeMs}`,
-        );
-        if (currentCtimeMs > rec.sourceCtimeMs) {
-          this.logger.warn(
-            `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
-            + `| stored=${rec.sourceCtimeMs} (${new Date(rec.sourceCtimeMs).toISOString()}) `
-            + `| current=${currentCtimeMs} (${new Date(currentCtimeMs).toISOString()}) | Flagging as METADATA_UPDATE_CONFLICT`,
-          );
-          ctimeConflictDetected = true;
-          const error = new MetadataUpdateConflictError(sourcePath);
-          const dmErr = dmError(
-            "OPERATION", Origin.SOURCE, Operation.STAMP_META,
-            ErrorType.METADATA_UPDATE_CONFLICT,
-            rec.commandId,
-            error,
-            { name: rec.fPath, path: sourcePath },
-          );
-          await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
-        }
-      } catch (error) {
-        this.logger.debug(`[${jobRunId}] Could not validate source ctime for ${rec.fPath}: ${error?.message}`);
-      }
-    }
-
-    // Stamp mTime at destination regardless of conflict (both paths in design stamp mTime).
-    // Retries locally (3 attempts with linear backoff) since entries are already
-    // popped from Redis and cannot be re-processed by a Temporal activity retry.
+    // Stamp mTime at destination. Retries locally (3 attempts with linear
+    // backoff) since entries are already popped from Redis and cannot be
+    // re-processed by a Temporal activity retry.
     const MAX_UTIMES_RETRIES = 2; // 0-indexed → 3 total attempts
     let lastUtimesError: any;
     for (let attempt = 0; attempt <= MAX_UTIMES_RETRIES; attempt++) {
@@ -208,7 +164,10 @@ export class RestampDirectoriesService {
       const dmErr = dmError(
         "OPERATION", Origin.DESTINATION, Operation.STAMP_TIME,
         ErrorType.TRANSIENT_ERROR,
-        rec.commandId,
+        // Deferred restamp pass has no originating command — correlation is
+        // by path only. The dmError carries `errorFiles` so the path is still
+        // recoverable downstream.
+        "",
         lastUtimesError,
         { name: rec.fPath, path: targetPath },
       );
@@ -216,6 +175,6 @@ export class RestampDirectoriesService {
       throw lastUtimesError;
     }
 
-    return ctimeConflictDetected ? "ctime_conflict" : "stamped";
+    return "stamped";
   }
 }
