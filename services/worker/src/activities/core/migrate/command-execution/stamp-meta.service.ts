@@ -49,12 +49,12 @@ export class StampMetaService {
                     this.stampObjectACL(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
-                if (input.command.isDir) {
-                    const sourceCtime = await this.fetchSourceCtimeMs(input.sourcePath);
-                    await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, sourceCtime, input.command.id,
-                    );
-                }
+                // if (input.command.isDir) {
+                //     const sourceCtime = await this.fetchSourceCtimeMs(input.sourcePath);
+                //     await this.deferredDirStampService.updateSourceCtime(
+                //         input.jobContext.jobRunId, input.command.fPath, sourceCtime, input.command.id,
+                //     );
+                // }
                 output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
                 if (aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length === 0) {
@@ -313,6 +313,9 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'preserve_time' })
     async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if (command.isDir) {
+            return output;
+        }
         if (command.metadata.mtime && command.metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
             try {
                 if (command?.metadata?.isSymLink) {

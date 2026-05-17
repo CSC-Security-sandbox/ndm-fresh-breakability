@@ -562,6 +562,7 @@ export class CommandGenerationService {
       atime: new Date(sourceStat.atime).toISOString(),
       mtime: new Date(sourceStat.mtime).toISOString(),
       depth: DeferredDirStampService.computeDepth(relativeSourcePath),
+      sourceCtimeMs: Math.floor(sourceStat.ctimeMs),
     };
     await deferredDirStampService.add(jobContext.jobRunId, record);
   }

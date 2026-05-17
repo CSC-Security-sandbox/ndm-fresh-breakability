@@ -216,6 +216,22 @@ export class RestampDirectoriesService {
       throw lastUtimesError;
     }
 
+    // Preserve source atime/mtime so that the resulting source ctime bump
+    // aligns with the destination ctime bump from the utimes above. Without
+    // this, isSmbMetaUpdated's abs(sourceCtime − destCtime) check would see
+    // a stale source ctime and flag every directory as changed on re-scan.
+    const preserveAccessTime = !!jobContext.jobConfig?.options?.preserveAccessTime;
+    if (preserveAccessTime && baseSourcePrefixPath) {
+      const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
+      try {
+        await fs.promises.utimes(sourcePath, atime, mtime);
+      } catch (error) {
+        this.logger.warn(
+          `[${jobRunId}] Failed to preserve source dir timestamps for ${rec.fPath}: ${error?.message ?? error}`,
+        );
+      }
+    }
+
     return ctimeConflictDetected ? "ctime_conflict" : "stamped";
   }
 }
