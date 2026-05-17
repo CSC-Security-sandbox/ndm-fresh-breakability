@@ -198,6 +198,10 @@ const isSmbMetaUpdated = (sFile: fs.Stats, dFile: fs.Stats, toleranceMs: number)
   return Math.abs(sourceCtimeMs - destinationCtimeMs) > toleranceMs;
 };
 
+export const isAtimeUpdated = (sFile: fs.Stats, dFile: fs.Stats): boolean => {
+  return sFile.atime.toISOString() !== dFile.atime.toISOString();
+};
+
 export const isNfsMetaUpdated = async (
   sFile: fs.Stats,
   dFile: fs.Stats,

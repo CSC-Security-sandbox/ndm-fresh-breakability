@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, CommandStatus, ErrorType, FileInfo, JobManagerContext, OP
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, getExcludeOrSkipReason } from "src/activities/utils/utils";
+import { dmError, getFileInfo, isAtimeUpdated, isContentUpdate, isMetaUpdated, removePrefix, getExcludeOrSkipReason } from "src/activities/utils/utils";
 import { RedisService } from "src/redis/redis.service";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
@@ -507,6 +507,22 @@ export class CommandGenerationService {
         {
           [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: { targetExisted } },
           [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} }
+        },
+        metadata,
+        originalCommandId
+      );
+    }
+
+    if (isAtimeUpdated(sFile, dFile)) {
+      const isDirectory = sFile.isDirectory();
+      return new Cmd(
+        uuid4(),
+        fPath,
+        CommandStatus.READY,
+        isDirectory,
+        {
+          [this.getOpsCommand(isDirectory, metadata.isSymLink)]: { status: OPS_STATUS.COMPLETED, params: { targetExisted } },
+          [OPS_CMD.STAMP_ATIME]: { status: OPS_STATUS.READY, params: {} }
         },
         metadata,
         originalCommandId

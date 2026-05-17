@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { CommandGenerationService, LocalSetLookup } from './command-generation.service';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileTypeDetectionService } from '../utils/file-type-detection.service';
-import { ErrorType, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
+import { ErrorType, OPS_CMD, OPS_STATUS } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FileType } from 'src/activities/types/tasks';
@@ -12,6 +12,7 @@ const mockRemovePrefix = jest.fn();
 const mockGetExcludeOrSkipReason = jest.fn();
 const mockIsContentUpdate = jest.fn();
 const mockIsMetaUpdated = jest.fn();
+const mockIsAtimeUpdated = jest.fn();
 const mockDmError = jest.fn();
 
 jest.mock('src/activities/utils/utils', () => ({
@@ -19,6 +20,7 @@ jest.mock('src/activities/utils/utils', () => ({
     getFileInfo: (...args: unknown[]) => mockGetFileInfo(...args),
     isContentUpdate: (...args: unknown[]) => mockIsContentUpdate(...args),
     isMetaUpdated: (...args: unknown[]) => mockIsMetaUpdated(...args),
+    isAtimeUpdated: (...args: unknown[]) => mockIsAtimeUpdated(...args),
     removePrefix: (full: string, prefix: string) => mockRemovePrefix(full, prefix),
     getExcludeOrSkipReason: (params: unknown) => mockGetExcludeOrSkipReason(params),
 }));
@@ -86,6 +88,7 @@ describe('CommandGenerationService', () => {
         mockGetExcludeOrSkipReason.mockReturnValue(null);
         mockIsContentUpdate.mockReturnValue(true);
         mockIsMetaUpdated.mockReturnValue(false);
+        mockIsAtimeUpdated.mockReturnValue(false);
         mockDmError.mockImplementation((type: string, _origin: unknown, _op: unknown, errorType: string, _id: string, _err: unknown, _file?: unknown) => ({ type, errorType }));
         (fs.promises.lstat as jest.Mock).mockResolvedValue({
             isDirectory: () => false,
@@ -745,9 +748,10 @@ describe('CommandGenerationService', () => {
             expect(result).toBeDefined();
         });
 
-        it('should return undefined when neither content nor meta update', async () => {
+        it('should return undefined when content=false, meta=false, atime=false', async () => {
             mockIsContentUpdate.mockReturnValue(false);
             mockIsMetaUpdated.mockResolvedValue(false);
+            mockIsAtimeUpdated.mockReturnValue(false);
             const sFile = {
                 isDirectory: () => false,
                 isSymbolicLink: () => false,
@@ -763,6 +767,79 @@ describe('CommandGenerationService', () => {
             } as fs.Stats;
             const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeUndefined();
+        });
+
+        it('should return STAMP_ATIME command when only atime differs (content=false, meta=false, atime=true)', async () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
+            mockIsAtimeUpdated.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date('2024-01-02'),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = { ...sFile, atime: new Date('2024-01-01') } as fs.Stats;
+            const result = await service.buildCommand(sFile, 'path/file.txt', dFile);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
+            expect(result!.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
+            expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
+        });
+
+        it('should NOT produce STAMP_ATIME when content also differs (content takes priority)', async () => {
+            mockIsContentUpdate.mockReturnValue(true);
+            mockIsAtimeUpdated.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
+            expect(result!.ops[OPS_CMD.COPY_FILE]).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeDefined();
+        });
+
+        it('should NOT produce STAMP_ATIME when meta also differs (meta takes priority)', async () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(true);
+            mockIsAtimeUpdated.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
+            expect(result!.ops[OPS_CMD.STAMP_META]).toBeDefined();
         });
     });
 
