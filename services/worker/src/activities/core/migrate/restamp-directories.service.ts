@@ -141,8 +141,11 @@ export class RestampDirectoriesService {
       return "skipped";
     }
 
-    // Per design: fetch source cTime BEFORE stamping mTime
-    // at destination, so we capture the source state at the moment of restamp.
+    // Ctime conflict detection: sourceCtimeMs is now captured at scan time,
+    // so our own ACL stamp during migration will have bumped it. We still
+    // compare to detect external changes but only log + set the flag (which
+    // gates the source-side utimes below). Error publishing is disabled to
+    // avoid false-positive METADATA_UPDATE_CONFLICT on every directory.
     let ctimeConflictDetected = false;
     if (baseSourcePrefixPath && rec.sourceCtimeMs != null) {
       try {
@@ -151,24 +154,24 @@ export class RestampDirectoriesService {
         const currentStat = await fs.promises.lstat(sourcePath);
         const currentCtimeMs = Math.floor(currentStat.ctimeMs);
         this.logger.log(
-          `########### [${jobRunId}] ${sourcePath} | storedCtime=${rec.sourceCtimeMs} | currentCtime=${currentCtimeMs}`,
+          `[${jobRunId}] ${sourcePath} | storedCtime=${rec.sourceCtimeMs} | currentCtime=${currentCtimeMs}`,
         );
         if (currentCtimeMs > rec.sourceCtimeMs) {
           this.logger.warn(
-            `[${jobRunId}] Source folder ctime changed since migration for ${rec.fPath} `
+            `[${jobRunId}] Source folder ctime changed since scan for ${rec.fPath} `
             + `| stored=${rec.sourceCtimeMs} (${new Date(rec.sourceCtimeMs).toISOString()}) `
-            + `| current=${currentCtimeMs} (${new Date(currentCtimeMs).toISOString()}) | Flagging as METADATA_UPDATE_CONFLICT`,
+            + `| current=${currentCtimeMs} (${new Date(currentCtimeMs).toISOString()})`,
           );
           ctimeConflictDetected = true;
-          const error = new MetadataUpdateConflictError(sourcePath);
-          const dmErr = dmError(
-            "OPERATION", Origin.SOURCE, Operation.STAMP_META,
-            ErrorType.METADATA_UPDATE_CONFLICT,
-            rec.commandId,
-            error,
-            { name: rec.fPath, path: sourcePath },
-          );
-          await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+          // const error = new MetadataUpdateConflictError(sourcePath);
+          // const dmErr = dmError(
+          //   "OPERATION", Origin.SOURCE, Operation.STAMP_META,
+          //   ErrorType.METADATA_UPDATE_CONFLICT,
+          //   rec.commandId,
+          //   error,
+          //   { name: rec.fPath, path: sourcePath },
+          // );
+          // await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
         }
       } catch (error) {
         this.logger.debug(`[${jobRunId}] Could not validate source ctime for ${rec.fPath}: ${error?.message}`);
