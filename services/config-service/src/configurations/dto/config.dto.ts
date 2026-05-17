@@ -44,6 +44,7 @@ export class FileServersDTO {
 
     @ApiProperty({ description: 'Username', example: 'admin' })
     @IsNotEmpty()
+    @IsString()
     userName: string;
 
     @ApiProperty({ description: 'Host', example: '127.0.0.1:2049' })

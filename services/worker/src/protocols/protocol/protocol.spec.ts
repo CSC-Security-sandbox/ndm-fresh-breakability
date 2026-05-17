@@ -113,6 +113,51 @@ describe('Protocol', () => {
       ).rejects.toBeDefined();
     });
 
+    it('should reject SMB command when username contains shell metacharacters', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        username: 'DOMAIN\\user" & Remove-Item C:\\',
+        password: 'pass',
+        protocolVersion: '3.0',
+      };
+
+      await expect(
+        protocol.executeCommand('trace-123', 'SMB', payload, 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}', 'SMB mount'),
+      ).rejects.toThrow('SMB username contains invalid characters');
+
+      expect(mockExecAsync).not.toHaveBeenCalled();
+    });
+
+    it('should allow SMB command when username contains spaces or underscores', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        username: 'DOMAIN\\john _do-e',
+        password: 'pass',
+        protocolVersion: '3.0',
+      };
+      mockExecAsync.mockResolvedValue({ stdout: 'ok', stderr: '' });
+
+      const response = await protocol.executeCommand('trace-123', 'SMB', payload, 'net use \\\\${HOST} /user:${USERNAME} ${PASSWORD}', 'SMB mount');
+
+      expect(response.status).toBe('success');
+      expect(mockExecAsync).toHaveBeenCalled();
+    });
+
+    it('should allow NFS command with any username', async () => {
+      const payload: ProtocolPayload = {
+        hostname: 'localhost',
+        username: 'nfs-user',
+        password: '',
+        protocolVersion: '3',
+      };
+      mockExecAsync.mockResolvedValue({ stdout: 'ok', stderr: '' });
+
+      const response = await protocol.executeCommand('trace-123', 'NFS', payload, 'showmount -e ${HOST}', 'NFS list');
+
+      expect(response.status).toBe('success');
+      expect(mockExecAsync).toHaveBeenCalled();
+    });
+
     it('should sanitize password in error message when exec throws error', async () => {
       const payload: ProtocolPayload = {
       mountBasePath: '/test/mount',

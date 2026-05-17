@@ -12,6 +12,8 @@ import {
 
 
 export abstract class Protocol {
+    private static readonly SMB_USERNAME_SAFE = /^[^"'`;|&$(){}<>\r\n]+$/;
+
     protected readonly logger: LoggerService;
     protected workerId = WorkersConfig.get('workerId');
     protected baseMountDir = WorkersConfig.get('baseMountDir');
@@ -38,6 +40,10 @@ export abstract class Protocol {
         commandPattern: string,
         commandDescription: string,
       ): Promise<any> {
+      if (protocolType === 'SMB' && payload?.username && !Protocol.SMB_USERNAME_SAFE.test(payload.username)) {
+        throw new Error(`[${traceId}] Rejected: SMB username contains invalid characters`);
+      }
+
       const directoryPath= `${payload?.mountBasePath}/${payload?.jobRunId}/${payload?.pathId}`;
         const response = {
           traceId: traceId,

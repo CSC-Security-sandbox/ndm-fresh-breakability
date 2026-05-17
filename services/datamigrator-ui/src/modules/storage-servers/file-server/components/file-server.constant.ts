@@ -39,7 +39,8 @@ export const NFS_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
 });
 
 export const SMB_CREDENTIALS_VALIDATION_SCHEMA = Yup.object().shape({
-  userName: Yup.string().required("SMB Username is required"),
+  userName: Yup.string()
+    .required("SMB Username is required"),
   password: Yup.string().required("SMB Password is required"),
   protocolVersion: Yup.object({
     label: Yup.string(),
