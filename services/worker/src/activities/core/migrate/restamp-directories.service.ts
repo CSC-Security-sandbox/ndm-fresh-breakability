@@ -220,8 +220,11 @@ export class RestampDirectoriesService {
     // aligns with the destination ctime bump from the utimes above. Without
     // this, isSmbMetaUpdated's abs(sourceCtime − destCtime) check would see
     // a stale source ctime and flag every directory as changed on re-scan.
+    // Skip when a ctime conflict was detected — the source was modified by an
+    // external actor, so writing our stale timestamps back would overwrite
+    // legitimate changes and hinder post-conflict forensics.
     const preserveAccessTime = !!jobContext.jobConfig?.options?.preserveAccessTime;
-    if (preserveAccessTime && baseSourcePrefixPath) {
+    if (preserveAccessTime && baseSourcePrefixPath && !ctimeConflictDetected) {
       const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
       try {
         await fs.promises.utimes(sourcePath, atime, mtime);
