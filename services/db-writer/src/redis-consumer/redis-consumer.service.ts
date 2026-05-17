@@ -953,18 +953,30 @@ export class RedisConsumerService implements OnModuleDestroy {
                             await this.processErrorData(stream.data);
                         }
                         await jobContext.groupAckErrorStream([stream.id], GroupReaderType.DB_WRITER);
-                    } catch (e) {
-                        this.logger.error(`projectId: ${projectId} Data updating error for ${jobRunId}:${consumerType}`, e?.stack || e);
+                    } catch (error: unknown) {
+                        this.logger.error(`projectId: ${projectId} Data updating error for ${jobRunId}:${consumerType}`, error instanceof Error ? error.stack : String(error));
                     }
                     break;
 
                 case ConsumerType.tasks:
-                    if (stream?.data?.id === this.lastErrorAndTaskId) {
-                        await this.stopConsumer(jobRunId, ConsumerType.tasks);
-                    } else {
-                        await this.inventoryService.saveTasks(stream?.data);
+                    try {
+                        if (stream?.data?.id === this.lastErrorAndTaskId) {
+                            await this.stopConsumer(jobRunId, ConsumerType.tasks);
+                        } else {
+                            await this.inventoryService.saveTasks(stream?.data);
+                        }
+                    } catch (error: unknown) {
+                        this.logger.error(`projectId: ${projectId} Data updating error for ${jobRunId}:${consumerType}`, error instanceof Error ? error.stack : String(error));
+                    } finally {
+                        try {
+                            await jobContext.groupAckTaskStream([stream.id], GroupReaderType.DB_WRITER);
+                        } catch (ackError: unknown) {
+                            this.logger.error(
+                                `projectId: ${projectId} Failed to ack task stream message ${stream.id} for ${jobRunId} — message will be redelivered`,
+                                ackError instanceof Error ? ackError.stack : String(ackError),
+                            );
+                        }
                     }
-                    await jobContext.groupAckTaskStream([stream.id], GroupReaderType.DB_WRITER);
                     break;
 
                 case ConsumerType.files:

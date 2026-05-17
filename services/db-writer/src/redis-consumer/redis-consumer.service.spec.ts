@@ -9,6 +9,8 @@ import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { DataSource } from 'typeorm';
 import { JobContextFactory } from '@netapp-cloud-datamigrate/jobs-lib';
+import { ValidationError } from '../errors/custom-errors';
+import { ConsumerType } from '../enum/redis-consumer.enum';
 
 jest.mock('redis', () => ({
   createClient: jest.fn(),
@@ -903,5 +905,166 @@ describe('RedisConsumerService - deduplicateRecords', () => {
     const result = (service as any).deduplicateRecords([first, second]);
     expect(result).toHaveLength(1);
     expect(result[0].size).toBe(20);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processStreamData – tasks consumer
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RedisConsumerService - processStreamData tasks consumer', () => {
+  let service: RedisConsumerService;
+  let mockInventoryService: any;
+  let mockRedisClient: any;
+
+  const JOB_RUN_ID = 'job-tasks-test';
+
+  const mockJobContext: any = {
+    groupAckTaskStream: jest.fn().mockResolvedValue(undefined),
+    groupAckErrorStream: jest.fn().mockResolvedValue(undefined),
+    groupAckFileStream: jest.fn().mockResolvedValue(undefined),
+    jobConfig: { sourceFileServer: { pathId: 'path-1' } },
+  };
+
+  const mockLogger = {
+    log: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.REDIS_JWT_AUTH_ENABLED = 'false';
+
+    mockRedisClient = {
+      isOpen: false,
+      connect: jest.fn().mockImplementation(() => {
+        mockRedisClient.isOpen = true;
+        return Promise.resolve();
+      }),
+      quit: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      keys: jest.fn().mockResolvedValue([]),
+      hGetAll: jest.fn().mockResolvedValue({}),
+      hSet: jest.fn().mockResolvedValue(1),
+      hDel: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+    };
+    (createClient as jest.Mock).mockReturnValue(mockRedisClient);
+
+    mockInventoryService = {
+      createInventory: jest.fn().mockResolvedValue([]),
+      saveTasks: jest.fn().mockResolvedValue(undefined),
+      saveOperationError: jest.fn().mockResolvedValue(undefined),
+      saveTaskError: jest.fn().mockResolvedValue(undefined),
+      createPartitionInventoryTableByJobRunId: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RedisConsumerService,
+        { provide: InventoryService, useValue: mockInventoryService },
+        { provide: DataSource, useValue: { query: jest.fn().mockResolvedValue([]) } },
+        { provide: WorkflowService, useValue: { signalWorkflow: jest.fn().mockResolvedValue(undefined) } },
+        { provide: AuthService, useValue: { getAccessToken: jest.fn().mockResolvedValue('mock-jwt') } },
+        { provide: LoggerFactory, useValue: { create: jest.fn().mockReturnValue(mockLogger) } },
+      ],
+    }).compile();
+
+    service = module.get<RedisConsumerService>(RedisConsumerService);
+    await new Promise(r => setImmediate(r));
+
+    (service as any).redisClient = mockRedisClient;
+    mockRedisClient.isOpen = true;
+    (service as any).jobRunIdToProjectIdMap.set(JOB_RUN_ID, 'proj-tasks-test');
+  });
+
+  afterEach(() => {
+    delete process.env.REDIS_JWT_AUTH_ENABLED;
+  });
+
+  // ── Test 1 ───────────────────────────────────────────────────────────────
+  it('acks the message after saveTasks succeeds (happy path)', async () => {
+    const stream = { id: '1-0', data: { jobRunId: JOB_RUN_ID, taskType: 'SCAN', status: 'DONE' } };
+
+    await (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext);
+
+    expect(mockInventoryService.saveTasks).toHaveBeenCalledWith(stream.data);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledTimes(1);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledWith([stream.id], expect.anything());
+  });
+
+  // ── Test 2 ───────────────────────────────────────────────────────────────
+  it('acks the message even when saveTasks throws a ValidationError (poison message fix)', async () => {
+    const stream = { id: '2-0', data: { taskType: null } }; // missing required fields
+    mockInventoryService.saveTasks.mockRejectedValue(
+      new ValidationError('Missing required field', 'jobRunId'),
+    );
+
+    await (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext);
+
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledTimes(1);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledWith([stream.id], expect.anything());
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Data updating error'),
+      expect.anything(),
+    );
+  });
+
+  // ── Test 3 ───────────────────────────────────────────────────────────────
+  it('acks the message even when saveTasks throws a generic Error', async () => {
+    const stream = { id: '3-0', data: { jobRunId: JOB_RUN_ID } };
+    mockInventoryService.saveTasks.mockRejectedValue(new Error('db connection lost'));
+
+    await (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext);
+
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledTimes(1);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledWith([stream.id], expect.anything());
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Data updating error'),
+      expect.anything(),
+    );
+  });
+
+  // ── Test 4 ───────────────────────────────────────────────────────────────
+  it('calls stopConsumer instead of saveTasks for the stop sentinel and still acks', async () => {
+    const sentinelId: string = (service as any).lastErrorAndTaskId;
+    const stream = { id: '4-0', data: { id: sentinelId } };
+    const stopSpy = jest.spyOn(service as any, 'stopConsumer').mockResolvedValue(undefined);
+
+    await (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext);
+
+    expect(mockInventoryService.saveTasks).not.toHaveBeenCalled();
+    expect(stopSpy).toHaveBeenCalledWith(JOB_RUN_ID, ConsumerType.tasks);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledTimes(1);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledWith([stream.id], expect.anything());
+  });
+
+  // ── Test 5 ───────────────────────────────────────────────────────────────
+  it('acks the message even when stopConsumer throws for the stop sentinel', async () => {
+    const sentinelId: string = (service as any).lastErrorAndTaskId;
+    const stream = { id: '5-0', data: { id: sentinelId } };
+    jest.spyOn(service as any, 'stopConsumer').mockRejectedValue(new Error('redis unavailable'));
+
+    await (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext);
+
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledTimes(1);
+    expect(mockJobContext.groupAckTaskStream).toHaveBeenCalledWith([stream.id], expect.anything());
+  });
+
+  // ── Test 6 ───────────────────────────────────────────────────────────────
+  it('logs a distinct ack-failure message and does not throw when groupAckTaskStream throws', async () => {
+    const stream = { id: '6-0', data: { jobRunId: JOB_RUN_ID, taskType: 'SCAN', status: 'DONE' } };
+    mockJobContext.groupAckTaskStream.mockRejectedValueOnce(new Error('redis ack failed'));
+
+    await expect(
+      (service as any).processStreamData(stream, ConsumerType.tasks, JOB_RUN_ID, mockJobContext),
+    ).resolves.toBeUndefined();
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to ack task stream message ${stream.id} for ${JOB_RUN_ID} — message will be redelivered`),
+      expect.anything(),
+    );
   });
 });
