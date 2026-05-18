@@ -44,25 +44,26 @@ type migrationFixture struct {
 }
 
 // newMigrationBrowserFixture creates the auth fixture and both page objects
-// needed for the migration flow.
-func newMigrationBrowserFixture(t *testing.T) (*fixtures.AuthFixture, *pages.MigrationPage) {
+// needed for the migration flow. The prefix is used to namespace screenshots
+// so parallel tests don't overwrite each other's images.
+func newMigrationBrowserFixture(t *testing.T, prefix string) (*fixtures.AuthFixture, *pages.MigrationPage) {
 	t.Helper()
 	f := fixtures.NewAdminFixture(t)
-	mp := pages.NewMigrationPage(f.Page)
+	mp := pages.NewMigrationPage(f.Page, prefix)
 	return f, mp
 }
 
 // createFreshSourceFileServer creates a new NFS source file server named
 // <NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX>-<timestamp>, attaches a worker,
 // and waits until Active.
-func createFreshSourceFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID string, fsName string) {
+func createFreshSourceFileServer(t *testing.T, f *fixtures.AuthFixture, prefix string) (fsID string, fsName string) {
 	t.Helper()
 	requireEnv(t, config.NfsSourceHost, "NDM_NFS_SOURCE_HOST")
 
 	fsName = fmt.Sprintf("%s-%d", config.NfsSourceFileServerNamePrefix, time.Now().UnixMilli())
 	t.Logf("[setup] creating source file server %q on host %s", fsName, config.NfsSourceHost)
 
-	fsp := pages.NewFileServerPage(f.Page)
+	fsp := pages.NewFileServerPage(f.Page, prefix)
 	var err error
 	fsID, err = fsp.CreateNFSFileServer(
 		fsName,
@@ -85,14 +86,14 @@ func createFreshSourceFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID st
 // createFreshDestinationFileServer creates a new NFS destination file server
 // named <NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX>-<timestamp>, attaches
 // a worker, and waits until Active.
-func createFreshDestinationFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID string, fsName string) {
+func createFreshDestinationFileServer(t *testing.T, f *fixtures.AuthFixture, prefix string) (fsID string, fsName string) {
 	t.Helper()
 	requireEnv(t, config.NfsDestinationHost, "NDM_NFS_DESTINATION_HOST")
 
 	fsName = fmt.Sprintf("%s-%d", config.NfsDestinationFileServerNamePrefix, time.Now().UnixMilli())
 	t.Logf("[setup] creating destination file server %q on host %s", fsName, config.NfsDestinationHost)
 
-	fsp := pages.NewFileServerPage(f.Page)
+	fsp := pages.NewFileServerPage(f.Page, prefix)
 	var err error
 	fsID, err = fsp.CreateNFSFileServer(
 		fsName,
@@ -117,24 +118,26 @@ func createFreshDestinationFileServer(t *testing.T, f *fixtures.AuthFixture) (fs
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestMigration_BasicNFS(t *testing.T) {
+	t.Parallel()
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
 	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
-	f, mp := newMigrationBrowserFixture(t)
+	const prefix = "m001"
+	f, mp := newMigrationBrowserFixture(t, prefix)
 	defer f.Close()
 
 	mf := &migrationFixture{}
 
 	// ── 1. Create source file server ─────────────────────────────────────────
 	By(t, "Creating source NFS file server")
-	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f)
-	f.Screenshot("mig-src-fs-active")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-mig-src-fs-active")
 	t.Logf("[M-001] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
 
 	// ── 2. Create destination file server ────────────────────────────────────
 	By(t, "Creating destination NFS file server")
-	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f)
-	f.Screenshot("mig-dst-fs-active")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-mig-dst-fs-active")
 	t.Logf("[M-001] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
 
 	// ── 3. Navigate to source file server overview ───────────────────────────
@@ -161,9 +164,9 @@ func TestMigration_BasicNFS(t *testing.T) {
 		"select source path %s", config.NfsSourceExportPath,
 	)
 
-	By(t, "Selecting destination file server in mapping")
+	By(t, "Selecting destination file server in mapping (with retry)")
 	require.NoError(t,
-		mp.SelectDestinationFileServer(mf.dstFSName),
+		mp.SelectDestinationFileServerWithRetry(mf.srcFSID, mf.dstFSName, config.NfsSourceExportPath, 3),
 		"select destination file server %s", mf.dstFSName,
 	)
 
@@ -231,24 +234,27 @@ func TestMigration_BasicNFS(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestMigration_IncrementalSyncCron(t *testing.T) {
+	t.Parallel()
+	time.Sleep(5 * time.Second) // stagger parallel start to reduce NDM backend contention
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
 	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
-	f, mp := newMigrationBrowserFixture(t)
+	const prefix = "m002"
+	f, mp := newMigrationBrowserFixture(t, prefix)
 	defer f.Close()
 
 	mf := &migrationFixture{}
 
 	// ── 1. Create source file server ─────────────────────────────────────────
 	By(t, "Creating source NFS file server")
-	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f)
-	f.Screenshot("incr-src-fs-active")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-incr-src-fs-active")
 	t.Logf("[M-002] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
 
 	// ── 2. Create destination file server ────────────────────────────────────
 	By(t, "Creating destination NFS file server")
-	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f)
-	f.Screenshot("incr-dst-fs-active")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-incr-dst-fs-active")
 	t.Logf("[M-002] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
 
 	// ── 3. Navigate to source file server overview ───────────────────────────
@@ -271,9 +277,9 @@ func TestMigration_IncrementalSyncCron(t *testing.T) {
 		"select source path %s", config.NfsSourceExportPath,
 	)
 
-	By(t, "Selecting destination file server in mapping")
+	By(t, "Selecting destination file server in mapping (with retry)")
 	require.NoError(t,
-		mp.SelectDestinationFileServer(mf.dstFSName),
+		mp.SelectDestinationFileServerWithRetry(mf.srcFSID, mf.dstFSName, config.NfsSourceExportPath, 3),
 		"select destination file server %s", mf.dstFSName,
 	)
 
@@ -365,24 +371,27 @@ func TestMigration_IncrementalSyncCron(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestMigration_CustomOptions(t *testing.T) {
+	t.Parallel()
+	time.Sleep(10 * time.Second) // stagger parallel start to reduce NDM backend contention
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
 	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
-	f, mp := newMigrationBrowserFixture(t)
+	const prefix = "m003"
+	f, mp := newMigrationBrowserFixture(t, prefix)
 	defer f.Close()
 
 	mf := &migrationFixture{}
 
 	// ── 1. Create source file server ─────────────────────────────────────────
 	By(t, "Creating source NFS file server")
-	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f)
-	f.Screenshot("opts-src-fs-active")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-opts-src-fs-active")
 	t.Logf("[M-003] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
 
 	// ── 2. Create destination file server ────────────────────────────────────
 	By(t, "Creating destination NFS file server")
-	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f)
-	f.Screenshot("opts-dst-fs-active")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-opts-dst-fs-active")
 	t.Logf("[M-003] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
 
 	// ── 3. Navigate to source file server overview ───────────────────────────
@@ -405,9 +414,9 @@ func TestMigration_CustomOptions(t *testing.T) {
 		"select source path %s", config.NfsSourceExportPath,
 	)
 
-	By(t, "Selecting destination file server in mapping")
+	By(t, "Selecting destination file server in mapping (with retry)")
 	require.NoError(t,
-		mp.SelectDestinationFileServer(mf.dstFSName),
+		mp.SelectDestinationFileServerWithRetry(mf.srcFSID, mf.dstFSName, config.NfsSourceExportPath, 3),
 		"select destination file server %s", mf.dstFSName,
 	)
 

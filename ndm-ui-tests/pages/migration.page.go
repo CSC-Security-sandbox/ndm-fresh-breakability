@@ -16,11 +16,16 @@ import (
 
 // MigrationPage models the NDM Bulk Migrate wizard flow.
 type MigrationPage struct {
-	page playwright.Page
+	page             playwright.Page
+	screenshotPrefix string
 }
 
-func NewMigrationPage(page playwright.Page) *MigrationPage {
-	return &MigrationPage{page: page}
+func NewMigrationPage(page playwright.Page, prefix ...string) *MigrationPage {
+	p := &MigrationPage{page: page}
+	if len(prefix) > 0 && prefix[0] != "" {
+		p.screenshotPrefix = prefix[0]
+	}
+	return p
 }
 
 // ── Step 0: Navigate ──────────────────────────────────────────────────────────
@@ -76,66 +81,225 @@ func (p *MigrationPage) OpenBulkMigrateForm() error {
 
 // ── Step 1 → Mapping page ─────────────────────────────────────────────────────
 
-// SelectDestinationFileServer picks the destination FS from the bxp FormFieldSelect.
-// bxp's FormFieldSelect renders a div[tabindex] trigger; clicking it focuses the
-// wrapper but the dropdown only opens via keyboard (ArrowDown/Space/Enter).
+// SelectDestinationFileServer picks the destination FS from the bxp FormFieldSelect
+// inside the wrapper div with data-testid="select-destination-file-server".
+//
+// This is a single-attempt method; use SelectDestinationFileServerWithRetry for
+// resilience against stale API data (e.g. when running tests in parallel).
 func (p *MigrationPage) SelectDestinationFileServer(dstFSName string) error {
 	p.sleep(1000)
 
-	// ── Step A: Open the dropdown ────────────────────────────────────────────
-	trigger := p.page.Locator(`[data-testid="select-destination-file-server"]`)
-	if !p.isVisible(trigger) {
-		trigger = p.page.Locator(`div[tabindex]`).Filter(playwright.LocatorFilterOptions{
-			HasText: "Select Destination File Server",
-		}).Last()
-	}
-	if !p.isVisible(trigger) {
-		trigger = p.page.Locator(`div[tabindex]`).Last()
+	wrapper := p.page.Locator(`[data-testid="select-destination-file-server"]`)
+	if err := p.expectVisible(wrapper, 10000); err != nil {
+		return fmt.Errorf("destination FS wrapper not visible: %w", err)
 	}
 
-	if err := trigger.Click(); err != nil {
-		log.Printf("[SelectDestinationFileServer] trigger click error: %v", err)
+	// Scroll the wrapper into view and wait for layout to settle.
+	_ = wrapper.ScrollIntoViewIfNeeded()
+	p.sleep(800)
+
+	// Use Playwright's locator to click the control div inside the wrapper.
+	// bxp FormFieldSelect renders a div with class containing "Select-module_control".
+	control := wrapper.Locator(`div[class*="Select-module_control"]`).First()
+	if !p.isVisible(control) {
+		control = wrapper.Locator(`div[class*="control"]`).First()
 	}
-	p.sleep(1500)
-	p.screenshot("mig-dst-fs-dropdown-open")
 
-	// ── Step B: Pick the option ──────────────────────────────────────────────
-	option := p.page.GetByText(dstFSName, playwright.PageGetByTextOptions{
-		Exact: playwright.Bool(true),
-	}).First()
-
-	if p.isVisible(option) {
-		if err := option.Click(); err == nil {
-			p.sleep(800)
-			log.Printf("[SelectDestinationFileServer] selected %q via getByText", dstFSName)
-			return nil
+	if p.isVisible(control) {
+		_ = control.ScrollIntoViewIfNeeded()
+		p.sleep(300)
+		if err := control.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+			log.Printf("[SelectDestinationFileServer] control.Click failed: %v — trying wrapper click", err)
+			_ = wrapper.Click()
+		} else {
+			log.Printf("[SelectDestinationFileServer] clicked control via Playwright locator")
 		}
+	} else {
+		log.Printf("[SelectDestinationFileServer] control locator not visible — clicking wrapper")
+		_ = wrapper.Click()
 	}
+	p.sleep(2000)
+	p.screenshot("mig-dst-fs-after-click")
 
-	// Fallback: JS click on any visible element containing the name.
-	result, _ := p.page.Evaluate(fmt.Sprintf(`() => {
-		const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-		while (walk.nextNode()) {
-			const el = walk.currentNode;
+	// Dump the DOM around the wrapper to discover actual class names for menu/options.
+	domDump, _ := p.page.Evaluate(`() => {
+		const result = { wrapperHTML: '', menuClasses: [], allSelectModuleClasses: [] };
+		const w = document.querySelector('[data-testid="select-destination-file-server"]');
+		if (w) {
+			result.wrapperHTML = w.innerHTML.substring(0, 2000);
+		}
+		// Find all elements with "Select-module" in class anywhere on the page.
+		document.querySelectorAll('*').forEach(el => {
+			const cls = (el.className || '').toString();
+			if (cls.includes('Select-module') && !cls.includes('control')) {
+				const t = el.textContent.trim();
+				const tag = el.tagName;
+				const r = el.getBoundingClientRect();
+				if (t.length < 200 && t.length > 0) {
+					result.allSelectModuleClasses.push({
+						cls: cls.substring(0, 120),
+						tag: tag,
+						text: t.substring(0, 80),
+						h: r.height,
+						childCount: el.children.length,
+					});
+				}
+			}
+		});
+		// Also look for any dropdown/menu/portal elements.
+		document.querySelectorAll('[class*="menu"], [class*="Menu"], [class*="dropdown"], [class*="Dropdown"], [role="listbox"]').forEach(el => {
 			const r = el.getBoundingClientRect();
-			if (r.height === 0 || r.width === 0) continue;
-			const txt = el.textContent.trim();
-			if (txt === %q || txt === %q) {
-				el.click();
-				return true;
+			if (r.height > 0) {
+				result.menuClasses.push({
+					cls: (el.className||'').toString().substring(0, 120),
+					tag: el.tagName,
+					childCount: el.children.length,
+					h: r.height,
+				});
+			}
+		});
+		return result;
+	}`)
+	if dm, ok := domDump.(map[string]interface{}); ok {
+		if html, ok := dm["wrapperHTML"].(string); ok && len(html) > 0 {
+			if len(html) > 500 {
+				html = html[:500] + "..."
+			}
+			log.Printf("[SelectDestinationFileServer] wrapper innerHTML: %s", html)
+		}
+		if menus, ok := dm["allSelectModuleClasses"].([]interface{}); ok {
+			log.Printf("[SelectDestinationFileServer] Select-module elements on page: %d", len(menus))
+			for i, m := range menus {
+				if i >= 15 {
+					log.Printf("[SelectDestinationFileServer]   ... (%d more)", len(menus)-15)
+					break
+				}
+				log.Printf("[SelectDestinationFileServer]   [%d] %v", i, m)
 			}
 		}
-		return false;
-	}`, dstFSName, dstFSName))
-	if ok, _ := result.(bool); ok {
+		if menus, ok := dm["menuClasses"].([]interface{}); ok && len(menus) > 0 {
+			log.Printf("[SelectDestinationFileServer] menu/dropdown elements: %d", len(menus))
+			for i, m := range menus {
+				if i >= 10 {
+					break
+				}
+				log.Printf("[SelectDestinationFileServer]   menu[%d] %v", i, m)
+			}
+		}
+	}
+
+	// Try to find and click the option.
+	if err := p.clickBxpOption(dstFSName); err == nil {
 		p.sleep(800)
-		log.Printf("[SelectDestinationFileServer] selected %q via JS", dstFSName)
+		log.Printf("[SelectDestinationFileServer] selected %q", dstFSName)
+		return nil
+	}
+
+	// Menu might have toggled closed — click again to reopen.
+	log.Printf("[SelectDestinationFileServer] option not found — reopening dropdown")
+	if p.isVisible(control) {
+		_ = control.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)})
+	} else {
+		_ = wrapper.Click()
+	}
+	p.sleep(2000)
+	p.screenshot("mig-dst-fs-after-reopen")
+
+	if err := p.clickBxpOption(dstFSName); err == nil {
+		p.sleep(800)
+		log.Printf("[SelectDestinationFileServer] selected %q on second attempt", dstFSName)
 		return nil
 	}
 
 	p.screenshot("mig-dst-fs-not-found")
 	return fmt.Errorf("destination FS %q not found in dropdown", dstFSName)
 }
+
+// clickBxpOption finds a bxp FormFieldSelect option containing text and clicks it.
+// bxp uses virtualized rendering — only visible options exist in the DOM.
+// This function incrementally scrolls the virtualized container to reveal the
+// target option, then clicks it.
+func (p *MigrationPage) clickBxpOption(text string) error {
+	// Scroll through the virtualized dropdown to find and click the option.
+	result, _ := p.page.Evaluate(`async (name) => {
+		// Find the virtualized scroll container.
+		const virt = document.querySelector('[class*="Select-module_virtualized"]');
+		const menu = document.querySelector('[class*="Select-module_menu"]');
+		const scrollContainer = virt || menu;
+		if (!scrollContainer) {
+			return { clicked: false, reason: 'no-menu-container' };
+		}
+
+		function findOption() {
+			const opts = document.querySelectorAll('[class*="Select-module_option"]');
+			for (const opt of opts) {
+				if (opt.textContent.trim() === name) return opt;
+			}
+			return null;
+		}
+
+		// Check if already visible (no scroll needed).
+		let opt = findOption();
+		if (opt) {
+			opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+			opt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+			opt.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+			return { clicked: true, text: name, scrolled: 0 };
+		}
+
+		// Incrementally scroll the virtualized container.
+		// Each option is ~48px tall. Scroll in chunks of ~200px.
+		const maxScroll = scrollContainer.scrollHeight;
+		const step = 200;
+		let scrollPos = 0;
+
+		for (let i = 0; i < 100 && scrollPos < maxScroll + step; i++) {
+			scrollPos += step;
+			scrollContainer.scrollTop = scrollPos;
+			// Wait for virtualized list to re-render.
+			await new Promise(r => setTimeout(r, 50));
+
+			opt = findOption();
+			if (opt) {
+				opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+				opt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+				opt.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+				return { clicked: true, text: name, scrolled: scrollPos };
+			}
+		}
+
+		// Collect all visible option texts for diagnostics.
+		const visibleOpts = [];
+		document.querySelectorAll('[class*="Select-module_option"]').forEach(o => {
+			visibleOpts.push(o.textContent.trim().substring(0, 80));
+		});
+		return {
+			clicked: false,
+			reason: 'not-found-after-scroll',
+			maxScroll: maxScroll,
+			scrolledTo: scrollPos,
+			lastVisibleOpts: visibleOpts,
+		};
+	}`, text)
+
+	if rm, ok := result.(map[string]interface{}); ok {
+		if cl, _ := rm["clicked"].(bool); cl {
+			log.Printf("[clickBxpOption] clicked %q (scrolled %.0fpx)", text, rm["scrolled"])
+			return nil
+		}
+		log.Printf("[clickBxpOption] %q NOT found: %v (scrollHeight=%.0f, scrolledTo=%.0f)",
+			text, rm["reason"], rm["maxScroll"], rm["scrolledTo"])
+		if opts, ok := rm["lastVisibleOpts"].([]interface{}); ok {
+			log.Printf("[clickBxpOption] last visible options after full scroll (%d):", len(opts))
+			for i, o := range opts {
+				log.Printf("[clickBxpOption]   [%d] %v", i, o)
+			}
+		}
+	}
+
+	return fmt.Errorf("option %q not found in virtualized dropdown", text)
+}
+
 
 // SelectDestinationFileServerWithRetry tries SelectDestinationFileServer.
 // If it fails (e.g. wizard data stale), it navigates back to the source FS
@@ -149,9 +313,10 @@ func (p *MigrationPage) SelectDestinationFileServerWithRetry(
 	}
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		log.Printf("[SelectDestinationFileServerWithRetry] attempt %d/%d — re-opening wizard", attempt, maxRetries)
+		waitSec := 10 + attempt*5
+		log.Printf("[SelectDestinationFileServerWithRetry] attempt %d/%d — waiting %ds then re-opening wizard", attempt, maxRetries, waitSec)
 		p.page.Keyboard().Press("Escape")
-		p.sleep(5000)
+		time.Sleep(time.Duration(waitSec) * time.Second)
 
 		// Navigate back to file server overview to force re-mount the wizard.
 		if navErr := p.NavigateToFileServerOverview(srcFSID); navErr != nil {
@@ -830,6 +995,9 @@ func (p *MigrationPage) expectVisible(loc playwright.Locator, timeoutMs float64)
 }
 
 func (p *MigrationPage) screenshot(name string) {
+	if p.screenshotPrefix != "" {
+		name = p.screenshotPrefix + "-" + name
+	}
 	path := fmt.Sprintf("test-results/screenshots/%s.png", name)
 	_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{
 		Path:     playwright.String(path),

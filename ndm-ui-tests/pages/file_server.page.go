@@ -14,11 +14,16 @@ import (
 )
 
 type FileServerPage struct {
-	page playwright.Page
+	page             playwright.Page
+	screenshotPrefix string
 }
 
-func NewFileServerPage(page playwright.Page) *FileServerPage {
-	return &FileServerPage{page: page}
+func NewFileServerPage(page playwright.Page, prefix ...string) *FileServerPage {
+	p := &FileServerPage{page: page}
+	if len(prefix) > 0 && prefix[0] != "" {
+		p.screenshotPrefix = prefix[0]
+	}
+	return p
 }
 
 // CreateNFSFileServer runs the 3-step wizard and returns the UUID.
@@ -42,7 +47,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 60000); err != nil {
+	if err := p.expectVisible(nameField, 45000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -1165,7 +1170,10 @@ func (p *FileServerPage) expectVisible(loc playwright.Locator, timeoutMs float64
 }
 
 func (p *FileServerPage) screenshot(name string) {
-	dir := config.ScreenshotDir
+	if p.screenshotPrefix != "" {
+		name = p.screenshotPrefix + "-" + name
+	}
+	dir := "test-results/screenshots"
 	_ = os.MkdirAll(dir, 0o755)
 	path := fmt.Sprintf("%s/%s.png", dir, name)
 	_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{
