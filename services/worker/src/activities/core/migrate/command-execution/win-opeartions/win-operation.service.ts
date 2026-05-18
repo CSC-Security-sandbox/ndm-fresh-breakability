@@ -17,6 +17,11 @@ import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { dmError } from 'src/activities/utils/utils';
 
+export enum SmbPermissionInheritanceMode {
+  DO_NOT_INHERIT_SOURCE_CHILD_PERMS = 'DO_NOT_INHERIT_SOURCE_CHILD_PERMS',
+  INHERIT_SOURCE_PARENT_AS_EXPLICIT  = 'INHERIT_SOURCE_PARENT_AS_EXPLICIT',
+}
+
 // Windows API initialization for ADS detection
 let FindFirstStreamW: any;
 let FindNextStreamW: any;
@@ -175,6 +180,15 @@ export class WinOperationService {
       });
     }
 
+    // 2c. Apply SMB inheritance mode when explicitly requested via STAMP_META params.
+    // Only set for the DLM root command — no other commands carry this flag.
+    if (command.ops[OPS_CMD.STAMP_META]?.params?.applyInheritanceMode) {
+      const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
+        ?? SmbPermissionInheritanceMode.INHERIT_SOURCE_PARENT_AS_EXPLICIT;
+      this.logger.debug(`Applying SMB inheritance mode "${mode}" for DLM root ${sourcePath}`);
+      acl = this.applySmbInheritanceMode(acl, mode);
+    }
+
     // 3. Set target ACL (PowerShell Set-FileSecurityFast)
     const result = await this.metricsService.runWithTiming(
       workflowId,
@@ -219,6 +233,35 @@ export class WinOperationService {
     this.logger.debug(`sidMap stored - sourceAcl: "${validation.sourceSID}" | targetAcl: "${validation.targetSID}"`);
     
     return { output, errors };
+  }
+
+  /**
+   * Applies the configured SMB permission inheritance mode to an ACL before stamping.
+   *
+   * INHERIT_SOURCE_PARENT_AS_EXPLICIT (default):
+   *   Converts inherited ACEs to explicit by clearing IsInherited and the INHERITED_ACE
+   *   bit (0x10) from AceFlags. Windows keeps them as the folder's own ACEs and
+   *   propagates them to children via OI/CI — source-parent permissions are preserved.
+   *
+   * DO_NOT_INHERIT_SOURCE_CHILD_PERMS:
+   *   Strips all inherited ACEs. Only explicit source ACEs land on the destination.
+   *   The destination parent can still propagate its own ACEs (DaclProtected passthrough).
+   *
+   * DaclProtected is always a passthrough from source and is not overridden by either mode.
+   */
+  applySmbInheritanceMode(acl: SecurityDescriptor, mode: string): SecurityDescriptor {
+    if (!acl.DaclAces) return acl;
+    if (mode === SmbPermissionInheritanceMode.INHERIT_SOURCE_PARENT_AS_EXPLICIT) {
+      acl.DaclAces = acl.DaclAces.map(ace =>
+        ace.IsInherited
+          ? { ...ace, IsInherited: false, AceFlags: (ace.AceFlags ?? 0) & ~0x10 }
+          : ace
+      );
+    } else {
+      // DO_NOT_INHERIT_SOURCE_CHILD_PERMS — also the safe fallback for unknown values.
+      acl.DaclAces = acl.DaclAces.filter(ace => !ace.IsInherited);
+    }
+    return acl;
   }
 
   async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {

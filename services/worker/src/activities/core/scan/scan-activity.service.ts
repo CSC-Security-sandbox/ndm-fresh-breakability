@@ -105,6 +105,12 @@ export class ScanService {
         let errors: string[] = [], errorType: ErrorType = task.retryCount + 1 >= this.maxRetryCount ? ErrorType.TRANSIENT_ERROR : ErrorType.RECOVERABLE_ERROR;
         task.retryCount++;
         const settings = getScanSettings(jobContext);
+
+        // DLM-only, once per migration: emit the root-dir STAMP_META command.
+        if (isMigration) {
+            await this.migrateScanService.initDlmRootStamp(task, jobContext, baseSourcePrefixPath, baseTargetPrefixPath);
+        }
+
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {
             if (Context.current().cancellationSignal?.aborted) {
                 throw new CancelledFailure('Activity cancelled');
