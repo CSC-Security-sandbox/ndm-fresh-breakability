@@ -293,6 +293,97 @@ func (p *MigrationPage) ProceedFromOptions() error {
 	return p.clickProceed("options")
 }
 
+// ConfigureCustomOptions modifies all config fields on the Options step:
+//   - Toggles OFF "Preserve a-time"
+//   - Toggles OFF "Preserve Permissions"
+//   - Selects "Exclude file older than (UTC)" and sets a past date
+//   - Changes "Skip Files modified in last" to the given value
+//   - Appends extra patterns to "Excluded Path Patterns"
+func (p *MigrationPage) ConfigureCustomOptions(skipFileNum string, extraExcludePatterns string) error {
+	optionsAnchor := p.page.Locator(`[data-testid="bulk-migrate-options-step"]`)
+	if !p.isVisible(optionsAnchor) {
+		optionsAnchor = p.page.GetByText("Preserve a-time").First()
+	}
+	if err := p.expectVisible(optionsAnchor, 15000); err != nil {
+		return fmt.Errorf("options step not visible: %w", err)
+	}
+	p.sleep(1000)
+
+	// ── 1. Toggle OFF "Preserve a-time" (default is ON) ─────────────────────
+	aTimeToggle := p.page.GetByText("Preserve a-time", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First()
+	if err := p.expectVisible(aTimeToggle, 5000); err != nil {
+		return fmt.Errorf("'Preserve a-time' toggle not visible: %w", err)
+	}
+	if err := aTimeToggle.Click(); err != nil {
+		return fmt.Errorf("click 'Preserve a-time' toggle: %w", err)
+	}
+	p.sleep(500)
+	log.Printf("[ConfigureCustomOptions] toggled OFF 'Preserve a-time'")
+
+	// ── 2. Toggle OFF "Preserve Permissions" (default is ON) ────────────────
+	permToggle := p.page.GetByText("Preserve Permissions", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First()
+	if err := p.expectVisible(permToggle, 5000); err != nil {
+		return fmt.Errorf("'Preserve Permissions' toggle not visible: %w", err)
+	}
+	if err := permToggle.Click(); err != nil {
+		return fmt.Errorf("click 'Preserve Permissions' toggle: %w", err)
+	}
+	p.sleep(500)
+	log.Printf("[ConfigureCustomOptions] toggled OFF 'Preserve Permissions'")
+
+	// ── 3. Select "Exclude file older than (UTC)" radio ─────────────────────
+	excludeRadio := p.page.GetByText("Exclude file older than (UTC)", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First()
+	if err := p.expectVisible(excludeRadio, 5000); err != nil {
+		log.Printf("[ConfigureCustomOptions] 'Exclude file older than' radio not visible — skipping")
+	} else {
+		if err := excludeRadio.Click(); err != nil {
+			return fmt.Errorf("click 'Exclude file older than' radio: %w", err)
+		}
+		p.sleep(1000)
+		log.Printf("[ConfigureCustomOptions] selected 'Exclude file older than (UTC)'")
+		p.screenshot("mig-options-exclude-older-than")
+	}
+
+	// ── 4. Change "Skip Files modified in last" number ──────────────────────
+	skipInput := p.page.Locator(`input[placeholder="Number e.g. 10"]`).First()
+	if !p.isVisible(skipInput) {
+		skipInput = p.page.Locator(`input[name="skipFileNum"]`).First()
+	}
+	if p.isVisible(skipInput) {
+		if err := skipInput.Click(playwright.LocatorClickOptions{ClickCount: playwright.Int(3)}); err == nil {
+			skipInput.Fill(skipFileNum)
+			p.sleep(500)
+			log.Printf("[ConfigureCustomOptions] set 'Skip Files modified in last' to %s", skipFileNum)
+		}
+	} else {
+		log.Printf("[ConfigureCustomOptions] skip files input not visible — skipping")
+	}
+
+	// ── 5. Append to "Excluded Path Patterns" textarea ──────────────────────
+	excludeTextarea := p.page.Locator(`textarea[name="exclude_file_patterns"]`).First()
+	if !p.isVisible(excludeTextarea) {
+		excludeTextarea = p.page.Locator(`textarea[placeholder="Excluded Path Patterns"]`).First()
+	}
+	if p.isVisible(excludeTextarea) {
+		currentVal, _ := excludeTextarea.InputValue()
+		newVal := currentVal
+		if newVal != "" && !strings.HasSuffix(newVal, "\n") {
+			newVal += "\n"
+		}
+		newVal += extraExcludePatterns
+		if err := excludeTextarea.Fill(newVal); err == nil {
+			p.sleep(500)
+			log.Printf("[ConfigureCustomOptions] set exclude patterns to: %q", newVal)
+		}
+	} else {
+		log.Printf("[ConfigureCustomOptions] exclude patterns textarea not visible — skipping")
+	}
+
+	p.screenshot("mig-options-custom-configured")
+	log.Printf("[ConfigureCustomOptions] all custom options configured")
+	return nil
+}
+
 // SetIncrementalSyncCronExpression selects "Cron Expression" on the Options
 // step and types the given cron expression (e.g. "*/5 * * * *").
 func (p *MigrationPage) SetIncrementalSyncCronExpression(cronExpr string) error {

@@ -18,6 +18,7 @@
 //
 //	M-001 TestMigration_BasicNFS              — full Bulk Migrate flow (NFS → NFS)
 //	M-002 TestMigration_IncrementalSyncCron   — Bulk Migrate with cron-based incremental sync
+//	M-003 TestMigration_CustomOptions         — Bulk Migrate with all config options changed
 package tests
 
 import (
@@ -348,6 +349,131 @@ func TestMigration_IncrementalSyncCron(t *testing.T) {
 	fmt.Printf("[M-002] src=%s dst=%s cron=*/5 initial_jobs=%d final_jobs=%d\n",
 		mf.srcFSName, mf.dstFSName, initialCount, finalCount)
 	fmt.Println("[MIGRATION M-002 PASSED] Incremental sync via cron expression verified")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// M-003  Custom Migration Options (NFS → NFS)
+//
+// Modifies ALL configurable options on the Options step before submitting:
+//   - Preserve a-time     → OFF
+//   - Preserve Permissions → OFF
+//   - Migrate File        → "Exclude file older than (UTC)"
+//   - Skip Files modified  → 30  (default unit)
+//   - Excluded Path Patterns → "*.tmp\n*.log"
+//
+// After migration completes, downloads the CoC Report.
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestMigration_CustomOptions(t *testing.T) {
+	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
+	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+
+	f, mp := newMigrationBrowserFixture(t)
+	defer f.Close()
+
+	mf := &migrationFixture{}
+
+	// ── 1. Create source file server ─────────────────────────────────────────
+	By(t, "Creating source NFS file server")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f)
+	f.Screenshot("opts-src-fs-active")
+	t.Logf("[M-003] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
+
+	// ── 2. Create destination file server ────────────────────────────────────
+	By(t, "Creating destination NFS file server")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f)
+	f.Screenshot("opts-dst-fs-active")
+	t.Logf("[M-003] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
+
+	// ── 3. Navigate to source file server overview ───────────────────────────
+	By(t, "Navigating to source file server overview")
+	require.NoError(t,
+		mp.NavigateToFileServerOverview(mf.srcFSID),
+		"navigate to source file server overview",
+	)
+	f.Screenshot("opts-src-overview")
+
+	// ── 4. Open Bulk Migrate wizard ──────────────────────────────────────────
+	By(t, "Opening Bulk Migrate wizard")
+	require.NoError(t, mp.OpenBulkMigrateForm(), "open Bulk Migrate form")
+	f.Screenshot("opts-wizard-mapping-step")
+
+	// ── 5. Mapping step ──────────────────────────────────────────────────────
+	By(t, "Selecting source export path")
+	require.NoError(t,
+		mp.SelectSourcePath(config.NfsSourceExportPath),
+		"select source path %s", config.NfsSourceExportPath,
+	)
+
+	By(t, "Selecting destination file server in mapping")
+	require.NoError(t,
+		mp.SelectDestinationFileServer(mf.dstFSName),
+		"select destination file server %s", mf.dstFSName,
+	)
+
+	By(t, "Selecting destination export path")
+	require.NoError(t,
+		mp.SelectDestinationPath(config.NfsDestinationExportPath),
+		"select destination path %s", config.NfsDestinationExportPath,
+	)
+
+	By(t, "Adding path mapping")
+	require.NoError(t, mp.AddMapping(), "add mapping")
+	f.Screenshot("opts-mapping-row-added")
+
+	// ── 6. Proceed from Mapping step ─────────────────────────────────────────
+	By(t, "Proceeding from Mapping step")
+	require.NoError(t, mp.ProceedFromMapping(), "proceed from mapping step")
+	f.Screenshot("opts-options-step")
+
+	// ── 7. Options step — change all config fields ───────────────────────────
+	By(t, "Configuring custom migration options")
+	require.NoError(t,
+		mp.ConfigureCustomOptions("30", "*.tmp\n*.log"),
+		"configure custom migration options",
+	)
+	f.Screenshot("opts-options-configured")
+
+	By(t, "Proceeding from Options step")
+	require.NoError(t, mp.ProceedFromOptions(), "proceed from options step")
+	f.Screenshot("opts-review-step")
+
+	// ── 8. Review step — select all mappings, submit ─────────────────────────
+	By(t, "Selecting all mappings on Review step")
+	require.NoError(t, mp.SelectAllMappingsOnReview(), "select all mappings on review")
+
+	By(t, "Submitting migration job")
+	require.NoError(t, mp.SubmitMigration(), "submit migration job")
+
+	// ── 9. Navigate to Job Run List ──────────────────────────────────────────
+	By(t, "Navigating to Job Run List")
+	require.NoError(t, mp.NavigateToJobRunList(), "navigate to job run list")
+	f.Screenshot("opts-job-run-list")
+
+	// ── 10. Wait for migration job to complete ───────────────────────────────
+	By(t, "Waiting for migration job to complete")
+	require.NoError(t,
+		mp.WaitForMigrationCompleted(config.MigrationTimeoutMs),
+		"migration job did not complete within timeout",
+	)
+	f.Screenshot("opts-job-completed")
+	t.Log("[M-003] migration job completed successfully")
+
+	// ── 11. Download CoC Report ──────────────────────────────────────────────
+	By(t, "Downloading CoC Report")
+	downloadDir := filepath.Join("test-results", "downloads")
+	require.NoError(t, os.MkdirAll(downloadDir, 0o755))
+
+	cocPath, err := mp.DownloadCoCReport(downloadDir)
+	require.NoError(t, err, "download CoC report")
+
+	info, statErr := os.Stat(cocPath)
+	require.NoError(t, statErr, "CoC report file should exist at %s", cocPath)
+	require.Greater(t, info.Size(), int64(0), "CoC report should not be empty")
+
+	t.Logf("[M-003] CoC Report saved: %s (%d bytes)", cocPath, info.Size())
+	fmt.Printf("[M-003] src=%s dst=%s coc=%s\n", mf.srcFSName, mf.dstFSName, cocPath)
+	fmt.Println("[MIGRATION M-003 PASSED] Custom options migration completed and CoC Report downloaded")
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
