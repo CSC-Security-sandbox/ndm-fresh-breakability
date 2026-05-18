@@ -147,12 +147,15 @@ export class RestampDirectoriesService {
     // gates the source-side utimes below). Error publishing is disabled to
     // avoid false-positive METADATA_UPDATE_CONFLICT on every directory.
     let ctimeConflictDetected = false;
-    if (baseSourcePrefixPath && rec.sourceCtimeMs != null) {
+    const sourcePath = baseSourcePrefixPath ? path.join(baseSourcePrefixPath, rec.fPath) : null;
+    let sourceStat: Awaited<ReturnType<typeof fs.promises.lstat>> | null = null;
+    const storedAtimeMs = atime.getTime();
+
+    if (sourcePath && rec.sourceCtimeMs != null) {
       try {
-        const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
         this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);
-        const currentStat = await fs.promises.lstat(sourcePath);
-        const currentCtimeMs = Math.floor(currentStat.ctimeMs);
+        sourceStat = await fs.promises.lstat(sourcePath);
+        const currentCtimeMs = Math.floor(sourceStat.ctimeMs);
         this.logger.log(
           `[${jobRunId}] ${sourcePath} | storedCtime=${rec.sourceCtimeMs} | currentCtime=${currentCtimeMs}`,
         );
@@ -176,16 +179,23 @@ export class RestampDirectoriesService {
       } catch (error) {
         this.logger.debug(`[${jobRunId}] Could not validate source ctime for ${rec.fPath}: ${error?.message}`);
       }
+    } else if (sourcePath) {
+      try { sourceStat = await fs.promises.lstat(sourcePath); } catch { /* source may be gone */ }
     }
 
-    // Stamp mTime at destination regardless of conflict (both paths in design stamp mTime).
-    // Retries locally (3 attempts with linear backoff) since entries are already
-    // popped from Redis and cannot be re-processed by a Temporal activity retry.
+    const atimeToStamp = (sourceStat && sourceStat.atimeMs > storedAtimeMs)
+      ? sourceStat.atime
+      : atime;
+
+    // Stamp destination. Retries locally (3 attempts with linear backoff)
+    // since entries are already popped from Redis and cannot be re-processed
+    // by a Temporal activity retry.
     const MAX_UTIMES_RETRIES = 2; // 0-indexed → 3 total attempts
     let lastUtimesError: any;
+
     for (let attempt = 0; attempt <= MAX_UTIMES_RETRIES; attempt++) {
       try {
-        await fs.promises.utimes(targetPath, atime, mtime);
+        await fs.promises.utimes(targetPath, atimeToStamp, mtime);
         lastUtimesError = null;
         break;
       } catch (error) {
@@ -227,10 +237,9 @@ export class RestampDirectoriesService {
     // external actor, so writing our stale timestamps back would overwrite
     // legitimate changes and hinder post-conflict forensics.
     const preserveAccessTime = !!jobContext.jobConfig?.options?.preserveAccessTime;
-    if (preserveAccessTime && baseSourcePrefixPath && !ctimeConflictDetected) {
-      const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
+    if (preserveAccessTime && sourcePath && !ctimeConflictDetected) {
       try {
-        await fs.promises.utimes(sourcePath, atime, mtime);
+        await fs.promises.utimes(sourcePath, atimeToStamp, mtime);
       } catch (error) {
         this.logger.warn(
           `[${jobRunId}] Failed to preserve source dir timestamps for ${rec.fPath}: ${error?.message ?? error}`,
