@@ -769,7 +769,7 @@ describe('CommandGenerationService', () => {
             expect(result).toBeUndefined();
         });
 
-        it('should return STAMP_ATIME command when only atime differs (content=false, meta=false, atime=true)', async () => {
+        it('should return STAMP_ATIME command when only atime differs and preserveAccessTime=true', async () => {
             mockIsContentUpdate.mockReturnValue(false);
             mockIsMetaUpdated.mockResolvedValue(false);
             mockIsAtimeUpdated.mockReturnValue(true);
@@ -787,13 +787,37 @@ describe('CommandGenerationService', () => {
                 ino: 1,
             } as fs.Stats;
             const dFile = { ...sFile, atime: new Date('2024-01-01') } as fs.Stats;
-            const result = await service.buildCommand(sFile, 'path/file.txt', dFile);
+            const jobCtx = { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preserveAccessTime: true } } };
+            const result = await service.buildCommand(sFile, 'path/file.txt', dFile, undefined, jobCtx as any);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeDefined();
             expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
             expect(result!.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.COMPLETED);
             expect(result!.ops[OPS_CMD.COPY_FILE].params).toEqual({ targetExisted: true });
             expect(result!.ops[OPS_CMD.STAMP_META]).toBeUndefined();
+        });
+
+        it('should NOT produce STAMP_ATIME when atime differs but preserveAccessTime=false', async () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
+            mockIsAtimeUpdated.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date('2024-01-02'),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = { ...sFile, atime: new Date('2024-01-01') } as fs.Stats;
+            const jobCtx = { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preserveAccessTime: false } } };
+            const result = await service.buildCommand(sFile, 'path/file.txt', dFile, undefined, jobCtx as any);
+            expect(result).toBeUndefined();
         });
 
         it('should NOT produce STAMP_ATIME when content also differs (content takes priority)', async () => {
@@ -840,6 +864,31 @@ describe('CommandGenerationService', () => {
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
             expect(result!.ops[OPS_CMD.STAMP_META]).toBeDefined();
+        });
+
+        it('should produce STAMP_ATIME for directories — preserve normalizes source atime so deferred dest stamp matches', async () => {
+            mockIsContentUpdate.mockReturnValue(false);
+            mockIsMetaUpdated.mockResolvedValue(false);
+            mockIsAtimeUpdated.mockReturnValue(true);
+            const sFile = {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                size: 0,
+                mtime: new Date(),
+                mode: 0o755,
+                uid: 0,
+                gid: 0,
+                atime: new Date('2024-01-02'),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dFile = { ...sFile, atime: new Date('2024-01-01') } as fs.Stats;
+            const jobCtx = { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preserveAccessTime: true } } };
+            const result = await service.buildCommand(sFile, 'path/dir', dFile, undefined, jobCtx as any);
+            expect(result).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeDefined();
+            expect(result!.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.READY);
         });
     });
 

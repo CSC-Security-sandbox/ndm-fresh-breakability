@@ -1152,6 +1152,24 @@ describe('StampMetaService', () => {
       expect(sourceCalls).toHaveLength(0);
     });
 
+    it('directory: preserve runs on source, stampAccessAndModifiedTime skips dest (isDir early return)', async () => {
+      const input = createAtimeInput({}, { preserveAccessTime: true }, true /* isDir */);
+      input.sourcePath = '/source/test-dir';
+      input.targetPath = '/target/test-dir';
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      await service.stampMetaData(input);
+
+      const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
+      const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-dir');
+      const targetCalls = utimesCalls.filter(c => c[0] === '/target/test-dir');
+      // preserve normalizes source dir atime so it matches what DeferredDirStampService stamps on dest
+      expect(sourceCalls).toHaveLength(1);
+      // stampAccessAndModifiedTime returns early for dirs — dest is handled by DeferredDirStampService
+      expect(targetCalls).toHaveLength(0);
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
+    });
+
     it('should NOT call chown (stampGIDandUID is skipped)', async () => {
       const input = createAtimeInput({ gid: 1000, uid: 1001 }, { preservePermissions: true });
 

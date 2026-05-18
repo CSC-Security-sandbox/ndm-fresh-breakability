@@ -513,8 +513,9 @@ export class CommandGenerationService {
       );
     }
 
-    if (isAtimeUpdated(sFile, dFile)) {
+    if (jobContext?.jobConfig?.options?.preserveAccessTime && isAtimeUpdated(sFile, dFile)) {
       const isDirectory = sFile.isDirectory();
+      this.logger.debug(`atime-only change detected | path=${fPath} | src=${sFile.atime.toISOString()} dst=${dFile.atime.toISOString()}`);
       return new Cmd(
         uuid4(),
         fPath,
