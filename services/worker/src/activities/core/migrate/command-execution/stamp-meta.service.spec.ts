@@ -1036,16 +1036,16 @@ describe('StampMetaService', () => {
       expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
     });
 
-    it('with preserveAccessTime=true: retries and exhausts when T3 > T2', async () => {
+    it('with preserveAccessTime=true: completes without ctime validation in simplified flow', async () => {
       const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: Date.now() });
       let callCount = 0;
       (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
         callCount++;
         return Promise.resolve({ ctimeMs: callCount * 1000 });
       });
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+      expect(result.sourceErrors).not.toContain('METADATA_UPDATE_CONFLICT');
+      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
     });
 
     it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
@@ -1055,7 +1055,7 @@ describe('StampMetaService', () => {
       expect(result.sourceErrors).toEqual([]);
     });
 
-    it('updates deferred dir stamp when isDir=true and ctime exhausted', async () => {
+    it('updates deferred dir stamp when isDir=true regardless of ctime changes', async () => {
       const input = createMockInput({}, {}, true);
       let callCount = 0;
       (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
@@ -1063,7 +1063,8 @@ describe('StampMetaService', () => {
         return Promise.resolve({ ctimeMs: callCount * 1000 });
       });
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+      expect(result.sourceErrors).not.toContain('METADATA_UPDATE_CONFLICT');
+      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
     });
   });
 
