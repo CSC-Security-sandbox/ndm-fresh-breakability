@@ -314,7 +314,7 @@ export class InventoryService {
           return [];
         }
         
-        const isWindowsDirectoryPath = directoryPath.startsWith('\\');
+        const isWindowsDirectoryPath = directoryPath.startsWith('\\') || directoryPath.includes('\\');  
         const escapedDirectoryPath = directoryPath
           .replace(/\\/g, '\\\\')      
           .replace(/!/g, '!!')         

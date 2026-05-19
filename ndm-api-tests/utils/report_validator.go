@@ -794,3 +794,58 @@ func CountDeletedReportRows(jobRunID string) (int, error) {
 	LogDebug(fmt.Sprintf("CountDeletedReportRows: job %s deleted %d files from destination", jobRunID, count))
 	return count, nil
 }
+
+// CountCocFileOnlyRows returns the number of file-only rows in coc-report.csv.
+// Directory rows have an empty "Destination Checksum"; file rows have a non-empty value.
+func CountCocFileOnlyRows(jobRunID string) (int, error) {
+	data, err := fetchCocCSV(jobRunID)
+	if err != nil {
+		return 0, fmt.Errorf("CountCocFileOnlyRows: fetch CoC ZIP for job %s: %w", jobRunID, err)
+	}
+
+	csvFiles, err := extractCSVFilesFromZip(data)
+	if err != nil {
+		return 0, fmt.Errorf("CountCocFileOnlyRows: extract ZIP for job %s: %w", jobRunID, err)
+	}
+
+	var csvBytes []byte
+	for zipPath, b := range csvFiles {
+		if strings.Contains(strings.ToLower(path.Base(normalizeZipEntryPath(zipPath))), "coc-report.csv") {
+			csvBytes = b
+			break
+		}
+	}
+	if csvBytes == nil {
+		return 0, fmt.Errorf("CountCocFileOnlyRows: coc-report.csv not found in CoC ZIP for job %s", jobRunID)
+	}
+
+	reader := csv.NewReader(bytes.NewReader(csvBytes))
+	header, err := reader.Read()
+	if err != nil {
+		return 0, fmt.Errorf("CountCocFileOnlyRows: read CSV header for job %s: %w", jobRunID, err)
+	}
+
+	checksumIdx := -1
+	for i, h := range header {
+		if strings.TrimSpace(h) == "Destination Checksum" {
+			checksumIdx = i
+			break
+		}
+	}
+	if checksumIdx == -1 {
+		return 0, fmt.Errorf("CountCocFileOnlyRows: \"Destination Checksum\" column not found in coc-report.csv for job %s", jobRunID)
+	}
+
+	count := 0
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			break
+		}
+		if checksumIdx < len(record) && strings.TrimSpace(record[checksumIdx]) != "" {
+			count++
+		}
+	}
+	LogDebug(fmt.Sprintf("CountCocFileOnlyRows: job %s has %d file-only rows in CoC report", jobRunID, count))
+	return count, nil
+}

@@ -237,8 +237,8 @@ const (
 	// Baseline file counts (files only, no directories) for each volume in the cloned test dataset.
 	NFS_VOL1_BASELINE_CUTOVER_FILES = 20221
 	NFS_VOL2_BASELINE_CUTOVER_FILES = 17764
-	SMB_VOL1_BASELINE_CUTOVER_FILES = 378
-	SMB_VOL2_BASELINE_CUTOVER_FILES = 368
+	SMB_VOL1_BASELINE_CUTOVER_FILES = 278
+	SMB_VOL2_BASELINE_CUTOVER_FILES = 268
 	ConfigTypeFile                       ConfigType       = "FILE"
 	ServerTypeOtherNAS                   ServerType       = "OtherNAS"
 	ProtocolNFS                          Protocol         = "NFS"

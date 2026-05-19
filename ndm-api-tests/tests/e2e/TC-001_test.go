@@ -267,8 +267,15 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				}
 			}
 
+		// sourcePathToVolIndex maps each cloned source volume path to its vol index (0-based)
+			// so validators and replacement maps are looked up by identity, not by API response order.
+			sourcePathToVolIndex := make(map[string]int)
+			for idx, vol := range clonedSourceVolumes {
+				sourcePathToVolIndex[vol] = idx
+			}
+
 			// Get migration job run IDs and wait for completion
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
@@ -278,11 +285,15 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Migration job did not complete")
 
+				sourcePath := strings.TrimPrefix(getJobsResp.SourceServer.Path, "/")
+				volIndex, ok := sourcePathToVolIndex[sourcePath]
+				Expect(ok).To(BeTrue(), "Could not map migration source path %q to any cloned volume", sourcePath)
+
 				result, err := ValidateReport(
 					migrationJobRunID,
 					JobTypeMigration,
-					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]),
-					volumeReplacementMaps[i],
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[volIndex]),
+					volumeReplacementMaps[volIndex],
 				)
 				Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 				LogDebug(fmt.Sprintf("validate report result : %s", result))
@@ -304,13 +315,19 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			defer resp.Body.Close()
 
 			By("Getting jobs by job config id")
+			// cutoverRunByVolIndex maps vol index -> cutoverRunID so the validation loop uses
+			// BaselineCutoverFileCount(volIndex) matched by identity, not by API response order.
+			cutoverRunByVolIndex := make(map[int]string)
 			for _, jobConfigID := range jobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting blocked job run ID for config %s", jobConfigID)
 				defer resp.Body.Close()
 
 				cutoverRunID := getJobsResp.JobRuns[0].JobRunId
-				Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", cutoverRunID)
+				sourcePath := strings.TrimPrefix(getJobsResp.SourceServer.Path, "/")
+				volIndex, ok := sourcePathToVolIndex[sourcePath]
+				Expect(ok).To(BeTrue(), "Could not map cutover source path %q to any cloned volume", sourcePath)
+				Expect(cutoverRunID).NotTo(BeEmpty(), "Expected a valid cutoverID for config %s", jobConfigID)
 
 				WaitForJobState(cutoverRunID, BLOCKED_JOBRUN)
 				// Fetch the latest status
@@ -324,6 +341,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				Expect(getJobsResp.JobRuns[0].Status).To(Equal("BLOCKED"), "Expected status BLOCKED for config %s", jobConfigID)
 
 				cutoverRunIDs = append(cutoverRunIDs, cutoverRunID)
+				cutoverRunByVolIndex[volIndex] = cutoverRunID
 			}
 
 			By("Approving Bulk Cutover Job")
@@ -342,18 +360,20 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 			// }
 
 			By("Waiting for cutover jobs to complete and validating file counts")
-			for i, cutoverRunID := range cutoverRunIDs {
+			for volIndex, cutoverRunID := range cutoverRunByVolIndex {
 				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
 
-				expected := BaselineCutoverFileCount(i) + DeltaFilesInCutoverCoC
-				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC))
+				// Use volIndex derived from SourceServer.Path so the correct baseline is applied
+				// regardless of the order the cutover API returned the jobs.
+				expected := BaselineCutoverFileCount(volIndex) + DeltaFilesInCutoverCoC
+				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC))
 				cutoverRowCount, err := CountMigrationReportRows(cutoverRunID)
 				Expect(err).NotTo(HaveOccurred(), "Error counting cutover CoC report rows for run %s", cutoverRunID)
 				Expect(cutoverRowCount).To(Equal(expected),
-					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC, cutoverRowCount),
+					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC, cutoverRowCount),
 				)
-				LogDebug(fmt.Sprintf("Cutover run %s correctly shows %d files in CoC report", cutoverRunID, cutoverRowCount))
+				LogDebug(fmt.Sprintf("Cutover run %s (vol%d) correctly shows %d files in CoC report", cutoverRunID, volIndex+1, cutoverRowCount))
 			}
 
 			By("########################## TC-001 end ################################")

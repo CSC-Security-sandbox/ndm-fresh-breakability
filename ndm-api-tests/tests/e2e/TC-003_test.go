@@ -286,20 +286,30 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				}
 			}
 
-			// Get migration job run IDs and perform state management tests
+			// sourcePathToVolIndex maps each cloned source volume path to its vol index (0-based)
+			// so validators and replacement maps are looked up by identity.
+			sourcePathToVolIndex := make(map[string]int)
+			for idx, vol := range clonedSourceVolumes {
+				sourcePathToVolIndex[vol] = idx
+			}
+
 			flag := false
-			for i, migrationJobConfigID := range migrationJobConfigIDs {
+			for _, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID = getJobsResp.JobRuns[0].JobRunId
 				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
 				defer resp.Body.Close()
 				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 
+				sourcePath := strings.TrimPrefix(getJobsResp.SourceServer.Path, "/")
+				volIndex, ok := sourcePathToVolIndex[sourcePath]
+				Expect(ok).To(BeTrue(), "Could not map migration source path %q to any cloned volume", sourcePath)
+
 				if !flag {
 					list = nil
 					list = append(list, migrationJobRunID)
 
-					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on migration job %d", i+1))
+					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on migration job for %s", sourcePath))
 					err = HandleJobRunStateChange(migrationJobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 					Wait(5)
@@ -330,8 +340,8 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				result, err := ValidateReport(
 					migrationJobRunID,
 					JobTypeMigration,
-					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[i]),
-					volumeReplacementMaps[i],
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, migration_validators[volIndex]),
+					volumeReplacementMaps[volIndex],
 				)
 				Expect(err).NotTo(HaveOccurred(), "Error while validate migration report")
 				By(fmt.Sprintf("validate migration report result : %s", result))
@@ -355,6 +365,9 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 
 			jobConfigIDsLoop := []string{jobConfigIDs[0], jobConfigIDs[1]}
 			cutoverJobRunIDs := make([]string, len(jobConfigIDsLoop))
+			// cutoverRunByVolIndex maps vol index -> cutoverRunID so the validation loop uses
+			// BaselineCutoverFileCount(volIndex) matched by identity.
+			cutoverRunByVolIndex := make(map[int]string)
 			for i, jobConfigID := range jobConfigIDsLoop {
 				getJobsResp, resp, err := GetJobRunDetails(jobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting cutover job run ID")
@@ -362,12 +375,16 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				jobRunID := getJobsResp.JobRuns[0].JobRunId
 				cutoverJobRunIDs[i] = jobRunID
 
+				sourcePath := strings.TrimPrefix(getJobsResp.SourceServer.Path, "/")
+				volIndex, ok := sourcePathToVolIndex[sourcePath]
+				Expect(ok).To(BeTrue(), "Could not map cutover source path %q to any cloned volume", sourcePath)
+
 				// Perform PAUSE, RESUME, and STOP operations on the first cutover job run
 				if i == 0 {
 					list = nil
 					list = append(list, jobRunID)
 
-					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on cutover job %d", i+1))
+					By(fmt.Sprintf("Testing PAUSE/RESUME/STOP/ADHOC on cutover job for %s", sourcePath))
 					err = HandleJobRunStateChange(jobRunID, "PAUSE", list)
 					Expect(err).NotTo(HaveOccurred(), "Error while pause job run ID")
 					Wait(5)
@@ -390,11 +407,13 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 					Expect(err).NotTo(HaveOccurred(), "Ad-hoc cutover job did not reach BLOCKED state")
 
 					cutoverJobRunIDs[i] = adHocJobRunId
+					cutoverRunByVolIndex[volIndex] = adHocJobRunId
 					continue
 				}
 
 				err = WaitForJobState(jobRunID, BLOCKED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Cutover job %d did not reach BLOCKED state", i+1))
+				cutoverRunByVolIndex[volIndex] = jobRunID
 			}
 
 			By("Approving bulk cutover jobs")
@@ -405,18 +424,20 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 			}
 
 			By("Waiting for cutover jobs to complete and validating file counts")
-			for i, cutoverRunID := range cutoverJobRunIDs {
+			for volIndex, cutoverRunID := range cutoverRunByVolIndex {
 				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
 
-				expected := BaselineCutoverFileCount(i) + DeltaFilesInCutoverCoC
-				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC))
+				// Use volIndex derived from SourceServer.Path so the correct baseline is applied
+				// regardless of the order the cutover API returned the jobs.
+				expected := BaselineCutoverFileCount(volIndex) + DeltaFilesInCutoverCoC
+				By(fmt.Sprintf("Validating cutover CoC row count for vol%d: expected %d (baseline %d + %d delta files)", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC))
 				cutoverRowCount, err := CountMigrationReportRows(cutoverRunID)
 				Expect(err).NotTo(HaveOccurred(), "Error counting cutover CoC report rows for run %s", cutoverRunID)
 				Expect(cutoverRowCount).To(Equal(expected),
-					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", i+1, expected, BaselineCutoverFileCount(i), DeltaFilesInCutoverCoC, cutoverRowCount),
+					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC, cutoverRowCount),
 				)
-				LogDebug(fmt.Sprintf("Cutover run %s correctly shows %d files in CoC report", cutoverRunID, cutoverRowCount))
+				LogDebug(fmt.Sprintf("Cutover run %s (vol%d) correctly shows %d files in CoC report", cutoverRunID, volIndex+1, cutoverRowCount))
 			}
 
 			By("########################## TC-003 end ################################")

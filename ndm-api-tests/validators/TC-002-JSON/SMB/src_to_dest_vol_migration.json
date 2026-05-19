@@ -872,24 +872,12 @@
     "Source Path": "volSMBAuto_vol1\\folder"
   },
   {
-    "Destination Checksum": "d4cbaa4b1af4aa333c4a095b1610e5d6fef37202b7c9c931059f06c21b3439c2",
-    "Source Path": "volSMBAuto_vol1\\folder\\file1.txt"
-  },
-  {
     "Destination Checksum": "",
     "Source Path": "volSMBAuto_vol1\\folder\\folder2"
   },
   {
-    "Destination Checksum": "8e5c16e97492ec8988f42f0408a810c587998c80a732f63052a16287daf1347b",
-    "Source Path": "volSMBAuto_vol1\\folder\\folder2\\file2.txt"
-  },
-  {
     "Destination Checksum": "",
     "Source Path": "volSMBAuto_vol1\\folder\\folder2\\folder3"
-  },
-  {
-    "Destination Checksum": "c526bb1d1bd785e16a39cf42c8af52fec7f6d0442e948b6083dbcd8394255d7b",
-    "Source Path": "volSMBAuto_vol1\\folder\\folder2\\folder3\\file3.txt"
   },
   {
     "Destination Checksum": "d48e182b47e8358775074e988bea968f5a018d619a3e00aa0113438f9dd803bd",
@@ -960,18 +948,6 @@
     "Source Path": "volSMBAuto_vol1\\hardlink_to_txt"
   },
   {
-    "Destination Checksum": "186b26b6c8cc0416482da9b9664db9d30efc944228e075f37a5b06d612dbddd6",
-    "Source Path": "volSMBAuto_vol1\\modify1.txt"
-  },
-  {
-    "Destination Checksum": "98783cf087d863c2db7eca89ed32caabbe9a6805a5e067dd37251612fbc63fc5",
-    "Source Path": "volSMBAuto_vol1\\modify2.txt"
-  },
-  {
-    "Destination Checksum": "c46fc8b20b4c86346f66472ebe1fe226fba71366e8a97ad7b6e4f8611a0e515a",
-    "Source Path": "volSMBAuto_vol1\\modify3.txt"
-  },
-  {
     "Destination Checksum": "d48e182b47e8358775074e988bea968f5a018d619a3e00aa0113438f9dd803bd",
     "Source Path": "volSMBAuto_vol1\\sample_2.csv"
   },
@@ -1004,10 +980,6 @@
     "Source Path": "volSMBAuto_vol1\\sample_2.png"
   },
   {
-    "Destination Checksum": "cbcd08cf0f78f1c1732f65b30b5a2f97e615a10726d65f33453a40b43c31f19a",
-    "Source Path": "volSMBAuto_vol1\\sample_2.txt"
-  },
-  {
     "Destination Checksum": "999ec24beac56021585a7d5add9834c4a97f224122da4f22c42b7b781d3e07a6",
     "Source Path": "volSMBAuto_vol1\\sample.csv"
   },
@@ -1038,10 +1010,6 @@
   {
     "Destination Checksum": "8e43ec09d6353020cfadd0d780568aa69405a0db246a1d2810aa7387e74c3194",
     "Source Path": "volSMBAuto_vol1\\sample.png"
-  },
-  {
-    "Destination Checksum": "0a289de35c83a651beeaa8541483f6905537860be7ecd1ff53d2fb57ccda67b3",
-    "Source Path": "volSMBAuto_vol1\\sample.txt"
   },
   {
     "Destination Checksum": "d48e182b47e8358775074e988bea968f5a018d619a3e00aa0113438f9dd803bd",
