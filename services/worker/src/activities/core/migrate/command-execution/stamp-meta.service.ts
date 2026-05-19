@@ -49,12 +49,6 @@ export class StampMetaService {
                     this.stampObjectACL(input),
                     this.preserveAccessAndModifiedTime(input)
                 ]);
-                if (input.command.isDir) {
-                    const sourceCtime = await this.fetchSourceCtimeMs(input.sourcePath);
-                    await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, sourceCtime, input.command.id,
-                    );
-                }
                 output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
                 output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
                 if (aclStampOutput.targetErrors.length === 0 && aclStampOutput.sourceErrors.length === 0) {
@@ -64,6 +58,16 @@ export class StampMetaService {
                 }
             } else {
                 await this.executeStampMeta(input, output);
+            }
+            if (input.command.isDir) {
+                try{
+                const sourceCtime = await this.fetchSourceCtimeMs(input.sourcePath);
+                await this.deferredDirStampService.updateSourceCtime(
+                    input.jobContext.jobRunId, input.command.fPath, sourceCtime, input.command.id,
+                )}
+                catch (error) {
+                    this.logger.error(`Error updating source ctime for ${input.sourcePath}: ${error.message}`, error.stack);
+                }
             }
         }
 

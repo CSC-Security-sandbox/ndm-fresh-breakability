@@ -70,7 +70,7 @@ export default function CutoverConfirmationModal({
             </Box>
           </Box>
 
-          <Box style={{ margin: "16px 0" }}>
+          {/* <Box style={{ margin: "16px 0" }}>
             <Notification type="info">
               Metadata update conflicts, if any, can be reviewed in
               the <strong>metadata_conflict_errors.csv</strong> file available
@@ -79,7 +79,7 @@ export default function CutoverConfirmationModal({
               cutover and before making the destination live. Refer to
               documentation for the steps.
             </Notification>
-          </Box>
+          </Box> */}
 
           <Checkbox
             form={confirmCutOverForm}

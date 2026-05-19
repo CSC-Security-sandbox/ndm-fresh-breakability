@@ -147,7 +147,7 @@ export class RestampDirectoriesService {
     if (baseSourcePrefixPath && rec.sourceCtimeMs != null) {
       try {
         const sourcePath = path.join(baseSourcePrefixPath, rec.fPath);
-        this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId);
+        // this.ctimeTestTriggers.testChangeBetweenT3AndDirRestamp(sourcePath, jobRunId); 
         const currentStat = await fs.promises.lstat(sourcePath);
         const currentCtimeMs = Math.floor(currentStat.ctimeMs);
         this.logger.log(
