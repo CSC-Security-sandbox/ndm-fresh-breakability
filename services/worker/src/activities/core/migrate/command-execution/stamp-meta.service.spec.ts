@@ -1020,32 +1020,29 @@ describe('StampMetaService', () => {
   });
 
   describe('ctime validation (win32 path)', () => {
+    let deferredDirStampService: jest.Mocked<{ updateSourceCtime: jest.Mock }>;
+
     beforeEach(() => {
       Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
       winOperationService.stampAclOperation.mockResolvedValue({ output: null, errors: [] });
+      deferredDirStampService = (service as any).deferredDirStampService;
     });
 
-    it('with preserveAccessTime=true: passes when T3 <= T2', async () => {
+    it('with preserveAccessTime=true: succeeds when ACL and time stamping complete without errors', async () => {
       const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock)
-        .mockResolvedValueOnce({ ctimeMs: 1000 })  // T1
-        .mockResolvedValueOnce({ ctimeMs: 2000 })  // T2 (from preserveAccessAndModifiedTimeAndCaptureT2)
-        .mockResolvedValueOnce({ ctimeMs: 2000 }); // T3 = T2, no change
       const result = await service.stampMetaData(input);
       expect(result.sourceErrors).toEqual([]);
       expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
     });
 
-    it('with preserveAccessTime=true: retries and exhausts when T3 > T2', async () => {
+    it('with preserveAccessTime=true: propagates source error when preserveAccessAndModifiedTime fails', async () => {
       const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: Date.now() });
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
+      const error = new Error('utimes failed') as any;
+      error.code = 'EPERM';
+      (mockFs.promises.utimes as jest.Mock).mockRejectedValue(error);
+      dmError.mockReturnValue({});
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+      expect(result.sourceErrors).toContain('EPERM');
     });
 
     it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
@@ -1053,17 +1050,19 @@ describe('StampMetaService', () => {
       (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 5000 });
       const result = await service.stampMetaData(input);
       expect(result.sourceErrors).toEqual([]);
+      expect(deferredDirStampService.updateSourceCtime).toHaveBeenCalledWith(
+        'job-run-123', '/test-file.txt', 5000, 'cmd-1',
+      );
     });
 
-    it('updates deferred dir stamp when isDir=true and ctime exhausted', async () => {
+    it('updates deferred dir stamp when isDir=true with the lstat-reported ctime', async () => {
       const input = createMockInput({}, {}, true);
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
+      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 9000 });
       const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
+      expect(result.sourceErrors).toEqual([]);
+      expect(deferredDirStampService.updateSourceCtime).toHaveBeenCalledWith(
+        'job-run-123', '/test-file.txt', 9000, 'cmd-1',
+      );
     });
   });
 
