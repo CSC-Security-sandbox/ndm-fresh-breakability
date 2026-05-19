@@ -542,19 +542,6 @@ export class CommandGenerationService {
     );
   }
 
-  /**
-   * Records a directory for deferred mtime/atime restamping after migration.
-   * No-op if the caller didn't supply a deferredDirStampService.
-   *
-   * Used in two places:
-   *  1. `processItems` — once per child dir (CASE 3) so child writes that
-   *     clobber the parent dir's mtime are reverted at the end of migration.
-   *  2. `MigrateScanService.scanDirectory` for the DLM root (fPath='/') — same
-   *     defensive registration so the root's mtime survives child writes too.
-   *
-   * Failures here are swallowed (logged inside the service) — recording is
-   * best-effort and must never fail the surrounding scan/migration.
-   */
   async recordDeferredDirStamp(
     deferredDirStampService: DeferredDirStampService | undefined,
     jobContext: JobManagerContext,

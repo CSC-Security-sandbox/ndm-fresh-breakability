@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, CommandStatus, ErrorType, JobManagerContext, OPS_CMD, OPS
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
+import { dmError, isContentUpdate, isMetaUpdated, isDirectoryLevelMigration, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
@@ -46,37 +46,27 @@ export class MigrateScanService {
         await jobContext.publishBulkToCommandStream(commands);
     }
 
-    /**
-     * Initialises DLM root directory stamping once per migration.
-     * Short-circuits on any task that is not the initial root scan task
-     * (single command, fPath='/'), so batch subdirectory tasks are never
-     * processed here.
-     *
-     * Delegates to two focused helpers:
-     *   - `publishDlmRootPermissionStamp` — emits the STAMP_META command that
-     *     applies ACL / mode / ownership on the destination root.
-     *     Guarded by `preservePermissions` — skipped when permissions are not
-     *     being migrated.
-     *   - `registerDlmRootMtimeRestamp`   — registers the root in the deferred
-     *     mtime/atime restamp queue so child writes cannot clobber its timestamps.
-     *     Always runs — mtime must be preserved regardless of permission settings.
-     */
     async initDlmRootStamp(
         task: { commands: Cmd[] },
         jobContext: JobManagerContext,
         sourcePath: string,
         targetPath: string,
     ): Promise<void> {
-        if (!jobContext.jobConfig?.sourceDirectoryPath) return;
+        if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
         if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
 
-        const sourceRootStat = await fs.promises.lstat(sourcePath);
+        let sourceRootStat: fs.Stats | undefined;
         let targetRootStat: fs.Stats | undefined;
         try {
+            sourceRootStat = await fs.promises.lstat(sourcePath);
             targetRootStat = await fs.promises.lstat(targetPath);
-        } catch {
-            // First run — destination root not yet created. buildCommand's
-            // !dFile branch returns a fresh COPY_DIR+STAMP_META cmd.
+            this.logger.debug(`DLM root exists on destination: ${targetPath}`);
+        } catch (err) {
+            if (!sourceRootStat) {
+                this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
+                return;
+            }
+            this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
@@ -85,14 +75,6 @@ export class MigrateScanService {
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
 
-    /**
-     * Builds and publishes a STAMP_META command for the DLM root dir (`fPath='/'`).
-     * Skips if `buildCommand` determines nothing has changed (incremental guard).
-     *
-     * Sets `applyInheritanceMode: true` so `stampAclOperation` converts inherited
-     * ACEs from the source into explicit ACEs on the destination root — the only
-     * root-specific behaviour vs. normal child-dir stamping.
-     */
     private async publishDlmRootPermissionStamp(
         sourceRootStat: fs.Stats,
         targetRootStat: fs.Stats | undefined,
@@ -106,16 +88,6 @@ export class MigrateScanService {
         await this.publishCommands({ jobContext, commands: [rootCmd] });
     }
 
-    /**
-     * Registers the DLM root dir (`fPath='/'`, depth=0) in the deferred
-     * mtime/atime restamp queue.
-     *
-     * Every child write clobbers a parent directory's mtime, so the
-     * per-command STAMP_META timestamp is meaningless for directories.
-     * `restampDirectoriesActivity` drains this queue deepest-first at the
-     * end of the migration — depth=0 ensures the root is restamped last,
-     * after all descendants.
-     */
     private async registerDlmRootMtimeRestamp(
         sourceRootStat: fs.Stats,
         jobContext: JobManagerContext,

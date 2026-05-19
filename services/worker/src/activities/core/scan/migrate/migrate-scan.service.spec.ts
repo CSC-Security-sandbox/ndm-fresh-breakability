@@ -1386,3 +1386,124 @@ describe('MigrateScanService', () => {
 
     // Add more tests as needed for coverage, e.g. for scanDirectory, buildCommand, etc.
 });
+
+// --- initDlmRootStamp ---
+describe('MigrateScanService.initDlmRootStamp', () => {
+    let service: MigrateScanService;
+    let configService: ConfigService;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
+    let commandGenerationService: Partial<CommandGenerationService>;
+    let jobContext: any;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const rootStat: Partial<fs.Stats> = {
+        mtimeMs: 1000,
+        isDirectory: () => true,
+        isSymbolicLink: () => false,
+    };
+
+    const makeTask = (fPath = '/') => ({ commands: [{ fPath }] });
+
+    beforeEach(() => {
+        configService = {
+            get: jest.fn((key: string) => ({
+                'worker.workerId': 'test-worker',
+                'worker.maxMigrationCommand': 2,
+                'worker.maxCommandConcurrency': 5,
+                'worker.maxRetryCount': 2,
+            }[key])),
+        } as any;
+
+        fileTypeDetectionService = { detectFileType: jest.fn() } as any;
+        commandGenerationService = { processItems: jest.fn(), buildCommand: jest.fn() } as any;
+
+        service = new MigrateScanService(
+            configService,
+            mockLoggerFactory as LoggerFactory,
+            fileTypeDetectionService as FileTypeDetectionService,
+            commandGenerationService as CommandGenerationService,
+            { add: jest.fn() } as any,
+        );
+
+        jobContext = {
+            publishToCommandStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
+            jobConfig: {
+                sourceDirectoryPath: '/src',
+                options: { preservePermissions: false },
+            },
+        };
+
+        jest.clearAllMocks();
+    });
+
+    it('returns early when sourceDirectoryPath is absent', async () => {
+        jobContext.jobConfig.sourceDirectoryPath = undefined;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(fs.promises.lstat).not.toHaveBeenCalled();
+    });
+
+    it('returns early when task has more than one command', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
+        await service.initDlmRootStamp({ commands: [{ fPath: '/' }, { fPath: '/other' }] } as any, jobContext, '/src', '/dst');
+        expect(fs.promises.lstat).not.toHaveBeenCalled();
+    });
+
+    it('returns early when task command fPath is not "/"', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
+        await service.initDlmRootStamp(makeTask('/subdir') as any, jobContext, '/src', '/dst');
+        expect(fs.promises.lstat).not.toHaveBeenCalled();
+    });
+
+    it('logs error and returns early when source lstat fails', async () => {
+        (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to stat DLM root source path'));
+        expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
+    });
+
+    it('logs first-run message when destination does not exist yet', async () => {
+        (fs.promises.lstat as jest.Mock)
+            .mockResolvedValueOnce(rootStat)    // source
+            .mockRejectedValueOnce(new Error('ENOENT')); // target missing
+        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('first run'));
+    });
+
+    it('logs debug when both source and destination exist', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('DLM root exists on destination'));
+    });
+
+    it('calls publishDlmRootPermissionStamp when preservePermissions is true', async () => {
+        jobContext.jobConfig.options.preservePermissions = true;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const permSpy = jest.spyOn(service as any, 'publishDlmRootPermissionStamp').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(permSpy).toHaveBeenCalled();
+    });
+
+    it('skips publishDlmRootPermissionStamp when preservePermissions is false', async () => {
+        jobContext.jobConfig.options.preservePermissions = false;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const permSpy = jest.spyOn(service as any, 'publishDlmRootPermissionStamp').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(permSpy).not.toHaveBeenCalled();
+    });
+
+    it('always calls registerDlmRootMtimeRestamp regardless of preservePermissions', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const mtimeSpy = jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
+    });
+});
