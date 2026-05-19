@@ -26,6 +26,9 @@ export class CommonTaskService {
   readonly groupSize: number;
   readonly commandsInTask: number;
   readonly maxCmdStreamLen: number;
+  readonly maxDiscoveryFileStreamLen: number;
+  readonly maxScanConcurrency: number;
+  readonly scanBatchSize: number;
   private temporalConfig: TemporalConfig = null;
 
   constructor(
@@ -41,6 +44,9 @@ export class CommonTaskService {
       this.commandsInTask = this.configService.get<number>('worker.commandsInTask') || 100;
       this.logger = loggerFactory.create(CommonTaskService.name);
       this.maxCmdStreamLen = this.configService.get<number>('worker.maxCmdStreamLen') || 5000;
+      this.maxDiscoveryFileStreamLen = this.configService.get<number>('worker.maxDiscoveryFileStreamLen') || 200000;
+      this.maxScanConcurrency = this.configService.get<number>('worker.maxScanConcurrency') || 10;
+      this.scanBatchSize = this.configService.get<number>('worker.scanBatchSize') || 100;
     }
 
   /**
@@ -172,6 +178,10 @@ export class CommonTaskService {
   }
 
 
+  async getWorkerScanConfig(): Promise<{ concurrency: number; batchSize: number }> {
+    return { concurrency: this.maxScanConcurrency, batchSize: this.scanBatchSize };
+  }
+
   async createInitialDirBatch({dirsToScan, jobRunId}: CreateInitBatchInput): Promise<string>  {
     const jobContext = await this.redisService.getJobManagerContext(jobRunId);
     const batchId: string = calculateHash(dirsToScan);
@@ -184,5 +194,10 @@ export class CommonTaskService {
     const currStreamLen =  await jobContext.getCmdStreamLen();
     return this.maxCmdStreamLen >= currStreamLen;
   }
-    
+
+  async isFileStreamLenValid(jobRunId: string): Promise<boolean> {
+    const jobContext = await this.redisService.getJobManagerContext(jobRunId);
+    const currStreamLen = await jobContext.getFileStreamLen();
+    return this.maxDiscoveryFileStreamLen >= currStreamLen;
+  }
 }

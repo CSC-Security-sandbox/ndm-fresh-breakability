@@ -1,5 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { cancelWorkflowIfRunning, getUnifiedJobStatus, signalIfRunning } from './workflow-utils';
 
@@ -17,6 +18,13 @@ const {
 } = wf.proxyActivities<CommonActivityService>({ 
   startToCloseTimeout: '10m', 
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } 
+});
+
+const {
+  getWorkerScanConfig: getWorkerScanConfigActivity,
+} = wf.proxyActivities<CommonTaskService>({
+  startToCloseTimeout: '1m',
+  retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 1 },
 });
 
 // Use 'action' signal name to match jobs-service signal (same as migration workflow)
@@ -77,10 +85,12 @@ export const executeRetryMigrationChildWorkflows = async ({
   });
 
   if (output.status !== JobRunStatus.Stopped) {
+    const { concurrency: workerConcurrency, batchSize } = await getWorkerScanConfigActivity();
+
     // Start ChildRetryScanWorkflow - fetches failed operations and publishes to stream
     // Uses originalJobRunId to fetch failed operations, but jobRunId for workflow/task identifiers
     retryScanWorkflow = await wf.startChild('ChildRetryScanWorkflow', {
-      args: [{ jobRunId: jobRunId, originalJobRunId: originalJobRunId }],
+      args: [{ jobRunId, originalJobRunId, workerConcurrency, batchSize }],
       workflowId: `RetryScanWorkflow-${jobRunId}`,
       taskQueue: `${jobRunId}-TaskQueue`,
       cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

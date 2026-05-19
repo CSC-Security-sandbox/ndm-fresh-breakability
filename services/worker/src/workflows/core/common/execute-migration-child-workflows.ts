@@ -1,5 +1,6 @@
 import * as wf from '@temporalio/workflow';
 import { CommonActivityService } from 'src/activities/common/common.service';
+import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { cancelWorkflowIfRunning, getUnifiedJobStatus, signalIfRunning } from './workflow-utils';
 
@@ -21,6 +22,12 @@ const {
     retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 } 
 });
 
+const {
+    getWorkerScanConfig: getWorkerScanConfigActivity,
+} = wf.proxyActivities<CommonTaskService>({
+    startToCloseTimeout: '1m',
+    retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 1 },
+});
 
 export const actionSignal = wf.defineSignal<[string]>('action');
 
@@ -66,8 +73,9 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
     });
 
     if(output.status !== JobRunStatus.Stopped){
+        const { concurrency: workerConcurrency, batchSize } = await getWorkerScanConfigActivity();
         scanWorkflow = await wf.startChild('ChildScanWorkflow', {
-            args: [ { jobRunId: jobRunId, failedWorkers: [] , isMigration: true } ],
+            args: [ { jobRunId: jobRunId, isMigration: true, workerConcurrency, batchSize } ],
             workflowId: `ScanWorkflow-${jobRunId}`,
             taskQueue: `${jobRunId}-TaskQueue`,
             cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,

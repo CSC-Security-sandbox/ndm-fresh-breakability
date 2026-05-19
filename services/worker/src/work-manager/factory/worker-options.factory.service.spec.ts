@@ -93,6 +93,8 @@ const CommonTaskServiceMock = {
   updateCutOverStatus: jest.fn(),
   generateCOCReport: jest.fn(),
   isCmdStreamLenValid: jest.fn(),
+  isFileStreamLenValid: jest.fn(),
+  getWorkerScanConfig: jest.fn().mockResolvedValue({ concurrency: 20, batchSize: 100 }),
 };
 
 const ScanServiceMock = {

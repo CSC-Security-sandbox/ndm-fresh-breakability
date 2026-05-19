@@ -3,9 +3,9 @@ import { CommonActivityService } from "src/activities/common/common.service";
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
-import { updateJobStatusIfNotRunning, validateCommandStreamLength } from '../common/workflow-utils';
-import { MAX_CONCURRENT_BATCHES, ITERATIONS_LIMIT, CMD_LENGTH_VALIDATION_ITERATIONS, DEFAULT_BATCH_SIZE } from '../common/workflow-constants';
-import { ChildScanWorkflowInput, ChildScanWorkflowOutput, ExecuteBatchScanInput, ExecuteBatchScansOutput } from './chid-scan.workflow.type';
+import { updateJobStatusIfNotRunning, validateCommandStreamLength, validateFileStreamLength } from '../common/workflow-utils';
+import { ITERATIONS_LIMIT } from '../common/workflow-constants';
+import { ChildScanWorkflowInput, ChildScanWorkflowOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
 
@@ -82,12 +82,9 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
   wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
     actionState = action;
     console.log(jobRunId, `action signal called with value: ${action}`);
-    
-    
   });
 
   let isStopRequested = false;
-  let errors: string[] = [];
   let iterations = 0; 
 
   while(dirBatchIds.length > 0) {   
@@ -102,72 +99,54 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     await updateJobStatusIfNotRunning(actionState, jobRunId);
     await wf.condition(() => actionState !== JobRunStatus.Paused);
 
-    iterations+= dirBatchIds.length + CMD_LENGTH_VALIDATION_ITERATIONS;
+    const currentBatchIds = dirBatchIds;
+    const nextBatchIds: string[] = [];
 
-    const batchExecResults: ExecuteBatchScansOutput = await executeBatchScan({ batches: dirBatchIds, batchSize, isMigration, jobRunId});
-    scanWorkflowOutput.fileCount += batchExecResults.fileCount;
-    scanWorkflowOutput.dirCount += batchExecResults.dirCount;
-    if (batchExecResults.excludedPaths?.length) scanWorkflowOutput.excludedPaths!.push(...batchExecResults.excludedPaths);
-    if (batchExecResults.skippedPaths?.length) scanWorkflowOutput.skippedPaths!.push(...batchExecResults.skippedPaths);
-    dirBatchIds = batchExecResults.batchDirs;
+    for (let i = 0; i < currentBatchIds.length; i += workerConcurrency) {
+      try {
+        const validationSteps = isMigration
+          ? await validateCommandStreamLength(jobRunId, () => actionState)
+          : await validateFileStreamLength(jobRunId, () => actionState);
+          
+        iterations += validationSteps;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+        throw error;
+      }
 
-    if(batchExecResults.error){
-      errors.push(batchExecResults.error);
+      const batchSlice = currentBatchIds.slice(i, i + workerConcurrency);
+      iterations += batchSlice.length;
+      
+      const batchResults = await Promise.all(
+        batchSlice.map(async (batchId) => {
+            try {
+              return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
+            } catch (error) {
+              console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
+              throw error;
+            }
+          })
+        );
+
+      for (const result of batchResults) {
+        scanWorkflowOutput.fileCount += result.fileCount;
+        scanWorkflowOutput.dirCount += result.dirCount; 
+        nextBatchIds.push(...result.batchDirs);
+        if (result.excludedPaths?.length) scanWorkflowOutput.excludedPaths!.push(...result.excludedPaths);
+        if (result.skippedPaths?.length) scanWorkflowOutput.skippedPaths!.push(...result.skippedPaths);
+      }
+
+      if(iterations > ITERATIONS_LIMIT ){
+        const remainingBatchIds = currentBatchIds.slice(i + workerConcurrency);
+        const nextDirBatchIds = [...nextBatchIds, ...remainingBatchIds];
+        console.warn(`ChildScanWorkflow ${jobRunId} exceeded iteration budget (${iterations} > ${ITERATIONS_LIMIT}); continuing as new.`);                      
+        await wf.continueAsNew({ jobRunId, dirsToScan, dirBatchIds: nextDirBatchIds, batchSize, dirCount: scanWorkflowOutput.dirCount, fileCount: scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency });      
+      }
     }
-
-    if(iterations > ITERATIONS_LIMIT ){
-      console.warn(`ChildScanWorkflow ${jobRunId} has exceeded 1000 iterations, stopping to prevent infinite loop.`);                      
-      await wf.continueAsNew({ 
-        jobRunId, dirsToScan, dirBatchIds, batchSize, dirCount:scanWorkflowOutput.dirCount, fileCount:scanWorkflowOutput.fileCount, isMigration, actionState, isInitialScan: false, workerConcurrency 
-      });      
-    }
+    dirBatchIds = nextBatchIds;
   }
-  if(errors.length > 0) {
-    console.log(`[ERROR]ChildScanWorkflow ${jobRunId} encountered errors: ${errors.join(', ')}`);
-    scanWorkflowOutput.error = errors.length > 0 ? errors.join(', ') : undefined;
-    scanWorkflowOutput.status = JobRunStatus.Errored;
-  }else{
-     scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;    
-  }
-  
-  return  scanWorkflowOutput;
-}
+  scanWorkflowOutput.status = isStopRequested ? JobRunStatus.Stopped : JobRunStatus.Completed;
 
-export const executeBatchScan = async ({ batchSize, batches, isMigration, jobRunId}: ExecuteBatchScanInput): Promise<ExecuteBatchScansOutput> => {
-  const output: ExecuteBatchScansOutput = {
-    fileCount: 0,
-    dirCount: 0,
-    batchDirs: [],
-    error: undefined,
-    excludedPaths: [],
-    skippedPaths: [],
-  };
-
-
-  for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
-    if(isMigration){
-      await validateCommandStreamLength(jobRunId);
-    }
-  const batchSlice = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
-  const batchResults = await Promise.all(
-    batchSlice.map(async (batchId) => {
-        try {
-          return await scanDirectories({batchSize, isMigration, jobRunId, batchId: batchId});
-        } catch (error) {
-          console.log(`[ERROR] Error scanning directories for batch ${batchId}: ${error.message}`);
-          throw error;
-        }
-      })
-    );
-
-    for (const result of batchResults) {
-      output.fileCount += result.fileCount;
-      output.dirCount += result.dirCount; 
-      output.batchDirs.push(...result.batchDirs);
-      if (result.excludedPaths?.length) output.excludedPaths!.push(...result.excludedPaths);
-      if (result.skippedPaths?.length) output.skippedPaths!.push(...result.skippedPaths);
-    }
-  }
-
-  return output;
+  return scanWorkflowOutput;
 }

@@ -57,6 +57,7 @@ describe('CommonTaskService', () => {
                 if (key === 'worker.maxRetryCount') return 2;
                 if (key === 'temporal.address') return 'localhost:7233';
                 if (key === 'worker.maxCmdStreamLen') return 5000;
+                if (key === 'worker.maxDiscoveryFileStreamLen') return 200000;
                 return undefined;
             }),
         };
@@ -74,6 +75,30 @@ describe('CommonTaskService', () => {
         it('should set workerId and maxRetryCount', () => {
             expect(service.workerId).toBe('worker-1');
             expect(service.maxRetryCount).toBe(2);
+        });
+    });
+
+    describe('getWorkerScanConfig', () => {
+        it('should return defaults when maxScanConcurrency and scanBatchSize are unset', async () => {
+            const result = await service.getWorkerScanConfig();
+            expect(result).toEqual({ concurrency: 10, batchSize: 100 });
+        });
+
+        it('should return configured maxScanConcurrency and scanBatchSize', async () => {
+            configService.get = jest.fn((key) => {
+                if (key === 'worker.workerId') return 'worker-1';
+                if (key === 'worker.maxRetryCount') return 2;
+                if (key === 'temporal.address') return 'localhost:7233';
+                if (key === 'worker.maxCmdStreamLen') return 5000;
+                if (key === 'worker.maxDiscoveryFileStreamLen') return 200000;
+                if (key === 'worker.maxScanConcurrency') return 7;
+                if (key === 'worker.scanBatchSize') return 33;
+                return undefined;
+            });
+            service = new CommonTaskService(configService, mockLoggerFactory as LoggerFactory, redisService, authService);
+
+            const result = await service.getWorkerScanConfig();
+            expect(result).toEqual({ concurrency: 7, batchSize: 33 });
         });
     });
 
@@ -332,6 +357,32 @@ describe('CommonTaskService', () => {
             const result = await service.isCmdStreamLenValid('job-eq');
 
             expect(result).toBe(true);
+        });
+    });
+
+    describe('isFileStreamLenValid', () => {
+        it('should return true when file stream length is within max', async () => {
+            const jobContext = { getFileStreamLen: jest.fn().mockResolvedValue(1000) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            const result = await service.isFileStreamLenValid('job-f1');
+
+            expect(result).toBe(true);
+            expect(jobContext.getFileStreamLen).toHaveBeenCalled();
+        });
+
+        it('should return false when file stream length exceeds max', async () => {
+            const jobContext = { getFileStreamLen: jest.fn().mockResolvedValue(1000000) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            expect(await service.isFileStreamLenValid('job-f2')).toBe(false);
+        });
+
+        it('should return true when file stream length equals max', async () => {
+            const jobContext = { getFileStreamLen: jest.fn().mockResolvedValue(200000) };
+            redisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+            expect(await service.isFileStreamLenValid('job-f3')).toBe(true);
         });
     });
 });

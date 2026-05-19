@@ -82,6 +82,7 @@ export class WorkerOptionsService {
           updateCutOverStatus: this.commonActivityService.updateCutOverStatus.bind(this.commonActivityService),
           generateCOCReport: this.commonActivityService.generateCOCReport.bind(this.commonActivityService),
           addExcludedSkippedEntries: this.commonActivityService.addExcludedSkippedEntries.bind(this.commonActivityService),
+          getWorkerScanConfig: this.commonTaskService.getWorkerScanConfig.bind(this.commonTaskService),
         });
       case WorkFlowType.WORKER_SPECIFIC_WORKFLOW:
         return new WorkFlowOptions(id, workerId, connection, 'TaskQueue', config, {
@@ -123,6 +124,7 @@ export class WorkerOptionsService {
           scanDirectories: this.scanService.scanDirectories.bind(this.scanService),
           createInitialDirBatch: this.commonTaskService.createInitialDirBatch.bind(this.commonTaskService),
           isCmdStreamLenValid: this.commonTaskService.isCmdStreamLenValid.bind(this.commonTaskService),
+          isFileStreamLenValid: this.commonTaskService.isFileStreamLenValid.bind(this.commonTaskService),
           resolveUsernamesToSids: this.mappingResolverService.resolveUsernamesToSids.bind(this.mappingResolverService),
           setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService),
           // Retry workflow activities

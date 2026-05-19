@@ -17,9 +17,7 @@ jest.mock('../common/workflow-utils', () => ({
 }));
 
 jest.mock('../common/workflow-constants', () => ({
-    MAX_CONCURRENT_BATCHES: 20,
     ITERATIONS_LIMIT: 1000,
-    CMD_LENGTH_VALIDATION_ITERATIONS: 1,
     DEFAULT_BATCH_SIZE: 100,
 }));
 
@@ -65,7 +63,7 @@ describe('ChildRetryScanWorkflow', () => {
         // Default mocks
         mockUpdateJobStatusActivity.mockResolvedValue(undefined);
         mockResolveUsernamesToSidsActivity.mockResolvedValue(undefined);
-        mockValidateCommandStreamLength.mockResolvedValue(undefined);
+        mockValidateCommandStreamLength.mockResolvedValue(0);
         mockUpdateJobStatusIfNotRunning.mockResolvedValue(undefined);
         mockCondition.mockResolvedValue(true);
 
@@ -147,7 +145,7 @@ describe('ChildRetryScanWorkflow', () => {
                 actionState: JobRunStatus.Running,
             });
 
-            expect(mockValidateCommandStreamLength).toHaveBeenCalledWith(jobRunId);
+            expect(mockValidateCommandStreamLength).toHaveBeenCalledWith(jobRunId, expect.any(Function));
         });
     });
 
@@ -377,6 +375,7 @@ describe('executeRetryBatches', () => {
             opsBatchIds: ['ops-001', 'ops-002'],
             batchDirIds: [],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
@@ -400,6 +399,7 @@ describe('executeRetryBatches', () => {
             opsBatchIds: [],
             batchDirIds: ['dir-001'],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
@@ -417,6 +417,7 @@ describe('executeRetryBatches', () => {
             opsBatchIds: ['ops-001'],
             batchDirIds: ['dir-001'],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
@@ -433,14 +434,14 @@ describe('executeRetryBatches', () => {
             opsBatchIds: ['ops-001', 'ops-002'],
             batchDirIds: [],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
         expect(result.batchDirs).toEqual(['new-dir-001', 'new-dir-002', 'new-dir-003']);
     });
 
-    it('should process batches in chunks of MAX_CONCURRENT_BATCHES', async () => {
-        // Create 25 batches (should be processed in 2 chunks: 20 + 5)
+    it('should process batches in chunks of workerConcurrency', async () => {
         const opsBatchIds = Array.from({ length: 25 }, (_, i) => `ops-${i}`);
 
         await executeRetryBatches({
@@ -448,6 +449,7 @@ describe('executeRetryBatches', () => {
             opsBatchIds,
             batchDirIds: [],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
@@ -460,6 +462,7 @@ describe('executeRetryBatches', () => {
             opsBatchIds: [],
             batchDirIds: [],
             batchSize: 100,
+            workerConcurrency: 20,
             settings: mockSettings,
         });
 
@@ -476,6 +479,7 @@ describe('executeRetryBatches', () => {
                 opsBatchIds: ['ops-001'],
                 batchDirIds: [],
                 batchSize: 100,
+                workerConcurrency: 20,
                 settings: mockSettings,
             })
         ).rejects.toThrow('Batch failed');

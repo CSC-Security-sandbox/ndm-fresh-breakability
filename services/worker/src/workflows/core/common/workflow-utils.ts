@@ -4,7 +4,6 @@ import { CommonActivityService } from 'src/activities/common/common.service';
 import { JobRunStatus } from 'src/activities/common/enums';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 
-
 const {
   updateStatus: updateJobStatusActivity,
   
@@ -17,12 +16,18 @@ const {
 const {
     isWorkflowRunningActivity: isWorkflowRunningActivity,
     isCmdStreamLenValid: isCmdStreamLenValidActivity,
+    isFileStreamLenValid: isFileStreamLenValidActivity,
 } = wf.proxyActivities<CommonTaskService>({
   startToCloseTimeout: '5m',
   heartbeatTimeout: '1m',
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
+/** Abort stream length polling after this many consecutive activity failures (avoids infinite retry). */
+const MAX_CONSECUTIVE_STREAM_VALIDATION_ERRORS = 5;
+
+/** Latest job action from scan signal; when not {@link JobRunStatus.Running}, polling exits before the next activity or after a full inter-poll sleep (never mid-sleep). */
+export type GetScanActionStateFn = () => JobRunStatus;
 
 export const updateJobStatusIfNotRunning = async (state: JobRunStatus, jobRunId: string) => {
   if(state !== JobRunStatus.Running) {
@@ -73,23 +78,79 @@ export const getUnifiedJobStatus = (scanStatus: JobRunStatus, syncStatus: JobRun
  * Validates that the command stream length is within acceptable limits.
  * Waits if the stream is too long to prevent memory overflow.
  * Shared by ChildScanWorkflow and ChildRetryScanWorkflow.
+ *
+ * @returns Number of workflow history contributors: one per validation activity
+ * plus one per sleep while waiting.
  */
-export async function validateCommandStreamLength(jobRunId: string): Promise<void> {
-  let checkCount = 0;
-  const maxChecks = 100;
-
-  while (checkCount < maxChecks) {
-    checkCount++;
+export async function validateCommandStreamLength(
+  jobRunId: string,
+  getActionState: GetScanActionStateFn
+): Promise<number> {
+  let steps = 0;
+  let consecutiveErrors = 0;
+  while (true) {
     try {
-      const isCmdStreamLenValid = await isCmdStreamLenValidActivity(jobRunId);
-      if (isCmdStreamLenValid) break;
+      if (getActionState() !== JobRunStatus.Running) {
+        return steps;
+      }
+      steps += 1;
+      if (await isCmdStreamLenValidActivity(jobRunId)) {
+        return steps;
+      }
       console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for command stream to be valid.`);
       await wf.sleep('30s');
-    } catch (error) {
-      console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${error.message}`);
+      steps += 1;
+      consecutiveErrors = 0;
+    } catch (error: unknown ) {
+      if (wf.isCancellation(error)) {
+        throw error;
+      }
+      consecutiveErrors += 1;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[ERROR] Error validating command stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+      if (consecutiveErrors >= MAX_CONSECUTIVE_STREAM_VALIDATION_ERRORS) {
+        throw error;
+      }
     }
   }
-  if (checkCount >= maxChecks) {
-    console.warn(`[WARNING] For jobRunId ${jobRunId}, Maximum checks reached. Exiting validation loop.`);
+}
+
+/**
+ * Validates Redis file stream length for discovery scans.
+ * Waits until consumers reduce XLEN below configured maxDiscoveryFileStreamLen.
+ *
+ * @returns Number of workflow history contributors: one per validation activity
+ * plus one per sleep while waiting.
+ */
+export async function validateFileStreamLength(
+  jobRunId: string,
+  getActionState: GetScanActionStateFn
+): Promise<number> {
+  let steps = 0;
+  let consecutiveErrors = 0;
+  while (true) {
+    try {
+      if (getActionState() !== JobRunStatus.Running) {
+        return steps;
+      }
+      steps += 1;
+      if (await isFileStreamLenValidActivity(jobRunId)) {
+        return steps;
+      }
+      console.warn(`[WARNING] For jobRunId ${jobRunId}, Waiting for file stream length to be valid.`);
+      await wf.sleep('30s');
+      steps += 1;
+      consecutiveErrors = 0;
+    } catch (error: unknown) {
+      if (wf.isCancellation(error)) {
+        throw error;
+      }
+      consecutiveErrors += 1;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[ERROR] Error validating file stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+      if (consecutiveErrors >= MAX_CONSECUTIVE_STREAM_VALIDATION_ERRORS) {
+        throw error;
+      }
+    }
   }
 }

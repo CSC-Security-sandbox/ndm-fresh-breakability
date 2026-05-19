@@ -65,11 +65,3 @@ export interface CreateBatchInput {
   jobRunId: string;
   isMigration: boolean;
 }
-
-export interface ExecuteBatchScanInput  {
-  batches: string[];
-  jobRunId: string;
-  isMigration: boolean;
-  batchSize: number;  
-}
-

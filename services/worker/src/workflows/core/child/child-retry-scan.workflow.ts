@@ -3,7 +3,7 @@ import { MappingResolverService } from 'src/activities/core/initializer/mapping-
 import { CommonActivityService } from "src/activities/common/common.service";
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning, validateCommandStreamLength } from '../common/workflow-utils';
-import { MAX_CONCURRENT_BATCHES, ITERATIONS_LIMIT, CMD_LENGTH_VALIDATION_ITERATIONS, DEFAULT_BATCH_SIZE } from '../common/workflow-constants';
+import { ITERATIONS_LIMIT, DEFAULT_BATCH_SIZE } from '../common/workflow-constants';
 import {
   ChildRetryScanWorkflowInput,
   ChildRetryScanWorkflowOutput,
@@ -80,7 +80,7 @@ const retryScanActionSignal = wf.defineSignal<[JobRunStatus]>('retryScanActionSi
  * This workflow follows a similar pattern to ChildScanWorkflow with parallel processing:
  * 1. Fetches failed operations in batches (4000 ops) from the jobs-service API
  * 2. Groups operations by parent directory and stores in Redis as opsBatches
- * 3. Processes opsBatches in parallel (20 concurrent activities)
+ * 3. Processes opsBatches in parallel (workerConcurrency from getWorkerScanConfig, same as migration scan)
  * 4. For each opsBatch, generates commands for specific failed files only (no full rescan)
  * 5. Discovered subdirectories are batched and processed in parallel
  * 6. Uses cursor-based pagination with Redis checkpoint for resumability
@@ -93,6 +93,7 @@ export const ChildRetryScanWorkflow = async ({
                                                opsBatchIds = [],
                                                batchDirs = [],
                                                batchSize = DEFAULT_BATCH_SIZE,
+                                               workerConcurrency = 10,
                                                settings: inputSettings
                                              }: ChildRetryScanWorkflowInput): Promise<ChildRetryScanWorkflowOutput> => {
 
@@ -174,21 +175,29 @@ export const ChildRetryScanWorkflow = async ({
     batchDirs = [];
 
     if (currentOpsBatchIds.length > 0 || currentBatchDirs.length > 0) {
-      // Validate command stream length before processing
-      await validateCommandStreamLength(jobRunId);
+      // Validate command stream length before processing (steps counted toward continueAsNew)
+      let streamValidationSteps = 0;
+      try {
+        streamValidationSteps = await validateCommandStreamLength(jobRunId, () => actionState);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.log(`[ERROR] Error validating stream length for jobRunId ${jobRunId}: ${errorMessage}`);
+        throw error;
+      }
 
       const batchExecResults = await executeRetryBatches({
         jobRunId,
         opsBatchIds: currentOpsBatchIds,
         batchDirIds: currentBatchDirs,
         batchSize,
-        settings: settings
+        workerConcurrency,
+        settings,
       });
 
       // Collect newly discovered subdirectory batches
       batchDirs.push(...batchExecResults.batchDirs);
       const totalBatchesProcessed = currentOpsBatchIds.length + currentBatchDirs.length;
-      iterations += Math.ceil(totalBatchesProcessed / MAX_CONCURRENT_BATCHES) + CMD_LENGTH_VALIDATION_ITERATIONS;
+      iterations += Math.ceil(totalBatchesProcessed / workerConcurrency) + streamValidationSteps;
 
       if (batchExecResults.error) {
         errors.push(batchExecResults.error);
@@ -208,6 +217,7 @@ export const ChildRetryScanWorkflow = async ({
         opsBatchIds,
         batchDirs,
         batchSize,
+        workerConcurrency,
         settings
       });
     }
@@ -233,6 +243,7 @@ interface ExecuteRetryBatchesInput {
   opsBatchIds: string[];    // Batch IDs for grouped operations (process specific files)
   batchDirIds: string[];    // Batch IDs for directory scans (full readdir)
   batchSize: number;
+  workerConcurrency: number;
   settings: RetryScanSettings; // Cached settings to pass to activities
 }
 
@@ -247,13 +258,14 @@ interface ExecuteRetryBatchesOutput {
 /**
  * Executes retry batches in parallel, similar to executeBatchScan in scan workflow.
  * Processes both opsBatches (specific file processing) and batchDirs (full directory scan)
- * in parallel with MAX_CONCURRENT_BATCHES limit using the unified retryScan activity.
+ * in parallel with workerConcurrency limit (same as migration ChildScanWorkflow).
  */
 export const executeRetryBatches = async ({
                                             jobRunId,
                                             opsBatchIds,
                                             batchDirIds,
                                             batchSize,
+                                            workerConcurrency,
                                             settings
                                           }: ExecuteRetryBatchesInput): Promise<ExecuteRetryBatchesOutput> => {
   const output: ExecuteRetryBatchesOutput = {
@@ -267,9 +279,8 @@ export const executeRetryBatches = async ({
     ...batchDirIds.map(id => ({ id, type: 'dir' as const }))
   ];
 
-  // Process in chunks of MAX_CONCURRENT_BATCHES
-  for (let i = 0; i < allBatches.length; i += MAX_CONCURRENT_BATCHES) {
-    const batchSlice = allBatches.slice(i, i + MAX_CONCURRENT_BATCHES);
+  for (let i = 0; i < allBatches.length; i += workerConcurrency) {
+    const batchSlice = allBatches.slice(i, i + workerConcurrency);
 
     const batchResults = await Promise.all(
       batchSlice.map(async (batch) => {

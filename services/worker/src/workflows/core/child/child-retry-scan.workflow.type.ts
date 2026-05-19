@@ -32,7 +32,9 @@ export interface ChildRetryScanWorkflowInput {
   actionState: JobRunStatus;
   opsBatchIds?: string[];     // Batch IDs for grouped operations (from fetchFailedOperations)
   batchDirs?: string[];       // Batch IDs for directory scans (subdirectories discovered)
-  batchSize?: number;         // Number of directories per batch (default 100)
+  batchSize?: number;         // Number of directories per batch (from getWorkerScanConfig; default 100)
+  /** Parallel retry batch activities; from getWorkerScanConfig (same as migration ChildScanWorkflow). */
+  workerConcurrency?: number;
   settings?: RetryScanSettings; // Cached settings (populated on first fetch, passed on continueAsNew)
 }
 

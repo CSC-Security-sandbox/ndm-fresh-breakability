@@ -24,6 +24,7 @@ jest.mock('@temporalio/workflow', () => ({
     proxyActivities: () => ({
         updateLastEntry: jest.fn().mockResolvedValue(undefined),
         updateWorkerResponse: jest.fn().mockResolvedValue(undefined),
+        getWorkerScanConfig: jest.fn().mockResolvedValue({ concurrency: 20, batchSize: 100 }),
     }),
     isCancellation: jest.fn((error) => error?.isCancellation === true),
     ChildWorkflowCancellationType: { WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED' },
@@ -78,7 +79,12 @@ describe('executeRetryMigrationChildWorkflows', () => {
             await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
 
             expect(mockStartChild).toHaveBeenCalledWith('ChildRetryScanWorkflow', {
-                args: [{ jobRunId, originalJobRunId }],
+                args: [{
+                    jobRunId,
+                    originalJobRunId,
+                    workerConcurrency: 20,
+                    batchSize: 100,
+                }],
                 workflowId: `RetryScanWorkflow-${jobRunId}`,
                 taskQueue: `${jobRunId}-TaskQueue`,
                 cancellationType: 'WAIT_CANCELLATION_COMPLETED',

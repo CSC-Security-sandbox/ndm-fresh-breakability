@@ -7,22 +7,10 @@
  */
 
 /**
- * Maximum number of batches to process in parallel.
- * Controls how many batch activities are executed concurrently.
- */
-export const MAX_CONCURRENT_BATCHES = 20;
-
-/**
  * Maximum number of iterations before triggering continueAsNew.
  * Prevents workflow history from growing too large.
  */
 export const ITERATIONS_LIMIT = 1000;
-
-/**
- * Number of iterations allocated for command length validation.
- * Used when calculating total iterations for continueAsNew threshold.
- */
-export const CMD_LENGTH_VALIDATION_ITERATIONS = 10;
 
 /**
  * Default batch size for processing operations/directories.
