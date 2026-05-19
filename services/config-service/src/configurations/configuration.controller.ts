@@ -57,7 +57,7 @@ export class ConfigurationController{
 
     @ApiOperation({ summary: 'Get Cutover details by configId' })
     @ApiResponse({ status: 200, description: 'Cutover details Found' })
-    @ApiNotFoundResponse({ status: 404, description: 'Cutover details Not Found' })
+    @ApiNotFoundResponse({ description: 'Cutover details Not Found' })
     @ApiQuery({ name: 'fileServerId', type: 'string', required: false, description: 'Optional file server ID to filter by zone (for Dell Isilon)' })
     @ApiBearerAuth()
     @Auth(Permission.ViewConfig)

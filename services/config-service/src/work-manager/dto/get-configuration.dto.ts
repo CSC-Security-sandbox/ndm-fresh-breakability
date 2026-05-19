@@ -5,7 +5,8 @@ export class GetConfigurationRequestDto {
   @ApiProperty({
     description: 'Environment variables from the worker',
     required: false,
-    type: 'object',
+    type: Object,
+    additionalProperties: true,
   })
   @IsObject()
   envVariables: Record<string, any> | null;
