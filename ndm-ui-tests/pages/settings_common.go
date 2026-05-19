@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"ndm-ui-tests/config"
@@ -122,18 +123,19 @@ func openSettingsDrawer(page playwright.Page) error {
 	}
 
 	// Final desperate try: take a screenshot for debugging.
+	_ = os.MkdirAll(config.ScreenshotDir, 0o755)
 	_, _ = page.Screenshot(playwright.PageScreenshotOptions{
-		Path:     playwright.String("test-results/screenshots/no-settings-trigger.png"),
+		Path:     playwright.String(config.ScreenshotDir + "/no-settings-trigger.png"),
 		FullPage: playwright.Bool(true),
 	})
 
 	return fmt.Errorf(
 		"could not find Settings trigger after clicking %d visible icon "+
 			"buttons (page URL: %s). Screenshot saved to "+
-			"test-results/screenshots/no-settings-trigger.png. "+
+			"%s/no-settings-trigger.png. "+
 			`Add data-testid="settings-button" to the gear icon in `+
 			"services/datamigrator-ui/src/components/top-nav-bar/setting/Settings.tsx",
-		candidates, page.URL())
+		candidates, page.URL(), config.ScreenshotDir)
 }
 
 // drawerSignals is a list of selectors any of which becoming visible

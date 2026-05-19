@@ -40,6 +40,7 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
           onClick={handleBack}
           disabled={isFormSubmitting || currentStepIndex === 0}
           style={{ width: 152 }}
+          data-testid="btn-bulk-migrate-back"
         >
           Back
         </Button>
@@ -48,6 +49,7 @@ const BulkMigrateFooter = ({ content }: { content?: ReactNode }) => {
           onClick={handleCancel}
           disabled={isFormSubmitting}
           style={{ width: 152 }}
+          data-testid="btn-bulk-migrate-cancel"
         >
           Cancel
         </Button>

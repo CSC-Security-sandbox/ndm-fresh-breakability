@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NDM UI Test Plan
+#
+# Controls which UI tests run on the pipeline.
+#
+# Structure:
+#   suites.<name>.enabled  — false skips the whole suite (no browser launched)
+#   suites.<name>.parallel — max concurrent browser instances for this suite
+#   suites.<name>.timeout  — go test -timeout value (e.g. 30m, 60m)
+#   suites.<name>.tests.<TestFunctionName>: true|false  # description
+#
+# Each test line:
+#   TestFoo: true   # what this test verifies
+#   TestFoo: false  # why it is disabled / what env vars it needs
+#
+# Notes:
+#   - Suite-level enabled:false takes priority over individual test flags.
+#   - parallel defaults to 2 when not specified.
+#   - timeout defaults to 30m when not specified.
+# ─────────────────────────────────────────────────────────────────────────────
+
+suites:
+
+  # ── Account / User Management ──────────────────────────────────────────────
+  # Creates users, assigns project roles, completes first-login password change,
+  # and verifies RBAC permissions for Project Viewer and Project Admin — all in
+  # one end-to-end flow.
+  user_management:
+    enabled: true
+    parallel: 1          # stateful test; run serially
+    timeout: 20m
+    tests:
+      TestUserManagement_CreateThreeRoleUsers: true   # Create users, assign roles, first login, verify RBAC for Viewer + Admin
+
+  # ── Discovery ──────────────────────────────────────────────────────────────
+  discovery:
+    enabled: true
+    parallel: 4          # each test gets its own browser + ANF clone
+    timeout: 60m
+    tests:
+      TestDiscovery_BasicNFS:               true    # NFS discovery on a cloned volume; validates report counts against live data
+      TestDiscovery_BasicSMB:               true    # SMB discovery with share selection and report generation
+      TestDiscovery_ExcludeFilePatterns:    false    # Discovery with custom exclude patterns (*.tmp *.log *.bak)
+      TestDiscovery_Bulk:                   false    # Bulk discovery — all export paths selected in a single job
+      TestDiscovery_Destination:            false   # Scan destination server for baseline — requires NDM_DESTINATION_FILE_SERVER_ID
+      TestDiscovery_Isilon:                 false   # Isilon/PowerScale auto-lists paths, excludes .snapshot — requires NDM_ISILON_HOST
+      TestDiscovery_IndividualReportCSV:    false   # Download per-run discovery CSV from Job Run List — requires NDM_FILE_SERVER_ID
+      TestDiscovery_ConsolidatedCSV:        false   # Generate and download consolidated discovery CSV — requires NDM_FILE_SERVER_ID
+      TestDiscovery_ValidateReportAgainstVolume: false   # Validate CSV counts against live NFS volume — requires NDM_FILE_SERVER_ID

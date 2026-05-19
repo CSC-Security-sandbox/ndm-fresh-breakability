@@ -1,10 +1,14 @@
 package pages
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,6 +78,66 @@ func (p *DiscoveryPage) gotoWithRetry(url string, retries int) {
 		}
 		p.sleep(2000)
 	}
+}
+
+// WaitForExportPathInOverview navigates to the file server overview page and
+// polls until the specified export path appears in the export-paths table.
+//
+// On each iteration it also hits the NDM refresh API so NDM re-queries the
+// NFS host — this bridges the gap between "API says volume exists" (fast) and
+// "Bulk Discover form shows it" (needs NFS export to actually propagate).
+//
+// Between attempts it reloads the overview page so the table is re-rendered.
+// Timeout: up to 20 × 15 s = 5 minutes.
+func (p *DiscoveryPage) WaitForExportPathInOverview(fsID, exportPath, bearerToken, baseURL string) error {
+	const maxAttempts = 20
+	variants := nameVariants(exportPath)
+
+	refreshURL := fmt.Sprintf("%s/api/v1/servers/refresh/%s", baseURL, fsID)
+	overviewURL := fmt.Sprintf("%s/file-server/%s", config.BaseURL, fsID)
+
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Trigger NDM to re-query the NFS host.
+		if req, err := http.NewRequest("GET", refreshURL, nil); err == nil {
+			req.Header.Set("Authorization", "Bearer "+bearerToken)
+			resp, _ := httpClient.Do(req)
+			if resp != nil {
+				resp.Body.Close()
+			}
+		}
+
+		// Navigate to the overview page so the table is freshly rendered.
+		_, _ = p.page.Goto(overviewURL, playwright.PageGotoOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+			Timeout:   playwright.Float(30000),
+		})
+		p.sleep(3000) // let the React table render
+
+		// Check whether any variant of the path is visible in the table.
+		for _, v := range variants {
+			loc := p.page.GetByText(v, playwright.PageGetByTextOptions{
+				Exact: playwright.Bool(false),
+			}).First()
+			if p.isVisible(loc) {
+				log.Printf("[WaitForExportPathInOverview] found %q on attempt %d", exportPath, attempt)
+				return nil
+			}
+		}
+
+		log.Printf("[WaitForExportPathInOverview] %q not in overview table (attempt %d/%d) — waiting 15s…",
+			exportPath, attempt, maxAttempts)
+		p.sleep(15000)
+	}
+
+	return fmt.Errorf("export path %q not visible in file server overview after %d attempts",
+		exportPath, maxAttempts)
 }
 
 // NavigateToFileServerOverview opens the file server overview page.
@@ -305,29 +369,138 @@ func (p *DiscoveryPage) SelectAllExportPaths() error {
 	return fmt.Errorf("no checkboxes found in export paths table")
 }
 
-// SelectExportPathByName uses JS DOM traversal to click the checkbox near
-// the given path text.
+// nameVariants returns the original name plus variants with underscores and
+// hyphens swapped. ONTAP volumes use underscores (master_nfs_vol_dnd_src_…)
+// but ANF junction paths use hyphens (/master-nfs-vol-dnd-src-…).
+func nameVariants(name string) []string {
+	seen := map[string]bool{name: true}
+	variants := []string{name}
+
+	withHyphens := strings.ReplaceAll(name, "_", "-")
+	if !seen[withHyphens] {
+		variants = append(variants, withHyphens)
+		seen[withHyphens] = true
+	}
+	withUnderscores := strings.ReplaceAll(name, "-", "_")
+	if !seen[withUnderscores] {
+		variants = append(variants, withUnderscores)
+		seen[withUnderscores] = true
+	}
+	return variants
+}
+
+// SelectExportPathByName locates an export path in the (potentially paginated)
+// table and clicks its checkbox. It handles underscore/hyphen mismatches
+// between env var names and UI-displayed junction paths automatically.
 func (p *DiscoveryPage) SelectExportPathByName(pathName string) error {
 	p.sleep(500)
 
-	pathText := p.page.GetByText(pathName, playwright.PageGetByTextOptions{
-		Exact: playwright.Bool(false),
-	}).First()
+	variants := nameVariants(pathName)
 
-	if !p.isVisible(pathText) {
-		return fmt.Errorf("export path %q not visible in table", pathName)
+	// Helper: try each name variant on the current page.
+	tryClick := func() bool {
+		for _, v := range variants {
+			pathText := p.page.GetByText(v, playwright.PageGetByTextOptions{
+				Exact: playwright.Bool(false),
+			}).First()
+			if !p.isVisible(pathText) {
+				continue
+			}
+			result, err := pathText.Evaluate(checkboxClickJS, nil)
+			if err != nil {
+				continue
+			}
+			if clicked, ok := result.(bool); ok && clicked {
+				if v != pathName {
+					log.Printf("[SelectExportPathByName] matched variant %q (original: %q)", v, pathName)
+				}
+				return true
+			}
+		}
+		return false
 	}
 
-	result, err := pathText.Evaluate(checkboxClickJS, nil)
-	if err != nil {
-		return fmt.Errorf("checkbox JS eval failed for %q: %w", pathName, err)
-	}
-	if clicked, ok := result.(bool); !ok || !clicked {
-		return fmt.Errorf("could not find checkbox near export path %q", pathName)
+	// 1. Check current page first.
+	if tryClick() {
+		log.Printf("[SelectExportPathByName] found %q on current page", pathName)
+		p.sleep(500)
+		return nil
 	}
 
-	p.sleep(500)
-	return nil
+	// 2. Try search/filter box (File Server Overview has one, Bulk Discover may not).
+	searchSelectors := []string{
+		`input[placeholder*="Search" i]`,
+		`input[placeholder*="Filter" i]`,
+		`input[type="search"]`,
+		`[data-testid="search-input"]`,
+	}
+	for _, sel := range searchSelectors {
+		searchBox := p.page.Locator(sel).First()
+		if p.isVisible(searchBox) {
+			for _, v := range variants {
+				_ = searchBox.Fill(v)
+				log.Printf("[SelectExportPathByName] filtered table with %q", v)
+				p.sleep(2000)
+				if tryClick() {
+					p.sleep(500)
+					return nil
+				}
+			}
+			_ = searchBox.Fill("")
+			p.sleep(1000)
+			break
+		}
+	}
+
+	// 3. Try increasing rows-per-page to show all rows at once.
+	rowsPerPage := p.page.Locator(`[class*="rowsPerPage"] select, [aria-label*="rows per page" i]`).First()
+	if p.isVisible(rowsPerPage) {
+		_, _ = rowsPerPage.SelectOption(playwright.SelectOptionValues{Values: &[]string{"100", "50", "All"}})
+		p.sleep(2000)
+		if tryClick() {
+			log.Printf("[SelectExportPathByName] found %q after increasing rows per page", pathName)
+			p.sleep(500)
+			return nil
+		}
+	}
+
+	// 4. Paginate: click "next page" buttons until the path appears.
+	nextBtnSelectors := []string{
+		`button[aria-label*="next" i]`,
+		`button[aria-label*="Next" i]`,
+		`[data-testid="next-page"]`,
+		`button:has-text("›"):not(:has-text("»"))`,
+		`button:has-text(">"):not(:has-text(">>"))`,
+	}
+	for pg := 0; pg < 20; pg++ {
+		clicked := false
+		for _, sel := range nextBtnSelectors {
+			btn := p.page.Locator(sel).First()
+			if !p.isVisible(btn) {
+				continue
+			}
+			disabled, _ := btn.IsDisabled()
+			if disabled {
+				continue
+			}
+			if err := btn.Click(); err == nil {
+				clicked = true
+				log.Printf("[SelectExportPathByName] clicked next page (page %d)", pg+2)
+				p.sleep(1500)
+				break
+			}
+		}
+		if !clicked {
+			break
+		}
+		if tryClick() {
+			log.Printf("[SelectExportPathByName] found %q on page %d", pathName, pg+2)
+			p.sleep(500)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("export path %q not visible in table (checked all pages)", pathName)
 }
 
 // SelectFirstNRows selects the first N export path rows.
@@ -682,24 +855,81 @@ func (p *DiscoveryPage) DownloadDiscoveryReportFromJobRunList(downloadDir string
 
 	targetRow := rows[rowIndex]
 
-	overflowBtn := targetRow.Locator(`button`).Last()
-	if err := overflowBtn.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
-		return "", fmt.Errorf("click overflow menu on row %d: %w", rowIndex, err)
+	// Open the overflow menu and attempt the download. Retry the whole
+	// open+click sequence up to 3 times because the menu can close itself
+	// between our isVisible() check and the actual click.
+	overflowCandidates := []playwright.Locator{
+		targetRow.Locator(`button[aria-label*="overflow" i], button[aria-label*="more action" i], button[aria-label*="options" i]`).First(),
+		targetRow.Locator(`[data-testid*="overflow"], [data-testid*="more"]`).First(),
+		targetRow.Locator(`button`).Last(),
 	}
-	p.sleep(1000)
 
 	csvOptionCandidates := []playwright.Locator{
 		p.page.GetByText("Download Discovery Report as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
-		p.page.Locator(`[role="menuitem"]:has-text("CSV")`).First(),
+		p.page.GetByText("Download Report as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
 		p.page.GetByText("Download as CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.GetByText("Download CSV", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.Locator(`[role="menuitem"]:has-text("CSV")`).First(),
+		p.page.Locator(`li:has-text("CSV")`).First(),
+		p.page.Locator(`[role="menuitem"]:has-text("Download")`).First(),
+		p.page.Locator(`li:has-text("Download")`).First(),
+		p.page.GetByText("Download", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
 	}
 
 	var downloadStarted bool
 	var savePath string
-	for _, loc := range csvOptionCandidates {
-		if p.isVisible(loc) {
+
+	for attempt := 1; attempt <= 3 && !downloadStarted; attempt++ {
+		// (Re-)open the overflow menu on each attempt.
+		var overflowErr error
+		for _, btn := range overflowCandidates {
+			if p.isVisible(btn) {
+				if err := btn.Hover(); err == nil {
+					overflowErr = btn.Click()
+				} else {
+					overflowErr = btn.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)})
+				}
+				if overflowErr == nil {
+					break
+				}
+			}
+		}
+		if overflowErr != nil {
+			log.Printf("[DownloadDiscoveryReportFromJobRunList] attempt %d: overflow click failed: %v", attempt, overflowErr)
+			p.sleep(1000)
+			continue
+		}
+
+		// Wait for menu items to render.
+		_ = p.page.Locator(`[role="menuitem"], [role="menu"] li, ul[class*="menu"] li`).
+			First().WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateVisible,
+			Timeout: playwright.Float(5000),
+		})
+		p.sleep(500)
+
+		// Log visible menu items for debugging.
+		if items, err := p.page.Locator(`[role="menuitem"], [role="menu"] li`).All(); err == nil {
+			for i, item := range items {
+				if txt, err := item.TextContent(); err == nil {
+					log.Printf("[DownloadDiscoveryReportFromJobRunList] attempt %d menu item %d: %q", attempt, i, strings.TrimSpace(txt))
+				}
+			}
+		}
+
+		for _, loc := range csvOptionCandidates {
+			if !p.isVisible(loc) {
+				continue
+			}
+			txt, _ := loc.TextContent()
+			log.Printf("[DownloadDiscoveryReportFromJobRunList] attempt %d: trying %q", attempt, strings.TrimSpace(txt))
 			download, dlErr := p.page.ExpectDownload(func() error {
-				return loc.Click()
+				// 10s click timeout — fail fast if menu closed, so we retry.
+				return loc.Click(playwright.LocatorClickOptions{
+					Timeout: playwright.Float(10000),
+				})
+			}, playwright.PageExpectDownloadOptions{
+				Timeout: playwright.Float(60000), // 60s for the download to start
 			})
 			if dlErr == nil {
 				suggestedName := download.SuggestedFilename()
@@ -711,11 +941,18 @@ func (p *DiscoveryPage) DownloadDiscoveryReportFromJobRunList(downloadDir string
 				log.Printf("[DownloadDiscoveryReportFromJobRunList] CSV saved to %s", savePath)
 				break
 			}
+			log.Printf("[DownloadDiscoveryReportFromJobRunList] attempt %d: ExpectDownload failed for %q: %v",
+				attempt, strings.TrimSpace(txt), dlErr)
+		}
+
+		if !downloadStarted && attempt < 3 {
+			log.Printf("[DownloadDiscoveryReportFromJobRunList] attempt %d: no download started — retrying in 2s…", attempt)
+			p.sleep(2000)
 		}
 	}
 
 	if !downloadStarted {
-		return "", fmt.Errorf("'Download Discovery Report as CSV' option not found in overflow menu")
+		return "", fmt.Errorf("'Download Discovery Report as CSV' option not found in overflow menu after 3 attempts")
 	}
 
 	return savePath, nil
@@ -901,7 +1138,9 @@ func (p *DiscoveryPage) expectVisible(loc playwright.Locator, timeoutMs float64)
 }
 
 func (p *DiscoveryPage) takeScreenshot(name string) {
-	path := fmt.Sprintf("test-results/screenshots/%s.png", name)
+	dir := config.ScreenshotDir
+	_ = os.MkdirAll(dir, 0o755)
+	path := fmt.Sprintf("%s/%s.png", dir, name)
 	_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{
 		Path:     playwright.String(path),
 		FullPage: playwright.Bool(true),
@@ -1048,7 +1287,8 @@ func (p *DiscoveryPage) FetchAllJobIDs(jobType string) map[string]bool {
 	return set
 }
 
-// DiffJobIDs returns IDs present in after but not in before.
+// DiffJobIDs returns IDs present in after but not in before, sorted for
+// deterministic ordering (Go map iteration is randomized).
 func DiffJobIDs(before, after map[string]bool) []string {
 	var newIDs []string
 	for id := range after {
@@ -1056,6 +1296,7 @@ func DiffJobIDs(before, after map[string]bool) []string {
 			newIDs = append(newIDs, id)
 		}
 	}
+	sort.Strings(newIDs)
 	return newIDs
 }
 

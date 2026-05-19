@@ -81,6 +81,7 @@ const BulkMigrateProceedButton = () => {
       style={{ width: 152 }}
       disabled={Boolean(isSubmitDisabled())}
       isSubmitting={isFormSubmitting}
+      data-testid="btn-bulk-migrate-proceed"
     >
       {currentStepIndex === BULK_MIGRATE_STEPS_IDS.review
         ? "Submit"

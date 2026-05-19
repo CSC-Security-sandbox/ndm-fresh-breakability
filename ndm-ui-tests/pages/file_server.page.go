@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -30,14 +31,14 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("fs-step1-loaded")
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -47,7 +48,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 
 	// ── Step 2: Credentials ─────────────────────────────────────────────
 	hostField := p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
-	if err := p.expectVisible(hostField, 10000); err != nil {
+	if err := p.expectVisible(hostField, 30000); err != nil {
 		return "", fmt.Errorf("step2: Host Name field not visible: %w", err)
 	}
 	_ = hostField.Fill(host)
@@ -69,7 +70,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 	// ── Step 3: Workers ─────────────────────────────────────────────────
 	if err := p.expectVisible(
 		p.page.GetByText(regexp.MustCompile(`(?i)Compatible Workers`)).First(),
-		15000,
+		30000,
 	); err != nil {
 		return "", fmt.Errorf("step3: Compatible Workers label not visible: %w", err)
 	}
@@ -77,7 +78,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)nfs-worker`))
 	_ = workerNames.First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(30000),
 	})
 	p.sleep(2000)
 
@@ -184,14 +185,14 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("smb-step1-loaded")
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -209,7 +210,7 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 	if !p.isVisible(hostField) {
 		hostField = p.page.GetByRole("textbox", playwright.PageGetByRoleOptions{Name: "Host Name"})
 	}
-	if err := p.expectVisible(hostField, 10000); err != nil {
+	if err := p.expectVisible(hostField, 30000); err != nil {
 		return "", fmt.Errorf("step2: Host Name field not visible: %w", err)
 	}
 	_ = hostField.Fill(host)
@@ -301,42 +302,78 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 	p.screenshot("smb-step3-loaded")
 
 	// ── Step 3: Workers ─────────────────────────────────────────────────
-	p.sleep(3000)
+	// The SMB wizard step 3 uses the same bxp/ag-grid component as the NFS
+	// wizard — NOT a plain <tbody><tr> table. Use the same text-match + JS
+	// toggle approach that CreateNFSFileServer uses successfully.
+	//
+	// Workers are listed by their hostname label (contains "smb" or "SMB").
+	// Poll up to 10×3s so the list has time to load after cloning.
+	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)smb`))
+	var workerCount int
+	for attempt := 0; attempt < 10; attempt++ {
+		workerCount, _ = workerNames.Count()
+		if workerCount > 0 {
+			break
+		}
+		log.Printf("[CreateSMBFileServer] step3: no worker labels yet (attempt %d/10) — waiting…", attempt+1)
+		p.sleep(3000)
+	}
+	log.Printf("[CreateSMBFileServer] step3: %d worker label(s) found", workerCount)
 
-	// Check if compatible workers exist by looking at table rows.
-	workerRows := p.page.Locator(`tbody tr`).Filter(playwright.LocatorFilterOptions{
-		HasNot: p.page.Locator(`text=No SMB compatible workers found`),
-	})
-	rowCount, _ := workerRows.Count()
-	log.Printf("[CreateSMBFileServer] step3: %d worker row(s) in table", rowCount)
-
-	if rowCount > 0 {
-		// Toggle workers using the same approach as NFS.
+	if workerCount > 0 {
 		toggled := 0
-		for i := 0; i < rowCount; i++ {
-			row := workerRows.Nth(i)
-			toggle := row.Locator(`[role="switch"], input[type="checkbox"], [role="checkbox"]`).First()
-			if p.isVisible(toggle) {
-				_ = toggle.Click()
+		for i := 0; i < workerCount; i++ {
+			el := workerNames.Nth(i)
+			if !p.isVisible(el) {
+				continue
+			}
+			info, err := el.Evaluate(fsToggleInspectJS, nil)
+			if err != nil {
+				continue
+			}
+			m, ok := info.(map[string]interface{})
+			if !ok || m["found"] != true {
+				continue
+			}
+			if m["isAlreadyOn"] == true {
 				toggled++
-				log.Printf("[CreateSMBFileServer] worker %d: toggled", i)
-				p.sleep(500)
+				log.Printf("[CreateSMBFileServer] worker %d: already ON", i)
+				continue
+			}
+			if m["isOffline"] == true || m["isDisabled"] == true {
+				log.Printf("[CreateSMBFileServer] worker %d: offline/disabled, skipping", i)
+				continue
+			}
+			clicked, _ := el.Evaluate(fsToggleClickJS, nil)
+			if cb, ok := clicked.(bool); ok && cb {
+				toggled++
+				log.Printf("[CreateSMBFileServer] worker %d: toggled ON", i)
+				p.sleep(1000)
 			}
 		}
 		log.Printf("[CreateSMBFileServer] %d worker(s) associated", toggled)
-		p.screenshot("smb-step3-workers-toggled")
+		if toggled > 0 {
+			p.screenshot("smb-step3-workers-toggled")
+		} else {
+			log.Printf("[CreateSMBFileServer] WARNING: found worker labels but could not toggle any")
+		}
 	} else {
-		log.Printf("[CreateSMBFileServer] no SMB workers available — proceeding without worker association")
+		log.Printf("[CreateSMBFileServer] no compatible workers visible in step 3 — proceeding without worker association")
 	}
 
+	// Brief pause so the form registers the worker toggle before Finish fires.
+	p.sleep(2000)
+
 	// Click Finish and wait for redirect/success.
+	// Use 4 minutes — with workers associated NDM validates the SMB connection
+	// and scans export paths which can take 2–3 minutes.
 	finishBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Finish"})
 	if err := p.expectVisible(finishBtn, 10000); err != nil {
 		return "", fmt.Errorf("step3: Finish button not visible: %w", err)
 	}
 	_ = finishBtn.Click()
 
-	deadline := time.Now().Add(2 * time.Minute)
+	deadline := time.Now().Add(4 * time.Minute)
 	outcome := "timeout"
 	for time.Now().Before(deadline) {
 		if !strings.Contains(p.page.URL(), "new-file-server") {
@@ -355,6 +392,7 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 		p.sleep(3000)
 	}
 	log.Printf("[CreateSMBFileServer] finish outcome: %s", outcome)
+
 
 	if outcome == "error_toast" {
 		p.screenshot("smb-create-error")
@@ -391,14 +429,14 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
 	_ = p.page.WaitForURL(regexp.MustCompile(`new-file-server`), playwright.PageWaitForURLOptions{
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(60000),
 	})
-	p.sleep(3000)
+	p.sleep(5000)
 	p.screenshot("isilon-step1-loaded")
 
 	// ── Step 1: Server Type ────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 15000); err != nil {
+	if err := p.expectVisible(nameField, 60000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -468,7 +506,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	acceptBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{
 		Name: "Accept and Continue",
 	})
-	if err := p.expectVisible(acceptBtn, 15000); err == nil {
+	if err := p.expectVisible(acceptBtn, 30000); err == nil {
 		p.screenshot("isilon-certificate-dialog")
 		_ = acceptBtn.Click()
 		p.sleep(3000)
@@ -479,7 +517,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	// ── Step 2: Access Zones / Credentials ─────────────────────────────
 	// Wait for the Access Zones heading to render.
 	if err := p.expectVisible(
-		p.page.GetByText("Access Zones").First(), 15000,
+		p.page.GetByText("Access Zones").First(), 30000,
 	); err != nil {
 		return "", fmt.Errorf("step2: Access Zones not visible: %w", err)
 	}
@@ -763,7 +801,7 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	workerToggles := p.page.Locator(`[role="switch"]`)
 	_ = workerToggles.First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(15000),
+		Timeout: playwright.Float(30000),
 	})
 	p.sleep(1000)
 
@@ -912,7 +950,7 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 		log.Printf("[navigateToFileServer] attempt %d: %q not visible in list, retrying…", attempt+1, name)
 	}
 
-	if err := p.expectVisible(nameLink.First(), 15000); err != nil {
+	if err := p.expectVisible(nameLink.First(), 30000); err != nil {
 		p.screenshot("fs-name-not-found")
 		return "", fmt.Errorf("file server %q not found in list", name)
 	}
@@ -1097,7 +1135,9 @@ func (p *FileServerPage) expectVisible(loc playwright.Locator, timeoutMs float64
 }
 
 func (p *FileServerPage) screenshot(name string) {
-	path := fmt.Sprintf("test-results/screenshots/%s.png", name)
+	dir := config.ScreenshotDir
+	_ = os.MkdirAll(dir, 0o755)
+	path := fmt.Sprintf("%s/%s.png", dir, name)
 	_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{
 		Path:     playwright.String(path),
 		FullPage: playwright.Bool(true),

@@ -100,6 +100,7 @@ const JobsAction = ({
             disabled={areExportPathsInvalid}
             onClick={() => navigate(`${pathname}/bulk-migrate${queryString}`)}
             style={{ whiteSpace: "nowrap" }}
+            data-testid="btn-bulk-migrate"
           >
             Bulk Migrate
           </Button>

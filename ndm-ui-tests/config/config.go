@@ -63,6 +63,44 @@ var (
 
 	// Discovery timeouts (overridable for slow environments)
 	DiscoveryTimeoutMs float64 // max wait for a discovery run to complete
+
+	// Worker SSH — for volume-mount-based report validation.
+	// The test SSHes into the worker to mount the volume read-only,
+	// collects real file metadata, and compares against the report CSV.
+	WorkerHost     string
+	WorkerPort     int
+	WorkerUsername string
+	WorkerPassword string
+
+	// All worker IPs (comma-separated) for multi-worker setup.
+	// Falls back to WorkerHost if not set.
+	WorkerIPs string
+
+	// SMB (Windows) worker SSH — separate from Linux workers because
+	// Windows VMs use different IPs, credentials, and registration flow.
+	SMBWorkerHost           string // IP of the Windows worker VM
+	SMBWorkerPort           int
+	SMBWorkerUsername       string
+	SMBWorkerPassword       string
+	SMBExecutableFilename   string // path to the installer exe on the Windows VM
+
+	// CP SSH — for OpenBao secret retrieval during test setup.
+	// Defaults to worker SSH credentials since the same SSH keys
+	// are used across all VMs in the Azure test environment.
+	CPSSHPort     int
+	CPSSHUsername string
+	CPSSHPassword string
+
+	// RBAC test users — populated from .env after running
+	// TestUserManagement_CreateThreeRoleUsers (which prints the credentials).
+	ProjectAdminEmail  string
+	ProjectAdminPass   string
+	ProjectViewerEmail string
+	ProjectViewerPass  string
+
+	// Optional: a project the Project Admin is NOT assigned to.
+	// Set NDM_OTHER_PROJECT_NAME in .env to enable cross-project isolation check.
+	OtherProjectName string
 )
 
 // init loads .env then reads every config var from the environment.
@@ -122,6 +160,38 @@ func init() {
 	NfsExportPath           = getEnvStr("NDM_NFS_EXPORT_PATH", "")
 	SmbShareName            = getEnvStr("NDM_SMB_SHARE_NAME", "")
 	DiscoveryTimeoutMs      = getEnvFloat("NDM_DISCOVERY_TIMEOUT_MS", 600000)
+
+	// Worker SSH for volume validation
+	WorkerHost     = getEnvStr("NDM_WORKER_HOST", "")
+	WorkerPort     = getEnvInt("NDM_WORKER_PORT", 22)
+	WorkerUsername = getEnvStr("NDM_WORKER_USERNAME", "ubuntu")
+	WorkerPassword = getEnvStr("NDM_WORKER_PASSWORD", "")
+
+	// All worker IPs for setup (falls back to single WorkerHost)
+	WorkerIPs = getEnvStr("NDM_WORKER_IPS", WorkerHost)
+
+	// SMB (Windows) worker SSH
+	SMBWorkerHost         = getEnvStr("NDM_SMB_WORKER_HOST", "")
+	SMBWorkerPort         = getEnvInt("NDM_SMB_WORKER_PORT", 22)
+	SMBWorkerUsername     = getEnvStr("NDM_SMB_WORKER_USERNAME", "")
+	SMBWorkerPassword     = getEnvStr("NDM_SMB_WORKER_PASSWORD", "")
+	SMBExecutableFilename = getEnvStr("NDM_SMB_EXECUTABLE_FILENAME", `C:\Temp\windows-worker-installer.exe`)
+
+	// CP SSH (defaults to worker creds — same SSH keys in Azure env)
+	CPSSHPort     = getEnvInt("NDM_CP_SSH_PORT", 22)
+	CPSSHUsername = getEnvStr("NDM_CP_SSH_USERNAME", WorkerUsername)
+	CPSSHPassword = getEnvStr("NDM_CP_SSH_PASSWORD", WorkerPassword)
+
+	// RBAC test users — set after running TestUserManagement_CreateThreeRoleUsers
+	ProjectAdminEmail  = getEnvStr("NDM_PROJECT_ADMIN_EMAIL", "")
+	ProjectAdminPass   = getEnvStr("NDM_PROJECT_ADMIN_PASS", "")
+	ProjectViewerEmail = getEnvStr("NDM_PROJECT_VIEWER_EMAIL", "")
+	ProjectViewerPass  = getEnvStr("NDM_PROJECT_VIEWER_PASS", "")
+
+	// OtherProjectName is an optional project name the RBAC Project Admin user
+	// is NOT assigned to. Set NDM_OTHER_PROJECT_NAME in .env to enable the
+	// cross-project isolation check in TestRBAC_ProjectAdmin_LimitedProjectAccess.
+	OtherProjectName = getEnvStr("NDM_OTHER_PROJECT_NAME", "")
 }
 
 // ── .env loader ──────────────────────────────────────────────────────────────

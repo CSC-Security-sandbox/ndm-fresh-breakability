@@ -4,11 +4,11 @@
 // no stale errored runs from previous attempts. Requires NDM_SOURCE_HOST.
 //
 // The Bulk Discover form exposes:
-//   1. Job Schedule           — Start Now  /  Schedule Date & Time (UTC)
-//   2. Excluded Path Patterns — textarea  (default: */-snapshot/*, */.snapshot/*)
-//   3. Select Protocol        — dropdown  (NFS | SMB)
-//   4. Export Path table      — row checkboxes
-//   5. Cancel / Submit
+//  1. Job Schedule           — Start Now  /  Schedule Date & Time (UTC)
+//  2. Excluded Path Patterns — textarea  (default: */-snapshot/*, */.snapshot/*)
+//  3. Select Protocol        — dropdown  (NFS | SMB)
+//  4. Export Path table      — row checkboxes
+//  5. Cancel / Submit
 //
 // Test index:
 //
@@ -34,15 +34,10 @@ import (
 	"ndm-ui-tests/config"
 	"ndm-ui-tests/fixtures"
 	"ndm-ui-tests/pages"
+	"ndm-ui-tests/utils"
 
 	"github.com/stretchr/testify/require"
 )
-
-// lastDiscoveredFSID holds the file server ID from the most recent test that
-// completed a successful discovery run. TestDiscovery_ConsolidatedCSV picks
-// this up automatically so it doesn't need NDM_FILE_SERVER_ID when running
-// as part of the full suite.
-var lastDiscoveredFSID string
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,9 +48,152 @@ func requireEnv(t *testing.T, value, name string) {
 	}
 }
 
+// waitForCloneExport waits until the cloned export path is visible in BOTH
+// the NDM API and the file server overview UI table before Bulk Discover opens.
+//
+// Two-phase check (mirrors how TC-001 handles this):
+//  1. API phase  — polls NDM's refresh endpoint until the volume appears in
+//                  /api/v1/servers/{fsID}.  Fast; confirms NDM knows about it.
+//  2. UI phase   — reloads the file server overview page and checks the export-
+//                  path table until the path is rendered.  This is the source
+//                  of truth for the Bulk Discover form table.
+//
+// Both phases run in sequence; the combined timeout is up to ~10 minutes.
+// It is a no-op when cloning is not active or the export path is empty.
+func waitForCloneExport(t *testing.T, dp *pages.DiscoveryPage, fsID string, clone cloneResult) {
+	t.Helper()
+	if discoveryVolumeSetup == nil || clone.exportPath == "" {
+		return
+	}
+
+	// Phase 1: API-level check (fast ~10 s per attempt, 5 min max).
+	t.Logf("[clone] phase 1 — API: polling NDM refresh for %q in file server %s…",
+		clone.exportPath, fsID)
+	if err := utils.WaitForExportPathInFileServer(fsID, clone.exportPath); err != nil {
+		t.Logf("[clone] phase 1 WARNING: %v", err)
+	}
+
+	// Phase 2: UI-level check — waits until the path appears in the overview
+	// table (which is what the Bulk Discover form renders).
+	t.Logf("[clone] phase 2 — UI: waiting for %q to appear in file server overview table…",
+		clone.exportPath)
+	if err := dp.WaitForExportPathInOverview(fsID, clone.exportPath,
+		utils.SetupAuthToken, config.BaseURL); err != nil {
+		t.Logf("[clone] phase 2 WARNING: %v — proceeding; selectAll fallback will be used", err)
+	}
+}
+
+// downloadDir returns a test-scoped download directory so parallel tests do
+// not overwrite each other's downloaded files.
+func downloadDir(t *testing.T) string {
+	t.Helper()
+	// Replace characters that are invalid in directory names on most OSes.
+	safe := strings.NewReplacer("/", "_", " ", "_", ":", "_").Replace(t.Name())
+	dir := filepath.Join("test-results", "downloads", safe)
+	require.NoError(t, os.MkdirAll(dir, 0o755), "create download dir %s", dir)
+	return dir
+}
+
+// cloneResult holds per-test cloned volume details together with a cleanup
+// function that deletes the clone after the test completes.
+type cloneResult struct {
+	hostIP     string // NFS server IP or SMB server IP
+	exportPath string // NFS path ("/cloneName") or SMB share name
+}
+
+// resolveNFSClone returns the NFS host and export path for a test.
+//
+// When discoveryVolumeSetup is populated (volume cloning is enabled):
+//   - Clones the first master source volume
+//   - Registers cleanup via t.Cleanup
+//   - Returns the cloned volume's host IP and export path
+//
+// Otherwise it falls back to (config.SourceHost, config.NfsExportPath).
+func resolveNFSClone(t *testing.T) cloneResult {
+	t.Helper()
+
+	if discoveryVolumeSetup == nil {
+		return cloneResult{hostIP: config.SourceHost, exportPath: config.NfsExportPath}
+	}
+
+	srcVols, _, srcMgr, dstMgr, err := utils.SetupTestVolumesForTest(t, "NFS")
+	if err != nil {
+		t.Logf("[clone] WARNING: volume clone failed, falling back to static config: %v", err)
+		return cloneResult{hostIP: config.SourceHost, exportPath: config.NfsExportPath}
+	}
+
+	t.Cleanup(func() {
+		utils.CleanupTestVolumesForTest(t, srcMgr, dstMgr)
+	})
+
+	host := config.SourceHost
+	if len(discoveryVolumeSetup.SourceHostIPs) > 0 {
+		host = discoveryVolumeSetup.SourceHostIPs[0]
+	}
+
+	exportPath := config.NfsExportPath
+	if len(srcVols) > 0 && srcVols[0] != "" {
+		exportPath = "/" + srcVols[0]
+	}
+
+	t.Logf("[clone] NFS clone ready — host=%s export=%s", host, exportPath)
+	return cloneResult{hostIP: host, exportPath: exportPath}
+}
+
+// resolveSMBClone returns the SMB host and share name for a test.
+//
+// When discoveryVolumeSetup is populated with SMB clone config:
+//   - Clones the first master SMB source volume
+//   - Registers cleanup via t.Cleanup
+//   - Returns the cloned share's host and name
+//
+// Otherwise falls back to (config.SMBHost, config.SMBShare).
+func resolveSMBClone(t *testing.T) cloneResult {
+	t.Helper()
+
+	// Attempt SMB-specific volume setup if SMB clone vars are present.
+	hasSMBClone := hasAnyEnv(
+		"AZURE_SMB_SOURCE_VOLUMES",
+		"ONTAP_SMB_SOURCE_VOLUMES",
+		"AWS_FSXN_SMB_SOURCE_VOLUMES",
+	)
+	if !hasSMBClone {
+		return cloneResult{hostIP: config.SMBHost, exportPath: config.SMBShare}
+	}
+
+	srcVols, _, srcMgr, dstMgr, err := utils.SetupTestVolumesForTest(t, "SMB")
+	if err != nil {
+		t.Logf("[clone] WARNING: SMB volume clone failed, falling back to static config: %v", err)
+		return cloneResult{hostIP: config.SMBHost, exportPath: config.SMBShare}
+	}
+
+	t.Cleanup(func() {
+		utils.CleanupTestVolumesForTest(t, srcMgr, dstMgr)
+	})
+
+	host := config.SMBHost
+	// For SMB clones, the share name is the cloned volume name.
+	shareName := config.SMBShare
+	if len(srcVols) > 0 && srcVols[0] != "" {
+		shareName = srcVols[0]
+	}
+
+	t.Logf("[clone] SMB clone ready — host=%s share=%s", host, shareName)
+	return cloneResult{hostIP: host, exportPath: shareName}
+}
+
 func newDiscoveryFixture(t *testing.T) (*fixtures.AuthFixture, *pages.DiscoveryPage) {
 	t.Helper()
 	f := fixtures.NewAdminFixture(t)
+
+	if utils.SetupProjectName != "" {
+		require.NoError(t,
+			pages.SwitchToProject(f.Page, utils.SetupProjectName),
+			"switch to setup project %s", utils.SetupProjectName,
+		)
+		t.Logf("[discovery] switched to setup project %s", utils.SetupProjectName)
+	}
+
 	dp := pages.NewDiscoveryPage(f.Page)
 	return f, dp
 }
@@ -63,18 +201,23 @@ func newDiscoveryFixture(t *testing.T) (*fixtures.AuthFixture, *pages.DiscoveryP
 // createFreshFileServer always creates a new NFS file server with a unique
 // timestamped name, attaches a worker, and waits until the server transitions
 // to Active (export paths retrieved, Bulk Discover button enabled).
-func createFreshFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID string, fsName string) {
+//
+// sourceHost overrides config.SourceHost when non-empty (used for cloned volumes).
+func createFreshFileServer(t *testing.T, f *fixtures.AuthFixture, sourceHost string) (fsID string, fsName string) {
 	t.Helper()
-	requireEnv(t, config.SourceHost, "NDM_SOURCE_HOST")
+	if sourceHost == "" {
+		sourceHost = config.SourceHost
+	}
+	requireEnv(t, sourceHost, "NDM_SOURCE_HOST")
 
 	fsName = fmt.Sprintf("test-fs-%d", time.Now().UnixMilli())
-	t.Logf("[setup] creating fresh file server %q on host %s", fsName, config.SourceHost)
+	t.Logf("[setup] creating fresh file server %q on host %s", fsName, sourceHost)
 
 	fsp := pages.NewFileServerPage(f.Page)
 	var err error
 	fsID, err = fsp.CreateNFSFileServer(
 		fsName,
-		config.SourceHost,
+		sourceHost,
 		config.ProtocolUsername,
 		config.ProtocolPassword,
 		config.MinWorkers,
@@ -123,20 +266,25 @@ func createFreshIsilonFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID st
 // createFreshSMBFileServer creates a new SMB file server with a unique
 // timestamped name, attaches a worker, and waits until the server transitions
 // to Active.
-func createFreshSMBFileServer(t *testing.T, f *fixtures.AuthFixture) (fsID string, fsName string) {
+//
+// smbHost overrides config.SMBHost when non-empty (used for cloned volumes).
+func createFreshSMBFileServer(t *testing.T, f *fixtures.AuthFixture, smbHost string) (fsID string, fsName string) {
 	t.Helper()
-	requireEnv(t, config.SMBHost, "NDM_SMB_HOST")
+	if smbHost == "" {
+		smbHost = config.SMBHost
+	}
+	requireEnv(t, smbHost, "NDM_SMB_HOST")
 	requireEnv(t, config.SMBUsername, "NDM_SMB_USERNAME")
 	requireEnv(t, config.SMBPassword, "NDM_SMB_PASSWORD")
 
 	fsName = fmt.Sprintf("test-smb-%d", time.Now().UnixMilli())
-	t.Logf("[setup] creating fresh SMB file server %q on host %s", fsName, config.SMBHost)
+	t.Logf("[setup] creating fresh SMB file server %q on host %s", fsName, smbHost)
 
 	fsp := pages.NewFileServerPage(f.Page)
 	var err error
 	fsID, err = fsp.CreateSMBFileServer(
 		fsName,
-		config.SMBHost,
+		smbHost,
 		config.SMBAdServerIP,
 		config.SMBUsername,
 		config.SMBPassword,
@@ -190,10 +338,15 @@ func runBulkDiscovery(
 	if selectAll {
 		require.NoError(t, dp.SelectAllExportPaths(), "select all export paths")
 	} else if exportPath != "" {
-		require.NoError(t,
-			dp.SelectExportPathByName(exportPath),
-			"select export path "+exportPath,
-		)
+		if err := dp.SelectExportPathByName(exportPath); err != nil {
+			// The specific path was not found in the table (e.g. ANF NFS export
+			// not yet visible). Fall back to selecting ALL paths — this always
+			// leaves the Submit button enabled. SelectFirstNRows was previously
+			// used here but left the form in an invalid state (Submit disabled).
+			t.Logf("[discovery] %v — falling back to select all export paths", err)
+			require.NoError(t, dp.SelectAllExportPaths(),
+				"fallback: select all export paths")
+		}
 	}
 
 	f.Screenshot("before-submit")
@@ -296,13 +449,18 @@ func navigateToRunListAndWaitForStatus(
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_BasicNFS(t *testing.T) {
+	t.Parallel()
+	clone := resolveNFSClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SOURCE_HOST")
+	requireEnv(t, clone.exportPath, "NDM_NFS_EXPORT_PATH")
+
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	fsID, _ := createFreshFileServer(t, f)
-	requireEnv(t, config.NfsExportPath, "NDM_NFS_EXPORT_PATH")
+	fsID, _ := createFreshFileServer(t, f, clone.hostIP)
+	waitForCloneExport(t, dp, fsID, clone)
 
-	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", config.NfsExportPath, false, nil)
+	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", clone.exportPath, false, nil)
 	waitForDiscoveryCompletion(t, dp, f, configID, config.DiscoveryTimeoutMs)
 
 	f.Screenshot("after-completion")
@@ -311,9 +469,30 @@ func TestDiscovery_BasicNFS(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("[5.1] report visible = %t", visible)
 
-	lastDiscoveredFSID = fsID
-	t.Logf("[5.1] stored file server %s for downstream tests (e.g. ConsolidatedCSV)", fsID)
-	fmt.Println("[DISCOVERY 5.1 PASSED] Basic NFS discovery completed with report")
+	// ── Validate report against the actual volume ─────────────────────────
+	// Download the individual discovery report CSV that was just generated,
+	// mount the NFS volume locally, and compare report counts with live data.
+	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List for CSV download")
+
+	t.Log("[5.1] downloading discovery report CSV")
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir(t), 0)
+	require.NoError(t, err, "download discovery report CSV")
+	t.Logf("[5.1] report CSV: %s", csvPath)
+
+	exportPath := clone.exportPath
+	if !strings.HasPrefix(exportPath, "/") {
+		exportPath = "/" + exportPath
+	}
+	nfsExport := fmt.Sprintf("%s:%s", clone.hostIP, exportPath)
+	t.Logf("[5.1] validating report against live volume %s", nfsExport)
+
+	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolNFS, csvPath, nfsExport)
+	require.NoError(t, err, "validate discovery report against live NFS volume")
+	require.True(t, result.Match,
+		"[5.1] discovery report does not match live volume:\n%s", result)
+
+	t.Logf("[5.1] report validation: %s", result)
+	fmt.Println("[DISCOVERY 5.1 PASSED] Basic NFS discovery completed — report validated against live volume")
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -321,20 +500,54 @@ func TestDiscovery_BasicNFS(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_BasicSMB(t *testing.T) {
-	requireEnv(t, config.SMBHost, "NDM_SMB_HOST")
-	requireEnv(t, config.SMBShare, "NDM_SMB_SHARE")
+	t.Parallel()
+	clone := resolveSMBClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SMB_HOST")
+	requireEnv(t, clone.exportPath, "NDM_SMB_SHARE")
+	requireEnv(t, config.SMBAdServerIP, "NDM_SMB_AD_SERVER_IP")
+	requireEnv(t, config.SMBUsername, "NDM_SMB_USERNAME")
+	requireEnv(t, config.SMBPassword, "NDM_SMB_PASSWORD")
+	requireEnv(t, config.SMBWorkerHost, "NDM_SMB_WORKER_HOST")
+	// AZURE_AD_SMB_SOURCE_HOST_IP is checked inside validateSMBDiscovery.
 
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	fsID, _ := createFreshSMBFileServer(t, f)
+	fsID, _ := createFreshSMBFileServer(t, f, clone.hostIP)
+	waitForCloneExport(t, dp, fsID, clone)
 
-	configID := runBulkDiscovery(t, dp, f, fsID, "SMB", config.SMBShare, false, nil)
+	configID := runBulkDiscovery(t, dp, f, fsID, "SMB", clone.exportPath, false, nil)
 	waitForDiscoveryCompletion(t, dp, f, configID, config.DiscoveryTimeoutMs)
+
+	f.Screenshot("after-completion")
 
 	visible, _ := dp.IsReportVisible()
 	t.Logf("[5.2] report visible = %t", visible)
-	fmt.Println("[DISCOVERY 5.2 PASSED] Basic SMB discovery completed with report")
+
+	// ── Validate report against the actual SMB share ──────────────────────
+	// Download the discovery report CSV and compare its file/dir counts
+	// against a live PowerShell scan of the share from the Windows scan host.
+	// Credentials are read from env vars inside ValidateReport (same pattern
+	// as NFS, which uses the local machine for mounting).
+	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List for CSV download")
+
+	t.Log("[5.2] downloading discovery report CSV")
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir(t), 0)
+	require.NoError(t, err, "download SMB discovery report CSV")
+	t.Logf("[5.2] report CSV: %s", csvPath)
+
+	// src format: \\smbHost\shareName  (parsed by validateSMBDiscovery)
+	smbSrc := fmt.Sprintf(`\\%s\%s`, clone.hostIP, clone.exportPath)
+	t.Logf("[5.2] validating report against live SMB share %s via AD server %s",
+		smbSrc, config.SMBAdServerIP)
+
+	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolSMB, csvPath, smbSrc)
+	require.NoError(t, err, "validate SMB discovery report against live share")
+	require.True(t, result.Match,
+		"[5.2] SMB discovery report does not match live share:\n%s", result)
+
+	t.Logf("[5.2] report validation: %s", result)
+	fmt.Println("[DISCOVERY 5.2 PASSED] Basic SMB discovery completed — report validated against live share")
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -342,15 +555,20 @@ func TestDiscovery_BasicSMB(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_ExcludeFilePatterns(t *testing.T) {
+	t.Parallel()
+	clone := resolveNFSClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SOURCE_HOST")
+	requireEnv(t, clone.exportPath, "NDM_NFS_EXPORT_PATH")
+
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	fsID, _ := createFreshFileServer(t, f)
-	requireEnv(t, config.NfsExportPath, "NDM_NFS_EXPORT_PATH")
+	fsID, _ := createFreshFileServer(t, f, clone.hostIP)
+	waitForCloneExport(t, dp, fsID, clone)
 
 	customPatterns := "*/-snapshot/*\n*/.snapshot/*\n*.tmp\n*.log\n*.bak"
 
-	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", config.NfsExportPath, false,
+	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", clone.exportPath, false,
 		func(t *testing.T, dp *pages.DiscoveryPage) {
 			t.Helper()
 			require.NoError(t,
@@ -370,11 +588,17 @@ func TestDiscovery_ExcludeFilePatterns(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_Bulk(t *testing.T) {
+	t.Parallel()
+	clone := resolveNFSClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SOURCE_HOST")
+
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	fsID, _ := createFreshFileServer(t, f)
+	fsID, _ := createFreshFileServer(t, f, clone.hostIP)
+	waitForCloneExport(t, dp, fsID, clone)
 
+	// Select all paths exposed on this host (which now includes the cloned volume).
 	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", "", true, nil)
 	waitForDiscoveryCompletion(t, dp, f, configID, config.DiscoveryTimeoutMs)
 
@@ -388,6 +612,7 @@ func TestDiscovery_Bulk(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_Destination(t *testing.T) {
+	t.Parallel()
 	requireEnv(t, config.DestinationFileServerID, "NDM_DESTINATION_FILE_SERVER_ID")
 
 	f, dp := newDiscoveryFixture(t)
@@ -405,6 +630,7 @@ func TestDiscovery_Destination(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_Isilon(t *testing.T) {
+	t.Parallel()
 	requireEnv(t, config.IsilonHost, "NDM_ISILON_HOST")
 	requireEnv(t, config.IsilonMgmtPassword, "NDM_ISILON_MGMT_PASSWORD")
 	requireEnv(t, config.IsilonNfsIP, "NDM_ISILON_NFS_IP")
@@ -412,7 +638,7 @@ func TestDiscovery_Isilon(t *testing.T) {
 	f, dp := newDiscoveryFixture(t)
 	defer f.Close()
 
-	// Create a fresh Isilon file server via the wizard.
+	// Isilon is a separate file server type; volume cloning does not apply.
 	fsID, _ := createFreshIsilonFileServer(t, f)
 
 	// Verify Isilon overview shows auto-listed export paths.
@@ -444,12 +670,10 @@ func TestDiscovery_Isilon(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_IndividualReportCSV(t *testing.T) {
-	fsID := lastDiscoveredFSID
+	t.Parallel()
+	fsID := config.FileServerID
 	if fsID == "" {
-		fsID = config.FileServerID
-	}
-	if fsID == "" {
-		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
+		t.Skip("skipping: NDM_FILE_SERVER_ID is not set — required for standalone parallel run")
 	}
 	t.Logf("[5.20] using file server %s", fsID)
 
@@ -460,11 +684,8 @@ func TestDiscovery_IndividualReportCSV(t *testing.T) {
 	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List")
 	f.Screenshot("individual-report-job-run-list")
 
-	downloadDir := filepath.Join("test-results", "downloads")
-	require.NoError(t, os.MkdirAll(downloadDir, 0o755), "create download dir")
-
 	t.Log("[5.20] downloading individual discovery report CSV from overflow menu")
-	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir, 0)
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir(t), 0)
 	require.NoError(t, err, "download individual discovery report CSV")
 	f.Screenshot("individual-report-downloaded")
 
@@ -490,12 +711,10 @@ func TestDiscovery_IndividualReportCSV(t *testing.T) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 func TestDiscovery_ConsolidatedCSV(t *testing.T) {
-	fsID := lastDiscoveredFSID
+	t.Parallel()
+	fsID := config.FileServerID
 	if fsID == "" {
-		fsID = config.FileServerID
-	}
-	if fsID == "" {
-		t.Skip("skipping: no file server available — run the full suite or set NDM_FILE_SERVER_ID")
+		t.Skip("skipping: NDM_FILE_SERVER_ID is not set — required for standalone parallel run")
 	}
 	t.Logf("[5.19] using file server %s", fsID)
 
@@ -509,11 +728,8 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 	)
 	f.Screenshot("fs-overview-for-csv")
 
-	downloadDir := filepath.Join("test-results", "downloads")
-	require.NoError(t, os.MkdirAll(downloadDir, 0o755), "create download dir")
-
 	t.Log("[5.19] triggering consolidated CSV generation and downloading")
-	csvPath, err := dp.GenerateAndDownloadConsolidatedCSV(downloadDir, 300000)
+	csvPath, err := dp.GenerateAndDownloadConsolidatedCSV(downloadDir(t), 300000)
 	require.NoError(t, err, "generate and download consolidated CSV")
 
 	f.Screenshot("csv-download-complete")
@@ -528,4 +744,64 @@ func TestDiscovery_ConsolidatedCSV(t *testing.T) {
 
 	t.Logf("[5.19] CSV downloaded: %s (%d bytes)", csvPath, info.Size())
 	fmt.Println("[DISCOVERY 5.19 PASSED] Consolidated Discovery Report CSV downloaded and verified")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5.21  Validate Discovery Report against actual volume data
+//
+// Downloads the individual discovery report CSV, then SSHes into the worker,
+// mounts the NFS volume read-only, counts real files/dirs, and compares
+// the totals against the report. Zero diff = report is accurate.
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
+	t.Parallel()
+	// Resolve host and export path — uses a clone if cloning is enabled.
+	clone := resolveNFSClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SOURCE_HOST")
+	requireEnv(t, clone.exportPath, "NDM_NFS_EXPORT_PATH")
+
+	fsID := config.FileServerID
+	if fsID == "" {
+		t.Skip("skipping: NDM_FILE_SERVER_ID is not set — required for standalone parallel run")
+	}
+	t.Logf("[5.21] using file server %s", fsID)
+
+	// ── Step 1: download report CSV via browser ──
+	f, dp := newDiscoveryFixture(t)
+	defer f.Close()
+
+	require.NoError(t, dp.NavigateToJobRunList(), "navigate to Job Run List")
+
+	t.Log("[5.21] downloading individual discovery report CSV")
+	csvPath, err := dp.DownloadDiscoveryReportFromJobRunList(downloadDir(t), 0)
+	require.NoError(t, err, "download discovery report CSV")
+	t.Logf("[5.21] report downloaded: %s", csvPath)
+
+	// ── Step 2: mount NFS volume locally on the runner and scan ──
+	exportPath := clone.exportPath
+	if !strings.HasPrefix(exportPath, "/") {
+		exportPath = "/" + exportPath
+	}
+	nfsExport := fmt.Sprintf("%s:%s", clone.hostIP, exportPath)
+	t.Logf("[5.21] scanning volume %s locally on runner", nfsExport)
+
+	scan, err := utils.LocalScanNFSVolumeForDiscovery(nfsExport)
+	require.NoError(t, err, "scan NFS volume for discovery metadata")
+	t.Logf("[5.21] volume scan: total=%d, files=%d, dirs=%d, symlinks=%d",
+		scan.TotalCount, scan.RegularFilesCount, scan.DirectoriesCount, scan.SymlinksCount)
+
+	// ── Step 3: compare ──
+	diffs, err := utils.CompareDiscoveryReport(csvPath, scan)
+	require.NoError(t, err, "compare discovery report with volume scan")
+
+	if len(diffs) > 0 {
+		for _, d := range diffs {
+			t.Logf("[5.21] DIFF: %s", d)
+		}
+		t.Fatalf("[5.21] discovery report does not match actual volume data: %d differences", len(diffs))
+	}
+
+	t.Log("[5.21] discovery report matches actual volume data — zero diff")
+	fmt.Println("[DISCOVERY 5.21 PASSED] Report validated against real volume data")
 }

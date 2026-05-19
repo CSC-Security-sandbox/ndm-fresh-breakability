@@ -548,16 +548,18 @@ const Mapping = () => {
             </Text>
           </Box>
           <Box className="flex flex-col gap-2 md:pl-10 w-full">
-            <FormFieldSelect
-              label="Select Destination File Server"
-              labelClassName="text-sm font-semibold text-gray-900"
-              name="destinationFileServer"
-              form={destinationForm}
-              options={destinationFileServerOptions}
-              disabled={!sourceFileServerDetails || !destinationFileServerOptions.length}
-              className="w-full"
-              placeholder="Select Destination File Server"
-            />
+            <div data-testid="bulk-migrate-dst-fs-select">
+              <FormFieldSelect
+                label="Select Destination File Server"
+                labelClassName="text-sm font-semibold text-gray-900"
+                name="destinationFileServer"
+                form={destinationForm}
+                options={destinationFileServerOptions}
+                disabled={!sourceFileServerDetails || !destinationFileServerOptions.length}
+                className="w-full"
+                placeholder="Select Destination File Server"
+              />
+            </div>
           </Box>
           {/* Row 2 - all dropdowns same width as Select Destination File Server; use Autocomplete so disabled export paths are faded (mirrors overview/ExploreModal) */}
           <Box className="flex flex-col gap-2 md:pr-10 w-full">
@@ -579,12 +581,17 @@ const Mapping = () => {
               disabled={!sourceFileServerDetails || !sourcePathOptions.length}
               size="small"
               renderInput={(params) => (
-                <TextField {...params} placeholder="Select Source Path" />
+                <TextField
+                  {...params}
+                  placeholder="Select Source Path"
+                  inputProps={{ ...params.inputProps, "data-testid": "bulk-migrate-src-path-input" }}
+                />
               )}
               renderOption={(props, option) => (
                 <li
                   {...props}
                   key={option.value}
+                  data-testid={`bulk-migrate-src-path-option-${option.value}`}
                   style={{
                     ...(props as React.HTMLAttributes<HTMLLIElement>).style,
                     opacity: option.isDisabled ? 0.5 : 1,
@@ -617,12 +624,17 @@ const Mapping = () => {
               }
               size="small"
               renderInput={(params) => (
-                <TextField {...params} placeholder="Select Destination Path" />
+                <TextField
+                  {...params}
+                  placeholder="Select Destination Path"
+                  inputProps={{ ...params.inputProps, "data-testid": "bulk-migrate-dst-path-input" }}
+                />
               )}
               renderOption={(props, option) => (
                 <li
                   {...props}
                   key={option.value}
+                  data-testid={`bulk-migrate-dst-path-option-${option.value}`}
                   style={{
                     ...(props as React.HTMLAttributes<HTMLLIElement>).style,
                     opacity: option.isDisabled ? 0.5 : 1,
@@ -737,6 +749,7 @@ const Mapping = () => {
             color="primary"
             disabled={!canAddMapping}
             onClick={handleAddMapping}
+            data-testid="btn-add-mapping"
           >
             <Box className="inline-flex items-center gap-1.5">
               <AddIcon size={20} aria-hidden />

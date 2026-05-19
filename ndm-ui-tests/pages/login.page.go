@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"ndm-ui-tests/config"
@@ -22,18 +23,15 @@ func NewLoginPage(page playwright.Page) *LoginPage {
 // NDM redirects to Keycloak, so we wait for any URL under the CP and for
 // the username input to be visible rather than waiting for full page load.
 func (p *LoginPage) Navigate() error {
-	// Use a generous timeout for initial navigation — NDM + Keycloak redirect
-	// can take 15-30s on first load.
 	navTimeout := float64(60000)
 
 	if _, err := p.page.Goto(config.BaseURL, playwright.PageGotoOptions{
 		Timeout:   playwright.Float(navTimeout),
-		WaitUntil: playwright.WaitUntilStateCommit, // just wait for first byte, not full load
+		WaitUntil: playwright.WaitUntilStateCommit,
 	}); err != nil {
 		return fmt.Errorf("navigate to %s: %w", config.BaseURL, err)
 	}
 
-	// Wait for the login form — this handles the Keycloak redirect gracefully
 	_, err := p.page.WaitForSelector(
 		`input[name="username"], input[type="email"], input[id="username"]`,
 		playwright.PageWaitForSelectorOptions{
@@ -47,24 +45,48 @@ func (p *LoginPage) Navigate() error {
 	return nil
 }
 
-// Login fills in credentials and submits the Keycloak login form.
-// After submit it waits for the NDM dashboard to load.
+// Login fills in credentials, submits the Keycloak form, and waits for
+// the NDM dashboard to load. If Keycloak presents an "Update Password"
+// form (common on fresh CP deployments), it automatically fills in the
+// same password and submits.
 func (p *LoginPage) Login(email, password string) error {
 	if err := p.submitCredentials(email, password); err != nil {
 		return err
 	}
-	// Wait for NDM dashboard to appear after login.
-	_, err := p.page.WaitForSelector(
-		`nav, [data-testid="dashboard"], .sidebar, [class*="sidebar"], [class*="nav"]`,
-		playwright.PageWaitForSelectorOptions{
-			Timeout: playwright.Float(60000),
-			State:   playwright.WaitForSelectorStateVisible,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("dashboard did not appear after login (current URL: %s): %w", p.page.URL(), err)
+
+	log.Printf("[login] credentials submitted for %s, waiting for redirect…", email)
+
+	// Poll for up to 30s: dashboard loaded, password-change form, or error.
+	for elapsed := 0.0; elapsed < 30000; elapsed += 500 {
+		url := p.page.URL()
+
+		// NDM dashboard loaded — we're done.
+		if strings.Contains(url, "/home") || strings.Contains(url, "/file-servers") {
+			log.Printf("[login] dashboard reached (URL: %s)", url)
+			return nil
+		}
+
+		// Keycloak "Update Password" page.
+		if v, _ := p.page.Locator(`input[id="password-new"], input[name="password-new"]`).First().IsVisible(); v {
+			log.Printf("[login] detected Keycloak password-change page — auto-filling same password")
+			if err := p.handlePasswordChange(password); err != nil {
+				return err
+			}
+			return p.waitForDashboard()
+		}
+
+		// Keycloak error (bad creds, locked account, etc.).
+		if errMsg, _ := p.page.Locator(
+			`#kc-error-message, [class*="alert-error"], [class*="kc-feedback-text"]`,
+		).First().InnerText(); errMsg != "" {
+			return fmt.Errorf("Keycloak error for %s: %s (URL: %s)", email, errMsg, url)
+		}
+
+		p.page.WaitForTimeout(500)
 	}
-	return nil
+
+	// Fallback: try the broader dashboard selector in case the URL didn't match.
+	return p.waitForDashboard()
 }
 
 // LoginWithTempPassword handles the first-login flow for a freshly-created
@@ -78,12 +100,10 @@ func (p *LoginPage) Login(email, password string) error {
 //
 // Returns the new password that was set.
 func (p *LoginPage) LoginWithTempPassword(email, tempPassword, newPassword string) (string, error) {
-	// 1. Submit temp credentials.
 	if err := p.submitCredentials(email, tempPassword); err != nil {
 		return "", fmt.Errorf("submit temp credentials: %w", err)
 	}
 
-	// Check for Keycloak error (invalid credentials / account locked).
 	p.page.WaitForTimeout(1000)
 	if errMsg, _ := p.page.Locator(
 		`#kc-error-message, [class*="alert-error"], [class*="kc-feedback-text"]`,
@@ -91,32 +111,31 @@ func (p *LoginPage) LoginWithTempPassword(email, tempPassword, newPassword strin
 		return "", fmt.Errorf("Keycloak login error for %s: %s", email, errMsg)
 	}
 
-	// 2. Wait for either the dashboard or the "Update Password" form.
-	//    We poll both signals separately (can't mix CSS + text= engines).
-	passwordChangeDetected := false
 	for elapsed := 0.0; elapsed < 15000; elapsed += 500 {
-		// Dashboard loaded?
 		if strings.Contains(p.page.URL(), "/home") {
 			return newPassword, nil
 		}
-		// Password-change form visible?
-		if v, _ := p.page.Locator(`input[id="password-new"]`).First().IsVisible(); v {
-			passwordChangeDetected = true
-			break
-		}
-		if v, _ := p.page.Locator(`input[name="password-new"]`).First().IsVisible(); v {
-			passwordChangeDetected = true
+		if v, _ := p.page.Locator(`input[id="password-new"], input[name="password-new"]`).First().IsVisible(); v {
 			break
 		}
 		p.page.WaitForTimeout(500)
 	}
 
-	// Re-check dashboard after the loop (in case it loaded late).
-	if !passwordChangeDetected && strings.Contains(p.page.URL(), "/home") {
+	if strings.Contains(p.page.URL(), "/home") {
 		return newPassword, nil
 	}
 
-	// 3. We're on the Update Password page. Fill new password + confirm.
+	if err := p.handlePasswordChange(newPassword); err != nil {
+		return "", err
+	}
+	if err := p.waitForDashboard(); err != nil {
+		return "", err
+	}
+	return newPassword, nil
+}
+
+// handlePasswordChange fills the Keycloak "Update Password" form and submits.
+func (p *LoginPage) handlePasswordChange(newPassword string) error {
 	newPwdField := p.page.Locator(
 		`input[id="password-new"], input[name="password-new"]`,
 	).First()
@@ -125,38 +144,52 @@ func (p *LoginPage) LoginWithTempPassword(email, tempPassword, newPassword strin
 	).First()
 
 	if v, _ := newPwdField.IsVisible(); !v {
-		return "", fmt.Errorf("neither dashboard nor Update Password form appeared (URL: %s)", p.page.URL())
+		return fmt.Errorf("Update Password form not found (URL: %s)", p.page.URL())
 	}
 
 	if err := newPwdField.Fill(newPassword); err != nil {
-		return "", fmt.Errorf("fill new password: %w", err)
+		return fmt.Errorf("fill new password: %w", err)
 	}
 	if err := confirmPwdField.Fill(newPassword); err != nil {
-		return "", fmt.Errorf("fill confirm password: %w", err)
+		return fmt.Errorf("fill confirm password: %w", err)
 	}
 	if err := p.page.Locator(
 		`button[type="submit"], input[type="submit"]`,
 	).Click(); err != nil {
-		return "", fmt.Errorf("submit new password: %w", err)
+		return fmt.Errorf("submit new password: %w", err)
+	}
+	log.Printf("[login] password change submitted")
+	return nil
+}
+
+// waitForDashboard waits for the NDM dashboard to load after login/password-change.
+// It uses a combination of URL check and DOM selector to confirm we're on the app.
+func (p *LoginPage) waitForDashboard() error {
+	// First try URL-based detection (most reliable).
+	for elapsed := 0.0; elapsed < 30000; elapsed += 500 {
+		url := p.page.URL()
+		if strings.Contains(url, "/home") || strings.Contains(url, "/file-servers") {
+			log.Printf("[login] dashboard loaded (URL: %s)", url)
+			return nil
+		}
+		// Still on Keycloak? Keep waiting.
+		if strings.Contains(url, "/auth/") || strings.Contains(url, "/realms/") {
+			p.page.WaitForTimeout(500)
+			continue
+		}
+		// On NDM but not /home — also acceptable (could be a deep link).
+		if !strings.Contains(url, "/auth/") {
+			log.Printf("[login] left Keycloak, assuming dashboard loaded (URL: %s)", url)
+			p.page.WaitForTimeout(2000)
+			return nil
+		}
+		p.page.WaitForTimeout(500)
 	}
 
-	// 4. Wait for NDM dashboard.
-	_, err := p.page.WaitForSelector(
-		`nav, [data-testid="dashboard"], .sidebar, [class*="sidebar"]`,
-		playwright.PageWaitForSelectorOptions{
-			Timeout: playwright.Float(30000),
-			State:   playwright.WaitForSelectorStateVisible,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("dashboard did not appear after password change (URL: %s): %w",
-			p.page.URL(), err)
-	}
-	return newPassword, nil
+	return fmt.Errorf("dashboard did not load within 30s (stuck at URL: %s)", p.page.URL())
 }
 
 // submitCredentials fills email + password and clicks the login button.
-// Shared by Login() and LoginWithTempPassword().
 func (p *LoginPage) submitCredentials(email, password string) error {
 	if err := p.page.Locator(
 		`input[name="username"], input[type="email"], input[id="username"]`,

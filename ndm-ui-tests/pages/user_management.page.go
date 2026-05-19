@@ -2,8 +2,11 @@ package pages
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
+
+	"ndm-ui-tests/config"
 
 	"github.com/playwright-community/playwright-go"
 )
@@ -284,8 +287,9 @@ func (p *UserManagementPage) openEditProject(projectName string) error {
 	}
 
 	if v, _ := menuBtn.IsVisible(); !v {
+		_ = os.MkdirAll(config.ScreenshotDir, 0o755)
 		_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{
-			Path:     playwright.String("test-results/screenshots/no-menu-btn.png"),
+			Path:     playwright.String(config.ScreenshotDir + "/no-menu-btn.png"),
 			FullPage: playwright.Bool(true),
 		})
 		return fmt.Errorf("project %q found via search but ⋯ button not visible", projectName)

@@ -1,0 +1,14 @@
+# CodeQL configuration for the NDM monorepo.
+#
+# ndm-api-tests and ndm-ui-tests are TEST utilities that intentionally connect
+# to internal lab infrastructure using self-signed certificates and SSH without
+# host-key verification. These are not production code paths. Excluding them
+# from the security scan avoids false-positive noise from:
+#   - InsecureSkipVerify: true   (TLS, connecting to NDM with self-signed cert)
+#   - InsecureIgnoreHostKey()    (SSH, connecting to lab worker VMs)
+#
+# The production services under services/ and lib/ are NOT excluded and
+# continue to be fully scanned.
+name: "NDM CodeQL Config"
+paths-ignore:
+  - "ndm-ui-tests/**"

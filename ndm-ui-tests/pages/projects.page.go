@@ -2,10 +2,82 @@ package pages
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/playwright-community/playwright-go"
 )
+
+// SwitchToProject uses the header project-switcher dropdown to change the
+// active project. The dropdown is triggered by clicking the "Project" area
+// in the top-right header bar. A right-side panel appears with a search
+// box, radio-button list, and Switch/Cancel buttons.
+func SwitchToProject(page playwright.Page, projectName string) error {
+	log.Printf("[SwitchToProject] switching to project %q", projectName)
+
+	// 1. Open the project switcher panel by clicking the "Project" area.
+	headerTriggers := []string{
+		`[data-testid="project-switcher"]`,
+		`[data-testid="project-dropdown"]`,
+		`header >> text=Project`,
+		`text=Project`,
+	}
+	clicked := false
+	for _, sel := range headerTriggers {
+		loc := page.Locator(sel).First()
+		if visible, _ := loc.IsVisible(); !visible {
+			continue
+		}
+		if err := loc.Click(); err == nil {
+			clicked = true
+			break
+		}
+	}
+	if !clicked {
+		return fmt.Errorf("could not click project switcher trigger")
+	}
+
+	page.WaitForTimeout(2000)
+
+	// 2. Wait for the panel to appear (has "Search Projects" placeholder or "Switch" button).
+	switchBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Switch"})
+	if err := switchBtn.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(10000),
+	}); err != nil {
+		return fmt.Errorf("project switcher panel did not open: %w", err)
+	}
+
+	// 3. Type the project name in the search box to filter the list.
+	searchBox := page.GetByPlaceholder("Search Projects")
+	if visible, _ := searchBox.IsVisible(); visible {
+		_ = searchBox.Fill(projectName)
+		page.WaitForTimeout(1500)
+	}
+
+	// 4. Click the radio button / row for the target project.
+	projectRow := page.Locator(fmt.Sprintf(`text=%s`, projectName)).First()
+	if err := projectRow.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(10000),
+	}); err != nil {
+		return fmt.Errorf("project %q not found in switcher list: %w", projectName, err)
+	}
+	if err := projectRow.Click(); err != nil {
+		return fmt.Errorf("click project %q in list: %w", projectName, err)
+	}
+	page.WaitForTimeout(500)
+
+	// 5. Click "Switch".
+	if err := switchBtn.Click(); err != nil {
+		return fmt.Errorf("click Switch button: %w", err)
+	}
+
+	// 6. Wait for the panel to close and the page to settle.
+	page.WaitForTimeout(3000)
+	log.Printf("[SwitchToProject] switched to project %q", projectName)
+	return nil
+}
 
 // ProjectsPage models the NDM Settings → Projects tab.
 //
