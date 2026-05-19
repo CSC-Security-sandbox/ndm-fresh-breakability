@@ -96,124 +96,124 @@ export class StampMetaService {
      * a no-op so T2 is skipped and we fall back to a simple
      * T1 vs T3 comparison.
      */
-    private async stampMetaWithCtimeValidation(input: CommandExecInput, output: CommandOutput): Promise<void> {
-        const preserveAccessTime = !!input.jobContext.jobConfig?.options?.preserveAccessTime;
-        const cmdId = input.command.id;
+    // private async stampMetaWithCtimeValidation(input: CommandExecInput, output: CommandOutput): Promise<void> {
+    //     const preserveAccessTime = !!input.jobContext.jobConfig?.options?.preserveAccessTime;
+    //     const cmdId = input.command.id;
 
-        this.logger.debug(
-            `[${cmdId}] CtimeValidation START | preserveAccessTime=${preserveAccessTime} `
-            + `| sourcePath=${input.sourcePath} | fPath=${input.command.fPath}`,
-        );
+    //     this.logger.debug(
+    //         `[${cmdId}] CtimeValidation START | preserveAccessTime=${preserveAccessTime} `
+    //         + `| sourcePath=${input.sourcePath} | fPath=${input.command.fPath}`,
+    //     );
 
-        for (let attempt = 0; attempt <= MAX_CTIME_RETRIES; attempt++) {
-            // Step 1 (T1): fetch source cTime before any operations
-            const ctimeT1 = await this.fetchSourceCtimeMs(input.sourcePath);
-            this.logger.debug(
-                `[${cmdId}] [attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}] T1=${ctimeT1} `
-                + `(${new Date(ctimeT1).toISOString()}) | ${input.sourcePath}`,
-            );
+    //     for (let attempt = 0; attempt <= MAX_CTIME_RETRIES; attempt++) {
+    //         // Step 1 (T1): fetch source cTime before any operations
+    //         const ctimeT1 = await this.fetchSourceCtimeMs(input.sourcePath);
+    //         this.logger.debug(
+    //             `[${cmdId}] [attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}] T1=${ctimeT1} `
+    //             + `(${new Date(ctimeT1).toISOString()}) | ${input.sourcePath}`,
+    //         );
 
-            const attemptOutput: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
+    //         const attemptOutput: CommandOutput = { shouldStampMeta: false, sourceErrors: [], targetErrors: [], shouldUpdateItemInfo: true };
 
-            // Step 2: stamp ACL at destination (doesn't bump source ctime)
-            // Step 3: preserve aTime/mTime at source in parallel (bumps source ctime), then capture T2
-            let ctimeT2: number = 0;
-            const aclStampPromise = this.stampObjectACL(input);
-            const preserveTimePromise = preserveAccessTime
-                ? this.preserveAccessAndModifiedTimeAndCaptureT2(input, cmdId)
-                : Promise.resolve(null);
+    //         // Step 2: stamp ACL at destination (doesn't bump source ctime)
+    //         // Step 3: preserve aTime/mTime at source in parallel (bumps source ctime), then capture T2
+    //         let ctimeT2: number = 0;
+    //         const aclStampPromise = this.stampObjectACL(input);
+    //         const preserveTimePromise = preserveAccessTime
+    //             ? this.preserveAccessAndModifiedTimeAndCaptureT2(input, cmdId)
+    //             : Promise.resolve(null);
 
-            const [aclStampOutput, preserveTimeResult] = await Promise.all([aclStampPromise, preserveTimePromise]);
-            attemptOutput.sourceErrors.push(...aclStampOutput.sourceErrors);
-            attemptOutput.targetErrors.push(...aclStampOutput.targetErrors);
-            if (preserveTimeResult) {
-                ctimeT2 = preserveTimeResult.ctimeT2;
-                attemptOutput.sourceErrors.push(...preserveTimeResult.output.sourceErrors);
-            }
+    //         const [aclStampOutput, preserveTimeResult] = await Promise.all([aclStampPromise, preserveTimePromise]);
+    //         attemptOutput.sourceErrors.push(...aclStampOutput.sourceErrors);
+    //         attemptOutput.targetErrors.push(...aclStampOutput.targetErrors);
+    //         if (preserveTimeResult) {
+    //             ctimeT2 = preserveTimeResult.ctimeT2;
+    //             attemptOutput.sourceErrors.push(...preserveTimeResult.output.sourceErrors);
+    //         }
 
-            this.logger.debug(
-                `[${cmdId}] ACL stamp done | sourceErrors=${aclStampOutput.sourceErrors.length} `
-                + `| targetErrors=${aclStampOutput.targetErrors.length}`,
-            );
+    //         this.logger.debug(
+    //             `[${cmdId}] ACL stamp done | sourceErrors=${aclStampOutput.sourceErrors.length} `
+    //             + `| targetErrors=${aclStampOutput.targetErrors.length}`,
+    //         );
 
-            const noAclErrors = aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0;
-            if (noAclErrors) {
-                const timeOutput = await this.stampAccessAndModifiedTime(input);
-                attemptOutput.sourceErrors.push(...timeOutput.sourceErrors);
-                attemptOutput.targetErrors.push(...timeOutput.targetErrors);
-            }
+    //         const noAclErrors = aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0;
+    //         if (noAclErrors) {
+    //             const timeOutput = await this.stampAccessAndModifiedTime(input);
+    //             attemptOutput.sourceErrors.push(...timeOutput.sourceErrors);
+    //             attemptOutput.targetErrors.push(...timeOutput.targetErrors);
+    //         }
 
-            this.ctimeTestTriggers.testExhaustAllRetries(input.sourcePath, attempt + 1, cmdId);
-            this.ctimeTestTriggers.testChangeBetweenT2AndT3(input.sourcePath, attempt + 1, cmdId);
+    //         this.ctimeTestTriggers.testExhaustAllRetries(input.sourcePath, attempt + 1, cmdId);
+    //         this.ctimeTestTriggers.testChangeBetweenT2AndT3(input.sourcePath, attempt + 1, cmdId);
 
-            // Step 4 (T3): fetch source cTime after all operations
-            const ctimeT3 = await this.fetchSourceCtimeMs(input.sourcePath);
-            this.logger.debug(
-                `[${cmdId}] T3=${ctimeT3} (${new Date(ctimeT3).toISOString()}) | `
-                + `T1=${ctimeT1}, T2=${ctimeT2}`,
-            );
+    //         // Step 4 (T3): fetch source cTime after all operations
+    //         const ctimeT3 = await this.fetchSourceCtimeMs(input.sourcePath);
+    //         this.logger.debug(
+    //             `[${cmdId}] T3=${ctimeT3} (${new Date(ctimeT3).toISOString()}) | `
+    //             + `T1=${ctimeT1}, T2=${ctimeT2}`,
+    //         );
 
-            // CHECK: T3 > T2 (files with preserveAccessTime) or T3 > T1 (dirs / no preserveAccessTime)
-            let sourceChanged: boolean;
-            if (preserveAccessTime) {
-                sourceChanged = ctimeT3 > ctimeT2;
-                this.logger.debug(
-                    `[${cmdId}] preserveAccessTime check | T3 > T2 = ${sourceChanged}`,
-                );
-            } else {
-                sourceChanged = ctimeT3 > ctimeT1;
-                this.logger.debug(
-                    `[${cmdId}] simple check | T3 > T1 = ${sourceChanged}`,
-                );
-            }
+    //         // CHECK: T3 > T2 (files with preserveAccessTime) or T3 > T1 (dirs / no preserveAccessTime)
+    //         let sourceChanged: boolean;
+    //         if (preserveAccessTime) {
+    //             sourceChanged = ctimeT3 > ctimeT2;
+    //             this.logger.debug(
+    //                 `[${cmdId}] preserveAccessTime check | T3 > T2 = ${sourceChanged}`,
+    //             );
+    //         } else {
+    //             sourceChanged = ctimeT3 > ctimeT1;
+    //             this.logger.debug(
+    //                 `[${cmdId}] simple check | T3 > T1 = ${sourceChanged}`,
+    //             );
+    //         }
 
-            if (!sourceChanged) {
-                this.logger.debug(
-                    `[${cmdId}] CtimeValidation PASSED | postStampCtime=${ctimeT3} `
-                    + `(${new Date(ctimeT3).toISOString()}) | attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}`,
-                );
-                output.sourceErrors.push(...attemptOutput.sourceErrors);
-                output.targetErrors.push(...attemptOutput.targetErrors);
-                output.postStampSourceCtimeMs = ctimeT3;
-                if (input.command.isDir) {
-                    await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
-                    );
-                }
-                return;
-            }
+    //         if (!sourceChanged) {
+    //             this.logger.debug(
+    //                 `[${cmdId}] CtimeValidation PASSED | postStampCtime=${ctimeT3} `
+    //                 + `(${new Date(ctimeT3).toISOString()}) | attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}`,
+    //             );
+    //             output.sourceErrors.push(...attemptOutput.sourceErrors);
+    //             output.targetErrors.push(...attemptOutput.targetErrors);
+    //             output.postStampSourceCtimeMs = ctimeT3;
+    //             if (input.command.isDir) {
+    //                 await this.deferredDirStampService.updateSourceCtime(
+    //                     input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
+    //                 );
+    //             }
+    //             return;
+    //         }
 
-            this.logger.log(
-                `[${cmdId}] Source ctime changed during stamp `
-                + `(T1=${ctimeT1}, T2=${ctimeT2}, T3=${ctimeT3}, `
-                + `attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}): ${input.sourcePath}`,
-            );
+    //         this.logger.log(
+    //             `[${cmdId}] Source ctime changed during stamp `
+    //             + `(T1=${ctimeT1}, T2=${ctimeT2}, T3=${ctimeT3}, `
+    //             + `attempt=${attempt + 1}/${MAX_CTIME_RETRIES + 1}): ${input.sourcePath}`,
+    //         );
 
-            if (attempt === MAX_CTIME_RETRIES) {
-                this.logger.error(
-                    `[${cmdId}] CtimeValidation FAILED | all ${MAX_CTIME_RETRIES + 1} attempts exhausted `
-                    + `| publishing METADATA_UPDATE_CONFLICT | ${input.sourcePath}`,
-                );
-                output.sourceErrors.push(...attemptOutput.sourceErrors);
-                output.targetErrors.push(...attemptOutput.targetErrors);
-                output.postStampSourceCtimeMs = ctimeT3;
-                if (input.command.isDir) {
-                    await this.deferredDirStampService.updateSourceCtime(
-                        input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
-                    );
-                }
-                const error = new MetadataUpdateConflictError(input.sourcePath);
-                const dmErr = dmError(
-                    "OPERATION", Origin.SOURCE, Operation.STAMP_META,
-                    ErrorType.METADATA_UPDATE_CONFLICT,
-                    input.command.id, error,
-                    { name: input.command.fPath, path: input.sourcePath },
-                );
-                await input.jobContext.publishToErrorStream(dmErr, input.jobContext.jobConfig?.jobRunId);
-                output.sourceErrors.push(error.code);
-            }
-        }
-    }
+    //         if (attempt === MAX_CTIME_RETRIES) {
+    //             this.logger.error(
+    //                 `[${cmdId}] CtimeValidation FAILED | all ${MAX_CTIME_RETRIES + 1} attempts exhausted `
+    //                 + `| publishing METADATA_UPDATE_CONFLICT | ${input.sourcePath}`,
+    //             );
+    //             output.sourceErrors.push(...attemptOutput.sourceErrors);
+    //             output.targetErrors.push(...attemptOutput.targetErrors);
+    //             output.postStampSourceCtimeMs = ctimeT3;
+    //             if (input.command.isDir) {
+    //                 await this.deferredDirStampService.updateSourceCtime(
+    //                     input.jobContext.jobRunId, input.command.fPath, ctimeT3, input.command.id,
+    //                 );
+    //             }
+    //             const error = new MetadataUpdateConflictError(input.sourcePath);
+    //             const dmErr = dmError(
+    //                 "OPERATION", Origin.SOURCE, Operation.STAMP_META,
+    //                 ErrorType.METADATA_UPDATE_CONFLICT,
+    //                 input.command.id, error,
+    //                 { name: input.command.fPath, path: input.sourcePath },
+    //             );
+    //             await input.jobContext.publishToErrorStream(dmErr, input.jobContext.jobConfig?.jobRunId);
+    //             output.sourceErrors.push(error.code);
+    //         }
+    //     }
+    // }
 
     private async fetchSourceCtimeMs(sourcePath: string): Promise<number> {
         const stat = await fs.promises.lstat(sourcePath);
