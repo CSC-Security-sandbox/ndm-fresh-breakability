@@ -20,7 +20,7 @@ import * as firstline from "firstline";
 import * as readLastLines from "read-last-lines";
 
 jest.mock("firstline");
-jest.mock("read-last-lines");
+jest.mock("read-last-lines", () => ({ read: jest.fn() }));
 
 describe("JobRunService", () => {
   let service: JobRunService;
@@ -944,6 +944,7 @@ describe("JobRunService", () => {
       path.resolve(cocReportsBaseDir, `${id}-coc-report/metadata_conflict_errors.csv`),
     ]);
 
+
     beforeEach(() => {
       jest
         .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
@@ -1209,8 +1210,6 @@ describe("JobRunService", () => {
     const mockZipPath = path.resolve(mockBase, `${jobRunId}-coc-report.zip`);
     const mockBundle = [
       path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/metadata_conflict_errors.csv`),
     ];
@@ -1353,8 +1352,6 @@ describe("JobRunService", () => {
     };
     const mockBundle = [
       path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/excluded-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/skipped-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/metadata_conflict_errors.csv`),
     ];
@@ -1457,8 +1454,6 @@ describe("JobRunService", () => {
     const bundleDir = path.resolve(reportsBase, `${jobRunId}-coc-report`);
     const bundlePaths = [
       path.resolve(bundleDir, "coc-report.csv"),
-      path.resolve(bundleDir, "excluded-report.csv"),
-      path.resolve(bundleDir, "skipped-report.csv"),
       path.resolve(bundleDir, "deleted-report.csv"),
       path.resolve(bundleDir, "metadata_conflict_errors.csv"),
     ];

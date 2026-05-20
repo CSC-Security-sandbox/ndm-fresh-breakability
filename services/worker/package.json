@@ -118,8 +118,9 @@
     "minimatch": "^10.2.3",
     "test-exclude": "^8.0.0",
     "handlebars": "^4.7.9",
-    "protobufjs": "7.5.5",
-    "brace-expansion": "5.0.6"
+    "protobufjs": "7.5.6",
+    "brace-expansion": "5.0.6",
+    "@swc/core": "1.15.21"
   },
   "jest-junit": {
     "suiteName": "Unit Tests",

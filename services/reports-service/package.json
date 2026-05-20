@@ -34,7 +34,7 @@
     "@nestjs/typeorm": "11.0.1",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.10",
     "@netapp-cloud-datamigrate/auth-lib": "0.1.4",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.2.58",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.2.65",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.18",
     "@temporalio/worker": "^1.12.1",
     "@temporalio/workflow": "^1.12.1",
@@ -164,7 +164,7 @@
       "handlebars": "^4.7.9"
     },
     "basic-ftp": "5.3.1",
-    "protobufjs": "7.5.5",
+    "protobufjs": "7.5.6",
     "path-to-regexp": "8.4.2",
     "@nestjs/common": "11.1.18",
     "@nestjs/core": "11.1.18"

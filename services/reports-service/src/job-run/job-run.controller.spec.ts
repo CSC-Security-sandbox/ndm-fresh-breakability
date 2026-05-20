@@ -18,6 +18,8 @@ import { ConfigService } from "@nestjs/config";
 import { serializeJobRunDetailsResponse } from "./dto/job-rundetails.dto";
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 
+jest.mock("read-last-lines", () => ({ read: jest.fn() }));
+
 // Mock the serialization function
 jest.mock("./dto/job-rundetails.dto", () => ({
   ...jest.requireActual("./dto/job-rundetails.dto"),

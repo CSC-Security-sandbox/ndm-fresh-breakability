@@ -30,7 +30,7 @@
     "@nestjs/schedule": "^6.0.0",
     "@nestjs/swagger": "^11.0.6",
     "@nestjs/typeorm": "^11.0.0",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.2.58",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.2.65",
     "@netapp-cloud-datamigrate/auth-lib": "0.1.4",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.10",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.18",
@@ -63,7 +63,7 @@
     "serialize-javascript": "^7.0.3",
     "test-exclude": "^8.0.0",
     "handlebars": "^4.7.9",
-    "protobufjs": "7.5.5",
+    "protobufjs": "7.5.6",
     "brace-expansion": "5.0.6"
   },
   "devDependencies": {
