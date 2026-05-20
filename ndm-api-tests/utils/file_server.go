@@ -633,6 +633,155 @@ func RemoveDeltaFromVolume(export string, deltaFolderName string) error {
 	return nil
 }
 
+// parseAtimeLines parses "PREFIX:<ms>:<rel_path>" lines from SSH output into a map.
+func parseAtimeLines(output, prefix string) map[string]int64 {
+	result := make(map[string]int64)
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, prefix+":") {
+			continue
+		}
+		rest := strings.TrimPrefix(line, prefix+":")
+		parts := strings.SplitN(rest, ":", 2)
+		if len(parts) != 2 || parts[0] == "MISSING" {
+			continue
+		}
+		var ms int64
+		fmt.Sscanf(parts[0], "%d", &ms)
+		result[parts[1]] = ms
+	}
+	return result
+}
+
+// BumpAtimeOnVolumeForNFS mounts the NFS export, runs `touch -a` on up to `count`
+// regular files, then records the resulting atime of each touched file in milliseconds.
+// Uses touch -a (utimes syscall) so atime is bumped reliably regardless of mount
+// options (noatime/relatime on ANF volumes suppress atime updates from read syscalls).
+// Returns map[relPath -> atime_ms].
+func BumpAtimeOnVolumeForNFS(export string, count int) (map[string]int64, error) {
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	mountPoint := fmt.Sprintf("/mnt/atime_bump_%s", uniqueID)
+
+	// Touch up to `count` files and stat only those — POSIX-compatible (no bash arrays or
+	// process substitution) so it works regardless of the SSH exec shell on the worker.
+	// find errors are suppressed so set -e does not abort on unreadable directories.
+	script := fmt.Sprintf(`
+set -e
+sudo mkdir -p "%s"
+sudo mount -t nfs "%s" "%s"
+
+bumped_list=$(mktemp)
+find "%s" -type f 2>/dev/null | head -n %d > "$bumped_list" || true
+
+while IFS= read -r f; do
+    if sudo touch -a "$f" 2>/dev/null; then
+        rel="${f#%s/}"
+        ms=$(LC_ALL=C date -d "$(LC_ALL=C stat -c '%x' "$f")" +%s%3N 2>/dev/null || echo "MISSING")
+        echo "SRCATIME:${ms}:${rel}"
+    fi
+done < "$bumped_list"
+rm -f "$bumped_list"
+
+sudo umount "%s" || sudo umount -l "%s"
+sudo rm -rf "%s"
+`, mountPoint, export, mountPoint, mountPoint, count, mountPoint,
+		mountPoint, mountPoint, mountPoint)
+
+	config := GetAttachedWorkerDetails()
+	cfg := SSHConfig{Username: config.Username, Host: config.Host, Port: config.Port, Password: config.Password}
+	output, err := sshRunScript(cfg, script)
+	if err != nil {
+		return nil, fmt.Errorf("BumpAtimeOnVolumeForNFS failed: %w\noutput: %s", err, output)
+	}
+	return parseAtimeLines(output, "SRCATIME"), nil
+}
+
+// StatAtimeOnDestNFS mounts the destination NFS export and reads the atime (ms) of
+// each relative path that exists in srcAtimes. Returns map[relPath -> atime_ms].
+func StatAtimeOnDestNFS(export string, srcAtimes map[string]int64) (map[string]int64, error) {
+	uniqueID := fmt.Sprintf("%d", time.Now().UnixNano())
+	mountPoint := fmt.Sprintf("/mnt/atime_dest_%s", uniqueID)
+
+	relPaths := make([]string, 0, len(srcAtimes))
+	for p := range srcAtimes {
+		relPaths = append(relPaths, p)
+	}
+	pathList := strings.Join(relPaths, "\n")
+
+	script := fmt.Sprintf(`
+set -e
+sudo mkdir -p "%s"
+sudo mount -t nfs "%s" "%s"
+
+while IFS= read -r rel; do
+    full="%s/${rel}"
+    if [ -f "$full" ]; then
+        ms=$(LC_ALL=C date -d "$(LC_ALL=C stat -c '%x' "$full")" +%s%3N 2>/dev/null || echo "MISSING")
+        echo "DESTATIME:${ms}:${rel}"
+    else
+        echo "DESTATIME:MISSING:${rel}"
+    fi
+done <<'__PATHS__'
+%s
+__PATHS__
+
+sudo umount "%s" || sudo umount -l "%s"
+sudo rm -rf "%s"
+`, mountPoint, export, mountPoint, mountPoint, pathList, mountPoint, mountPoint, mountPoint)
+
+	config := GetAttachedWorkerDetails()
+	cfg := SSHConfig{Username: config.Username, Host: config.Host, Port: config.Port, Password: config.Password}
+	output, err := sshRunScript(cfg, script)
+	if err != nil {
+		return nil, fmt.Errorf("StatAtimeOnDestNFS failed: %w\noutput: %s", err, output)
+	}
+	return parseAtimeLines(output, "DESTATIME"), nil
+}
+
+// ValidateAtime compares source and destination atime maps (both relPath -> atime_ms).
+// Returns a slice of human-readable mismatch descriptions. Empty slice means all match.
+// toleranceMs defines acceptable difference in milliseconds (e.g. 100 for NFS rounding).
+func ValidateAtime(srcAtimes, destAtimes map[string]int64, toleranceMs int64) []string {
+	var mismatches []string
+	for relPath, srcMs := range srcAtimes {
+		destMs, ok := destAtimes[relPath]
+		if !ok {
+			mismatches = append(mismatches, fmt.Sprintf("%s: missing on dest", relPath))
+			continue
+		}
+		diff := destMs - srcMs
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff > toleranceMs {
+			mismatches = append(mismatches, fmt.Sprintf(
+				"%s: src=%dms dest=%dms diff=%dms (tolerance=%dms)",
+				relPath, srcMs, destMs, diff, toleranceMs,
+			))
+		}
+	}
+	return mismatches
+}
+
+// BumpAtimeOnVolume runs touch -a on up to `count` source files and returns
+// map[relPath -> atime_ms]. Returns nil on SMB (atime unreliable on Windows).
+func BumpAtimeOnVolume(export string, count int) (map[string]int64, error) {
+	if PROTOCOL_TYPE == ProtocolNFS {
+		return BumpAtimeOnVolumeForNFS(export, count)
+	}
+	// TODO: When SMB's ctime check is redundant, add aTime scenario for SMB
+	return nil, nil
+}
+
+// StatAtimeOnDestVolume reads atime_ms for each path in srcAtimes from the dest export.
+// Returns nil on SMB.
+func StatAtimeOnDestVolume(export string, srcAtimes map[string]int64) (map[string]int64, error) {
+	if PROTOCOL_TYPE == ProtocolNFS {
+		return StatAtimeOnDestNFS(export, srcAtimes)
+	}
+	return nil, nil
+}
+
 func ModifyDataOnVolumeForSMB(export string) string {
 	// Use unique drive letter to avoid conflicts in parallel test execution
 	mappedDrive := getUniqueDriveLetter()
