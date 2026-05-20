@@ -415,7 +415,7 @@ try {
     if (!(Test-Path $srcFile)) { throw "File not found: $srcFile" }
     Get-FileSecurityFast $srcFile
 } catch {
-    Write-Output (@{ error = $_.Exception.Message } | ConvertTo-Json -Compress)
+    Write-Output "ERROR: $($_.Exception.Message)"
 }
 `;
 

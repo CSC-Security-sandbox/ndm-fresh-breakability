@@ -223,6 +223,33 @@ describe('WinOperationService', () => {
       );
     });
 
+    it('should throw SourceAclError when ACL read fails and error is surfaced via stderr field', async () => {
+      const testPath = 'C:\\test\\path';
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: '',
+        stderr: 'File not found: C:\\test\\path',
+      });
+
+      await expect(service.getAclOperation(testPath, true)).rejects.toThrow(
+        SourceAclError,
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get ACL for C:\\test\\path'),
+      );
+    });
+
+    it('should throw TargetAclError when ACL read fails and error is surfaced via stderr field', async () => {
+      const testPath = 'C:\\test\\path';
+      mockWinShellService.executeCommand = jest.fn().mockResolvedValue({
+        stdout: '',
+        stderr: 'File not found: C:\\test\\path',
+      });
+
+      await expect(service.getAclOperation(testPath, false)).rejects.toThrow(
+        TargetAclError,
+      );
+    });
+
   });
 
   describe('setAclOperation', () => {
