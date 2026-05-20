@@ -78,6 +78,7 @@
     "sha.js": "^2.4.12",
     "react-is": "19.2.3",
     "minimatch": "^10.2.3",
-    "postcss": "8.5.10"
+    "postcss": "8.5.10",
+    "brace-expansion": "5.0.6"
   }
 }

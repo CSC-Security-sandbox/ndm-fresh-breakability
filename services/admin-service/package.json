@@ -99,8 +99,7 @@
     "handlebars": "^4.7.9",
     "protobufjs": "7.5.5",
     "path-to-regexp": "8.4.2",
-    "@nestjs/common": "11.1.18",
-    "@nestjs/core": "11.1.18"
+    "brace-expansion": "5.0.6"
   },
   "jest": {
     "moduleFileExtensions": [
