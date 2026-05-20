@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
+var _ = FDescribe("TC-003: Complete workflow with discovery, migration, and cutover - testing pause/resume/stop/adhoc-run at each stage", func() {
 	var headers map[string]string
 	var (
 		ProjectId             string

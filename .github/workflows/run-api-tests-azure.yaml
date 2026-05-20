@@ -1330,238 +1330,238 @@ jobs:
           go run support_bundle.go
           echo "Support bundle uploaded successfully"
 
-  cleanup:
-    name: Cleanup Infrastructure
-    runs-on: openlab
-    needs: [setup-infrastructure, run-observability-tests, run-nfs-tests, run-smb-tests, upload-support-bundle]
-    if: always()
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
-        with:
-          egress-policy: audit
+  # cleanup:
+  #   name: Cleanup Infrastructure
+  #   runs-on: openlab
+  #   needs: [setup-infrastructure, run-observability-tests, run-nfs-tests, run-smb-tests, upload-support-bundle]
+  #   if: always()
+  #   steps:
+  #     - name: Harden the runner (Audit all outbound calls)
+  #       uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+  #       with:
+  #         egress-policy: audit
 
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  #     - name: Checkout repository
+  #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Setup Node.js
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+  #       with:
+  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Configure Provider Credentials for Cleanup
-        run: |
-          CLOUD="${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}"
-          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
-          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
-          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+  #     - name: Configure Provider Credentials for Cleanup
+  #       run: |
+  #         CLOUD="${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}"
+  #         VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+  #         VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+  #         echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
 
-          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
-          TIME_SUFFIX=$(date +"%H%M%S")
-          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
-            VM_OWNER="ntly${TIME_SUFFIX}"
-          else
-            VM_OWNER="adhc${TIME_SUFFIX}"
-          fi
-          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
+  #         TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+  #         TIME_SUFFIX=$(date +"%H%M%S")
+  #         if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+  #           VM_OWNER="ntly${TIME_SUFFIX}"
+  #         else
+  #           VM_OWNER="adhc${TIME_SUFFIX}"
+  #         fi
+  #         echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
 
-          if [[ "$CLOUD" == "aws" ]]; then
-            echo "TF_DIR=app-deployment/terraform/aws/environments/api" >> $GITHUB_ENV
-            CONTROL_PLANE_AMI="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-            LINUX_WORKER_AMI="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
-            echo "TF_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-            echo "TF_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-            echo "TF_VAR_key_name=${{ secrets.AWS_EC2_KEY_PAIR_NAME }}" >> $GITHUB_ENV
-            echo "TF_VAR_control_plane_ami_id=$CONTROL_PLANE_AMI" >> $GITHUB_ENV
-            echo "TF_VAR_linux_worker_ami_id=$LINUX_WORKER_AMI" >> $GITHUB_ENV
-            echo "TF_VAR_ad_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
-          elif [[ "$CLOUD" == "azure" ]]; then
-            echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
-            echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-            echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
-            echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
-            echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-            CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
-            WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
-            echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
-            echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
-            echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
-            echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
-          else
-            echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
-            exit 1
-          fi
+  #         if [[ "$CLOUD" == "aws" ]]; then
+  #           echo "TF_DIR=app-deployment/terraform/aws/environments/api" >> $GITHUB_ENV
+  #           CONTROL_PLANE_AMI="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+  #           LINUX_WORKER_AMI="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+  #           echo "TF_VAR_aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+  #           echo "TF_VAR_aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+  #           echo "TF_VAR_key_name=${{ secrets.AWS_EC2_KEY_PAIR_NAME }}" >> $GITHUB_ENV
+  #           echo "TF_VAR_control_plane_ami_id=$CONTROL_PLANE_AMI" >> $GITHUB_ENV
+  #           echo "TF_VAR_linux_worker_ami_id=$LINUX_WORKER_AMI" >> $GITHUB_ENV
+  #           echo "TF_VAR_ad_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+  #         elif [[ "$CLOUD" == "azure" ]]; then
+  #           echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
+  #           echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+  #           echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+  #           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+  #           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+  #           CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image_version || github.event.inputs.control_plane_image_version }}"
+  #           WORKER_IMAGE="${{ inputs.worker_image_version || github.event.inputs.worker_image_version }}"
+  #           echo "TF_VAR_control_plane_image_version=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+  #           echo "TF_VAR_worker_image_version=$WORKER_IMAGE" >> $GITHUB_ENV
+  #           echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+  #           echo "TF_VAR_dns_servers=${{ env.WIN_AD_DNS_SERVERS }}" >> $GITHUB_ENV
+  #         else
+  #           echo "ERROR: Unsupported cloud_provider '$CLOUD'. Supported values: aws, azure" >&2
+  #           exit 1
+  #         fi
 
-      - name: Download Terraform State
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: terraform-state
-          path: ${{ env.TF_DIR }}
+  #     - name: Download Terraform State
+  #       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+  #       with:
+  #         name: terraform-state
+  #         path: ${{ env.TF_DIR }}
 
-      - name: Initialize Terraform for Cleanup
-        run: |
-          cd $TF_DIR
-          terraform init
+  #     - name: Initialize Terraform for Cleanup
+  #       run: |
+  #         cd $TF_DIR
+  #         terraform init
 
-      - name: Cleanup ONTAP Snapshots
-        if: always() && github.event_name == 'workflow_call' && contains(inputs.build_version, '-nightly')
-        run: |
-          ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
-          ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
-          ONTAP_SYSTEM_MANAGER_SRC_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}"
-          ONTAP_SRC_SVM_NAME="${{ vars.ONTAP_SRC_SVM_NAME }}"
-          ONTAP_DST_API_URL="${{ vars.ONTAP_DST_API_URL }}"
-          ONTAP_SYSTEM_MANAGER_DST_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}"
-          ONTAP_SYSTEM_MANAGER_DST_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}"
-          ONTAP_DST_SVM_NAME="${{ vars.ONTAP_DST_SVM_NAME }}"
-          ONTAP_NFS_SOURCE_VOLUMES="${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}"
-          ONTAP_NFS_DEST_VOLUMES="${{ vars.ONTAP_NFS_DEST_VOLUMES }}"
-          ONTAP_SMB_SOURCE_VOLUMES="${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}"
-          ONTAP_SMB_DEST_VOLUMES="${{ vars.ONTAP_SMB_DEST_VOLUMES }}"
+  #     - name: Cleanup ONTAP Snapshots
+  #       if: always() && github.event_name == 'workflow_call' && contains(inputs.build_version, '-nightly')
+  #       run: |
+  #         ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
+  #         ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
+  #         ONTAP_SYSTEM_MANAGER_SRC_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}"
+  #         ONTAP_SRC_SVM_NAME="${{ vars.ONTAP_SRC_SVM_NAME }}"
+  #         ONTAP_DST_API_URL="${{ vars.ONTAP_DST_API_URL }}"
+  #         ONTAP_SYSTEM_MANAGER_DST_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}"
+  #         ONTAP_SYSTEM_MANAGER_DST_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}"
+  #         ONTAP_DST_SVM_NAME="${{ vars.ONTAP_DST_SVM_NAME }}"
+  #         ONTAP_NFS_SOURCE_VOLUMES="${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}"
+  #         ONTAP_NFS_DEST_VOLUMES="${{ vars.ONTAP_NFS_DEST_VOLUMES }}"
+  #         ONTAP_SMB_SOURCE_VOLUMES="${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}"
+  #         ONTAP_SMB_DEST_VOLUMES="${{ vars.ONTAP_SMB_DEST_VOLUMES }}"
           
-          cleanup_snapshots_for_volume() {
-            local ONTAP_URL=$1
-            local USERNAME=$2
-            local PASSWORD=$3
-            local SVM_NAME=$4
-            local VOLUME_NAME=$5
+  #         cleanup_snapshots_for_volume() {
+  #           local ONTAP_URL=$1
+  #           local USERNAME=$2
+  #           local PASSWORD=$3
+  #           local SVM_NAME=$4
+  #           local VOLUME_NAME=$5
             
-            echo "[CLEANUP] Processing volume '$VOLUME_NAME'"
+  #           echo "[CLEANUP] Processing volume '$VOLUME_NAME'"
             
-            MAX_RETRIES=3
-            RETRY_COUNT=0
-            HTTP_CODE="000"
+  #           MAX_RETRIES=3
+  #           RETRY_COUNT=0
+  #           HTTP_CODE="000"
             
-            while [ "$HTTP_CODE" = "000" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if [ $RETRY_COUNT -gt 0 ]; then
-                echo "Retry attempt $RETRY_COUNT/$MAX_RETRIES for volume '$VOLUME_NAME'"
-                sleep 2
-              fi
+  #           while [ "$HTTP_CODE" = "000" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  #             if [ $RETRY_COUNT -gt 0 ]; then
+  #               echo "Retry attempt $RETRY_COUNT/$MAX_RETRIES for volume '$VOLUME_NAME'"
+  #               sleep 2
+  #             fi
               
-              VOLUME_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
-                "$ONTAP_URL/api/storage/volumes?svm.name=$SVM_NAME&name=$VOLUME_NAME" 2>&1)
+  #             VOLUME_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+  #               "$ONTAP_URL/api/storage/volumes?svm.name=$SVM_NAME&name=$VOLUME_NAME" 2>&1)
               
-              HTTP_CODE=$(echo "$VOLUME_RESPONSE" | tail -n1)
-              VOLUME_BODY=$(echo "$VOLUME_RESPONSE" | sed '$d')
+  #             HTTP_CODE=$(echo "$VOLUME_RESPONSE" | tail -n1)
+  #             VOLUME_BODY=$(echo "$VOLUME_RESPONSE" | sed '$d')
               
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-            done
+  #             RETRY_COUNT=$((RETRY_COUNT + 1))
+  #           done
             
-            if [ "$HTTP_CODE" = "000" ]; then
-              echo "Failed to connect to ONTAP API at '$ONTAP_URL' after $MAX_RETRIES attempts - check URL and network connectivity"
-              return 1
-            fi
+  #           if [ "$HTTP_CODE" = "000" ]; then
+  #             echo "Failed to connect to ONTAP API at '$ONTAP_URL' after $MAX_RETRIES attempts - check URL and network connectivity"
+  #             return 1
+  #           fi
             
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "Failed to get volume '$VOLUME_NAME': HTTP $HTTP_CODE"
-              return 1
-            fi
+  #           if [ "$HTTP_CODE" != "200" ]; then
+  #             echo "Failed to get volume '$VOLUME_NAME': HTTP $HTTP_CODE"
+  #             return 1
+  #           fi
             
-            VOLUME_UUID=$(echo "$VOLUME_BODY" | jq -r '.records[0].uuid // empty')
+  #           VOLUME_UUID=$(echo "$VOLUME_BODY" | jq -r '.records[0].uuid // empty')
             
-            if [ -z "$VOLUME_UUID" ] || [ "$VOLUME_UUID" = "null" ]; then
-              echo "[CLEANUP] Volume '$VOLUME_NAME' not found"
-              return 1
-            fi
+  #           if [ -z "$VOLUME_UUID" ] || [ "$VOLUME_UUID" = "null" ]; then
+  #             echo "[CLEANUP] Volume '$VOLUME_NAME' not found"
+  #             return 1
+  #           fi
             
-            SNAPSHOTS_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
-              "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots")
+  #           SNAPSHOTS_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+  #             "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots")
             
-            SNAPSHOTS_HTTP_CODE=$(echo "$SNAPSHOTS_RESPONSE" | tail -n1)
-            SNAPSHOTS_BODY=$(echo "$SNAPSHOTS_RESPONSE" | sed '$d')
+  #           SNAPSHOTS_HTTP_CODE=$(echo "$SNAPSHOTS_RESPONSE" | tail -n1)
+  #           SNAPSHOTS_BODY=$(echo "$SNAPSHOTS_RESPONSE" | sed '$d')
             
-            if [ "$SNAPSHOTS_HTTP_CODE" != "200" ]; then
-              echo "[CLEANUP] Failed to list snapshots for volume '$VOLUME_NAME': HTTP $SNAPSHOTS_HTTP_CODE"
-              return 1
-            fi
+  #           if [ "$SNAPSHOTS_HTTP_CODE" != "200" ]; then
+  #             echo "[CLEANUP] Failed to list snapshots for volume '$VOLUME_NAME': HTTP $SNAPSHOTS_HTTP_CODE"
+  #             return 1
+  #           fi
             
-            SNAPSHOT_UUIDS=$(echo "$SNAPSHOTS_BODY" | jq -r '.records[]?.uuid // empty')
+  #           SNAPSHOT_UUIDS=$(echo "$SNAPSHOTS_BODY" | jq -r '.records[]?.uuid // empty')
             
-            if [ -z "$SNAPSHOT_UUIDS" ]; then
-              echo "[CLEANUP] No snapshots found on volume '$VOLUME_NAME'"
-              return 0
-            fi
+  #           if [ -z "$SNAPSHOT_UUIDS" ]; then
+  #             echo "[CLEANUP] No snapshots found on volume '$VOLUME_NAME'"
+  #             return 0
+  #           fi
             
-            while IFS= read -r SNAP_UUID; do
-              [ -z "$SNAP_UUID" ] && continue
+  #           while IFS= read -r SNAP_UUID; do
+  #             [ -z "$SNAP_UUID" ] && continue
               
-              curl -sk -u "$USERNAME:$PASSWORD" -X DELETE \
-                "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots/$SNAP_UUID" > /dev/null 2>&1
-            done <<< "$SNAPSHOT_UUIDS"
+  #             curl -sk -u "$USERNAME:$PASSWORD" -X DELETE \
+  #               "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots/$SNAP_UUID" > /dev/null 2>&1
+  #           done <<< "$SNAPSHOT_UUIDS"
             
-            echo "[CLEANUP] Completed snapshot cleanup for volume '$VOLUME_NAME'"
-            return 0
-          }
+  #           echo "[CLEANUP] Completed snapshot cleanup for volume '$VOLUME_NAME'"
+  #           return 0
+  #         }
           
-          cleanup_snapshots_for_protocol() {
-            local PROTOCOL=$1
-            local SOURCE_VOLUMES_STR=$2
-            local DEST_VOLUMES_STR=$3
+  #         cleanup_snapshots_for_protocol() {
+  #           local PROTOCOL=$1
+  #           local SOURCE_VOLUMES_STR=$2
+  #           local DEST_VOLUMES_STR=$3
             
-            if [ -z "$SOURCE_VOLUMES_STR" ] || [ -z "$DEST_VOLUMES_STR" ]; then
-              echo "Skipping $PROTOCOL snapshot cleanup - volume GitHub variables not set"
-              return 0
-            fi
+  #           if [ -z "$SOURCE_VOLUMES_STR" ] || [ -z "$DEST_VOLUMES_STR" ]; then
+  #             echo "Skipping $PROTOCOL snapshot cleanup - volume GitHub variables not set"
+  #             return 0
+  #           fi
             
-            echo "Cleaning up $PROTOCOL snapshots"
+  #           echo "Cleaning up $PROTOCOL snapshots"
             
-            if [ -n "$ONTAP_SRC_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" ] && \
-               [ -n "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" ] && [ -n "$ONTAP_SRC_SVM_NAME" ]; then
+  #           if [ -n "$ONTAP_SRC_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" ] && \
+  #              [ -n "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" ] && [ -n "$ONTAP_SRC_SVM_NAME" ]; then
               
-              IFS=',' read -ra SOURCE_VOLUMES <<< "$SOURCE_VOLUMES_STR"
-              for VOL in "${SOURCE_VOLUMES[@]}"; do
-                VOL=$(echo "$VOL" | xargs)
-                [ -z "$VOL" ] && continue
+  #             IFS=',' read -ra SOURCE_VOLUMES <<< "$SOURCE_VOLUMES_STR"
+  #             for VOL in "${SOURCE_VOLUMES[@]}"; do
+  #               VOL=$(echo "$VOL" | xargs)
+  #               [ -z "$VOL" ] && continue
                 
-                cleanup_snapshots_for_volume "$ONTAP_SRC_API_URL" \
-                  "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" \
-                  "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" \
-                  "$ONTAP_SRC_SVM_NAME" \
-                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for source volume '$VOL'"
+  #               cleanup_snapshots_for_volume "$ONTAP_SRC_API_URL" \
+  #                 "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" \
+  #                 "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" \
+  #                 "$ONTAP_SRC_SVM_NAME" \
+  #                 "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for source volume '$VOL'"
                 
-                echo "Waiting 30 seconds to avoid ONTAP rate limits"
-                sleep 30
-              done
-            else
-              echo "Skipping $PROTOCOL source snapshot cleanup - ONTAP configuration incomplete"
-            fi
+  #               echo "Waiting 30 seconds to avoid ONTAP rate limits"
+  #               sleep 30
+  #             done
+  #           else
+  #             echo "Skipping $PROTOCOL source snapshot cleanup - ONTAP configuration incomplete"
+  #           fi
             
-            if [ -n "$ONTAP_DST_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" ] && \
-               [ -n "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" ] && [ -n "$ONTAP_DST_SVM_NAME" ]; then
+  #           if [ -n "$ONTAP_DST_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" ] && \
+  #              [ -n "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" ] && [ -n "$ONTAP_DST_SVM_NAME" ]; then
               
-              IFS=',' read -ra DEST_VOLUMES <<< "$DEST_VOLUMES_STR"
-              for VOL in "${DEST_VOLUMES[@]}"; do
-                VOL=$(echo "$VOL" | xargs)
-                [ -z "$VOL" ] && continue
+  #             IFS=',' read -ra DEST_VOLUMES <<< "$DEST_VOLUMES_STR"
+  #             for VOL in "${DEST_VOLUMES[@]}"; do
+  #               VOL=$(echo "$VOL" | xargs)
+  #               [ -z "$VOL" ] && continue
                 
-                cleanup_snapshots_for_volume "$ONTAP_DST_API_URL" \
-                  "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" \
-                  "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" \
-                  "$ONTAP_DST_SVM_NAME" \
-                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for destination volume '$VOL'"
+  #               cleanup_snapshots_for_volume "$ONTAP_DST_API_URL" \
+  #                 "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" \
+  #                 "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" \
+  #                 "$ONTAP_DST_SVM_NAME" \
+  #                 "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for destination volume '$VOL'"
                 
-                echo "Waiting 30 seconds to avoid ONTAP rate limits"
-                sleep 30
-              done
-            else
-              echo "Skipping $PROTOCOL destination snapshot cleanup - ONTAP configuration incomplete"
-            fi
-          }
+  #               echo "Waiting 30 seconds to avoid ONTAP rate limits"
+  #               sleep 30
+  #             done
+  #           else
+  #             echo "Skipping $PROTOCOL destination snapshot cleanup - ONTAP configuration incomplete"
+  #           fi
+  #         }
           
-          cleanup_snapshots_for_protocol "NFS" "$ONTAP_NFS_SOURCE_VOLUMES" "$ONTAP_NFS_DEST_VOLUMES"
-          cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
-          echo "Snapshot cleanup completed"
+  #         cleanup_snapshots_for_protocol "NFS" "$ONTAP_NFS_SOURCE_VOLUMES" "$ONTAP_NFS_DEST_VOLUMES"
+  #         cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
+  #         echo "Snapshot cleanup completed"
 
-      - name: Destroy Terraform Resources
-        run: |
-          cd $TF_DIR
-          terraform destroy -auto-approve
+  #     - name: Destroy Terraform Resources
+  #       run: |
+  #         cd $TF_DIR
+  #         terraform destroy -auto-approve
 
-      - name: Clean Up Temporary Files
-        run: |
-          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+  #     - name: Clean Up Temporary Files
+  #       run: |
+  #         rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
