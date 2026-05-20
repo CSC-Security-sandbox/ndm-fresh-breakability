@@ -106,44 +106,47 @@ export const executeRetryMigrationChildWorkflows = async ({
       parentClosePolicy: wf.ParentClosePolicy.TERMINATE,
     });
 
-    // Wait for retry scan workflow to complete
-    try {
-      const retryScanWorkflowOutput = await retryScanWorkflow.result();
-      output.retryScanJobStatus = retryScanWorkflowOutput.status;
-    } catch (error) {
-      if (wf.isCancellation(error.cause)) {
-        output.retryScanJobStatus = JobRunStatus.Stopped;
-      } else {
-        output.retryScanJobStatus = JobRunStatus.Failed;
-        syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
+    let errorReported = false;
+
+    const handleError = async (error: any, code: string, operation: string, siblingWorkflowId: string): Promise<JobRunStatus> => {
+      if (wf.isCancellation(error) || wf.isCancellation(error?.cause)) {
+        await cancelWorkflowIfRunning(siblingWorkflowId);
+        return JobRunStatus.Stopped;
       }
-    }
-
-    // Signal sync workflow that scan is complete
-    await signalIfRunning(syncWorkflow, 'scanResultSignal', output.retryScanJobStatus);
-
-    if (syncWorkflow) {
-      try {
-        const syncWorkflowOutput = await syncWorkflow.result();
-        output.syncJobStatus = syncWorkflowOutput.status;
-      } catch (error) {
-        if (wf.isCancellation(error.cause)) {
-          output.syncJobStatus = JobRunStatus.Stopped;
-        } else {
-          output.syncJobStatus = JobRunStatus.Failed;
-        }
+      if (!errorReported) {
+        errorReported = true;
         await updateWorkerResponseActivity(jobRunId, 'all', {
-          status: output.syncJobStatus,
-          code: 'RETRY_SYNC_FAILURE',
-          operation: 'Retry Sync Workflow',
+          status: JobRunStatus.Failed,
+          code,
+          operation,
           occurrence: 1,
           origin: 'RetryMigrationWorkflow',
-          message: `Retry sync workflow failed with error: ${error.message}`,
+          message: `${operation} failed with error: ${error?.message || 'Unknown error'}`,
           createdAt: new Date()
         });
-        retryScanWorkflow && await cancelWorkflowIfRunning(retryScanWorkflow.workflowId);
       }
-    }
+      await cancelWorkflowIfRunning(siblingWorkflowId);
+      return JobRunStatus.Failed;
+    };
+
+    const scanPromise = retryScanWorkflow.result()
+      .then(async (retryScanWorkflowOutput) => {
+        output.retryScanJobStatus = retryScanWorkflowOutput.status;
+        await signalIfRunning(syncWorkflow, 'scanResultSignal', output.retryScanJobStatus);
+      })
+      .catch(async (error) => {
+        output.retryScanJobStatus = await handleError(error, 'RETRY_SCAN_FAILURE', 'Retry Scan Workflow', syncWorkflow.workflowId);
+      });
+
+    const syncPromise = syncWorkflow.result()
+      .then(async (syncWorkflowOutput) => {
+        output.syncJobStatus = syncWorkflowOutput.status;
+      })
+      .catch(async (error) => {
+        output.syncJobStatus = await handleError(error, 'RETRY_SYNC_FAILURE', 'Retry Sync Workflow', retryScanWorkflow.workflowId);
+      });
+
+    await Promise.all([scanPromise, syncPromise]);
   } else {
     output.syncJobStatus = JobRunStatus.Stopped;
   }
