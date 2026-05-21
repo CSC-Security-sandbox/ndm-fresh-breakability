@@ -3,7 +3,7 @@ import { GroupReaderType, JobContextFactory, JobManagerContext, ItemInfo } from 
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { DataSource } from 'typeorm';
 import * as path from 'path';
-import { Worker, isMainThread } from 'worker_threads';
+import { Worker, isMainThread, parentPort } from 'worker_threads';
 import { ConsumerType } from '../enum/redis-consumer.enum';
 import { InventoryService } from '../inventory/inventory.service';
 import { WorkflowService } from '../workflow/workflow.service';
@@ -572,12 +572,14 @@ export class RedisConsumerService implements OnModuleDestroy {
     }
 
 
-    private activeWorkers: Map<string, number> = new Map(); // jobId -> start timestamp
+    private activeWorkers: Map<string, { startedAt: number; lastHeartbeatAt: number; workerRef: Worker | null; terminated?: boolean }> = new Map();
     private workerRetryCounts: Map<string, number> = new Map(); // jobId -> consecutive failure count
     private readonly maxWorkerRetries: number = parseInt(process.env.MAX_WORKER_RETRIES || '3');
     private redisCompensationFailureCounts: Map<string, number> = new Map(); // jobId -> consecutive Redis compensation failure count
     private readonly maxRedisCompensationFailures = 3;
-    private readonly workerTimeoutMs: number = parseInt(process.env.WORKER_TIMEOUT_MS || '3600000');
+    // Idle heartbeat timeout: worker is considered hung only if it sends no heartbeat for this long.
+    // Replaces the old wall-clock WORKER_TIMEOUT_MS which killed healthy long-running workers.
+    private readonly workerHeartbeatTimeoutMs: number = parseInt(process.env.WORKER_HEARTBEAT_TIMEOUT_MS || '600000'); // default 10 min
 
     /**
      * Cron job that monitors Redis for active consumers and manages worker threads
@@ -616,9 +618,18 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                 if (Object.values(consumerStatuses).some(status => status === 'active')) {
                     if (this.activeWorkers.has(jobId)) {
-                        const startedAt = this.activeWorkers.get(jobId);
-                        if (Date.now() - startedAt > this.workerTimeoutMs) {
-                            this.logger.warn(`projectId: ${projectId} Worker for job ${jobId} appears hung (running for ${Math.round((Date.now() - startedAt) / 1000)}s), removing tracking to allow respawn`);
+                        const tracked = this.activeWorkers.get(jobId);
+                        const idleMs = Date.now() - tracked.lastHeartbeatAt;
+                        if (idleMs > this.workerHeartbeatTimeoutMs) {
+                            this.logger.warn(
+                                `projectId: ${projectId} Worker for job ${jobId} appears hung ` +
+                                `(no heartbeat for ${Math.round(idleMs / 1000)}s, ` +
+                                `total uptime ${Math.round((Date.now() - tracked.startedAt) / 1000)}s), terminating`,
+                            );
+                            if (tracked.workerRef) {
+                                tracked.terminated = true;
+                                await tracked.workerRef.terminate();
+                            }
                             this.activeWorkers.delete(jobId);
                         } else {
                             continue;
@@ -642,7 +653,7 @@ export class RedisConsumerService implements OnModuleDestroy {
                         continue;
                     }
 
-                    this.activeWorkers.set(jobId, Date.now());
+                    this.activeWorkers.set(jobId, { startedAt: Date.now(), lastHeartbeatAt: Date.now(), workerRef: null });
 
                     this.createConsumerWorkerThread(jobId)
                         .then(() => {
@@ -650,8 +661,13 @@ export class RedisConsumerService implements OnModuleDestroy {
                             this.workerRetryCounts.delete(jobId);
                         })
                         .catch(error => {
-                            this.logger.error(`projectId: ${projectId} Error in worker thread for job ${jobId}: ${error.message}`, error?.stack || error);
+                            const tracked = this.activeWorkers.get(jobId);
                             this.activeWorkers.delete(jobId);
+                            if (tracked?.terminated) {
+                                this.logger.warn(`projectId: ${projectId} Worker for job ${jobId} was intentionally terminated, skipping retry count increment`);
+                                return;
+                            }
+                            this.logger.error(`projectId: ${projectId} Error in worker thread for job ${jobId}: ${error.message}`, error?.stack || error);
                             this.workerRetryCounts.set(jobId, (this.workerRetryCounts.get(jobId) || 0) + 1);
                         });
                 } else {
@@ -693,7 +709,22 @@ export class RedisConsumerService implements OnModuleDestroy {
                 workerData: { jobRunId, projectId }
             });
 
+            // Register the Worker reference so the cron can terminate it if hung
+            const entry = this.activeWorkers.get(jobRunId);
+            if (entry) {
+                entry.workerRef = worker;
+            }
+
             worker.on('message', (result) => {
+                // Heartbeat — update timestamp and return without settling the promise.
+                // This keeps long-running healthy workers alive through the cron's hung-detection.
+                if (result.type === 'heartbeat') {
+                    const entry = this.activeWorkers.get(jobRunId);
+                    if (entry) entry.lastHeartbeatAt = Date.now();
+                    this.logger.debug(`projectId: ${projectId} Heartbeat from worker for job ${jobRunId}, processed: ${result.processedCount}`);
+                    return;
+                }
+
                 if (settled) return;
                 settled = true;
 
@@ -805,6 +836,30 @@ export class RedisConsumerService implements OnModuleDestroy {
             let totalFilesReceived = 0;
             let iterationCount = 0;
 
+            // Drain own PEL before reading new messages. If this consumer previously
+            // crashed or was force-terminated mid-batch, those stream IDs are still
+            // sitting unACKed in Redis. Re-processing them here ensures no records
+            // are silently lost before the normal '>' polling loop begins.
+            if (consumerType === ConsumerType.files) {
+                this.logger.log(
+                    `projectId: ${projectId} Checking PEL for ${consumerType} in job ${jobRunId} before starting read loop`,
+                );
+                let pelCount = 0;
+                for await (const data of jobContext.drainPendingFileStream(
+                    `${consumerType}-reader`, this.batchSize, GroupReaderType.DB_WRITER,
+                )) {
+                    await this.processStreamData(data, consumerType, jobRunId, jobContext);
+                    pelCount++;
+                }
+                if (pelCount > 0) {
+                    this.logger.warn(
+                        `projectId: ${projectId} Recovered ${pelCount} PEL orphans for job ${jobRunId} — reprocessed before starting normal read loop`,
+                    );
+                } else {
+                    this.logger.debug(`projectId: ${projectId} No PEL orphans found for job ${jobRunId}`);
+                }
+            }
+
             while (await this.isConsumerRunning(jobRunId, consumerType)) {
                 iterationCount++;
 
@@ -824,6 +879,9 @@ export class RedisConsumerService implements OnModuleDestroy {
 
                     if (batchFilesReceived > 0) {
                         this.logger.debug(`projectId: ${projectId} Processed ${batchFilesReceived} items in iteration ${iterationCount} for ${consumerType} in job ${jobRunId}`);
+                        // Heartbeat to main thread so the cron knows this worker is alive and making progress.
+                        // Only emitted when actual data was processed to avoid noise on idle iterations.
+                        parentPort?.postMessage({ type: 'heartbeat', processedCount: totalFilesReceived });
                     }
                     if (!hasData) {
                         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -1222,7 +1280,34 @@ export class RedisConsumerService implements OnModuleDestroy {
         // Flush if batch size met
         if (context.records.length >= this.batchSize) {
             this.logger.debug(`projectId: ${projectId} Batch size reached (${this.batchSize}), flushing inventory for job ${jobRunId}`);
-            await this.flushInventory(jobRunId, jobContext);
+            let flushSucceeded = await this.flushInventory(jobRunId, jobContext);
+
+            if (!flushSucceeded) {
+                // Failed records are already restored into context.records by flushInventory.
+                // Apply backpressure: retry with linear back-off before accepting more records
+                // to prevent the backlog from growing unboundedly under a transient DB failure.
+                const baseDelayMs = 2000;
+                for (let attempt = 1; attempt <= this.maxRetries && !flushSucceeded; attempt++) {
+                    const delay = baseDelayMs * attempt; // 2 s, 4 s, 6 s
+                    this.logger.warn(
+                        `projectId: ${projectId} Batch flush failed for job ${jobRunId}, ` +
+                        `retrying in ${delay}ms (attempt ${attempt}/${this.maxRetries}), ` +
+                        `backlog: ${context.records.length} records`,
+                    );
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    flushSucceeded = await this.flushInventory(jobRunId, jobContext);
+                }
+
+                if (!flushSucceeded) {
+                    this.logger.error(
+                        `projectId: ${projectId} Batch flush failed after ${this.maxRetries} retries for job ${jobRunId}. ` +
+                        `Signalling DB writer failure. Backlog: ${context.records.length} records.`,
+                    );
+                    await this.signalWorkflowDbWriterFailure(jobRunId);
+                    await this.stopConsumer(jobRunId, ConsumerType.files);
+                    return;
+                }
+            }
         }
 
         // Flush on timeout
@@ -1234,9 +1319,16 @@ export class RedisConsumerService implements OnModuleDestroy {
                 }
 
                 this.logger.debug(`projectId: ${projectId} Timeout reached, flushing inventory for job ${jobRunId}`);
-                await this.flushInventory(jobRunId, jobContext).catch(err => {
+                const timerFlushOk = await this.flushInventory(jobRunId, jobContext).catch(err => {
                     this.logger.error(`projectId: ${projectId} Timeout flush failed for job ${jobRunId}:`, err);
+                    return false;
                 });
+                if (!timerFlushOk) {
+                    this.logger.warn(
+                        `projectId: ${projectId} Timeout flush failed for job ${jobRunId}. ` +
+                        `${context.records.length} records remain in backlog — next batch or final flush will retry.`,
+                    );
+                }
             }, this.batchTimeoutMs);
         }
     }
@@ -1273,21 +1365,26 @@ export class RedisConsumerService implements OnModuleDestroy {
         const records = [...context.records];
         context.records.length = 0;
 
+        // Hoisted outside try so the catch block can compensate Redis if an exception
+        // is thrown after incrementLiveStats but before writeInventoryToPostgres returns.
+        let redisUpdated = false;
+        let delta: InventoryDelta | null = null;
+        let inventoryEntryByKey: Map<string, string | null> | null = null;
+
         try {
             const dedupedItems = this.deduplicateRecords(records);
 
-            const inventoryEntryByKey = await this.inventoryService.getInventoryEntryTypesForPaths(
+            inventoryEntryByKey = await this.inventoryService.getInventoryEntryTypesForPaths(
                 context.jobRunId,
                 dedupedItems.map(r => ({ path: r.fileName, isDirectory: r.isDirectory ?? false })),
             );
 
-            const delta = this.computeLiveStatsDelta(context.jobRunId, dedupedItems, inventoryEntryByKey);
+            delta = this.computeLiveStatsDelta(context.jobRunId, dedupedItems, inventoryEntryByKey);
             const hasNewItems = delta.fileCount > 0 || delta.dirCount > 0;
             const hasAdditionalCounters =
                 delta.newlyCopiedCount > 0 ||
                 delta.recopiedCount > 0 ||
                 delta.deletedCount > 0;
-            let redisUpdated = false;
 
             if (hasNewItems || hasAdditionalCounters) {
                 await this.incrementLiveStats(projectId, jobRunId, delta);
@@ -1328,6 +1425,17 @@ export class RedisConsumerService implements OnModuleDestroy {
             return true;
         } catch (err) {
             this.logger.error(`projectId: ${projectId} Batch write failed for job ${jobRunId}:`, err);
+
+            // If Redis was already incremented before the exception, compensate the full delta
+            // to prevent liveStats from drifting above the actual DB state.
+            if (redisUpdated && delta && inventoryEntryByKey) {
+                this.logger.warn(
+                    `projectId: ${projectId} Exception after Redis increment for job ${jobRunId} — ` +
+                    `compensating full liveStats delta to maintain Redis/DB consistency`,
+                );
+                await this.compensateRedisIncrement(projectId, context.jobRunId, delta);
+            }
+
             context.records.unshift(...records);
             this.logger.warn(`projectId: ${projectId} Restored ${records.length} records to queue for retry in job ${jobRunId}`);
             return false;
@@ -1611,9 +1719,9 @@ export class RedisConsumerService implements OnModuleDestroy {
             }
 
             if (this.activeWorkers.has(jobRunId)) {
-                const startedAt = this.activeWorkers.get(jobRunId);
+                const tracked = this.activeWorkers.get(jobRunId);
                 this.activeWorkers.delete(jobRunId);
-                this.logger.debug(`projectId: ${projectId} Removed worker tracking for job ${jobRunId} (was active for ${startedAt ? Math.round((Date.now() - startedAt) / 1000) : '?'}s)`);
+                this.logger.debug(`projectId: ${projectId} Removed worker tracking for job ${jobRunId} (was active for ${tracked ? Math.round((Date.now() - tracked.startedAt) / 1000) : '?'}s)`);
             }
 
             this.accumulatedRecords.length = 0;

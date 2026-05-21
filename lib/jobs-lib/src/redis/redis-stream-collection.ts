@@ -230,8 +230,39 @@ export class RedisStreamCollection<T extends Serializable>
     }
   }
 
-  } 
-  
+  }
+
+  /**
+   * Drains all messages in this consumer's own PEL (Pending Entry List) by reading
+   * with id '0-0' instead of '>'. Used at consumer startup to recover any messages
+   * that were delivered but never ACKed due to a prior crash or forced termination.
+   * Paginates until the PEL is fully empty, then exits.
+   */
+  async *drainPendingEntries(
+    readerName: string,
+    batchSize: number,
+    groupType: GroupReaderType,
+  ): AsyncGenerator<{ data: T; id: string }> {
+    let cursor = '0-0';
+    while (true) {
+      const results = await this.redisClient.xReadGroup(
+        `${this.jobRunId}-${groupType}`,
+        readerName,
+        [{ key: this.streamKey, id: cursor }],
+        { COUNT: batchSize },
+        // No BLOCK — returns immediately if PEL is empty
+      );
+      if (!results || results.length === 0 || results[0].messages.length === 0) {
+        break;
+      }
+      for (const { id, message } of results[0].messages) {
+        const data = decode(Buffer.from(message.obj, 'base64')) as T;
+        cursor = id; // advance cursor so next page starts after this entry
+        yield { data, id };
+      }
+    }
+  }
+
   async *readAndPurge(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<T> {
     const results = await this.redisClient.xReadGroup(
       `${this.jobRunId}-${groupType}`,

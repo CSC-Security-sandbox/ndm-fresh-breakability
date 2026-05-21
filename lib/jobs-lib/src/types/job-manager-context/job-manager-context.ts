@@ -56,6 +56,10 @@ export  class JobManagerContext {
         yield* this.fileStream.groupReadWithoutAck(readerName, batchSize, groupType);
     }
 
+    async *drainPendingFileStream(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<{ data: ItemInfo; id: string; }> {
+        yield* this.fileStream.drainPendingEntries(readerName, batchSize, groupType);
+    }
+
     async groupAckFileStream(ids:string[], groupType: GroupReaderType): Promise<void> {
         await this.fileStream.ackAndPurge(ids, groupType);
     }

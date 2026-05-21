@@ -27,6 +27,7 @@ export interface StreamCollection<T extends Serializable> {
   getLength(): Promise<number>;
   ackAndPurge(ids: string[], groupType: GroupReaderType): Promise<boolean>;
   groupReadWithoutAck(readerName: string,batchSize:number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }>;
+  drainPendingEntries(readerName: string, batchSize: number, groupType: GroupReaderType): AsyncGenerator<{ data: T; id: string; }>;
 }
 
 export interface FileCollection extends StreamCollection<FileInfo> {}
