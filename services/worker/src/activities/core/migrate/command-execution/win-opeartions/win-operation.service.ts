@@ -180,19 +180,8 @@ export class WinOperationService {
       });
     }
 
-    // 2c. Apply SMB inheritance mode when explicitly requested via STAMP_META params.
-    // Only set for the DLM root command — no other commands carry this flag.
-    // originalAcl  — snapshot of all source ACEs before filtering, used for CoC sourceSID.
-    // filteredAcl  — ACEs after mode filtering, used for stamping and ACE comparison.
-    let originalAcl: SecurityDescriptor | undefined;
-    let filteredAcl: SecurityDescriptor = acl;
-    if (command.ops[OPS_CMD.STAMP_META]?.params?.applyInheritanceMode) {
-      const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
-        ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
-      this.logger.debug(`Applying SMB inheritance mode "${mode}" for DLM root ${sourcePath}`);
-      originalAcl = { ...acl, DaclAces: [...(acl.DaclAces ?? [])] };
-      filteredAcl = this.applySmbInheritanceMode(acl, mode);
-    }
+    // 2c. Apply SMB inheritance mode for the DLM root (no-op for all other commands).
+    const filteredAcl = this.applySmbInheritanceMode(acl, command, jobContext);
 
     // 3. Set target ACL (PowerShell Set-FileSecurityFast)
     const result = await this.metricsService.runWithTiming(
@@ -225,48 +214,49 @@ export class WinOperationService {
     const validation = await this.metricsService.runWithTiming(
       workflowId,
       { category: 'stamp_phase', phase: 'acl_validate' },
-      () => this.validateAclOperation(originalAcl ?? filteredAcl, targetAcl, filteredAcl),
+      () => this.validateAclOperation(filteredAcl, targetAcl),
     );
     if (validation.inValid.length > 0){
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
     }
+    // Build CoC header from the ORIGINAL (non-filtered) source ACL so the audit shows
+    // the source's actual Owner/Group regardless of inheritance-mode filtering.
+    const sourceSidString = `Owner: ${acl.originalOwner ?? acl.Owner}, Group: ${acl.originalGroup ?? acl.Group},${validation.sourceSID}`;
+    const targetSidString = `Owner: ${targetAcl.Owner}, Group: ${targetAcl.Group}, ${validation.targetSID}`;
     command.ops[OPS_CMD.STAMP_META].params.sidMap = {
-      targetAcl: validation.targetSID,
-      sourceAcl: validation.sourceSID,
+      targetAcl: targetSidString,
+      sourceAcl: sourceSidString,
       validationError: validation.inValid,
     };
-    this.logger.debug(`sidMap stored - sourceAcl: "${validation.sourceSID}" | targetAcl: "${validation.targetSID}"`);
+    this.logger.debug(`sidMap stored - sourceAcl: "${sourceSidString}" | targetAcl: "${targetSidString}"`);
     
     return { output, errors };
   }
 
-  /**
-   * Applies the configured SMB permission inheritance mode to an ACL before stamping.
-   *
-   * INHERIT_PERMS_AS_EXPLICIT (default):
-   *   Converts inherited ACEs to explicit by clearing IsInherited and the INHERITED_ACE
-   *   bit (0x10) from AceFlags. Windows keeps them as the folder's own ACEs and
-   *   propagates them to children via OI/CI — source-parent permissions are preserved.
-   *
-   * INHERIT_PERMS_AS_IS:
-   *   Strips all inherited ACEs. Only explicit source ACEs land on the destination.
-   *   The destination parent can still propagate its own ACEs (DaclProtected passthrough).
-   *
-   * DaclProtected is always a passthrough from source and is not overridden by either mode.
-   */
-  applySmbInheritanceMode(acl: SecurityDescriptor, mode: string): SecurityDescriptor {
+  
+  applySmbInheritanceMode(
+    acl: SecurityDescriptor,
+    command: Cmd,
+    jobContext: JobManagerContext,
+  ): SecurityDescriptor {
+    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
     if (!acl.DaclAces) return acl;
+
+    const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
+      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+
     if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) {
-      acl.DaclAces = acl.DaclAces.map(ace =>
-        ace.IsInherited
-          ? { ...ace, IsInherited: false, AceFlags: (ace.AceFlags ?? 0) & ~0x10 }
-          : ace
-      );
-    } else {
-      // INHERIT_PERMS_AS_IS — also the safe fallback for unknown values.
-      acl.DaclAces = acl.DaclAces.filter(ace => !ace.IsInherited);
+      return {
+        ...acl,
+        DaclAces: acl.DaclAces.map(ace =>
+          ace.IsInherited
+            ? { ...ace, IsInherited: false, AceFlags: (ace.AceFlags ?? 0) & ~0x10 }
+            : ace,
+        ),
+      };
     }
-    return acl;
+
+    return { ...acl, DaclAces: acl.DaclAces.filter(ace => !ace.IsInherited) };
   }
 
   async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {
@@ -322,41 +312,30 @@ export class WinOperationService {
   }
 
   async validateAclOperation(
-    acl1: SecurityDescriptor,
-    acl2: SecurityDescriptor,
-    comparisonAcl: SecurityDescriptor,
+    sourceAcl: SecurityDescriptor,
+    targetAcl: SecurityDescriptor,
   ): Promise<ValidatorOutput> {
     const output: ValidatorOutput = {
       sourceSID: '',
       targetSID: '',
       inValid: '',
     };
-    // acl1 is used for the CoC sourceSID display (full original source ACL).
-    output.sourceSID = `Owner: ${acl1.originalOwner ?? acl1.Owner}, Group: ${acl1.originalGroup ?? acl1.Group},`;
-    output.targetSID = `Owner: ${acl2.Owner}, Group: ${acl2.Group}, `;
-    if (acl1.Owner !== acl2.Owner)
-      output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
-    if (acl1.Group !== acl2.Group)
-      output.inValid += `Group mismatch: Expected(${acl1.Group}) Target(${acl2.Group}). `;
+    if (sourceAcl.Owner !== targetAcl.Owner)
+      output.inValid += `Owner mismatch: Expected(${sourceAcl.Owner}) Target(${targetAcl.Owner}). `;
+    if (sourceAcl.Group !== targetAcl.Group)
+      output.inValid += `Group mismatch: Expected(${sourceAcl.Group}) Target(${targetAcl.Group}). `;
 
     // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
     // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.
     // This prevents false errors for ACEs that cannot be set or are not part of DACL.
-    const acl1Aces = (acl1.DaclAces || []).filter(
+    const sourceAcls = (sourceAcl.DaclAces || []).filter(
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
-    acl1Aces.forEach((ace) => {
+    sourceAcls.forEach((ace) => {
       output.sourceSID += `ACE in source: SID(${ace.originalSid ?? ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
     });
 
-    // comparisonAcl is the post-mode-filter ACL (what was actually stamped).
-    // Using it here prevents inherited ACEs intentionally dropped by the inheritance
-    // mode from causing false validation failures.
-    const sourceAcls = (comparisonAcl.DaclAces || []).filter(
-      (ace) => ace.AceType === 0 || ace.AceType === 1,
-    );
-
-    const targetAcls = (acl2.DaclAces || []).filter(
+    const targetAcls = (targetAcl.DaclAces || []).filter(
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
     targetAcls.forEach((ace) => {
