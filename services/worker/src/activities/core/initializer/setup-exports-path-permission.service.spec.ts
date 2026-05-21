@@ -116,7 +116,36 @@ describe('SetupExportsPathPermissionService', () => {
 
       await service.setupExportPathPermission(jobRunId);
 
-      expect(mockLogger.error).toHaveBeenCalledWith(`Starting ACL setup for jobRunId: ${jobRunId}`);
+      expect(mockLogger.log).toHaveBeenCalledWith(`Starting ACL setup for jobRunId: ${jobRunId}`);
+    });
+
+    it('should propagate errors thrown by setup() instead of swallowing them', async () => {
+      const jobRunId = 'test-job-run-id';
+      const jobContext = {
+        jobConfig: {
+          destinationFileServer: {
+            protocols: [{ type: ProtocolTypes.SMB }],
+            hostname: 'dest-host',
+            path: 'dest-path'
+          },
+          sourceFileServer: {
+            hostname: 'source-host',
+            path: 'source-path'
+          },
+          options: { preservePermissions: true }
+        }
+      } as any;
+
+      mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
+      // Force setup() itself to throw by replacing it on the instance
+      const setupError = new Error('Unexpected runtime error');
+      jest.spyOn(service, 'setup').mockRejectedValue(setupError);
+
+      await expect(service.setupExportPathPermission(jobRunId)).rejects.toThrow('Unexpected runtime error');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `ACL setup failed for jobRunId: ${jobRunId}: Unexpected runtime error`,
+        expect.anything()
+      );
     });
   });
 
@@ -286,7 +315,7 @@ describe('SetupExportsPathPermissionService', () => {
       expect(mockLogger.error).toHaveBeenCalledWith('Invalid fileServer parameter');
     });
 
-    it('should return null when command fails', async () => {
+    it('should return null when command fails with stderr', async () => {
       const fileServer: FileServerDetails = {
         hostname: 'test-host',
         path: 'test-path'
@@ -298,7 +327,7 @@ describe('SetupExportsPathPermissionService', () => {
       });
 
       const result = await service.getFileACL(fileServer, 'test-job');
-      
+
       expect(result).toBeNull();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Error getting ACL for \\\\test-host/test-path: Access denied'
@@ -324,15 +353,19 @@ describe('SetupExportsPathPermissionService', () => {
       expect(result!.permissions[0].principal).toBe('testuser');
     });
 
-    it('should throw error when command execution fails', async () => {
+    it('should throw when command execution fails (network/process error)', async () => {
       const fileServer: FileServerDetails = {
         hostname: 'test-host',
         path: 'test-path'
       } as any;
 
-      mockWinShellService.executeCommand.mockRejectedValue(new Error('Command failed'));
+      mockWinShellService.executeCommand.mockRejectedValueOnce(new Error('Command failed'));
 
       await expect(service.getFileACL(fileServer, 'test-job')).rejects.toThrow('Command failed');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get ACL for'),
+        expect.anything()
+      );
     });
   });
 

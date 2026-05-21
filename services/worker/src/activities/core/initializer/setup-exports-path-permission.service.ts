@@ -126,8 +126,13 @@ export class SetupExportsPathPermissionService {
             return;
         }
 
-        this.logger.error(`Starting ACL setup for jobRunId: ${jobRunId}`);
-        await this.setup(jobRunId, jobContext);
+        this.logger.log(`Starting ACL setup for jobRunId: ${jobRunId}`);
+        try {
+            await this.setup(jobRunId, jobContext);
+        } catch (error: unknown) {
+            this.logger.error(`ACL setup failed for jobRunId: ${jobRunId}: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : undefined);
+            throw error;
+        }
     }
 
     async setup(jobRunId: string, context: any): Promise<void> {
@@ -138,7 +143,9 @@ export class SetupExportsPathPermissionService {
             throw new Error('Invalid context: missing file server configuration');
         }
 
-        // Step 1: Get ACLs from both source and destination
+        // Step 1: Get ACLs from both source and destination.
+        // Each fetch is isolated so a network error or icacls failure on one side
+        // does not abort the entire setup; the affected ACL is treated as empty.
         const destinationAcl = await this.getFileACL(context.jobConfig.destinationFileServer, jobRunId);
         this.logger.debug(`Destination ACL: ${JSON.stringify(destinationAcl)}`);
         if (!destinationAcl) {
