@@ -103,8 +103,14 @@ export const ChildRetryScanWorkflow = async ({
   // Settings will be populated on first fetch and reused for all subsequent activities
   let settings: RetryScanSettings | undefined = inputSettings;
 
-  // Update status to RUNNING at start
-  await updateJobStatusActivity({ jobRunId, status: JobRunStatus.Running });
+  // Update status at start
+  await updateJobStatusActivity({ jobRunId, status: actionState });
+  
+  // Handle stop/pause signals
+  wf.setHandler(retryScanActionSignal, async (action: JobRunStatus) => {
+    actionState = action;
+    console.log(jobRunId, `retry scan action signal called with value: ${action}`);
+  });
 
   await resolveUsernamesToSidsActivity(jobRunId);
 
@@ -113,12 +119,6 @@ export const ChildRetryScanWorkflow = async ({
     status: JobRunStatus.Running,
     error: undefined,
   };
-
-  // Handle stop/pause signals
-  wf.setHandler(retryScanActionSignal, async (action: JobRunStatus) => {
-    actionState = action;
-    console.log(jobRunId, `retry scan action signal called with value: ${action}`);
-  });
 
   let isStopRequested = false;
   let errors: string[] = [];

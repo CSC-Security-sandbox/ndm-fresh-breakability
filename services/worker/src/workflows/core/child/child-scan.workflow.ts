@@ -57,7 +57,12 @@ const actionSignal = wf.defineSignal<[JobRunStatus]>('scanActionSignal');
 
 export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatchIds = [], batchSize = 100, dirCount = 0, fileCount = 0, isMigration = false, actionState = JobRunStatus.Running, isInitialScan = true, workerConcurrency = 20}: ChildScanWorkflowInput): Promise<ChildScanWorkflowOutput> => {
 
-  await updateJobStatusActivity({jobRunId, status :JobRunStatus.Running});
+  await updateJobStatusActivity({jobRunId, status: actionState});
+  
+  wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
+    actionState = action;
+    console.log(jobRunId, `action signal called with value: ${action}`);
+  });
 
   if(isMigration){
     await resolveUsernamesToSidsActivity(jobRunId);
@@ -79,11 +84,6 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     skippedPaths: [],
   };
 
-  wf.setHandler(actionSignal, async (action:JobRunStatus)=>{    
-    actionState = action;
-    console.log(jobRunId, `action signal called with value: ${action}`);
-  });
-
   let isStopRequested = false;
   let iterations = 0; 
 
@@ -95,14 +95,14 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
       break;
     }
 
-    // wait until the state is paused. 
-    await updateJobStatusIfNotRunning(actionState, jobRunId);
-    await wf.condition(() => actionState !== JobRunStatus.Paused);
-
     const currentBatchIds = dirBatchIds;
     const nextBatchIds: string[] = [];
-
+ 
     for (let i = 0; i < currentBatchIds.length; i += workerConcurrency) {
+      // wait until the state is paused.
+      await updateJobStatusIfNotRunning(actionState, jobRunId);
+      await wf.condition(() => actionState !== JobRunStatus.Paused);
+      
       try {
         const validationSteps = isMigration
           ? await validateCommandStreamLength(jobRunId, () => actionState)

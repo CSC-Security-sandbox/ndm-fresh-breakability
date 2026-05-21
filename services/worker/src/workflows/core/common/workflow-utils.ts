@@ -90,6 +90,10 @@ export async function validateCommandStreamLength(
   let consecutiveErrors = 0;
   while (true) {
     try {
+      if (getActionState() === JobRunStatus.Paused) {
+        await updateJobStatusActivity({ jobRunId, status: JobRunStatus.Paused });
+        await wf.condition(() => getActionState() !== JobRunStatus.Paused);
+      }
       if (getActionState() !== JobRunStatus.Running) {
         return steps;
       }
@@ -130,6 +134,10 @@ export async function validateFileStreamLength(
   let consecutiveErrors = 0;
   while (true) {
     try {
+      if (getActionState() === JobRunStatus.Paused) {
+        await updateJobStatusActivity({ jobRunId, status: JobRunStatus.Paused });
+        await wf.condition(() => getActionState() !== JobRunStatus.Paused);
+      }
       if (getActionState() !== JobRunStatus.Running) {
         return steps;
       }

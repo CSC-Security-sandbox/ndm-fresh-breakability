@@ -3,7 +3,7 @@ import { CommonActivityService } from 'src/activities/common/common.service';
 import { CommonTaskService } from 'src/activities/core/common/common-task.service';
 import { JobRunStatus } from 'src/activities/common/enums';
 import { ChildScanWorkflowOutput } from '../child/chid-scan.workflow.type';
-import { cancelWorkflowIfRunning } from './workflow-utils';
+import { cancelWorkflowIfRunning, signalIfRunning } from './workflow-utils';
 
 
 interface DiscoveryWorkflowExecutorInput {
@@ -45,7 +45,6 @@ const actionSignal = wf.defineSignal<[string]>('action');
 export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWorkflowExecutorInput ) => {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
-    let isScanIsRunning: boolean = false;
     let output: DiscoveryWorkflowExecutorOutput = {
         status: JobRunStatus.Running,
         fileCount: 0,
@@ -61,8 +60,7 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
             output.status = JobRunStatus.Stopped;
             return;
         }
-        if(isScanIsRunning)    
-            scanWorkflow.signal('scanActionSignal', action);    
+        await signalIfRunning(scanWorkflow, 'scanActionSignal', action); 
     });
 
     if(output.status !== JobRunStatus.Stopped) {
@@ -75,7 +73,6 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
             cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
             parentClosePolicy: wf.ParentClosePolicy.TERMINATE,
         });
-        isScanIsRunning = true;
 
         try{
             const scanWorkflowResult: ChildScanWorkflowOutput = await scanWorkflow.result();
@@ -103,7 +100,6 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
             }      
         }
     }
-    isScanIsRunning = false;
     await updateLastEntryActivity(jobRunId);
     return output;
 
