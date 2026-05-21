@@ -1,5 +1,5 @@
 
-import { Cmd, ItemInfo, TaskInfo } from '../datatype/stream-datatypes';
+import { Cmd, ItemInfo, ParquetItem, TaskInfo } from '../datatype/stream-datatypes';
 import { GroupReaderType } from './enums';
 import { FileInfo, DMError, TaskStats, Task, SpeedTestReadWriteInfo } from './metadata-types';
 import { Serializable } from './serializable';
@@ -43,3 +43,4 @@ export interface MigrationTaskCollection extends StreamCollection<Task> {}
 export interface CommandCollection extends StreamCollection<Cmd> {}
 export interface ItemInfoCollection extends StreamCollection<ItemInfo> {}
 export interface TaskInfoCollection extends StreamCollection<TaskInfo> {}
+export interface ParquetCollection extends StreamCollection<ParquetItem> {}

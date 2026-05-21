@@ -26,6 +26,10 @@ const mockTaskStream = {
     groupReadWithoutAck: jest.fn(),
     ackAndPurge: jest.fn(),
 };
+const mockParquetStream = {
+    append: jest.fn(),
+    appendBulk: jest.fn(),
+};
 const mockTaskMap = {
     setValue: jest.fn(),
     setValueIfNotExists: jest.fn(),
@@ -61,6 +65,7 @@ describe("JobManagerContext", () => {
         ctx.errorStream = mockErrorStream as any;
         ctx.commandStream = mockCommandStream as any;
         ctx.taskStream = mockTaskStream as any;
+        ctx.parquetStream = mockParquetStream as any;
         ctx.taskMap = mockTaskMap as any;
         ctx.dirBatchMap = mockDirBatchMap as any;
         ctx.cursorMap = mockCursorMap as any;
@@ -189,6 +194,24 @@ describe("JobManagerContext", () => {
         it("groupAckTaskStream should call ackAndPurge", async () => {
             await ctx.groupAckTaskStream(["id1"], GroupReaderType.DB_WRITER);
             expect(mockTaskStream.ackAndPurge).toHaveBeenCalledWith(["id1"], GroupReaderType.DB_WRITER);
+        });
+    });
+
+    describe("Parquet Stream Methods", () => {
+        it("publishToParquetStream should call append", async () => {
+            mockParquetStream.append.mockResolvedValue("parquet-id");
+            const item = { filePath: "/p/col.parquet", mtime: new Date(), atime: new Date(), gid: 1, uid: 2, mode: 0o644, aclhash: "abc" } as any;
+            const res = await ctx.publishToParquetStream(item);
+            expect(mockParquetStream.append).toHaveBeenCalledWith(item);
+            expect(res).toBe("parquet-id");
+        });
+
+        it("publishToParquetStreamBulk should call appendBulk", async () => {
+            mockParquetStream.appendBulk.mockResolvedValue(["a", "b"]);
+            const items = [{}, {}] as any[];
+            const res = await ctx.publishToParquetStreamBulk(items);
+            expect(mockParquetStream.appendBulk).toHaveBeenCalledWith(items);
+            expect(res).toEqual(["a", "b"]);
         });
     });
 

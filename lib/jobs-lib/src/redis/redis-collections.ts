@@ -11,12 +11,13 @@ import {
   MigrationTaskCollection,
   CommandCollection,
   ItemInfoCollection,
+  ParquetCollection,
   TaskInfoCollection
 } from '../types/stream-collection';
 import { JobUtils } from '../utils/job-utils';
 import { RedisStreamCollection } from './redis-stream-collection';
 import { encode } from 'msgpack-lite';
-import { Cmd, ItemInfo, TaskInfo } from '../datatype/stream-datatypes';
+import { Cmd, ItemInfo, ParquetItem, TaskInfo } from '../datatype/stream-datatypes';
 
 export class RedisFileCollection
   extends RedisStreamCollection<FileInfo>
@@ -248,6 +249,26 @@ export class RedisTaskInfoCollection
     super(
       jobRunId,
       JobUtils.getRedisKey(jobRunId, 'tasks'),
+      numMessages,
+      lastId,
+      redisClient,
+    );
+  }
+}
+
+export class RedisParquetItemCollection
+  extends RedisStreamCollection<ParquetItem>
+  implements ParquetCollection
+{
+  constructor(
+    jobRunId: string,
+    numMessages: number,
+    lastId: string,
+    redisClient: any,
+  ) {
+    super(
+      jobRunId,
+      JobUtils.getRedisKey(jobRunId, 'parquet'),
       numMessages,
       lastId,
       redisClient,

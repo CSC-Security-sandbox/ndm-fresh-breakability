@@ -1,9 +1,9 @@
 import { DirMap, TaskMap, CursorMap, RetryBatchMap } from "src/redis/hmap-collection";
-import { Cmd, ItemInfo, TaskInfo } from "../../datatype/stream-datatypes";
+import { Cmd, ItemInfo, ParquetItem, TaskInfo } from "../../datatype/stream-datatypes";
 import { GroupReaderType } from "../enums";
 import { JobConfig } from "../job-config";
 import { DMError, Task } from "../metadata-types";
-import { CommandCollection, ErrorCollection, ItemInfoCollection, TaskInfoCollection } from "../stream-collection";
+import { CommandCollection, ErrorCollection, ItemInfoCollection, ParquetCollection, TaskInfoCollection } from "../stream-collection";
 
 
 
@@ -16,6 +16,7 @@ export  class JobManagerContext {
     errorStream: ErrorCollection;
     commandStream: CommandCollection;
     taskStream: TaskInfoCollection;
+    parquetStream: ParquetCollection;
     taskMap: TaskMap;
     dirBatchMap: DirMap;
     cursorMap: CursorMap;
@@ -111,6 +112,14 @@ export  class JobManagerContext {
     }
     async groupAckTaskStream(ids:string[], groupType: GroupReaderType): Promise<void> {
         await this.taskStream.ackAndPurge(ids, groupType);
+    }
+
+    async publishToParquetStream(item: ParquetItem): Promise<string> {
+        return await this.parquetStream.append(item);
+    }
+
+    async publishToParquetStreamBulk(items: ParquetItem[]): Promise<string[]> {
+        return await this.parquetStream.appendBulk(items);
     }
 
 

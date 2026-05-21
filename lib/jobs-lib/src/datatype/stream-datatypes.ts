@@ -215,3 +215,48 @@ export class RetryBatchInfo implements Serializable{
     }
 }
 
+export class ParquetItem implements Serializable {
+    filePath: string;
+    mtime: Date;
+    atime: Date;
+    gid: number;
+    uid: number;
+    mode: number;
+    aclhash: string;
+
+    constructor(
+        filePath: string,
+        mtime: Date,
+        atime: Date,
+        gid: number,
+        uid: number,
+        mode: number,
+        aclhash: string,
+    ) {
+        this.filePath = filePath;
+        this.mtime = mtime;
+        this.atime = atime;
+        this.gid = gid;
+        this.uid = uid;
+        this.mode = mode;
+        this.aclhash = aclhash;
+    }
+
+    serialize(): string {
+        return JSON.stringify(this);
+    }
+
+    static deserialize(serialized: string): ParquetItem {
+        const data = JSON.parse(serialized);
+        return new ParquetItem(
+            data.filePath,
+            new Date(data.mtime),
+            new Date(data.atime),
+            data.gid,
+            data.uid,
+            data.mode,
+            data.aclhash,
+        );
+    }
+}
+

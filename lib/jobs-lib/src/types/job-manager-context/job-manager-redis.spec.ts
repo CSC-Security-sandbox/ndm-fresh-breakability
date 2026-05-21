@@ -1,4 +1,4 @@
-import { RedisCommandCollection, RedisErrorCollection, RedisItemInfoCollection, RedisTaskInfoCollection } from "../../redis/redis-collections";
+import { RedisCommandCollection, RedisErrorCollection, RedisItemInfoCollection, RedisParquetItemCollection, RedisTaskInfoCollection } from "../../redis/redis-collections";
 import { RedisHMapCollection } from "../../redis/redis-hmap-collection";
 import { DEFAULT_DIR_CONTENT_TTL_SECONDS } from "../options";
 import { RedisJobManagerContext } from "./job-manager-redis";
@@ -44,6 +44,10 @@ describe("RedisJobManagerContext", () => {
             init: jest.fn(),
             cleanup: jest.fn(),
         }));
+        (RedisParquetItemCollection as jest.Mock).mockImplementation(() => ({
+            init: jest.fn(),
+            cleanup: jest.fn(),
+        }));
         (RedisHMapCollection as jest.Mock).mockImplementation(() => ({}));
 
         context = new RedisJobManagerContext(
@@ -69,11 +73,12 @@ describe("RedisJobManagerContext", () => {
             expect(context.redisClient).toBe(mockRedisClient);
         });
 
-        it("should create 4 stream collections", () => {
+        it("should create 5 stream collections", () => {
             expect(RedisItemInfoCollection).toHaveBeenCalledTimes(1);
             expect(RedisErrorCollection).toHaveBeenCalledTimes(1);
             expect(RedisCommandCollection).toHaveBeenCalledTimes(1);
             expect(RedisTaskInfoCollection).toHaveBeenCalledTimes(1);
+            expect(RedisParquetItemCollection).toHaveBeenCalledTimes(1);
         });
 
         it("should create 4 hash map collections with correct map types", () => {
@@ -111,6 +116,7 @@ describe("RedisJobManagerContext", () => {
             expect(context.errorStream.init).toHaveBeenCalled();
             expect(context.commandStream.init).toHaveBeenCalled();
             expect(context.taskStream.init).toHaveBeenCalled();
+            expect(context.parquetStream.init).toHaveBeenCalled();
             expect(mockRedisClient.set).toHaveBeenCalledWith(mockJobRunId, "serialized");
         });
     });
@@ -124,6 +130,7 @@ describe("RedisJobManagerContext", () => {
             expect(context.errorStream.cleanup).toHaveBeenCalled();
             expect(context.commandStream.cleanup).toHaveBeenCalled();
             expect(context.taskStream.cleanup).toHaveBeenCalled();
+            expect(context.parquetStream.cleanup).toHaveBeenCalled();
             expect(mockRedisClient.del).toHaveBeenCalledWith("job-123");
             expect(mockRedisClient.del).toHaveBeenCalledWith("job-123-task");
         });

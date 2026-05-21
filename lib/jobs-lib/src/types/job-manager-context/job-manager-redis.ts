@@ -1,5 +1,5 @@
 import { RedisClientType } from "redis";
-import { RedisCommandCollection, RedisErrorCollection, RedisItemInfoCollection, RedisTaskCollection, RedisTaskInfoCollection } from "../../redis/redis-collections";
+import { RedisCommandCollection, RedisErrorCollection, RedisItemInfoCollection, RedisParquetItemCollection, RedisTaskCollection, RedisTaskInfoCollection } from "../../redis/redis-collections";
 import { RedisHMapCollection } from "../../redis/redis-hmap-collection";
 import { JobConfig } from "../job-config";
 import { DEFAULT_DIR_CONTENT_TTL_SECONDS } from "../options";
@@ -16,6 +16,7 @@ export class RedisJobManagerContext extends JobManagerContext {
         this.errorStream = new RedisErrorCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.commandStream = new RedisCommandCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.taskStream = new RedisTaskInfoCollection(this.jobRunId, 0, '0-0', this.redisClient);
+        this.parquetStream = new RedisParquetItemCollection(this.jobRunId, 0, '0-0', this.redisClient);
         this.taskMap = new RedisHMapCollection(this.jobRunId, 'taskMap', this.redisClient);
         this.dirBatchMap = new RedisHMapCollection(this.jobRunId, 'dirBatchMap', this.redisClient);
         this.cursorMap = new RedisHMapCollection(this.jobRunId, 'cursorMap', this.redisClient);
@@ -46,7 +47,7 @@ export class RedisJobManagerContext extends JobManagerContext {
     }
 
     async init(): Promise<void> {
-        for (const collection of [this.fileStream, this.errorStream, this.commandStream, this.taskStream]) {
+        for (const collection of [this.fileStream, this.errorStream, this.commandStream, this.taskStream, this.parquetStream]) {
             await collection.init();  
         }
         await this.redisClient.set(this.jobRunId, this.serialize());
@@ -87,7 +88,7 @@ export class RedisJobManagerContext extends JobManagerContext {
     }
 
     async cleanup(): Promise<void> {
-        for (const collection of [this.fileStream, this.errorStream, this.commandStream, this.taskStream]) {
+        for (const collection of [this.fileStream, this.errorStream, this.commandStream, this.taskStream, this.parquetStream]) {
             await collection.cleanup();
         }
 
