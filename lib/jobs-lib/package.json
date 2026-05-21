@@ -32,7 +32,7 @@
   "dependencies": {
     "msgpack-lite": "^0.1.26",
     "redis": "^4.7.0",
-    "uuid": "^11.0.5",
+    "uuid": "^14.0.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   },
