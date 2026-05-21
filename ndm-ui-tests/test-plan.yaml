@@ -47,3 +47,16 @@ suites:
       TestDiscovery_IndividualReportCSV:    false   # Download per-run discovery CSV from Job Run List — requires NDM_FILE_SERVER_ID
       TestDiscovery_ConsolidatedCSV:        false   # Generate and download consolidated discovery CSV — requires NDM_FILE_SERVER_ID
       TestDiscovery_ValidateReportAgainstVolume: false   # Validate CSV counts against live NFS volume — requires NDM_FILE_SERVER_ID
+
+  # ── Migration ────────────────────────────────────────────────────────────────
+  # End-to-end Bulk Migrate flows — NFS source → NFS destination.
+  # Creates fresh file servers, runs migration, validates job completion,
+  # and downloads CoC (Chain of Custody) reports.
+  migration:
+    enabled: true
+    parallel: 1          # avoid creating 6 file servers at once; run serially
+    timeout: 60m
+    tests:
+      TestMigration_BasicNFS: true               # Full NFS Bulk Migrate end-to-end + CoC report download
+      TestMigration_IncrementalSyncCron: true     # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
+      TestMigration_CustomOptions: true           # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)

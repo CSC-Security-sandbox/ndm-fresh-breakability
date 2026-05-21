@@ -52,6 +52,7 @@ var (
 	NfsDestinationProtocolPassword       string // NFS password for destination (often empty)
 	NfsDestinationFileServerNamePrefix   string // prefix for auto-generated destination FS names
 	NfsDestinationExportPath             string // export path to select in migration mapping (e.g. "/vol1")
+	NfsDestinationExportPaths           []string // per-test destination export paths (comma-separated)
 	NfsDestinationFileServerID          string // existing destination FS UUID — skips wizard if set
 
 	// Migration timeouts
@@ -175,6 +176,7 @@ func init() {
 	NfsDestinationProtocolPassword     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_PASSWORD", "")
 	NfsDestinationFileServerNamePrefix = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX", "nfs-dst")
 	NfsDestinationExportPath           = getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATH", "")
+	NfsDestinationExportPaths          = splitCSV(getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATHS", ""))
 	NfsDestinationFileServerID         = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_ID", "")
 
 	// Migration timeouts
@@ -331,4 +333,30 @@ func getEnvFloat(key string, fallback float64) float64 {
 		return fallback
 	}
 	return f
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// GetDestinationExportPath returns the destination export path for a given
+// test index (0-based). If NDM_NFS_DESTINATION_EXPORT_PATHS is set with
+// multiple values, each test gets its own volume. Otherwise falls back to
+// the single NDM_NFS_DESTINATION_EXPORT_PATH for all tests.
+func GetDestinationExportPath(testIndex int) string {
+	if len(NfsDestinationExportPaths) > testIndex {
+		return NfsDestinationExportPaths[testIndex]
+	}
+	return NfsDestinationExportPath
 }

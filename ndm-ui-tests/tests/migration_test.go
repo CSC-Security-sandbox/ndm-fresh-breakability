@@ -120,7 +120,8 @@ func createFreshDestinationFileServer(t *testing.T, f *fixtures.AuthFixture, pre
 func TestMigration_BasicNFS(t *testing.T) {
 	t.Parallel()
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
-	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+	dstExportPath := config.GetDestinationExportPath(0)
+	requireEnv(t, dstExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
 	const prefix = "m001"
 	f, mp := newMigrationBrowserFixture(t, prefix)
@@ -172,8 +173,8 @@ func TestMigration_BasicNFS(t *testing.T) {
 
 	By(t, "Selecting destination export path")
 	require.NoError(t,
-		mp.SelectDestinationPath(config.NfsDestinationExportPath),
-		"select destination path %s", config.NfsDestinationExportPath,
+		mp.SelectDestinationPath(dstExportPath),
+		"select destination path %s", dstExportPath,
 	)
 
 	// ── 6. Add mapping ───────────────────────────────────────────────────────
@@ -237,7 +238,8 @@ func TestMigration_IncrementalSyncCron(t *testing.T) {
 	t.Parallel()
 	time.Sleep(5 * time.Second) // stagger parallel start to reduce NDM backend contention
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
-	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+	dstExportPath := config.GetDestinationExportPath(1)
+	requireEnv(t, dstExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
 	const prefix = "m002"
 	f, mp := newMigrationBrowserFixture(t, prefix)
@@ -285,8 +287,8 @@ func TestMigration_IncrementalSyncCron(t *testing.T) {
 
 	By(t, "Selecting destination export path")
 	require.NoError(t,
-		mp.SelectDestinationPath(config.NfsDestinationExportPath),
-		"select destination path %s", config.NfsDestinationExportPath,
+		mp.SelectDestinationPath(dstExportPath),
+		"select destination path %s", dstExportPath,
 	)
 
 	By(t, "Adding path mapping")
@@ -374,7 +376,8 @@ func TestMigration_CustomOptions(t *testing.T) {
 	t.Parallel()
 	time.Sleep(10 * time.Second) // stagger parallel start to reduce NDM backend contention
 	requireEnv(t, config.NfsSourceExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
-	requireEnv(t, config.NfsDestinationExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+	dstExportPath := config.GetDestinationExportPath(2)
+	requireEnv(t, dstExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
 
 	const prefix = "m003"
 	f, mp := newMigrationBrowserFixture(t, prefix)
@@ -422,8 +425,8 @@ func TestMigration_CustomOptions(t *testing.T) {
 
 	By(t, "Selecting destination export path")
 	require.NoError(t,
-		mp.SelectDestinationPath(config.NfsDestinationExportPath),
-		"select destination path %s", config.NfsDestinationExportPath,
+		mp.SelectDestinationPath(dstExportPath),
+		"select destination path %s", dstExportPath,
 	)
 
 	By(t, "Adding path mapping")
