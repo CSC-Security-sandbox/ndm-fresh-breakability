@@ -11,8 +11,8 @@ name: GCP Resource Cleanup
 
 on:
   schedule:
-    # Run on Wednesday and Friday at 11:00 PM IST (17:30 UTC)
-    - cron: '30 17 * * 3,5'
+    # Run daily at 18:30 UTC
+    - cron: '30 18 * * *'
   workflow_dispatch:
     inputs:
       dry_run:

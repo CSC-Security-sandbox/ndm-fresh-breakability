@@ -10,8 +10,8 @@ name: Azure Resource Cleanup
 
 on:
   schedule:
-    # Run on Wednesday and Friday at 11:00 PM IST (17:30 UTC)
-    - cron: '30 17 * * 3,5'
+    # Run daily at 18:30 UTC
+    - cron: '30 18 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -533,6 +533,114 @@ jobs:
             exit 1
           fi
           
+  cleanup-nics:
+    runs-on: ubuntu-latest
+    needs: [setup, cleanup-vms]
+    if: always() && !cancelled()
+    permissions:
+      contents: read
+    outputs:
+      deleted_nics: ${{ steps.cleanup.outputs.deleted_nics }}
+      failed_nics: ${{ steps.cleanup.outputs.failed_nics }}
+      failed_resources: ${{ steps.cleanup.outputs.failed_resources }}
+      deleted_resources: ${{ steps.cleanup.outputs.deleted_resources }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Azure CLI and jq
+        run: |
+          if ! command -v az &> /dev/null; then
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+
+      - name: Authenticate to Azure
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302
+        with:
+          creds: ${{ secrets.NDM_AZURE_CREDENTIALS }}
+
+      - name: Cleanup Unattached NICs
+        id: cleanup
+        run: |
+          set +e
+
+          source app-deployment/scripts/cloud-cleanup-utils.sh
+          DRY_RUN="${{ needs.setup.outputs.dry_run }}"
+
+          DELETED_NICS=0
+          FAILED_NICS=0
+          FAILED_RESOURCES=""
+          DELETED_RESOURCES=""
+
+          echo "=== Processing Unattached Network Interfaces ==="
+
+          if [ -z "$AZ_VM_RESOURCE_GROUP" ]; then
+            echo "Error: AZ_VM_RESOURCE_GROUP is required but not set"
+            exit 1
+          fi
+
+          # A NIC is considered unattached only when ALL of the following ownership
+          # properties are absent: Virtual Machine, Private Endpoint, Private Link Service, BareMetal / hosted workload resource IDs, VMSS, AKS, or any top-level ARM-managing resource
+          NICS_JSON=$(az network nic list --resource-group "$AZ_VM_RESOURCE_GROUP" --query "[?virtualMachine == null && privateEndpoint == null && privateLinkService == null && !hostedWorkloads && managedBy == null].{name:name, resourceGroup:resourceGroup, tags:tags}" --output json 2>/dev/null || echo "[]")
+
+          if [ "$NICS_JSON" != "[]" ] && [ -n "$NICS_JSON" ]; then
+            NIC_COUNT=$(echo "$NICS_JSON" | jq '. | length')
+            echo -e "Found $NIC_COUNT unattached NIC(s)\n"
+
+            for i in $(seq 0 $((NIC_COUNT - 1))); do
+              NIC_NAME=$(echo "$NICS_JSON" | jq -r ".[$i].name")
+              RESOURCE_GROUP=$(echo "$NICS_JSON" | jq -r ".[$i].resourceGroup")
+              TAGS=$(echo "$NICS_JSON" | jq -c ".[$i].tags // {}")
+
+              if should_exclude "$TAGS" "$EXCLUDE_TAG_KEY" "$EXCLUDE_TAG_VALUE"; then
+                echo "Excluded NIC: $NIC_NAME"
+                continue
+              fi
+
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Would delete NIC $NIC_NAME"
+                DELETED_NICS=$((DELETED_NICS + 1))
+                DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NIC_NAME"
+              else
+                if az network nic delete --resource-group "$RESOURCE_GROUP" --name "$NIC_NAME" 2>&1; then
+                  echo "Deleted NIC $NIC_NAME"
+                  DELETED_NICS=$((DELETED_NICS + 1))
+                  DELETED_RESOURCES="$DELETED_RESOURCES\n  - $NIC_NAME"
+                else
+                  echo "Failed to delete NIC $NIC_NAME"
+                  FAILED_RESOURCES="$FAILED_RESOURCES\nNIC: $NIC_NAME"
+                  FAILED_NICS=$((FAILED_NICS + 1))
+                fi
+              fi
+            done
+          else
+            echo "No unattached NICs found"
+          fi
+
+          echo "deleted_nics=$DELETED_NICS" >> $GITHUB_OUTPUT
+          echo "failed_nics=$FAILED_NICS" >> $GITHUB_OUTPUT
+          echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "deleted_resources<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED_RESOURCES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo -e "\nSummary: Deleted=$DELETED_NICS, Failed=$FAILED_NICS"
+
+          if [ "$FAILED_NICS" -gt 0 ]; then
+            echo "ERROR: Failed to delete $FAILED_NICS NIC(s)"
+            exit 1
+          fi
+
   cleanup-anf:
     runs-on: ubuntu-latest
     needs: setup
@@ -749,7 +857,7 @@ jobs:
 
   generate-report:
     runs-on: ubuntu-latest
-    needs: [cleanup-vms, cleanup-disks, cleanup-snapshots, cleanup-images, cleanup-anf, setup]
+    needs: [cleanup-vms, cleanup-disks, cleanup-snapshots, cleanup-images, cleanup-anf, cleanup-nics, setup]
     if: always()
     permissions:
       contents: read
@@ -775,6 +883,7 @@ jobs:
           DELETED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.deleted_anf_volumes || '0' }}"
           DELETED_ANF_POOLS="${{ needs.cleanup-anf.outputs.deleted_anf_pools || '0' }}"
           DELETED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.deleted_anf_accounts || '0' }}"
+          DELETED_NICS="${{ needs.cleanup-nics.outputs.deleted_nics || '0' }}"
           
           FAILED_VMS="${{ needs.cleanup-vms.outputs.failed_vms || '0' }}"
           FAILED_DISKS="${{ needs.cleanup-disks.outputs.failed_disks || '0' }}"
@@ -783,9 +892,10 @@ jobs:
           FAILED_ANF_VOLUMES="${{ needs.cleanup-anf.outputs.failed_anf_volumes || '0' }}"
           FAILED_ANF_POOLS="${{ needs.cleanup-anf.outputs.failed_anf_pools || '0' }}"
           FAILED_ANF_ACCOUNTS="${{ needs.cleanup-anf.outputs.failed_anf_accounts || '0' }}"
+          FAILED_NICS="${{ needs.cleanup-nics.outputs.failed_nics || '0' }}"
           
-          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_ANF_VOLUMES + DELETED_ANF_POOLS + DELETED_ANF_ACCOUNTS))
-          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_ANF_VOLUMES + FAILED_ANF_POOLS + FAILED_ANF_ACCOUNTS))
+          TOTAL_DELETED=$((DELETED_VMS + DELETED_DISKS + DELETED_SNAPSHOTS + DELETED_IMAGES + DELETED_ANF_VOLUMES + DELETED_ANF_POOLS + DELETED_ANF_ACCOUNTS + DELETED_NICS))
+          TOTAL_FAILED=$((FAILED_VMS + FAILED_DISKS + FAILED_SNAPSHOTS + FAILED_IMAGES + FAILED_ANF_VOLUMES + FAILED_ANF_POOLS + FAILED_ANF_ACCOUNTS + FAILED_NICS))
           
           echo "deleted_vms=$DELETED_VMS" >> $GITHUB_OUTPUT
           echo "deleted_disks=$DELETED_DISKS" >> $GITHUB_OUTPUT
@@ -794,6 +904,7 @@ jobs:
           echo "deleted_anf_volumes=$DELETED_ANF_VOLUMES" >> $GITHUB_OUTPUT
           echo "deleted_anf_pools=$DELETED_ANF_POOLS" >> $GITHUB_OUTPUT
           echo "deleted_anf_accounts=$DELETED_ANF_ACCOUNTS" >> $GITHUB_OUTPUT
+          echo "deleted_nics=$DELETED_NICS" >> $GITHUB_OUTPUT
           echo "total_deleted=$TOTAL_DELETED" >> $GITHUB_OUTPUT
           echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
           
@@ -812,6 +923,9 @@ jobs:
           fi
           if [ -n "${{ needs.cleanup-anf.outputs.failed_resources }}" ]; then
             FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-anf.outputs.failed_resources }}"
+          fi
+          if [ -n "${{ needs.cleanup-nics.outputs.failed_resources }}" ]; then
+            FAILED_RESOURCES="$FAILED_RESOURCES${{ needs.cleanup-nics.outputs.failed_resources }}"
           fi
           
           echo "failed_resources<<EOF" >> $GITHUB_OUTPUT
@@ -837,6 +951,11 @@ jobs:
           if [ -n "${{ needs.cleanup-images.outputs.deleted_resources }}" ]; then
             if [ "$DELETED_IMAGES" -gt 0 ]; then
               DELETED_RESOURCES="$DELETED_RESOURCES\n\nImages ($DELETED_IMAGES):${{ needs.cleanup-images.outputs.deleted_resources }}"
+            fi
+          fi
+          if [ -n "${{ needs.cleanup-nics.outputs.deleted_resources }}" ]; then
+            if [ "$DELETED_NICS" -gt 0 ]; then
+              DELETED_RESOURCES="$DELETED_RESOURCES\n\nNICs ($DELETED_NICS):${{ needs.cleanup-nics.outputs.deleted_resources }}"
             fi
           fi
           if [ -n "${{ needs.cleanup-anf.outputs.deleted_resources }}" ]; then
@@ -875,6 +994,7 @@ jobs:
           echo "Disks deleted: $DELETED_DISKS (failed: $FAILED_DISKS)"
           echo "Snapshots deleted: $DELETED_SNAPSHOTS (failed: $FAILED_SNAPSHOTS)"
           echo "Images deleted: $DELETED_IMAGES (failed: $FAILED_IMAGES)"
+          echo "NICs deleted: $DELETED_NICS (failed: $FAILED_NICS)"
           echo "ANF Volumes deleted: $DELETED_ANF_VOLUMES (failed: $FAILED_ANF_VOLUMES)"
           echo "ANF Capacity Pools deleted: $DELETED_ANF_POOLS (failed: $FAILED_ANF_POOLS)"
           echo "ANF Accounts deleted: $DELETED_ANF_ACCOUNTS (failed: $FAILED_ANF_ACCOUNTS)"
@@ -908,13 +1028,15 @@ jobs:
              [ "${{ needs.cleanup-disks.result }}" = "cancelled" ] || \
              [ "${{ needs.cleanup-snapshots.result }}" = "cancelled" ] || \
              [ "${{ needs.cleanup-images.result }}" = "cancelled" ] || \
-             [ "${{ needs.cleanup-anf.result }}" = "cancelled" ]; then
+             [ "${{ needs.cleanup-anf.result }}" = "cancelled" ] || \
+             [ "${{ needs.cleanup-nics.result }}" = "cancelled" ]; then
             WORKFLOW_STATUS="Cancelled"
           elif [ "${{ needs.cleanup-vms.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-disks.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-snapshots.result }}" = "failure" ] || \
                [ "${{ needs.cleanup-images.result }}" = "failure" ] || \
-               [ "${{ needs.cleanup-anf.result }}" = "failure" ]; then
+               [ "${{ needs.cleanup-anf.result }}" = "failure" ] || \
+               [ "${{ needs.cleanup-nics.result }}" = "failure" ]; then
             WORKFLOW_STATUS="Failed"
           fi
           
@@ -936,6 +1058,7 @@ jobs:
           Disks: ${{ steps.summary.outputs.deleted_disks || '0' }}
           Snapshots: ${{ steps.summary.outputs.deleted_snapshots || '0' }}
           Images: ${{ steps.summary.outputs.deleted_images || '0' }}
+          NICs: ${{ steps.summary.outputs.deleted_nics || '0' }}
           ANF Volumes: ${{ steps.summary.outputs.deleted_anf_volumes || '0' }}
           ANF Capacity Pools: ${{ steps.summary.outputs.deleted_anf_pools || '0' }}
           ANF Accounts: ${{ steps.summary.outputs.deleted_anf_accounts || '0' }}
