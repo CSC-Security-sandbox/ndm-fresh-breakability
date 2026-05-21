@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Cmd, Command, ErrorType, CommandStatus, OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import * as fs from 'fs';
-import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict } from 'src/activities/utils/utils';
+import { dmError, getFileInfo, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeOrSkip, shouldExcludeForDelete, checkCaseSensitiveConflict, isDirectoryLevelMigration } from 'src/activities/utils/utils';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { FatalError } from 'src/errors/errors.types';
 import { MigrateScanService } from './migrate-scan.service';
@@ -81,6 +81,7 @@ jest.mock('src/activities/utils/utils', () => ({
     isMetaUpdated: jest.fn(),
     shouldExcludeForDelete: jest.fn(),
     checkCaseSensitiveConflict: jest.fn(),
+    isDirectoryLevelMigration: jest.fn().mockReturnValue(false),
 }));
 
 describe('MigrateScanService', () => {
@@ -1438,9 +1439,11 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         };
 
         jest.clearAllMocks();
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(true);
     });
 
     it('returns early when sourceDirectoryPath is absent', async () => {
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
         jobContext.jobConfig.sourceDirectoryPath = undefined;
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');

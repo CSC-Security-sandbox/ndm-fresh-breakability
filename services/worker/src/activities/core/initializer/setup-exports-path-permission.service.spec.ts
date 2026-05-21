@@ -5,6 +5,12 @@ import { WinShellService } from 'src/activities/common/win-shell.service';
 import { RedisService } from 'src/redis/redis.service';
 import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ProtocolTypes } from 'src/protocols/protocols';
+import { isDirectoryLevelMigration } from 'src/activities/utils/utils';
+
+jest.mock('src/activities/utils/utils', () => ({
+    ...jest.requireActual('src/activities/utils/utils'),
+    isDirectoryLevelMigration: jest.fn().mockReturnValue(false),
+}));
 
 describe('SetupExportsPathPermissionService', () => {
   let service: SetupExportsPathPermissionService;
@@ -146,6 +152,37 @@ describe('SetupExportsPathPermissionService', () => {
         `ACL setup failed for jobRunId: ${jobRunId}: Unexpected runtime error`,
         expect.anything()
       );
+    });
+
+    it('should skip ACL setup for DLM jobs', async () => {
+      const jobRunId = 'test-job-run-id';
+      const jobContext = {
+        jobConfig: {
+          destinationFileServer: {
+            protocols: [{ type: ProtocolTypes.SMB }],
+            hostname: 'test-host',
+            path: 'test-path'
+          },
+          sourceFileServer: {
+            hostname: 'source-host',
+            path: 'source-path'
+          },
+          sourceDirectoryPath: '/src',
+          options: { preservePermissions: true }
+        }
+      } as any;
+
+      mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
+      (isDirectoryLevelMigration as jest.Mock).mockReturnValue(true);
+
+      await service.setupExportPathPermission(jobRunId);
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        `Skipping share-level ACL setup for jobRunId: ${jobRunId} - DLM job; ACLs stamped per directory by worker`
+      );
+      expect(mockLogger.log).not.toHaveBeenCalled();
+
+      (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
     });
   });
 

@@ -4,7 +4,10 @@ import { JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib/dist/types
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import * as path from 'path';
 import { WinShellService } from "src/activities/common/win-shell.service";
-import { basePrefix, isDirectoryLevelMigration } from "src/activities/utils/utils";
+import {
+  basePrefix,
+  isDirectoryLevelMigration,
+} from 'src/activities/utils/utils';
 import { ProtocolTypes } from "src/protocols/protocols";
 import { RedisService } from "src/redis/redis.service";
 
@@ -126,13 +129,18 @@ export class SetupExportsPathPermissionService {
             return;
         }
 
-        if (isDirectoryLevelMigration(jobContext.jobConfig)) {
-            this.logger.debug(`Skipping share-level ACL setup for jobRunId: ${jobRunId} - DLM job; ACLs stamped per directory by worker`);
-            return;
-        }
+      if (isDirectoryLevelMigration(jobContext.jobConfig)) {
+        this.logger.debug(`Skipping share-level ACL setup for jobRunId: ${jobRunId} - DLM job; ACLs stamped per directory by worker`);
+        return;
+      }
 
-        this.logger.debug(`Starting ACL setup for jobRunId: ${jobRunId}`);
-        await this.setup(jobRunId, jobContext);
+        this.logger.log(`Starting ACL setup for jobRunId: ${jobRunId}`);
+        try {
+            await this.setup(jobRunId, jobContext);
+        } catch (error: unknown) {
+            this.logger.error(`ACL setup failed for jobRunId: ${jobRunId}: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : undefined);
+            throw error;
+        }
     }
 
     async setup(jobRunId: string, context: any): Promise<void> {
@@ -143,7 +151,9 @@ export class SetupExportsPathPermissionService {
             throw new Error('Invalid context: missing file server configuration');
         }
 
-        // Step 1: Get ACLs from both source and destination
+        // Step 1: Get ACLs from both source and destination.
+        // Each fetch is isolated so a network error or icacls failure on one side
+        // does not abort the entire setup; the affected ACL is treated as empty.
         const destinationAcl = await this.getFileACL(context.jobConfig.destinationFileServer, jobRunId);
         this.logger.debug(`Destination ACL: ${JSON.stringify(destinationAcl)}`);
         if (!destinationAcl) {

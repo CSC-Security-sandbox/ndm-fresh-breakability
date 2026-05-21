@@ -796,7 +796,7 @@ describe('WinOperationService', () => {
 
       const acl2: SecurityDescriptor = { ...acl1 };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe('');
       expect(result.sourceSID).toBe(
@@ -825,7 +825,7 @@ describe('WinOperationService', () => {
         Owner: 'S-1-5-21-target-owner',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Owner mismatch: Expected(S-1-5-21-source-owner) Target(S-1-5-21-target-owner). ',
@@ -856,7 +856,7 @@ describe('WinOperationService', () => {
         Group: 'S-1-5-21-target-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Group mismatch: Expected(S-1-5-21-source-group) Target(S-1-5-21-target-group). ',
@@ -890,7 +890,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
@@ -926,7 +926,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toContain('Owner mismatch');
       expect(result.inValid).toContain('Group mismatch');
@@ -951,7 +951,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe('');
     });
@@ -992,7 +992,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe('');
     });
@@ -1024,7 +1024,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-3-0), AceType(0). ',
@@ -1067,7 +1067,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0). ',
@@ -1118,7 +1118,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(''); // Should be valid because audit ACE is ignored
     });
@@ -1170,7 +1170,7 @@ describe('WinOperationService', () => {
         originalGroup: 'S-1-5-21-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       // sourceSID must show original source SID (2757), not the mapped target SID (2758)
       expect(result.sourceSID).toContain('SID(S-1-5-21-2757)');
@@ -1204,7 +1204,7 @@ describe('WinOperationService', () => {
 
       const acl2 = { ...acl1 };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       // Should fall back to Sid and Owner/Group since original* are undefined
       expect(result.sourceSID).toContain('SID(S-1-5-21-ace)');
@@ -1237,7 +1237,7 @@ describe('WinOperationService', () => {
         originalGroup: 'S-1-5-21-mapped-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       // sourceSID must show original source Owner/Group
       expect(result.sourceSID).toContain('Owner: S-1-5-21-source-owner');
