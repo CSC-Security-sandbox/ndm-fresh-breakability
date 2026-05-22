@@ -64,7 +64,7 @@ export class StampMetaService {
             input.command.ops[OPS_CMD.STAMP_ATIME] &&
             input.command.ops[OPS_CMD.STAMP_ATIME].status !== OPS_STATUS.COMPLETED
         ) {
-            await this.executeStampAtimeOnly(input, output);
+            await this.executeStampAtimeAndPreserveSource(input, output);
             if (output.sourceErrors.length > 0 || output.targetErrors.length > 0)
                 input.command.ops[OPS_CMD.STAMP_ATIME].status = OPS_STATUS.ERROR;
             else
@@ -235,7 +235,7 @@ export class StampMetaService {
         output.targetErrors.push(...timeOutput.targetErrors);
     }
 
-    private async executeStampAtimeOnly(input: CommandExecInput, output: CommandOutput): Promise<void> {
+    private async executeStampAtimeAndPreserveSource(input: CommandExecInput, output: CommandOutput): Promise<void> {
         const [preserveTimeOutput, timeOutput] = await Promise.all([
             this.preserveAccessAndModifiedTime(input),
             this.stampAccessAndModifiedTime(input),

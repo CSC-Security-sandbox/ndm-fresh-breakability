@@ -1067,7 +1067,7 @@ describe('StampMetaService', () => {
     });
   });
 
-  describe('executeStampAtimeOnly (via STAMP_ATIME op)', () => {
+  describe('executeStampAtimeAndPreserveSource (via STAMP_ATIME op)', () => {
     const createAtimeInput = (
       metadata = {},
       jobConfig = {},
