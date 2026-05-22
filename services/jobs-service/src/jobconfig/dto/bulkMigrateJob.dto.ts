@@ -5,6 +5,7 @@ import {
     IsArray,
     IsBoolean,
     IsDate,
+    IsEnum,
     IsOptional,
     IsString,
     IsUUID,
@@ -14,6 +15,7 @@ import {
     ValidatorConstraintInterface, 
     ValidationArguments
 } from 'class-validator';
+import { SmbPermissionInheritanceMode } from 'src/constants/enums';
 
 @ValidatorConstraint({ name: 'SourceNotInDestination', async: false })
 export class SourceNotInDestinationConstraint implements ValidatorConstraintInterface {
@@ -53,6 +55,17 @@ export class MigrateJobConfigOptions {
   @ApiProperty({ description: 'Skip Files time duration', example: '1h' })
   @IsString()
   skipFile: string
+
+  @ApiProperty({
+    description:
+      'Convert inherited permissions into explicit (SMB directory-level migrate only; set at job creation, not updatable via job config PATCH)',
+    enum: SmbPermissionInheritanceMode,
+    required: false,
+    example: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+  })
+  @IsOptional()
+  @IsEnum(SmbPermissionInheritanceMode)
+  smbPermissionInheritanceMode?: SmbPermissionInheritanceMode;
 }
 
 export class MigrateConfig {

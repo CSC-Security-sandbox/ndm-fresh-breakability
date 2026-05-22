@@ -15,6 +15,7 @@ import Options from "@modules/storage-servers/file-server/file-server-overview/b
 import Review from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/steps/Review/Review";
 import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
 import { isValidCron } from "cron-validator";
+import { SMB_PERMISSION_INHERITANCE_MODE } from "@/utils/smb-inheritance.utils";
 
 export const STEPS_MAP_BULK_MIGRATION = {
   mapping: Mapping,
@@ -130,6 +131,9 @@ export const OPTIONS_FORM = Yup.object().shape({
   ),
   preserve_a_time: Yup.boolean(),
   preserve_permissions: Yup.boolean(),
+  smb_permission_inheritance_mode: Yup.string()
+    .oneOf(Object.values(SMB_PERMISSION_INHERITANCE_MODE))
+    .notRequired(),
   sid_mapping: Yup.string().notRequired(),
   uid_mapping: Yup.string().notRequired(),
   incremental_sync_schedule_weekly: Yup.string()

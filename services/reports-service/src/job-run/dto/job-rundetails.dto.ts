@@ -85,6 +85,11 @@ class JobOptionsDto {
   @IsOptional()
   @IsBoolean()
   shouldScanADS?: boolean;
+
+  @ApiProperty({ nullable: true, required: false })
+  @IsOptional()
+  @IsString()
+  smbPermissionInheritanceMode?: string | null;
 }
 
 export class TaskDto {

@@ -199,6 +199,7 @@ export class JobRunInitService {
         targetWorkingDir: this.mountBasePath,
         preserveAccessTime: details.preserveAccessTime,
         preservePermissions: details.preservePermissions,
+        smbPermissionInheritanceMode: details.smbPermissionInheritanceMode,
         excludeOlderThan: details.excludeOlderThan,
         shouldScanADS: details.shouldScanADS,
         skipFile: details.skipFile,
@@ -292,6 +293,7 @@ export class JobRunInitService {
       id: jobConfig.id,
       preserveAccessTime: jobConfig.preserveAccessTime,
       preservePermissions: jobConfig.preservePermissions,
+      smbPermissionInheritanceMode: jobConfig.smbPermissionInheritanceMode,
       shouldScanADS: jobConfig.shouldScanADS ?? false,
       excludeFilePatterns: jobConfig.excludeFilePatterns,
       excludeOlderThan: jobConfig.excludeOlderThan,
@@ -650,6 +652,13 @@ export class JobRunInitService {
           ? jobRunConfig.excludeOlderThan.toString()
           : "",
         isIdentityMappingAvailable: isIdentityMapping,
+        ...(this.shouldPassSmbInheritanceModeToWorker(jobRunConfig)
+          ? {
+              smbPermissionInheritanceMode:
+                jobRunConfig.smbPermissionInheritanceMode ??
+                "INHERIT_PERMS_AS_EXPLICIT",
+            }
+          : {}),
       },
       jobRunConfig.skipDelete,
       jobRunConfig.jobRunId,  // Pass retry job run ID if this is a retry
@@ -662,6 +671,19 @@ export class JobRunInitService {
     );
     await this.redisService.setJobContext(jobRunId, jobContext);
     this.logger.debug("JobContext Saved to Redis");
+  }
+
+  private shouldPassSmbInheritanceModeToWorker(jobRunConfig: JobRunConfig): boolean {
+    const protocol = jobRunConfig.connection?.sourceCredential?.protocol;
+    const sourceDir = jobRunConfig.connection?.sourceCredential?.directoryPath;
+    const targetDir = jobRunConfig.connection?.targetCredential?.directoryPath;
+    return (
+      !!jobRunConfig.preservePermissions &&
+      protocol === Protocol.SMB &&
+      !!(sourceDir?.trim() || targetDir?.trim()) &&
+      (jobRunConfig.jobType === JobType.MIGRATE ||
+        jobRunConfig.jobType === JobType.CUT_OVER)
+    );
   }
 
 

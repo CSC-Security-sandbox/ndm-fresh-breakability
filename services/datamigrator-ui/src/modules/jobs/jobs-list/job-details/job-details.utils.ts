@@ -83,6 +83,16 @@ export const parseIncrementalSchedule = (schedule: string) => {
     };
 }
 
+export {
+  SMB_CONVERT_INHERITED_PERMISSIONS_LABEL,
+  convertInheritedPermissionsEnabledFromMode,
+  formatSmbPermissionInheritanceMode,
+  isConvertInheritedPermissionsEnabled,
+  isSmbInheritanceDisplayEnabled,
+  SMB_PERMISSION_INHERITANCE_MODE,
+  toConvertInheritedPermissionsMode,
+} from "@/utils/smb-inheritance.utils";
+
 export const parseSkipFiles = (skipValue: string) => {
     if (skipValue === "-") return { num: 15, option: "M" };
     const match = skipValue.match(/^(\d+)-?(Mins?|Hrs?|Days?)$/);

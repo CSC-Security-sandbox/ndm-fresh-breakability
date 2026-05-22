@@ -734,4 +734,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260514_01_alter_jobconfig_add_smb_permission_inheritance_mode.sql" author="dm16162">
+      <sqlFile path="liquibase/20260514_01_alter_jobconfig_add_smb_permission_inheritance_mode.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260514_01_alter_jobconfig_add_smb_permission_inheritance_mode_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

@@ -192,6 +192,12 @@ export enum JobConfigurationEnum {
   futureScheduleAt = "Incremental sync schedule",
   shouldScanADS = "Scan Alternate Data Streams (ADS)",
   firstRunAt = "Job Scheduled For",
+  smbPermissionInheritanceMode = "Convert inherited permissions into explicit",
+}
+
+export enum SmbPermissionInheritanceMode {
+  INHERIT_PERMS_AS_IS = 'INHERIT_PERMS_AS_IS',
+  INHERIT_PERMS_AS_EXPLICIT = 'INHERIT_PERMS_AS_EXPLICIT',
 }
 
 /**

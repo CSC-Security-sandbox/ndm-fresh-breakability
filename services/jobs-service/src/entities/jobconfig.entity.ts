@@ -39,6 +39,19 @@ export class JobConfigEntity extends Base {
   @Column({ name: 'preserve_permissions', type: 'boolean', default: true })
   preservePermissions: boolean;
 
+  @ApiProperty({
+    description: 'SMB directory-level permission inheritance mode',
+    required: false,
+  })
+  @Column({
+    name: 'smb_permission_inheritance_mode',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+    default: 'INHERIT_PERMS_AS_EXPLICIT',
+  })
+  smbPermissionInheritanceMode: string | null;
+
   @ApiProperty({ description: 'Scan Alternate Data Streams flag (Windows/SMB only)' })
   @Column({ name: 'should_scan_ads', type: 'boolean', default: false })
   shouldScanADS: boolean;

@@ -49,6 +49,7 @@ import { InfoIcon } from "@netapp/bxp-style/react-icons/Notification";
 import { GENERATING_REPORT_LABEL } from "@modules/jobs/jobs-list/job-details/job-details.constants";
 import TitleWithLastRefreshedDate from "@components/TitleWithLastRefreshedDate/TitleWithLastRefreshedDate";
 import ExistingIdentityMappings from "@hooks/useExistingIdentityMappings";
+import { ConvertInheritedPermissionsReadOnly } from "@modules/jobs/jobs-list/job-details/components/ConvertInheritedPermissionsReadOnly";
 
 const JobRunDetails = () => {
   const navigate = useNavigate();
@@ -170,6 +171,19 @@ const JobRunDetails = () => {
     const preservePermissions = jobRunConfig?.preservePermissions ? "Enabled" : "Disabled";
     const excludeOlderThan = jobRunConfig?.excludeOlderThan ? format(new Date(jobRunConfig.excludeOlderThan), "dd MMM yyyy, hh:mm a") : "-";
     const excludeFilePatterns = jobRunConfig?.excludeFilePatterns?.split(',').join('\n') || "-";
+    const isSmbDirectoryLevelJobRun =
+      jobRunProtocol === "SMB" &&
+      !!(
+        jobRunDetails?.jobConfig?.sourceServer?.directoryPath?.trim() ||
+        jobRunDetails?.jobConfig?.destinationServer?.directoryPath?.trim()
+      );
+    const showSmbInheritanceMode =
+      isSmbDirectoryLevelJobRun && jobRunConfig?.preservePermissions;
+    const smbInheritanceModeField = showSmbInheritanceMode ? (
+      <ConvertInheritedPermissionsReadOnly
+        mode={jobRunConfig?.smbPermissionInheritanceMode}
+      />
+    ) : null;
     if (isDiscoveryJob) {
       const shouldScanAds = jobRunConfig?.shouldScanADS ? "Enabled" : "Disabled";
       dispatch(
@@ -226,6 +240,7 @@ const JobRunDetails = () => {
                       <Text className="!mb-0 font-semibold">Preserve Permissions:</Text>
                       <Text>{preservePermissions}</Text>
                     </Box>
+                    {smbInheritanceModeField}
                     <Box>
                       <Text className="!mb-0 font-semibold">Exclude files older than:</Text>
                       <Text>{excludeOlderThan}</Text>
@@ -284,6 +299,7 @@ const JobRunDetails = () => {
                       <Text className="!mb-0 font-semibold">Preserve Permissions:</Text>
                       <Text>{preservePermissions}</Text>
                     </Box>
+                    {smbInheritanceModeField}
                     <Box>
                       <Text className="!mb-0 font-semibold">Exclude files older than:</Text>
                       <Text>{excludeOlderThan}</Text>

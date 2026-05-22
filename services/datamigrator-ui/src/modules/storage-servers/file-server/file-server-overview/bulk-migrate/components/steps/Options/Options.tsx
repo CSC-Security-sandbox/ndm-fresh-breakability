@@ -3,7 +3,15 @@ import { useLazyDownloadTemplateQuery } from "@api/jobsApi";
 import { Box } from "@components/container/index";
 import FormFrame from "@modules/storage-servers/file-server/components/layout/FormFrame";
 import { SKIP_FILE_OPTIONS } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
-import { handleDownloadTemplate } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
+import {
+  SMB_CONVERT_INHERITED_PERMISSIONS_LABEL,
+  isConvertInheritedPermissionsEnabled,
+  toConvertInheritedPermissionsMode,
+} from "@/utils/smb-inheritance.utils";
+import {
+  handleDownloadTemplate,
+  hasDirectoryLevelMappingForProtocol,
+} from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
 import IncrementalSyncSchedule from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/IncrementalSyncSchedule";
 import MigrateFileOption from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/MigrateFileOption/MigrateFileOption";
 import { BulkMigrateContext } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/context/BulkMigrateContextProvider";
@@ -23,8 +31,19 @@ import { useContext } from "react";
 dayjs.extend(utc);
 
 const Options = () => {
-  const { optionForm, protocolForm } = useContext(BulkMigrateContext);
+  const { optionForm, protocolForm, mappingStepForm } =
+    useContext(BulkMigrateContext);
   const [downloadTemplateApi] = useLazyDownloadTemplateQuery();
+
+  const hasDirectoryLevelMapping = hasDirectoryLevelMappingForProtocol(
+    mappingStepForm.values.migrationDetailsTableConfigurationValue,
+    protocolForm.formState.protocol.value
+  );
+
+  const showSmbInheritanceMode =
+    protocolForm.formState.protocol.value === ProtocolType.SMB &&
+    hasDirectoryLevelMapping &&
+    optionForm.formState.preserve_permissions;
 
   return (
     <FormFrame>
@@ -48,6 +67,27 @@ const Options = () => {
               </Popover>
             </Box>
           </Box>
+          {showSmbInheritanceMode && (
+            <Box className="flex gap-2 items-center">
+              <Toggle
+                value={isConvertInheritedPermissionsEnabled(
+                  optionForm.formState.smb_permission_inheritance_mode
+                )}
+                toggle={(enabled) =>
+                  optionForm.wrappedHandleFormChange(
+                    "smb_permission_inheritance_mode"
+                  )(toConvertInheritedPermissionsMode(enabled), null)
+                }
+              >
+                {SMB_CONVERT_INHERITED_PERMISSIONS_LABEL}
+              </Toggle>
+              <Popover placement="right" verticalPlacement="center">
+                When enabled, inherited source permissions are written as
+                explicit permissions on the destination for directory-level SMB
+                migrations.
+              </Popover>
+            </Box>
+          )}
           <MigrateFileOption />
           <Box className="w-5/6 flex flex-col gap-1">
             <Box className="flex gap-2 items-center mb-1">

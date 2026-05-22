@@ -18,6 +18,7 @@ import {
   JobStatus,
   JobType,
   Protocol,
+  SmbPermissionInheritanceMode,
   TemplateType,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
@@ -1398,6 +1399,12 @@ describe("JobConfigService", () => {
       .spyOn(jobConfigRepo, "save")
       .mockResolvedValue(mockJobConfigEntities as any);
     jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+    jest.spyOn(volumeRepo, "find").mockResolvedValue([
+      {
+        id: "sourcePath1",
+        fileServer: { protocol: Protocol.SMB },
+      },
+    ] as any);
 
     const result = await service.createBulkMigrate(mockBulkMigrate as any);
 
@@ -1436,6 +1443,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
         preservePermissions: mockBulkMigrate.options.preservePermissions,
+        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
         excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
         skipFile: mockBulkMigrate.options.skipFile,
         firstRunAt: mockBulkMigrate.firstRunAt,
@@ -1450,6 +1458,7 @@ describe("JobConfigService", () => {
       jobType: JobType.MIGRATE,
       preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
       preservePermissions: mockBulkMigrate.options.preservePermissions,
+      smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
       sourcePathId: "sourcePath1",
       sourceDirectoryPath,
       targetPathId: "destinationPath2",
@@ -1467,6 +1476,7 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
         preservePermissions: mockBulkMigrate.options.preservePermissions,
+        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
         sourcePathId: "sourcePath1",
         sourceDirectoryPath,
         targetPathId: mockBulkMigrate.migrateConfigs[0].destinationPathId[1],
@@ -1504,6 +1514,7 @@ describe("JobConfigService", () => {
     jest.spyOn(jobConfigRepo, "create").mockImplementation((data) => data as any);
     jest.spyOn(jobConfigRepo, "save").mockResolvedValue([{ id: "jobConfigId1" }] as any);
     jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+    jest.spyOn(volumeRepo, "find").mockResolvedValue([]);
 
     const result = await service.createBulkMigrate(mockBulkMigrate as any);
 
@@ -2257,6 +2268,26 @@ describe("JobConfigService", () => {
         where: { id: mockJobConfigId },
       });
     });
+
+    it("should reject smbPermissionInheritanceMode on update", async () => {
+      const mockJobConfigId = "jobConfigId";
+      jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue({
+        id: mockJobConfigId,
+        jobType: JobType.MIGRATE,
+        smbPermissionInheritanceMode:
+          SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
+      } as any);
+
+      await expect(
+        service.updateJobConfig(mockJobConfigId, {
+          smbPermissionInheritanceMode:
+            SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+        } as Partial<JobConfigDto>)
+      ).rejects.toThrow(
+        "smbPermissionInheritanceMode is set when the job is created and cannot be updated",
+      );
+      expect(jobConfigRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe("deleteJobConfig", () => {
@@ -2968,6 +2999,75 @@ describe("JobConfigService", () => {
       expect(result["Skip Files modified in last"]).toBe("35-Mins");
       expect(result["Preserve a-time"]).toBe("Disabled");
       expect(result["Excluded Path Patterns"]).toEqual(["*/logs/*", "*/tmp/*"]);
+    });
+
+    it("should expose convert inherited permissions as Enabled for SMB directory-level MIGRATE when DB value is null", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "35-M",
+        preserveAccessTime: false,
+        preservePermissions: true,
+        smbPermissionInheritanceMode: null,
+        sourceDirectoryPath: "/data/share1",
+        targetDirectoryPath: null,
+        sourcePath: {
+          fileServer: { protocol: Protocol.SMB },
+        },
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+        firstRunAt: new Date(),
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(
+        result[JobConfigurationEnum.smbPermissionInheritanceMode],
+      ).toBe("Enabled");
+    });
+
+    it("should omit convert inherited permissions when preservePermissions is disabled", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "35-M",
+        preserveAccessTime: false,
+        preservePermissions: false,
+        smbPermissionInheritanceMode:
+          SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
+        sourceDirectoryPath: "/data/share1",
+        sourcePath: {
+          fileServer: { protocol: Protocol.SMB },
+        },
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+        firstRunAt: new Date(),
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(
+        result[JobConfigurationEnum.smbPermissionInheritanceMode],
+      ).toBeUndefined();
+    });
+
+    it("should format smbPermissionInheritanceMode when set on SMB directory-level MIGRATE", () => {
+      const jobConfig = {
+        jobType: JobType.MIGRATE,
+        skipFile: "35-M",
+        preserveAccessTime: false,
+        preservePermissions: true,
+        smbPermissionInheritanceMode:
+          SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
+        sourceDirectoryPath: "/data/share1",
+        sourcePath: {
+          fileServer: { protocol: Protocol.SMB },
+        },
+        excludeFilePatterns: "",
+        excludeOlderThan: null,
+        futureScheduleAt: null,
+        firstRunAt: new Date(),
+      };
+      const result = service.getConfigurationsSetToJob(jobConfig as any);
+      expect(
+        result[JobConfigurationEnum.smbPermissionInheritanceMode],
+      ).toBe("Disabled");
     });
 
     it("should handle CUT_OVER job type", () => {
@@ -4876,6 +4976,220 @@ describe("JobConfigService", () => {
       const result = await service.createBulkMigrate(bulkMigrate as any);
       expect(result).toEqual({"jobs": [], "warnings": undefined});
     });
+
+    describe("smbPermissionInheritanceMode gate", () => {
+      const setupNewMigrateMocks = (protocol: Protocol) => {
+        jest.spyOn(jobConfigRepo, "find").mockResolvedValue([]);
+        jest.spyOn(jobConfigRepo, "update").mockResolvedValue({ affected: 0 } as any);
+        jest.spyOn(jobConfigRepo, "create").mockImplementation((data) => data as any);
+        jest.spyOn(jobConfigRepo, "save").mockResolvedValue([
+          {
+            id: "new_job1",
+            jobType: JobType.MIGRATE,
+            sourcePathId: "src1",
+            targetPathId: "dest1",
+            status: "CREATED",
+          },
+        ] as any);
+        jest.spyOn(volumeRepo, "find").mockResolvedValue([
+          { id: "src1", fileServer: { protocol } },
+        ] as any);
+        jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+      };
+
+      it("stores requested mode for SMB directory-level mapping on create", async () => {
+        setupNewMigrateMocks(Protocol.SMB);
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            {
+              sourcePathId: "src1",
+              sourceDirectoryPath: "/src/dir",
+              destinationPathId: ["dest1"],
+              destinationDirectoryPath: "/dest/dir",
+            },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: true,
+            skipFile: "15-M",
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          }),
+        );
+      });
+
+      it("defaults to INHERIT_PERMS_AS_EXPLICIT for SMB directory-level when mode omitted from payload", async () => {
+        setupNewMigrateMocks(Protocol.SMB);
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            {
+              sourcePathId: "src1",
+              sourceDirectoryPath: "/src/dir",
+              destinationPathId: ["dest1"],
+              destinationDirectoryPath: "/dest/dir",
+            },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: true,
+            skipFile: "15-M",
+          },
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          }),
+        );
+      });
+
+      it("stores null for SMB whole-export (no directory paths) on create", async () => {
+        setupNewMigrateMocks(Protocol.SMB);
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            { sourcePathId: "src1", destinationPathId: ["dest1"] },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: true,
+            skipFile: "15-M",
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            smbPermissionInheritanceMode: null,
+          }),
+        );
+      });
+
+      it("stores null when preservePermissions is false for SMB directory-level mapping on create", async () => {
+        setupNewMigrateMocks(Protocol.SMB);
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            {
+              sourcePathId: "src1",
+              sourceDirectoryPath: "/src/dir",
+              destinationPathId: ["dest1"],
+              destinationDirectoryPath: "/dest/dir",
+            },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: false,
+            skipFile: "15-M",
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            preservePermissions: false,
+            smbPermissionInheritanceMode: null,
+          }),
+        );
+      });
+
+      it("stores null for NFS even when directory paths are set on create", async () => {
+        setupNewMigrateMocks(Protocol.NFS);
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            {
+              sourcePathId: "src1",
+              sourceDirectoryPath: "/src/dir",
+              destinationPathId: ["dest1"],
+              destinationDirectoryPath: "/dest/dir",
+            },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: true,
+            skipFile: "15-M",
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            smbPermissionInheritanceMode: null,
+          }),
+        );
+      });
+
+      it("stores null on update for SMB whole-export when existing job is rescheduled", async () => {
+        jest.spyOn(volumeRepo, "find").mockResolvedValue([
+          { id: "src1", fileServer: { protocol: Protocol.SMB } },
+        ] as any);
+        jest.spyOn(jobConfigRepo, "find").mockResolvedValue([
+          {
+            id: "job1",
+            sourcePathId: "src1",
+            sourceDirectoryPath: null,
+            targetPathId: "dest1",
+            targetDirectoryPath: null,
+            scheduler: ScheduleStatus.READY_TO_BE_SCHEDULED,
+            status: JobStatus.Active,
+          },
+        ] as any);
+        jest.spyOn(jobConfigRepo, "update").mockResolvedValue({ affected: 1 } as any);
+        jest.spyOn(identityCrossMappingRepo, "exists").mockResolvedValue(false);
+
+        const bulkMigrate: BulkMigrateJobConfig = {
+          migrateConfigs: [
+            { sourcePathId: "src1", destinationPathId: ["dest1"] },
+          ],
+          options: {
+            excludeFilePatterns: "*.tmp",
+            preserveAccessTime: true,
+            preservePermissions: true,
+            skipFile: "15-M",
+            smbPermissionInheritanceMode:
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+          firstRunAt: new Date(),
+          futureRunSchedule: "0 0 * * *",
+        } as any;
+
+        await service.createBulkMigrate(bulkMigrate);
+
+        expect(jobConfigRepo.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sourcePathId: "src1",
+            targetPathId: "dest1",
+          }),
+          expect.objectContaining({
+            smbPermissionInheritanceMode: null,
+          }),
+        );
+      });
+    });
   });
 
  
@@ -5649,6 +5963,136 @@ describe("JobConfigService", () => {
         isOrphan: false,
       });
       expect(identityCrossMappingRepo.save).toHaveBeenCalled();
+    });
+
+    it('should copy smbPermissionInheritanceMode from migrate job when creating new cutover (JOB-08)', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
+      const migrateJobId = 'migrate-job-id';
+      const inheritMode =
+        SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
+
+      const completedMigrateJob = {
+        id: migrateJobId,
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        preservePermissions: true,
+        smbPermissionInheritanceMode: inheritMode,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null,
+      };
+
+      const jobRun = {
+        jobConfigId: migrateJobId,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+
+      jest.spyOn(service as any, 'flattenCutoverConfig').mockReturnValue(cutoverConfig);
+      jest.spyOn(service as any, 'findJobConfigs').mockResolvedValue([completedMigrateJob]);
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(null);
+      const createSpy = jest
+        .spyOn(service['jobConfigRepo'], 'create')
+        .mockImplementation((data) => data as any);
+      jest.spyOn(service['jobConfigRepo'], 'save').mockResolvedValue([
+        { id: 'new-cutover-id', jobType: JobType.CUT_OVER },
+      ] as any);
+      jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue(null);
+
+      await service.createBulkCutover({ cutoverConfig } as any);
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobType: JobType.CUT_OVER,
+          smbPermissionInheritanceMode: inheritMode,
+        }),
+      );
+    });
+
+    it('should copy smbPermissionInheritanceMode when updating existing active cutover (JOB-08)', async () => {
+      const sourcePathId = 'source-id';
+      const destinationPathId = 'destination-id';
+      const sourceDirectoryPath = '/cutover/source';
+      const destinationDirectoryPath = '/cutover/destination';
+      const migrateJobId = 'migrate-job-id';
+      const existingCutoverId = 'existing-cutover-id';
+      const inheritMode =
+        SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+
+      const cutoverConfig = [{
+        sourcePathId,
+        sourceDirectoryPath,
+        destinationPathId,
+        destinationDirectoryPath,
+      }];
+
+      const completedMigrateJob = {
+        id: migrateJobId,
+        jobType: JobType.MIGRATE,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        excludeFilePatterns: '*.tmp',
+        preserveAccessTime: true,
+        preservePermissions: true,
+        smbPermissionInheritanceMode: inheritMode,
+        status: JobStatus.Active,
+        excludeOlderThan: new Date(),
+        futureScheduleAt: null,
+      };
+
+      const jobRun = {
+        jobConfigId: migrateJobId,
+        status: JobRunStatus.Completed,
+        endTime: new Date(),
+      };
+
+      const existingCutoverJob = {
+        id: existingCutoverId,
+        jobType: JobType.CUT_OVER,
+        sourcePathId,
+        sourceDirectoryPath,
+        targetPathId: destinationPathId,
+        targetDirectoryPath: destinationDirectoryPath,
+        status: JobStatus.Active,
+      };
+
+      jest.spyOn(service as any, 'flattenCutoverConfig').mockReturnValue(cutoverConfig);
+      jest.spyOn(service as any, 'findJobConfigs').mockResolvedValue([completedMigrateJob]);
+      jest.spyOn(service['jobRunRepo'], 'find').mockResolvedValue([jobRun] as any);
+      jest.spyOn(service['jobConfigRepo'], 'findOne').mockResolvedValue(existingCutoverJob as any);
+      const updateSpy = jest
+        .spyOn(service['jobConfigRepo'], 'update')
+        .mockResolvedValue({} as any);
+      jest.spyOn(service['jobConfigRepo'], 'save').mockResolvedValue([] as any);
+      jest.spyOn(identityCrossMappingRepo, 'update').mockResolvedValue({} as any);
+      jest.spyOn(identityCrossMappingRepo, 'findOne').mockResolvedValue(null);
+
+      await service.createBulkCutover({ cutoverConfig } as any);
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        existingCutoverId,
+        expect.objectContaining({
+          smbPermissionInheritanceMode: inheritMode,
+        }),
+      );
     });
 
     it('should not create identity mapping for new cutover jobs when migrate job has no mapping', async () => {

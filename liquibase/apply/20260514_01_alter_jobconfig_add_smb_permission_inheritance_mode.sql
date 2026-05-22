@@ -1,0 +1,5 @@
+ALTER TABLE jobconfig
+  ADD COLUMN IF NOT EXISTS smb_permission_inheritance_mode VARCHAR(64) DEFAULT 'INHERIT_PERMS_AS_EXPLICIT';
+
+ALTER TABLE job_options
+  ADD COLUMN IF NOT EXISTS smb_permission_inheritance_mode VARCHAR(64) DEFAULT 'INHERIT_PERMS_AS_EXPLICIT';

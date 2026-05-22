@@ -29,6 +29,7 @@ import {
   WEEKDAY_OPTIONS,
   OFFLINE_STATUS,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
+import { SMB_PERMISSION_INHERITANCE_MODE } from "@/utils/smb-inheritance.utils";
 import {
   BulkMigrateContextType,
   bulkMigrateCreateApiType,
@@ -43,6 +44,7 @@ import {
 import {
   createPathMapping,
   createSelectedMountPathsObject,
+  hasDirectoryLevelMappingForProtocol,
   migratePathMapping,
   validateMappingStepForm,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.utils";
@@ -208,6 +210,8 @@ export function withBulkMigrateCreateForm(
         ),
         preserve_a_time: true,
         preserve_permissions: true,
+        smb_permission_inheritance_mode:
+          SMB_PERMISSION_INHERITANCE_MODE.INHERIT_PERMS_AS_EXPLICIT,
         sid_mapping: "",
         uid_mapping: "",
         migrate_file_option: MIGRATE_OPTION_ENUM.ALL,
@@ -478,6 +482,11 @@ export function withBulkMigrateCreateForm(
       const uid_mapping: FormFileUploadType | undefined =
         optionForm.formState.upload_uid_mapping;
 
+      const hasDirectoryLevelMapping = hasDirectoryLevelMappingForProtocol(
+        mappingStepForm.values.migrationDetailsTableConfigurationValue,
+        protocolForm.formState.protocol.value
+      );
+
       const body: bulkMigrateCreateApiType = {
         firstRunAt:
           mappingStepForm.values.scheduleTime === "start_now"
@@ -517,6 +526,14 @@ export function withBulkMigrateCreateForm(
           preserveAccessTime: optionForm.formState?.preserve_a_time,
           preservePermissions: optionForm.formState?.preserve_permissions,
           skipFile: `${optionForm.formState?.skipFileNum}-${optionForm.formState?.skipFileOption?.value}`,
+          ...(protocolForm.formState.protocol.value === ProtocolType.SMB &&
+          hasDirectoryLevelMapping &&
+          optionForm.formState.preserve_permissions
+            ? {
+                smbPermissionInheritanceMode:
+                  optionForm.formState.smb_permission_inheritance_mode,
+              }
+            : {}),
         },
       };
 

@@ -308,6 +308,25 @@ export const structureDataForReviewList = (
   return data;
 };
 
+/** Export-level mappings store "-" when no directory is selected; treat that as absent. */
+export const isDirectoryLevelMappingRow = (
+  row: MigrationDetailsTableConfigurationType
+): boolean => {
+  const hasSourceDir =
+    !!row.sourceDirectoryPath && row.sourceDirectoryPath !== "-";
+  const hasDestDir =
+    !!row.destinationDirectoryPath && row.destinationDirectoryPath !== "-";
+  return hasSourceDir || hasDestDir;
+};
+
+export const hasDirectoryLevelMappingForProtocol = (
+  rows: MigrationDetailsTableConfigurationType[] | undefined,
+  protocol: string
+): boolean =>
+  rows?.some(
+    (row) => row.protocol === protocol && isDirectoryLevelMappingRow(row)
+  ) ?? false;
+
 // FOR API BODY MAPPING STEP
 export const createPathMapping = (
   migrationDetails: MigrationDetailsTableConfigurationType[],

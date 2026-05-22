@@ -9,7 +9,7 @@ import {
   Inject
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { JobRunStatus, JobType, ReportType } from "src/constants/enums";
+import { JobRunStatus, JobType, Protocol, ReportType } from "src/constants/enums";
 import { InventoryEntity } from "src/entities/inventory.entity";
 import { JobRunEntity } from "src/entities/jobrun.entity";
 import { ReportsEntity } from "src/entities/reports.entity";
@@ -63,6 +63,30 @@ export class JobRunService {
       // Fallback to basic NestJS Logger for worker threads
       this.logger = new Logger(JobRunService.name);
     }
+  }
+
+  /**
+   * Aligns with jobs-service: return stored run snapshot, or default when gated and null.
+   */
+  private resolveJobOptionsSmbPermissionInheritanceMode(
+    jobRun: JobRunEntity,
+  ): string | null {
+    const options = jobRun.options;
+    if (!options?.preservePermissions) {
+      return null;
+    }
+    const protocol = jobRun.jobConfig?.sourcePath?.fileServer?.protocol;
+    if (protocol !== Protocol.SMB) {
+      return null;
+    }
+    const sourceDir = jobRun.jobConfig?.sourceDirectoryPath?.trim();
+    const targetDir = jobRun.jobConfig?.destinationDirectoryPath?.trim();
+    if (!sourceDir && !targetDir) {
+      return null;
+    }
+    return (
+      options.smbPermissionInheritanceMode ?? "INHERIT_PERMS_AS_EXPLICIT"
+    );
   }
 
   async jobRunReportByJobRunId(jobRunId: string, reportType: string) {
@@ -182,6 +206,7 @@ export class JobRunService {
           skipFile: true,
           identityMappingId: true,
           shouldScanADS: true,
+          smbPermissionInheritanceMode: true,
         },
       },
       relations: {
@@ -227,6 +252,8 @@ export class JobRunService {
         skipFile: jobRun.options.skipFile,
         identityMappingId: jobRun.options.identityMappingId,
         shouldScanADS: jobRun.options.shouldScanADS,
+        smbPermissionInheritanceMode:
+          this.resolveJobOptionsSmbPermissionInheritanceMode(jobRun),
       },
       worker: jobRun?.worker?.length ?? 0,
     };

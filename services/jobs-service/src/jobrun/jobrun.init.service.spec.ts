@@ -5,7 +5,14 @@ import { IdentityTypes, JobContextFactory, JobStatus, SpeedTestJobConfig, SpeedT
 import { JobState } from '@netapp-cloud-datamigrate/jobs-lib/dist/types/job-state';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import axios from 'axios';
-import { JobRunStatus, JobType, JobStatus as JS, Protocol, WorkFlows } from 'src/constants/enums';
+import {
+  JobRunStatus,
+  JobType,
+  JobStatus as JS,
+  Protocol,
+  SmbPermissionInheritanceMode,
+  WorkFlows,
+} from 'src/constants/enums';
 import { ScheduleStatus } from 'src/constants/status';
 import { IdentityConfigCrossMappingEntity } from 'src/entities/indentity-mapping-cross.entity';
 import { IdentityMappingEntity } from 'src/entities/indentity-mapping.entity';
@@ -296,6 +303,81 @@ describe('JobRunInitService', () => {
         where: { jobConfigId, isOrphan: false },
         order: { createdAt: 'DESC' },
       });
+    });
+
+    it('should persist smbPermissionInheritanceMode on job_options for SMB directory-level cutover (JOB-08)', async () => {
+      const jobConfigId = 'cutover-config-id';
+      const currentTime = new Date();
+      const inheritMode =
+        SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+      const details = {
+        id: jobConfigId,
+        jobType: JobType.CUT_OVER,
+        workers: ['worker1'],
+        preserveAccessTime: true,
+        preservePermissions: true,
+        smbPermissionInheritanceMode: inheritMode,
+        excludeFilePatterns: null,
+        excludeOlderThan: null,
+        shouldScanADS: false,
+        skipFile: null,
+        connection: {
+          sourceCredential: {
+            path: '/share',
+            directoryPath: '/share/src',
+            pathId: 'sourcePathId',
+            protocol: Protocol.SMB,
+            username: 'user',
+            password: 'pass',
+            host: 'host',
+            workingDirectory: '/mnt',
+            isValidPath: true,
+            isDisabled: false,
+            protocolVersion: '3',
+          },
+          targetCredential: {
+            path: '/share',
+            directoryPath: '/share/dst',
+            pathId: 'targetPathId',
+            protocol: Protocol.SMB,
+            username: 'user',
+            password: 'pass',
+            host: 'host',
+            workingDirectory: '/mnt',
+            isValidPath: true,
+            isDisabled: false,
+            protocolVersion: '3',
+          },
+        },
+      } as any;
+
+      jest.spyOn(service, 'getJobConfig').mockResolvedValue(details);
+      jest.spyOn(identityConfigCrossMappingRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(workerJobRunMapRepo, 'create').mockReturnValue({} as any);
+      const optionCreateSpy = jest.spyOn(optionRepo, 'create').mockReturnValue({} as any);
+      jest.spyOn(jobRunRepo, 'create').mockReturnValue({} as any);
+      jest.spyOn(jobRunRepo, 'save').mockResolvedValue({} as any);
+      jest.spyOn(jobConfigRepo, 'update').mockResolvedValue({} as any);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue({
+        exists: jest.fn(),
+        xGroupCreate: jest.fn().mockResolvedValue(undefined),
+        set: jest.fn().mockResolvedValue('OK'),
+        xAdd: jest.fn().mockResolvedValue(undefined),
+        hSet: jest.fn().mockResolvedValue(1),
+        isOpen: true,
+        connect: jest.fn(),
+      } as any);
+      jest.spyOn(service, 'initiateWorkflow').mockResolvedValue(undefined);
+      jest.spyOn(jobRunRepo, 'update').mockResolvedValue(undefined);
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+
+      await service.createJobRun(jobConfigId, currentTime);
+
+      expect(optionCreateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          smbPermissionInheritanceMode: inheritMode,
+        }),
+      );
     });
 
     it('should create a job run and return it', async () => {
@@ -780,6 +862,145 @@ describe('JobRunInitService', () => {
           }),
         })
       );
+    });
+
+    it('should pass smbPermissionInheritanceMode into job context for SMB directory-level migrate (JOB-08)', async () => {
+      const jobRunId = 'jobRunId';
+      const inheritMode =
+        SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+      const jobRunConfig = {
+        id: 'migrate-config-id',
+        jobType: JobType.MIGRATE,
+        workers: ['worker1'],
+        preserveAccessTime: true,
+        preservePermissions: true,
+        smbPermissionInheritanceMode: inheritMode,
+        excludeFilePatterns: null,
+        excludeOlderThan: null,
+        shouldScanADS: false,
+        skipFile: null,
+        skipDelete: false,
+        connection: {
+          sourceCredential: {
+            protocol: Protocol.SMB,
+            host: 'host',
+            username: 'user',
+            password: 'pass',
+            pathId: 'sourcePathId',
+            path: '/share',
+            directoryPath: '/share/src',
+            workingDirectory: '/mnt',
+            protocolVersion: '3',
+          },
+          targetCredential: {
+            protocol: Protocol.SMB,
+            host: 'host',
+            username: 'user',
+            password: 'pass',
+            pathId: 'targetPathId',
+            path: '/share',
+            directoryPath: '/share/dst',
+            workingDirectory: '/mnt',
+            protocolVersion: '3',
+          },
+        },
+      };
+
+      let capturedJobConfig: any;
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockImplementation(async (_id, jobConfig) => {
+          capturedJobConfig = jobConfig;
+          return { jobConfig, jobRunStatus: JobRunStatus.Ready };
+        }),
+      };
+
+      jest.spyOn(identityConfigCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(identityMappingRepo, 'findBy').mockResolvedValue([]);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue({
+        isOpen: true,
+        exists: jest.fn().mockResolvedValue(false),
+        xGroupCreate: jest.fn(),
+        set: jest.fn(),
+        xAdd: jest.fn(),
+      } as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(
+        mockRedisProvider as any,
+      );
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+
+      expect(capturedJobConfig.options.smbPermissionInheritanceMode).toBe(
+        inheritMode,
+      );
+    });
+
+    it('should omit smbPermissionInheritanceMode from job context for NFS migrate (JOB-06)', async () => {
+      const jobRunId = 'jobRunId';
+      const jobRunConfig = {
+        id: 'migrate-config-id',
+        jobType: JobType.MIGRATE,
+        workers: ['worker1'],
+        preserveAccessTime: true,
+        preservePermissions: true,
+        smbPermissionInheritanceMode:
+          SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+        excludeFilePatterns: null,
+        excludeOlderThan: null,
+        shouldScanADS: false,
+        skipFile: null,
+        skipDelete: false,
+        connection: {
+          sourceCredential: {
+            protocol: Protocol.NFS,
+            host: 'host',
+            username: 'user',
+            password: 'pass',
+            pathId: 'sourcePathId',
+            path: '/export',
+            directoryPath: '/export/src',
+            workingDirectory: '/mnt',
+            protocolVersion: '3',
+          },
+          targetCredential: {
+            protocol: Protocol.NFS,
+            host: 'host',
+            username: 'user',
+            password: 'pass',
+            pathId: 'targetPathId',
+            path: '/export',
+            directoryPath: '/export/dst',
+            workingDirectory: '/mnt',
+            protocolVersion: '3',
+          },
+        },
+      };
+
+      let capturedJobConfig: any;
+      const mockRedisProvider = {
+        buildContext: jest.fn().mockImplementation(async (_id, jobConfig) => {
+          capturedJobConfig = jobConfig;
+          return { jobConfig, jobRunStatus: JobRunStatus.Ready };
+        }),
+      };
+
+      jest.spyOn(identityConfigCrossMappingRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(identityMappingRepo, 'findBy').mockResolvedValue([]);
+      jest.spyOn(redisService, 'getClient').mockResolvedValue({
+        isOpen: true,
+        exists: jest.fn().mockResolvedValue(false),
+        xGroupCreate: jest.fn(),
+        set: jest.fn(),
+        xAdd: jest.fn(),
+      } as any);
+      jest.spyOn(JobContextFactory, 'getJobManagerProvider').mockReturnValue(
+        mockRedisProvider as any,
+      );
+      jest.spyOn(redisService, 'setJobContext').mockResolvedValue(undefined);
+
+      await service.buildJobContext(jobRunId, jobRunConfig as any);
+
+      expect(capturedJobConfig.options.smbPermissionInheritanceMode).toBeUndefined();
     });
   });
 

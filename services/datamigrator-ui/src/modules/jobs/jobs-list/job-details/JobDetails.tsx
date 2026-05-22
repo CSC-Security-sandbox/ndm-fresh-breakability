@@ -52,7 +52,12 @@ import {
   BULK_DISCOVERY_FORM_SCHEMA,
   DEFAULT_MINUTES_AHEAD as DISCOVERY_DEFAULT_MINUTES_AHEAD,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discover.constant";
-import { parseIncrementalSchedule, parseSkipFiles } from "@modules/jobs/jobs-list/job-details/job-details.utils";
+import { ConvertInheritedPermissionsReadOnly } from "@modules/jobs/jobs-list/job-details/components/ConvertInheritedPermissionsReadOnly";
+import {
+  parseIncrementalSchedule,
+  parseSkipFiles,
+} from "@modules/jobs/jobs-list/job-details/job-details.utils";
+import { SMB_CONVERT_INHERITED_PERMISSIONS_LABEL } from "@/utils/smb-inheritance.utils";
 import { bulkDiscoveryFormType } from "@modules/storage-servers/file-server/file-server-overview/bulk-discover/bulk-discovery.interface";
 import {
   SKIP_FILE_OPTIONS, OPTIONS_FORM, MIGRATE_OPTION_ENUM,
@@ -502,7 +507,15 @@ const JobDetails = () => {
   const jobProtocol = jobConfigDetails?.sourceServer?.protocol;
   const preserveATime = configurationsSetToJob?.["Preserve a-time"];
   const preservePermissions = configurationsSetToJob?.["Preserve permissions"];
+  const smbPermissionInheritanceModeLabel =
+    configurationsSetToJob?.[SMB_CONVERT_INHERITED_PERMISSIONS_LABEL];
   const skipFilesModified = configurationsSetToJob?.["Skip Files modified in last"] || "-";
+  const isSmbDirectoryLevelJobConfig = (details: typeof jobConfigDetails) =>
+    details?.sourceServer?.protocol === ProtocolType.SMB &&
+    !!(
+      details?.sourceServer?.directoryPath?.trim() ||
+      details?.destinationServer?.directoryPath?.trim()
+    );
 
   const MigrationConfigDetailsModalContent = ({
     downloadTemplateApi, onSave, isLoading, jobId
@@ -527,6 +540,7 @@ const JobDetails = () => {
       refetch: refetchMappings,
     } = useGetJobIdentityMappingsQuery(jobId as string, { skip: !jobId });
 
+    const activeJobConfig = modalJobConfigDetails ?? jobConfigDetails;
     const migrateFileOption = configurationsSetToJob?.["Exclude file older than (UTC)"] ? "excludeFilesOlderThan" : "all";
     const migrationFileOptionExcludeDate = migrateFileOption === "excludeFilesOlderThan" ? dayjs(configurationsSetToJob?.["Exclude file older than (UTC)"]) : dayjs().subtract(1, "day");
     const incrementalSyncSchedule = configurationsSetToJob?.["Incremental sync schedule"] || "";
@@ -554,6 +568,15 @@ const JobDetails = () => {
       },
       OPTIONS_FORM
     );
+
+    const smbInheritanceDisplay =
+      activeJobConfig?.configurationsSetToJob?.[
+        SMB_CONVERT_INHERITED_PERMISSIONS_LABEL
+      ];
+    const showSmbInheritanceReadOnly =
+      jobProtocol === ProtocolType.SMB &&
+      isSmbDirectoryLevelJobConfig(activeJobConfig) &&
+      optionForm.formState.preserve_permissions;
 
     const mappingStepForm = useFormik<MappingStepFormikFormType>({
       initialValues: {
@@ -683,7 +706,7 @@ const JobDetails = () => {
         <Box className="!bg-white mx-auto shadow-[rgba(0,_0,_0,_0.24)_0px_3px_8px]">
           <Box className="p-6 flex gap-4">
             <Box className="w-3/6 flex flex-col gap-8">
-              <Box className="flex gap-6 items-center">
+              <Box className="flex gap-6 items-center flex-wrap">
                 <Box className="flex gap-2 items-center">
                   <Toggle 
                     name="preserve_a_time"
@@ -710,6 +733,16 @@ const JobDetails = () => {
                     Preserve file and directory permissions (ACLs for SMB, POSIX for NFS).
                   </Popover>
                 </Box>
+                {showSmbInheritanceReadOnly && (
+                  <ConvertInheritedPermissionsReadOnly
+                    variant="form"
+                    displayLabel={
+                      typeof smbInheritanceDisplay === "string"
+                        ? smbInheritanceDisplay
+                        : null
+                    }
+                  />
+                )}
               </Box>
               <Box>
                 <Box className="flex gap-2 items-center mb-1">
@@ -1092,6 +1125,13 @@ const JobDetails = () => {
                     <Text className="!mb-0 font-semibold">Preserve permissions:</Text>
                     <Text>{preservePermissions}</Text>
                   </Box>
+                  {jobProtocol === ProtocolType.SMB &&
+                    isSmbDirectoryLevelJobConfig(jobConfigDetails) &&
+                    preservePermissions === "Enabled" && (
+                      <ConvertInheritedPermissionsReadOnly
+                        displayLabel={smbPermissionInheritanceModeLabel}
+                      />
+                    )}
                   <Box>
                     <Text className="!mb-0 font-semibold">Exclude Files Older Than:</Text>
                     <Text>{skipFilesModified}</Text>

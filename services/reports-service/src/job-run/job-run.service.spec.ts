@@ -618,16 +618,18 @@ describe("JobRunService", () => {
         jobConfig: {
           id: "configId",
           jobType: JobType.Migrate,
+          sourceDirectoryPath: "/src/dir",
+          destinationDirectoryPath: "/dest/dir",
           sourcePath: {
             fileServer: {
-              protocol: "nfs",
+              protocol: "SMB",
               config: { configName: "sourceServer" },
             },
             volumePath: "/source",
           },
           destinationPath: {
             fileServer: {
-              protocol: "smb",
+              protocol: "SMB",
               config: { configName: "destServer" },
             },
             volumePath: "/destination",
@@ -635,10 +637,12 @@ describe("JobRunService", () => {
         },
         options: {
           preserveAccessTime: true,
+          preservePermissions: true,
           excludeOlderThan: new Date("2025-01-01T00:00:00Z"),
           excludeFilePatterns: "*.tmp,*.log",
           skipFile: "x-M",
           identityMappingId: "mapping-456",
+          smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
         },
         worker: { workerId: "worker1" },
       };
@@ -659,6 +663,89 @@ describe("JobRunService", () => {
       expect(result.jobOptions.excludeFilePatterns).toBe("*.tmp,*.log");
       expect(result.jobOptions.skipFile).toBe("x-M");
       expect(result.jobOptions.identityMappingId).toBe("mapping-456");
+      expect(result.jobOptions.smbPermissionInheritanceMode).toBe(
+        "INHERIT_PERMS_AS_EXPLICIT",
+      );
+    });
+
+    it("should default smbPermissionInheritanceMode when null for SMB directory-level run", async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourceDirectoryPath: "/src/dir",
+          destinationDirectoryPath: "/dest/dir",
+          sourcePath: {
+            fileServer: { protocol: "SMB", config: { configName: "src" } },
+            volumePath: "/source",
+          },
+          destinationPath: {
+            fileServer: { protocol: "SMB", config: { configName: "dest" } },
+            volumePath: "/destination",
+          },
+        },
+        options: {
+          preserveAccessTime: true,
+          preservePermissions: true,
+          smbPermissionInheritanceMode: null,
+        },
+        worker: {},
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 1,
+        directoryCount: 1,
+        totalSize: 100,
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.jobOptions.smbPermissionInheritanceMode).toBe(
+        "INHERIT_PERMS_AS_EXPLICIT",
+      );
+    });
+
+    it("should omit smbPermissionInheritanceMode for NFS job run options", async () => {
+      const mockJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourceDirectoryPath: "/src/dir",
+          sourcePath: {
+            fileServer: { protocol: "NFS", config: { configName: "src" } },
+            volumePath: "/source",
+          },
+          destinationPath: {
+            fileServer: { protocol: "NFS", config: { configName: "dest" } },
+            volumePath: "/destination",
+          },
+        },
+        options: {
+          preservePermissions: true,
+          smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
+        },
+        worker: {},
+      };
+
+      mockJobRunRepo.findOne.mockResolvedValue(mockJobRun);
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: 1,
+        directoryCount: 1,
+        totalSize: 100,
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.jobOptions.smbPermissionInheritanceMode).toBeNull();
     });
   });
 

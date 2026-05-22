@@ -36,7 +36,8 @@ export interface JobRunConfig{
     skipFile?: string,
     skipDelete?: boolean,
     id: string,
-    jobRunId?: string,  // If set, this is a retry run - skip scan and use failed items from this job run
+    jobRunId?: string,
+    smbPermissionInheritanceMode?: string | null,
 }
 
 

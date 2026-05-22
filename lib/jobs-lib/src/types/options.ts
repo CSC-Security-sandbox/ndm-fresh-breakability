@@ -9,4 +9,5 @@ export interface Options {
     isIdentityMappingAvailable?: boolean;
     shouldScanADS?: boolean;
     dirContentTtlSeconds?: number;
+    smbPermissionInheritanceMode?: string;
 }

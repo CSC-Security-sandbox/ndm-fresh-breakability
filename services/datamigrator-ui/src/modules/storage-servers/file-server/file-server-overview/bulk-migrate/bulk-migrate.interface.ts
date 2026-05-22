@@ -15,6 +15,7 @@ import {
   MIGRATE_OPTION_ENUM,
 } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/bulk-migrate.constant";
 import { INCREMENTAL_SYNC_SCHEDULE_ENUM } from "@modules/storage-servers/file-server/file-server-overview/bulk-migrate/components/IncrementalSyncSchedule/incremental-sync-schedule.constants";
+import { SMB_PERMISSION_INHERITANCE_MODE } from "@/utils/smb-inheritance.utils";
 
 export interface OptionType {
   label: string;
@@ -81,6 +82,7 @@ export interface FormFileUploadType {
 export interface OptionsFormType {
   preserve_a_time: boolean;
   preserve_permissions: boolean;
+  smb_permission_inheritance_mode: SMB_PERMISSION_INHERITANCE_MODE;
   exclude_file_patterns: string;
   upload_sid_mapping: FormFileUploadType;
   upload_uid_mapping: FormFileUploadType;
@@ -210,6 +212,7 @@ export interface bulkMigrateCreateApiType {
     preserveAccessTime: boolean;
     preservePermissions: boolean;
     skipFile: string;
+    smbPermissionInheritanceMode?: SMB_PERMISSION_INHERITANCE_MODE;
   };
   sidMapping?: any;
   gidMapping?: any;

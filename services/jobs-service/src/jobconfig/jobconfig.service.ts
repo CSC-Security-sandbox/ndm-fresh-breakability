@@ -22,6 +22,7 @@ import {
   TemplateType,
   JobConfigurationEnum,
   USER_VISIBLE_ERROR_TYPES,
+  SmbPermissionInheritanceMode,
 } from "src/constants/enums";
 import { ScheduleStatus } from "src/constants/status";
 import { Options } from "src/constants/types";
@@ -150,6 +151,94 @@ export class JobConfigService {
     private dataSource: DataSource
   ) {
     this.logger = loggerFactory.create(JobConfigService.name);
+  }
+
+  private isSmbDirectoryLevelMapping(
+    sourceDirectoryPath?: string | null,
+    destinationDirectoryPath?: string | null,
+  ): boolean {
+    const src = sourceDirectoryPath?.trim();
+    const dst = destinationDirectoryPath?.trim();
+    return !!(src || dst);
+  }
+
+  private isSmbDirectoryLevelJobConfig(jobConfig: JobConfigEntity): boolean {
+    if (jobConfig.sourcePath?.fileServer?.protocol !== Protocol.SMB) {
+      return false;
+    }
+    return this.isSmbDirectoryLevelMapping(
+      jobConfig.sourceDirectoryPath,
+      jobConfig.targetDirectoryPath,
+    );
+  }
+
+  private resolveSmbPermissionInheritanceConfigLabel(
+    jobConfig: JobConfigEntity,
+  ): string | null {
+    if (!jobConfig.preservePermissions) {
+      return null;
+    }
+    if (
+      jobConfig.jobType !== JobType.MIGRATE &&
+      jobConfig.jobType !== JobType.CUT_OVER
+    ) {
+      return null;
+    }
+    const mode = jobConfig.smbPermissionInheritanceMode;
+    if (mode) {
+      return this.formatSmbPermissionInheritanceMode(mode) ?? String(mode);
+    }
+    if (this.isSmbDirectoryLevelJobConfig(jobConfig)) {
+      return "Enabled";
+    }
+    return null;
+  }
+
+  private resolveSmbPermissionInheritanceModeForStorage(
+    protocol: Protocol | undefined,
+    sourceDirectoryPath?: string | null,
+    destinationDirectoryPath?: string | null,
+    requestedMode?: string | null,
+    preservePermissions?: boolean,
+  ): string | null {
+    if (
+      !preservePermissions ||
+      protocol !== Protocol.SMB ||
+      !this.isSmbDirectoryLevelMapping(sourceDirectoryPath, destinationDirectoryPath)
+    ) {
+      return null;
+    }
+    return (
+      requestedMode ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT
+    );
+  }
+
+  private async getSourceProtocolsByPathIds(
+    pathIds: string[],
+  ): Promise<Map<string, Protocol>> {
+    if (pathIds.length === 0) {
+      return new Map();
+    }
+    const volumes = await this.volumeRepo.find({
+      where: { id: In(pathIds) },
+      relations: ["fileServer"],
+    });
+    return new Map(
+      (volumes ?? []).map((volume) => [volume.id, volume.fileServer?.protocol]),
+    );
+  }
+
+  private formatSmbPermissionInheritanceMode(mode: string | null): string | null {
+    if (!mode) {
+      return null;
+    }
+    if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) {
+      return "Enabled";
+    }
+    if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS) {
+      return "Disabled";
+    }
+    return mode;
   }
 
   // ------------ Bulk Discovery ---------------- //
@@ -639,12 +728,31 @@ export class JobConfigService {
       parsedMappings = await this.parseBlobData(gidMapping, templateType);
     }
 
+    const sourcePathIds = [
+      ...new Set(
+        bulkMigrate.migrateConfigs
+          ?.map((config) => config?.sourcePathId)
+          .filter(Boolean) ?? [],
+      ),
+    ];
+    const sourceProtocolsByPathId =
+      await this.getSourceProtocolsByPathIds(sourcePathIds);
+
     for (const config of bulkMigrate.migrateConfigs) {
       if (!config?.destinationPathId) {
         continue;
       }
 
       for (const destinationPath of config.destinationPathId) {
+        const smbPermissionInheritanceMode =
+          this.resolveSmbPermissionInheritanceModeForStorage(
+            sourceProtocolsByPathId.get(config.sourcePathId),
+            config.sourceDirectoryPath,
+            config.destinationDirectoryPath,
+            bulkMigrate?.options?.smbPermissionInheritanceMode,
+            bulkMigrate?.options?.preservePermissions,
+          );
+
         const existingJobConfigs = await this.jobConfigRepo.find({
           where: {
             jobType: JobType.MIGRATE,
@@ -721,6 +829,7 @@ export class JobConfigService {
               excludeFilePatterns: bulkMigrate?.options?.excludeFilePatterns,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               preservePermissions: bulkMigrate?.options?.preservePermissions,
+              smbPermissionInheritanceMode,
               excludeOlderThan: bulkMigrate?.options?.excludeOlderThan ?? null,
               skipFile: bulkMigrate?.options?.skipFile,
               status: JobStatus.Active,
@@ -788,6 +897,7 @@ export class JobConfigService {
               jobType: JobType.MIGRATE,
               preserveAccessTime: bulkMigrate?.options?.preserveAccessTime,
               preservePermissions: bulkMigrate?.options?.preservePermissions,
+              smbPermissionInheritanceMode,
               sourcePathId: config?.sourcePathId,
               sourceDirectoryPath: config?.sourceDirectoryPath || null,
               targetPathId: destinationPath,
@@ -953,6 +1063,7 @@ export class JobConfigService {
                   status: JobStatus.Active,
                   preserveAccessTime: config.preserveAccessTime,
                   preservePermissions: config.preservePermissions,
+                  smbPermissionInheritanceMode: config.smbPermissionInheritanceMode,
                   firstRunAt: new Date(),
                   excludeOlderThan: config.excludeOlderThan,
                 })
@@ -974,6 +1085,7 @@ export class JobConfigService {
                       : config.status,
                   preserveAccessTime: config.preserveAccessTime,
                   preservePermissions: config.preservePermissions,
+                  smbPermissionInheritanceMode: config.smbPermissionInheritanceMode,
                   firstRunAt: new Date(),
                 });
                 updatedCutoverJobs.push({ ...existingCutover, ...config });
@@ -1169,7 +1281,14 @@ export class JobConfigService {
     if (!job) {
       throw new NotFoundException(`Job with id ${id} not found`);
     }
-    
+
+    const updatePayload = data as Record<string, unknown>;
+    if (updatePayload.smbPermissionInheritanceMode !== undefined) {
+      throw new BadRequestException(
+        "smbPermissionInheritanceMode is set when the job is created and cannot be updated",
+      );
+    }
+
     // Handle field mapping between DTO and entity
     const { futureSchedule, ...otherData } = data;
     Object.assign(job, otherData);
@@ -1554,6 +1673,16 @@ export class JobConfigService {
                                       .map(pattern => pattern.trim())
                                       .filter(pattern => pattern !== "") ) : [];
 
+    const smbInheritanceLabel =
+      this.resolveSmbPermissionInheritanceConfigLabel(jobConfig);
+    const smbInheritanceConfig =
+      smbInheritanceLabel != null
+        ? {
+            [JobConfigurationEnum.smbPermissionInheritanceMode]:
+              smbInheritanceLabel,
+          }
+        : {};
+
     if (jobConfig.jobType === JobType.MIGRATE) {
       return {
         [JobConfigurationEnum.skipFile]: jobConfig.skipFile
@@ -1569,6 +1698,7 @@ export class JobConfigService {
           : "-",
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
         [JobConfigurationEnum.preservePermissions]: jobConfig.preservePermissions ? "Enabled" : "Disabled",
+        ...smbInheritanceConfig,
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
         [JobConfigurationEnum.futureScheduleAt]: jobConfig.futureScheduleAt,
@@ -1578,6 +1708,7 @@ export class JobConfigService {
       return {
         [JobConfigurationEnum.preserveAccessTime]: jobConfig.preserveAccessTime ? "Enabled" : "Disabled",
         [JobConfigurationEnum.preservePermissions]: jobConfig.preservePermissions ? "Enabled" : "Disabled",
+        ...smbInheritanceConfig,
         [JobConfigurationEnum.excludeFilePatterns]: excludeFilePatternsArray,
         [JobConfigurationEnum.excludeOlderThan]: jobConfig.excludeOlderThan,
       }
