@@ -4,7 +4,7 @@ import { Cmd, CmdMeta, CommandStatus, ErrorType, JobManagerContext, OPS_CMD, OPS
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from "fs";
 import * as path from "path";
-import { dmError, isContentUpdate, isMetaUpdated, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
+import { dmError, isContentUpdate, isMetaUpdated, isDirectoryLevelMigration, removePrefix, shouldExcludeForDelete } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { DirContentsInput, PublishCommandInput } from "./migrate-scan.type";
@@ -44,6 +44,57 @@ export class MigrateScanService {
 
     async publishCommands({ jobContext, commands}: PublishCommandInput)  {
         await jobContext.publishBulkToCommandStream(commands);
+    }
+
+    async initDlmRootStamp(
+        task: { commands: Cmd[] },
+        jobContext: JobManagerContext,
+        sourcePath: string,
+        targetPath: string,
+    ): Promise<void> {
+        if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
+        if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
+
+        let sourceRootStat: fs.Stats | undefined;
+        let targetRootStat: fs.Stats | undefined;
+        try {
+            sourceRootStat = await fs.promises.lstat(sourcePath);
+            targetRootStat = await fs.promises.lstat(targetPath);
+            this.logger.debug(`DLM root exists on destination: ${targetPath}`);
+        } catch (err) {
+            if (!sourceRootStat) {
+                this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
+                return;
+            }
+            this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
+        }
+
+        if (jobContext.jobConfig?.options?.preservePermissions) {
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext);
+        }
+        await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
+    }
+
+    private async publishDlmRootPermissionStamp(
+        sourceRootStat: fs.Stats,
+        targetRootStat: fs.Stats | undefined,
+        jobContext: JobManagerContext,
+    ): Promise<void> {
+        const rootCmd = await this.commandGenerationService.buildCommand(
+            sourceRootStat, '/', targetRootStat, undefined, jobContext,
+        );
+        if (!rootCmd) return;
+        rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
+        await this.publishCommands({ jobContext, commands: [rootCmd] });
+    }
+
+    private async registerDlmRootMtimeRestamp(
+        sourceRootStat: fs.Stats,
+        jobContext: JobManagerContext,
+    ): Promise<void> {
+        await this.commandGenerationService.recordDeferredDirStamp(
+            this.deferredDirStampService, jobContext, '/', sourceRootStat,
+        );
     }
 
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
@@ -101,7 +152,7 @@ export class MigrateScanService {
         output.excludedPaths = processResult.excludedPaths ?? [];
         output.skippedPaths = processResult.skippedPaths ?? [];
         commands = processResult.commands;
-        
+
         if (jobContext?.jobConfig?.skipDelete === false) {
             //TODO: remove command as it is not required. 
             await this.processDeletedItems({

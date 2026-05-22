@@ -4,7 +4,10 @@ import { JobManagerContext } from "@netapp-cloud-datamigrate/jobs-lib/dist/types
 import { LoggerFactory } from "@netapp-cloud-datamigrate/logger-lib";
 import * as path from 'path';
 import { WinShellService } from "src/activities/common/win-shell.service";
-import { basePrefix } from "src/activities/utils/utils";
+import {
+  basePrefix,
+  isDirectoryLevelMigration,
+} from 'src/activities/utils/utils';
 import { ProtocolTypes } from "src/protocols/protocols";
 import { RedisService } from "src/redis/redis.service";
 
@@ -125,6 +128,11 @@ export class SetupExportsPathPermissionService {
             this.logger.debug(`Skipping ACL setup for jobRunId: ${jobRunId} - preservePermissions is disabled`);
             return;
         }
+
+      if (isDirectoryLevelMigration(jobContext.jobConfig)) {
+        this.logger.debug(`Skipping share-level ACL setup for jobRunId: ${jobRunId} - DLM job; ACLs stamped per directory by worker`);
+        return;
+      }
 
         this.logger.log(`Starting ACL setup for jobRunId: ${jobRunId}`);
         try {

@@ -17,6 +17,11 @@ import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { dmError } from 'src/activities/utils/utils';
 
+export enum SmbPermissionInheritanceMode {
+  INHERIT_PERMS_AS_IS       = 'INHERIT_PERMS_AS_IS',
+  INHERIT_PERMS_AS_EXPLICIT = 'INHERIT_PERMS_AS_EXPLICIT',
+}
+
 // Windows API initialization for ADS detection
 let FindFirstStreamW: any;
 let FindNextStreamW: any;
@@ -175,11 +180,14 @@ export class WinOperationService {
       });
     }
 
+    // 2c. Apply SMB inheritance mode for the DLM root (no-op for all other commands).
+    const filteredAcl = this.applySmbInheritanceMode(acl, command, jobContext);
+
     // 3. Set target ACL (PowerShell Set-FileSecurityFast)
     const result = await this.metricsService.runWithTiming(
       workflowId,
       { category: 'stamp_phase', phase: 'acl_set_target' },
-      () => this.setAclOperation(targetPath, acl, workflowId),
+      () => this.setAclOperation(targetPath, filteredAcl, workflowId),
     );
 
     if (result?.stdout && result.stdout.includes('unresolved_sids')) {
@@ -202,23 +210,53 @@ export class WinOperationService {
 
     this.logger.debug(`Fetched target ACL for ${targetPath}: ${JSON.stringify(targetAcl)}`);
 
-    // 5. Validate ACL (compare source vs target)
+    // 5. Validate ACL (compare source vs target).
     const validation = await this.metricsService.runWithTiming(
       workflowId,
       { category: 'stamp_phase', phase: 'acl_validate' },
-      () => this.validateAclOperation(acl, targetAcl),
+      () => this.validateAclOperation(filteredAcl, targetAcl),
     );
     if (validation.inValid.length > 0){
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
     }
+    // Build CoC header from the ORIGINAL (non-filtered) source ACL so the audit shows
+    // the source's actual Owner/Group regardless of inheritance-mode filtering.
+    const sourceSidString = `Owner: ${acl.originalOwner ?? acl.Owner}, Group: ${acl.originalGroup ?? acl.Group},${validation.sourceSID}`;
+    const targetSidString = `Owner: ${targetAcl.Owner}, Group: ${targetAcl.Group}, ${validation.targetSID}`;
     command.ops[OPS_CMD.STAMP_META].params.sidMap = {
-      targetAcl: validation.targetSID,
-      sourceAcl: validation.sourceSID,
+      targetAcl: targetSidString,
+      sourceAcl: sourceSidString,
       validationError: validation.inValid,
     };
-    this.logger.debug(`sidMap stored - sourceAcl: "${validation.sourceSID}" | targetAcl: "${validation.targetSID}"`);
+    this.logger.debug(`sidMap stored - sourceAcl: "${sourceSidString}" | targetAcl: "${targetSidString}"`);
     
     return { output, errors };
+  }
+
+  
+  applySmbInheritanceMode(
+    acl: SecurityDescriptor,
+    command: Cmd,
+    jobContext: JobManagerContext,
+  ): SecurityDescriptor {
+    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
+    if (!acl.DaclAces) return acl;
+
+    const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
+      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+
+    if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) {
+      return {
+        ...acl,
+        DaclAces: acl.DaclAces.map(ace =>
+          ace.IsInherited
+            ? { ...ace, IsInherited: false, AceFlags: (ace.AceFlags ?? 0) & ~0x10 }
+            : ace,
+        ),
+      };
+    }
+
+    return { ...acl, DaclAces: acl.DaclAces.filter(ace => !ace.IsInherited) };
   }
 
   async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {
@@ -274,32 +312,30 @@ export class WinOperationService {
   }
 
   async validateAclOperation(
-    acl1: SecurityDescriptor,
-    acl2: SecurityDescriptor,
+    sourceAcl: SecurityDescriptor,
+    targetAcl: SecurityDescriptor,
   ): Promise<ValidatorOutput> {
     const output: ValidatorOutput = {
       sourceSID: '',
       targetSID: '',
       inValid: '',
     };
-    output.sourceSID = `Owner: ${acl1.originalOwner ?? acl1.Owner}, Group: ${acl1.originalGroup ?? acl1.Group},`;
-    output.targetSID = `Owner: ${acl2.Owner}, Group: ${acl2.Group}, `;
-    if (acl1.Owner !== acl2.Owner)
-      output.inValid += `Owner mismatch: Expected(${acl1.Owner}) Target(${acl2.Owner}). `;
-    if (acl1.Group !== acl2.Group)
-      output.inValid += `Group mismatch: Expected(${acl1.Group}) Target(${acl2.Group}). `;
+    if (sourceAcl.Owner !== targetAcl.Owner)
+      output.inValid += `Owner mismatch: Expected(${sourceAcl.Owner}) Target(${targetAcl.Owner}). `;
+    if (sourceAcl.Group !== targetAcl.Group)
+      output.inValid += `Group mismatch: Expected(${sourceAcl.Group}) Target(${targetAcl.Group}). `;
 
     // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
     // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.
     // This prevents false errors for ACEs that cannot be set or are not part of DACL.
-    const sourceAcls = (acl1.DaclAces || []).filter(
+    const sourceAcls = (sourceAcl.DaclAces || []).filter(
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
     sourceAcls.forEach((ace) => {
       output.sourceSID += `ACE in source: SID(${ace.originalSid ?? ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
     });
 
-    const targetAcls = (acl2.DaclAces || []).filter(
+    const targetAcls = (targetAcl.DaclAces || []).filter(
       (ace) => ace.AceType === 0 || ace.AceType === 1,
     );
     targetAcls.forEach((ace) => {

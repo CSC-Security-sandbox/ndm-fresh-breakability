@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { WinOperationService } from './win-operation.service';
+import { WinOperationService, SmbPermissionInheritanceMode } from './win-operation.service';
 import {
   LoggerFactory,
   LoggerService,
@@ -800,10 +800,10 @@ describe('WinOperationService', () => {
 
       expect(result.inValid).toBe('');
       expect(result.sourceSID).toBe(
-        'Owner: S-1-5-21-owner, Group: S-1-5-21-group,ACE in source: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
+        'ACE in source: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
       );
       expect(result.targetSID).toBe(
-        'Owner: S-1-5-21-owner, Group: S-1-5-21-group, ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
+        'ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
       );
     });
 
@@ -830,12 +830,8 @@ describe('WinOperationService', () => {
       expect(result.inValid).toBe(
         'Owner mismatch: Expected(S-1-5-21-source-owner) Target(S-1-5-21-target-owner). ',
       );
-      expect(result.sourceSID).toBe(
-        'Owner: S-1-5-21-source-owner, Group: S-1-5-21-group,',
-      );
-      expect(result.targetSID).toBe(
-        'Owner: S-1-5-21-target-owner, Group: S-1-5-21-group, ',
-      );
+      expect(result.sourceSID).toBe('');
+      expect(result.targetSID).toBe('');
     });
 
     it('should detect group mismatch', async () => {
@@ -856,7 +852,7 @@ describe('WinOperationService', () => {
         Group: 'S-1-5-21-target-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Group mismatch: Expected(S-1-5-21-source-group) Target(S-1-5-21-target-group). ',
@@ -890,7 +886,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-5-21-ace), AccessMask(2032127), AceType(0). ',
@@ -926,7 +922,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toContain('Owner mismatch');
       expect(result.inValid).toContain('Group mismatch');
@@ -951,7 +947,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe('');
     });
@@ -992,7 +988,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe('');
     });
@@ -1024,7 +1020,7 @@ describe('WinOperationService', () => {
         DaclAces: [],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-3-0), AceType(0). ',
@@ -1067,7 +1063,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(
         'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0). ',
@@ -1118,7 +1114,7 @@ describe('WinOperationService', () => {
         ],
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       expect(result.inValid).toBe(''); // Should be valid because audit ACE is ignored
     });
@@ -1170,7 +1166,7 @@ describe('WinOperationService', () => {
         originalGroup: 'S-1-5-21-group',
       };
 
-      const result = await service.validateAclOperation(acl1, acl2);
+      const result = await service.validateAclOperation(acl1, acl2, acl1);
 
       // sourceSID must show original source SID (2757), not the mapped target SID (2758)
       expect(result.sourceSID).toContain('SID(S-1-5-21-2757)');
@@ -1206,47 +1202,255 @@ describe('WinOperationService', () => {
 
       const result = await service.validateAclOperation(acl1, acl2);
 
-      // Should fall back to Sid and Owner/Group since original* are undefined
+      // Should fall back to Sid since originalSid is undefined
       expect(result.sourceSID).toContain('SID(S-1-5-21-ace)');
-      expect(result.sourceSID).toContain('Owner: S-1-5-21-owner');
       expect(result.inValid).toBe('');
     });
 
-    it('should use originalOwner and originalGroup for sourceSID when SID mapping was applied', async () => {
-      const acl1: SecurityDescriptor = {
-        Owner: 'S-1-5-21-mapped-owner',       // mutated by mapSIDToTarget
-        Group: 'S-1-5-21-mapped-group',        // mutated by mapSIDToTarget
-        DaclAces: [],
-        Attributes: 'SE_DACL_PRESENT',
-        DaclPresent: true,
-        DaclProtected: false,
-        DaclAutoInherit: false,
-        originalOwner: 'S-1-5-21-source-owner', // original
-        originalGroup: 'S-1-5-21-source-group', // original
-      };
+  });
 
-      const acl2: SecurityDescriptor = {
-        Owner: 'S-1-5-21-mapped-owner',
-        Group: 'S-1-5-21-mapped-group',
-        DaclAces: [],
-        Attributes: 'SE_DACL_PRESENT',
-        DaclPresent: true,
-        DaclProtected: false,
-        DaclAutoInherit: false,
-        originalOwner: 'S-1-5-21-mapped-owner',
-        originalGroup: 'S-1-5-21-mapped-group',
-      };
-
-      const result = await service.validateAclOperation(acl1, acl2);
-
-      // sourceSID must show original source Owner/Group
-      expect(result.sourceSID).toContain('Owner: S-1-5-21-source-owner');
-      expect(result.sourceSID).toContain('Group: S-1-5-21-source-group');
-      expect(result.sourceSID).not.toContain('mapped-owner');
-      // targetSID shows the actual target values
-      expect(result.targetSID).toContain('Owner: S-1-5-21-mapped-owner');
-      expect(result.inValid).toBe('');
+  describe('applySmbInheritanceMode', () => {
+    const makeAce = (isInherited: boolean, aceFlags = 0x10) => ({
+      Sid: 'S-1-5-21-ace',
+      AccessMask: 0x1301bf,
+      AceType: 0,
+      AceFlags: aceFlags,
+      IsInherited: isInherited,
+      originalSid: 'S-1-5-21-ace',
     });
+
+    const baseAcl = (): any => ({
+      Owner: 'S-1-5-21-owner',
+      Group: 'S-1-5-21-group',
+      DaclProtected: false,
+      DaclAces: [makeAce(false, 0x03), makeAce(true, 0x13)],
+    });
+
+    const cmdWithMode = (apply: boolean): any => ({
+      ops: { [OPS_CMD.STAMP_META]: { params: { applyInheritanceMode: apply } } },
+    });
+
+    const ctxWithMode = (mode?: string): any => ({
+      jobConfig: { options: mode ? { smbPermissionInheritanceMode: mode } : {} },
+    });
+
+    it('INHERIT_PERMS_AS_EXPLICIT: converts inherited ACEs to explicit by clearing IsInherited and INHERITED_ACE bit', () => {
+      const acl = baseAcl();
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(true),
+        ctxWithMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT),
+        'C:\\src',
+      );
+
+      expect(result.DaclAces).toHaveLength(2);
+      // explicit ACE unchanged
+      expect(result.DaclAces[0].IsInherited).toBe(false);
+      expect(result.DaclAces[0].AceFlags).toBe(0x03);
+      // inherited ACE converted: IsInherited cleared, bit 0x10 stripped from AceFlags
+      expect(result.DaclAces[1].IsInherited).toBe(false);
+      expect(result.DaclAces[1].AceFlags & 0x10).toBe(0);
+      // pure: input ACL is not mutated
+      expect(acl.DaclAces[1].IsInherited).toBe(true);
+    });
+
+    it('INHERIT_PERMS_AS_IS: strips all inherited ACEs, keeps only explicit ones', () => {
+      const acl = baseAcl();
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(true),
+        ctxWithMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS),
+        'C:\\src',
+      );
+
+      expect(result.DaclAces).toHaveLength(1);
+      expect(result.DaclAces[0].IsInherited).toBe(false);
+      // pure: input ACL is not mutated
+      expect(acl.DaclAces).toHaveLength(2);
+    });
+
+    it('unknown mode falls back to INHERIT_PERMS_AS_IS behaviour (strips inherited ACEs)', () => {
+      const acl = baseAcl();
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(true),
+        ctxWithMode('UNKNOWN_MODE'),
+        'C:\\src',
+      );
+
+      expect(result.DaclAces).toHaveLength(1);
+      expect(result.DaclAces[0].IsInherited).toBe(false);
+    });
+
+    it('returns acl unchanged when DaclAces is absent', () => {
+      const acl: any = { Owner: 'S-1-5-21-owner', Group: 'S-1-5-21-group' };
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(true),
+        ctxWithMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT),
+        'C:\\src',
+      );
+      expect(result).toBe(acl);
+      expect(result.DaclAces).toBeUndefined();
+    });
+
+    it('returns acl unchanged when applyInheritanceMode flag is not set on the command', () => {
+      const acl = baseAcl();
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(false),
+        ctxWithMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS),
+        'C:\\src',
+      );
+      expect(result).toBe(acl);
+      expect(result.DaclAces).toHaveLength(2);
+    });
+
+    it('defaults to INHERIT_PERMS_AS_EXPLICIT when no mode is configured on the job', () => {
+      const acl = baseAcl();
+      const result = service.applySmbInheritanceMode(
+        acl,
+        cmdWithMode(true),
+        ctxWithMode(undefined),
+        'C:\\src',
+      );
+      // EXPLICIT keeps both ACEs (inherited one converted, not stripped)
+      expect(result.DaclAces).toHaveLength(2);
+      expect(result.DaclAces[1].IsInherited).toBe(false);
+      expect(result.DaclAces[1].AceFlags & 0x10).toBe(0);
+    });
+
+    it('stampAclOperation applies INHERIT_PERMS_AS_EXPLICIT mode when applyInheritanceMode param is set', async () => {
+      const command: any = {
+        ops: {
+          [OPS_CMD.STAMP_META]: { params: { applyInheritanceMode: true } },
+        },
+      };
+      const jobCtx: any = {
+        jobRunId: 'test-job',
+        jobConfig: {
+          options: {
+            isIdentityMappingAvailable: false,
+            smbPermissionInheritanceMode: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+          },
+        },
+      };
+      const sourceAcl: any = {
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: [makeAce(true, 0x13)],
+        DaclProtected: false,
+      };
+
+      jest.spyOn(service, 'getAclOperation')
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce({ ...sourceAcl, DaclAces: [makeAce(false, 0x03)] });
+      const setAclSpy = jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: '' });
+      jest.spyOn(service, 'validateAclOperation').mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
+
+      await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
+
+      // EXPLICIT mode: inherited ACE converted (IsInherited false, INHERITED_ACE bit cleared)
+      const stampedAcl = setAclSpy.mock.calls[0][1];
+      expect(stampedAcl.DaclAces).toHaveLength(1);
+      expect(stampedAcl.DaclAces[0].IsInherited).toBe(false);
+      expect(stampedAcl.DaclAces[0].AceFlags & 0x10).toBe(0);
+    });
+
+    it('stampAclOperation does not transform ACL when applyInheritanceMode flag is absent', async () => {
+      const command: any = {
+        ops: { [OPS_CMD.STAMP_META]: { params: {} } },
+      };
+      const jobCtx: any = {
+        jobRunId: 'test-job',
+        jobConfig: { options: { isIdentityMappingAvailable: false } },
+      };
+      const inheritedAce = makeAce(true, 0x13);
+      const sourceAcl: any = {
+        Owner: 'S-1-5-21-owner', Group: 'S-1-5-21-group', DaclAces: [inheritedAce], DaclProtected: false,
+      };
+
+      jest.spyOn(service, 'getAclOperation').mockResolvedValue(sourceAcl);
+      const setAclSpy = jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: '' });
+      jest.spyOn(service, 'validateAclOperation').mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
+
+      await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
+
+      // No transform: the inherited ACE should pass through to setAcl untouched
+      const stampedAcl = setAclSpy.mock.calls[0][1];
+      expect(stampedAcl).toBe(sourceAcl);
+      expect(stampedAcl.DaclAces[0].IsInherited).toBe(true);
+      expect(stampedAcl.DaclAces[0].AceFlags).toBe(0x13);
+    });
+
+    it('stampAclOperation passes filtered acl as sourceAcl to validateAclOperation in INHERIT_PERMS_AS_IS mode', async () => {
+      const explicitAce = { Sid: 'S-1-5-21-explicit', AccessMask: 0x120116, AceType: 0, AceFlags: 0x03, IsInherited: false, originalSid: 'S-1-5-21-explicit' };
+      const inheritedAce1 = { Sid: 'S-1-5-21-kiran', AccessMask: 0x1200a9, AceType: 0, AceFlags: 0x13, IsInherited: true, originalSid: 'S-1-5-21-kiran' };
+      const inheritedAce2 = { Sid: 'S-1-1-0', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0x13, IsInherited: true, originalSid: 'S-1-1-0' };
+
+      const sourceAcl: any = {
+        Owner: 'S-1-5-21-owner',
+        Group: 'S-1-5-21-group',
+        DaclAces: [explicitAce, inheritedAce1, inheritedAce2],
+        DaclProtected: false,
+      };
+      const destAcl: any = { Owner: 'S-1-5-21-owner', Group: 'S-1-5-21-group', DaclAces: [explicitAce] };
+      const command: any = {
+        ops: { [OPS_CMD.STAMP_META]: { params: { applyInheritanceMode: true } } },
+      };
+      const jobCtx: any = {
+        jobRunId: 'test-job',
+        jobConfig: {
+          options: {
+            isIdentityMappingAvailable: false,
+            smbPermissionInheritanceMode: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
+          },
+        },
+      };
+
+      jest.spyOn(service, 'getAclOperation')
+        .mockResolvedValueOnce(sourceAcl)   // source read
+        .mockResolvedValueOnce(destAcl);    // dest read after stamp
+      jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: '' });
+      const validateSpy = jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
+        sourceSID: 'full-source-sid-string', targetSID: '', inValid: '',
+      });
+
+      await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
+
+      // sourceAcl = filteredAcl (only explicitAce), targetAcl = destAcl
+      expect(validateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ DaclAces: [explicitAce] }),
+        destAcl,
+      );
+      expect(command.ops[OPS_CMD.STAMP_META].params.sidMap.sourceAcl).toBe('Owner: S-1-5-21-owner, Group: S-1-5-21-group,full-source-sid-string');
+    });
+
+    it('stampAclOperation passes sourceAcl and targetAcl to validateAclOperation when no mode is applied', async () => {
+      const sourceAcl: any = {
+        Owner: 'S-1-5-21-owner', Group: 'S-1-5-21-group', DaclAces: [], DaclProtected: false,
+      };
+      const command: any = {
+        ops: { [OPS_CMD.STAMP_META]: { params: {} } },
+      };
+      const jobCtx: any = {
+        jobRunId: 'test-job',
+        jobConfig: { options: { isIdentityMappingAvailable: false } },
+      };
+
+      jest.spyOn(service, 'getAclOperation').mockResolvedValue(sourceAcl);
+      jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: '' });
+      const validateSpy = jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
+        sourceSID: 'no-mode-source-sid', targetSID: '', inValid: '',
+      });
+
+      await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
+
+      // No mode applied — applySmbInheritanceMode returns acl unchanged, so filteredAcl === sourceAcl
+      expect(validateSpy).toHaveBeenCalledWith(sourceAcl, sourceAcl);
+      expect(command.ops[OPS_CMD.STAMP_META].params.sidMap.sourceAcl).toBe('Owner: S-1-5-21-owner, Group: S-1-5-21-group,no-mode-source-sid');
+    });
+
   });
 
   describe('resetFileAttributes', () => {

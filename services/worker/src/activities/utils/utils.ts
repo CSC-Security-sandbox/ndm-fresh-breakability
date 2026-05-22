@@ -83,6 +83,9 @@ export const shouldExcludeOlderThan = (stats: fs.Stats, olderThan: Date): boolea
 
 export const shouldExcludeOrSkip = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): boolean => (shouldExclude(fullPath, excludePatterns) || shouldSkipFile(stats, skipTime, jobType) || shouldExcludeOlderThan(stats, olderThan));
 
+export const isDirectoryLevelMigration = (jobConfig?: { sourceDirectoryPath?: string; destinationDirectoryPath?: string }): boolean =>
+  !!(jobConfig?.sourceDirectoryPath || jobConfig?.destinationDirectoryPath);
+
 /** Returns 'excluded' | 'skipped' | null so callers can distinguish and record paths. */
 export const getExcludeOrSkipReason = ({ fullPath, stats, excludePatterns, skipTime, olderThan, jobType }: ExcludeOrSkipParams): 'excluded' | 'skipped' | null => {
   if (shouldExclude(fullPath, excludePatterns) || shouldExcludeOlderThan(stats, olderThan)) return 'excluded';

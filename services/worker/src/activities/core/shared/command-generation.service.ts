@@ -542,14 +542,7 @@ export class CommandGenerationService {
     );
   }
 
-  /**
-   * Records a directory for deferred mtime/atime restamping after migration.
-   * No-op if the caller didn't supply a deferredDirStampService.
-   *
-   * Failures here are swallowed (logged inside the service) — recording is
-   * best-effort and must never fail the surrounding scan/migration.
-   */
-  private async recordDeferredDirStamp(
+  async recordDeferredDirStamp(
     deferredDirStampService: DeferredDirStampService | undefined,
     jobContext: JobManagerContext,
     relativeSourcePath: string,
