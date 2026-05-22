@@ -1,6 +1,6 @@
 {
   "main": "dist/index.js",
-  "name": "@NetApp-Cloud-DataMigrate/jobs-lib",
+  "name": "@netapp-cloud-datamigrate/jobs-lib",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },

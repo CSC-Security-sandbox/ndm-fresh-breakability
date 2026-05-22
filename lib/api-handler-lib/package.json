@@ -1,5 +1,5 @@
 {
-  "name": "@NetApp-Cloud-DataMigrate/api-handler-lib",
+  "name": "@netapp-cloud-datamigrate/api-handler-lib",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -20,7 +20,7 @@
     "typescript": "^5.6.3",
     "uuid": "^11.0.3",
     "winston": "^3.17.0",
-    "@netapp-cloud-datamigrate/logger-lib": "0.0.18"
+    "@netapp-cloud-datamigrate/logger-lib": "*"
   },
   "devDependencies": {
     "@nestjs/common": "11.1.18",
