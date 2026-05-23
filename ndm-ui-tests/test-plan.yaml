@@ -60,3 +60,15 @@ suites:
       TestMigration_BasicNFS: true               # Full NFS Bulk Migrate end-to-end + CoC report download
       TestMigration_IncrementalSyncCron: true     # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
       TestMigration_CustomOptions: true           # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)
+      TestMigration_BasicSMB: true               # Full SMB Bulk Migrate end-to-end + CoC report download
+
+  # ── Incremental Migration ──────────────────────────────────────────────────
+  # Validates adhoc migration runs after source-side changes.
+  # Runs baseline migration, applies ~10% churn on source via SSH, triggers
+  # adhoc run, and downloads CoC reports for both runs.
+  incremental:
+    enabled: true
+    parallel: 1          # sequential — single source volume under churn
+    timeout: 90m
+    tests:
+      TestIncremental_AdhocAfterChurn: true    # Baseline + 10% source churn + adhoc run + both CoC reports

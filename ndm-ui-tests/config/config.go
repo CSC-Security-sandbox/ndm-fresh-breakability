@@ -55,6 +55,22 @@ var (
 	NfsDestinationExportPaths           []string // per-test destination export paths (comma-separated)
 	NfsDestinationFileServerID          string // existing destination FS UUID — skips wizard if set
 
+	// SMB source file server for migration
+	SmbMigSourceHost                 string // IP/hostname of the SMB source server
+	SmbMigSourceAdServerIP           string // AD Server IP for SMB source auth
+	SmbMigSourceUsername             string // SMB username for source (e.g. "DOMAIN\\user")
+	SmbMigSourcePassword             string // SMB password for source
+	SmbMigSourceShare                string // SMB share name on source (used in mapping)
+	SmbMigSourceFileServerNamePrefix string // prefix for auto-generated source FS names
+
+	// SMB destination file server for migration
+	SmbMigDestHost                 string // IP/hostname of the SMB destination server
+	SmbMigDestAdServerIP           string // AD Server IP for SMB destination auth
+	SmbMigDestUsername             string // SMB username for destination
+	SmbMigDestPassword             string // SMB password for destination
+	SmbMigDestShare                string // SMB share name on destination (used in mapping)
+	SmbMigDestFileServerNamePrefix string // prefix for auto-generated destination FS names
+
 	// Migration timeouts
 	MigrationTimeoutMs float64 // max wait for a migration run to complete
 
@@ -178,6 +194,22 @@ func init() {
 	NfsDestinationExportPath           = getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATH", "")
 	NfsDestinationExportPaths          = splitCSV(getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATHS", ""))
 	NfsDestinationFileServerID         = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_ID", "")
+
+	// SMB source file server for migration
+	SmbMigSourceHost                 = getEnvStr("NDM_SMB_MIG_SOURCE_HOST", "")
+	SmbMigSourceAdServerIP           = getEnvStr("NDM_SMB_MIG_SOURCE_AD_SERVER_IP", "")
+	SmbMigSourceUsername             = getEnvStr("NDM_SMB_MIG_SOURCE_USERNAME", "")
+	SmbMigSourcePassword             = getEnvStr("NDM_SMB_MIG_SOURCE_PASSWORD", "")
+	SmbMigSourceShare                = getEnvStr("NDM_SMB_MIG_SOURCE_SHARE", "")
+	SmbMigSourceFileServerNamePrefix = getEnvStr("NDM_SMB_MIG_SOURCE_FILE_SERVER_NAME_PREFIX", "smb-mig-src")
+
+	// SMB destination file server for migration
+	SmbMigDestHost                 = getEnvStr("NDM_SMB_MIG_DEST_HOST", "")
+	SmbMigDestAdServerIP           = getEnvStr("NDM_SMB_MIG_DEST_AD_SERVER_IP", "")
+	SmbMigDestUsername             = getEnvStr("NDM_SMB_MIG_DEST_USERNAME", "")
+	SmbMigDestPassword             = getEnvStr("NDM_SMB_MIG_DEST_PASSWORD", "")
+	SmbMigDestShare                = getEnvStr("NDM_SMB_MIG_DEST_SHARE", "")
+	SmbMigDestFileServerNamePrefix = getEnvStr("NDM_SMB_MIG_DEST_FILE_SERVER_NAME_PREFIX", "smb-mig-dst")
 
 	// Migration timeouts
 	MigrationTimeoutMs = getEnvFloat("NDM_MIGRATION_TIMEOUT_MS", 600000)

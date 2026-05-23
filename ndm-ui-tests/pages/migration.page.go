@@ -28,6 +28,11 @@ func NewMigrationPage(page playwright.Page, prefix ...string) *MigrationPage {
 	return p
 }
 
+// Page returns the underlying Playwright page for advanced operations.
+func (p *MigrationPage) Page() playwright.Page {
+	return p.page
+}
+
 // ── Step 0: Navigate ──────────────────────────────────────────────────────────
 
 // NavigateToFileServerOverview opens the file server overview page.
@@ -908,6 +913,127 @@ func (p *MigrationPage) DownloadCoCReport(downloadDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("'Download CoC Report' option not found in overflow menu")
+}
+
+// NavigateToJobConfigDetails opens the Job Config Details page for a given
+// config ID (e.g. the one visible in the URL after clicking a job in Job Config List).
+func (p *MigrationPage) NavigateToJobConfigDetails(configID string) error {
+	url := fmt.Sprintf("%s/job-details/%s", config.BaseURL, configID)
+	_, err := p.page.Goto(url, playwright.PageGotoOptions{
+		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		Timeout:   playwright.Float(60000),
+	})
+	if err != nil {
+		return fmt.Errorf("navigate to job config details: %w", err)
+	}
+	heading := p.page.GetByText("Job Config Details").First()
+	if err := p.expectVisible(heading, 20000); err != nil {
+		p.sleep(3000)
+	}
+	p.sleep(2000)
+	log.Printf("[MigrationPage] on Job Config Details for %s", configID)
+	return nil
+}
+
+// TriggerAdhocRun clicks the "Adhoc Run" button on the Job Config Details page.
+func (p *MigrationPage) TriggerAdhocRun() error {
+	candidates := []string{"Adhoc Run", "Ad Hoc", "Run Now", "Adhoc"}
+	for _, name := range candidates {
+		btn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: name})
+		if p.isVisible(btn) {
+			if err := btn.Click(); err == nil {
+				p.sleep(3000)
+				log.Printf("[MigrationPage] triggered adhoc run via button %q", name)
+				return nil
+			}
+		}
+	}
+	// Fallback: data-testid
+	btn := p.page.Locator(`[data-testid="btn-adhoc-run"]`)
+	if p.isVisible(btn) {
+		if err := btn.Click(); err == nil {
+			p.sleep(3000)
+			log.Printf("[MigrationPage] triggered adhoc run via data-testid")
+			return nil
+		}
+	}
+	return fmt.Errorf("Adhoc Run button not found on Job Config Details page")
+}
+
+// GetJobConfigIDFromURL extracts the job config ID from the current page URL.
+// Expects a URL like /job-details/<configID>.
+func (p *MigrationPage) GetJobConfigIDFromURL() string {
+	url := p.page.URL()
+	re := regexp.MustCompile(`/job-details/([a-f0-9-]+)`)
+	matches := re.FindStringSubmatch(url)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+// DownloadCoCReportByRowIndex downloads the CoC report from a specific row
+// in the Run History table (0-based index, 0 = most recent run).
+func (p *MigrationPage) DownloadCoCReportByRowIndex(downloadDir string, rowIndex int) (string, error) {
+	p.sleep(2000)
+
+	if err := os.MkdirAll(downloadDir, 0o755); err != nil {
+		return "", fmt.Errorf("create download dir %s: %w", downloadDir, err)
+	}
+
+	// Get all table rows (Run History on Job Config Details, or Job Run List).
+	rows, err := p.page.Locator(`tbody tr`).All()
+	if err != nil || len(rows) == 0 {
+		return "", fmt.Errorf("no rows found in run history table")
+	}
+	if rowIndex >= len(rows) {
+		return "", fmt.Errorf("row index %d out of range (only %d rows)", rowIndex, len(rows))
+	}
+
+	migRow := rows[rowIndex]
+
+	overflowBtn := migRow.Locator(`[data-testid="btn-overflow-menu"]`)
+	if !p.isVisible(overflowBtn) {
+		overflowBtn = migRow.Locator(`button`).Last()
+	}
+	if err := p.expectVisible(overflowBtn, 10000); err != nil {
+		return "", fmt.Errorf("overflow menu button not found on row %d: %w", rowIndex, err)
+	}
+	if err := overflowBtn.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+		return "", fmt.Errorf("click overflow menu on row %d: %w", rowIndex, err)
+	}
+	p.sleep(1000)
+
+	cocCandidates := []playwright.Locator{
+		p.page.Locator(`[data-testid="menu-download-coc-report"]`).First(),
+		p.page.GetByText("Download CoC Report", playwright.PageGetByTextOptions{Exact: playwright.Bool(false)}).First(),
+		p.page.Locator(`[role="menuitem"]:has-text("CoC")`).First(),
+		p.page.Locator(`li:has-text("CoC")`).First(),
+		p.page.GetByText("CoC Report").First(),
+	}
+
+	for _, loc := range cocCandidates {
+		if p.isVisible(loc) {
+			download, dlErr := p.page.ExpectDownload(func() error {
+				return loc.Click()
+			})
+			if dlErr != nil {
+				continue
+			}
+			suggestedName := download.SuggestedFilename()
+			if suggestedName == "" {
+				suggestedName = fmt.Sprintf("coc-report-row%d-%d.pdf", rowIndex, time.Now().UnixMilli())
+			}
+			savePath := filepath.Join(downloadDir, suggestedName)
+			if err := download.SaveAs(savePath); err != nil {
+				return "", fmt.Errorf("save CoC report to %s: %w", savePath, err)
+			}
+			log.Printf("[DownloadCoCReportByRowIndex] row %d saved to %s", rowIndex, savePath)
+			return savePath, nil
+		}
+	}
+
+	return "", fmt.Errorf("'Download CoC Report' option not found for row %d", rowIndex)
 }
 
 // findFirstMigrationRow returns the first table row whose text contains "Migration".

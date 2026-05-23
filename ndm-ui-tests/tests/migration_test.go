@@ -19,6 +19,7 @@
 //	M-001 TestMigration_BasicNFS              — full Bulk Migrate flow (NFS → NFS)
 //	M-002 TestMigration_IncrementalSyncCron   — Bulk Migrate with cron-based incremental sync
 //	M-003 TestMigration_CustomOptions         — Bulk Migrate with all config options changed
+//	M-004 TestMigration_BasicSMB              — full Bulk Migrate flow (SMB → SMB)
 package tests
 
 import (
@@ -488,7 +489,188 @@ func TestMigration_CustomOptions(t *testing.T) {
 	fmt.Println("[MIGRATION M-003 PASSED] Custom options migration completed and CoC Report downloaded")
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// M-004  Basic SMB Migration (SMB source → SMB destination)
+//
+// Creates fresh SMB source and destination file servers, runs the Bulk Migrate
+// wizard selecting SMB shares, waits for job completion, and downloads CoC.
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestMigration_BasicSMB(t *testing.T) {
+	t.Parallel()
+	requireEnv(t, config.SmbMigSourceHost, "NDM_SMB_MIG_SOURCE_HOST")
+	requireEnv(t, config.SmbMigSourceShare, "NDM_SMB_MIG_SOURCE_SHARE")
+	requireEnv(t, config.SmbMigDestHost, "NDM_SMB_MIG_DEST_HOST")
+	requireEnv(t, config.SmbMigDestShare, "NDM_SMB_MIG_DEST_SHARE")
+
+	const prefix = "m004"
+	f, mp := newMigrationBrowserFixture(t, prefix)
+	defer f.Close()
+
+	mf := &migrationFixture{}
+
+	// ── 1. Create SMB source file server ─────────────────────────────────────
+	By(t, "Creating SMB source file server")
+	mf.srcFSID, mf.srcFSName = createFreshSMBSourceFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-smb-src-fs-active")
+	t.Logf("[M-004] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
+
+	// ── 2. Create SMB destination file server ────────────────────────────────
+	By(t, "Creating SMB destination file server")
+	mf.dstFSID, mf.dstFSName = createFreshSMBDestinationFileServer(t, f, prefix)
+	f.Screenshot(prefix + "-smb-dst-fs-active")
+	t.Logf("[M-004] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
+
+	// ── 3. Navigate to source file server overview ───────────────────────────
+	By(t, "Navigating to source file server overview")
+	require.NoError(t,
+		mp.NavigateToFileServerOverview(mf.srcFSID),
+		"navigate to source file server overview",
+	)
+	f.Screenshot("smb-mig-src-overview")
+
+	// ── 4. Open Bulk Migrate wizard ──────────────────────────────────────────
+	By(t, "Opening Bulk Migrate wizard")
+	require.NoError(t, mp.OpenBulkMigrateForm(), "open Bulk Migrate form")
+	f.Screenshot("smb-mig-wizard-mapping-step")
+
+	// ── 5. Mapping step ──────────────────────────────────────────────────────
+	By(t, "Selecting source SMB share")
+	require.NoError(t,
+		mp.SelectSourcePath(config.SmbMigSourceShare),
+		"select source share %s", config.SmbMigSourceShare,
+	)
+
+	By(t, "Selecting destination file server in mapping (with retry)")
+	require.NoError(t,
+		mp.SelectDestinationFileServerWithRetry(mf.srcFSID, mf.dstFSName, config.SmbMigSourceShare, 3),
+		"select destination file server %s", mf.dstFSName,
+	)
+
+	By(t, "Selecting destination SMB share")
+	require.NoError(t,
+		mp.SelectDestinationPath(config.SmbMigDestShare),
+		"select destination share %s", config.SmbMigDestShare,
+	)
+
+	// ── 6. Add mapping ───────────────────────────────────────────────────────
+	By(t, "Adding path mapping")
+	require.NoError(t, mp.AddMapping(), "add mapping")
+	f.Screenshot("smb-mig-mapping-row-added")
+
+	// ── 7. Proceed from Mapping step ─────────────────────────────────────────
+	By(t, "Proceeding from Mapping step")
+	require.NoError(t, mp.ProceedFromMapping(), "proceed from mapping step")
+	f.Screenshot("smb-mig-options-step")
+
+	// ── 8. Options step — leave defaults, proceed ────────────────────────────
+	By(t, "Proceeding from Options step (defaults)")
+	require.NoError(t, mp.ProceedFromOptions(), "proceed from options step")
+	f.Screenshot("smb-mig-review-step")
+
+	// ── 9. Review step — select all mappings, submit ─────────────────────────
+	By(t, "Selecting all mappings on Review step")
+	require.NoError(t, mp.SelectAllMappingsOnReview(), "select all mappings on review")
+
+	By(t, "Submitting migration job")
+	require.NoError(t, mp.SubmitMigration(), "submit migration job")
+
+	// ── 10. Navigate to Job Run List ─────────────────────────────────────────
+	By(t, "Navigating to Job Run List")
+	require.NoError(t, mp.NavigateToJobRunList(), "navigate to job run list")
+	f.Screenshot("smb-mig-job-run-list")
+
+	// ── 11. Wait for migration job to complete ───────────────────────────────
+	By(t, "Waiting for migration job to complete")
+	require.NoError(t,
+		mp.WaitForMigrationCompleted(config.MigrationTimeoutMs),
+		"migration job did not complete within timeout",
+	)
+	f.Screenshot("smb-mig-job-completed")
+	t.Log("[M-004] SMB migration job completed successfully")
+
+	// ── 12. Download CoC Report ──────────────────────────────────────────────
+	By(t, "Downloading CoC Report")
+	downloadDir := filepath.Join("test-results", "downloads")
+	require.NoError(t, os.MkdirAll(downloadDir, 0o755))
+
+	cocPath, err := mp.DownloadCoCReport(downloadDir)
+	require.NoError(t, err, "download CoC report")
+
+	info, statErr := os.Stat(cocPath)
+	require.NoError(t, statErr, "CoC report file should exist at %s", cocPath)
+	require.Greater(t, info.Size(), int64(0), "CoC report should not be empty")
+
+	t.Logf("[M-004] CoC Report saved: %s (%d bytes)", cocPath, info.Size())
+	fmt.Printf("[M-004] src=%s dst=%s coc=%s\n", mf.srcFSName, mf.dstFSName, cocPath)
+	fmt.Println("[MIGRATION M-004 PASSED] SMB migration completed and CoC Report downloaded")
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// createFreshSMBSourceFileServer creates a new SMB source file server for
+// migration, attaches a worker, and waits until Active.
+func createFreshSMBSourceFileServer(t *testing.T, f *fixtures.AuthFixture, prefix string) (fsID string, fsName string) {
+	t.Helper()
+	requireEnv(t, config.SmbMigSourceHost, "NDM_SMB_MIG_SOURCE_HOST")
+	requireEnv(t, config.SmbMigSourceUsername, "NDM_SMB_MIG_SOURCE_USERNAME")
+	requireEnv(t, config.SmbMigSourcePassword, "NDM_SMB_MIG_SOURCE_PASSWORD")
+
+	fsName = fmt.Sprintf("%s-%d", config.SmbMigSourceFileServerNamePrefix, time.Now().UnixMilli())
+	t.Logf("[setup] creating SMB source file server %q on host %s", fsName, config.SmbMigSourceHost)
+
+	fsp := pages.NewFileServerPage(f.Page, prefix)
+	var err error
+	fsID, err = fsp.CreateSMBFileServer(
+		fsName,
+		config.SmbMigSourceHost,
+		config.SmbMigSourceAdServerIP,
+		config.SmbMigSourceUsername,
+		config.SmbMigSourcePassword,
+		config.MinWorkers,
+	)
+	require.NoError(t, err, "create SMB source file server via wizard")
+	t.Logf("[setup] SMB source file server %s (ID: %s) created — waiting for Active…", fsName, fsID)
+
+	require.NoError(t,
+		fsp.WaitForFileServerActive(fsID, 300000),
+		"SMB source file server did not become active within 5 minutes",
+	)
+	t.Logf("[setup] SMB source file server %s is now Active", fsName)
+	return fsID, fsName
+}
+
+// createFreshSMBDestinationFileServer creates a new SMB destination file server
+// for migration, attaches a worker, and waits until Active.
+func createFreshSMBDestinationFileServer(t *testing.T, f *fixtures.AuthFixture, prefix string) (fsID string, fsName string) {
+	t.Helper()
+	requireEnv(t, config.SmbMigDestHost, "NDM_SMB_MIG_DEST_HOST")
+	requireEnv(t, config.SmbMigDestUsername, "NDM_SMB_MIG_DEST_USERNAME")
+	requireEnv(t, config.SmbMigDestPassword, "NDM_SMB_MIG_DEST_PASSWORD")
+
+	fsName = fmt.Sprintf("%s-%d", config.SmbMigDestFileServerNamePrefix, time.Now().UnixMilli())
+	t.Logf("[setup] creating SMB destination file server %q on host %s", fsName, config.SmbMigDestHost)
+
+	fsp := pages.NewFileServerPage(f.Page, prefix)
+	var err error
+	fsID, err = fsp.CreateSMBFileServer(
+		fsName,
+		config.SmbMigDestHost,
+		config.SmbMigDestAdServerIP,
+		config.SmbMigDestUsername,
+		config.SmbMigDestPassword,
+		config.MinWorkers,
+	)
+	require.NoError(t, err, "create SMB destination file server via wizard")
+	t.Logf("[setup] SMB destination file server %s (ID: %s) created — waiting for Active…", fsName, fsID)
+
+	require.NoError(t,
+		fsp.WaitForFileServerActive(fsID, 300000),
+		"SMB destination file server did not become active within 5 minutes",
+	)
+	t.Logf("[setup] SMB destination file server %s is now Active", fsName)
+	return fsID, fsName
+}
 
 // By logs a step label so test output is easy to follow.
 func By(t *testing.T, step string) {
