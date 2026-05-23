@@ -982,7 +982,11 @@ func (p *MigrationPage) DownloadCoCReportByRowIndex(downloadDir string, rowIndex
 	}
 
 	// Get all table rows (Run History on Job Config Details, or Job Run List).
-	rows, err := p.page.Locator(`tbody tr`).All()
+	// Try BlueXP data-testid rows first, then fall back to native tbody tr.
+	rows, err := p.page.Locator(`[data-testid^="table-row-"]`).All()
+	if err != nil || len(rows) == 0 {
+		rows, err = p.page.Locator(`tbody tr`).All()
+	}
 	if err != nil || len(rows) == 0 {
 		return "", fmt.Errorf("no rows found in run history table")
 	}

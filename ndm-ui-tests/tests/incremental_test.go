@@ -28,6 +28,7 @@ import (
 	"ndm-ui-tests/pages"
 	"ndm-ui-tests/utils"
 
+	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -209,46 +210,55 @@ func TestIncremental_AdhocAfterChurn(t *testing.T) {
 
 // ── Test Helpers ─────────────────────────────────────────────────────────────
 
-// navigateToJobConfigFromRunList clicks the first migration row in Job Run List
-// and extracts the job config ID from the resulting URL.
+// navigateToJobConfigFromRunList clicks "Details" via the overflow menu on
+// the first migration row in Job Run List — which navigates to
+// /job-details/<configID>/run/<runID>. Returns the configID extracted from URL.
 func navigateToJobConfigFromRunList(t *testing.T, mp *pages.MigrationPage) string {
 	t.Helper()
 
-	// The Job Run List rows link to Job Config Details when clicked.
-	// We use JavaScript to find the config ID from the first migration row's link.
-	result, err := mp.Page().Evaluate(`() => {
-		// Look for links in the first row that lead to /job-details/
-		const rows = document.querySelectorAll('tbody tr');
-		for (const row of rows) {
-			const link = row.querySelector('a[href*="job-details"]');
-			if (link) {
-				const match = link.href.match(/job-details\/([a-f0-9-]+)/);
-				if (match) return match[1];
-			}
-		}
-		// Fallback: check data-testid rows
-		const dRows = document.querySelectorAll('[data-testid^="table-row-"]');
-		for (const row of dRows) {
-			const link = row.querySelector('a[href*="job-details"]');
-			if (link) {
-				const match = link.href.match(/job-details\/([a-f0-9-]+)/);
-				if (match) return match[1];
-			}
-		}
-		return '';
-	}`, nil)
+	page := mp.Page()
 
-	if err != nil || result == nil || result.(string) == "" {
-		// Fallback: click the first row and extract from URL
-		mp.Page().Locator(`tbody tr`).First().Click()
-		time.Sleep(3 * time.Second)
-		return mp.GetJobConfigIDFromURL()
+	// Re-navigate to Job Run List to ensure we have a fresh table view.
+	require.NoError(t, mp.NavigateToJobRunList(), "re-navigate to job run list")
+	time.Sleep(3 * time.Second)
+
+	// The table uses [data-testid^="table-row-"] rows (BlueXP table component).
+	// Wait for at least one row to appear.
+	rowLoc := page.Locator(`[data-testid^="table-row-"]`).First()
+	err := rowLoc.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(20000),
+	})
+	if err != nil {
+		// Fallback: try native tbody tr
+		rowLoc = page.Locator(`tbody tr`).First()
+		err = rowLoc.WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateVisible,
+			Timeout: playwright.Float(10000),
+		})
+		require.NoError(t, err, "no table rows visible in Job Run List")
 	}
 
-	configID := result.(string)
-	// Navigate to it
-	mp.NavigateToJobConfigDetails(configID)
-	return configID
+	// Open the overflow menu (⋯) on the first row.
+	overflowBtn := rowLoc.Locator(`[data-testid="btn-overflow-menu"]`)
+	if count, _ := overflowBtn.Count(); count == 0 {
+		overflowBtn = rowLoc.Locator(`button`).Last()
+	}
+	require.NoError(t, overflowBtn.Click(playwright.LocatorClickOptions{
+		Force: playwright.Bool(true),
+	}), "click overflow menu on first row")
+	time.Sleep(1 * time.Second)
+
+	// Click "Details" menu item.
+	detailsBtn := page.Locator(`[data-testid="menu-details"]`)
+	if count, _ := detailsBtn.Count(); count == 0 {
+		detailsBtn = page.GetByText("Details", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First()
+	}
+	require.NoError(t, detailsBtn.Click(), "click Details in overflow menu")
+	time.Sleep(3 * time.Second)
+
+	// Extract config ID from the URL: /job-details/<configID>/run/<runID>
+	return mp.GetJobConfigIDFromURL()
 }
 
 // churnSSHConfig returns the SSH config for connecting to the worker.
@@ -262,12 +272,10 @@ func churnSSHConfig() utils.SSHConfig {
 }
 
 const churnMountPoint = "/tmp/incr_churn_mount"
-const churnStateFile = "/tmp/incr_churn_state.txt"
 
-// runSourceChurn SSHes into the worker, mounts the NFS source volume, saves
-// pre-churn state (mtime + ownership), then applies ~10% file + metadata changes.
-// The state file is left on the worker for revertSourceChurn to restore later.
-// Keeps the volume mounted so the revert can run without re-mounting.
+// runSourceChurn SSHes into the worker, mounts the NFS source volume, and
+// applies ~10% file + metadata changes. New files are prefixed with "playwright-"
+// so cleanup can simply delete playwright-* without needing state tracking.
 func runSourceChurn(t *testing.T, nfsHost, exportPath string) {
 	t.Helper()
 
@@ -278,40 +286,36 @@ func runSourceChurn(t *testing.T, nfsHost, exportPath string) {
 mkdir -p %s
 mount -t nfs -o hard,rw %s %s 2>/dev/null || true
 
-# Save pre-churn state: path \t mtime_epoch \t uid:gid
-find %s -type f -printf '%%p\t%%T@\t%%U:%%G\n' > %s
-
-TOTAL_FILES=$(wc -l < %s)
+TOTAL_FILES=$(find %s -type f -not -name 'playwright-*' | wc -l)
 BATCH_SIZE=$(( TOTAL_FILES / 10 ))
 [ "$BATCH_SIZE" -lt 5 ] && BATCH_SIZE=5
 
 echo "Total files: $TOTAL_FILES, churn batch: $BATCH_SIZE (10%%)"
 
-# Touch mtime on ~10%% of files
+# Touch mtime on ~10%% of existing files
 CHANGED=0
-for f in $(find %s -type f | shuf -n $BATCH_SIZE 2>/dev/null || find %s -type f | head -n $BATCH_SIZE); do
+for f in $(find %s -type f -not -name 'playwright-*' | shuf -n $BATCH_SIZE 2>/dev/null || find %s -type f -not -name 'playwright-*' | head -n $BATCH_SIZE); do
     touch -m "$f" 2>/dev/null && CHANGED=$((CHANGED+1))
 done
 
-# Create new files (~2%% of total, min 2)
+# Create new files with playwright- prefix (~2%% of total, min 2)
 NEW_FILES=$(( TOTAL_FILES / 50 ))
 [ "$NEW_FILES" -lt 2 ] && NEW_FILES=2
 for i in $(seq 1 $NEW_FILES); do
-    dd if=/dev/urandom of="%s/churn_new_${i}_$$.dat" bs=1K count=$((RANDOM %% 64 + 1)) 2>/dev/null
+    dd if=/dev/urandom of="%s/playwright-churn-${i}-$$.dat" bs=1K count=$((RANDOM %% 64 + 1)) 2>/dev/null
 done
 
-# Change ownership on ~5%% of files
+# Change ownership on ~5%% of existing files (non-playwright)
 UID_BATCH=$(( TOTAL_FILES / 20 ))
 [ "$UID_BATCH" -lt 2 ] && UID_BATCH=2
-for f in $(find %s -type f -not -name 'churn_new_*' | shuf -n $UID_BATCH 2>/dev/null || find %s -type f -not -name 'churn_new_*' | tail -n $UID_BATCH); do
+for f in $(find %s -type f -not -name 'playwright-*' | shuf -n $UID_BATCH 2>/dev/null || find %s -type f -not -name 'playwright-*' | tail -n $UID_BATCH); do
     chown 1001:2001 "$f" 2>/dev/null || true
 done
 
 echo "Churn complete: touched=$CHANGED, new_files=$NEW_FILES, uid_changes=$UID_BATCH"
 `,
 		churnMountPoint, nfsExport, churnMountPoint,
-		churnMountPoint, churnStateFile,
-		churnStateFile,
+		churnMountPoint,
 		churnMountPoint, churnMountPoint,
 		churnMountPoint,
 		churnMountPoint, churnMountPoint,
@@ -325,36 +329,22 @@ echo "Churn complete: touched=$CHANGED, new_files=$NEW_FILES, uid_changes=$UID_B
 	t.Logf("[churn] output: %s", output)
 }
 
-// revertSourceChurn restores the source volume to its pre-churn state by:
-//  1. Deleting all churn_new_* files created during churn
-//  2. Restoring original mtime and uid:gid from the saved state file
-//  3. Unmounting the volume
-//
-// This runs in a single SSH call and is fast (no re-mount needed since the
-// volume was left mounted by runSourceChurn).
+// revertSourceChurn removes all playwright-* files created during churn and
+// unmounts the source volume. Mtime/ownership changes on existing files are
+// left as-is (they don't affect future test runs since the baseline already
+// captured the original state).
 func revertSourceChurn(t *testing.T) {
 	t.Helper()
 
 	sshCfg := churnSSHConfig()
 
 	script := fmt.Sprintf(`set -e
-# Delete files created by churn
-find %s -name 'churn_new_*' -delete 2>/dev/null || true
-DELETED=$(find %s -name 'churn_new_*' 2>/dev/null | wc -l)
+# Count and delete all playwright-* files created during churn
+BEFORE=$(find %s -name 'playwright-*' 2>/dev/null | wc -l)
+find %s -name 'playwright-*' -delete 2>/dev/null || true
+AFTER=$(find %s -name 'playwright-*' 2>/dev/null | wc -l)
 
-# Restore original mtime and ownership from state file
-RESTORED=0
-if [ -f %s ]; then
-    while IFS=$'\t' read -r fpath mtime uidgid; do
-        [ -f "$fpath" ] || continue
-        touch -m -d "@${mtime%%%%.*}" "$fpath" 2>/dev/null
-        chown "$uidgid" "$fpath" 2>/dev/null || true
-        RESTORED=$((RESTORED+1))
-    done < %s
-    rm -f %s
-fi
-
-echo "Revert complete: restored=$RESTORED, deleted_churn_files=$DELETED"
+echo "Revert complete: deleted $((BEFORE - AFTER)) playwright-* files"
 
 # Unmount and cleanup
 umount %s 2>/dev/null || umount -l %s 2>/dev/null || true
@@ -362,14 +352,12 @@ rmdir %s 2>/dev/null || true
 `,
 		churnMountPoint,
 		churnMountPoint,
-		churnStateFile,
-		churnStateFile,
-		churnStateFile,
+		churnMountPoint,
 		churnMountPoint, churnMountPoint,
 		churnMountPoint,
 	)
 
-	t.Log("[revert] restoring source volume to pre-churn state...")
+	t.Log("[revert] deleting playwright-* churn files and unmounting...")
 	output, err := utils.RunScript(sshCfg, script)
 	if err != nil {
 		t.Logf("[revert] WARNING: revert error (may be partial): %v", err)

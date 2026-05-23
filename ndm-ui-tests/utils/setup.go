@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -597,6 +598,14 @@ func pollWorkersOnline(projectID, authToken string, workerIDs []string) error {
 func InitTestEnv() error {
 	logSetup("Initializing test environment...")
 	logSetup("Control plane: %s", cpHost())
+
+	// Skip full setup for local testing against an existing CP with
+	// pre-configured projects and workers.
+	if os.Getenv("NDM_SKIP_SETUP") == "true" {
+		logSetup("NDM_SKIP_SETUP=true — skipping project creation and worker registration")
+		logSetup("Using existing project and workers on the CP")
+		return nil
+	}
 
 	// 1. Keycloak credentials from OpenBao
 	logSetup("Step 1/6: Retrieving Keycloak credentials from OpenBao...")
