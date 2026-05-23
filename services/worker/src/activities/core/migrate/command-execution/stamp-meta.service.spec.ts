@@ -1067,6 +1067,186 @@ describe('StampMetaService', () => {
     });
   });
 
+  describe('executeStampAtimeAndPreserveSource (via STAMP_ATIME op)', () => {
+    const createAtimeInput = (
+      metadata = {},
+      jobConfig = {},
+      isDir = false,
+    ): CommandExecInput => ({
+      command: {
+        id: 'cmd-atime',
+        fPath: '/test-file.txt',
+        isDir,
+        ops: {
+          [OPS_CMD.STAMP_ATIME]: { status: OPS_STATUS.READY, params: {} },
+        },
+        metadata: {
+          mode: 0o644,
+          birthtime: new Date('2023-01-01T10:00:00Z'),
+          gid: 1000,
+          uid: 1001,
+          sid: 'test-sid',
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+          ...metadata,
+        },
+        serialize: jest.fn(),
+      } as any,
+      jobContext: {
+        jobRunId: 'job-run-atime',
+        jobConfig: {
+          options: {
+            isIdentityMappingAvailable: false,
+            preserveAccessTime: false,
+            ...jobConfig,
+          },
+        },
+        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      sourcePath: '/source/test-file.txt',
+      targetPath: '/target/test-file.txt',
+      errorType: ErrorType.RECOVERABLE_ERROR,
+    });
+
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'linux', writable: true });
+    });
+
+    it('should stamp atime/mtime on target and set STAMP_ATIME status to COMPLETED', async () => {
+      const input = createAtimeInput();
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampMetaData(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
+      expect(mockFs.promises.utimes).toHaveBeenCalledWith(
+        '/target/test-file.txt',
+        new Date('2023-01-02T14:00:00Z'),
+        new Date('2023-01-02T12:00:00Z'),
+      );
+    });
+
+    it('should also preserve atime/mtime on source when preserveAccessTime is enabled', async () => {
+      const input = createAtimeInput({}, { preserveAccessTime: true });
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      await service.stampMetaData(input);
+
+      const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
+      const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-file.txt');
+      const targetCalls = utimesCalls.filter(c => c[0] === '/target/test-file.txt');
+      expect(sourceCalls).toHaveLength(1);
+      expect(targetCalls).toHaveLength(1);
+    });
+
+    it('should NOT call preserve on source when preserveAccessTime is disabled', async () => {
+      const input = createAtimeInput({}, { preserveAccessTime: false });
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      await service.stampMetaData(input);
+
+      const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
+      const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-file.txt');
+      expect(sourceCalls).toHaveLength(0);
+    });
+
+    it('directory: preserve runs on source, stampAccessAndModifiedTime skips dest (isDir early return)', async () => {
+      const input = createAtimeInput({}, { preserveAccessTime: true }, true /* isDir */);
+      input.sourcePath = '/source/test-dir';
+      input.targetPath = '/target/test-dir';
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      await service.stampMetaData(input);
+
+      const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
+      const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-dir');
+      const targetCalls = utimesCalls.filter(c => c[0] === '/target/test-dir');
+      // preserve normalizes source dir atime so it matches what DeferredDirStampService stamps on dest
+      expect(sourceCalls).toHaveLength(1);
+      // stampAccessAndModifiedTime returns early for dirs — dest is handled by DeferredDirStampService
+      expect(targetCalls).toHaveLength(0);
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
+    });
+
+    it('should NOT call chown (stampGIDandUID is skipped)', async () => {
+      const input = createAtimeInput({ gid: 1000, uid: 1001 }, { preservePermissions: true });
+
+      await service.stampMetaData(input);
+
+      expect(mockFs.promises.chown).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call chmod (stampPermission is skipped)', async () => {
+      const input = createAtimeInput({ mode: 0o755 }, { preservePermissions: true });
+
+      await service.stampMetaData(input);
+
+      expect(mockFs.promises.chmod).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call stampAclOperation even on Windows', async () => {
+      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
+      const input = createAtimeInput({ sid: 'S-1-5-21-123' }, { preservePermissions: true });
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      await service.stampMetaData(input);
+
+      expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
+    });
+
+    it('should set STAMP_ATIME status to ERROR and propagate targetErrors when stampAccessAndModifiedTime fails', async () => {
+      const input = createAtimeInput();
+      const error = new Error('utimes failed') as any;
+      error.code = 'EIO';
+      (mockFs.promises.utimes as jest.Mock).mockRejectedValue(error);
+      dmError.mockReturnValue({});
+
+      const result = await service.stampMetaData(input);
+
+      expect(result.targetErrors).toContain('EIO');
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.ERROR);
+    });
+
+    it('should set STAMP_ATIME status to ERROR and propagate sourceErrors when preserve fails', async () => {
+      const input = createAtimeInput({}, { preserveAccessTime: true });
+      const error = new Error('utimes source failed') as any;
+      error.code = 'EPERM';
+      (mockFs.promises.utimes as jest.Mock).mockRejectedValue(error);
+      dmError.mockReturnValue({});
+
+      const result = await service.stampMetaData(input);
+
+      expect(result.sourceErrors).toContain('EPERM');
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.ERROR);
+    });
+
+    it('should skip execution when STAMP_ATIME op is already COMPLETED', async () => {
+      const input = createAtimeInput();
+      input.command.ops[OPS_CMD.STAMP_ATIME].status = OPS_STATUS.COMPLETED;
+
+      await service.stampMetaData(input);
+
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    it('should process STAMP_ATIME independently of STAMP_META (both can coexist in ops)', async () => {
+      const input = createAtimeInput();
+      // Add a STAMP_META op alongside STAMP_ATIME — STAMP_META runs first, STAMP_ATIME runs after
+      input.command.ops[OPS_CMD.STAMP_META] = { status: OPS_STATUS.READY, params: {} };
+      (mockFs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+      const result = await service.stampMetaData(input);
+
+      // Both ops processed; STAMP_META runs first (full stamp), STAMP_ATIME runs after
+      expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
+      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+    });
+  });
+
   describe('symlink branches', () => {
     beforeEach(() => {
       Object.defineProperty(process, 'platform', { value: 'linux', writable: true });

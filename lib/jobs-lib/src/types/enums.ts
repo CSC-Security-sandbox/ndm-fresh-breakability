@@ -10,6 +10,7 @@ export enum JobType {
 export enum OPS_CMD {
   COPY_CONTENT = 'cc',
   STAMP_META  = 'sm', // TO-DO: make it granular
+  STAMP_ATIME = 'sa', // atime-only stamp — skips uid/gid/permissions
   COPY_FILE = 'cf',
   COPY_DIR = 'cd',
   REMOVE_DIR = 'rd', // This is used to remove directories

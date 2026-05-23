@@ -59,6 +59,18 @@ export class StampMetaService {
             else
                 input.command.ops[OPS_CMD.STAMP_META].status = OPS_STATUS.COMPLETED;
         }
+
+        if (
+            input.command.ops[OPS_CMD.STAMP_ATIME] &&
+            input.command.ops[OPS_CMD.STAMP_ATIME].status !== OPS_STATUS.COMPLETED
+        ) {
+            await this.executeStampAtimeAndPreserveSource(input, output);
+            if (output.sourceErrors.length > 0 || output.targetErrors.length > 0)
+                input.command.ops[OPS_CMD.STAMP_ATIME].status = OPS_STATUS.ERROR;
+            else
+                input.command.ops[OPS_CMD.STAMP_ATIME].status = OPS_STATUS.COMPLETED;
+        }
+
         return output;
     }
 
@@ -221,6 +233,15 @@ export class StampMetaService {
         const timeOutput = await this.stampAccessAndModifiedTime(input);
         output.sourceErrors.push(...timeOutput.sourceErrors);
         output.targetErrors.push(...timeOutput.targetErrors);
+    }
+
+    private async executeStampAtimeAndPreserveSource(input: CommandExecInput, output: CommandOutput): Promise<void> {
+        const [preserveTimeOutput, timeOutput] = await Promise.all([
+            this.preserveAccessAndModifiedTime(input),
+            this.stampAccessAndModifiedTime(input),
+        ]);
+        output.sourceErrors.push(...preserveTimeOutput.sourceErrors);
+        output.targetErrors.push(...preserveTimeOutput.targetErrors, ...timeOutput.targetErrors);
     }
 
     @Timed({ category: 'stamp_phase', phase: 'permissions' })
