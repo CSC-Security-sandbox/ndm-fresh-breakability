@@ -2073,7 +2073,7 @@ describe('WinOperationService', () => {
     });
   });
 
-  describe('aclEquals', () => {
+  describe('securityDescriptorEquals', () => {
     const mkAce = (over: Partial<Ace> = {}): Ace => ({
       Sid: 'S-1-5-21-AAA',
       AccessMask: 0x1f01ff,
@@ -2100,152 +2100,196 @@ describe('WinOperationService', () => {
     it('returns equal=true for byte-identical descriptors', () => {
       const a = mkSd();
       const b = mkSd();
-      const result = service.aclEquals(a as any, b as any);
+      const result = service.securityDescriptorEquals(a as any, b as any);
       expect(result.equal).toBe(true);
       expect(result.reason).toBeUndefined();
     });
 
     it('flags owner SID mismatch', () => {
-      const src = mkSd({ Owner: 'S-1-5-21-AAA' });
-      const dst = mkSd({ Owner: 'S-1-5-21-BBB' });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ Owner: 'S-1-5-21-AAA' });
+      const actual = mkSd({ Owner: 'S-1-5-21-BBB' });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('owner');
-      expect(result.reason?.srcValue).toBe('S-1-5-21-AAA');
-      expect(result.reason?.dstValue).toBe('S-1-5-21-BBB');
+      expect(result.reason?.expectedValue).toBe('S-1-5-21-AAA');
+      expect(result.reason?.actualValue).toBe('S-1-5-21-BBB');
     });
 
     it('flags group SID mismatch', () => {
-      const src = mkSd({ Group: 'S-1-5-21-G1' });
-      const dst = mkSd({ Group: 'S-1-5-21-G2' });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ Group: 'S-1-5-21-G1' });
+      const actual = mkSd({ Group: 'S-1-5-21-G2' });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('group');
     });
 
     it('flags DaclProtected mismatch', () => {
-      const src = mkSd({ DaclProtected: true });
-      const dst = mkSd({ DaclProtected: false });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ DaclProtected: true });
+      const actual = mkSd({ DaclProtected: false });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('daclProtected');
     });
 
     it('flags DaclAutoInherit mismatch (watch-list, compared strictly by default)', () => {
-      const src = mkSd({ DaclAutoInherit: true });
-      const dst = mkSd({ DaclAutoInherit: false });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ DaclAutoInherit: true });
+      const actual = mkSd({ DaclAutoInherit: false });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('daclAutoInherit');
     });
 
-    it('considers ACEs equal regardless of insertion order', () => {
-      const src = mkSd({
+    it('treats ACE order as significant: same set in swapped positions is reported as drift', () => {
+      // Windows DACL evaluation is order-sensitive (first-match decides
+      // access, canonical-order positions carry semantic meaning), so a
+      // migration tool whose value proposition is "destination is byte-
+      // faithful to source" must surface order drift, not silently accept it.
+      const expected = mkSd({
         DaclAces: [
           mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
           mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
         ],
       });
-      const dst = mkSd({
+      const actual = mkSd({
         DaclAces: [
           mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
           mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
         ],
       });
-      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
+    });
+
+    it('flags semantically-meaningful order swap (Allow-before-Deny vs Deny-before-Allow for same trustee)', () => {
+      // [Allow Alice FC, Deny Alice FC]  -> Alice ALLOWED (Allow short-circuits)
+      // [Deny Alice FC, Allow Alice FC]  -> Alice DENIED  (Deny short-circuits)
+      // These DACLs grant opposite access despite holding the same ACE set.
+      // The comparator must report this as drift so the gate re-stamps.
+      const expected = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-ALICE', AceType: 0, AccessMask: 0x1f01ff }),
+          mkAce({ Sid: 'S-1-5-21-ALICE', AceType: 1, AccessMask: 0x1f01ff }),
+        ],
+      });
+      const actual = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-ALICE', AceType: 1, AccessMask: 0x1f01ff }),
+          mkAce({ Sid: 'S-1-5-21-ALICE', AceType: 0, AccessMask: 0x1f01ff }),
+        ],
+      });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
+    });
+
+    it('treats positionally-identical ACE sequences as equal', () => {
+      const expected = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
+          mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
+        ],
+      });
+      const actual = mkSd({
+        DaclAces: [
+          mkAce({ Sid: 'S-1-5-21-A', AccessMask: 1 }),
+          mkAce({ Sid: 'S-1-5-21-B', AccessMask: 2 }),
+        ],
+      });
+      expect(service.securityDescriptorEquals(expected as any, actual as any).equal).toBe(true);
     });
 
     it('flags ACE missing on destination (source has extra ACE)', () => {
-      const src = mkSd({
+      const expected = mkSd({
         DaclAces: [
           mkAce({ Sid: 'S-1-5-21-A' }),
           mkAce({ Sid: 'S-1-5-21-B' }),
         ],
       });
-      const dst = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
-      const result = service.aclEquals(src as any, dst as any);
+      const actual = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('aceRemoved');
     });
 
     it('flags extra ACE on destination', () => {
-      const src = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
-      const dst = mkSd({
+      const expected = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
+      const actual = mkSd({
         DaclAces: [
           mkAce({ Sid: 'S-1-5-21-A' }),
           mkAce({ Sid: 'S-1-5-21-B' }),
         ],
       });
-      const result = service.aclEquals(src as any, dst as any);
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('aceAdded');
     });
 
     it('flags ACE AccessMask drift', () => {
-      const src = mkSd({ DaclAces: [mkAce({ AccessMask: 0x1f01ff })] });
-      const dst = mkSd({ DaclAces: [mkAce({ AccessMask: 0x120089 })] });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ DaclAces: [mkAce({ AccessMask: 0x1f01ff })] });
+      const actual = mkSd({ DaclAces: [mkAce({ AccessMask: 0x120089 })] });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('aceFieldDiff');
     });
 
     it('flags ACE AceFlags drift (Inherited bit) — strict by default', () => {
-      const src = mkSd({ DaclAces: [mkAce({ AceFlags: 0x00 })] });
-      const dst = mkSd({ DaclAces: [mkAce({ AceFlags: 0x10 })] });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ DaclAces: [mkAce({ AceFlags: 0x00 })] });
+      const actual = mkSd({ DaclAces: [mkAce({ AceFlags: 0x10 })] });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('aceFieldDiff');
     });
 
     it('ignores audit/object ACE types (only AceType 0/1 are compared)', () => {
-      const src = mkSd({
+      const expected = mkSd({
         DaclAces: [
           mkAce({ AceType: 0 }),
           mkAce({ AceType: 2 }), // SystemAudit — excluded
           mkAce({ AceType: 5 }), // AccessAllowedObject — excluded
         ],
       });
-      const dst = mkSd({ DaclAces: [mkAce({ AceType: 0 })] });
-      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+      const actual = mkSd({ DaclAces: [mkAce({ AceType: 0 })] });
+      expect(service.securityDescriptorEquals(expected as any, actual as any).equal).toBe(true);
     });
 
     it('masks non-settable attribute bits before compare', () => {
-      // Compressed is not in the keep-mask, so its presence on src only
-      // must not flag a mismatch.
-      const src = mkSd({ Attributes: 'Archive, Compressed' });
-      const dst = mkSd({ Attributes: 'Archive' });
-      expect(service.aclEquals(src as any, dst as any).equal).toBe(true);
+      // Compressed is not in the keep-mask, so its presence on the expected
+      // descriptor only must not flag a mismatch.
+      const expected = mkSd({ Attributes: 'Archive, Compressed' });
+      const actual = mkSd({ Attributes: 'Archive' });
+      expect(service.securityDescriptorEquals(expected as any, actual as any).equal).toBe(true);
     });
 
-    it('flags a settable attribute drift (ReadOnly on src only)', () => {
-      const src = mkSd({ Attributes: 'Archive, ReadOnly' });
-      const dst = mkSd({ Attributes: 'Archive' });
-      const result = service.aclEquals(src as any, dst as any);
+    it('flags a settable attribute drift (ReadOnly on expected descriptor only)', () => {
+      const expected = mkSd({ Attributes: 'Archive, ReadOnly' });
+      const actual = mkSd({ Attributes: 'Archive' });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
       expect(result.reason?.field).toBe('attributes');
     });
 
     it('short-circuits on the first mismatch (owner reported before group)', () => {
-      const src = mkSd({ Owner: 'S-1-5-21-A', Group: 'S-1-5-21-X' });
-      const dst = mkSd({ Owner: 'S-1-5-21-B', Group: 'S-1-5-21-Y' });
-      const result = service.aclEquals(src as any, dst as any);
+      const expected = mkSd({ Owner: 'S-1-5-21-A', Group: 'S-1-5-21-X' });
+      const actual = mkSd({ Owner: 'S-1-5-21-B', Group: 'S-1-5-21-Y' });
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.reason?.field).toBe('owner');
     });
 
     it('treats directories the same as files (no folder-specific bypass)', () => {
       // The comparator is shape-agnostic — a directory descriptor with
       // different DaclAutoInherit is still flagged the same way as a file.
-      const src = mkSd({ DaclAutoInherit: true });
-      const dst = mkSd({ DaclAutoInherit: false });
-      expect(service.aclEquals(src as any, dst as any).equal).toBe(false);
+      const expected = mkSd({ DaclAutoInherit: true });
+      const actual = mkSd({ DaclAutoInherit: false });
+      expect(service.securityDescriptorEquals(expected as any, actual as any).equal).toBe(false);
     });
   });
 
-  describe('hasAclChanged', () => {
-    const srcPath = '/src/file.txt';
-    const dstPath = '/dst/file.txt';
+  describe('hasSecurityDescriptorChanged', () => {
+    const sourcePath = '/src/file.txt';
+    const targetPath = '/dst/file.txt';
 
-    it('returns false and emits no log when source and destination ACLs match', async () => {
+    it('returns false and emits no log when source and destination security descriptors match', async () => {
       const acl = {
         Owner: 'S-1-5-21-O',
         Group: 'S-1-5-21-G',
@@ -2260,16 +2304,16 @@ describe('WinOperationService', () => {
       const getSpy = jest
         .spyOn(service, 'getAclOperation')
         .mockResolvedValue(acl as any);
-      const changed = await service.hasAclChanged(srcPath, dstPath);
+      const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath);
       expect(changed).toBe(false);
       expect(getSpy).toHaveBeenCalledTimes(2);
-      expect(getSpy).toHaveBeenCalledWith(srcPath, true, '');
-      expect(getSpy).toHaveBeenCalledWith(dstPath, false, '');
+      expect(getSpy).toHaveBeenCalledWith(sourcePath, true, '');
+      expect(getSpy).toHaveBeenCalledWith(targetPath, false, '');
       expect(mockLogger.log).not.toHaveBeenCalled();
     });
 
     it('returns true and emits one structured INFO log on mismatch', async () => {
-      const srcAcl = {
+      const sourceSecurityDescriptor = {
         Owner: 'S-1-5-21-A',
         Group: 'S-1-5-21-G',
         DaclAces: [],
@@ -2280,19 +2324,19 @@ describe('WinOperationService', () => {
         originalOwner: '',
         originalGroup: '',
       };
-      const dstAcl = { ...srcAcl, Owner: 'S-1-5-21-B' };
+      const destinationSecurityDescriptor = { ...sourceSecurityDescriptor, Owner: 'S-1-5-21-B' };
       jest
         .spyOn(service, 'getAclOperation')
         .mockImplementation(async (_p: string, isSource: boolean) =>
-          (isSource ? srcAcl : dstAcl) as any,
+          (isSource ? sourceSecurityDescriptor : destinationSecurityDescriptor) as any,
         );
-      const changed = await service.hasAclChanged(srcPath, dstPath);
+      const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath);
       expect(changed).toBe(true);
       expect(mockLogger.log).toHaveBeenCalledTimes(1);
       const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
       expect(msg).toContain('ACL mismatch on destination');
-      expect(msg).toContain(`target=${dstPath}`);
-      expect(msg).toContain(`source=${srcPath}`);
+      expect(msg).toContain(`target=${targetPath}`);
+      expect(msg).toContain(`source=${sourcePath}`);
       expect(msg).toContain('field=owner');
       expect(msg).toContain('S-1-5-21-A');
       expect(msg).toContain('S-1-5-21-B');
@@ -2310,16 +2354,16 @@ describe('WinOperationService', () => {
         originalOwner: '',
         originalGroup: '',
       };
-      const dstAcl = { ...acl, Group: 'S-1-5-21-Z' };
+      const destinationSecurityDescriptor = { ...acl, Group: 'S-1-5-21-Z' };
       const getSpy = jest
         .spyOn(service, 'getAclOperation')
         .mockImplementation(async (_p: string, isSource: boolean) =>
-          (isSource ? acl : dstAcl) as any,
+          (isSource ? acl : destinationSecurityDescriptor) as any,
         );
       const jobContext = { jobRunId: 'wf-123' } as any;
-      await service.hasAclChanged(srcPath, dstPath, jobContext);
-      expect(getSpy).toHaveBeenCalledWith(srcPath, true, 'wf-123');
-      expect(getSpy).toHaveBeenCalledWith(dstPath, false, 'wf-123');
+      await service.hasSecurityDescriptorChanged(sourcePath, targetPath, jobContext);
+      expect(getSpy).toHaveBeenCalledWith(sourcePath, true, 'wf-123');
+      expect(getSpy).toHaveBeenCalledWith(targetPath, false, 'wf-123');
       const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
       expect(msg).toContain('[wf-123]');
     });
@@ -2331,10 +2375,472 @@ describe('WinOperationService', () => {
           if (isSource) throw new SourceAclError('boom');
           return {} as any;
         });
-      await expect(service.hasAclChanged(srcPath, dstPath)).rejects.toBeInstanceOf(
+      await expect(service.hasSecurityDescriptorChanged(sourcePath, targetPath)).rejects.toBeInstanceOf(
         SourceAclError,
       );
       expect(mockLogger.log).not.toHaveBeenCalled();
+    });
+
+    describe('SID mapping integration', () => {
+      const ctxWithMapping = (jobRunId = 'wf-map'): any => ({
+        jobRunId,
+        jobConfig: { options: { isIdentityMappingAvailable: true } },
+      });
+
+      it('does not invoke SID mapping when isIdentityMappingAvailable is false', async () => {
+        const acl = {
+          Owner: 'S-1-5-21-O',
+          Group: 'S-1-5-21-G',
+          DaclAces: [],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockResolvedValue(acl as any);
+        const mapSpy = jest.spyOn(service, 'mapSIDToTarget');
+        const jobContext = {
+          jobRunId: 'wf-no-map',
+          jobConfig: { options: { isIdentityMappingAvailable: false } },
+        } as any;
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, jobContext);
+        expect(changed).toBe(false);
+        expect(mapSpy).not.toHaveBeenCalled();
+      });
+
+      it('compares mapped source SIDs against destination when mapping is enabled', async () => {
+        const sourceSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-SRC-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSecurityDescriptor = {
+          Owner: 'S-1-5-21-DST-OWNER',
+          Group: 'S-1-5-21-DST-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-DST-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            // Deep-clone the source so mapSIDToTarget's mutation doesn't leak across asserts.
+            (isSource ? JSON.parse(JSON.stringify(sourceSecurityDescriptor)) : destinationSecurityDescriptor) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'S-1-5-21-DST-OWNER';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            if (sid === 'S-1-5-21-SRC-USER') return 'S-1-5-21-DST-USER';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, ctxWithMapping());
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
+
+      it('reports drift when a mapped Owner SID does not match the destination', async () => {
+        const sourceSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSecurityDescriptor = {
+          ...sourceSecurityDescriptor,
+          Owner: 'S-1-5-21-DST-OTHER',
+          Group: 'S-1-5-21-DST-GROUP',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSecurityDescriptor)) : destinationSecurityDescriptor) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'S-1-5-21-DST-OWNER';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, ctxWithMapping());
+        expect(changed).toBe(true);
+        const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
+        expect(msg).toContain('field=owner');
+        expect(msg).toContain('S-1-5-21-DST-OWNER');
+        expect(msg).toContain('S-1-5-21-DST-OTHER');
+      });
+
+      it("mirrors stamp's Invalid-Owner revert: destination already holds the original source SID -> no drift, no re-stamp", async () => {
+        // Mirrors the post-stamp state for a file where the Owner SID couldn't
+        // be mapped: stampAclOperation reverts Owner to the original source
+        // SID, so on the next incremental the gate must recognize the
+        // destination as already in-sync (otherwise we'd re-stamp every scan).
+        const sourceSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-SRC-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER', // stamp reverted Invalid -> original source SID
+          Group: 'S-1-5-21-DST-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-DST-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSecurityDescriptor)) : destinationSecurityDescriptor) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'Invalid';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            if (sid === 'S-1-5-21-SRC-USER') return 'S-1-5-21-DST-USER';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, ctxWithMapping());
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
+
+      it("mirrors stamp's Invalid-ACE drop: destination missing the unmappable ACE -> no drift, no re-stamp", async () => {
+        // stampAclOperation drops ACEs whose Sid mapped to 'Invalid', so the
+        // expected destination DACL is the mapped source DACL minus those
+        // entries. Destinations that already reflect that filtered state must
+        // not trigger a re-stamp.
+        const sourceSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-SRC-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+            { Sid: 'S-1-5-21-SRC-BAD',  AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSecurityDescriptor = {
+          Owner: 'S-1-5-21-DST-OWNER',
+          Group: 'S-1-5-21-DST-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-DST-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSecurityDescriptor)) : destinationSecurityDescriptor) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'S-1-5-21-DST-OWNER';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            if (sid === 'S-1-5-21-SRC-USER') return 'S-1-5-21-DST-USER';
+            if (sid === 'S-1-5-21-SRC-BAD')  return 'Invalid';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, ctxWithMapping());
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
+
+      it('reports drift when destination has not yet absorbed the post-stamp state for an Invalid Owner mapping', async () => {
+        // First incremental after an Owner went unmappable: destination still
+        // holds the pre-migration value, so the gate must report drift and
+        // hand off to stamp (which records the per-principal error).
+        const sourceSecurityDescriptor = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSecurityDescriptor = {
+          ...sourceSecurityDescriptor,
+          Owner: 'S-1-5-21-DST-STALE',
+          Group: 'S-1-5-21-DST-GROUP',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSecurityDescriptor)) : destinationSecurityDescriptor) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'Invalid';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(sourcePath, targetPath, ctxWithMapping());
+        expect(changed).toBe(true);
+        const msg = (mockLogger.log as jest.Mock).mock.calls[0][0];
+        expect(msg).toContain('field=owner');
+        // Expected Owner is the reverted original source SID, not the 'Invalid' sentinel.
+        expect(msg).toContain('S-1-5-21-SRC-OWNER');
+        expect(msg).toContain('S-1-5-21-DST-STALE');
+      });
+    });
+
+    describe('DLM root inheritance-mode transform', () => {
+      // Mirrors stampAclOperation's `applySmbInheritanceMode` step. The gate
+      // must apply the same transform when building the expected destination
+      // SD for the DLM root, otherwise the destination's transformed ACEs
+      // (e.g., inherited flipped to explicit) never equal the un-transformed
+      // source and the DLM root false-positives drift on every incremental.
+
+      const inheritedAce = (sid = 'S-1-5-21-INHERITED') => ({
+        Sid: sid,
+        AccessMask: 0x1f01ff,
+        AceType: 0,
+        AceFlags: 0x13,
+        IsInherited: true,
+        originalSid: '',
+      });
+
+      const explicitFromInherited = (sid = 'S-1-5-21-INHERITED') => ({
+        Sid: sid,
+        AccessMask: 0x1f01ff,
+        AceType: 0,
+        AceFlags: 0x03,
+        IsInherited: false,
+        originalSid: '',
+      });
+
+      const explicitAce = (sid = 'S-1-5-21-EXPLICIT') => ({
+        Sid: sid,
+        AccessMask: 0x1f01ff,
+        AceType: 0,
+        AceFlags: 0x00,
+        IsInherited: false,
+        originalSid: '',
+      });
+
+      const baseSd = (aces: any[]) => ({
+        Owner: 'S-1-5-21-O',
+        Group: 'S-1-5-21-G',
+        DaclAces: aces,
+        Attributes: '',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: '',
+        originalGroup: '',
+      });
+
+      const ctxWithInheritanceMode = (mode?: string): any => ({
+        jobRunId: 'wf-dlm-root',
+        jobConfig: { options: mode ? { smbPermissionInheritanceMode: mode } : {} },
+      });
+
+      it('INHERIT_PERMS_AS_EXPLICIT: destination holds flipped-to-explicit ACEs -> no drift, no re-stamp', async () => {
+        const sourceSd = baseSd([explicitAce(), inheritedAce()]);
+        const destinationSd = baseSd([explicitAce(), explicitFromInherited()]);
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          ctxWithInheritanceMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT),
+          true,
+        );
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
+
+      it('INHERIT_PERMS_AS_IS: destination has inherited ACEs stripped -> no drift, no re-stamp', async () => {
+        const sourceSd = baseSd([explicitAce(), inheritedAce()]);
+        const destinationSd = baseSd([explicitAce()]);
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          ctxWithInheritanceMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS),
+          true,
+        );
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
+
+      it('defaults to INHERIT_PERMS_AS_EXPLICIT when no mode is configured on the job', async () => {
+        const sourceSd = baseSd([inheritedAce()]);
+        const destinationSd = baseSd([explicitFromInherited()]);
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          ctxWithInheritanceMode(undefined),
+          true,
+        );
+        expect(changed).toBe(false);
+      });
+
+      it('applyInheritanceMode=false: inherited source ACE vs explicit destination ACE -> drift detected (transform NOT applied for non-root items)', async () => {
+        // Same descriptors as the EXPLICIT-mode happy path, but with the
+        // flag off — confirms the gate does NOT silently transform when the
+        // caller didn't flag this as the DLM root.
+        const sourceSd = baseSd([inheritedAce()]);
+        const destinationSd = baseSd([explicitFromInherited()]);
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          ctxWithInheritanceMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT),
+          false,
+        );
+        expect(changed).toBe(true);
+      });
+
+      it('applyInheritanceMode defaults to false when omitted', async () => {
+        const sourceSd = baseSd([inheritedAce()]);
+        const destinationSd = baseSd([explicitFromInherited()]);
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          ctxWithInheritanceMode(SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT),
+        );
+        expect(changed).toBe(true);
+      });
+
+      it('composes with SID mapping: applies mapping + Invalid revert + inheritance-mode transform on DLM root', async () => {
+        // End-to-end mirror of stampAclOperation: SID mapping translates
+        // Owner/Group/ACE SIDs, the Invalid Owner is reverted to its
+        // original source SID, the dropped-Invalid ACE is filtered, AND
+        // the inheritance-mode transform flips the inherited ACE to
+        // explicit. Destination already holds that exact post-stamp state.
+        const sourceSd = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-SRC-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-SRC-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0x13, IsInherited: true,  originalSid: '' },
+            { Sid: 'S-1-5-21-SRC-BAD',  AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0x00, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        const destinationSd = {
+          Owner: 'S-1-5-21-SRC-OWNER',
+          Group: 'S-1-5-21-DST-GROUP',
+          DaclAces: [
+            { Sid: 'S-1-5-21-DST-USER', AccessMask: 0x1f01ff, AceType: 0, AceFlags: 0x03, IsInherited: false, originalSid: '' },
+          ],
+          Attributes: '',
+          DaclPresent: true,
+          DaclProtected: false,
+          DaclAutoInherit: true,
+          originalOwner: '',
+          originalGroup: '',
+        };
+        jest
+          .spyOn(service, 'getAclOperation')
+          .mockImplementation(async (_p: string, isSource: boolean) =>
+            (isSource ? JSON.parse(JSON.stringify(sourceSd)) : destinationSd) as any,
+          );
+        jest
+          .spyOn(service, 'getSIDMapping')
+          .mockImplementation(async (sid: string) => {
+            if (sid === 'S-1-5-21-SRC-OWNER') return 'Invalid';
+            if (sid === 'S-1-5-21-SRC-GROUP') return 'S-1-5-21-DST-GROUP';
+            if (sid === 'S-1-5-21-SRC-USER')  return 'S-1-5-21-DST-USER';
+            if (sid === 'S-1-5-21-SRC-BAD')   return 'Invalid';
+            return null;
+          });
+        const changed = await service.hasSecurityDescriptorChanged(
+          sourcePath,
+          targetPath,
+          {
+            jobRunId: 'wf-dlm-root',
+            jobConfig: {
+              options: {
+                isIdentityMappingAvailable: true,
+                smbPermissionInheritanceMode: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+              },
+            },
+          } as any,
+          true,
+        );
+        expect(changed).toBe(false);
+        expect(mockLogger.log).not.toHaveBeenCalled();
+      });
     });
   });
 });

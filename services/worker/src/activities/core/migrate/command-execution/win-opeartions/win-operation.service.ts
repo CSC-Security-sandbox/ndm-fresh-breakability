@@ -15,7 +15,7 @@ import { MetricsService } from 'src/metrics/metrics.service';
 import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
-import { AclChangeDetector, dmError } from 'src/activities/utils/utils';
+import { SecurityDescriptorChangeDetector, dmError } from 'src/activities/utils/utils';
 
 export enum SmbPermissionInheritanceMode {
   INHERIT_PERMS_AS_IS       = 'INHERIT_PERMS_AS_IS',
@@ -77,37 +77,43 @@ function parseStampableAttributes(attrs: string | undefined): number {
   return mask & STAMPABLE_ATTR_MASK;
 }
 
-type AceCanonical = Pick<Ace, 'Sid' | 'AccessMask' | 'AceType' | 'AceFlags'>;
+type ComparableAce = Pick<Ace, 'Sid' | 'AccessMask' | 'AceType' | 'AceFlags'>;
 
-function canonicalizeAces(aces: Ace[] | undefined): AceCanonical[] {
+/**
+ * Project a `DaclAces` array down to the fields the comparator looks at and
+ * drop ACE types we don't stamp (audit / object ACEs — `AceType` other than
+ * 0 = AccessAllowed and 1 = AccessDenied).
+ *
+ * Order is preserved as read from the security descriptor. Windows DACLs
+ * are order-sensitive (first-match decides access, and the canonical-order
+ * convention assigns semantic positions to Explicit Deny / Explicit Allow /
+ * Inherited Deny / Inherited Allow), so a faithful "source vs destination"
+ * comparator must compare positionally — any order drift on destination is
+ * a real semantic drift and must trigger a re-stamp.
+ */
+function getComparableAces(aces: Ace[] | undefined): ComparableAce[] {
   if (!aces || aces.length === 0) return [];
-  const filtered: AceCanonical[] = [];
+  const result: ComparableAce[] = [];
   for (const a of aces) {
     if (a.AceType !== 0 && a.AceType !== 1) continue;
-    filtered.push({
+    result.push({
       Sid: a.Sid,
       AccessMask: a.AccessMask,
       AceType: a.AceType,
       AceFlags: a.AceFlags,
     });
   }
-  filtered.sort((a, b) => {
-    if (a.Sid !== b.Sid) return a.Sid < b.Sid ? -1 : 1;
-    if (a.AceType !== b.AceType) return a.AceType - b.AceType;
-    if (a.AccessMask !== b.AccessMask) return a.AccessMask - b.AccessMask;
-    return a.AceFlags - b.AceFlags;
-  });
-  return filtered;
+  return result;
 }
 
-function aceKey(a: AceCanonical): string {
+function aceKey(a: ComparableAce): string {
   return `${a.Sid}|${a.AceType}|${a.AccessMask}|${a.AceFlags}`;
 }
 
 
 
 @Injectable()
-export class WinOperationService implements AclChangeDetector {
+export class WinOperationService implements SecurityDescriptorChangeDetector {
   private readonly logger: LoggerService;
   private sidCache: LRUCache = new LRUCache(1000);
 
@@ -309,17 +315,32 @@ export class WinOperationService implements AclChangeDetector {
     return { output, errors };
   }
 
-  
-  applySmbInheritanceMode(
-    acl: SecurityDescriptor,
-    command: Cmd,
-    jobContext: JobManagerContext,
-  ): SecurityDescriptor {
-    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
-    if (!acl.DaclAces) return acl;
+  /**
+   * Resolve the configured inheritance mode for a job, defaulting to
+   * `INHERIT_PERMS_AS_EXPLICIT` when none is set. Shared by stamp and the
+   * scan-time comparison gate so the two paths can't drift on the default.
+   */
+  private resolveSmbInheritanceMode(jobContext?: JobManagerContext): SmbPermissionInheritanceMode {
+    return ((jobContext?.jobConfig?.options as any)?.smbPermissionInheritanceMode
+      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) as SmbPermissionInheritanceMode;
+  }
 
-    const mode = (jobContext.jobConfig?.options as any)?.smbPermissionInheritanceMode
-      ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT;
+  /**
+   * Pure transform — applies the configured inheritance mode to a security
+   * descriptor's DACL. Caller is responsible for deciding *when* to invoke
+   * this (DLM root only in both stamp and gate paths).
+   *
+   *   - `INHERIT_PERMS_AS_EXPLICIT`: flip inherited ACEs to explicit
+   *     (clear `IsInherited`, clear `INHERITED_ACE` bit `0x10`).
+   *   - `INHERIT_PERMS_AS_IS` (and any unknown mode): drop inherited ACEs.
+   *
+   * Returns the input unchanged when `DaclAces` is absent. Does not mutate.
+   */
+  applySmbInheritanceModeTransform(
+    acl: SecurityDescriptor,
+    mode: SmbPermissionInheritanceMode,
+  ): SecurityDescriptor {
+    if (!acl.DaclAces) return acl;
 
     if (mode === SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT) {
       return {
@@ -333,6 +354,20 @@ export class WinOperationService implements AclChangeDetector {
     }
 
     return { ...acl, DaclAces: acl.DaclAces.filter(ace => !ace.IsInherited) };
+  }
+
+  /**
+   * Stamp-path wrapper: applies the inheritance-mode transform iff the
+   * command was flagged by `initDlmRootStamp` as the DLM root. Non-root
+   * commands pass through unchanged.
+   */
+  applySmbInheritanceMode(
+    acl: SecurityDescriptor,
+    command: Cmd,
+    jobContext: JobManagerContext,
+  ): SecurityDescriptor {
+    if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
+    return this.applySmbInheritanceModeTransform(acl, this.resolveSmbInheritanceMode(jobContext));
   }
 
   async getSIDMapping(sourceSid: string, jobRunId): Promise<string | null> {
@@ -378,6 +413,87 @@ export class WinOperationService implements AclChangeDetector {
     return acl;
   }
 
+  /**
+   * Build the security descriptor we *expect* to see on the destination,
+   * given the raw source security descriptor and the job's SID-mapping
+   * configuration. This is what `securityDescriptorEquals` compares against
+   * the destination's actual security descriptor.
+   *
+   * SID mapping not configured (`isIdentityMappingAvailable: false`):
+   * return the source descriptor untouched. Raw SIDs that genuinely differ
+   * across domains will surface as drift and fall through to the existing
+   * stamp path (documented "warn-and-stamp" fallback for cross-domain jobs
+   * without a SID map).
+   *
+   * SID mapping configured: translate Owner / Group / per-ACE SIDs via the
+   * SID map, then mirror the post-stamp normalization that
+   * `stampAclOperation` does for unmappable principals so the comparison
+   * matches what would actually land on the destination:
+   *
+   *   - `Owner` / `Group` that map to the `'Invalid'` sentinel are reverted
+   *     to the original source SID (same as stamp). The gate compares
+   *     against the reverted value, not against `'Invalid'`, so a file
+   *     that's already been stamped under this regime is recognized as
+   *     in-sync on subsequent incrementals instead of re-stamping every
+   *     scan.
+   *   - ACEs whose SID maps to `'Invalid'` are dropped from the expected
+   *     DACL (same filter as stamp).
+   *
+   * Per-principal error reporting for unmappable SIDs remains owned by
+   * `stampAclOperation` + `validateAclOperation` — it fires on the first
+   * scan that actually triggers a stamp, then quiets down on subsequent
+   * idempotent scans (which is what we want).
+   *
+   * Note: `mapSIDToTarget` mutates its input. The gate owns the source
+   * descriptor read in `hasSecurityDescriptorChanged`, so the mutation is
+   * contained. Do **not** pass a shared/cached source descriptor into this
+   * helper.
+   */
+  private async prepareExpectedDestinationSecurityDescriptor(
+    sourceSecurityDescriptor: SecurityDescriptor,
+    jobContext?: JobManagerContext,
+    applyInheritanceMode = false,
+  ): Promise<SecurityDescriptor> {
+    let expectedSecurityDescriptor = sourceSecurityDescriptor;
+
+    if (jobContext?.jobConfig?.options?.isIdentityMappingAvailable) {
+      expectedSecurityDescriptor = await this.mapSIDToTarget(
+        sourceSecurityDescriptor,
+        jobContext.jobRunId,
+      );
+
+      // Mirror stampAclOperation's post-mapping normalization so the expected
+      // descriptor equals what stamp would actually write. Without this the
+      // gate would force a re-stamp on every incremental for files containing
+      // unmappable SIDs, even when the destination already matches the
+      // post-stamp state from a previous run.
+      if (expectedSecurityDescriptor.Owner === 'Invalid' && expectedSecurityDescriptor.originalOwner) {
+        expectedSecurityDescriptor.Owner = expectedSecurityDescriptor.originalOwner;
+      }
+      if (expectedSecurityDescriptor.Group === 'Invalid' && expectedSecurityDescriptor.originalGroup) {
+        expectedSecurityDescriptor.Group = expectedSecurityDescriptor.originalGroup;
+      }
+      if (expectedSecurityDescriptor.DaclAces) {
+        expectedSecurityDescriptor.DaclAces = expectedSecurityDescriptor.DaclAces.filter(
+          (ace) => ace.Sid !== 'Invalid',
+        );
+      }
+    }
+
+    // Mirror stampAclOperation's DLM-root inheritance-mode transform.
+    // Without this, the destination's transformed ACEs (e.g., inherited
+    // flipped to explicit) would never equal the un-transformed source,
+    // forcing a re-stamp on every incremental scan of the DLM root.
+    if (applyInheritanceMode) {
+      expectedSecurityDescriptor = this.applySmbInheritanceModeTransform(
+        expectedSecurityDescriptor,
+        this.resolveSmbInheritanceMode(jobContext),
+      );
+    }
+
+    return expectedSecurityDescriptor;
+  }
+
   async resetFileAttributes(path: string): Promise<boolean> {
     try {
       await this.winShellService.executeCommand(`attrib -H -R "${path}"`);
@@ -388,65 +504,112 @@ export class WinOperationService implements AclChangeDetector {
   }
 
   /**
-   * Bidirectional strict comparison of source vs destination NTFS ACLs.
+   * Strict equality check between an `expected` security descriptor and the
+   * `actual` one read from disk. In production the gate path supplies the
+   * expected-destination descriptor (post-SID-mapping, post-Invalid-
+   * normalization) as `expected` and the live destination descriptor as
+   * `actual`. The comparator itself is direction-agnostic — it compares
+   * value-for-value, so callers can also pass raw source vs destination if
+   * they don't need SID mapping.
    *
    * Compares only the fields the production stamp pipeline can actually
    * write to destination: `Owner`, `Group`, `DaclProtected`, `DaclAutoInherit`,
    * the settable subset of `Attributes`, and ACEs of type 0/1 with their
-   * `AceFlags` byte intact (sorted before element-wise compare so insertion
-   * order doesn't cause false mismatches).
+   * `AceFlags` byte intact.
+   *
+   * **ACE order is significant** — Windows DACLs are order-sensitive
+   * (first-match decides access, and canonical-order positions carry
+   * semantic meaning), so this comparator performs a positional element-
+   * wise compare. Any order drift on destination is reported as drift, not
+   * silently accepted. When the destination has the same ACE set in a
+   * different order, the per-position diff is surfaced as `aceFieldDiff`.
    *
    * Short-circuits on the first mismatch and returns the offending field
    * inside `reason` so the caller can log a structured single line without
    * a second pass over the data.
    */
-  aclEquals(src: SecurityDescriptor, dst: SecurityDescriptor): AclCompareResult {
-    if (src.Owner !== dst.Owner) {
-      return { equal: false, reason: { field: 'owner', srcValue: src.Owner, dstValue: dst.Owner } };
+  securityDescriptorEquals(
+    expected: SecurityDescriptor,
+    actual: SecurityDescriptor,
+  ): SecurityDescriptorCompareResult {
+    if (expected.Owner !== actual.Owner) {
+      return { equal: false, reason: { field: 'owner', expectedValue: expected.Owner, actualValue: actual.Owner } };
     }
-    if (src.Group !== dst.Group) {
-      return { equal: false, reason: { field: 'group', srcValue: src.Group, dstValue: dst.Group } };
+    if (expected.Group !== actual.Group) {
+      return { equal: false, reason: { field: 'group', expectedValue: expected.Group, actualValue: actual.Group } };
     }
-    if (!!src.DaclProtected !== !!dst.DaclProtected) {
-      return { equal: false, reason: { field: 'daclProtected', srcValue: !!src.DaclProtected, dstValue: !!dst.DaclProtected } };
+    if (!!expected.DaclProtected !== !!actual.DaclProtected) {
+      return { equal: false, reason: { field: 'daclProtected', expectedValue: !!expected.DaclProtected, actualValue: !!actual.DaclProtected } };
     }
     // Watch-list: Windows' inheritance engine can set/clear this bit on its
     // own. Compared strictly by default; mask this branch off if real testing
     // surfaces a stable round-trip mismatch.
-    if (!!src.DaclAutoInherit !== !!dst.DaclAutoInherit) {
-      return { equal: false, reason: { field: 'daclAutoInherit', srcValue: !!src.DaclAutoInherit, dstValue: !!dst.DaclAutoInherit } };
+    if (!!expected.DaclAutoInherit !== !!actual.DaclAutoInherit) {
+      return { equal: false, reason: { field: 'daclAutoInherit', expectedValue: !!expected.DaclAutoInherit, actualValue: !!actual.DaclAutoInherit } };
     }
-    const srcAttrs = parseStampableAttributes(src.Attributes);
-    const dstAttrs = parseStampableAttributes(dst.Attributes);
-    if (srcAttrs !== dstAttrs) {
-      return { equal: false, reason: { field: 'attributes', srcValue: srcAttrs, dstValue: dstAttrs } };
+    const expectedAttrs = parseStampableAttributes(expected.Attributes);
+    const actualAttrs = parseStampableAttributes(actual.Attributes);
+    if (expectedAttrs !== actualAttrs) {
+      return { equal: false, reason: { field: 'attributes', expectedValue: expectedAttrs, actualValue: actualAttrs } };
     }
-    const srcAces = canonicalizeAces(src.DaclAces);
-    const dstAces = canonicalizeAces(dst.DaclAces);
-    if (srcAces.length !== dstAces.length) {
-      const dstKeys = new Set(dstAces.map(aceKey));
-      const srcKeys = new Set(srcAces.map(aceKey));
-      if (srcAces.length > dstAces.length) {
-        const missing = srcAces.find(a => !dstKeys.has(aceKey(a))) ?? srcAces[0];
-        return { equal: false, reason: { field: 'aceRemoved', srcValue: missing, dstValue: null } };
+    const expectedAces = getComparableAces(expected.DaclAces);
+    const actualAces = getComparableAces(actual.DaclAces);
+    if (expectedAces.length !== actualAces.length) {
+      const actualKeys = new Set(actualAces.map(aceKey));
+      const expectedKeys = new Set(expectedAces.map(aceKey));
+      if (expectedAces.length > actualAces.length) {
+        const missing = expectedAces.find(a => !actualKeys.has(aceKey(a))) ?? expectedAces[0];
+        return { equal: false, reason: { field: 'aceRemoved', expectedValue: missing, actualValue: null } };
       }
-      const extra = dstAces.find(a => !srcKeys.has(aceKey(a))) ?? dstAces[0];
-      return { equal: false, reason: { field: 'aceAdded', srcValue: null, dstValue: extra } };
+      const extra = actualAces.find(a => !expectedKeys.has(aceKey(a))) ?? actualAces[0];
+      return { equal: false, reason: { field: 'aceAdded', expectedValue: null, actualValue: extra } };
     }
-    for (let i = 0; i < srcAces.length; i++) {
-      const s = srcAces[i];
-      const d = dstAces[i];
-      if (s.Sid !== d.Sid || s.AccessMask !== d.AccessMask || s.AceType !== d.AceType || s.AceFlags !== d.AceFlags) {
-        return { equal: false, reason: { field: 'aceFieldDiff', srcValue: s, dstValue: d } };
+    for (let i = 0; i < expectedAces.length; i++) {
+      const expectedAce = expectedAces[i];
+      const actualAce = actualAces[i];
+      if (
+        expectedAce.Sid !== actualAce.Sid ||
+        expectedAce.AccessMask !== actualAce.AccessMask ||
+        expectedAce.AceType !== actualAce.AceType ||
+        expectedAce.AceFlags !== actualAce.AceFlags
+      ) {
+        return { equal: false, reason: { field: 'aceFieldDiff', expectedValue: expectedAce, actualValue: actualAce } };
       }
     }
     return { equal: true };
   }
 
   /**
-   * Scan-time entry point for SMB metadata-change detection. Reads source
-   * and destination ACLs in parallel, runs `aclEquals`, and on mismatch
-   * emits one structured INFO log line per item with the offending field.
+   * Scan-time entry point for SMB metadata-change detection.
+   *
+   * Reads source and destination security descriptors in parallel, builds
+   * the expected destination descriptor via
+   * `prepareExpectedDestinationSecurityDescriptor` (which applies SID
+   * mapping, mirrors stamp's Invalid-SID normalization when mapping is
+   * configured, and applies the SMB inheritance-mode transform when the
+   * caller flags this as the DLM root via `applyInheritanceMode`), then
+   * runs `securityDescriptorEquals`. On mismatch, emits one structured
+   * INFO log line per item with the offending field.
+   *
+   * `applyInheritanceMode` mirrors stamp's per-command
+   * `OPS_CMD.STAMP_META.params.applyInheritanceMode` flag, which is set
+   * only on the DLM root by `MigrateScanService.initDlmRootStamp`. Caller
+   * (`command-generation.service.buildCommand` → `isMetaUpdated`) computes
+   * the same predicate (`isDirectoryLevelMigration(jobConfig) && fPath ===
+   * '/'`) and passes it through. Without this, the DLM root would
+   * false-positive drift on every incremental scan because the destination
+   * holds the transformed ACEs while the gate compares against the
+   * un-transformed source.
+   *
+   * Decision matrix:
+   * - SID mapping configured → compare against the post-mapping,
+   *   post-Invalid-normalization expected descriptor. Files where mapping
+   *   returned `'Invalid'` but the destination already holds the reverted-
+   *   to-source SID (or has the Invalid ACEs dropped) are correctly
+   *   recognized as in-sync and skip the stamp.
+   * - SID mapping not configured → compare raw SIDs. Cross-domain SIDs
+   *   that genuinely differ will surface as drift and fall through to the
+   *   existing stamp path.
    *
    * First-time-stamp case (destination object does not yet exist) is
    * handled by callers — `isMetaUpdated` short-circuits before this method
@@ -455,23 +618,40 @@ export class WinOperationService implements AclChangeDetector {
    * reflects a genuine drift between source and destination, not an
    * initial-stamp event.
    */
-  async hasAclChanged(
+  async hasSecurityDescriptorChanged(
     sourcePath: string,
     targetPath: string,
     jobContext?: JobManagerContext,
+    applyInheritanceMode = false,
   ): Promise<boolean> {
     const workflowId = jobContext?.jobRunId ?? '';
-    const [srcAcl, dstAcl] = await Promise.all([
+    const [sourceSecurityDescriptor, destinationSecurityDescriptor] = await Promise.all([
       this.getAclOperation(sourcePath, true, workflowId),
       this.getAclOperation(targetPath, false, workflowId),
     ]);
-    const result = this.aclEquals(srcAcl, dstAcl);
+
+    const expectedDestinationSecurityDescriptor =
+      await this.prepareExpectedDestinationSecurityDescriptor(
+        sourceSecurityDescriptor,
+        jobContext,
+        applyInheritanceMode,
+      );
+    const result = this.securityDescriptorEquals(
+      expectedDestinationSecurityDescriptor,
+      destinationSecurityDescriptor,
+    );
     if (!result.equal && result.reason) {
+      // NOTE: This log string is operator-facing. The prefix
+      // "ACL mismatch on destination - target=" is intentionally retained
+      // (instead of the strictly-correct "Security descriptor mismatch")
+      // for backward compatibility with operator grep / log-aggregation
+      // pipelines that key on this exact substring. "ACL" here is used in
+      // the colloquial Windows-ops sense for the full security descriptor.
       this.logger.log(
         `[${workflowId}] ACL mismatch on destination - target=${targetPath} source=${sourcePath} ` +
         `field=${result.reason.field} ` +
-        `srcValue=${JSON.stringify(result.reason.srcValue)} ` +
-        `dstValue=${JSON.stringify(result.reason.dstValue)}`,
+        `expectedValue=${JSON.stringify(result.reason.expectedValue)} ` +
+        `actualValue=${JSON.stringify(result.reason.actualValue)}`,
       );
     }
     return !result.equal;

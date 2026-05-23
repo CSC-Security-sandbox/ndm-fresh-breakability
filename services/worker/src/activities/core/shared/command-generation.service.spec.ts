@@ -114,7 +114,7 @@ describe('CommandGenerationService', () => {
             ino: 1,
         });
         const redisService = {} as any;
-        const winOperationService = { hasAclChanged: jest.fn().mockResolvedValue(false) } as any;
+        const winOperationService = { hasSecurityDescriptorChanged: jest.fn().mockResolvedValue(false) } as any;
         service = new CommandGenerationService(configService, loggerFactory, fileTypeDetectionService, redisService, winOperationService);
     });
 
@@ -765,6 +765,50 @@ describe('CommandGenerationService', () => {
             } as fs.Stats;
             const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
             expect(result).toBeUndefined();
+        });
+
+        describe('applyInheritanceMode propagation', () => {
+            // The DLM-root decision lives in `publishDlmRootPermissionStamp`
+            // (single source of truth); buildCommand is a pure pass-through
+            // for the flag. These tests verify exactly that: whatever the
+            // caller passes lands in isMetaUpdated unchanged.
+            const sFile = {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                size: 100,
+                mtime: new Date(),
+                mode: 0o644,
+                uid: 0,
+                gid: 0,
+                atime: new Date(),
+                ctime: new Date(),
+                birthtime: new Date(),
+                ino: 1,
+            } as fs.Stats;
+            const dummyCtx = { jobConfig: { sourceDirectoryPath: '/src-root' } } as any;
+
+            beforeEach(() => {
+                mockIsContentUpdate.mockReturnValue(false);
+                mockIsMetaUpdated.mockResolvedValue(true);
+            });
+
+            it('threads applyInheritanceMode=true through to isMetaUpdated when caller passes true', async () => {
+                await service.buildCommand(sFile, '/', sFile, undefined, dummyCtx, '/abs/src', '/abs/dst', true);
+                const lastCall = mockIsMetaUpdated.mock.calls.at(-1) as unknown[];
+                expect(lastCall[7]).toBe(true);
+            });
+
+            it('threads applyInheritanceMode=false through to isMetaUpdated when caller passes false', async () => {
+                await service.buildCommand(sFile, '/', sFile, undefined, dummyCtx, '/abs/src', '/abs/dst', false);
+                const lastCall = mockIsMetaUpdated.mock.calls.at(-1) as unknown[];
+                expect(lastCall[7]).toBe(false);
+            });
+
+            it('defaults applyInheritanceMode to false when caller omits it', async () => {
+                await service.buildCommand(sFile, 'sub/file.txt', sFile, undefined, dummyCtx, '/abs/src', '/abs/dst');
+                const lastCall = mockIsMetaUpdated.mock.calls.at(-1) as unknown[];
+                expect(lastCall[7]).toBe(false);
+            });
         });
     });
 

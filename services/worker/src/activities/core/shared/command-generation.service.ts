@@ -470,6 +470,14 @@ export class CommandGenerationService {
    * They are unused when `dFile` is undefined (first-time-stamp case never
    * reaches the comparator) and on non-Windows platforms (NFS branch uses
    * `Stats` fields only).
+   *
+   * `applyInheritanceMode` mirrors stamp's
+   * `OPS_CMD.STAMP_META.params.applyInheritanceMode` flag. It must be
+   * decided by the caller (single source of truth: `initDlmRootStamp` ->
+   * `publishDlmRootPermissionStamp`, which is the only call site that
+   * passes `true`). Threaded through to `isMetaUpdated` so the gate's
+   * expected-destination SD matches what stamp would actually write on
+   * the DLM root.
    */
   async buildCommand(
     sFile: fs.Stats,
@@ -479,6 +487,7 @@ export class CommandGenerationService {
     jobContext?: JobManagerContext,
     sourceAbsPath?: string,
     targetAbsPath?: string,
+    applyInheritanceMode = false,
   ): Promise<Cmd | undefined> {
     const metadata: CmdMeta = {
       size: sFile.size,
@@ -511,7 +520,7 @@ export class CommandGenerationService {
       );
     }
 
-    if (await isMetaUpdated(sFile, dFile, this.redisService, jobContext, this.winOperationService, sourceAbsPath, targetAbsPath)) {
+    if (await isMetaUpdated(sFile, dFile, this.redisService, jobContext, this.winOperationService, sourceAbsPath, targetAbsPath, applyInheritanceMode)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),

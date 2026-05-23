@@ -188,8 +188,13 @@ export const isContentUpdate = (sFile: fs.Stats, dFile?: fs.Stats, fileName = 'u
  * SMB branch. Kept structural rather than a class reference to avoid pulling
  * a heavy DI graph into the utils module.
  */
-export interface AclChangeDetector {
-  hasAclChanged(sourcePath: string, targetPath: string, jobContext?: JobManagerContext): Promise<boolean>;
+export interface SecurityDescriptorChangeDetector {
+  hasSecurityDescriptorChanged(
+    sourcePath: string,
+    targetPath: string,
+    jobContext?: JobManagerContext,
+    applyInheritanceMode?: boolean,
+  ): Promise<boolean>;
 }
 
 export const isMetaUpdated = async (
@@ -197,20 +202,26 @@ export const isMetaUpdated = async (
   dFile?: fs.Stats,
   redisService?: { getOwnerIdentity: (jobRunId: string, id: string, type: 'UID' | 'GID' | 'SID') => Promise<string | null> },
   jobContext?: JobManagerContext,
-  aclChangeDetector?: AclChangeDetector,
+  securityDescriptorChangeDetector?: SecurityDescriptorChangeDetector,
   sourcePath?: string,
   targetPath?: string,
+  applyInheritanceMode = false,
 ): Promise<boolean> => {
   if (!dFile) return true;
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
-  // SMB: direct source vs destination ACL comparison. Caller is responsible
-  // for supplying the detector and both paths — without them we have no way
-  // to make a correctness-preserving decision, so we fail loudly rather
-  // than silently falling back to the old ctime heuristic.
-  if (!aclChangeDetector || !sourcePath || !targetPath) {
-    throw new Error('isMetaUpdated on win32 requires aclChangeDetector, sourcePath, and targetPath');
+  // SMB: direct source vs destination security descriptor comparison. Caller
+  // is responsible for supplying the detector and both paths — without them
+  // we have no way to make a correctness-preserving decision, so we fail
+  // loudly rather than silently falling back to the old ctime heuristic.
+  if (!securityDescriptorChangeDetector || !sourcePath || !targetPath) {
+    throw new Error('isMetaUpdated on win32 requires securityDescriptorChangeDetector, sourcePath, and targetPath');
   }
-  return aclChangeDetector.hasAclChanged(sourcePath, targetPath, jobContext);
+  return securityDescriptorChangeDetector.hasSecurityDescriptorChanged(
+    sourcePath,
+    targetPath,
+    jobContext,
+    applyInheritanceMode,
+  );
 };
 
 export const isNfsMetaUpdated = async (

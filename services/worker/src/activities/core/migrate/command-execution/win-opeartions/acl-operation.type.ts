@@ -26,10 +26,10 @@ interface ValidatorOutput {
 }
 
 /**
- * Field key for the first ACL mismatch surfaced by `aclEquals`. Use these
- * as stable log/grep keys; do not switch on free-form strings.
+ * Field key for the first mismatch surfaced by `securityDescriptorEquals`.
+ * Use these as stable log/grep keys; do not switch on free-form strings.
  */
-type AclMismatchField =
+type SecurityDescriptorMismatchField =
   | 'owner'
   | 'group'
   | 'daclProtected'
@@ -39,15 +39,15 @@ type AclMismatchField =
   | 'aceRemoved'
   | 'aceFieldDiff';
 
-interface AclMismatchReason {
-  field: AclMismatchField;
-  srcValue: unknown;
-  dstValue: unknown;
+interface SecurityDescriptorMismatchReason {
+  field: SecurityDescriptorMismatchField;
+  expectedValue: unknown;
+  actualValue: unknown;
 }
 
-interface AclCompareResult {
+interface SecurityDescriptorCompareResult {
   equal: boolean;
-  reason?: AclMismatchReason;
+  reason?: SecurityDescriptorMismatchReason;
 }
 
 interface ADSInfo {
