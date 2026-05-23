@@ -240,7 +240,7 @@ func fetchDiscoveryCSV(jobRunID string) ([]byte, error) {
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 			return respBytes, nil
 		}
-		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError {
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError || resp.StatusCode == http.StatusServiceUnavailable {
 			if attempt < maxRetries {
 				Wait(retryDelay)
 				continue
@@ -315,8 +315,8 @@ func fetchCocCSV(jobRunID string) ([]byte, error) {
 			break
 		}
 
-		// 404 = ZIP not ready yet; 500 = transient — retry both.
-		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError {
+		// 404 = ZIP not ready yet; 500/503 = transient (worker restart, upstream reset) — retry all.
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError || resp.StatusCode == http.StatusServiceUnavailable {
 			if attempt < maxRetries {
 				Wait(retryDelay)
 				continue

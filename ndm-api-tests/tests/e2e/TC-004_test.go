@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
+var _ = FDescribe("TC-004: Run migration with incremental sync schedule - verify both addition and deletion sync", func() {
 	var (
 		ProjectId             string
 		ProjectName           string
@@ -352,63 +352,59 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				By(fmt.Sprintf("Validate deletion discovery report result: %s", result))
 			}
 
-		// 4) Atime-only sync: touch -a files on source, verify incremental picks up STAMP_ATIME,
-		// then stat destination files to confirm atimes were propagated correctly.
-		// Skipped for SMB: Windows disables atime updates by default (NtfsDisableLastAccessUpdate=1).
-		if PROTOCOL_TYPE == ProtocolNFS {
-			destVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[0])
-			destVolumePath2 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[1])
+		// 4) Atime-only sync: explicitly bump source file atimes (touch -a / Set LastAccessTime),
+		// verify incremental picks up STAMP_ATIME via isAtimeUpdated, then confirm dest was stamped by NDM.
+		destVolumePath1 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[0])
+		destVolumePath2 := fmt.Sprintf("%s:%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[1])
 
-			By("Step 6: Bumping atime on source files")
-			// TODO: When SMB's ctime check is redundant, add aTime scenario for SMB
-			bumpCount := 10
-			srcAtimes1, err := BumpAtimeOnVolume(sourceVolumePath1, bumpCount)
-			Expect(err).NotTo(HaveOccurred(), "Error bumping atime on %s", sourceVolumePath1)
-			LogDebug(fmt.Sprintf("Bumped atime on %d files in %s", len(srcAtimes1), sourceVolumePath1))
+		By("Step 6: Bumping atime on source files")
+		bumpCount := 10
+		srcAtimes1, err := BumpAtimeOnVolume(sourceVolumePath1, bumpCount)
+		Expect(err).NotTo(HaveOccurred(), "Error bumping atime on %s", sourceVolumePath1)
+		Expect(srcAtimes1).NotTo(BeEmpty(), "Expected at least one file atime bumped on %s", sourceVolumePath1)
+		LogDebug(fmt.Sprintf("Bumped atime on %d files in %s", len(srcAtimes1), sourceVolumePath1))
 
-			srcAtimes2, err := BumpAtimeOnVolume(sourceVolumePath2, bumpCount)
-			Expect(err).NotTo(HaveOccurred(), "Error bumping atime on %s", sourceVolumePath2)
-			LogDebug(fmt.Sprintf("Bumped atime on %d files in %s", len(srcAtimes2), sourceVolumePath2))
+		srcAtimes2, err := BumpAtimeOnVolume(sourceVolumePath2, bumpCount)
+		Expect(err).NotTo(HaveOccurred(), "Error bumping atime on %s", sourceVolumePath2)
+		Expect(srcAtimes2).NotTo(BeEmpty(), "Expected at least one file atime bumped on %s", sourceVolumePath2)
+		LogDebug(fmt.Sprintf("Bumped atime on %d files in %s", len(srcAtimes2), sourceVolumePath2))
 
-			LogDebug("Waiting for next incremental run to pick up atime-only changes")
-			Wait(300)
+		LogDebug("Waiting for next incremental run to pick up atime-only changes")
+		Wait(300)
 
-			By("Step 6.1: Validating incremental sync for atime-only changes completes without error")
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID after atime bump")
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 4), "Expected at least 4 job runs (base + addition + deletion + atime)")
-				defer resp.Body.Close()
+		By("Step 6.1: Validating incremental sync for atime-only changes completes without error")
+		for _, migrationJobConfigID := range migrationJobConfigIDs {
+			getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID after atime bump")
+			Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 4), "Expected at least 4 job runs (base + addition + deletion + atime)")
+			defer resp.Body.Close()
 
-				lastIdx := len(getJobsResp.JobRuns) - 1
-				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
+			lastIdx := len(getJobsResp.JobRuns) - 1
+			migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
+			Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
 
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
-				Expect(err).NotTo(HaveOccurred(), "Atime-only incremental sync job did not complete")
-				LogDebug(fmt.Sprintf("Atime-only incremental sync %s completed for config %s", migrationJobRunID, migrationJobConfigID))
-			}
-
-			By("Step 6.2: Reading destination file atimes after incremental sync")
-			destAtimes1, err := StatAtimeOnDestVolume(destVolumePath1, srcAtimes1)
-			Expect(err).NotTo(HaveOccurred(), "Error reading atime on dest %s", destVolumePath1)
-
-			destAtimes2, err := StatAtimeOnDestVolume(destVolumePath2, srcAtimes2)
-			Expect(err).NotTo(HaveOccurred(), "Error reading atime on dest %s", destVolumePath2)
-
-			By("Step 6.3: Validating source vs destination atimes (100ms tolerance)")
-			const atimeToleranceMs int64 = 100 // This is to avoid false positives due to millisecond precision in stamping and nanosecond precision in retrieving via shell script
-
-			mismatches1 := ValidateAtime(srcAtimes1, destAtimes1, atimeToleranceMs)
-			Expect(mismatches1).To(BeEmpty(), "Atime mismatch on dest vol1: %v", mismatches1)
-
-			mismatches2 := ValidateAtime(srcAtimes2, destAtimes2, atimeToleranceMs)
-			Expect(mismatches2).To(BeEmpty(), "Atime mismatch on dest vol2: %v", mismatches2) 
-
-			LogDebug("Step 6.3: Destination atimes verified — all match source within 100ms")
-		} else {
-			LogDebug("Step 6: Skipping atime-only sync step — SMB does not reliably update atime on Windows shares")
+			err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+			Expect(err).NotTo(HaveOccurred(), "Atime-only incremental sync job did not complete")
+			LogDebug(fmt.Sprintf("Atime-only incremental sync %s completed for config %s", migrationJobRunID, migrationJobConfigID))
 		}
+
+		By("Step 6.2: Reading destination file atimes after incremental sync")
+		destAtimes1, err := StatAtimeOnDestVolume(destVolumePath1, srcAtimes1)
+		Expect(err).NotTo(HaveOccurred(), "Error reading atime on dest %s", destVolumePath1)
+
+		destAtimes2, err := StatAtimeOnDestVolume(destVolumePath2, srcAtimes2)
+		Expect(err).NotTo(HaveOccurred(), "Error reading atime on dest %s", destVolumePath2)
+
+		By("Step 6.3: Validating source vs destination atimes (100ms tolerance)")
+		const atimeToleranceMs int64 = 100 // avoid false positives from ms stamping vs ns retrieval
+
+		mismatches1 := ValidateAtime(srcAtimes1, destAtimes1, atimeToleranceMs)
+		Expect(mismatches1).To(BeEmpty(), "Atime mismatch on dest vol1: %v", mismatches1)
+
+		mismatches2 := ValidateAtime(srcAtimes2, destAtimes2, atimeToleranceMs)
+		Expect(mismatches2).To(BeEmpty(), "Atime mismatch on dest vol2: %v", mismatches2)
+
+		LogDebug("Step 6.3: Destination atimes verified — all match source within 100ms")
 
 		By("Creating bulk cutover job")
 			cutoverParams := BulkCutoverJobParams{

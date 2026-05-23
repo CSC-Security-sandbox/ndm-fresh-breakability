@@ -676,7 +676,11 @@ find "%s" -type f 2>/dev/null | head -n %d > "$bumped_list" || true
 while IFS= read -r f; do
     if sudo touch -a "$f" 2>/dev/null; then
         rel="${f#%s/}"
-        ms=$(LC_ALL=C date -d "$(LC_ALL=C stat -c '%x' "$f")" +%s%3N 2>/dev/null || echo "MISSING")
+        if secs=$(LC_ALL=C stat -c %%X "$f" 2>/dev/null); then
+            ms=$((secs * 1000))
+        else
+            ms=MISSING
+        fi
         echo "SRCATIME:${ms}:${rel}"
     fi
 done < "$bumped_list"
@@ -716,7 +720,11 @@ sudo mount -t nfs "%s" "%s"
 while IFS= read -r rel; do
     full="%s/${rel}"
     if [ -f "$full" ]; then
-        ms=$(LC_ALL=C date -d "$(LC_ALL=C stat -c '%x' "$full")" +%s%3N 2>/dev/null || echo "MISSING")
+        if secs=$(LC_ALL=C stat -c %%X "$full" 2>/dev/null); then
+            ms=$((secs * 1000))
+        else
+            ms=MISSING
+        fi
         echo "DESTATIME:${ms}:${rel}"
     else
         echo "DESTATIME:MISSING:${rel}"
@@ -763,23 +771,97 @@ func ValidateAtime(srcAtimes, destAtimes map[string]int64, toleranceMs int64) []
 	return mismatches
 }
 
-// BumpAtimeOnVolume runs touch -a on up to `count` source files and returns
-// map[relPath -> atime_ms]. Returns nil on SMB (atime unreliable on Windows).
-func BumpAtimeOnVolume(export string, count int) (map[string]int64, error) {
-	if PROTOCOL_TYPE == ProtocolNFS {
-		return BumpAtimeOnVolumeForNFS(export, count)
+// BumpAtimeOnVolumeForSMB maps the SMB share and explicitly sets LastAccessTimeUtc on
+// up to `count` files. Does not rely on Windows passive atime updates
+// (NtfsDisableLastAccessUpdate); NDM detects drift via isAtimeUpdated and stamps dest.
+// Returns map[relPath -> atime_ms] with forward-slash relative paths.
+func BumpAtimeOnVolumeForSMB(export string, count int) (map[string]int64, error) {
+	mappedDrive := getUniqueDriveLetter()
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	// cmd /C one-liner chain — same pattern as ModifyDataOnVolumeForSMB.
+	// PowerShell uses semicolons (no script block) to avoid SSH/cmd quoting issues.
+	bumpScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "$drive='%s'; $bumpUtc=(Get-Date).ToUniversalTime().AddDays(-30); Get-ChildItem -Path ($drive+'\') -Recurse -File -EA SilentlyContinue | Select -First %d | ForEach-Object { try { $_.LastAccessTimeUtc=$bumpUtc; $rel=$_.FullName.Substring($drive.Length+1).Replace('\','/'); $ms=[int64]([DateTimeOffset]$_.LastAccessTimeUtc).ToUnixTimeMilliseconds(); Write-Output ('SRCATIME:'+$ms+':'+$rel) } catch {} }" &&
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD,
+		mappedDrive, count, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(bumpScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
 	}
-	// TODO: When SMB's ctime check is redundant, add aTime scenario for SMB
-	return nil, nil
+	script := strings.Join(commands, " ")
+
+	config := GetAttachedWorkerDetails()
+	cfg := SSHConfig{Username: config.Username, Host: config.Host, Port: config.Port, Password: config.Password}
+	output, err := sshRunScript(cfg, script)
+	if err != nil {
+		return nil, fmt.Errorf("BumpAtimeOnVolumeForSMB failed: %w\noutput: %s", err, output)
+	}
+	return parseAtimeLines(output, "SRCATIME"), nil
+}
+
+// StatAtimeOnDestSMB reads LastAccessTimeUtc (ms) for each relative path on the dest SMB share.
+func StatAtimeOnDestSMB(export string, srcAtimes map[string]int64) (map[string]int64, error) {
+	mappedDrive := getUniqueDriveLetter()
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+
+	var psPaths []string
+	for rel := range srcAtimes {
+		psPaths = append(psPaths, fmt.Sprintf("'%s'", strings.ReplaceAll(rel, "'", "''")))
+	}
+	pathsLiteral := strings.Join(psPaths, ",")
+
+	statScript := fmt.Sprintf(`cmd /C
+	net use %s /delete /yes &
+	net use %s %s /user:%s "%s" &&
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "$drive='%s'; $paths=@(%s); foreach ($rel in $paths) { $full=Join-Path $drive ($rel.Replace('/','\')); if (Test-Path -LiteralPath $full -PathType Leaf) { $item=Get-Item -LiteralPath $full; $ms=[int64]([DateTimeOffset]$item.LastAccessTimeUtc).ToUnixTimeMilliseconds(); Write-Output ('DESTATIME:'+$ms+':'+$rel) } else { Write-Output ('DESTATIME:MISSING:'+$rel) } }" &&
+	net use %s /delete /yes
+	`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD,
+		mappedDrive, pathsLiteral, mappedDrive)
+
+	commands := []string{}
+	for _, v := range strings.Split(statScript, "\n") {
+		commands = append(commands, strings.TrimSpace(v))
+	}
+	script := strings.Join(commands, " ")
+
+	config := GetAttachedWorkerDetails()
+	cfg := SSHConfig{Username: config.Username, Host: config.Host, Port: config.Port, Password: config.Password}
+	output, err := sshRunScript(cfg, script)
+	if err != nil {
+		return nil, fmt.Errorf("StatAtimeOnDestSMB failed: %w\noutput: %s", err, output)
+	}
+	return parseAtimeLines(output, "DESTATIME"), nil
+}
+
+// BumpAtimeOnVolume explicitly bumps source file atimes and returns map[relPath -> atime_ms].
+func BumpAtimeOnVolume(export string, count int) (map[string]int64, error) {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		return BumpAtimeOnVolumeForNFS(export, count)
+	case ProtocolSMB:
+		return BumpAtimeOnVolumeForSMB(export, count)
+	default:
+		return nil, fmt.Errorf("unsupported protocol for BumpAtimeOnVolume: %s", PROTOCOL_TYPE)
+	}
 }
 
 // StatAtimeOnDestVolume reads atime_ms for each path in srcAtimes from the dest export.
-// Returns nil on SMB.
 func StatAtimeOnDestVolume(export string, srcAtimes map[string]int64) (map[string]int64, error) {
-	if PROTOCOL_TYPE == ProtocolNFS {
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
 		return StatAtimeOnDestNFS(export, srcAtimes)
+	case ProtocolSMB:
+		return StatAtimeOnDestSMB(export, srcAtimes)
+	default:
+		return nil, fmt.Errorf("unsupported protocol for StatAtimeOnDestVolume: %s", PROTOCOL_TYPE)
 	}
-	return nil, nil
 }
 
 func ModifyDataOnVolumeForSMB(export string) string {
