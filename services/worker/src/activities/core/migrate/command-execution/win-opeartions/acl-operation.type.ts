@@ -35,8 +35,8 @@ type SecurityDescriptorMismatchField =
   | 'daclProtected'
   | 'daclAutoInherit'
   | 'attributes'
-  | 'aceAdded'
-  | 'aceRemoved'
+  | 'aceMissingOnDestination'
+  | 'aceExtraOnDestination'
   | 'aceFieldDiff';
 
 interface SecurityDescriptorMismatchReason {

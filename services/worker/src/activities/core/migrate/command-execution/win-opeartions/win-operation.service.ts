@@ -559,10 +559,10 @@ export class WinOperationService implements SecurityDescriptorChangeDetector {
       const expectedKeys = new Set(expectedAces.map(aceKey));
       if (expectedAces.length > actualAces.length) {
         const missing = expectedAces.find(a => !actualKeys.has(aceKey(a))) ?? expectedAces[0];
-        return { equal: false, reason: { field: 'aceRemoved', expectedValue: missing, actualValue: null } };
+        return { equal: false, reason: { field: 'aceMissingOnDestination', expectedValue: missing, actualValue: null } };
       }
       const extra = actualAces.find(a => !expectedKeys.has(aceKey(a))) ?? actualAces[0];
-      return { equal: false, reason: { field: 'aceAdded', expectedValue: null, actualValue: extra } };
+      return { equal: false, reason: { field: 'aceExtraOnDestination', expectedValue: null, actualValue: extra } };
     }
     for (let i = 0; i < expectedAces.length; i++) {
       const expectedAce = expectedAces[i];
@@ -647,11 +647,21 @@ export class WinOperationService implements SecurityDescriptorChangeDetector {
       // for backward compatibility with operator grep / log-aggregation
       // pipelines that key on this exact substring. "ACL" here is used in
       // the colloquial Windows-ops sense for the full security descriptor.
+      //
+      // `expectedSd` is the post-mapping, post-Invalid-revert, post-
+      // inheritance-transform descriptor (i.e., what stamp would write).
+      // `actualSd` is the live destination descriptor. Both are logged in
+      // full alongside the headline `expectedValue`/`actualValue` so the
+      // operator can see every drifted field in one line — the headline
+      // pair surfaces only the first mismatch (short-circuit), the full
+      // SDs let them diff the rest without re-fetching from disk.
       this.logger.log(
         `[${workflowId}] ACL mismatch on destination - target=${targetPath} source=${sourcePath} ` +
         `field=${result.reason.field} ` +
         `expectedValue=${JSON.stringify(result.reason.expectedValue)} ` +
-        `actualValue=${JSON.stringify(result.reason.actualValue)}`,
+        `actualValue=${JSON.stringify(result.reason.actualValue)} ` +
+        `expectedSd=${JSON.stringify(expectedDestinationSecurityDescriptor)} ` +
+        `actualSd=${JSON.stringify(destinationSecurityDescriptor)}`,
       );
     }
     return !result.equal;

@@ -2209,7 +2209,7 @@ describe('WinOperationService', () => {
       const actual = mkSd({ DaclAces: [mkAce({ Sid: 'S-1-5-21-A' })] });
       const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
-      expect(result.reason?.field).toBe('aceRemoved');
+      expect(result.reason?.field).toBe('aceMissingOnDestination');
     });
 
     it('flags extra ACE on destination', () => {
@@ -2222,7 +2222,7 @@ describe('WinOperationService', () => {
       });
       const result = service.securityDescriptorEquals(expected as any, actual as any);
       expect(result.equal).toBe(false);
-      expect(result.reason?.field).toBe('aceAdded');
+      expect(result.reason?.field).toBe('aceExtraOnDestination');
     });
 
     it('flags ACE AccessMask drift', () => {
@@ -2312,7 +2312,13 @@ describe('WinOperationService', () => {
       expect(mockLogger.log).not.toHaveBeenCalled();
     });
 
-    it('returns true and emits one structured INFO log on mismatch', async () => {
+    it('returns true and emits one structured INFO log on mismatch — includes headline diff + full expected/actual SDs', async () => {
+      // The mismatch log carries two layers of detail in a single line:
+      //   1. Headline pair (`field`, `expectedValue`, `actualValue`) — the
+      //      first drifted field surfaced by the short-circuit comparator.
+      //   2. Full descriptors (`expectedSd`, `actualSd`) — let the operator
+      //      diff every other field without re-fetching ACLs from disk.
+      // Pin both so an accidental field removal during refactors trips.
       const sourceSecurityDescriptor = {
         Owner: 'S-1-5-21-A',
         Group: 'S-1-5-21-G',
@@ -2340,6 +2346,10 @@ describe('WinOperationService', () => {
       expect(msg).toContain('field=owner');
       expect(msg).toContain('S-1-5-21-A');
       expect(msg).toContain('S-1-5-21-B');
+      // Full SDs must be present — operators rely on these to diff the
+      // rest of the descriptor without re-running Get-Acl.
+      expect(msg).toContain(`expectedSd=${JSON.stringify(sourceSecurityDescriptor)}`);
+      expect(msg).toContain(`actualSd=${JSON.stringify(destinationSecurityDescriptor)}`);
     });
 
     it('threads workflowId from jobContext into getAclOperation and log line', async () => {
