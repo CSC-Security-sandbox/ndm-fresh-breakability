@@ -49,6 +49,7 @@ interface MigrationWorkflowExecutorOutput {
 export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkflowExecutorInput): Promise<MigrationWorkflowExecutorOutput> => {
 
     let scanWorkflow: wf.ChildWorkflowHandle<wf.Workflow>, syncWorkflow: wf.ChildWorkflowHandle<wf.Workflow>;
+    let stopRequested = false;
     let output: MigrationWorkflowExecutorOutput = {
         status: JobRunStatus.Running,
         fileCount: 0,
@@ -61,18 +62,17 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
 
     wf.setHandler(actionSignal, async (action:string) => {  
         if(action == JobRunStatus.Stopped){
+            stopRequested = true;
             scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
-            syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
-            output.status = JobRunStatus.Stopped;
+            await signalIfRunning(syncWorkflow, 'syncActionSignal', JobRunStatus.Stopped);
             output.scanJobStatus = JobRunStatus.Stopped;
-            output.syncJobStatus = JobRunStatus.Stopped;
             return;
         }
         await signalIfRunning(scanWorkflow, 'scanActionSignal', action);    
         await signalIfRunning(syncWorkflow, 'syncActionSignal', action);
     });
 
-    if(output.status !== JobRunStatus.Stopped){
+    if (!stopRequested) {
         const { concurrency: workerConcurrency, batchSize } = await getWorkerScanConfigActivity();
         scanWorkflow = await wf.startChild('ChildScanWorkflow', {
             args: [ { jobRunId: jobRunId, isMigration: true, workerConcurrency, batchSize } ],
@@ -83,9 +83,9 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         });
     }
 
-    if(output.status !== JobRunStatus.Stopped){
+    if (!stopRequested) {
         syncWorkflow = await wf.startChild('ChildSyncWorkflow', {
-            args: [ { jobRunId: jobRunId, scanWorkflowStatus: JobRunStatus.Running } ],
+            args: [ { jobRunId: jobRunId, scanWorkflowStatus: JobRunStatus.Running, actionState: JobRunStatus.Running } ],
             workflowId: `SyncWorkflow-${jobRunId}`,
             taskQueue: `${jobRunId}-TaskQueue`,
             cancellationType: wf.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
@@ -93,7 +93,7 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         });
     }
 
-    if(output.status !== JobRunStatus.Stopped){
+    if (scanWorkflow) {
         try {
             const scanWorkflowOutput = await scanWorkflow.result();
             output.fileCount = scanWorkflowOutput.fileCount;
@@ -104,37 +104,39 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
         } catch (error) {  
             if (wf.isCancellation(error.cause)) {
                 output.scanJobStatus = JobRunStatus.Stopped;
-            }else {
-                output.scanJobStatus = JobRunStatus.Failed; 
+            } else {
+                output.scanJobStatus = JobRunStatus.Failed;
+                syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
             }
-            syncWorkflow && await cancelWorkflowIfRunning(syncWorkflow.workflowId);
         }
 
         await signalIfRunning(syncWorkflow, 'scanResultSignal', output.scanJobStatus);
+    }
 
-        if(syncWorkflow){
-            try{
-                const syncWorkflowOutput = await syncWorkflow.result(); 
-                
-                output.syncJobStatus = syncWorkflowOutput.status;    
-            }catch(error){  
-                if (wf.isCancellation(error.cause)) {
-                    output.syncJobStatus = JobRunStatus.Stopped;
-                }else {
-                    output.syncJobStatus = JobRunStatus.Failed;
-                }
-                await updateWorkerResponse(jobRunId, 'all', {
-                    status: output.syncJobStatus,
-                    code: 'TASK_FETCH_FAILURE',
-                    operation: 'Sync Workflow Failed',
-                    occurrence: 1,
-                    origin: 'ChildSyncWorkflow',
-                    message: `Sync workflow failed with error: ${error.message}`,
-                    createdAt: new Date()
-                });
-                scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+    if (syncWorkflow) {
+        try{
+            const syncWorkflowOutput = await syncWorkflow.result(); 
+            
+            output.syncJobStatus = syncWorkflowOutput.status;    
+        }catch(error){  
+            if (wf.isCancellation(error.cause)) {
+                output.syncJobStatus = JobRunStatus.Stopped;
+            }else {
+                output.syncJobStatus = JobRunStatus.Failed;
             }
+            await updateWorkerResponse(jobRunId, 'all', {
+                status: output.syncJobStatus,
+                code: 'TASK_FETCH_FAILURE',
+                operation: 'Sync Workflow Failed',
+                occurrence: 1,
+                origin: 'ChildSyncWorkflow',
+                message: `Sync workflow failed with error: ${error.message}`,
+                createdAt: new Date()
+            });
+            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
         }
+    } else if (stopRequested) {
+        output.syncJobStatus = JobRunStatus.Stopped;
     }
 
     output.status = getUnifiedJobStatus(output.scanJobStatus, output.syncJobStatus);
