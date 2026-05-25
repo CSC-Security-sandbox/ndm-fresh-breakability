@@ -24,6 +24,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
 
@@ -43,6 +44,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
       ackAndCreateTask: jest.fn(),
     };
@@ -63,6 +65,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength: jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
 
@@ -82,6 +85,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
 
@@ -101,6 +105,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
 
@@ -120,6 +125,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
 
@@ -139,6 +145,7 @@ class TestJobContext extends JobContext {
       readAndPurge: jest.fn(),
       getLength:  jest.fn(),
       groupReadWithoutAck: jest.fn(),
+      drainPendingEntries: jest.fn(),
       ackAndPurge: jest.fn(),
     };
   }

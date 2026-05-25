@@ -242,6 +242,139 @@ describe('RedisStreamCollection', () => {
     });
   });
 
+  describe('drainPendingEntries()', () => {
+    it('should stop immediately and yield nothing when PEL is empty', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+
+      const items: { data: typeof mockRecord; id: string }[] = [];
+      for await (const item of collection.drainPendingEntries('readerF', 10, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+
+      expect(items).toHaveLength(0);
+      expect(mockRedis.xReadGroup).toHaveBeenCalledTimes(1);
+      expect(mockRedis.xReadGroup).toHaveBeenCalledWith(
+        `job123-${GroupReaderType.DB_WRITER}`,
+        'readerF',
+        [{ key: 'stream:test', id: '0-0' }],
+        { COUNT: 10 },
+      );
+      // must not ACK or delete — that is the caller's responsibility
+      expect(mockRedis.xAck).not.toHaveBeenCalled();
+      expect(mockRedis.xDel).not.toHaveBeenCalled();
+    });
+
+    it('should stop when xReadGroup returns an empty messages array', async () => {
+      mockRedis.xReadGroup.mockResolvedValue([{ messages: [] }]);
+
+      const items: { data: typeof mockRecord; id: string }[] = [];
+      for await (const item of collection.drainPendingEntries('readerF', 10, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+
+      expect(items).toHaveLength(0);
+      expect(mockRedis.xReadGroup).toHaveBeenCalledTimes(1);
+    });
+
+    it('should yield decoded { data, id } for each message in a single page', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup
+        .mockResolvedValueOnce([
+          { messages: [{ id: '1-0', message: { obj: encoded } }] },
+        ])
+        .mockResolvedValueOnce(null); // second call: PEL drained
+
+      const items: { data: typeof mockRecord; id: string }[] = [];
+      for await (const item of collection.drainPendingEntries('readerF', 10, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+
+      expect(items).toHaveLength(1);
+      expect(items[0]).toEqual({ data: mockRecord, id: '1-0' });
+    });
+
+    it('should advance the cursor across pages and yield all messages', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup
+        .mockResolvedValueOnce([
+          {
+            messages: [
+              { id: '1-0', message: { obj: encoded } },
+              { id: '2-0', message: { obj: encoded } },
+            ],
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            messages: [
+              { id: '3-0', message: { obj: encoded } },
+            ],
+          },
+        ])
+        .mockResolvedValueOnce(null); // PEL exhausted
+
+      const items: { data: typeof mockRecord; id: string }[] = [];
+      for await (const item of collection.drainPendingEntries('readerF', 2, GroupReaderType.DB_WRITER)) {
+        items.push(item);
+      }
+
+      expect(items).toHaveLength(3);
+      expect(items.map(i => i.id)).toEqual(['1-0', '2-0', '3-0']);
+
+      // First call must use the initial cursor
+      expect(mockRedis.xReadGroup).toHaveBeenNthCalledWith(
+        1,
+        expect.any(String),
+        'readerF',
+        [{ key: 'stream:test', id: '0-0' }],
+        { COUNT: 2 },
+      );
+      // Second call must use the last ID from the first page as the cursor
+      expect(mockRedis.xReadGroup).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        'readerF',
+        [{ key: 'stream:test', id: '2-0' }],
+        { COUNT: 2 },
+      );
+      // Third call must use the last ID from the second page
+      expect(mockRedis.xReadGroup).toHaveBeenNthCalledWith(
+        3,
+        expect.any(String),
+        'readerF',
+        [{ key: 'stream:test', id: '3-0' }],
+        { COUNT: 2 },
+      );
+    });
+
+    it('should use the correct consumer group name', async () => {
+      mockRedis.xReadGroup.mockResolvedValue(null);
+
+      for await (const _ of collection.drainPendingEntries('readerF', 5, GroupReaderType.DB_WRITER)) { /* drain */ }
+
+      expect(mockRedis.xReadGroup).toHaveBeenCalledWith(
+        `job123-${GroupReaderType.DB_WRITER}`,
+        expect.any(String),
+        expect.any(Array),
+        expect.any(Object),
+      );
+    });
+
+    it('should never call xAck or xDel — ACKing is the caller\'s responsibility', async () => {
+      const encoded = encode(mockRecord).toString('base64');
+      mockRedis.xReadGroup
+        .mockResolvedValueOnce([
+          { messages: [{ id: '1-0', message: { obj: encoded } }] },
+        ])
+        .mockResolvedValueOnce(null);
+
+      for await (const _ of collection.drainPendingEntries('readerF', 10, GroupReaderType.DB_WRITER)) { /* drain */ }
+
+      expect(mockRedis.xAck).not.toHaveBeenCalled();
+      expect(mockRedis.xDel).not.toHaveBeenCalled();
+    });
+  });
+
   describe('readAndPurge()', () => {
     it('should read, ACK and delete all messages', async () => {
       const encoded = encode(mockRecord).toString('base64');

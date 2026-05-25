@@ -6,6 +6,7 @@ const mockFileStream = {
     append: jest.fn(),
     appendBulk: jest.fn(),
     groupReadWithoutAck: jest.fn(),
+    drainPendingEntries: jest.fn(),
     ackAndPurge: jest.fn(),
     getLength: jest.fn(),
 };
@@ -111,6 +112,19 @@ describe("JobManagerContext", () => {
         it("groupAckFileStream should call ackAndPurge", async () => {
             await ctx.groupAckFileStream(["id1", "id2"], GroupReaderType.DB_WRITER);
             expect(mockFileStream.ackAndPurge).toHaveBeenCalledWith(["id1", "id2"], GroupReaderType.DB_WRITER);
+        });
+
+        it("drainPendingFileStream should yield from fileStream.drainPendingEntries with correct args", async () => {
+            const items = [{ data: { name: "f.txt" }, id: "1-0" }, { data: { name: "g.txt" }, id: "2-0" }];
+            mockFileStream.drainPendingEntries.mockReturnValue((function* () { yield* items; })());
+
+            const result: any[] = [];
+            for await (const item of ctx.drainPendingFileStream("pel-reader", 5, GroupReaderType.DB_WRITER)) {
+                result.push(item);
+            }
+
+            expect(result).toEqual(items);
+            expect(mockFileStream.drainPendingEntries).toHaveBeenCalledWith("pel-reader", 5, GroupReaderType.DB_WRITER);
         });
     });
 
