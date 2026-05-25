@@ -8,7 +8,7 @@ import {
   LoggerFactory,
   LoggerService
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyTaskInfoEntry } from '../utils/utils';
+import { generateDummyErrorEntry, generateDummyItemEntry, generateDummyParquetEntry, generateDummyTaskInfoEntry } from '../utils/utils';
 import { JobType } from "@netapp-cloud-datamigrate/jobs-lib";
 // import { SmbUserSetupService } from "../core/migrate/command-execution/smb-user-setup.service";
 
@@ -58,6 +58,7 @@ export class CommonActivityService{
       await jobContext.publishToFileStream(generateDummyItemEntry);
       await jobContext.publishToTaskStream(generateDummyTaskInfoEntry);
       await jobContext.publishToErrorStream(generateDummyErrorEntry);
+      await jobContext.publishToParquetStream(generateDummyParquetEntry)
       this.logger.log(`[${traceId}] Last entry published for job id: ${traceId}`);
       return { message: 'Job completed for job id: ' + traceId };
     } catch (error) {

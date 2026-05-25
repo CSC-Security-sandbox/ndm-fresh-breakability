@@ -67,7 +67,7 @@ export const DiscoveryWorkflow = async ({
     });
 
     // Cleanup
-    await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
+    //await executeCleanup({ jobRunId: traceId, workerIds: output.setupCompletedWorkers, options });
 
     return output
 }

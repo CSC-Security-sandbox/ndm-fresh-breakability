@@ -1,6 +1,6 @@
 import { Catch, Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
+import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta, ParquetItem } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
 import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
@@ -69,6 +69,17 @@ export class DiscoveryScanService {
                     await this.publishFileInfo({
                         stats: sourceStat, command, jobContext, fPath: sourceContentPath, relativeSourcePath, fileType, shouldScanADS
                     });
+
+                    const parquetItem = new ParquetItem(
+                        sourceContentPath ?? '' as any,
+                        (sourceStat.atime ?? '') as any,
+                        (sourceStat.mtime ?? '') as any,
+                        (sourceStat.gid ?? '') as any,
+                        (sourceStat.uid ?? '') as any,
+                        (sourceStat.mode ?? '') as any,
+                        '' as any,
+                    );
+                    await jobContext.publishToParquetStream(parquetItem);
 
                     if (sourceStat.isDirectory()) {
                         if(sourceStat.isSymbolicLink() ) continue;

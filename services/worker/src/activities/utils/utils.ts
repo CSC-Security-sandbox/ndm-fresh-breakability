@@ -4,7 +4,7 @@ import * as path from 'path';
 import { promises as fsPromises } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo, CommandStatus} from "@netapp-cloud-datamigrate/jobs-lib";
+import { Command, DMError, ErrorType, FileInfo, JobContext, JobContextFactory, JobManagerContext, RedisUtils, Task, TaskStatus, TaskType, Protocol, Cmd, ItemInfo, TaskInfo, CommandStatus, ParquetItem} from "@netapp-cloud-datamigrate/jobs-lib";
 import { ACL, ExcludeForDelete, ExcludeOrSkipParams, getFileInfoInput, GetJobConnectionInput, GetJobConnectionOutput, Operation, Origin } from "./utils.types";
 import { isPathExists } from "../core/utils/utils";
 import { uuid4 } from "@temporalio/workflow";
@@ -259,6 +259,16 @@ export const generateDummyTaskInfoEntry: TaskInfo = new TaskInfo(
 );
 
 export const generateDummyErrorEntry: DMError = new DMError({ taskId: '8840625a-b818-42a8-98c8-5c05aaa19106', errorCode: '', errorMessage: '', errorType: ErrorType.FATAL_ERROR, taskType: '' });
+
+export const generateDummyParquetEntry: ParquetItem = new ParquetItem(
+  'LAST_FILE',
+  new Date(),
+  new Date(),
+  0,
+  0,
+  0,
+  '',
+);
 
 export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string =>{
   if (error.code) {

@@ -184,7 +184,7 @@ export class ValidateWorkingDirectoryActivity {
         this.logger.log("Mounted export path successfully");
 
         this.logger.log(`Unmounting export path for host ${fileServer.host}`);
-        await protocol.unmountPath(traceId, mountPathPayload, false);
+        //await protocol.unmountPath(traceId, mountPathPayload, false);
         this.logger.log("Unmounted export path successfully");
       }
     } catch (error) {
