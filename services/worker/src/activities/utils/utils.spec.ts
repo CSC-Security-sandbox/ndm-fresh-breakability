@@ -10,6 +10,7 @@ import {
     getFileType,
     isContentUpdate,
     isMetaUpdated,
+    isAtimeUpdated,
     getErrorCode,
     formatDate,
     basePrefix
@@ -500,7 +501,60 @@ describe('utils', () => {
         });
     });
 
- 
+    describe('isAtimeUpdated', () => {
+        const makeStats = (atime: Date, isDirectory = false): fs.Stats =>
+            ({ atime, isDirectory: () => isDirectory, isSymbolicLink: () => false } as unknown as fs.Stats);
+
+        it('returns true when source atime is newer than dest atime (user cat)', () => {
+            const src = makeStats(new Date('2024-06-01T10:00:00.000Z'));
+            const dst = makeStats(new Date('2024-01-01T00:00:00.000Z'));
+            expect(isAtimeUpdated(src, dst)).toBe(true);
+        });
+
+        it('returns true when source atime is older than dest atime (clock skew / rollback)', () => {
+            const src = makeStats(new Date('2023-01-01T00:00:00.000Z'));
+            const dst = makeStats(new Date('2024-06-01T10:00:00.000Z'));
+            expect(isAtimeUpdated(src, dst)).toBe(true);
+        });
+
+        it('returns false when atimes are identical', () => {
+            const t = new Date('2024-01-01T00:00:00.000Z');
+            expect(isAtimeUpdated(makeStats(t), makeStats(new Date(t)))).toBe(false);
+        });
+
+        it('detects sub-second atime differences', () => {
+            const src = makeStats(new Date('2024-01-01T00:00:00.999Z'));
+            const dst = makeStats(new Date('2024-01-01T00:00:00.000Z'));
+            expect(isAtimeUpdated(src, dst)).toBe(true);
+        });
+
+        it('returns false for identical sub-second atime values', () => {
+            const t = new Date('2024-01-01T00:00:00.500Z');
+            expect(isAtimeUpdated(makeStats(t), makeStats(new Date(t)))).toBe(false);
+        });
+
+        it('is stable after stamp: same atime on source and dest', () => {
+            const stampedAt = new Date('2024-06-01T10:00:00.000Z');
+            expect(isAtimeUpdated(makeStats(stampedAt), makeStats(new Date(stampedAt)))).toBe(false);
+        });
+
+        it('works correctly for regular files', () => {
+            const src = makeStats(new Date('2024-06-01T10:00:00.000Z'), false);
+            const dst = makeStats(new Date('2024-01-01T00:00:00.000Z'), false);
+            expect(isAtimeUpdated(src, dst)).toBe(true);
+        });
+
+        it('works correctly for directories (atime changed by ls / readdir)', () => {
+            const src = makeStats(new Date('2024-06-01T10:00:00.000Z'), true);
+            const dst = makeStats(new Date('2024-01-01T00:00:00.000Z'), true);
+            expect(isAtimeUpdated(src, dst)).toBe(true);
+        });
+
+        it('returns false for directories when atime is identical', () => {
+            const t = new Date('2024-03-01T08:00:00.000Z');
+            expect(isAtimeUpdated(makeStats(t, true), makeStats(new Date(t), true))).toBe(false);
+        });
+    });
 
     describe('getErrorCode', () => {
         it('should return TASK error codes', () => {
