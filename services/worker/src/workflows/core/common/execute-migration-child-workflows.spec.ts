@@ -107,7 +107,7 @@ describe('executeMigrationChildWorkflows', () => {
     });
 
     describe('signal handling', () => {
-        it('when stop arrives during getWorkerScanConfig, should start scan but not sync', async () => {
+        it('when stop arrives during getWorkerScanConfig, should skip starting both children', async () => {
             let capturedHandler: (action: string) => Promise<void>;
             let releaseConfig!: () => void;
 
@@ -117,13 +117,6 @@ describe('executeMigrationChildWorkflows', () => {
                         releaseConfig = () => resolve({ concurrency: 20, batchSize: 100 });
                     }),
             );
-            mockScanWorkflowHandle.result.mockResolvedValue({
-                status: JobRunStatus.Stopped,
-                fileCount: 0,
-                dirCount: 0,
-                excludedPaths: [],
-                skippedPaths: [],
-            });
 
             mockSetHandler.mockImplementation((signal, handler) => {
                 capturedHandler = handler;
@@ -138,18 +131,11 @@ describe('executeMigrationChildWorkflows', () => {
             releaseConfig();
             const result = await workflowPromise;
 
-            expect(mockStartChild).toHaveBeenCalledTimes(1);
-            expect(mockStartChild).toHaveBeenCalledWith(
-                'ChildScanWorkflow',
-                expect.objectContaining({ workflowId: `ScanWorkflow-${jobRunId}` }),
-            );
-            expect(mockStartChild).not.toHaveBeenCalledWith(
-                'ChildSyncWorkflow',
-                expect.anything(),
-            );
+            expect(mockStartChild).not.toHaveBeenCalled();
             expect(result.scanJobStatus).toBe(JobRunStatus.Stopped);
             expect(result.syncJobStatus).toBe(JobRunStatus.Stopped);
             expect(result.status).toBe(JobRunStatus.Stopped);
+            expect(mockScanWorkflowHandle.result).not.toHaveBeenCalled();
             expect(mockSyncWorkflowHandle.result).not.toHaveBeenCalled();
             expect(mockUpdateLastEntry).toHaveBeenCalledWith(jobRunId);
         });
