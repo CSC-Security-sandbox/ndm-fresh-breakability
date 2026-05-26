@@ -83,7 +83,7 @@ function Get-FileSecurityFast([string]$path) {
     $attributes = [System.IO.File]::GetAttributes($path).ToString()
 
     # Check control flags for inheritance status
-    $ctrl = $sd.Control
+    $ctrl = $sd.ControlFlags
     
     # Check individual flags
     $daclPresent   = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0
@@ -123,29 +123,6 @@ function Get-FileSecurityFast([string]$path) {
         # SE_DACL_PRESENT=0 → NULL DACL → there is no DACL to enumerate.
         $daclAces = $null
     }
-    
-    # If we have DACL ACEs but daclPresent is false, there might be a flag detection issue
-    # Force daclPresent to true if we actually have ACEs
-    # if ($sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
-    #     $daclPresent = $true
-    # }
-    
-    # Additional check: if file has inheritance disabled, daclProtected should be true
-    # This handles cases where Windows doesn't set the flag correctly
-    # $hasInheritedAces = $false
-    # if ($sd.DiscretionaryAcl) {
-    #     foreach ($ace in $sd.DiscretionaryAcl) {
-    #         if ($ace.IsInherited) {
-    #             $hasInheritedAces = $true
-    #             break
-    #         }
-    #     }
-    # }
-    
-    # If no inherited ACEs are present and we have explicit ACEs, inheritance is likely disabled (protected)
-    # if (-not $hasInheritedAces -and $daclPresent -and $sd.DiscretionaryAcl -and $sd.DiscretionaryAcl.Count -gt 0) {
-    #     $daclProtected = $true
-    # }
 
     # Optional: free the security descriptor allocated by GetNamedSecurityInfo
     # [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pSD) # can't use FreeHGlobal; should call LocalFree. Skipping to avoid crash.
