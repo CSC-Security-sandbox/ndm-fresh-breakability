@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { createObjectCsvWriter } from 'csv-writer';
-import * as AdmZip from 'adm-zip';
+import AdmZip = require('adm-zip');
 import { ErrorCsvGenerationActivity } from './error-csv-generation.activity';
 import { OperationErrorService } from 'src/utils/error-csv-generation.service';
 import { ExportRequest, OperationErrorExportData } from 'src/constants/types';

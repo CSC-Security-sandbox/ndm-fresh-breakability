@@ -11,7 +11,7 @@ import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
-import AdmZip from 'adm-zip';
+import AdmZip = require('adm-zip');
 
 // Mock TypeORM decorators
 jest.mock('typeorm', () => ({
@@ -86,7 +86,7 @@ describe('ConfigurationDataCsvGenerationActivity', () => {
     // Get the mocked fs module
     mockFs = fs as jest.Mocked<typeof fs>;
     mockArchiver = archiver as jest.MockedFunction<typeof archiver>;
-    mockAdmZip = AdmZip;
+    mockAdmZip = AdmZip as jest.MockedClass<typeof AdmZip>;
 
     // Create mock repository and data source
     mockWorkerRepo = {

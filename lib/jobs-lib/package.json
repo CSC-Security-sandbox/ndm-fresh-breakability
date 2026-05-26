@@ -1,6 +1,6 @@
 {
   "main": "dist/index.js",
-  "name": "@NetApp-Cloud-DataMigrate/jobs-lib",
+  "name": "@netapp-cloud-datamigrate/jobs-lib",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },
@@ -51,12 +51,6 @@
     "ts-loader": "^9.4.3",
     "ts-node": "^10.9.1",
     "typescript": "^5.8.3"
-  },
-  "overrides": {
-    "fast-uri": "3.1.2",
-    "flatted": "3.4.2",
-    "postcss": "8.5.10",
-    "brace-expansion": "5.0.6"
   },
   "jest-junit": {
     "suiteName": "Unit Tests",

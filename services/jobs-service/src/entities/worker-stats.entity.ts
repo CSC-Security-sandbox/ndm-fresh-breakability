@@ -1,4 +1,3 @@
-import { name } from "./../../node_modules/ci-info/index.d";
 import {
   Column,
   Entity,
