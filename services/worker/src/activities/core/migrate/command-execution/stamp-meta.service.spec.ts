@@ -1033,14 +1033,6 @@ describe('StampMetaService', () => {
     });
   });
 
-  // NOTE: The `ctime validation (win32 path)` describe block from main was
-  // intentionally dropped during this rebase. The ACL-comparison refactor on
-  // this branch replaces the ctime-retry-loop (T1/T2/T3, MetadataUpdateConflictError,
-  // CtimeTestTriggersService) with source-vs-target ACL comparison performed by
-  // SecurityDescriptorChangeDetectorService at the next incremental scan in
-  // CommandGenerationService. Re-introducing those tests would assert behavior
-  // that no longer exists.
-
   describe('executeStampAtimeAndPreserveSource (via STAMP_ATIME op)', () => {
     const createAtimeInput = (
       metadata = {},

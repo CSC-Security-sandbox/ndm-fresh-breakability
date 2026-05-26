@@ -10,7 +10,7 @@ import { isPathExists } from "../core/utils/utils";
 import { uuid4 } from "@temporalio/workflow";
 import { FileType } from "../types/tasks";
 import { execSync } from "child_process";
-import { E8Dot3CollisionError, FatalError, METADATA_UPDATE_CONFLICT } from "../../errors/errors.types";
+import { E8Dot3CollisionError, FatalError } from "../../errors/errors.types";
 
 const execAsync = promisify(exec);
 
@@ -345,8 +345,6 @@ export const getErrorCode = (error: any, context: 'TASK' | 'OPERATION'): string 
       case 'ETRAILSPACE':
           // Filename contains trailing spaces
           return context === 'TASK' ? 'TASK_TRAILING_SPACE' : 'OP_TRAILING_SPACE';
-      case 'METADATA_UPDATE_CONFLICT':
-        return 'METADATA_UPDATE_CONFLICT';
       case 'IDENTITY_MAPPING_NOT_FOUND':
         return context === 'TASK'
           ? 'TASK_IDENTITY_MAPPING_NOT_FOUND'
@@ -371,15 +369,10 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
       error.code = 'EIO'; // Standardize code for known error
     }
     
-    // Check error.code for standard error codes (do not remap metadata conflict)
     if (error.code) {
-      const metadataConflictError =
-        errorType === ErrorType.METADATA_UPDATE_CONFLICT || error.code === METADATA_UPDATE_CONFLICT;
-      if (!metadataConflictError) {
-        if (isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
-        if (origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-        if (origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
-      }
+      if (isTransientError(error.code)) errorType = ErrorType.TRANSIENT_ERROR;
+      if (origin === Origin.SOURCE && isSourceFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
+      if (origin === Origin.DESTINATION && isFatalError(error.code)) errorType = ErrorType.FATAL_ERROR;
     }
   }
 
@@ -421,9 +414,6 @@ const FATAL_CODE = new Set<string>([
   'IDENTITY_MAPPING_NOT_FOUND',
 ]);
 
-// Transient errors for dmError / sync: codes here force ErrorType.TRANSIENT_ERROR in dmError.
-// METADATA_UPDATE_CONFLICT must NOT be listed — callers pass ErrorType.METADATA_UPDATE_CONFLICT and
-// dmError would otherwise overwrite it. Sync treats metadata conflict like "no retry" separately.
 const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
 
 // File server down errno numbers (negative values as reported by Node.js)

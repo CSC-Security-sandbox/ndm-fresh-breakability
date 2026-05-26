@@ -433,14 +433,6 @@ export class JobRunService {
             await this.csvService.generateCsv(filePath, jobRunId, batchSize, jobType, resume);
           } else if (entry.kind === 'list') {
             await this.csvService.generateListCsv(filePath, jobRunId, entry.listType, batchSize, resume);
-          } else {
-            await this.csvService.generatePermStampCtimeConflictCsv(
-              filePath,
-              jobRunId,
-              batchSize,
-              jobType,
-              resume,
-            );
           }
         }
       } catch (csvError) {
@@ -573,8 +565,7 @@ export class JobRunService {
       // SMB paths need backslash-to-forward-slash normalization for all report
       // types except 'deleted' (which stores backslashes in the DB) and 'inventory'.
       const shouldNormalizeSmbPath =
-        entry?.kind === 'metadataConflictErrors' ||
-        (entry?.kind === 'list' && entry.listType !== 'deleted');
+        entry?.kind === 'list' && entry.listType !== 'deleted';
       const cursor = shouldNormalizeSmbPath && stripped.startsWith('\\')
         ? stripped.replace(/\\/g, '/')
         : stripped;

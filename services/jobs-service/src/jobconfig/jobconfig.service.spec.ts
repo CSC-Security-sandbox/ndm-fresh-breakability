@@ -5678,7 +5678,7 @@ describe("JobConfigService", () => {
         
         expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
           "oe.errorType IN (:...errorTypes)", 
-          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR", "METADATA_UPDATE_CONFLICT"]) }
+          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
         );
         expect(result).toEqual(mockErrorCounts);
         expect(result.find(e => e.errortype === "RECOVERABLE_ERROR")).toBeUndefined();
