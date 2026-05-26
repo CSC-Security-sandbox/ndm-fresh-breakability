@@ -1,11 +1,10 @@
-FROM public.ecr.aws/docker/library/alpine:3.21.4
+FROM public.ecr.aws/docker/library/node:22.19.0-trixie-slim
 
-RUN apk update && \
-    apk upgrade --no-cache --purge && \
-    apk add --no-cache npm nodejs && \
-    rm -vrf /var/cache/apk/* && \
-    npm i -g @nestjs/cli && \
-    npm i -g pm2@latest 
+RUN apt-get update \
+    && apt-get install -y --only-upgrade libc-bin libc6 \
+    && apt-get install -y ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @nestjs/cli pm2@latest
 
 # Upgrade npm to 11.11.0 for compatibility. npm@11.11.0 bundles minimatch 10.2.2
 # which is vulnerable (CVE-2026-27903, CVE-2026-27904), so we patch it to 10.2.3.
