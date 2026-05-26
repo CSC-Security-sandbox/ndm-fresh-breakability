@@ -1844,7 +1844,7 @@ describe("JobRunService", () => {
     expect(service["fetchBatchMvStats"]).toHaveBeenCalledWith(["run1"]);
   });
 
-  it("should use MV stats for scannedFilesCount (jobstats is ignored)", async () => {
+    it("should use MV stats for scannedFilesCount (jobstats is ignored)", async () => {
     const filter = { projectId: "project123" };
     const mockJobRuns = [
       {
@@ -1854,7 +1854,7 @@ describe("JobRunService", () => {
         status: JobRunStatus.Completed,
         starttime: new Date(),
         endtime: new Date(),
-        jobstats: JSON.stringify({ fileCount: "999", directories: "99", totalSize: "99999" }),
+        jobstats: null,
       },
     ];
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
@@ -1908,7 +1908,7 @@ describe("JobRunService", () => {
     expect(result[0].scannedFilesCount).toBe("7");
   });
 
-  it("should use MV stats regardless of jobstats object on the row", async () => {
+    it("should use MV stats regardless of jobstats object on the row", async () => {
     const filter = { projectId: "project123" };
     const mockJobRuns = [
       {
@@ -1918,7 +1918,7 @@ describe("JobRunService", () => {
         status: JobRunStatus.Completed,
         starttime: new Date(),
         endtime: new Date(),
-        jobstats: { fileCount: "999", directories: "99", totalSize: "99999" },
+        jobstats: null,
       },
     ];
     jest.spyOn(jobRunRepo, "createQueryBuilder").mockReturnValue({
@@ -3177,6 +3177,16 @@ describe("JobRunService", () => {
         modifiedCount: "8",
         errors: [],
       } as any);
+      jest.spyOn(service as any, "calculateInventoryStatsFromBaseTable").mockResolvedValue({
+        fileCount: "4",
+        directories: "1",
+        totalSize: "2048",
+        deletedCount: "3",
+        excludedCount: "5",
+        newlyCopiedCount: "7",
+        modifiedCount: "8",
+        migratedSize: "0",
+      });
 
       const updateSpy = jest.fn().mockResolvedValue(undefined);
       jest.spyOn(dataSource, "transaction").mockImplementation(async (cb: any) => {
@@ -3368,11 +3378,12 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(jobConfigDetails as any);
       jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
       jest.spyOn(service, "calculateJobRunStats").mockResolvedValue({ fileCount: "10", directories: "2", totalSize: "4096", errors: [], lastRefreshed: null } as any);
+      jest.spyOn(service as any, "calculateInventoryStatsFromBaseTable").mockResolvedValue({ fileCount: "10", directories: "2", totalSize: "4096", deletedCount: "0", excludedCount: "0", newlyCopiedCount: "0", modifiedCount: "0", migratedSize: "0" });
       jest.spyOn(errorRemedyService, "getDistinctErrorCodes").mockResolvedValue([] as any);
+      (redisService.getLiveStats as jest.Mock).mockResolvedValueOnce({ fileCount: "0", dirCount: "0", totalSize: "0", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0" });
 
       await service.updateJobRunStatus(jobRunId, status);
 
-      expect(redisService.getLiveStats).not.toHaveBeenCalled();
       expect(dataSource.transaction).toHaveBeenCalled();
     });
 
@@ -3408,11 +3419,12 @@ describe("JobRunService", () => {
       jest.spyOn(jobConfigRepo, "findOne").mockResolvedValue(jobConfigDetails as any);
       jest.spyOn(jobConfigRepo, "update").mockResolvedValue(undefined);
       jest.spyOn(service, "calculateJobRunStats").mockResolvedValue({ fileCount: "200", directories: "10", totalSize: "8192", errors: [], lastRefreshed: null } as any);
+      jest.spyOn(service as any, "calculateInventoryStatsFromBaseTable").mockResolvedValue({ fileCount: "200", directories: "10", totalSize: "8192", deletedCount: "0", excludedCount: "0", newlyCopiedCount: "0", modifiedCount: "0", migratedSize: "0" });
       jest.spyOn(errorRemedyService, "getDistinctErrorCodes").mockResolvedValue([] as any);
+      (redisService.getLiveStats as jest.Mock).mockResolvedValueOnce({ fileCount: "0", dirCount: "0", totalSize: "0", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0" });
 
       await service.updateJobRunStatus(jobRunId, status);
 
-      expect(redisService.getLiveStats).not.toHaveBeenCalled();
       expect(dataSource.transaction).toHaveBeenCalled();
     });
 
@@ -3640,10 +3652,15 @@ describe("JobRunService", () => {
           fileCount: '5',
           directoryCount: '2',
           totalSize: '10240',
+          deletedCount: 0,
+          excludedCount: 0,
+          newlyCopiedCount: 0,
+          recopiedCount: 0,
           lastRefreshed: null,
         };
         const mockErrorCounts = [{ errorType: 'TypeError', count: 2 }];
 
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
         jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce(mockMvStats as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
 
@@ -3669,7 +3686,8 @@ describe("JobRunService", () => {
         const jobRunId = 'jobRunId';
         const mockErrorCounts = [];
 
-        jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce({} as any);
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
+        jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce({ deletedCount: 0, excludedCount: 0, newlyCopiedCount: 0, recopiedCount: 0 } as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
 
         const result = await service.calculateJobRunStats(jobRunId);
@@ -3691,10 +3709,15 @@ describe("JobRunService", () => {
         const jobRunId = 'jobRunId';
         const mockErrorCounts = [];
 
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
         jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce({
           fileCount: '',
           directoryCount: null,
           totalSize: 0,
+          deletedCount: 0,
+          excludedCount: 0,
+          newlyCopiedCount: 0,
+          recopiedCount: 0,
           lastRefreshed: null,
         } as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
@@ -3728,6 +3751,7 @@ describe("JobRunService", () => {
         };
         const mockErrorCounts = [];
 
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
         jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce(mockMvStats as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce(mockErrorCounts);
 
@@ -3749,6 +3773,7 @@ describe("JobRunService", () => {
           lastRefreshed,
         };
 
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
         jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce(mockMvStats as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
 
@@ -3768,6 +3793,7 @@ describe("JobRunService", () => {
           lastRefreshed: null,
         };
 
+        jest.spyOn(jobRunRepo, 'findOne').mockResolvedValueOnce({ id: jobRunId, jobStats: null, endTime: null } as any);
         jest.spyOn(jobStatsSummaryMvRepo, 'findOne').mockResolvedValueOnce(mockMvStats as any);
         jest.spyOn(service, 'getErrorCounts').mockResolvedValueOnce([]);
 
@@ -4879,7 +4905,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "50", directoryCount: "5", totalSize: "1024", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -4904,7 +4932,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "200", directoryCount: "10", totalSize: "8192", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -4936,7 +4966,9 @@ describe("JobRunService", () => {
       };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -4959,7 +4991,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "150", directoryCount: "8", totalSize: "4096", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -4975,7 +5009,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "0", directoryCount: "3", totalSize: "0", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -4989,7 +5025,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "0", directoryCount: "0", totalSize: "4096", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 
@@ -5003,7 +5041,9 @@ describe("JobRunService", () => {
       const mockMv = { fileCount: "20", directoryCount: "2", totalSize: "256", newlyCopiedCount: "0", recopiedCount: "0", deletedCount: "0", lastRefreshed: null };
 
       jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
+      jest.spyOn(jobRunRepo, "findOne").mockResolvedValueOnce(mockJobRun as any);
       jest.spyOn(jobStatsSummaryMvRepo, "findOne").mockResolvedValueOnce(mockMv as any);
+      jest.spyOn(service, "getErrorCounts").mockResolvedValueOnce([]);
 
       const result = await service.getJobRunLiveStats(jobRunId);
 

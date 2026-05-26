@@ -539,6 +539,14 @@ describe("JobRunService", () => {
         id: jobId,
         isReportReady: true,
         endTime: lastRefreshed,
+        jobStats: {
+          fileCount: "99",
+          directories: "9",
+          totalSize: "8192",
+          newlyCopiedCount: "0",
+          modifiedCount: "0",
+          deletedCount: "0",
+        },
       });
       const existingReport = {
         reportData: JSON.stringify({
@@ -1594,6 +1602,14 @@ describe("JobRunService", () => {
         id: jobId,
         isReportReady: true,
         endTime: lastRefreshed,
+        jobStats: {
+          fileCount: "11",
+          directories: "2",
+          totalSize: "2048",
+          newlyCopiedCount: "3",
+          modifiedCount: "4",
+          deletedCount: "6",
+        },
       });
       mockReportsRepo.findOne.mockResolvedValueOnce({
         reportData: JSON.stringify({
@@ -1618,6 +1634,351 @@ describe("JobRunService", () => {
       expect(result.migrate.totalSize).toBe("2 KiB");
       expect(result.migrate.modifiedCount).toBe("4");
       expect(result.lastRefreshed).toEqual(lastRefreshed);
+    });
+  });
+
+  // ─── persisted jobStats snapshot — fresh build path ──────────────────────
+  describe("getJobStatsId - persisted jobStats in fresh build path", () => {
+    const jobId = "snapshot-fresh-1";
+
+    beforeEach(() => {
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+    });
+
+    it("should use persisted jobStats snapshot for terminal job run (isTerminal && jobRun.jobStats branch)", async () => {
+      const endTime = new Date("2025-07-01T09:00:00Z");
+      const jobStats = {
+        fileCount: "55",
+        directories: "8",
+        totalSize: "4096",
+        newlyCopiedCount: "12",
+        modifiedCount: "3",
+        deletedCount: "1",
+      };
+      const mockFullJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        endTime,
+        status: JobRunStatus.Completed,
+        isReportReady: false,
+        jobStats,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourcePath: {
+            fileServer: { protocol: "NFS", config: { configName: "src" } },
+            volumePath: "/src",
+          },
+          destinationPath: {
+            fileServer: { protocol: "NFS", config: { configName: "dst" } },
+            volumePath: "/dst",
+          },
+        },
+        options: null,
+        worker: [],
+      };
+
+      mockJobRunRepo.findOne
+        .mockResolvedValueOnce({ id: jobId, isReportReady: false, endTime, jobStats })
+        .mockResolvedValueOnce(mockFullJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "0",
+        directoryCount: "0",
+        totalSize: "0",
+        jobRunStatus: null,
+        lastRefreshed: new Date("2025-07-01T08:00:00Z"),
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.migrate.fileCount).toBe("55");
+      expect(result.migrate.directories).toBe("8");
+      expect(result.migrate.newlyCopiedCount).toBe("12");
+      expect(result.migrate.modifiedCount).toBe("3");
+      expect(result.migrate.deletedCount).toBe("1");
+      // hasValidSnapshot=true + endTime != null → use endTime as lastRefreshed
+      expect(result.lastRefreshed).toEqual(endTime);
+    });
+
+    it("should use MV lastRefreshed when snapshot exists but endTime is null (fresh path)", async () => {
+      const mvLastRefreshed = new Date("2025-07-01T08:00:00Z");
+      const jobStats = {
+        fileCount: "20",
+        directories: "3",
+        totalSize: "1024",
+        newlyCopiedCount: "0",
+        modifiedCount: "0",
+        deletedCount: "0",
+      };
+      const mockFullJobRun = {
+        id: jobId,
+        startTime: new Date(),
+        endTime: null,
+        status: JobRunStatus.Completed,
+        isReportReady: false,
+        jobStats,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Discover,
+          sourcePath: {
+            fileServer: { protocol: "NFS", config: { configName: "src" } },
+            volumePath: "/src",
+          },
+          destinationPath: {
+            fileServer: { protocol: "NFS", config: { configName: "dst" } },
+            volumePath: "/dst",
+          },
+        },
+        options: null,
+        worker: [],
+      };
+
+      mockJobRunRepo.findOne
+        .mockResolvedValueOnce({ id: jobId, isReportReady: false, endTime: null, jobStats })
+        .mockResolvedValueOnce(mockFullJobRun);
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({
+        fileCount: "0",
+        directoryCount: "0",
+        totalSize: "0",
+        jobRunStatus: null,
+        lastRefreshed: mvLastRefreshed,
+      });
+
+      const result = await service.getJobStatsId(jobId);
+
+      // hasValidSnapshot=true but endTime=null → ternary false branch → MV lastRefreshed
+      expect(result.lastRefreshed).toEqual(mvLastRefreshed);
+      expect(result.discovery.fileCount).toBe("20");
+    });
+  });
+
+  // ─── cached path — snapshot override branches ─────────────────────────────
+  describe("getJobStatsId - cached path snapshot override branches", () => {
+    const jobId = "cached-snap-1";
+
+    beforeEach(() => {
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+    });
+
+    it("should override cached discovery stats with jobStats snapshot", async () => {
+      const endTime = new Date("2025-06-02T10:00:00Z");
+      const jobStats = {
+        fileCount: "33",
+        directories: "6",
+        totalSize: "2048",
+        newlyCopiedCount: "5",
+        modifiedCount: "2",
+        deletedCount: "1",
+      };
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobId, isReportReady: true, endTime, jobStats });
+      mockReportsRepo.findOne.mockResolvedValue({
+        reportData: JSON.stringify({
+          isReportReady: true,
+          discovery: { fileCount: "0", directories: "0", totalSize: "0 B" },
+        }),
+      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({ lastRefreshed: new Date("2025-06-01") });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.discovery.fileCount).toBe("33");
+      expect(result.discovery.directories).toBe("6");
+    });
+
+    it("should override cached cutOver stats with jobStats snapshot", async () => {
+      const endTime = new Date("2025-06-02T10:00:00Z");
+      const jobStats = {
+        fileCount: "77",
+        directories: "9",
+        totalSize: "8192",
+        newlyCopiedCount: "10",
+        modifiedCount: "5",
+        deletedCount: "2",
+      };
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobId, isReportReady: true, endTime, jobStats });
+      mockReportsRepo.findOne.mockResolvedValue({
+        reportData: JSON.stringify({
+          isReportReady: true,
+          cutOver: { fileCount: "0", directories: "0", totalSize: "0 B" },
+        }),
+      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({ lastRefreshed: new Date("2025-06-01") });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.cutOver.fileCount).toBe("77");
+      expect(result.cutOver.directories).toBe("9");
+    });
+
+    it("should use MV lastRefreshed in cached path when snapshot exists but endTime is null", async () => {
+      const mvLastRefreshed = new Date("2025-06-01T10:00:00Z");
+      const jobStats = {
+        fileCount: "20",
+        directories: "3",
+        totalSize: "1024",
+        newlyCopiedCount: "0",
+        modifiedCount: "0",
+        deletedCount: "0",
+      };
+      mockJobRunRepo.findOne.mockResolvedValue({ id: jobId, isReportReady: true, endTime: null, jobStats });
+      mockReportsRepo.findOne.mockResolvedValue({
+        reportData: JSON.stringify({
+          isReportReady: true,
+          migrate: { fileCount: "0", directories: "0", totalSize: "0 B" },
+        }),
+      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({ lastRefreshed: mvLastRefreshed });
+
+      const result = await service.getJobStatsId(jobId);
+
+      // endTime=null → ternary false branch → jobStatsSummary.lastRefreshed
+      expect(result.lastRefreshed).toEqual(mvLastRefreshed);
+    });
+  });
+
+  // ─── resolveJobOptionsSmbPermissionInheritanceMode: both dirs empty ────────
+  describe("resolveJobOptionsSmbPermissionInheritanceMode - both directories empty", () => {
+    const jobId = "smb-dirs-empty-1";
+
+    beforeEach(() => {
+      mockReportsRepo.findOne.mockResolvedValue(null);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+    });
+
+    it("should return null when preservePermissions is true, protocol is SMB, but both directories are empty", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue({
+        id: jobId,
+        startTime: new Date(),
+        status: JobRunStatus.Completed,
+        jobConfig: {
+          id: "configId",
+          jobType: JobType.Migrate,
+          sourceDirectoryPath: "   ",  // whitespace-only → trim → ""
+          destinationDirectoryPath: "", // empty
+          sourcePath: {
+            fileServer: { protocol: "SMB", config: { configName: "src" } },
+            volumePath: "/source",
+          },
+          destinationPath: {
+            fileServer: { protocol: "SMB", config: { configName: "dest" } },
+            volumePath: "/destination",
+          },
+        },
+        options: {
+          preservePermissions: true,
+          smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
+        },
+        worker: {},
+      });
+      mockJobSummaryMvRepo.findOne.mockResolvedValue({ fileCount: 1, directoryCount: 1, totalSize: 100 });
+
+      const result = await service.getJobStatsId(jobId);
+
+      expect(result.jobOptions.smbPermissionInheritanceMode).toBeNull();
+    });
+  });
+
+  // ─── getCocReportByJobRunId — additional branch coverage ──────────────────
+  describe("getCocReportByJobRunId - additional branch coverage", () => {
+    const jobRunId = "coc-extra-1";
+    const reportsBase = path.resolve(process.cwd(), "reports");
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as unknown as { ensureWritableReportsBaseDir: () => Promise<string> }, "ensureWritableReportsBaseDir")
+        .mockResolvedValue(reportsBase);
+      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
+    });
+
+    it("should not update isReportReady when ZIP already exists for CutOver job", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue({
+        id: jobRunId,
+        jobConfig: { jobType: JobType.CutOver },
+      });
+      jest.spyOn(service as any, "fileExists").mockResolvedValueOnce(true);
+
+      const result = await service.getCocReportByJobRunId(jobRunId);
+
+      const expectedZip = path.resolve(reportsBase, `${jobRunId}-coc-report.zip`);
+      expect(result).toBe(expectedZip);
+      expect(mockJobRunRepo.update).not.toHaveBeenCalled();
+    });
+
+    it("should construct SMB source path prefix when protocol is SMB with sourceDirectoryPath set", async () => {
+      mockJobRunRepo.findOne.mockResolvedValue({
+        id: jobRunId,
+        jobConfig: {
+          jobType: JobType.Migrate,
+          sourceDirectoryPath: "/share/subdir",
+          sourcePath: {
+            volumePath: "\\\\server\\vol",
+            fileServer: { protocol: "SMB" },
+          },
+        },
+      });
+      jest.spyOn(service as any, "fileExists").mockResolvedValue(false);
+      jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
+      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("data") as any);
+      mockCsvService.generateCsv.mockResolvedValue(undefined);
+      mockReportsRepo.create.mockReturnValue({});
+      mockReportsRepo.save.mockResolvedValue({});
+
+      const result = await service.getCocReportByJobRunId(jobRunId);
+
+      const expectedZip = path.resolve(reportsBase, `${jobRunId}-coc-report.zip`);
+      expect(result).toBe(expectedZip);
+    });
+  });
+
+  // ─── getResumeCursor — additional branch coverage ─────────────────────────
+  describe("getResumeCursor - additional branch coverage", () => {
+    beforeEach(() => {
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 100 } as any);
+      jest.spyOn(fs.promises, "truncate").mockResolvedValue(undefined);
+    });
+
+    it("should return null when the source path cell value is empty string", async () => {
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path","Other"');
+      (readLastLines.read as jest.Mock).mockResolvedValue('"","value"\n');
+
+      const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
+      expect(result).toBeNull();
+    });
+
+    it("should normalize SMB backslash path for metadataConflictErrors entry", async () => {
+      const volPath = "\\\\server\\vol";
+      const entry = { kind: "metadataConflictErrors", fileName: "metadata_conflict_errors.csv" };
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue(`${volPath}\\dir\\file.txt\n`);
+
+      const result = await (service as any).getResumeCursor("any.csv", volPath, "proj", entry);
+      expect(result).toBe("/dir/file.txt");
+    });
+
+    it("should normalize SMB backslash path for list entry when listType is not deleted", async () => {
+      const volPath = "\\\\server\\vol";
+      const entry = { kind: "list", listType: "excluded", fileName: "excluded-report.csv" };
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue(`${volPath}\\dir\\skipped.txt\n`);
+
+      const result = await (service as any).getResumeCursor("any.csv", volPath, "proj", entry);
+      expect(result).toBe("/dir/skipped.txt");
+    });
+
+    it("should NOT normalize backslash path for list entry when listType is deleted", async () => {
+      const volPath = "\\\\server\\vol";
+      const entry = { kind: "list", listType: "deleted", fileName: "deleted-report.csv" };
+      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
+      (readLastLines.read as jest.Mock).mockResolvedValue(`${volPath}\\dir\\deleted.txt\n`);
+
+      const result = await (service as any).getResumeCursor("any.csv", volPath, "proj", entry);
+      expect(result).toBe("\\dir\\deleted.txt");
     });
   });
 

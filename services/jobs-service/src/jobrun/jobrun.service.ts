@@ -643,10 +643,22 @@ export class JobRunService {
   ): JobRunsDTO {
     const mvStats = mvStatsMap[jobRun.jobrunid];
 
-    const fileCount = mvStats?.fileCount;
-    const directories = mvStats?.directoryCount;
-    const totalSize = mvStats?.totalSize;
-    const lastRefreshed = mvStats?.lastRefreshed;
+    let snapshot: JobRunStats | null = null;
+    if (typeof jobRun.jobstats === 'string') {
+      try {
+        snapshot = JSON.parse(jobRun.jobstats) as JobRunStats;
+      } catch {
+        this.logger.warn(`Failed to parse job_stats JSON for job run ${jobRun.jobrunid}, falling back to MV stats`);
+      }
+    } else if (jobRun.jobstats) {
+      snapshot = jobRun.jobstats as JobRunStats;
+    }
+
+    const fileCount = snapshot?.fileCount ?? mvStats?.fileCount;
+    const directories = snapshot?.directories ?? mvStats?.directoryCount;
+    const totalSize = snapshot?.totalSize ?? mvStats?.totalSize;
+    const lastRefreshed = snapshot ? (jobRun.endtime ?? mvStats?.lastRefreshed) : mvStats?.lastRefreshed;
+
     const errors = errorCountsMap[jobRun.jobrunid] || [];
 
     const sourceServer = {
@@ -741,6 +753,27 @@ export class JobRunService {
       }
       
       let jobRunStats: JobRunStats = await this.calculateJobRunStats(jobRunId);
+
+      const isCopyJobType =
+        jobConfig &&
+        (jobConfig.jobType === JobType.MIGRATE ||
+          jobConfig.jobType === JobType.CUT_OVER);
+      if (TERMINAL_JOB_RUN_STATUSES.includes(status) && isCopyJobType) {
+        const freshInventoryStats = await this.calculateInventoryStatsFromBaseTable(jobRunId);
+        jobRunStats = {
+          ...jobRunStats,
+          fileCount: freshInventoryStats.fileCount,
+          directories: freshInventoryStats.directories,
+          totalSize: freshInventoryStats.totalSize,
+          deletedCount: freshInventoryStats.deletedCount,
+          excludedCount: freshInventoryStats.excludedCount,
+          newlyCopiedCount: freshInventoryStats.newlyCopiedCount,
+          modifiedCount: freshInventoryStats.modifiedCount,
+          totalCopiedSize: freshInventoryStats.migratedSize,
+        };
+      }
+
+
       if (
         jobConfig &&
         (jobConfig.jobType === JobType.MIGRATE ||
@@ -814,6 +847,41 @@ export class JobRunService {
       if (TERMINAL_JOB_RUN_STATUSES.includes(status)) {
         updateData.endTime = new Date();
       }
+
+      // Snapshot live Redis stats into job_stats for terminal statuses and PAUSED,
+      // so getJobRunLiveStats never has to read from stale Redis for non-running jobs.
+      if (TERMINAL_JOB_RUN_STATUSES.includes(status) || status === JobRunStatus.Paused) {
+        try {
+          const liveStats = await this.redisService.getLiveStats(jobRunId);
+
+          const hasRedisLiveStatsSnapshot =
+            liveStats.fileCount !== "0" ||
+            liveStats.dirCount !== "0" ||
+            liveStats.totalSize !== "0" ||
+            liveStats.newlyCopiedCount !== "0" ||
+            liveStats.recopiedCount !== "0" ||
+            liveStats.deletedCount !== "0";
+
+          if (hasRedisLiveStatsSnapshot) {
+            updateData.jobStats = {
+              fileCount: liveStats.fileCount,
+              directories: liveStats.dirCount,
+              totalSize: liveStats.totalSize,
+              newlyCopiedCount: liveStats.newlyCopiedCount,
+              modifiedCount: liveStats.recopiedCount,
+              deletedCount: liveStats.deletedCount,
+              totalCopiedSize: jobRunStats.totalCopiedSize,
+              errors: [],
+            };
+            this.logger.log(
+              `Snapshotted Redis live stats into job_stats for job run ${jobRunId}: files=${liveStats.fileCount}, dirs=${liveStats.dirCount}, size=${liveStats.totalSize}, newlyCopied=${liveStats.newlyCopiedCount}, recopied=${liveStats.recopiedCount}, deleted=${liveStats.deletedCount}`,
+            );
+          }
+        } catch (redisErr: unknown) {
+          this.logger.warn(`Could not snapshot Redis stats for job run ${jobRunId}, job_stats will be null: ${redisErr instanceof Error ? redisErr.message : String(redisErr)}`);
+        }
+      }
+
       // Update job run status and record ASUP stats in a single transaction
       await this.dataSource.transaction(async (manager) => {
         await manager.update(JobRunEntity, { id: jobRunId }, updateData);
@@ -1088,24 +1156,52 @@ export class JobRunService {
   }> {
     const jobRun = await this.jobRunRepo.findOne({
       where: { id: jobRunId },
-      select: { id: true, status: true },
+      select: { id: true, status: true , jobStats: true  },
     });
     if (!jobRun) throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
 
     if (TERMINAL_JOB_RUN_STATUSES.includes(jobRun.status) || jobRun.status === JobRunStatus.Paused) {
-      // Terminal / paused: always source from the MV so the UI never shows stale Redis values.
-      const toCount = (v: unknown): string =>
-        v === null || v === undefined || v === '' ? '0' : String(v);
-      const mv = await this.jobStatsSummaryMvRepo.findOne({ where: { jobRunId } });
+
+      // Use job_stats column — snapshotted from Redis at the moment the job reached terminal/paused status.
+      const snap = jobRun.jobStats;
+      const hasValidSnapshot = !!snap && (
+        (snap.fileCount != null && snap.fileCount !== '0') ||
+        (snap.directories != null && snap.directories !== '0') ||
+        (snap.totalSize != null && snap.totalSize !== '0')||
+        (snap.newlyCopiedCount != null &&
+          snap.newlyCopiedCount !== "" &&
+          snap.newlyCopiedCount !== '0') ||
+        (snap.modifiedCount != null &&
+          snap.modifiedCount !== "" &&
+          snap.modifiedCount !== '0') ||
+        (snap.deletedCount != null &&
+          snap.deletedCount !== "" &&
+          snap.deletedCount !== '0'));
+      if (hasValidSnapshot) {
+        return {
+          fileCount: snap.fileCount,
+          dirCount: snap.directories,
+          totalMigratedSize: formatBytes(Number(snap.totalSize || '0')),
+          totalSizeBytes: snap.totalSize,
+          newlyCopiedCount: snap.newlyCopiedCount,
+          modifiedCount: snap.modifiedCount,
+          deletedCount: snap.deletedCount,
+          lastUpdated: null,
+          source: 'database',
+        };
+      }
+      // Fallback: job_stats not populated (job runs before this change) → use MV
+      const dbStats = await this.calculateJobRunStats(jobRunId);
+
       return {
-        fileCount: toCount(mv?.fileCount),
-        dirCount: toCount(mv?.directoryCount),
-        totalMigratedSize: formatBytes(Number(mv?.totalSize || '0')),
-        totalSizeBytes: toCount(mv?.totalSize),
-        newlyCopiedCount: toCount(mv?.newlyCopiedCount),
-        modifiedCount: toCount(mv?.recopiedCount),
-        deletedCount: toCount(mv?.deletedCount),
-        lastUpdated: mv?.lastRefreshed ? String(mv.lastRefreshed) : null,
+        fileCount: dbStats.fileCount,
+        dirCount: dbStats.directories,
+        totalMigratedSize: formatBytes(Number(dbStats.totalSize || '0')),
+        totalSizeBytes: dbStats.totalSize,
+        newlyCopiedCount: dbStats.newlyCopiedCount,
+        modifiedCount: dbStats.modifiedCount,
+        deletedCount: dbStats.deletedCount,
+        lastUpdated: dbStats.lastRefreshed ? String(dbStats.lastRefreshed) : null,
         source: 'database',
       };
     }
@@ -1125,29 +1221,66 @@ export class JobRunService {
   }
 
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
+
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ["jobConfig"],
+      select: { id: true, status: true, jobStats: true, endTime: true },
+    });
+    if (!jobRun)
+      throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    const snap = jobRun.jobStats;
+    const hasValidSnapshot = !!snap && (
+      (snap.fileCount != null && snap.fileCount !== '0') ||
+      (snap.directories != null && snap.directories !== '0') ||
+      (snap.totalSize != null && snap.totalSize !== '0') ||
+      (snap.newlyCopiedCount != null &&
+        snap.newlyCopiedCount !== "" &&
+        snap.newlyCopiedCount !== "0") ||
+      (snap.modifiedCount != null &&
+        snap.modifiedCount !== "" &&
+        snap.modifiedCount !== "0") ||
+      (snap.deletedCount != null &&
+        snap.deletedCount !== "" &&
+        snap.deletedCount !== "0"));
+    if (hasValidSnapshot) {
+      return {
+        fileCount: snap.fileCount,
+        directories: snap.directories,
+        totalSize: snap.totalSize,
+        newlyCopiedCount: snap.newlyCopiedCount,
+        modifiedCount: snap.modifiedCount,
+        deletedCount: snap.deletedCount,
+        excludedCount: snap.excludedCount,
+        lastRefreshed: jobRun.endTime,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+    }
+    
     const jobStatsSummary: JobStatsSummaryMvEntity = await this.jobStatsSummaryMvRepo.findOne({
-      where: { jobRunId },
+      where: { jobRunId: jobRunId },
     });
 
     this.logger.debug(
-      `[calculateJobRunStats] MV stats for ${jobRunId}: ${JSON.stringify(jobStatsSummary)}`
+      `[calculateJobRunStats] Calculating job stats for ${jobRunId}  and query result ${JSON.stringify(jobStatsSummary)}`
     );
 
     const errors = await this.getErrorCounts(jobRunId);
     const toCount = (v: unknown): string =>
       v === null || v === undefined || v === "" ? "0" : String(v);
-
-    return {
+    const jobRunStatus: JobRunStats = {
       fileCount: toCount(jobStatsSummary?.fileCount),
       directories: toCount(jobStatsSummary?.directoryCount),
       totalSize: toCount(jobStatsSummary?.totalSize),
-      deletedCount: toCount(jobStatsSummary?.deletedCount),
-      excludedCount: toCount(jobStatsSummary?.excludedCount),
-      newlyCopiedCount: toCount(jobStatsSummary?.newlyCopiedCount),
-      modifiedCount: toCount(jobStatsSummary?.recopiedCount),
       lastRefreshed: jobStatsSummary?.lastRefreshed ?? null,
       errors,
     };
+    if (jobStatsSummary?.deletedCount != null) jobRunStatus.deletedCount = String(jobStatsSummary.deletedCount);
+    if (jobStatsSummary?.excludedCount != null) jobRunStatus.excludedCount = String(jobStatsSummary.excludedCount);
+    if (jobStatsSummary?.newlyCopiedCount != null) jobRunStatus.newlyCopiedCount = String(jobStatsSummary.newlyCopiedCount);
+    if (jobStatsSummary?.recopiedCount != null) jobRunStatus.modifiedCount = String(jobStatsSummary.recopiedCount);
+    return jobRunStatus;
   }
 
   /**

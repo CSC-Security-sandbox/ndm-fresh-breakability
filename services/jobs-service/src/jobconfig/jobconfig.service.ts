@@ -1583,6 +1583,10 @@ export class JobConfigService {
             : Date.now() - jobRun.startTime.getTime(),
         };
         const inventoryCounts = await this.calculateJobRunStats(jobRun.id);
+        // Fetch lastRefreshed from materialized view
+        const mv = await this.jobStatsSummaryMvRepo.findOne({
+          where: { jobRunId: jobRun.id },
+        });
         return {
           ...partialPayload,
           scannedFilesCount: BigInt(
@@ -1598,7 +1602,7 @@ export class JobConfigService {
             Number(inventoryCounts?.totalSize || 0)
           ),
           errors: inventoryCounts.errors,
-          lastRefreshed: inventoryCounts.lastRefreshed,
+          lastRefreshed: mv?.lastRefreshed,
         };
       })
     );
@@ -2407,29 +2411,57 @@ export class JobConfigService {
   }
 
   async calculateJobRunStats(jobRunId: string): Promise<JobRunStats> {
+    const jobRun = await this.jobRunRepo.findOne({
+      where: { id: jobRunId },
+      relations: ["jobConfig"],
+      select: { id: true, status: true, jobStats: true, endTime: true },
+    });
+    if (!jobRun)
+      throw new NotFoundException(`Job Run with id ${jobRunId} not found`);
+
+    const snap = jobRun.jobStats;
+    const hasValidSnapshot = !!snap && (
+      (snap.fileCount != null && snap.fileCount !== '0') ||
+      (snap.directories != null && snap.directories !== '0') ||
+      (snap.totalSize != null && snap.totalSize !== '0')
+    );
+    if (hasValidSnapshot) {
+      return {
+        fileCount: snap.fileCount,
+        directories: snap.directories,
+        totalSize: snap.totalSize,
+        lastRefreshed: jobRun.endTime,
+        errors: await this.getErrorCounts(jobRunId),
+      };
+    }
+
     const inventorySummary = await this.jobStatsSummaryMvRepo.findOne({
       where: { jobRunId },
     });
-
-    this.logger.debug(
-      `[calculateJobRunStats] MV stats for ${jobRunId}: ${JSON.stringify(inventorySummary)}`
-    );
-
-    const errors = await this.getErrorCounts(jobRunId);
-    const toCount = (v: unknown): string =>
-      v === null || v === undefined || v === '' ? '0' : String(v);
-
-    return {
-      fileCount: toCount(inventorySummary?.fileCount),
-      directories: toCount(inventorySummary?.directoryCount),
-      totalSize: toCount(inventorySummary?.totalSize),
-      deletedCount: toCount(inventorySummary?.deletedCount),
-      excludedCount: toCount(inventorySummary?.excludedCount),
-      newlyCopiedCount: toCount(inventorySummary?.newlyCopiedCount),
-      modifiedCount: toCount(inventorySummary?.recopiedCount),
-      lastRefreshed: inventorySummary?.lastRefreshed ?? null,
-      errors,
+    if (!inventorySummary) {
+      this.logger.warn(
+        `No inventory summary found for job run ID ${jobRunId}. Returning default values.`
+      );
+      return {
+        fileCount: "0",
+        directories: "0",
+        totalSize: "0",
+        errors: await this.getErrorCounts(jobRunId),
+      };
+    }
+    const jobRunStatus = {
+      fileCount: inventorySummary.fileCount || "0",
+      directories: inventorySummary.directoryCount || "0",
+      totalSize: inventorySummary.totalSize || "0",
     };
+
+    this.logger.log("inventorySummary", JSON.stringify(inventorySummary));
+    const response = {
+      ...jobRunStatus,
+      errors: await this.getErrorCounts(jobRunId),
+    };
+    this.logger.log("formatted response", JSON.stringify(response));
+    return response;
   }
 
   private async fetchLatestRunPerJobConfig(

@@ -577,8 +577,12 @@ describe('RedisConsumerService - Worker Thread Crash Recovery', () => {
     });
 
     it('evicts and respawns a worker that has exceeded workerTimeoutMs', async () => {
-      const hungStart = Date.now() - ((service as any).workerTimeoutMs + 5000);
-      (service as any).activeWorkers.set(JOB_ID, hungStart);
+      const hungStart = Date.now() - ((service as any).workerHeartbeatTimeoutMs + 5000);
+      (service as any).activeWorkers.set(JOB_ID, {
+        startedAt: hungStart,
+        lastHeartbeatAt: hungStart,
+        workerRef: null,
+      });
 
       (Worker as unknown as jest.Mock).mockImplementation(() => makeWorker());
 

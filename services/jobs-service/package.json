@@ -36,7 +36,7 @@
     "@nestjs/typeorm": "11.0.1",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.10",
     "@netapp-cloud-datamigrate/auth-lib": "0.1.4",
-    "@netapp-cloud-datamigrate/jobs-lib": "0.2.71",
+    "@netapp-cloud-datamigrate/jobs-lib": "0.2.75",
     "@netapp-cloud-datamigrate/logger-lib": "0.0.18",
     "@temporalio/client": "^1.11.7",
     "@types/jsonwebtoken": "^9.0.6",
