@@ -110,7 +110,6 @@ export const executeRetryMigrationChildWorkflows = async ({
 
     const handleError = async (error: any, code: string, operation: string, siblingWorkflowId: string): Promise<JobRunStatus> => {
       if (wf.isCancellation(error) || wf.isCancellation(error?.cause)) {
-        await cancelWorkflowIfRunning(siblingWorkflowId);
         return JobRunStatus.Stopped;
       }
       if (!errorReported) {

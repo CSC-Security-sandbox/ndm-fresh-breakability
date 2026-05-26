@@ -98,7 +98,6 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
 
         const handleError = async (error: any, operation: string, origin: string, siblingWorkflowId: string): Promise<JobRunStatus> => {
             if (wf.isCancellation(error) || wf.isCancellation(error?.cause)) {
-                await cancelWorkflowIfRunning(siblingWorkflowId);
                 return JobRunStatus.Stopped;
             }
             if (!errorReported) {
@@ -139,6 +138,8 @@ export const executeMigrationChildWorkflows = async ({jobRunId}: MigrationWorkfl
             });
 
         await Promise.all([scanPromise, syncPromise]);
+    } else {
+        output.syncJobStatus = JobRunStatus.Stopped;
     }
 
     output.status = getUnifiedJobStatus(output.scanJobStatus, output.syncJobStatus);
