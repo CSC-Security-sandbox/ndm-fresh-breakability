@@ -693,6 +693,111 @@ describe('WinOperationService', () => {
       ).toBe(
         'Owner mismatch: Expected(S-1-5-21-source) Target(S-1-5-21-target)',
       );
+      // Validator mismatches must also flow through the returned `errors`
+      // array so the caller (`stampObjectACL`) can drain them into
+      // `output.targetErrors`. Without this, the validator text only
+      // lands on the side-channel `params.error` and never reaches the
+      // STAMP_META op status, the overall command status, or the error
+      // stream the UI listens on. Pinned here so a future regression
+      // that silently drops validator output from the error pipeline
+      // gets caught immediately.
+      expect(result.errors).toContain(
+        'ACL post-stamp validation mismatch: Owner mismatch: Expected(S-1-5-21-source) Target(S-1-5-21-target)',
+      );
+    });
+
+    it('surfaces a validator-only mismatch through the returned errors array (no unresolved SIDs, no SID-mapping issues)', async () => {
+      // Tests the same path as the "happy-stamp-but-bad-validation"
+      // case we hit in production for CL1_EDA_BACKEND\Dir0: the kernel
+      // accepted SetNamedSecurityInfo (no unresolved SIDs, no hard
+      // failures), but the post-stamp read-back of the destination
+      // showed missing ACEs (the Win32 INHERITED-bit poisoning). Before
+      // this fix, that path returned `errors: []` and the validator
+      // text was reachable only via the side-channel `params.error`.
+      const sourceAcl: SecurityDescriptor = {
+        Owner: 'S-1-5-21-source',
+        Group: 'S-1-5-21-source-group',
+        DaclAces: [
+          {
+            Sid: 'S-1-5-21-source-ace',
+            AccessMask: 0x1f01ff,
+            AceType: 0,
+            AceFlags: 0x13,
+            IsInherited: true,
+            originalSid: 'S-1-5-21-source-ace',
+          },
+        ],
+        Attributes: 'Directory',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: true,
+        originalOwner: 'S-1-5-21-source',
+        originalGroup: 'S-1-5-21-source-group',
+      };
+
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce({ ...sourceAcl, DaclAces: [] });
+      jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: 'Success' });
+      jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
+        sourceSID: 'ACE in source: SID(S-1-5-21-source-ace), AccessMask(2032127), AceType(0). ',
+        targetSID: '',
+        inValid: 'Missing ACE in target: SID(S-1-5-21-source-ace), AccessMask(2032127), AceType(0), AceFlags(0x13).',
+      });
+
+      const result = await service.stampAclOperation({
+        command: mockCommand,
+        jobContext: mockJobContext,
+        sourcePath: 'C:\\source',
+        targetPath: 'C:\\target',
+      } as any);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('ACL post-stamp validation mismatch:');
+      expect(result.errors[0]).toContain('Missing ACE in target');
+      // Side-channel must still be populated for the CoC OR-chain that
+      // existed before this fix — we are augmenting, not replacing.
+      expect(mockCommand.ops[OPS_CMD.STAMP_META].params.error).toBe(
+        'Missing ACE in target: SID(S-1-5-21-source-ace), AccessMask(2032127), AceType(0), AceFlags(0x13).',
+      );
+    });
+
+    it('does NOT push to errors when validator is clean (empty inValid string)', async () => {
+      // Negative pin: confirm we only push on actual mismatches, not on
+      // every stamp. Without this, a successful stamp would falsely
+      // appear in the error stream and trip the gate into restamping.
+      const sourceAcl: SecurityDescriptor = {
+        Owner: 'S-1-5-21-source',
+        Group: 'S-1-5-21-source-group',
+        DaclAces: [],
+        Attributes: 'SE_DACL_PRESENT',
+        DaclPresent: true,
+        DaclProtected: false,
+        DaclAutoInherit: false,
+        originalOwner: 'S-1-5-21-source',
+        originalGroup: 'S-1-5-21-source-group',
+      };
+
+      jest
+        .spyOn(service, 'getAclOperation')
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(sourceAcl);
+      jest.spyOn(service, 'setAclOperation').mockResolvedValue({ stdout: 'Success' });
+      jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
+        sourceSID: 'S-1-5-21-source',
+        targetSID: 'S-1-5-21-source',
+        inValid: '',
+      });
+
+      const result = await service.stampAclOperation({
+        command: mockCommand,
+        jobContext: mockJobContext,
+        sourcePath: 'C:\\source',
+        targetPath: 'C:\\target',
+      } as any);
+
+      expect(result.errors).toEqual([]);
     });
   });
 

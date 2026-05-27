@@ -77,14 +77,36 @@ export class CommandExecService {
             output.sourceErrors.push(...metaResult.sourceErrors);
         }
 
-        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo
+        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo.
+        //
+        // The status has three meanings, and we must NOT conflate them — that
+        // conflation was the bug that made the CoC silently overwrite a
+        // previous-run `'failed'` with `'success'` on the next incremental
+        // (when the scan-time comparator gate decided there was no drift and
+        // therefore did not add a STAMP_META op for that command):
+        //
+        //   'failed'         → STAMP_META actually ran this turn and either
+        //                       the stamp pipeline pushed a hard error
+        //                       (unresolved SID, kernel call failure, …) OR
+        //                       the post-stamp validator produced a non-empty
+        //                       `params.error`.
+        //   'success'        → STAMP_META actually ran this turn and the
+        //                       validator was clean.
+        //   'not_applicable' → STAMP_META did not run this turn. Either the
+        //                       command had no STAMP_META op (the comparator
+        //                       gate decided no drift), or `shouldStampMeta`
+        //                       was false to begin with.
         input.copyContentStatus = this.getCopyContentStatus(input.command);
+        const stampMetaOp = input.command.ops?.[OPS_CMD.STAMP_META];
+        const stampMetaRanThisTurn = !!stampMetaOp;
         input.stampMetaDataStatus = baseCmdRes.shouldStampMeta
             ? (metaResult && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0))
                 ? 'failed'
-                : input.command.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length
+                : stampMetaOp?.params?.error?.length
                     ? 'failed'
-                    : 'success'
+                    : stampMetaRanThisTurn
+                        ? 'success'
+                        : 'not_applicable'
             : 'not_applicable';
 
         if( baseCmdRes.shouldUpdateItemInfo ) {

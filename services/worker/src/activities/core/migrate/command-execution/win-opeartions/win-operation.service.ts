@@ -276,8 +276,9 @@ export class WinOperationService {
       { category: 'stamp_phase', phase: 'acl_validate' },
       () => this.validateAclOperation(filteredAcl, targetAcl, { workflowId, sourcePath, targetPath }),
     );
-    if (validation.inValid.length > 0){
+    if (validation.inValid.length > 0) {
       command.ops[OPS_CMD.STAMP_META].params.error = validation.inValid;
+      errors.push(`ACL post-stamp validation mismatch: ${validation.inValid}`);
     }
     // Build CoC header from the ORIGINAL (non-filtered) source ACL so the audit shows
     // the source's actual Owner/Group regardless of inheritance-mode filtering.
@@ -344,6 +345,7 @@ export class WinOperationService {
     command: Cmd,
     jobContext: JobManagerContext,
   ): SecurityDescriptor {
+    this.logger.log(`applySmbInheritanceMode: ${JSON.stringify(command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode)}`);
     if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
     return this.applySmbInheritanceModeTransform(acl, this.resolveSmbInheritanceMode(jobContext));
   }
