@@ -82,7 +82,9 @@ export class CommandExecService {
         input.stampMetaDataStatus = baseCmdRes.shouldStampMeta
             ? (metaResult && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0))
                 ? 'failed'
-                : 'success'
+                : input.command.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length
+                    ? 'failed'
+                    : 'success'
             : 'not_applicable';
 
         if( baseCmdRes.shouldUpdateItemInfo ) {
