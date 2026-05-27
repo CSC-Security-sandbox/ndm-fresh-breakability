@@ -86,7 +86,9 @@ export class WinOperationService {
       const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
       const output = await this.winShellService.executeCommand(script, workflowId);
       if (output.stderr) throw new Error(output.stderr);
-      return JSON.parse(output.stdout) as SecurityDescriptor;
+      const parsed = JSON.parse(output.stdout);
+      this.forwardGetAclScriptLogs(parsed, workflowId, path, isSource);
+      return parsed as SecurityDescriptor;
     } catch (error) {
       this.logger.error(`Failed to get ACL for ${path}: ${error.message}`);
       if (isSource)
@@ -150,6 +152,19 @@ export class WinOperationService {
       this.logger.log(
         `[${workflowId}] [Set-FileSecurityFast] ${line} targetPath=${targetPath}`,
       );
+    }
+  }
+
+  private forwardGetAclScriptLogs(
+    parsed: any,
+    workflowId: string,
+    path: string,
+    isSource: boolean,
+  ): void {
+    if (!Array.isArray(parsed?.logs)) return;
+    const tag = isSource ? 'Get-FileSecurityFast:SRC' : 'Get-FileSecurityFast:DST';
+    for (const line of parsed.logs) {
+      this.logger.log(`[${workflowId}] [${tag}] ${line} path=${path}`);
     }
   }
 
