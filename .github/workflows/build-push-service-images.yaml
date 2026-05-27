@@ -249,7 +249,8 @@ jobs:
             echo "CONTEXT=liquibase" >> $GITHUB_ENV
             echo "DOCKERFILE_PATH=liquibase/Dockerfile" >> $GITHUB_ENV
           else
-            echo "CONTEXT=services/${{ matrix.service }}" >> $GITHUB_ENV
+            # Use repo root as context so Dockerfiles can access lib/ and root package-lock.json
+            echo "CONTEXT=." >> $GITHUB_ENV
             echo "DOCKERFILE_PATH=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_ENV
           fi
 
@@ -276,6 +277,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+            -f "$DOCKERFILE_PATH" \
             -t "$IMAGE_NAME:$IMAGE_TAG" \
             -t "$IMAGE_NAME:latest" \
             --push "$CONTEXT"
@@ -283,6 +285,7 @@ jobs:
           GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
           DOCKER_BUILDKIT: 1
           CONTEXT: ${{ env.CONTEXT }}
+          DOCKERFILE_PATH: ${{ env.DOCKERFILE_PATH }}
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
       - name: Parse Base Image for ${{ matrix.service }}

@@ -5,26 +5,32 @@ RUN apk update && \
     apk add --no-cache npm nodejs && \
     rm -vrf /var/cache/apk/* && \
     npm i -g @nestjs/cli && \
-    npm i -g pm2@latest 
+    npm i -g pm2@latest
 
 WORKDIR /app
 
-COPY ["package.json", "package-lock.json", "./"]
-COPY [".npmrc", "./"]
+# Workspace root manifest and lock file
+COPY package.json package-lock.json ./
+
+# Internal libs (source — compiled inside Docker by build:libs)
+COPY lib/ ./lib/
+
+# This service
+COPY services/config-service/ ./services/config-service/
+
 RUN --mount=type=secret,id=git_token \
-    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install \
-    && rm -f ./.npmrc
+    printf "@netapp-cloud-datamigrate:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=$(cat /run/secrets/git_token)\n" > .npmrc && \
+    npm install && \
+    rm -f .npmrc
 
-COPY ./src ./src
-COPY tsconfig.json .
-COPY tsconfig.build.json .
-COPY nest-cli.json .
-COPY entrypoint.sh .
+RUN npm run build:libs && \
+    npm run build --workspace=services/config-service && \
+    npm uninstall -g @nestjs/cli
 
-RUN npm run build && npm uninstall -g @nestjs/cli
+# Run from the service directory so dist/main.js resolves correctly
+WORKDIR /app/services/config-service
 
 EXPOSE 3000
 
-RUN chmod +x /app/entrypoint.sh
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+RUN chmod +x /app/services/config-service/entrypoint.sh
+ENTRYPOINT ["/app/services/config-service/entrypoint.sh"]

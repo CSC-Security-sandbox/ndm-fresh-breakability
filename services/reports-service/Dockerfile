@@ -69,32 +69,31 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY ["package.json","package-lock.json","./"]
-COPY [".npmrc", "./"]
+# Workspace root manifest and lock file
+COPY package.json package-lock.json ./
+
+# Internal libs (source — compiled inside Docker by build:libs)
+COPY lib/ ./lib/
+
+# This service
+COPY services/reports-service/ ./services/reports-service/
+
 RUN --mount=type=secret,id=git_token \
-    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install --legacy-peer-deps --only=production \
-    && rm -f ./.npmrc 
+    printf "@netapp-cloud-datamigrate:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=$(cat /run/secrets/git_token)\n" > .npmrc && \
+    npm install --legacy-peer-deps && \
+    rm -f .npmrc
 
-# Copy application source code
-COPY ./src ./src
-COPY ./templates ./templates
-COPY tsconfig.json .
-COPY tsconfig.build.json .
-COPY nest-cli.json .
-COPY entrypoint.sh .
-
-# Build the application
-RUN npm run build && npm uninstall -g @nestjs/cli
+RUN npm run build:libs && \
+    npm run build --workspace=services/reports-service && \
+    npm uninstall -g @nestjs/cli
 
 # Ensure 7zip binary is executable
 RUN chmod +x /app/node_modules/7zip-bin/linux/x64/7za 2>/dev/null || true
 
-# Expose application port
+# Run from the service directory so dist/main.js resolves correctly
+WORKDIR /app/services/reports-service
+
 EXPOSE 3000
 
-# Ensure script is executable
-RUN chmod +x /app/entrypoint.sh
-
-# Start application
-ENTRYPOINT ["/app/entrypoint.sh"]
+RUN chmod +x /app/services/reports-service/entrypoint.sh
+ENTRYPOINT ["/app/services/reports-service/entrypoint.sh"]

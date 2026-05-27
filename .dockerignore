@@ -1,0 +1,31 @@
+# Version control
+.git
+.github
+
+# Other repo areas not needed for Docker builds
+ndm-api-tests
+ndm-ui-tests
+app-deployment
+upgrade
+docs
+scripts
+liquibase
+
+# Dependencies — installed fresh inside Docker
+node_modules
+**/node_modules
+
+# Compiled output — built inside Docker
+**/dist
+
+# Test artefacts
+**/coverage
+**/*.test.js
+**/*.spec.js
+
+# Auth tokens — written inline inside Docker via secret mount
+.npmrc
+
+# Misc
+*.log
+.DS_Store

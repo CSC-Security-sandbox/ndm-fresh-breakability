@@ -5,26 +5,32 @@ RUN apk update && \
     apk add --no-cache npm nodejs && \
     rm -vrf /var/cache/apk/* && \
     npm i -g @nestjs/cli && \
-    npm i -g pm2@latest 
+    npm i -g pm2@latest
 
 WORKDIR /app
 
-COPY ["package.json", "package-lock.json", "./"]
-COPY [".npmrc", "./"]
+# Workspace root manifest and lock file
+COPY package.json package-lock.json ./
+
+# Internal libs (source — compiled inside Docker by build:libs)
+COPY lib/ ./lib/
+
+# This service
+COPY services/db-writer/ ./services/db-writer/
 
 RUN --mount=type=secret,id=git_token \
-    GITOPS_USER_GITHUB_TOKEN=$(cat /run/secrets/git_token) npm install \
-    && rm -f ./.npmrc
+    printf "@netapp-cloud-datamigrate:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=$(cat /run/secrets/git_token)\n" > .npmrc && \
+    npm install && \
+    rm -f .npmrc
 
-COPY ./src ./src
-COPY tsconfig.json .
-COPY tsconfig.build.json .
-COPY nest-cli.json .
+RUN npm run build:libs && \
+    npm run build --workspace=services/db-writer && \
+    npm uninstall -g @nestjs/cli
 
-RUN npm run build && npm uninstall -g @nestjs/cli
+# Run from the service directory so dist/main.js resolves correctly
+WORKDIR /app/services/db-writer
 
 EXPOSE 3000
 
-COPY entrypoint.sh .
-RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/app/entrypoint.sh"]
+RUN chmod +x /app/services/db-writer/entrypoint.sh
+ENTRYPOINT ["/app/services/db-writer/entrypoint.sh"]
