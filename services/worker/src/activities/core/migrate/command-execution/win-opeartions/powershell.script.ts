@@ -128,18 +128,40 @@ function Get-FileSecurityFast([string]$path) {
     $aceCount = if ($null -eq $daclAces) { 'null' } else { $daclAces.Count }
     $getAclLogs.Add("parsed Owner=$owner Group=$group ControlFlags=$ctrl DaclPresent=$daclPresent DaclProtected=$daclProtected DaclAutoInherit=$daclAutoInherit DaclAceCount=$aceCount Attributes=$attributes elapsed=$($sw.ElapsedMilliseconds)ms")
 
+    # Build the response JSON manually instead of handing the whole
+    # PSCustomObject to ConvertTo-Json. The reason is a Windows PowerShell
+    # 5.1 wart: a [System.Collections.Generic.List[string]] nested inside a
+    # PSCustomObject is NOT reliably serialized as a JSON array — depending
+    # on -Depth and PowerShell version it can either be silently dropped or
+    # rendered as the list's own properties (Capacity/Count) instead of its
+    # items. The writer (Set-FileSecurityFast) already builds its "logs"
+    # field manually for the same reason; the reader was previously letting
+    # ConvertTo-Json handle it, which is why downstream
+    # forwardGetAclScriptLogs (in win-operation.service.ts) saw
+    # parsed.logs === undefined and silently no-op'd, producing zero
+    # [Get-FileSecurityFast:SRC] / [Get-FileSecurityFast:DST] log lines
+    # in the worker log even though [Set-FileSecurityFast] lines were
+    # flowing fine. Mirror the writer's manual pattern so the two sides
+    # stay symmetric and the forwarder's Array.isArray guard always
+    # passes for healthy payloads.
     $log_json = '[' + ((@($getAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
 
-    [PSCustomObject]@{
-        Owner         = $owner
-        Group         = $group
-        DaclAces      = $daclAces
-        DaclPresent   = $daclPresent
-        DaclProtected = $daclProtected
+    # Serialize the data-bearing fields via ConvertTo-Json (they need depth
+    # for DaclAces entries' Sid/AccessMask/AceType/AceFlags/IsInherited),
+    # then splice the manually-built logs array in before the closing brace.
+    # -Depth 5 is well past DaclAces' depth-3 requirement and keeps a buffer
+    # for any future nested field without re-tuning.
+    $payload = [PSCustomObject]@{
+        Owner           = $owner
+        Group           = $group
+        DaclAces        = $daclAces
+        DaclPresent     = $daclPresent
+        DaclProtected   = $daclProtected
         DaclAutoInherit = $daclAutoInherit
-        Attributes    = $attributes
-        logs          = $getAclLogs
-    } | ConvertTo-Json -Compress
+        Attributes      = $attributes
+    } | ConvertTo-Json -Compress -Depth 5
+
+    Write-Output ($payload.TrimEnd('}') + ',"logs":' + $log_json + '}')
 }
 
 function Set-FileSecurityFast([string]$path, [string]$aclJson) {
