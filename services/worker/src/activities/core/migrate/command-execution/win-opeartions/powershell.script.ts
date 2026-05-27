@@ -43,6 +43,10 @@ $SACL_SECURITY_INFORMATION  = 0x00000008
 $ALL_SECURITY_INFORMATION   = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION 
 
 function Get-FileSecurityFast([string]$path) {
+    $getAclLogs = [System.Collections.Generic.List[string]]::new()
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $getAclLogs.Add("start path=$path")
+
     $pOwnerSid = [IntPtr]::Zero
     $pGroupSid = [IntPtr]::Zero
     $pDacl = [IntPtr]::Zero
@@ -71,6 +75,7 @@ function Get-FileSecurityFast([string]$path) {
     }
 
     if ($result -ne 0) { throw "Error reading security info: $result" }
+    $getAclLogs.Add("GetNamedSecurityInfo ok elapsed=$($sw.ElapsedMilliseconds)ms")
 
     $sdLength = [MarshalHelpers]::GetSecurityDescriptorLength($pSD)
     $sdBytes = New-Object byte[] $sdLength
@@ -115,17 +120,15 @@ function Get-FileSecurityFast([string]$path) {
             }
         }
     } elseif ($daclPresent) {
-        # SE_DACL_PRESENT=1 but DiscretionaryAcl is $null (rare; some
-        # filesystems hand back an empty-but-present DACL this way) →
-        # represent as an empty array to preserve "DACL present, no ACEs".
         $daclAces = @()
     } else {
-        # SE_DACL_PRESENT=0 → NULL DACL → there is no DACL to enumerate.
         $daclAces = $null
     }
 
-    # Optional: free the security descriptor allocated by GetNamedSecurityInfo
-    # [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pSD) # can't use FreeHGlobal; should call LocalFree. Skipping to avoid crash.
+    $aceCount = if ($null -eq $daclAces) { 'null' } else { $daclAces.Count }
+    $getAclLogs.Add("parsed Owner=$owner Group=$group ControlFlags=$ctrl DaclPresent=$daclPresent DaclProtected=$daclProtected DaclAutoInherit=$daclAutoInherit DaclAceCount=$aceCount Attributes=$attributes elapsed=$($sw.ElapsedMilliseconds)ms")
+
+    $log_json = '[' + ((@($getAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
 
     [PSCustomObject]@{
         Owner         = $owner
@@ -135,6 +138,7 @@ function Get-FileSecurityFast([string]$path) {
         DaclProtected = $daclProtected
         DaclAutoInherit = $daclAutoInherit
         Attributes    = $attributes
+        logs          = $getAclLogs
     } | ConvertTo-Json -Compress
 }
 
@@ -303,7 +307,8 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         }
     }
 
-    $script:setAclLogs.Add("calling SetNamedSecurityInfo securityInfoFlags=$securityInfoFlags ptrDaclIsZero=$($ptrDacl -eq [IntPtr]::Zero)")
+    $script:setAclLogs.Add("calling SetNamedSecurityInfo securityInfoFlags=$securityInfoFlags (0x$($securityInfoFlags.ToString('X8'))) ptrDaclIsZero=$($ptrDacl -eq [IntPtr]::Zero) DaclProtected=$($securityInfo.DaclProtected)")
+    $setSw = [System.Diagnostics.Stopwatch]::StartNew()
     $result = [FastAcl]::SetNamedSecurityInfo(
         $path,
         $SE_FILE_OBJECT,
@@ -313,7 +318,8 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         $ptrDacl,
         $ptrSacl
     )
-    $script:setAclLogs.Add("SetNamedSecurityInfo returned $result")
+    $setSw.Stop()
+    $script:setAclLogs.Add("SetNamedSecurityInfo returned $result elapsed=$($setSw.ElapsedMilliseconds)ms")
 
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
