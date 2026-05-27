@@ -20,9 +20,6 @@ permissions:
 jobs:
   worker-package:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/worker
 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,30 +36,36 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-          sparse-checkout: |
-            services/worker
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '18'
 
-      - name: Replace GitHub Token Placeholder in .npmrc
+      - name: Create root .npmrc
         run: |
-          sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
+          cat > .npmrc <<EOF
+          @netapp-cloud-datamigrate:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+          EOF
 
-      - name: Install dependencies and pkg
+      - name: Install dependencies
         run: npm install && npm install pkg -g
-      
+
+      - name: Build internal libs
+        run: npm run build:libs
+
       - name: Run Build
-        run: npm run build
+        run: npm run build --workspace=services/worker
 
       - name: Build binary
+        working-directory: services/worker
         run: npm run pkg
-    
+
       - name: Zip pkg folder
+        working-directory: services/worker
         run: zip -r pkg.zip pkg
-      
+
       - name: Set Release Tag
         id: set_release_tag
         run: |
