@@ -253,23 +253,20 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
 
-    if ($result -ne 0) { throw "Error writing security info: $result" }
+    # Build unresolved_sids JSON once — emitted on both success and failure paths
+    $unresolved_json = '[' + ((@($unresolved_sids | ForEach-Object { '"' + $_.Value + '"' })) -join ',') + ']'
 
-    # Set file attributes
+    if ($result -ne 0) {
+        Write-Output ('{"success":false,"error":"Error writing security info: ' + $result + '","unresolved_sids":' + $unresolved_json + '}')
+        return
+    }
+
     if ($securityInfo.Attributes) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
     }
-        
-    $unresolved_sid_values = @()
-    if ($unresolved_sids.Count -gt 0) {
-        $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
-        # Manually build JSON array
-        $json_array = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
-        Write-Output ('{"success":true, "unresolved_sids":' + $json_array + '}')
-    } else {
-        Write-Output '{"success":true, "unresolved_sids":[]}'
-    }
+
+    Write-Output ('{"success":true,"unresolved_sids":' + $unresolved_json + '}')
 }
 
 function Resolve-UsernamesToSid {
