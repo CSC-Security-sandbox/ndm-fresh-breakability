@@ -17,16 +17,47 @@ public class FastAcl {
         out IntPtr ppSecurityDescriptor
     );
 
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern uint SetNamedSecurityInfo(
-        string pObjectName,
-        uint ObjectType,
+    // Handle-based variant. We use SetSecurityInfo instead of
+    // SetNamedSecurityInfo for the write path because the latter triggers
+    // a defect on some destination filers (observed on NetApp ONTAP SMB
+    // shares): a single SetNamedSecurityInfo call combining
+    // DACL_SECURITY_INFORMATION + PROTECTED_DACL_SECURITY_INFORMATION
+    // returns 0 but silently zeroes the DACL bytes on disk, leaving the
+    // directory in an unreachable "empty present DACL = deny all" state.
+    // Going through an open file handle bypasses that buggy code path
+    // entirely and lets us issue the same flag combination in a single
+    // call without losing ACE contents. Empirically validated against
+    // ONTAP on 2026-05-28; see commit message for the test trail.
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern int SetSecurityInfo(
+        IntPtr handle,
+        int ObjectType,
         int SecurityInfo,
         IntPtr psidOwner,
         IntPtr psidGroup,
         IntPtr pDacl,
         IntPtr pSacl
     );
+
+    // CreateFileW + CloseHandle support the handle the writer needs. We
+    // open with WRITE_DAC | WRITE_OWNER | READ_CONTROL and
+    // FILE_FLAG_BACKUP_SEMANTICS so the same call works for files and
+    // directories, and FILE_SHARE_READ|WRITE|DELETE so we never block
+    // concurrent SMB clients while we hold the handle. The handle must
+    // be closed with CloseHandle to release the kernel object.
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
 }
 
 public class MarshalHelpers {
@@ -313,131 +344,100 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     $OWNER_SECURITY_INFORMATION = 0x00000001
     $GROUP_SECURITY_INFORMATION = 0x00000002
     $DACL_SECURITY_INFORMATION  = 0x00000004
-    $PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
+    $PROTECTED_DACL_SECURITY_INFORMATION   = 0x80000000
     $UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000
 
-    # DACL protection flags only apply to present DACLs. For NULL DACL,
-    # leave both PROTECTED_/UNPROTECTED_ out — there is nothing to
-    # protect/unprotect from inheritance.
-    #
-    # Two-step PROTECTED workaround:
-    # On some destination filers (observed on NetApp ONTAP SMB shares),
-    # any SetNamedSecurityInfo call that sets DACL_SECURITY_INFORMATION
-    # together with PROTECTED_DACL_SECURITY_INFORMATION and passes a
-    # non-NULL DACL buffer silently drops the DACL contents while
-    # honouring SE_DACL_PROTECTED. The kernel returns 0, but the
-    # read-back shows DaclProtected=True with 0 ACEs — an empty present
-    # DACL is "deny all", which locks every non-privileged caller out
-    # of the directory and the entire subtree below it. We confirmed
-    # this is stateless on the filer: even when step A has already
-    # persisted the intended ACEs and step B re-sends the identical
-    # bytes, the filer still strips them whenever DACL+PROTECTED are
-    # combined in one call.
-    #
-    # The same filer correctly accepts DACL contents when UNPROTECTED
-    # is requested, so we split the stamp into two calls that never
-    # combine DACL+PROTECTED:
-    #
-    #   Step A: OWNER + GROUP + DACL + UNPROTECTED — writes the ACE
-    #           contents, leaves SE_DACL_PROTECTED cleared. Proven to
-    #           work on every filer we test against.
-    #   Step B: PROTECTED_DACL_SECURITY_INFORMATION alone (no DACL
-    #           flag, pDacl = NULL) — modifier-only call. The kernel
-    #           treats PROTECTED/UNPROTECTED as modifier bits that
-    #           toggle SE_DACL_PROTECTED on the *existing* DACL
-    #           without re-writing ACE bytes, so the filer's buggy
-    #           "process DACL write under PROTECTED" code path never
-    #           runs. The ACEs persisted by step A stay intact.
-    #
-    # Risk: PROTECTED_DACL_SECURITY_INFORMATION without
-    # DACL_SECURITY_INFORMATION is technically using a modifier flag
-    # outside the combination Microsoft formally documents. If the
-    # filer ignores it, the destination will end up with the correct
-    # DACL contents but SE_DACL_PROTECTED=False instead of True. The
-    # validator catches that mismatch immediately, and the destination
-    # is still functional (ACEs present, inheritance just enabled) —
-    # much better than the deny-all empty-DACL state we get without
-    # the workaround.
-    #
-    # NULL DACL stamps stay single-call (neither PROTECTED nor
-    # UNPROTECTED is meaningful when there is no DACL). UNPROTECTED
-    # source stamps stay single-call too — only PROTECTED sources need
-    # the workaround.
-    $needsTwoStepProtected = (-not $stampNullDacl) -and $securityInfo.DaclProtected
+    # CreateFileW constants. WRITE_DAC + WRITE_OWNER + READ_CONTROL is
+    # the smallest right set that lets us write owner/group/DACL on the
+    # same handle. FILE_FLAG_BACKUP_SEMANTICS is mandatory when the
+    # target is a directory (otherwise CreateFile fails with
+    # ERROR_ACCESS_DENIED). FILE_SHARE_READ|WRITE|DELETE keeps the share
+    # mode permissive so we never block concurrent SMB clients while we
+    # hold the handle.
+    $WRITE_DAC                  = 0x00040000
+    $WRITE_OWNER                = 0x00080000
+    $READ_CONTROL               = 0x00020000
+    $FILE_SHARE_READ_WRITE_DELETE = 0x00000007
+    $OPEN_EXISTING              = 3
+    $FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 
-    # Primary call flags. When we would have done PROTECTED in a single
-    # call, do UNPROTECTED here instead and rely on step B below to set
-    # the protection bit.
+    # Compute SecurityInfo for the single combined call. We pass
+    # OWNER + GROUP + DACL plus the protection modifier the source
+    # wants (PROTECTED for protected sources, UNPROTECTED for
+    # unprotected sources). For NULL DACL stamps we omit both
+    # protection modifiers — protection only describes how a present
+    # DACL interacts with inheritance, so it is meaningless when no
+    # DACL is being written.
+    #
+    # We previously had to split this into two calls (Workaround A then
+    # Workaround B) because SetNamedSecurityInfo with
+    # DACL+PROTECTED silently strips the DACL contents on ONTAP. The
+    # handle-based SetSecurityInfo path does not trigger that filer
+    # bug, so the single-call form is back. See the long comment on
+    # FastAcl.SetSecurityInfo for the diagnostic history.
     $securityInfoFlags = $OWNER_SECURITY_INFORMATION -bor $GROUP_SECURITY_INFORMATION -bor $DACL_SECURITY_INFORMATION
     if (-not $stampNullDacl) {
-        # Convert to signed int32 to keep the bor result inside the
-        # [int] range PowerShell hands to the [FastAcl] P/Invoke
-        # signature (matches the working set.ps1 reference).
-        $securityInfoFlags = [int]($securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION)
+        if ($securityInfo.DaclProtected) {
+            $securityInfoFlags = $securityInfoFlags -bor $PROTECTED_DACL_SECURITY_INFORMATION
+        } else {
+            $securityInfoFlags = $securityInfoFlags -bor $UNPROTECTED_DACL_SECURITY_INFORMATION
+        }
     }
+    # Cast to signed int32 so the P/Invoke marshaller (signature uses
+    # int, not uint) accepts the bit pattern; without the cast the
+    # 0x80000000 high bit promotes the value to int64 and the call
+    # fails with a marshaller type mismatch.
+    $securityInfoFlags = [int]$securityInfoFlags
 
-    # Log naming: 'sourceWantsProtected' is the source's intent (what
-    # the destination should end up as). 'thisCallProtectedBit' is what
-    # THIS specific SetNamedSecurityInfo call is asking the kernel to
-    # apply right now. In step A under the two-step workaround they
-    # differ on purpose — source wants True, step A applies False, and
-    # step B flips the bit afterwards. Earlier diagnostics conflated
-    # these and made it look like step A was contradicting the source.
-    $script:setAclLogs.Add("calling SetNamedSecurityInfo securityInfoFlags=$securityInfoFlags (0x$($securityInfoFlags.ToString('X8'))) ptrDaclIsZero=$($ptrDacl -eq [IntPtr]::Zero) sourceWantsProtected=$($securityInfo.DaclProtected) thisCallProtectedBit=False twoStepProtected=$needsTwoStepProtected step=A")
-    $setSw = [System.Diagnostics.Stopwatch]::StartNew()
-    $result = [FastAcl]::SetNamedSecurityInfo(
+    # Open a handle with WRITE_DAC|WRITE_OWNER|READ_CONTROL so we can
+    # write owner/group/DACL through a single SetSecurityInfo call.
+    # FILE_FLAG_BACKUP_SEMANTICS is required for directories.
+    $createSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $handle = [FastAcl]::CreateFileW(
         $path,
-        $SE_FILE_OBJECT,
-        $securityInfoFlags,
-        $ptrOwner,
-        $ptrGroup,
-        $ptrDacl,
-        $ptrSacl
+        [uint32]($WRITE_DAC -bor $WRITE_OWNER -bor $READ_CONTROL),
+        [uint32]$FILE_SHARE_READ_WRITE_DELETE,
+        [IntPtr]::Zero,
+        [uint32]$OPEN_EXISTING,
+        [uint32]$FILE_FLAG_BACKUP_SEMANTICS,
+        [IntPtr]::Zero
     )
-    $setSw.Stop()
-    $script:setAclLogs.Add("SetNamedSecurityInfo step=A returned $result elapsed=$($setSw.ElapsedMilliseconds)ms")
-
-    # Free the primary-call buffers. Step B does not pass owner / group
-    # / DACL pointers (it is a modifier-only call), so nothing here is
-    # needed again.
-    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
-    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
-    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
-
-    if ($result -ne 0) { throw "Error writing security info (step A): $result" }
-
-    if ($needsTwoStepProtected) {
-        # Step B: modifier-only call. SecurityInfo carries
-        # PROTECTED_DACL_SECURITY_INFORMATION alone (no
-        # DACL_SECURITY_INFORMATION), and all four pointers
-        # (owner / group / DACL / SACL) are NULL. The intent is to
-        # toggle SE_DACL_PROTECTED on the DACL persisted by step A
-        # without re-writing any ACE bytes — that way the filer's
-        # buggy "process DACL write under PROTECTED" code path is
-        # never entered. See the long comment above for the
-        # diagnostic trail that led here.
-        $protectedFlags = [int]$PROTECTED_DACL_SECURITY_INFORMATION
-        $script:setAclLogs.Add("calling SetNamedSecurityInfo securityInfoFlags=$protectedFlags (0x$($protectedFlags.ToString('X8'))) ptrDaclIsZero=True sourceWantsProtected=$($securityInfo.DaclProtected) thisCallProtectedBit=True step=B")
-        $setSwB = [System.Diagnostics.Stopwatch]::StartNew()
-        $resultB = [FastAcl]::SetNamedSecurityInfo(
-            $path,
-            $SE_FILE_OBJECT,
-            $protectedFlags,
-            [IntPtr]::Zero,
-            [IntPtr]::Zero,
-            [IntPtr]::Zero,
-            [IntPtr]::Zero
-        )
-        $setSwB.Stop()
-        $script:setAclLogs.Add("SetNamedSecurityInfo step=B returned $resultB elapsed=$($setSwB.ElapsedMilliseconds)ms")
-        # Partial-state note: step A already persisted the DACL contents
-        # but left SE_DACL_PROTECTED cleared. If step B fails the on-disk
-        # ACEs are correct but the protection bit is wrong — surface that
-        # explicitly so operators don't have to cross-reference logs to
-        # understand the dest state. (Validator will also flag a
-        # DaclProtected mismatch.)
-        if ($resultB -ne 0) { throw "Error writing security info (step B PROTECTED bit flip failed; DACL contents from step A remain on disk but SE_DACL_PROTECTED is not set): $resultB" }
+    $createSw.Stop()
+    if ($handle.ToInt64() -eq -1) {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
+        throw "CreateFileW failed: lastWin32Error=$err elapsed=$($createSw.ElapsedMilliseconds)ms"
     }
+    $script:setAclLogs.Add("CreateFileW ok handle=$($handle.ToInt64()) elapsed=$($createSw.ElapsedMilliseconds)ms")
+
+    $script:setAclLogs.Add("calling SetSecurityInfo securityInfoFlags=$securityInfoFlags (0x$($securityInfoFlags.ToString('X8'))) ptrDaclIsZero=$($ptrDacl -eq [IntPtr]::Zero) DaclProtected=$($securityInfo.DaclProtected)")
+    $setSw = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $result = [FastAcl]::SetSecurityInfo(
+            $handle,
+            $SE_FILE_OBJECT,
+            $securityInfoFlags,
+            $ptrOwner,
+            $ptrGroup,
+            $ptrDacl,
+            $ptrSacl
+        )
+    } finally {
+        $setSw.Stop()
+        # Always close the handle and free the marshalled buffers,
+        # whether the call succeeded, returned non-zero, or threw. The
+        # buffers are duplicated into kernel memory by SetSecurityInfo
+        # so freeing them after the call is safe even on success.
+        [FastAcl]::CloseHandle($handle) | Out-Null
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrOwner)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
+    }
+    $script:setAclLogs.Add("SetSecurityInfo returned $result elapsed=$($setSw.ElapsedMilliseconds)ms")
+
+    if ($result -ne 0) { throw "Error writing security info: $result" }
 
     # Set file attributes
     if ($securityInfo.Attributes) {
