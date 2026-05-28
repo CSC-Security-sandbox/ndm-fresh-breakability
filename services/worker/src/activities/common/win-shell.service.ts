@@ -266,7 +266,7 @@ Write-Host '${cmd.endMarker}'
         const isAclOperation = command.includes('Set-FileSecurityFast') || command.includes('$aclJson') || command.includes('Get-Acl') || command.includes('Set-Acl');
         const adjustedTimeout = isAclOperation ? Math.max(timeout, 60000) : timeout; // Minimum 60s for ACL operations
         
-        console.debug(`[PersistentShell:${this.id}] Executing command${isAclOperation ? ' (ACL Operation)' : ''}: ${command}, extended timeout: ${adjustedTimeout}ms`);
+        //console.debug(`[PersistentShell:${this.id}] Executing command${isAclOperation ? ' (ACL Operation)' : ''}: ${command}, extended timeout: ${adjustedTimeout}ms`);
         
         return new Promise((resolve, reject) => {
             const markerId = `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
