@@ -218,7 +218,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
         # if the source happened to be an empty present DACL — treat as
         # zero ACEs so we still stamp SE_DACL_PRESENT=1 with AceCount=0
         # (the "deny all" state, distinct from NULL DACL).
-        $aces = if ($null -eq $securityInfo.DaclAces) { @() } else { @($securityInfo.DaclAces) }
+        [array]$aces = if ($null -eq $securityInfo.DaclAces) { @() } else { @($securityInfo.DaclAces) }
         $dacl = New-Object System.Security.AccessControl.RawAcl(2, $aces.Count)
 
         # Insert ACEs in exact order from source
