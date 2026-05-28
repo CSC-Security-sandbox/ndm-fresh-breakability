@@ -359,7 +359,7 @@ jobs:
       - name: Build Redis JWT Wasm extension
         if: ${{ github.event.inputs.component == 'control-plane' || github.event.inputs.component == 'all' || github.event.inputs.component == '' }}
         run: |
-          sudo apt-get update
+          sudo apt-get update || echo "::warning::apt-get update had errors (non-critical third-party repos may be unreachable)"
           sudo apt-get install -y make
           echo "Building Redis JWT Wasm extension..."
           cd app-deployment/wasm/redis-jwt-auth
