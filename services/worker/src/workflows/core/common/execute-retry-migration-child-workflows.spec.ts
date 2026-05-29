@@ -1,5 +1,4 @@
 import { JobRunStatus } from 'src/activities/common/enums';
-import * as wf from '@temporalio/workflow';
 
 // Mock the workflow-utils before importing the module under test
 const mockCancelWorkflowIfRunning = jest.fn();
@@ -16,14 +15,16 @@ jest.mock('./workflow-utils', () => ({
 const mockSetHandler = jest.fn();
 const mockStartChild = jest.fn();
 const mockGetWorkerScanConfig = jest.fn().mockResolvedValue({ concurrency: 20, batchSize: 100 });
+const mockUpdateLastEntry = jest.fn().mockResolvedValue(undefined);
+const mockUpdateWorkerResponse = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@temporalio/workflow', () => ({
     defineSignal: jest.fn(() => 'actionSignal'),
     setHandler: (...args: any[]) => mockSetHandler(...args),
     startChild: (...args: any[]) => mockStartChild(...args),
     proxyActivities: () => ({
-        updateLastEntry: jest.fn().mockResolvedValue(undefined),
-        updateWorkerResponse: jest.fn().mockResolvedValue(undefined),
+        updateLastEntry: mockUpdateLastEntry,
+        updateWorkerResponse: mockUpdateWorkerResponse,
         getWorkerScanConfig: (...args: any[]) => mockGetWorkerScanConfig(...args),
     }),
     isCancellation: jest.fn((error) => error?.isCancellation === true),
@@ -220,7 +221,7 @@ describe('executeRetryMigrationChildWorkflows', () => {
     });
 
     describe('error handling', () => {
-        it('should handle retry scan workflow failure', async () => {
+        it('should cancel sync when retry scan workflow fails', async () => {
             mockRetryScanWorkflowHandle.result.mockRejectedValue(new Error('Scan failed'));
             mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
 
@@ -228,15 +229,24 @@ describe('executeRetryMigrationChildWorkflows', () => {
 
             expect(result.retryScanJobStatus).toBe(JobRunStatus.Failed);
             expect(mockCancelWorkflowIfRunning).toHaveBeenCalledWith(`RetrySyncWorkflow-${jobRunId}`);
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(jobRunId, 'all', expect.objectContaining({
+                status: JobRunStatus.Failed,
+                code: 'RETRY_SCAN_FAILURE',
+            }));
         });
 
-        it('should handle sync workflow failure', async () => {
+        it('should cancel retry scan when sync workflow fails', async () => {
             mockSyncWorkflowHandle.result.mockRejectedValue(new Error('Sync failed'));
             mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
 
             const result = await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
 
             expect(result.syncJobStatus).toBe(JobRunStatus.Failed);
+            expect(mockCancelWorkflowIfRunning).toHaveBeenCalledWith(`RetryScanWorkflow-${jobRunId}`);
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(jobRunId, 'all', expect.objectContaining({
+                status: JobRunStatus.Failed,
+                code: 'RETRY_SYNC_FAILURE',
+            }));
         });
 
         it('should detect cancellation and set Stopped status without hard-cancelling sync', async () => {
@@ -250,6 +260,17 @@ describe('executeRetryMigrationChildWorkflows', () => {
             expect(result.retryScanJobStatus).toBe(JobRunStatus.Stopped);
             expect(mockCancelWorkflowIfRunning).not.toHaveBeenCalledWith(`RetrySyncWorkflow-${jobRunId}`);
             expect(mockSyncWorkflowHandle.result).toHaveBeenCalled();
+        });
+
+        it('should not report error to DB when failure is a cancellation', async () => {
+            const cancellationError = { isCancellation: true };
+            mockRetryScanWorkflowHandle.result.mockRejectedValue(cancellationError);
+            mockSyncWorkflowHandle.result.mockResolvedValue({ status: JobRunStatus.Stopped });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Stopped);
+
+            await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+
+            expect(mockUpdateWorkerResponse).not.toHaveBeenCalled();
         });
     });
 

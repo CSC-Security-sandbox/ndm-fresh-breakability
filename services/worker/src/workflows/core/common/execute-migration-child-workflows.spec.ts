@@ -96,13 +96,27 @@ describe('executeMigrationChildWorkflows', () => {
             });
         });
 
-        it('should await sync result and publish last entry on success', async () => {
+        it('should await both results and publish last entry on success', async () => {
             const result = await executeMigrationChildWorkflows({ jobRunId });
 
+            expect(mockScanWorkflowHandle.result).toHaveBeenCalled();
             expect(mockSyncWorkflowHandle.result).toHaveBeenCalled();
             expect(mockUpdateLastEntry).toHaveBeenCalledWith(jobRunId);
             expect(result.status).toBe(JobRunStatus.Completed);
+            expect(result.scanJobStatus).toBe(JobRunStatus.Completed);
             expect(result.syncJobStatus).toBe(JobRunStatus.Completed);
+            expect(result.fileCount).toBe(10);
+            expect(result.dirCount).toBe(2);
+        });
+
+        it('should signal sync with scanResultSignal when scan completes', async () => {
+            await executeMigrationChildWorkflows({ jobRunId });
+
+            expect(mockSignalIfRunning).toHaveBeenCalledWith(
+                mockSyncWorkflowHandle,
+                'scanResultSignal',
+                JobRunStatus.Completed,
+            );
         });
     });
 
@@ -187,6 +201,46 @@ describe('executeMigrationChildWorkflows', () => {
     });
 
     describe('error handling', () => {
+        it('should cancel scan when sync fails with non-cancellation error', async () => {
+            const syncError = new Error('ENOSPC: FatalError - read-only filesystem');
+            mockSyncWorkflowHandle.result.mockRejectedValue(syncError);
+            mockScanWorkflowHandle.result.mockRejectedValue({ isCancellation: true });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            const result = await executeMigrationChildWorkflows({ jobRunId });
+
+            expect(result.syncJobStatus).toBe(JobRunStatus.Failed);
+            expect(result.scanJobStatus).toBe(JobRunStatus.Stopped);
+            expect(mockCancelWorkflowIfRunning).toHaveBeenCalledWith(`ScanWorkflow-${jobRunId}`);
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(jobRunId, 'all', expect.objectContaining({
+                status: JobRunStatus.Failed,
+                code: 'TASK_FETCH_FAILURE',
+                origin: 'ChildSyncWorkflow',
+            }));
+            expect(result.status).toBe(JobRunStatus.Failed);
+            expect(mockUpdateLastEntry).toHaveBeenCalledWith(jobRunId);
+        });
+
+        it('should cancel sync when scan fails with non-cancellation error', async () => {
+            const scanError = new Error('Scan failed critically');
+            mockScanWorkflowHandle.result.mockRejectedValue(scanError);
+            mockSyncWorkflowHandle.result.mockRejectedValue({ isCancellation: true });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            const result = await executeMigrationChildWorkflows({ jobRunId });
+
+            expect(result.scanJobStatus).toBe(JobRunStatus.Failed);
+            expect(result.syncJobStatus).toBe(JobRunStatus.Stopped);
+            expect(mockCancelWorkflowIfRunning).toHaveBeenCalledWith(`SyncWorkflow-${jobRunId}`);
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(jobRunId, 'all', expect.objectContaining({
+                status: JobRunStatus.Failed,
+                code: 'TASK_FETCH_FAILURE',
+                origin: 'ChildScanWorkflow',
+            }));
+            expect(result.status).toBe(JobRunStatus.Failed);
+            expect(mockUpdateLastEntry).toHaveBeenCalledWith(jobRunId);
+        });
+
         it('should detect scan cancellation without hard-cancelling sync', async () => {
             const cancellationError = { cause: { isCancellation: true } };
             mockScanWorkflowHandle.result.mockRejectedValue(cancellationError);
@@ -198,6 +252,17 @@ describe('executeMigrationChildWorkflows', () => {
             expect(result.scanJobStatus).toBe(JobRunStatus.Stopped);
             expect(mockCancelWorkflowIfRunning).not.toHaveBeenCalledWith(`SyncWorkflow-${jobRunId}`);
             expect(mockSyncWorkflowHandle.result).toHaveBeenCalled();
+        });
+
+        it('should not report error to DB when failure is a cancellation', async () => {
+            const cancellationError = { isCancellation: true };
+            mockScanWorkflowHandle.result.mockRejectedValue(cancellationError);
+            mockSyncWorkflowHandle.result.mockResolvedValue({ status: JobRunStatus.Stopped });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Stopped);
+
+            await executeMigrationChildWorkflows({ jobRunId });
+
+            expect(mockUpdateWorkerResponse).not.toHaveBeenCalled();
         });
     });
 });
