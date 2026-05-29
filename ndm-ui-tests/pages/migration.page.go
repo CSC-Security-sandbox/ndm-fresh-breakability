@@ -1279,6 +1279,179 @@ func (p *MigrationPage) expectVisible(loc playwright.Locator, timeoutMs float64)
 	return nil
 }
 
+// ── Bulk Cutover flow ────────────────────────────────────────────────────────
+
+// OpenBulkCutoverForm clicks "Bulk Cutover" on the file server overview and
+// waits for the cutover wizard URL.
+func (p *MigrationPage) OpenBulkCutoverForm() error {
+	btn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Bulk Cutover"})
+	if !p.isVisible(btn) {
+		btn = p.page.Locator(`button:has-text("Bulk Cutover")`).First()
+	}
+	if err := p.expectVisible(btn, 30000); err != nil {
+		return fmt.Errorf("Bulk Cutover button not visible: %w", err)
+	}
+	if err := btn.Click(); err != nil {
+		return fmt.Errorf("click Bulk Cutover: %w", err)
+	}
+	if err := p.page.WaitForURL(regexp.MustCompile(`bulk-cutover`), playwright.PageWaitForURLOptions{
+		Timeout: playwright.Float(15000),
+	}); err != nil {
+		return fmt.Errorf("did not navigate to bulk-cutover page: %w", err)
+	}
+	p.sleep(3000)
+	log.Printf("[MigrationPage] Bulk Cutover wizard opened")
+	return nil
+}
+
+// SelectCutoverPath selects the first row (or a row matching srcPath) in the
+// Bulk Cutover Select Path table.
+func (p *MigrationPage) SelectCutoverPath(srcPath ...string) error {
+	p.sleep(2000)
+
+	// If a specific source path is given, find its row; otherwise select first.
+	var checkbox playwright.Locator
+	if len(srcPath) > 0 && srcPath[0] != "" {
+		row := p.page.Locator(`tbody tr`).Filter(playwright.LocatorFilterOptions{
+			HasText: srcPath[0],
+		}).First()
+		if !p.isVisible(row) {
+			row = p.page.Locator(`[data-testid^="table-row-"]`).Filter(playwright.LocatorFilterOptions{
+				HasText: srcPath[0],
+			}).First()
+		}
+		if err := p.expectVisible(row, 10000); err != nil {
+			return fmt.Errorf("cutover path row with %q not found: %w", srcPath[0], err)
+		}
+		checkbox = row.Locator(`input[type="checkbox"]`).First()
+		if !p.isVisible(checkbox) {
+			checkbox = row.Locator(`[role="checkbox"]`).First()
+		}
+	} else {
+		checkbox = p.page.Locator(`tbody tr`).First().Locator(`input[type="checkbox"]`).First()
+		if !p.isVisible(checkbox) {
+			checkbox = p.page.Locator(`[data-testid^="table-row-"]`).First().Locator(`input[type="checkbox"]`).First()
+		}
+		if !p.isVisible(checkbox) {
+			checkbox = p.page.Locator(`[data-testid^="table-row-"]`).First().Locator(`[role="checkbox"]`).First()
+		}
+	}
+
+	if err := p.expectVisible(checkbox, 10000); err != nil {
+		return fmt.Errorf("cutover path checkbox not visible: %w", err)
+	}
+
+	checked, _ := checkbox.IsChecked()
+	if !checked {
+		if err := checkbox.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+			return fmt.Errorf("click cutover path checkbox: %w", err)
+		}
+	}
+	p.sleep(1000)
+	log.Printf("[MigrationPage] cutover path selected")
+	return nil
+}
+
+// AcceptCutoverWarning checks the "I understand Cutover requires downtime..."
+// checkbox on the Select Path step.
+func (p *MigrationPage) AcceptCutoverWarning() error {
+	// The checkbox is rendered by <UserWarning> with controlName="isSelectPathConformed"
+	checkbox := p.page.Locator(`input[name="isSelectPathConformed"]`)
+	if !p.isVisible(checkbox) {
+		// Fallback: find by partial text near the checkbox
+		card := p.page.Locator(`text=I understand Cutover requires downtime`).Locator("..").Locator("..").Locator(`input[type="checkbox"]`).First()
+		if p.isVisible(card) {
+			checkbox = card
+		} else {
+			// Try role-based
+			checkbox = p.page.GetByRole("checkbox").Filter(playwright.LocatorFilterOptions{}).First()
+			if !p.isVisible(checkbox) {
+				return fmt.Errorf("cutover warning checkbox not found")
+			}
+		}
+	}
+
+	checked, _ := checkbox.IsChecked()
+	if !checked {
+		if err := checkbox.Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+			return fmt.Errorf("click cutover warning checkbox: %w", err)
+		}
+	}
+	p.sleep(500)
+	log.Printf("[MigrationPage] cutover warning accepted")
+	return nil
+}
+
+// ProceedFromCutoverSelectPath clicks the "Proceed" button on the Select Path step.
+func (p *MigrationPage) ProceedFromCutoverSelectPath() error {
+	return p.clickProceed("cutover-select-path")
+}
+
+// SubmitCutover clicks the "Submit" button on the Cutover Review step.
+func (p *MigrationPage) SubmitCutover() error {
+	submitBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Submit"})
+	if !p.isVisible(submitBtn) {
+		submitBtn = p.page.Locator(`button:has-text("Submit")`).First()
+	}
+	if err := p.expectVisible(submitBtn, 15000); err != nil {
+		return fmt.Errorf("Submit button not visible on cutover review: %w", err)
+	}
+	// Wait for it to become enabled.
+	for i := 0; i < 10; i++ {
+		disabled, _ := submitBtn.IsDisabled()
+		if !disabled {
+			break
+		}
+		log.Printf("[SubmitCutover] Submit disabled, waiting (attempt %d/10)…", i+1)
+		p.sleep(2000)
+	}
+	if err := submitBtn.Click(); err != nil {
+		return fmt.Errorf("click Submit on cutover review: %w", err)
+	}
+	p.sleep(3000)
+	log.Printf("[MigrationPage] Cutover submitted")
+	return nil
+}
+
+// WaitForCutoverBlocked polls the Job Run List until the cutover job enters
+// "Blocked" state (waiting for human approval) or completes/errors.
+func (p *MigrationPage) WaitForCutoverBlocked(timeoutMs float64) error {
+	const pollInterval = 8000.0
+	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
+	attempt := 0
+
+	for time.Now().Before(deadline) {
+		attempt++
+		p.page.Reload(playwright.PageReloadOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+			Timeout:   playwright.Float(30000),
+		})
+		p.sleep(2000)
+
+		status := p.readFirstMigrationRowStatus()
+		log.Printf("[WaitForCutoverBlocked] attempt %d: status=%q", attempt, status)
+
+		switch strings.ToLower(status) {
+		case "blocked":
+			p.screenshot("cutover-job-blocked")
+			log.Printf("[WaitForCutoverBlocked] cutover job reached Blocked state after %d poll(s)", attempt)
+			return nil
+		case "completed":
+			p.screenshot("cutover-job-completed")
+			log.Printf("[WaitForCutoverBlocked] cutover job completed (no block needed) after %d poll(s)", attempt)
+			return nil
+		case "errored", "failed":
+			p.screenshot("cutover-job-errored")
+			return fmt.Errorf("cutover job entered %s state", status)
+		}
+
+		p.sleep(pollInterval)
+	}
+
+	p.screenshot("cutover-job-timeout")
+	return fmt.Errorf("cutover job did not reach Blocked state within %.0fs", timeoutMs/1000)
+}
+
 func (p *MigrationPage) screenshot(name string) {
 	if p.screenshotPrefix != "" {
 		name = p.screenshotPrefix + "-" + name

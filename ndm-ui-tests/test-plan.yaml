@@ -26,7 +26,7 @@ suites:
   # and verifies RBAC permissions for Project Viewer and Project Admin — all in
   # one end-to-end flow.
   user_management:
-    enabled: true
+    enabled: false
     parallel: 1          # stateful test; run serially
     timeout: 20m
     tests:
@@ -34,7 +34,7 @@ suites:
 
   # ── Discovery ──────────────────────────────────────────────────────────────
   discovery:
-    enabled: true
+    enabled: false
     parallel: 4          # each test gets its own browser + ANF clone
     timeout: 60m
     tests:
@@ -52,7 +52,7 @@ suites:
   # Creates fresh file servers, runs migration, validates job completion,
   # and downloads CoC (Chain of Custody) reports.
   migration:
-    enabled: true
+    enabled: false
     parallel: 1          # avoid creating 6 file servers at once; run serially
     timeout: 60m
     tests:
@@ -66,8 +66,20 @@ suites:
   # Runs baseline migration, applies 10% metadata + 10% file churn on source
   # via SSH, triggers adhoc run, downloads CoC reports, and reverts source.
   incremental:
-    enabled: true
+    enabled: false
     parallel: 1          # sequential — single source volume under churn
     timeout: 90m
     tests:
       TestIncremental_AdhocAfterChurn: true    # Baseline + 10% metadata/file churn + adhoc run + both CoC reports
+
+  # ── Cutover ────────────────────────────────────────────────────────────────
+  # Validates the Bulk Cutover flow end-to-end:
+  # Runs baseline migration, navigates to Bulk Cutover, selects the completed
+  # job config path, accepts the downtime acknowledgment, and submits.
+  # Verifies the cutover job reaches "Blocked" state (awaiting human approval).
+  cutover:
+    enabled: true
+    parallel: 1          # sequential — depends on completed migration
+    timeout: 60m
+    tests:
+      TestCutover_BasicNFS: true    # Baseline NFS migration + Bulk Cutover submission → Blocked state

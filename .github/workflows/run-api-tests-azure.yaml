@@ -956,7 +956,7 @@ jobs:
         run: |
           cd ndm-ui-tests
           OVERALL_EXIT=0
-          for SUITE in user_management discovery migration incremental; do
+          for SUITE in user_management discovery migration incremental cutover; do
             echo "══════════════════════════════════════════════════"
             echo " Starting suite: ${SUITE}"
             echo "══════════════════════════════════════════════════"
@@ -973,7 +973,7 @@ jobs:
             echo "TEAMS_UI_TESTS_WEBHOOK_URL not set — skipping notification."
             exit 0
           fi
-          for SUITE in user_management discovery migration incremental; do
+          for SUITE in user_management discovery migration incremental cutover; do
             PAYLOAD="ndm-ui-tests/test-results/${SUITE}-teams.json"
             if [[ ! -f "$PAYLOAD" ]]; then
               echo "No report for suite '${SUITE}' — skipping."
