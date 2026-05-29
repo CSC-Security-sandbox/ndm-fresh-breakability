@@ -76,12 +76,18 @@ func ExtractCSVFromZipFile(zipPath string) ([]byte, string, error) {
 	return ExtractCSVFromZipBytes(data)
 }
 
-// ExtractCSVFromZipBytes extracts the first CSV file from ZIP bytes.
+// ExtractCSVFromZipBytes extracts the main CoC report CSV from ZIP bytes.
+// It prefers "coc-report.csv" by name; otherwise returns the largest CSV
+// found (skipping empty files like deleted-report.csv and metadata_conflict_errors.csv).
 func ExtractCSVFromZipBytes(data []byte) ([]byte, string, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, "", fmt.Errorf("open zip: %w", err)
 	}
+
+	var bestBytes []byte
+	var bestName string
+
 	for _, f := range zr.File {
 		name := path.Base(f.Name)
 		if !strings.HasSuffix(strings.ToLower(name), ".csv") {
@@ -99,9 +105,23 @@ func ExtractCSVFromZipBytes(data []byte) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("read csv in zip: %w", err)
 		}
-		return csvBytes, f.Name, nil
+
+		// Prefer the main coc-report.csv by name.
+		if strings.ToLower(name) == "coc-report.csv" {
+			return csvBytes, f.Name, nil
+		}
+
+		// Track the largest CSV as fallback (skip empty files).
+		if len(csvBytes) > len(bestBytes) {
+			bestBytes = csvBytes
+			bestName = f.Name
+		}
 	}
-	return nil, "", fmt.Errorf("no CSV file found in ZIP")
+
+	if len(bestBytes) > 0 {
+		return bestBytes, bestName, nil
+	}
+	return nil, "", fmt.Errorf("no non-empty CSV file found in ZIP")
 }
 
 // ParseHumanCount converts human-readable counts like "20.45K" to an integer.

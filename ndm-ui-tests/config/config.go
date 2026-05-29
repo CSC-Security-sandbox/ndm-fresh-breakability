@@ -30,13 +30,74 @@ var (
 	VideoDir      string
 	ScreenshotDir string
 
+	// Browser — optional system Chrome path (useful when CP is only reachable
+	// via VPN/proxy; Playwright's bundled Chromium ignores macOS proxy settings)
+	ChromePath string
+
+	// NFS source file server
+	NFSSourceFileServerNamePrefix string // prefix for auto-created source FS name
+	NFSSourceHost                 string // IP/hostname of the NFS source server
+	NFSSourceProtocolUsername     string // NFS username (e.g. "root")
+	NFSSourceProtocolPassword     string // NFS password (often empty)
+	NFSSourceExportPath           string // export path (e.g. "/master-nfs-vol")
+
+	// NFS destination file server
+	NFSDestinationFileServerNamePrefix string // prefix for auto-created destination FS name
+	NFSDestinationHost                 string // IP/hostname of the NFS destination server
+	NFSDestinationProtocolUsername     string // NFS username (e.g. "root")
+	NFSDestinationProtocolPassword     string // NFS password (often empty)
+	NFSDestinationExportPath           string // export path (e.g. "/dest-dm")
+
 	// File server creation (when NDM_FILE_SERVER_ID is empty the test
 	// creates one via the wizard using these values)
-	SourceHost         string // IP/hostname of the NFS server
+	SourceHost         string // IP/hostname of the NFS source server
 	ProtocolUsername   string // NFS user (e.g. "root")
 	ProtocolPassword   string // NFS password (often empty)
 	MinWorkers         int    // workers to associate (default: 1)
 	FileServerNameNew  string // name for a newly created file server
+
+	// NFS source file server
+	NfsSourceHost                   string // IP/hostname of the NFS source server
+	NfsSourceProtocolUsername       string // NFS username for source (e.g. "root")
+	NfsSourceProtocolPassword       string // NFS password for source (often empty)
+	NfsSourceFileServerNamePrefix   string // prefix for auto-generated source FS names
+	NfsSourceExportPath             string   // export path to select in migration mapping (e.g. "/vol1")
+	NfsSourceExportPaths           []string // per-test source export paths (comma-separated)
+	NfsSourceFileServerID           string   // existing source FS UUID — skips wizard if set
+
+	// NFS destination file server
+	NfsDestinationHost                   string // IP/hostname of the NFS destination server
+	NfsDestinationProtocolUsername       string // NFS username for destination (e.g. "root")
+	NfsDestinationProtocolPassword       string // NFS password for destination (often empty)
+	NfsDestinationFileServerNamePrefix   string // prefix for auto-generated destination FS names
+	NfsDestinationExportPath             string // export path to select in migration mapping (e.g. "/vol1")
+	NfsDestinationExportPaths           []string // per-test destination export paths (comma-separated)
+	NfsDestinationFileServerID          string // existing destination FS UUID — skips wizard if set
+
+	// SMB source file server for migration
+	SmbMigSourceHost                 string // IP/hostname of the SMB source server
+	SmbMigSourceAdServerIP           string // AD Server IP for SMB source auth
+	SmbMigSourceUsername             string // SMB username for source (e.g. "DOMAIN\\user")
+	SmbMigSourcePassword             string // SMB password for source
+	SmbMigSourceShare                string // SMB share name on source (used in mapping)
+	SmbMigSourceFileServerNamePrefix string // prefix for auto-generated source FS names
+
+	// SMB destination file server for migration
+	SmbMigDestHost                 string // IP/hostname of the SMB destination server
+	SmbMigDestAdServerIP           string // AD Server IP for SMB destination auth
+	SmbMigDestUsername             string // SMB username for destination
+	SmbMigDestPassword             string // SMB password for destination
+	SmbMigDestShare                string // SMB share name on destination (used in mapping)
+	SmbMigDestFileServerNamePrefix string // prefix for auto-generated destination FS names
+
+	// Migration timeouts
+	MigrationTimeoutMs    float64 // max wait for a migration run to complete (NFS default: 10 min)
+	SmbMigrationTimeoutMs float64 // max wait for SMB migration to complete (default: 20 min)
+
+	// Destination file server creation (legacy)
+	DestinationHost             string // IP/hostname of the NFS destination server
+	DestinationProtocolUsername string // NFS user for destination (e.g. "root")
+	DestinationProtocolPassword string // NFS password for destination (often empty)
 
 	// SMB file server creation
 	SMBHost       string // IP/hostname of the SMB server (e.g. "172.30.202.20")
@@ -83,6 +144,7 @@ var (
 	SMBWorkerUsername       string
 	SMBWorkerPassword       string
 	SMBExecutableFilename   string // path to the installer exe on the Windows VM
+	SMBDomainName           string // AD domain name for domain-joining the Windows worker (e.g. "rootdomain.local")
 
 	// CP SSH — for OpenBao secret retrieval during test setup.
 	// Defaults to worker SSH credentials since the same SSH keys
@@ -90,6 +152,11 @@ var (
 	CPSSHPort     int
 	CPSSHUsername string
 	CPSSHPassword string
+
+	// KeycloakClientSecret — set directly to skip OpenBao SSH.
+	// Useful when running locally from a machine that cannot SSH into the CP.
+	// Leave empty to use the default OpenBao retrieval path.
+	KeycloakClientSecret string
 
 	// RBAC test users — populated from .env after running
 	// TestUserManagement_CreateThreeRoleUsers (which prints the credentials).
@@ -124,18 +191,76 @@ func init() {
 	Password = mustGetEnv("NDM_PASSWORD")
 
 	// Browser
+	ChromePath    = getEnvStr("NDM_CHROME_PATH", "")
 	Headless      = getEnvBool("NDM_HEADLESS", true)
 	SlowMo        = getEnvFloat("NDM_SLOWMO", 0)
 	Timeout       = getEnvFloat("NDM_TIMEOUT", 30000)
 	VideoDir      = getEnvStr("NDM_VIDEO_DIR", "test-results/videos")
 	ScreenshotDir = getEnvStr("NDM_SCREENSHOT_DIR", "test-results/screenshots")
 
-	// File server creation
-	SourceHost        = getEnvStr("NDM_SOURCE_HOST", "")
+	// NFS source file server
+	NFSSourceFileServerNamePrefix = getEnvStr("NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX", "NFS_Source")
+	NFSSourceHost                 = getEnvStr("NDM_NFS_SOURCE_HOST", "")
+	NFSSourceProtocolUsername     = getEnvStr("NDM_NFS_PROTOCOL_USERNAME", "root")
+	NFSSourceProtocolPassword     = getEnvStr("NDM_NFS_PROTOCOL_PASSWORD", "")
+	NFSSourceExportPath           = getEnvStr("NDM_NFS_SOURCE_EXPORT_PATH", "")
+
+	// NFS destination file server
+	NFSDestinationFileServerNamePrefix = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX", "NFS_Destination")
+	NFSDestinationHost                 = getEnvStr("NDM_NFS_DESTINATION_HOST", "")
+	NFSDestinationProtocolUsername     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_USERNAME", "root")
+	NFSDestinationProtocolPassword     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_PASSWORD", "")
+	NFSDestinationExportPath           = getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATH", "")
+
+	// File server creation (legacy)
+	SourceHost        = getEnvStr("NDM_SOURCE_HOST", NFSSourceHost)
 	ProtocolUsername  = getEnvStr("NDM_PROTOCOL_USERNAME", "root")
 	ProtocolPassword  = getEnvStr("NDM_PROTOCOL_PASSWORD", "")
 	MinWorkers        = getEnvInt("NDM_MIN_WORKERS", 1)
 	FileServerNameNew = getEnvStr("NDM_FILE_SERVER_NAME_NEW", "auto-test-fs")
+
+	// NFS source file server
+	NfsSourceHost                 = getEnvStr("NDM_NFS_SOURCE_HOST", "")
+	NfsSourceProtocolUsername     = getEnvStr("NDM_NFS_PROTOCOL_USERNAME", "root")
+	NfsSourceProtocolPassword     = getEnvStr("NDM_NFS_PROTOCOL_PASSWORD", "")
+	NfsSourceFileServerNamePrefix = getEnvStr("NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX", "nfs-src")
+	NfsSourceExportPath           = getEnvStr("NDM_NFS_SOURCE_EXPORT_PATH", "")
+	NfsSourceExportPaths          = splitCSV(getEnvStr("NDM_NFS_SOURCE_EXPORT_PATHS", ""))
+	NfsSourceFileServerID         = getEnvStr("NDM_NFS_SOURCE_FILE_SERVER_ID", "")
+
+	// NFS destination file server
+	NfsDestinationHost                 = getEnvStr("NDM_NFS_DESTINATION_HOST", "")
+	NfsDestinationProtocolUsername     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_USERNAME", "root")
+	NfsDestinationProtocolPassword     = getEnvStr("NDM_NFS_DESTINATION_PROTOCOL_PASSWORD", "")
+	NfsDestinationFileServerNamePrefix = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX", "nfs-dst")
+	NfsDestinationExportPath           = getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATH", "")
+	NfsDestinationExportPaths          = splitCSV(getEnvStr("NDM_NFS_DESTINATION_EXPORT_PATHS", ""))
+	NfsDestinationFileServerID         = getEnvStr("NDM_NFS_DESTINATION_FILE_SERVER_ID", "")
+
+	// SMB source file server for migration
+	SmbMigSourceHost                 = getEnvStr("NDM_SMB_MIG_SOURCE_HOST", "")
+	SmbMigSourceAdServerIP           = getEnvStr("NDM_SMB_MIG_SOURCE_AD_SERVER_IP", "")
+	SmbMigSourceUsername             = getEnvStr("NDM_SMB_MIG_SOURCE_USERNAME", "")
+	SmbMigSourcePassword             = getEnvStr("NDM_SMB_MIG_SOURCE_PASSWORD", "")
+	SmbMigSourceShare                = getEnvStr("NDM_SMB_MIG_SOURCE_SHARE", "")
+	SmbMigSourceFileServerNamePrefix = getEnvStr("NDM_SMB_MIG_SOURCE_FILE_SERVER_NAME_PREFIX", "smb-mig-src")
+
+	// SMB destination file server for migration
+	SmbMigDestHost                 = getEnvStr("NDM_SMB_MIG_DEST_HOST", "")
+	SmbMigDestAdServerIP           = getEnvStr("NDM_SMB_MIG_DEST_AD_SERVER_IP", "")
+	SmbMigDestUsername             = getEnvStr("NDM_SMB_MIG_DEST_USERNAME", "")
+	SmbMigDestPassword             = getEnvStr("NDM_SMB_MIG_DEST_PASSWORD", "")
+	SmbMigDestShare                = getEnvStr("NDM_SMB_MIG_DEST_SHARE", "")
+	SmbMigDestFileServerNamePrefix = getEnvStr("NDM_SMB_MIG_DEST_FILE_SERVER_NAME_PREFIX", "smb-mig-dst")
+
+	// Migration timeouts
+	MigrationTimeoutMs    = getEnvFloat("NDM_MIGRATION_TIMEOUT_MS", 600000)
+	SmbMigrationTimeoutMs = getEnvFloat("NDM_SMB_MIGRATION_TIMEOUT_MS", 1200000)
+
+	// Destination file server creation (legacy)
+	DestinationHost             = getEnvStr("NDM_DESTINATION_HOST", "")
+	DestinationProtocolUsername = getEnvStr("NDM_DESTINATION_PROTOCOL_USERNAME", "root")
+	DestinationProtocolPassword = getEnvStr("NDM_DESTINATION_PROTOCOL_PASSWORD", "")
 
 	// SMB file server creation
 	SMBHost       = getEnvStr("NDM_SMB_HOST", "")
@@ -161,11 +286,13 @@ func init() {
 	SmbShareName            = getEnvStr("NDM_SMB_SHARE_NAME", "")
 	DiscoveryTimeoutMs      = getEnvFloat("NDM_DISCOVERY_TIMEOUT_MS", 600000)
 
-	// Worker SSH for volume validation
+	// Worker SSH for volume validation.
+	// NDM_WORKER_PASSWORD falls back to NDM_PASSWORD so a single password
+	// covers both app login and SSH in environments that share credentials.
 	WorkerHost     = getEnvStr("NDM_WORKER_HOST", "")
 	WorkerPort     = getEnvInt("NDM_WORKER_PORT", 22)
 	WorkerUsername = getEnvStr("NDM_WORKER_USERNAME", "ubuntu")
-	WorkerPassword = getEnvStr("NDM_WORKER_PASSWORD", "")
+	WorkerPassword = getEnvStr("NDM_WORKER_PASSWORD", Password)
 
 	// All worker IPs for setup (falls back to single WorkerHost)
 	WorkerIPs = getEnvStr("NDM_WORKER_IPS", WorkerHost)
@@ -173,14 +300,18 @@ func init() {
 	// SMB (Windows) worker SSH
 	SMBWorkerHost         = getEnvStr("NDM_SMB_WORKER_HOST", "")
 	SMBWorkerPort         = getEnvInt("NDM_SMB_WORKER_PORT", 22)
-	SMBWorkerUsername     = getEnvStr("NDM_SMB_WORKER_USERNAME", "")
-	SMBWorkerPassword     = getEnvStr("NDM_SMB_WORKER_PASSWORD", "")
+	SMBWorkerUsername     = getEnvStr("NDM_SMB_WORKER_USERNAME", "ubuntu")
+	SMBWorkerPassword     = getEnvStr("NDM_SMB_WORKER_PASSWORD", Password)
 	SMBExecutableFilename = getEnvStr("NDM_SMB_EXECUTABLE_FILENAME", `C:\Temp\windows-worker-installer.exe`)
+	SMBDomainName         = getEnvStr("NDM_SMB_DOMAIN_NAME", "")
 
-	// CP SSH (defaults to worker creds — same SSH keys in Azure env)
+	// CP SSH falls back to worker creds, which fall back to NDM_PASSWORD.
 	CPSSHPort     = getEnvInt("NDM_CP_SSH_PORT", 22)
 	CPSSHUsername = getEnvStr("NDM_CP_SSH_USERNAME", WorkerUsername)
 	CPSSHPassword = getEnvStr("NDM_CP_SSH_PASSWORD", WorkerPassword)
+
+	// Keycloak client secret — bypasses OpenBao SSH when set directly
+	KeycloakClientSecret = getEnvStr("NDM_KEYCLOAK_CLIENT_SECRET", "")
 
 	// RBAC test users — set after running TestUserManagement_CreateThreeRoleUsers
 	ProjectAdminEmail  = getEnvStr("NDM_PROJECT_ADMIN_EMAIL", "")
@@ -283,4 +414,41 @@ func getEnvFloat(key string, fallback float64) float64 {
 		return fallback
 	}
 	return f
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// GetSourceExportPath returns the source export path for a given test index
+// (0-based). If NDM_NFS_SOURCE_EXPORT_PATHS is set with multiple values,
+// each test gets its own volume. Otherwise falls back to the single
+// NDM_NFS_SOURCE_EXPORT_PATH for all tests.
+func GetSourceExportPath(testIndex int) string {
+	if len(NfsSourceExportPaths) > testIndex {
+		return NfsSourceExportPaths[testIndex]
+	}
+	return NfsSourceExportPath
+}
+
+// GetDestinationExportPath returns the destination export path for a given
+// test index (0-based). If NDM_NFS_DESTINATION_EXPORT_PATHS is set with
+// multiple values, each test gets its own volume. Otherwise falls back to
+// the single NDM_NFS_DESTINATION_EXPORT_PATH for all tests.
+func GetDestinationExportPath(testIndex int) string {
+	if len(NfsDestinationExportPaths) > testIndex {
+		return NfsDestinationExportPaths[testIndex]
+	}
+	return NfsDestinationExportPath
 }

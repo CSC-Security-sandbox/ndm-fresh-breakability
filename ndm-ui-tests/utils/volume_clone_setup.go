@@ -11,10 +11,10 @@
 // Env vars consumed per protocol (NFS example):
 //
 //	VOLUME_CLONE_PROVIDER=anf
-//	AZURE_NFS_SOURCE_VOLUMES=vol1,vol2
-//	AZURE_NFS_DEST_VOLUMES=dvol1,dvol2
-//	AZURE_NFS_SOURCE_HOST_IP=10.x.x.x,10.x.x.x
-//	AZURE_NFS_DESTINATION_HOST_IP=10.x.x.x,10.x.x.x
+//	AZURE_UI_NFS_SOURCE_VOLUMES=vol1,vol2
+//	AZURE_UI_NFS_DESTINATION_VOLUMES=dvol1,dvol2
+//	AZURE_UI_NFS_SOURCE_HOST_IP=10.x.x.x,10.x.x.x
+//	AZURE_UI_NFS_DESTINATION_HOST_IP=10.x.x.x,10.x.x.x
 //	AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP=...
 //	AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME=...
 //	AZURE_ANF_NFS_SOURCE_POOL_NAME=...
@@ -252,10 +252,10 @@ func (s *UIVolumeSetup) initANF(proto string) error {
 	s.sourceANFConfig = &ANFEndpointConfig{ResourceGroup: srcRG, AccountName: srcAccount, PoolName: srcPool}
 	s.destANFConfig = &ANFEndpointConfig{ResourceGroup: dstRG, AccountName: dstAccount, PoolName: dstPool}
 
-	s.masterSourceVolumes = parseVolumeEnv(fmt.Sprintf("AZURE_%s_SOURCE_VOLUMES", proto))
-	s.masterDestVolumes = parseVolumeEnv(fmt.Sprintf("AZURE_%s_DEST_VOLUMES", proto))
-	s.SourceHostIPs = parseVolumeEnv(fmt.Sprintf("AZURE_%s_SOURCE_HOST_IP", proto))
-	s.DestHostIPs = parseVolumeEnv(fmt.Sprintf("AZURE_%s_DESTINATION_HOST_IP", proto))
+	s.masterSourceVolumes = parseVolumeEnv(fmt.Sprintf("AZURE_UI_%s_SOURCE_VOLUMES", proto))
+	s.masterDestVolumes = parseVolumeEnv(fmt.Sprintf("AZURE_UI_%s_DESTINATION_VOLUMES", proto))
+	s.SourceHostIPs = parseVolumeEnv(fmt.Sprintf("AZURE_UI_%s_SOURCE_HOST_IP", proto))
+	s.DestHostIPs = parseVolumeEnv(fmt.Sprintf("AZURE_UI_%s_DESTINATION_HOST_IP", proto))
 	return nil
 }
 

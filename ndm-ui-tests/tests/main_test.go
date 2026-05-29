@@ -27,18 +27,14 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Optionally initialise volume cloning when clone env vars are present.
-	// Errors are non-fatal: tests will fall back to static NDM_SOURCE_HOST /
-	// NDM_NFS_EXPORT_PATH / NDM_SMB_HOST / NDM_SMB_SHARE values.
 	if hasAnyEnv(
-		"AZURE_NFS_SOURCE_VOLUMES",
+		"AZURE_UI_NFS_SOURCE_VOLUMES",
 		"ONTAP_NFS_SOURCE_VOLUMES",
 		"AWS_FSXN_NFS_SOURCE_VOLUMES",
-		"AZURE_SMB_SOURCE_VOLUMES",
+		"AZURE_UI_SMB_SOURCE_VOLUMES",
 		"ONTAP_SMB_SOURCE_VOLUMES",
 		"AWS_FSXN_SMB_SOURCE_VOLUMES",
 	) {
-		// Default to NFS; individual tests will call initSMBSetup() if needed.
 		setup, err := utils.InitUIVolumeSetup("NFS")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[TestMain] volume clone setup warning: %v\n", err)
@@ -64,3 +60,4 @@ func hasAnyEnv(keys ...string) bool {
 	}
 	return false
 }
+

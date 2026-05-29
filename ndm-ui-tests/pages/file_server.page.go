@@ -14,19 +14,28 @@ import (
 )
 
 type FileServerPage struct {
-	page playwright.Page
+	page             playwright.Page
+	screenshotPrefix string
 }
 
-func NewFileServerPage(page playwright.Page) *FileServerPage {
-	return &FileServerPage{page: page}
+func NewFileServerPage(page playwright.Page, prefix ...string) *FileServerPage {
+	p := &FileServerPage{page: page}
+	if len(prefix) > 0 && prefix[0] != "" {
+		p.screenshotPrefix = prefix[0]
+	}
+	return p
 }
 
 // CreateNFSFileServer runs the 3-step wizard and returns the UUID.
 func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string, minWorkers int) (string, error) {
+	// Wait for the app-level loading screen ("Authenticated, checking permissions...")
+	// which appears after login before the React app is fully ready.
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -38,7 +47,7 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 
 	// ── Step 1: Server Name ─────────────────────────────────────────────
 	nameField := p.page.GetByPlaceholder("Name")
-	if err := p.expectVisible(nameField, 60000); err != nil {
+	if err := p.expectVisible(nameField, 45000); err != nil {
 		return "", fmt.Errorf("step1: Name field not visible: %w", err)
 	}
 	_ = nameField.Fill(name)
@@ -177,10 +186,12 @@ func (p *FileServerPage) CreateNFSFileServer(name, host, nfsUser, nfsPass string
 // CreateSMBFileServer runs the 3-step wizard for an SMB file server
 // and returns the UUID. Same wizard as NFS but expands the SMB accordion.
 func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, smbPass string, minWorkers int) (string, error) {
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -306,60 +317,65 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 	// wizard — NOT a plain <tbody><tr> table. Use the same text-match + JS
 	// toggle approach that CreateNFSFileServer uses successfully.
 	//
-	// Workers are listed by their hostname label (contains "smb" or "SMB").
-	// Poll up to 10×3s so the list has time to load after cloning.
-	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)smb`))
-	var workerCount int
-	for attempt := 0; attempt < 10; attempt++ {
-		workerCount, _ = workerNames.Count()
-		if workerCount > 0 {
-			break
-		}
-		log.Printf("[CreateSMBFileServer] step3: no worker labels yet (attempt %d/10) — waiting…", attempt+1)
-		p.sleep(3000)
+	// Wait for the "SMB Compatible Workers" heading to confirm the grid loaded.
+	if err := p.expectVisible(
+		p.page.GetByText(regexp.MustCompile(`(?i)SMB Compatible Workers`)).First(),
+		30000,
+	); err != nil {
+		return "", fmt.Errorf("step3: SMB Compatible Workers label not visible: %w", err)
 	}
+
+	// Workers are listed by their hostname label (e.g. "smb-worker-4").
+	workerNames := p.page.GetByText(regexp.MustCompile(`(?i)smb-worker`))
+	_ = workerNames.First().WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(30000),
+	})
+	p.sleep(2000)
+
+	workerCount, _ := workerNames.Count()
 	log.Printf("[CreateSMBFileServer] step3: %d worker label(s) found", workerCount)
 
-	if workerCount > 0 {
-		toggled := 0
-		for i := 0; i < workerCount; i++ {
-			el := workerNames.Nth(i)
-			if !p.isVisible(el) {
-				continue
-			}
-			info, err := el.Evaluate(fsToggleInspectJS, nil)
-			if err != nil {
-				continue
-			}
-			m, ok := info.(map[string]interface{})
-			if !ok || m["found"] != true {
-				continue
-			}
-			if m["isAlreadyOn"] == true {
-				toggled++
-				log.Printf("[CreateSMBFileServer] worker %d: already ON", i)
-				continue
-			}
-			if m["isOffline"] == true || m["isDisabled"] == true {
-				log.Printf("[CreateSMBFileServer] worker %d: offline/disabled, skipping", i)
-				continue
-			}
-			clicked, _ := el.Evaluate(fsToggleClickJS, nil)
-			if cb, ok := clicked.(bool); ok && cb {
-				toggled++
-				log.Printf("[CreateSMBFileServer] worker %d: toggled ON", i)
-				p.sleep(1000)
-			}
+	toggled := 0
+	for i := 0; i < workerCount; i++ {
+		el := workerNames.Nth(i)
+		if !p.isVisible(el) {
+			continue
 		}
-		log.Printf("[CreateSMBFileServer] %d worker(s) associated", toggled)
-		if toggled > 0 {
-			p.screenshot("smb-step3-workers-toggled")
-		} else {
-			log.Printf("[CreateSMBFileServer] WARNING: found worker labels but could not toggle any")
+		info, err := el.Evaluate(fsToggleInspectJS, nil)
+		if err != nil {
+			continue
 		}
-	} else {
-		log.Printf("[CreateSMBFileServer] no compatible workers visible in step 3 — proceeding without worker association")
+		m, ok := info.(map[string]interface{})
+		if !ok || m["found"] != true {
+			continue
+		}
+		if m["isAlreadyOn"] == true {
+			toggled++
+			log.Printf("[CreateSMBFileServer] worker %d: already ON", i)
+			continue
+		}
+		if m["isOffline"] == true || m["isDisabled"] == true {
+			log.Printf("[CreateSMBFileServer] worker %d: offline/disabled, skipping", i)
+			continue
+		}
+		clicked, _ := el.Evaluate(fsToggleClickJS, nil)
+		if cb, ok := clicked.(bool); ok && cb {
+			toggled++
+			log.Printf("[CreateSMBFileServer] worker %d: toggled ON", i)
+			p.sleep(1000)
+		}
 	}
+
+	if toggled == 0 {
+		p.screenshot("smb-step3-no-online-workers")
+		return "", fmt.Errorf("step3: no online SMB workers available to toggle")
+	}
+	if toggled < minWorkers {
+		log.Printf("[CreateSMBFileServer] WARNING: only %d worker(s) associated, wanted %d", toggled, minWorkers)
+	}
+	log.Printf("[CreateSMBFileServer] %d worker(s) associated", toggled)
+	p.screenshot("smb-step3-workers-toggled")
 
 	// Brief pause so the form registers the worker toggle before Finish fires.
 	p.sleep(2000)
@@ -421,10 +437,12 @@ func (p *FileServerPage) CreateSMBFileServer(name, host, adServerIP, smbUser, sm
 // Step 2: Access Zones table — select zone, NFS IP dropdown, NFS Username
 // Step 3: Workers — toggle worker association per access zone → Finish
 func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPass, nfsIP, nfsUser string, minWorkers int) (string, error) {
+	p.waitForAppReady()
+
 	url := config.BaseURL + "/new-file-server"
 	if _, err := p.page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(60000),
+		Timeout:   playwright.Float(90000),
 	}); err != nil {
 		return "", fmt.Errorf("goto new-file-server: %w", err)
 	}
@@ -918,6 +936,20 @@ func (p *FileServerPage) CreateIsilonFileServer(name, mgmtHost, mgmtUser, mgmtPa
 	return fsID, nil
 }
 
+// waitForAppReady waits for the NDM app-level loading screen to disappear.
+// After login the app shows "Authenticated, checking permissions, kindly wait..."
+// which must clear before any navigation is reliable.
+func (p *FileServerPage) waitForAppReady() {
+	loadingMsg := p.page.Locator(`text=checking permissions`)
+	for i := 0; i < 20; i++ {
+		if v, _ := loadingMsg.First().IsVisible(); !v {
+			return
+		}
+		log.Printf("[waitForAppReady] app still loading, waiting (attempt %d/20)…", i+1)
+		p.sleep(3000)
+	}
+}
+
 // navigateToFileServer goes to the file server list, finds the row
 // by name, clicks it, and returns the UUID from the resulting URL.
 // Retries navigation up to 5 times for eventual consistency.
@@ -933,6 +965,9 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 		return fsID, nil
 	}
 
+	// Wait for the loading screen to clear before navigating to the list.
+	p.waitForAppReady()
+
 	nameLink := p.page.GetByText(name, playwright.PageGetByTextOptions{
 		Exact: playwright.Bool(true),
 	})
@@ -943,6 +978,7 @@ func (p *FileServerPage) navigateToFileServer(name string) (string, error) {
 			Timeout:   playwright.Float(30000),
 		})
 		p.sleep(5000)
+		p.waitForAppReady()
 
 		if p.isVisible(nameLink.First()) {
 			break
@@ -1019,9 +1055,9 @@ func (p *FileServerPage) extractFileServerID(rawURL string) string {
 	return ""
 }
 
-// WaitForFileServerActive polls the file server overview page until the
-// "Bulk Discover" button is visible and enabled (server is Active with
-// export paths retrieved).
+// WaitForFileServerActive polls the file server overview page until it is
+// ready for migration — the "Bulk Migrate" button is visible and enabled,
+// meaning the file server is Active and its export paths have been retrieved.
 func (p *FileServerPage) WaitForFileServerActive(fsID string, timeoutMs float64) error {
 	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
 	attempt := 0
@@ -1032,35 +1068,39 @@ func (p *FileServerPage) WaitForFileServerActive(fsID string, timeoutMs float64)
 			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 			Timeout:   playwright.Float(30000),
 		})
-		p.sleep(5000)
+		// Wait for app-level loading screen to clear, then give React time to render.
+		p.waitForAppReady()
+		p.sleep(8000)
 
 		overview := p.page.GetByText("File Server Overview").First()
 		if !p.isVisible(overview) {
-			log.Printf("[WaitForFileServerActive] attempt %d: overview not visible", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: overview not visible, retrying…", attempt)
 			p.sleep(10000)
 			continue
 		}
 
-		bulkBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{
-			Name: "Bulk Discover",
-		})
-		if p.isVisible(bulkBtn) {
-			disabled, _ := bulkBtn.IsDisabled()
+		// Check "Bulk Migrate" button (data-testid added in JobsAction.tsx; falls back to role).
+		migrateBtn := p.page.Locator(`[data-testid="btn-bulk-migrate"]`)
+		if !p.isVisible(migrateBtn) {
+			migrateBtn = p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Bulk Migrate"})
+		}
+		if p.isVisible(migrateBtn) {
+			disabled, _ := migrateBtn.IsDisabled()
 			if !disabled {
-				log.Printf("[WaitForFileServerActive] file server active on attempt %d", attempt)
+				log.Printf("[WaitForFileServerActive] file server ready for migration (attempt %d)", attempt)
 				p.screenshot("fs-active")
 				return nil
 			}
-			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Discover disabled", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Migrate button still disabled", attempt)
 		} else {
-			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Discover not visible", attempt)
+			log.Printf("[WaitForFileServerActive] attempt %d: Bulk Migrate button not visible", attempt)
 		}
 
 		p.sleep(15000)
 	}
 
 	p.screenshot("fs-not-active-timeout")
-	return fmt.Errorf("file server %s did not become active within %.0fs", fsID, timeoutMs/1000)
+	return fmt.Errorf("file server %s did not become ready for migration within %.0fs", fsID, timeoutMs/1000)
 }
 
 // ── JS helpers for worker toggle ─────────────────────────────────────────────
@@ -1135,7 +1175,10 @@ func (p *FileServerPage) expectVisible(loc playwright.Locator, timeoutMs float64
 }
 
 func (p *FileServerPage) screenshot(name string) {
-	dir := config.ScreenshotDir
+	if p.screenshotPrefix != "" {
+		name = p.screenshotPrefix + "-" + name
+	}
+	dir := "test-results/screenshots"
 	_ = os.MkdirAll(dir, 0o755)
 	path := fmt.Sprintf("%s/%s.png", dir, name)
 	_, _ = p.page.Screenshot(playwright.PageScreenshotOptions{

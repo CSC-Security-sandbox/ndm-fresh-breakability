@@ -41,7 +41,7 @@ const JobRunStatusCellRenderer = ({
 }) => {
   const style = getStyleForStatus(status);
   return (
-    <Box className="flex gap-2 items-center">
+    <Box data-testid="job-run-status" className="flex gap-2 items-center">
       <span className={`w-3 h-3 rounded-full inline-block ${style}`}></span>
       <Box className="capitalize">{status.toLowerCase()}</Box>
     </Box>

@@ -128,6 +128,7 @@ const JobRunList = () => {
     return [
       {
         label: "Details",
+        "data-testid": "menu-details",
         onClick: () => {
           navigate(`/job-details/${row.jobConfigId}/run/${row.jobRunId}`);
         },

@@ -153,7 +153,7 @@ func resolveSMBClone(t *testing.T) cloneResult {
 
 	// Attempt SMB-specific volume setup if SMB clone vars are present.
 	hasSMBClone := hasAnyEnv(
-		"AZURE_SMB_SOURCE_VOLUMES",
+		"AZURE_UI_SMB_SOURCE_VOLUMES",
 		"ONTAP_SMB_SOURCE_VOLUMES",
 		"AWS_FSXN_SMB_SOURCE_VOLUMES",
 	)
@@ -486,7 +486,7 @@ func TestDiscovery_BasicNFS(t *testing.T) {
 	nfsExport := fmt.Sprintf("%s:%s", clone.hostIP, exportPath)
 	t.Logf("[5.1] validating report against live volume %s", nfsExport)
 
-	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolNFS, csvPath, nfsExport)
+	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolNFS, csvPath, nfsExport, "")
 	require.NoError(t, err, "validate discovery report against live NFS volume")
 	require.True(t, result.Match,
 		"[5.1] discovery report does not match live volume:\n%s", result)
@@ -541,7 +541,7 @@ func TestDiscovery_BasicSMB(t *testing.T) {
 	t.Logf("[5.2] validating report against live SMB share %s via AD server %s",
 		smbSrc, config.SMBAdServerIP)
 
-	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolSMB, csvPath, smbSrc)
+	result, err := utils.ValidateReport(utils.ReportTypeDiscovery, utils.ProtocolSMB, csvPath, smbSrc, "")
 	require.NoError(t, err, "validate SMB discovery report against live share")
 	require.True(t, result.Match,
 		"[5.2] SMB discovery report does not match live share:\n%s", result)
