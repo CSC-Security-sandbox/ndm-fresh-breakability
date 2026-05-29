@@ -23,6 +23,17 @@ export enum SmbPermissionInheritanceMode {
   INHERIT_PERMS_AS_EXPLICIT = 'INHERIT_PERMS_AS_EXPLICIT',
 }
 
+/**
+ * Shape of the JSON envelope `Set-FileSecurityFast` writes to stdout —
+ * identical on both the success and the kernel-failure path so callers
+ * can branch on `success` instead of throwing/stderr.
+ */
+type SetAclPayload = {
+  success?: boolean;
+  error?: string;
+  unresolved_sids?: string[];
+};
+
 // Windows API initialization for ADS detection
 let FindFirstStreamW: any;
 let FindNextStreamW: any;
@@ -155,6 +166,59 @@ export class WinOperationService {
     }
   }
 
+  /**
+   * Drain the structured stdout envelope emitted by `Set-FileSecurityFast`
+   * into the stamp-side error pipeline. The PowerShell script emits the
+   * same shape on both the success and the kernel-failure path:
+   *
+   *   { success: boolean, error?: string, unresolved_sids?: string[], logs?: string[] }
+   *
+   * Responsibilities:
+   *   - Push every `unresolved_sids` entry into `errors` as a soft warning
+   *     (these are SIDs the script could not resolve while building ACEs).
+   *   - On `success === false` (kernel-level stamp failure): push a
+   *     destination-scoped error, mirror the reason onto STAMP_META's
+   *     `params.error` so the UI surfaces it the same way it does
+   *     validation mismatches, and log an operator-facing error tagged
+   *     with `workflowId` + `targetPath`.
+   *
+   * Returns `true` when the stamp failed and the caller should
+   * short-circuit (skip step 4 `getAclOperation(target)` and step 5
+   * `validateAclOperation` — they'd only produce noise against an
+   * unstamped target). Returns `false` for success, missing payload, or a
+   * legacy/no-`success`-field shape, so existing flows continue unchanged.
+   */
+  private handleSetAclResult(
+    stdout: string | undefined,
+    { targetPath, workflowId, command, errors }: {
+      targetPath: string;
+      workflowId: string;
+      command: CommandExecInput['command'];
+      errors: string[];
+    },
+  ): boolean {
+    let payload: SetAclPayload | null = null;
+    if (stdout) {
+      try { payload = JSON.parse(stdout); } catch { /* leave null */ }
+    }
+
+    payload?.unresolved_sids?.forEach((sid) => {
+      errors.push(`Unresolved SID ${sid} found while setting ACL on target`);
+    });
+
+    const stampFailed = payload?.success === false;
+    if (stampFailed) {
+      const reason = payload.error ?? 'unknown error';
+      errors.push(`Stamping ACL failed for destination ${targetPath}: ${reason}`);
+      command.ops[OPS_CMD.STAMP_META].params.error = reason;
+      this.logger.error(
+        `[${workflowId}] Stamping ACL failed for destination - targetPath=${targetPath} reason=${reason}`,
+      );
+    }
+
+    return stampFailed;
+  }
+
   private forwardGetAclScriptLogs(
     parsed: any,
     workflowId: string,
@@ -235,6 +299,12 @@ export class WinOperationService {
       `sd=${JSON.stringify(filteredAcl)}`,
     );
 
+    command.ops[OPS_CMD.STAMP_META].params.sidMap = {
+      sourceAcl: `Owner: ${acl.originalOwner ?? acl.Owner}, Group: ${acl.originalGroup ?? acl.Group},`,
+      targetAcl: '',
+      validationError: '',
+    };
+
     // 3. Set target ACL (PowerShell Set-FileSecurityFast)
     const result = await this.metricsService.runWithTiming(
       workflowId,
@@ -242,23 +312,37 @@ export class WinOperationService {
       () => this.setAclOperation(targetPath, filteredAcl, workflowId),
     );
 
-    if (result?.stdout && result.stdout.includes('unresolved_sids')) {
-      const unresolved_sids = JSON.parse(result.stdout)?.unresolved_sids;
-      if (unresolved_sids && unresolved_sids.length > 0) {
-        unresolved_sids.forEach((sid) => {
-          errors.push(
-            `Unresolved SID ${sid} found while setting ACL on target`,
-          );
-        });
-      }
+    const stampFailed = this.handleSetAclResult(result?.stdout, {
+      targetPath,
+      workflowId,
+      command,
+      errors,
+    });
+    if (stampFailed) {
+      return { output, errors };
     }
 
-    // 4. Get target ACL (PowerShell Get-Acl for validation)
-    let targetAcl: SecurityDescriptor = await this.metricsService.runWithTiming(
-      workflowId,
-      { category: 'stamp_phase', phase: 'acl_get_target' },
-      () => this.getAclOperation(targetPath, false, workflowId),
-    );
+    // 4. Get target ACL (PowerShell Get-Acl for validation). Treat a fetch
+    //    failure here the same way as a stamp failure: record a destination
+    //    error, mirror it onto STAMP_META, log it, and bail before step 5 —
+    //    there's no target ACL to compare against, so validation would
+    //    either crash or produce noise.
+    let targetAcl: SecurityDescriptor;
+    try {
+      targetAcl = await this.metricsService.runWithTiming(
+        workflowId,
+        { category: 'stamp_phase', phase: 'acl_get_target' },
+        () => this.getAclOperation(targetPath, false, workflowId),
+      );
+    } catch (error) {
+      const reason = error?.message ?? 'unknown error';
+      errors.push(`Failed to validate ACL for destination ${targetPath}: ${reason}`);
+      command.ops[OPS_CMD.STAMP_META].params.error = reason;
+      this.logger.error(
+        `[${workflowId}] Failed to validate ACL for destination - targetPath=${targetPath} reason=${reason}`,
+      );
+      return { output, errors };
+    }
 
     this.logger.debug(`Fetched target ACL for ${targetPath}: ${JSON.stringify(targetAcl)}`);
 
