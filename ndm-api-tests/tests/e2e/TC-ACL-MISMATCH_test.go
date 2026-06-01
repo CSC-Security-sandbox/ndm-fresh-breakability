@@ -224,7 +224,7 @@ var _ = Describe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL muta
 			By("Fetching ad-hoc migration report")
 			adhocReportBytes, err := FetchCocReportBytes(adhocRunID)
 			Expect(err).NotTo(HaveOccurred(), "Error fetching ad-hoc migration report")
-			adhocReportPaths, err := ExtractSourcePathsFromCocCSV(adhocReportBytes)
+			adhocReportPaths, err := ExtractSourcePathsFromCocCSVSkipNoOps(adhocReportBytes)
 			Expect(err).NotTo(HaveOccurred(), "Error parsing ad-hoc migration report")
 			LogDebug(fmt.Sprintf("Ad-hoc migration report contained %d source paths", len(adhocReportPaths)))
 
@@ -322,7 +322,7 @@ var _ = Describe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL muta
 			By("Idempotency validation: second incremental re-migrated zero files")
 			idempotencyReportBytes, err := FetchCocReportBytes(idempotencyRunID)
 			Expect(err).NotTo(HaveOccurred(), "Error fetching idempotency report")
-			idempotencyReportPaths, err := ExtractSourcePathsFromCocCSV(idempotencyReportBytes)
+			idempotencyReportPaths, err := ExtractSourcePathsFromCocCSVSkipNoOps(idempotencyReportBytes)
 			Expect(err).NotTo(HaveOccurred(), "Error parsing idempotency report")
 			LogDebug(fmt.Sprintf("Idempotency report contained %d source paths (expected 0)", len(idempotencyReportPaths)))
 
@@ -376,6 +376,9 @@ type validationFailure struct {
 // would emit for a given scenario (test-root prefix + backslashes).
 func scenarioToReportPath(sc AclMismatchScenario) string {
 	rel := strings.ReplaceAll(sc.RelPath, "/", `\`)
+	if sc.ShareRootRelative {
+		return rel
+	}
 	return fmt.Sprintf(`%s\%s`, AclMismatchTestRoot, rel)
 }
 

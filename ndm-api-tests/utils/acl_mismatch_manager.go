@@ -11,7 +11,7 @@ package utils
 // and jobs.go and are reused as-is.
 //
 // What's here:
-//   1. AclMismatchScenario type + AclMismatchScenarios catalog (39 rows)
+//   1. AclMismatchScenario type + AclMismatchScenarios catalog (46 rows)
 //   2. CreateSMBFilesForAclMismatchTest — baseline seeder
 //   3. MutateSMBFilesForAclMismatchTest — applies one mutation per scenario
 //   4. BuildExpectedMutatedSet / BuildExpectedControlSet
@@ -62,12 +62,19 @@ type AclMismatchScenario struct {
 	IsControl         bool               // true → file must NOT be re-migrated by the ad-hoc run
 	MutationTarget    MutationTarget     // TargetSource for rows 1-47, TargetDestination for row 48 only
 	IsExpectedFailure bool               // true → known divergence between expected outcome and current product behavior; misses logged as XFAIL not FAIL
+	ShareRootRelative bool               // true → RelPath is relative to share root, not AclMismatchTestRoot
 	Notes             string             // human-readable note (kept for log output / future report rows)
 }
 
 // AclMismatchTestRoot is the directory under the share where the entire tree
 // lives. Kept short so cmd /C command lines stay well under length limits.
 const AclMismatchTestRoot = "acl_mismatch_test"
+
+// GaInheritTestRoot is a separate top-level directory at the share root that
+// inherits the volume root's raw GENERIC_ALL (0x10000000) ACE. Used by S45/S46
+// to validate the GA|FA stamper fix — these files must NOT re-migrate on
+// incremental runs.
+const GaInheritTestRoot = "ga_inherit_test"
 
 // SID-mapping AD users. Created at the top of the seeder script,
 // deleted at the end of the mutator script. Idempotent (drop-and-recreate).
@@ -99,7 +106,7 @@ func BuildAclMismatchSidMappingCSV() string {
 	return fmt.Sprintf("data:text/csv;base64,%s", b64)
 }
 
-// AclMismatchScenarios is the canonical catalog (44 scenarios, serial 1–44).
+// AclMismatchScenarios is the canonical catalog (46 scenarios, serial 1–46).
 //
 // Removed (ONTAP does not persist over SMB):
 //   - DaclAutoInherit (SE_DACL_AUTO_INHERITED) — SetFileSecurity silently ignored
@@ -174,6 +181,11 @@ var AclMismatchScenarios = []AclMismatchScenario{
 
 	// 44: Destination-drift canary
 	{ID: "S44_DEST_ONLY_DRIFT", RelPath: "selection/S44_dest_only_drift.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "ace", MutationTarget: TargetDestination, Notes: "Baseline: content 'v1'. Mutation: grant aclmap_u5:F on dest only."},
+
+	// 45–46: GA|FA idempotency — dir + file at share root inheriting volume root's raw GENERIC_ALL ACE.
+	// No mutation. Must NOT re-migrate on any incremental. Validates that the stamper
+	{ID: "S45_GA_INHERIT_DIR", RelPath: "ga_inherit_test", Verdict: VerdictMatch, IsControl: true, ShareRootRelative: true, Notes: "Directory at share root inheriting volume root GA. No mutation. Must NOT re-migrate."},
+	{ID: "S46_GA_INHERIT_FILE", RelPath: "ga_inherit_test/S46_ga_inherit.txt", Verdict: VerdictMatch, IsControl: true, ShareRootRelative: true, Notes: "File at share root inheriting volume root GA. No mutation. Must NOT re-migrate."},
 }
 
 // =============================================================================
@@ -227,6 +239,9 @@ func BuildExpectedControlSet() []string {
 func scenarioReportPath(sc AclMismatchScenario) string {
 	// Migration report uses Windows-style backslash separators.
 	rel := strings.ReplaceAll(sc.RelPath, "/", `\`)
+	if sc.ShareRootRelative {
+		return rel
+	}
 	return fmt.Sprintf(`%s\%s`, AclMismatchTestRoot, rel)
 }
 
@@ -472,8 +487,12 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	fmt.Fprintf(&b, "New-Item -ItemType Directory -Force -Path '%s' | Out-Null\n", localTestDir)
 
 	// Derive + create unique parent dirs from the scenarios catalog.
+	// Skip ShareRootRelative scenarios — those are created directly on the share.
 	dirsCreated := map[string]bool{}
 	for _, sc := range AclMismatchScenarios {
+		if sc.ShareRootRelative {
+			continue
+		}
 		parent := winParent(sc.RelPath)
 		if parent != "" && !dirsCreated[parent] {
 			fmt.Fprintf(&b, "New-Item -ItemType Directory -Force -Path '%s\\%s' | Out-Null\n", localTestDir, parent)
@@ -484,6 +503,9 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	// Echo a baseline body into every leaf. Dir-only scenarios get a marker
 	// file so the directory is non-empty and visible to the scanner.
 	for _, sc := range AclMismatchScenarios {
+		if sc.ShareRootRelative {
+			continue
+		}
 		winRel := strings.ReplaceAll(sc.RelPath, "/", `\`)
 		if strings.HasSuffix(winRel, ".txt") {
 			fmt.Fprintf(&b, "Set-Content -Path '%s\\%s' -Value 'baseline' -NoNewline\n", localTestDir, winRel)
@@ -512,6 +534,17 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	// Then grant Everyone:(OI)(CI)F recursively as the clean baseline ACE.
 	fmt.Fprintf(&b, "& icacls.exe '%s' /inheritance:r 2>&1 | Out-Null\n", share)
 	fmt.Fprintf(&b, "& icacls.exe '%s' /grant 'Everyone:(OI)(CI)F' /T /C 2>&1 | Out-Null\n\n", share)
+
+	// ── S45/S46: GA inherit idempotency — create dir + file at share root ──
+	// These live OUTSIDE acl_mismatch_test/ so they inherit the volume root's
+	// raw GENERIC_ALL (0x10000000) ACE. No inheritance break, no explicit grants.
+	// The migration stamper must handle this correctly without writing a hybrid
+	// GA|FA mask that causes infinite re-migration loops.
+	gaRoot := fmt.Sprintf(`%s\%s`, mappedDrive, GaInheritTestRoot)
+	b.WriteString("Write-Output '===== BASELINE 45-46 ga_inherit ====='\n")
+	fmt.Fprintf(&b, "if (Test-Path '%s') { Remove-Item -Recurse -Force '%s' }\n", gaRoot, gaRoot)
+	fmt.Fprintf(&b, "New-Item -ItemType Directory -Force -Path '%s' | Out-Null\n", gaRoot)
+	fmt.Fprintf(&b, "Set-Content -Path '%s\\S46_ga_inherit.txt' -Value 'baseline' -NoNewline\n", gaRoot)
 
 	// ── Per-scenario BASELINE ACL/attribute state ────────────────────────
 	// Helper: each line invokes icacls with PS's call operator. We redirect
@@ -618,6 +651,9 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 
 	b.WriteString("Write-Output '===== Verifying baseline tree ====='\n")
 	fmt.Fprintf(&b, "Get-ChildItem -Recurse -Force '%s' | Select-Object -ExpandProperty FullName\n", share)
+	fmt.Fprintf(&b, "Get-ChildItem -Recurse -Force '%s' | Select-Object -ExpandProperty FullName\n", gaRoot)
+	fmt.Fprintf(&b, "Write-Output 'GA inherit dir ACL:'\n")
+	fmt.Fprintf(&b, "& icacls.exe '%s' 2>&1\n", gaRoot)
 	fmt.Fprintf(&b, "try { & net.exe use %s /delete /y 2>&1 | Out-Null } catch { }\n", mappedDrive)
 	fmt.Fprintf(&b, "Remove-Item -Recurse -Force '%s'\n", localTestDir)
 	b.WriteString("Write-Output 'ACL-MISMATCH-SEED-DONE'\n")
