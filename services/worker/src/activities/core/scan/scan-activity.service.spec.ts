@@ -90,7 +90,7 @@ describe('ScanService', () => {
 
         migrateScanService = {
             scanDirectory: jest.fn().mockResolvedValue({ ...mockScanDirectoryOutput }),
-            initDlmRootStamp: jest.fn().mockResolvedValue(undefined),
+            initRootStamp: jest.fn().mockResolvedValue(undefined),
         } as any;
 
         discoveryScanService = {

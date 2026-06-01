@@ -44,13 +44,12 @@ export class MigrateScanService {
         await jobContext.publishBulkToCommandStream(commands);
     }
 
-    async initDlmRootStamp(
+    async initRootStamp(
         task: { commands: Cmd[] },
         jobContext: JobManagerContext,
         sourcePath: string,
         targetPath: string,
     ): Promise<void> {
-        if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
         if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
 
         let sourceRootStat: fs.Stats | undefined;
@@ -58,48 +57,50 @@ export class MigrateScanService {
         try {
             sourceRootStat = await fs.promises.lstat(sourcePath);
             targetRootStat = await fs.promises.lstat(targetPath);
-            this.logger.debug(`DLM root exists on destination: ${targetPath}`);
+            this.logger.debug(`Root exists on destination: ${targetPath}`);
         } catch (err) {
             if (!sourceRootStat) {
-                this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
+                this.logger.error(`Failed to stat root source path: ${sourcePath} — ${err.message}`);
                 return;
             }
-            this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
+            this.logger.log(`Root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
         }
 
+        const isDlm = isDirectoryLevelMigration(jobContext.jobConfig);
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
+            await this.publishRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath, isDlm);
         }
-        await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
+        await this.registerRootMtimeRestamp(sourceRootStat, jobContext);
     }
 
-    private async publishDlmRootPermissionStamp(
+    private async publishRootPermissionStamp(
         sourceRootStat: fs.Stats,
         targetRootStat: fs.Stats | undefined,
         jobContext: JobManagerContext,
         sourcePath: string,
         targetPath: string,
+        isDlm: boolean,
     ): Promise<void> {
-        // This method is the single decision point for "is this the DLM
-        // root?" — both the stamp-side flag on the command (set below) and
-        // the gate-side `applyInheritanceMode` arg to buildCommand are
-        // pinned to `true` here. buildCommand threads the arg through to
-        // isMetaUpdated -> hasSecurityDescriptorChanged so the gate's
-        // expected-destination SD matches what stamp will actually write.
+        // `applyInheritanceMode` is only relevant for DLM roots on SMB —
+        // it triggers the inherited→explicit ACE transform. For non-DLM
+        // (share-level) the root is the export mount point and its ACEs
+        // are already explicit, so the flag is false.
         //
         // sourcePath/targetPath are required: on win32, when destination
         // already exists and target mtime matches source (the steady state
         // after the previous run's deferred dir-stamp), buildCommand falls
         // through to isMetaUpdated, which needs both abs paths.
         const rootCmd = await this.commandGenerationService.buildCommand(
-            sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
+            sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, isDlm,
         );
         if (!rootCmd) return;
-        rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
+        if (isDlm) {
+            rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
+        }
         await this.publishCommands({ jobContext, commands: [rootCmd] });
     }
 
-    private async registerDlmRootMtimeRestamp(
+    private async registerRootMtimeRestamp(
         sourceRootStat: fs.Stats,
         jobContext: JobManagerContext,
     ): Promise<void> {

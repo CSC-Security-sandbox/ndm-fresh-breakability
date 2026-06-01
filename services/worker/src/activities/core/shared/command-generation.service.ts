@@ -473,9 +473,9 @@ export class CommandGenerationService {
    *
    * `applyInheritanceMode` mirrors stamp's
    * `OPS_CMD.STAMP_META.params.applyInheritanceMode` flag. It must be
-   * decided by the caller (single source of truth: `initDlmRootStamp` ->
-   * `publishDlmRootPermissionStamp`, which is the only call site that
-   * passes `true`). Threaded through to `isMetaUpdated` so the gate's
+   * decided by the caller (single source of truth: `initRootStamp` ->
+   * `publishRootPermissionStamp`, which passes `true` only for DLM).
+   * Threaded through to `isMetaUpdated` so the gate's
    * expected-destination SD matches what stamp would actually write on
    * the DLM root.
    */

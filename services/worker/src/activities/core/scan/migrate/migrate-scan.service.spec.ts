@@ -1388,8 +1388,8 @@ describe('MigrateScanService', () => {
     // Add more tests as needed for coverage, e.g. for scanDirectory, buildCommand, etc.
 });
 
-// --- initDlmRootStamp ---
-describe('MigrateScanService.initDlmRootStamp', () => {
+// --- initRootStamp ---
+describe('MigrateScanService.initRootStamp', () => {
     let service: MigrateScanService;
     let configService: ConfigService;
     let fileTypeDetectionService: Partial<FileTypeDetectionService>;
@@ -1442,30 +1442,32 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         (isDirectoryLevelMigration as jest.Mock).mockReturnValue(true);
     });
 
-    it('returns early when sourceDirectoryPath is absent', async () => {
+    it('proceeds for non-DLM (share-level) migrations — stamps root like DLM but without applyInheritanceMode', async () => {
         (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
         jobContext.jobConfig.sourceDirectoryPath = undefined;
-        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(fs.promises.lstat).not.toHaveBeenCalled();
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const mtimeSpy = jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(fs.promises.lstat).toHaveBeenCalled();
+        expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
     });
 
     it('returns early when task has more than one command', async () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
-        await service.initDlmRootStamp({ commands: [{ fPath: '/' }, { fPath: '/other' }] } as any, jobContext, '/src', '/dst');
+        await service.initRootStamp({ commands: [{ fPath: '/' }, { fPath: '/other' }] } as any, jobContext, '/src', '/dst');
         expect(fs.promises.lstat).not.toHaveBeenCalled();
     });
 
     it('returns early when task command fPath is not "/"', async () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat);
-        await service.initDlmRootStamp(makeTask('/subdir') as any, jobContext, '/src', '/dst');
+        await service.initRootStamp(makeTask('/subdir') as any, jobContext, '/src', '/dst');
         expect(fs.promises.lstat).not.toHaveBeenCalled();
     });
 
     it('logs error and returns early when source lstat fails', async () => {
         (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('ENOENT'));
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to stat DLM root source path'));
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to stat root source path'));
         expect(jobContext.publishBulkToCommandStream).not.toHaveBeenCalled();
     });
 
@@ -1473,47 +1475,33 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         (fs.promises.lstat as jest.Mock)
             .mockResolvedValueOnce(rootStat)    // source
             .mockRejectedValueOnce(new Error('ENOENT')); // target missing
-        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
         expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('first run'));
     });
 
     it('logs debug when both source and destination exist', async () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
-        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('DLM root exists on destination'));
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Root exists on destination'));
     });
 
-    it('calls publishDlmRootPermissionStamp when preservePermissions is true, threading abs paths through', async () => {
+    it('calls publishRootPermissionStamp when preservePermissions is true, threading abs paths and isDlm flag', async () => {
         jobContext.jobConfig.options.preservePermissions = true;
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
-        const permSpy = jest.spyOn(service as any, 'publishDlmRootPermissionStamp').mockResolvedValue(undefined);
-        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        // Abs paths must be threaded through so buildCommand can hand them
-        // to isMetaUpdated -> hasSecurityDescriptorChanged on win32.
-        expect(permSpy).toHaveBeenCalledWith(rootStat, rootStat, jobContext, '/src', '/dst');
+        const permSpy = jest.spyOn(service as any, 'publishRootPermissionStamp').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(permSpy).toHaveBeenCalledWith(rootStat, rootStat, jobContext, '/src', '/dst', true);
     });
 
-    it('publishDlmRootPermissionStamp invokes buildCommand with abs paths AND applyInheritanceMode=true (single source of truth for DLM-root flag)', async () => {
-        // Regression tests two things at once:
-        //   1. Abs paths in positions 6/7 — without them, isMetaUpdated
-        //      throws on win32 for every incremental run after the first
-        //      (target mtime matches source after the previous run's
-        //      deferred dir-stamp, so isContentUpdate returns false and
-        //      the gate path is exercised).
-        //   2. applyInheritanceMode=true in position 8 — this is the only
-        //      place the DLM-root flag is decided. buildCommand must not
-        //      re-derive it; if this test fails because the flag isn't
-        //      being passed, the gate's expected-destination SD will not
-        //      match what stamp writes and the root will re-stamp every
-        //      incremental.
+    it('publishRootPermissionStamp invokes buildCommand with applyInheritanceMode=true for DLM', async () => {
         jobContext.jobConfig.options.preservePermissions = true;
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
         (commandGenerationService.buildCommand as jest.Mock).mockResolvedValue(undefined);
-        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/abs/src/root', '/abs/dst/root');
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/abs/src/root', '/abs/dst/root');
         expect(commandGenerationService.buildCommand).toHaveBeenCalledWith(
             rootStat,
             '/',
@@ -1526,19 +1514,69 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         );
     });
 
-    it('skips publishDlmRootPermissionStamp when preservePermissions is false', async () => {
+    it('publishRootPermissionStamp invokes buildCommand with applyInheritanceMode=false for non-DLM', async () => {
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
+        jobContext.jobConfig.options.preservePermissions = true;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        (commandGenerationService.buildCommand as jest.Mock).mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/abs/src/root', '/abs/dst/root');
+        expect(commandGenerationService.buildCommand).toHaveBeenCalledWith(
+            rootStat,
+            '/',
+            rootStat,
+            undefined,
+            jobContext,
+            '/abs/src/root',
+            '/abs/dst/root',
+            false,
+        );
+    });
+
+    it('sets applyInheritanceMode param on command only for DLM', async () => {
+        jobContext.jobConfig.options.preservePermissions = true;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const fakeCmd = { ops: { [OPS_CMD.STAMP_META]: { status: 'READY', params: {} } } };
+        (commandGenerationService.buildCommand as jest.Mock).mockResolvedValue(fakeCmd);
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(true);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(fakeCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode).toBe(true);
+    });
+
+    it('does not set applyInheritanceMode param on command for non-DLM', async () => {
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
+        jobContext.jobConfig.options.preservePermissions = true;
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const fakeCmd = { ops: { [OPS_CMD.STAMP_META]: { status: 'READY', params: {} } } };
+        (commandGenerationService.buildCommand as jest.Mock).mockResolvedValue(fakeCmd);
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(fakeCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode).toBeUndefined();
+    });
+
+    it('skips publishRootPermissionStamp when preservePermissions is false', async () => {
         jobContext.jobConfig.options.preservePermissions = false;
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
-        const permSpy = jest.spyOn(service as any, 'publishDlmRootPermissionStamp').mockResolvedValue(undefined);
-        jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        const permSpy = jest.spyOn(service as any, 'publishRootPermissionStamp').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
         expect(permSpy).not.toHaveBeenCalled();
     });
 
-    it('always calls registerDlmRootMtimeRestamp regardless of preservePermissions', async () => {
+    it('always calls registerRootMtimeRestamp regardless of preservePermissions', async () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
-        const mtimeSpy = jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
-        await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        const mtimeSpy = jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
+        expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
+    });
+
+    it('always calls registerRootMtimeRestamp for non-DLM', async () => {
+        (isDirectoryLevelMigration as jest.Mock).mockReturnValue(false);
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
+        const mtimeSpy = jest.spyOn(service as any, 'registerRootMtimeRestamp').mockResolvedValue(undefined);
+        await service.initRootStamp(makeTask() as any, jobContext, '/src', '/dst');
         expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
     });
 });

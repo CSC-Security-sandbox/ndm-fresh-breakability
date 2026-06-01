@@ -407,7 +407,7 @@ export class WinOperationService {
 
   /**
    * Stamp-path wrapper: applies the inheritance-mode transform iff the
-   * command was flagged by `initDlmRootStamp` as the DLM root. Non-root
+   * command was flagged by `initRootStamp` as the DLM root. Non-root
    * commands pass through unchanged.
    */
   applySmbInheritanceMode(

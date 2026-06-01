@@ -106,9 +106,8 @@ export class ScanService {
         task.retryCount++;
         const settings = getScanSettings(jobContext);
 
-        // DLM-only, once per migration: emit the root-dir STAMP_META command.
         if (isMigration) {
-            await this.migrateScanService.initDlmRootStamp(task, jobContext, baseSourcePrefixPath, baseTargetPrefixPath);
+            await this.migrateScanService.initRootStamp(task, jobContext, baseSourcePrefixPath, baseTargetPrefixPath);
         }
 
         for (let i = 0; i < task.commands.length; i += this.maxConcurrency) {

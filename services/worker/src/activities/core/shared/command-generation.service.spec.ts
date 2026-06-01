@@ -894,7 +894,7 @@ describe('CommandGenerationService', () => {
         });
 
         describe('applyInheritanceMode propagation', () => {
-            // The DLM-root decision lives in `publishDlmRootPermissionStamp`
+            // The DLM-root decision lives in `publishRootPermissionStamp`
             // (single source of truth); buildCommand is a pure pass-through
             // for the flag. These tests verify exactly that: whatever the
             // caller passes lands in isMetaUpdated unchanged.

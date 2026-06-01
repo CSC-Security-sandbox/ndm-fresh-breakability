@@ -346,7 +346,7 @@ export class SecurityDescriptorChangeDetectorService
    *
    * `applyInheritanceMode` mirrors stamp's per-command
    * `OPS_CMD.STAMP_META.params.applyInheritanceMode` flag, which is set
-   * only on the DLM root by `MigrateScanService.initDlmRootStamp`. Caller
+   * only on the DLM root by `MigrateScanService.initRootStamp`. Caller
    * (`command-generation.service.buildCommand` → `isMetaUpdated`) computes
    * the same predicate (`isDirectoryLevelMigration(jobConfig) && fPath ===
    * '/'`) and passes it through. Without this, the DLM root would
