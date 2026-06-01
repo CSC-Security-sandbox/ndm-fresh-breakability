@@ -164,7 +164,7 @@ export class WinOperationService {
     }
     if (!Array.isArray(parsed?.logs)) return;
     for (const line of parsed.logs) {
-      this.logger.log(
+      this.logger.debug(
         `[${workflowId}] [Set-FileSecurityFast] ${line} targetPath=${targetPath}`,
       );
     }
@@ -232,7 +232,7 @@ export class WinOperationService {
     if (!Array.isArray(parsed?.logs)) return;
     const tag = isSource ? 'Get-FileSecurityFast:SRC' : 'Get-FileSecurityFast:DST';
     for (const line of parsed.logs) {
-      this.logger.log(`[${workflowId}] [${tag}] ${line} path=${path}`);
+      this.logger.debug(`[${workflowId}] [${tag}] ${line} path=${path}`);
     }
   }
 

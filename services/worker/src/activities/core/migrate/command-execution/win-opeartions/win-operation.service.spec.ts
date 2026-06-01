@@ -366,7 +366,7 @@ describe('WinOperationService', () => {
         await service.setAclOperation(testPath, mockAcl, 'wf-fwd-1');
 
         for (const line of psLogs) {
-          expect(mockLogger.log).toHaveBeenCalledWith(
+          expect(mockLogger.debug).toHaveBeenCalledWith(
             `[wf-fwd-1] [Set-FileSecurityFast] ${line} targetPath=${testPath}`,
           );
         }
@@ -1954,13 +1954,13 @@ describe('WinOperationService', () => {
       jest.spyOn(service, 'validateAclOperation').mockResolvedValue({
         sourceSID: '', targetSID: '', inValid: '',
       });
-      const logSpy = jest.spyOn((service as any).logger, 'log');
+      const debugSpy = jest.spyOn((service as any).logger, 'debug');
 
       await service.stampAclOperation({
         command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst',
       } as any);
 
-      const stampLog = logSpy.mock.calls.find((c) =>
+      const stampLog = debugSpy.mock.calls.find((c) =>
         String(c[0] ?? '').includes('Stamping ACL on destination'),
       );
       expect(stampLog).toBeDefined();
