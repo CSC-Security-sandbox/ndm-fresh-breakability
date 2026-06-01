@@ -11,6 +11,7 @@ import {
 import { ArrowBackIcon, FolderIcon } from "@netapp/bxp-design-system-react/icons/monochrome";
 import { VolumeType } from "@/types/app.type";
 import { RootStateType } from "@store/store";
+import useSelectedProjectId from "@hooks/useSelectedProjectId";
 
 // API base URL for jobs service
 const JOBS_SERVICE_URL = window?.env?.VITE_JOBS_SERVICE_URL || import.meta.env.VITE_JOBS_SERVICE_URL;
@@ -55,7 +56,8 @@ const fetchDirectoryContents = async (
   fileServerId: string,
   exportPath: string,
   currentPath: string,
-  token: string | null
+  token: string | null,
+  projectId?: string
 ): Promise<DirectoryItem[]> => {
   // The API expects:
   // - exportPath: the NFS/SMB export path (e.g., "/nfs/smallEDA")
@@ -76,6 +78,7 @@ const fetchDirectoryContents = async (
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(projectId ? { projectid: projectId } : {}),
     },
     body: JSON.stringify(requestBody),
   });
@@ -250,6 +253,8 @@ interface DirectoriesContentProps {
   fileServerId: string;
   /** Auth token for API calls */
   token: string | null;
+  /** Active project ID for RBAC authorization */
+  projectId?: string;
   /** Whether to show the back button (hidden when skipExportPathsView is true) */
   showBackButton?: boolean;
 }
@@ -268,6 +273,7 @@ const DirectoriesContent = ({
   onBackToExportPaths,
   fileServerId,
   token,
+  projectId,
   showBackButton = true,
 }: DirectoriesContentProps) => {
   // Search/Jump to path state - synced with current path navigation
@@ -338,7 +344,8 @@ const DirectoriesContent = ({
         fileServerId,
         exportPath.volumePath,
         parentPath,
-        token
+        token,
+        projectId
       );
 
       // Check if the target folder exists in parent directory
@@ -576,6 +583,7 @@ const ExploreModal = ({
 }: ExploreModalProps) => {
   // Get auth token reactively from Redux store
   const token = useSelector((state: RootStateType) => state.authSlice?.accessToken);
+  const { selectedProjectId: projectId } = useSelectedProjectId();
 
   // View state: "export-paths" or "directories"
   const [currentView, setCurrentView] = useState<"export-paths" | "directories">("export-paths");
@@ -664,7 +672,8 @@ const ExploreModal = ({
             fileServerId,
             selectedExportPathDetails.volumePath,
             currentPath,
-            token
+            token,
+            projectId
           );
           setDirectoryContents(contents);
           
@@ -703,7 +712,7 @@ const ExploreModal = ({
       };
       fetchData();
     }
-  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId, initialSelectedPath, initialSelectionApplied, token]);
+  }, [currentView, selectedExportPathDetails?.id, currentPath, fileServerId, initialSelectedPath, initialSelectionApplied, token, projectId]);
 
   // Handle export path selection
   const handlePathSelect = useCallback((pathId: string) => {
@@ -853,6 +862,7 @@ const ExploreModal = ({
             onBackToExportPaths={handleBackToExportPaths}
             fileServerId={fileServerId}
             token={token}
+            projectId={projectId}
             showBackButton={!skipExportPathsView}
           />
         )}
