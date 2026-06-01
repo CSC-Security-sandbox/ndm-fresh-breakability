@@ -1549,15 +1549,14 @@ describe('WinOperationService', () => {
         expect(result.inValid).toBe('');
       });
 
-      it('passes when AceFlags matches exactly even with AccessMask superset on target (subset semantics preserved)', async () => {
-        // Regression guard: tightening AceFlags must NOT tighten the
-        // existing AccessMask-subset behaviour.
+      it('fails when AccessMask on target is superset of source (strict equality)', async () => {
+        // Strict equality: source R+X, destination Full — different masks → inValid.
         const src = baseAcl({ AccessMask: 0x120089, AceFlags: 0x03 }); // R+X
         const tgt = baseAcl({ AccessMask: 0x1f01ff, AceFlags: 0x03 }); // Full
 
         const result = await service.validateAclOperation(src, tgt);
 
-        expect(result.inValid).toBe('');
+        expect(result.inValid).not.toBe('');
       });
     });
 

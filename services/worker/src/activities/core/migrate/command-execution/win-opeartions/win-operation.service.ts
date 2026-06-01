@@ -562,7 +562,7 @@ export class WinOperationService {
         );
         const found = matchingTargetAces.some(
           (tgtAce) =>
-            (tgtAce.AccessMask & srcAce.AccessMask) === srcAce.AccessMask &&
+            (tgtAce.AccessMask | 0) === (srcAce.AccessMask | 0) &&
             tgtAce.AceFlags === srcAce.AceFlags,
         );
         if (!found) {

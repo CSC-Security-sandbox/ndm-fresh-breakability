@@ -1958,15 +1958,15 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         ).toBe(true);
       });
 
-      it('P5b mixed encoding (signed vs unsigned representation) treated as equal via superset check', () => {
+      it('P5b mixed encoding (signed vs unsigned representation) treated as equal via int32 coercion', () => {
         const signed = mkAce({ AccessMask: -2147483648 });
         const unsigned = mkAce({ AccessMask: 0x80000000 });
         const result = service.securityDescriptorEquals(
           mkSd({ DaclAces: [signed] }) as any,
           mkSd({ DaclAces: [unsigned] }) as any,
         );
-        // Bitwise superset check: (0x80000000 & -2147483648) === -2147483648
-        // evaluates to true in JS because bitwise ops coerce to int32.
+        // (value | 0) coerces both to int32: (-2147483648 | 0) === (0x80000000 | 0)
+        // so two representations of the same 32-bit pattern are still equal.
         expect(result.equal).toBe(true);
       });
     });
@@ -2121,12 +2121,13 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(validate.inValid).toBe('');
       });
 
-      it('R3 dest mask is superset -> gate treats as equal (superset check), validate silent', async () => {
+      it('R3 dest mask is superset -> gate flags drift, validate also flags (both strict equality)', async () => {
         const src = mkAce({ Sid: 'S-1-5-21-A', AccessMask: 0x120089 });
         const dst = mkAce({ Sid: 'S-1-5-21-A', AccessMask: 0x1f01ff });
         const { gate, validate } = await runRow([src], [dst]);
-        expect(gate.equal).toBe(true);
-        expect(validate.inValid).toBe('');
+        expect(gate.equal).toBe(false);
+        expect(gate.reason?.field).toBe('aceFieldDiff');
+        expect(validate.inValid).not.toBe('');
       });
 
       it('R4 KNOWN DIVERGENCE: reorder -> gate flags, validate silent', async () => {

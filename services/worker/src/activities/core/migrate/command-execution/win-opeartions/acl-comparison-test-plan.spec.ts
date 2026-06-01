@@ -466,9 +466,10 @@ describe('ACL comparison — test-plan compliance (CDMT/619194501)', () => {
       expect(service.securityDescriptorEquals(expected as any, actual as any).equal).toBe(true);
     });
 
-    it('S3b.12 (CREATOR_OWNER_NON_CO_DRIFT_STILL_FIRES): CO mutated but non-CO dest is superset → equal=true (superset check)', () => {
-      // With superset AccessMask comparison: source Users:R, dest Users:F.
-      // (F & R) === R → destination is a superset → no drift flagged.
+    it('S3b.12 (CREATOR_OWNER_NON_CO_DRIFT_STILL_FIRES): CO mutated but non-CO dest mask differs → field=aceFieldDiff (strict equality)', () => {
+      // Strict equality: source Users:R, dest Users:F — different masks.
+      // The non-CO positional walk catches this as aceFieldDiff even though
+      // F is a superset of R.
       const expected = mkSd({
         DaclAces: [
           mkAce({ Sid: SID.CREATOR_OWNER, AccessMask: 0x10000000, AceFlags: FLAG.OI_CI_IO }),
@@ -482,7 +483,8 @@ describe('ACL comparison — test-plan compliance (CDMT/619194501)', () => {
         ],
       });
       const result = service.securityDescriptorEquals(expected as any, actual as any);
-      expect(result.equal).toBe(true);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
     });
 
     it('S3b.13 (CREATOR_OWNER_ACE_TYPE_FLIP): CO Allow on source vs CO Deny on dest → field=aceMissingOnDestination', () => {
@@ -565,13 +567,17 @@ describe('ACL comparison — test-plan compliance (CDMT/619194501)', () => {
       expect((result.reason?.actualValue as any).AccessMask).toBe(MASK.R);
     });
 
-    it('S3c.2 / row 16 (S3c_4_MASK_SHRINK): Everyone R on source, F on dest → equal=true (superset check)', () => {
-      // With superset AccessMask comparison: source demands R, destination
-      // has F (superset of R). (F & R) === R → no drift flagged.
+    it('S3c.2 / row 16 (S3c_4_MASK_SHRINK): Everyone R on source, F on dest → field=aceFieldDiff (strict equality)', () => {
+      // Strict equality: source is R, destination is F (different masks).
+      // A mask shrink on source (F→R after re-stamp) means dest is now
+      // over-permissive — must trigger a re-stamp.
       const expected = mkSd({ DaclAces: [mkAce({ Sid: SID.EVERYONE, AccessMask: MASK.R })] });
       const actual   = mkSd({ DaclAces: [mkAce({ Sid: SID.EVERYONE, AccessMask: MASK.F })] });
-      expect(service.securityDescriptorEquals(expected as any, actual as any).equal)
-        .toBe(true);
+      const result = service.securityDescriptorEquals(expected as any, actual as any);
+      expect(result.equal).toBe(false);
+      expect(result.reason?.field).toBe('aceFieldDiff');
+      expect((result.reason?.expectedValue as any).AccessMask).toBe(MASK.R);
+      expect((result.reason?.actualValue as any).AccessMask).toBe(MASK.F);
     });
 
     it('S3c.3: RX → RW (different bit positions) → field=aceFieldDiff', () => {

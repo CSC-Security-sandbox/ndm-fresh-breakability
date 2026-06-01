@@ -321,7 +321,7 @@ export class SecurityDescriptorChangeDetectorService
       const actualAce = actualNonCreatorOwnerAces[aceIndex];
       if (
         expectedAce.Sid !== actualAce.Sid ||
-        (actualAce.AccessMask & expectedAce.AccessMask) !== expectedAce.AccessMask ||
+        (expectedAce.AccessMask | 0) !== (actualAce.AccessMask | 0) ||
         expectedAce.AceType !== actualAce.AceType ||
         expectedAce.AceFlags !== actualAce.AceFlags
       ) {
