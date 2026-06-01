@@ -10,6 +10,7 @@ import {
 } from 'src/activities/utils/utils';
 import { ProtocolTypes } from "src/protocols/protocols";
 import { RedisService } from "src/redis/redis.service";
+import { WinOperationService } from "../migrate/command-execution/win-opeartions/win-operation.service";
 
 interface Permission {
     code: string;
@@ -112,7 +113,8 @@ export class SetupExportsPathPermissionService {
     constructor(
         @Inject(LoggerFactory) private readonly loggerFactory: LoggerFactory,
         private readonly winShellService: WinShellService,
-        private readonly redisService: RedisService
+        private readonly redisService: RedisService,
+        private readonly winOperationService: WinOperationService,
     ) {
         this.logger = this.loggerFactory.create(SetupExportsPathPermissionService.name);
     }
@@ -215,6 +217,9 @@ export class SetupExportsPathPermissionService {
         } else {
             this.logger.debug('No principals to remove from destination');
         }
+
+        // Step 4: Stamp Owner and Group from source onto destination share
+        await this.stampOwnerAndGroup(context, jobRunId);
 
         this.logger.debug(`ACL setup completed for job ${jobRunId}`);
     }
@@ -489,6 +494,65 @@ export class SetupExportsPathPermissionService {
         const permissionPart = permissionCodes.length > 0 ? `(${permissionCodes.join(',')})` : '';
 
         return `${inheritancePart}${permissionPart}`;
+    }
+
+    async stampOwnerAndGroup(context: any, jobRunId: string): Promise<void> {
+        const sourcePath = "\\\\" + path.join(
+            context.jobConfig.sourceFileServer.hostname,
+            context.jobConfig.sourceFileServer.path,
+        );
+        const destinationPath = "\\\\" + path.join(
+            context.jobConfig.destinationFileServer.hostname,
+            context.jobConfig.destinationFileServer.path,
+        );
+
+        let sourceOwnerSid: string;
+        let sourceGroupSid: string;
+        try {
+            const sourceAcl = await this.winOperationService.getAclOperation(sourcePath, true, jobRunId);
+            sourceOwnerSid = sourceAcl.Owner;
+            sourceGroupSid = sourceAcl.Group;
+            this.logger.debug(`Source share Owner=${sourceOwnerSid} Group=${sourceGroupSid}`);
+        } catch (error) {
+            this.logger.error(`Failed to read source Owner/Group for share ${sourcePath}: ${error.message}`, error.stack);
+            return;
+        }
+
+        // Apply SID mapping if configured
+        if (context.jobConfig?.options?.isIdentityMappingAvailable) {
+            const [mappedOwner, mappedGroup] = await Promise.all([
+                this.redisService.getOwnerIdentity(jobRunId, sourceOwnerSid, 'SID'),
+                this.redisService.getOwnerIdentity(jobRunId, sourceGroupSid, 'SID'),
+            ]);
+            if (mappedOwner) sourceOwnerSid = mappedOwner;
+            if (mappedGroup) sourceGroupSid = mappedGroup;
+            this.logger.debug(`Mapped share Owner=${sourceOwnerSid} Group=${sourceGroupSid}`);
+        }
+
+        // Stamp Owner via icacls /setowner
+        try {
+            const ownerCmd = `icacls "${destinationPath}" /setowner "${sourceOwnerSid}"`;
+            this.logger.debug(`Setting share owner: ${ownerCmd}`);
+            const { stderr } = await this.winShellService.executeCommand(ownerCmd);
+            if (stderr) throw new Error(stderr);
+            this.logger.debug(`Successfully set share owner to ${sourceOwnerSid}`);
+        } catch (error) {
+            this.logger.error(`Failed to set Owner on share ${destinationPath}: ${error.message}`, error.stack);
+        }
+
+        // Stamp Group via PowerShell 
+        try {
+            const escapedPath = destinationPath.replace(/'/g, "''");
+            const escapedSid = sourceGroupSid.replace(/'/g, "''");
+            const groupScript = `$p='${escapedPath}'; $a=Get-Acl $p; ` +
+                `$a.SetGroup([System.Security.Principal.SecurityIdentifier]'${escapedSid}'); Set-Acl $p $a`;
+            this.logger.debug(`Setting share group: ${groupScript}`);
+            const { stderr } = await this.winShellService.executeCommand(groupScript, jobRunId);
+            if (stderr) throw new Error(stderr);
+            this.logger.debug(`Successfully set share group to ${sourceGroupSid}`);
+        } catch (error) {
+            this.logger.error(`Failed to set Group on share ${destinationPath}: ${error.message}`, error.stack);
+        }
     }
 
 }
