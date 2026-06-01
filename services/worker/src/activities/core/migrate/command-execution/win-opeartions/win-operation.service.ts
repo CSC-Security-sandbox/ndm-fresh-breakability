@@ -229,10 +229,6 @@ export class WinOperationService {
     // 2c. Apply SMB inheritance mode for the DLM root (no-op for all other commands).
     const filteredAcl = this.applySmbInheritanceMode(acl, command, jobContext);
 
-    // Operator-facing: log the exact security descriptor we are about to hand
-    // to `Set-FileSecurityFast`. This is the *post-mapping, post-inheritance-
-    // transform* descriptor — i.e., the bytes the kernel will actually see —
-    // so an operator can reproduce stamp behaviour from logs alone.
     this.logger.log(
       `[${workflowId}] Stamping ACL on destination handed to Set-FileSecurityFast - targetPath=${targetPath} ` +
       `sourcePath=${sourcePath} ` +
