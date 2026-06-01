@@ -22,7 +22,7 @@ import (
 //
 // All 44 scenarios run in a single It block against one seeded tree to keep
 // wall-clock time low. Catalog: utils/acl_mismatch_manager.go.
-var _ = FDescribe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL mutation catalog", func() {
+var _ = Describe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL mutation catalog", func() {
 	BeforeEach(func() {
 		if PROTOCOL_TYPE == ProtocolNFS {
 			Skip("ACL mismatch detection is SMB-only")
