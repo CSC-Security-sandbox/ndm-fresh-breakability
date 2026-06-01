@@ -297,7 +297,7 @@ export class WinOperationService {
     // 2c. Apply SMB inheritance mode for the DLM root (no-op for all other commands).
     const filteredAcl = this.applySmbInheritanceMode(acl, command, jobContext);
 
-    this.logger.log(
+    this.logger.debug(
       `[${workflowId}] Stamping ACL on destination handed to Set-FileSecurityFast - targetPath=${targetPath} ` +
       `sourcePath=${sourcePath} ` +
       `sd=${JSON.stringify(filteredAcl)}`,
@@ -419,7 +419,7 @@ export class WinOperationService {
     command: Cmd,
     jobContext: JobManagerContext,
   ): SecurityDescriptor {
-    this.logger.log(`applySmbInheritanceMode: ${JSON.stringify(command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode)}`);
+    this.logger.debug(`applySmbInheritanceMode: ${command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode}`);
     if (!command.ops[OPS_CMD.STAMP_META]?.params.applyInheritanceMode) return acl;
     return this.applySmbInheritanceModeTransform(acl, this.resolveSmbInheritanceMode(jobContext));
   }
@@ -501,17 +501,11 @@ export class WinOperationService {
     if (!!sourceAcl.DaclProtected !== !!targetAcl.DaclProtected)
       output.inValid += `DaclProtected mismatch: Expected(${!!sourceAcl.DaclProtected}) Target(${!!targetAcl.DaclProtected}). `;
 
-    // NULL DACL on both sides → there is no DACL to compare ACE-by-ACE on
-    // either object (Win32 `SE_DACL_PRESENT=0` means access checks bypass
-    // the DACL entirely). Walking `DaclAces` here is not just wasted work —
-    // it's actively wrong: the reader sometimes surfaces phantom inherited
-    // ACE bytes the kernel keeps around even after `SE_DACL_PRESENT` is
-    // cleared, which would otherwise drive false-positive
-    // "Missing ACE in target" findings on every incremental scan.
-    //
-    // Owner / Group / DaclPresent / DaclProtected / Attributes were already
-    // checked above and stand on their own; we still log Source/Target SID
-    // strings (empty here, by definition) for CoC parity.
+    const expectedAttrs = parseStampableAttributes(sourceAcl.Attributes);
+    const actualAttrs   = parseStampableAttributes(targetAcl.Attributes);
+    if (expectedAttrs !== actualAttrs)
+      output.inValid += `Attributes mismatch: Expected(0x${expectedAttrs.toString(16)}) Target(0x${actualAttrs.toString(16)}). `;
+
     if (!sourceAcl.DaclPresent && !targetAcl.DaclPresent) {
       if (output.inValid.length > 0) {
         this.logger.log(
@@ -529,16 +523,6 @@ export class WinOperationService {
     // we read back is not guaranteed to equal what we wrote even on a
     // successful stamp. Validating it would generate false-positive
     // post-stamp errors. Symmetric with `securityDescriptorEquals`.
-
-    // Attributes are compared on the stampable subset only — same mask the
-    // stamp pipeline can actually write. Bits outside this subset
-    // (Compressed, Encrypted, SparseFile, etc.) require separate Win32
-    // syscalls that NDM does not invoke, so flagging them here would
-    // alarm on every stamp without giving the operator anything to act on.
-    const expectedAttrs = parseStampableAttributes(sourceAcl.Attributes);
-    const actualAttrs   = parseStampableAttributes(targetAcl.Attributes);
-    if (expectedAttrs !== actualAttrs)
-      output.inValid += `Attributes mismatch: Expected(0x${expectedAttrs.toString(16)}) Target(0x${actualAttrs.toString(16)}). `;
 
     // Only consider AccessAllowed (0) and AccessDenied (1) ACEs in comparison.
     // This ignores audit/object ACEs (e.g., AceType 3, 5) which are not stamped or relevant for access control.

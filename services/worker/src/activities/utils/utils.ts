@@ -204,10 +204,7 @@ export const isMetaUpdated = async (
 ): Promise<boolean> => {
   if (!dFile) return true;
   if (process.platform !== 'win32') return isNfsMetaUpdated(sFile, dFile, redisService, jobContext);
-  // SMB: direct source vs destination security descriptor comparison. Caller
-  // is responsible for supplying the detector and both paths — without them
-  // we have no way to make a correctness-preserving decision, so we fail
-  // loudly rather than silently falling back to the old ctime heuristic.
+  
   if (!securityDescriptorChangeDetector || !sourcePath || !targetPath) {
     throw new Error('isMetaUpdated on win32 requires securityDescriptorChangeDetector, sourcePath, and targetPath');
   }
