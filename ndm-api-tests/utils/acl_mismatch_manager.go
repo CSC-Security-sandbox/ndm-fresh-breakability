@@ -739,20 +739,60 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	fmt.Fprintf(&b, "$p='%s\\group\\S06_group_change.txt'; $a=Get-Acl $p; "+
 		"$a.SetGroup([System.Security.Principal.NTAccount]'ROOTDOMAIN\\Domain Admins'); Set-Acl $p $a\n", share)
 
-	// ── 7–8: DACL order — rebuild with swapped order ─────────────────────
+	// ── 7–8: DACL order — rebuild with swapped order via SetNamedSecurityInfo ──
+	// Set-Acl re-canonicalizes (Deny-before-Allow), making the order swap
+	// invisible. Use RawAcl + SetNamedSecurityInfo (same approach as NDM's
+	// Set-FileSecurityFast) to bypass Windows' automatic re-sorting.
 	b.WriteString("Write-Output '===== MUTATE 7-8 dacl_order ====='\n")
-	// S07: baseline is Deny-first, Allow-second → mutate to Allow-first, Deny-second
-	fmt.Fprintf(&b, "$p='%s\\dacl_order\\S07_deny_before_allow.txt'; $a=Get-Acl $p; "+
-		"$a.SetAccessRuleProtection($true,$false); foreach($r in @($a.Access)){ $a.RemoveAccessRule($r) | Out-Null }; "+
-		"$a.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('ROOTDOMAIN\\Domain Admins','Read','Allow'))); "+
-		"$a.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('ROOTDOMAIN\\Domain Users','Write','Deny'))); "+
-		"Set-Acl $p $a\n", share)
-	// S08: baseline is Deny Domain Users:W, Allow Domain Admins:R → mutate to Allow-first, Deny-second
-	fmt.Fprintf(&b, "$p='%s\\dacl_order\\S08_order_swap.txt'; $a=Get-Acl $p; "+
-		"$a.SetAccessRuleProtection($true,$false); foreach($r in @($a.Access)){ $a.RemoveAccessRule($r) | Out-Null }; "+
-		"$a.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('ROOTDOMAIN\\Domain Admins','Read','Allow'))); "+
-		"$a.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('ROOTDOMAIN\\Domain Users','Write','Deny'))); "+
-		"Set-Acl $p $a\n", share)
+
+	// Emit the P/Invoke helper type once (idempotent Add-Type).
+	b.WriteString(`try { [FastAcl] | Out-Null } catch {
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class FastAcl {
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint SetNamedSecurityInfo(
+        string pObjectName, uint ObjectType, int SecurityInfo,
+        IntPtr psidOwner, IntPtr psidGroup, IntPtr pDacl, IntPtr pSacl);
+}
+"@
+}
+`)
+
+	// Helper: read the existing DACL via RawSecurityDescriptor, reverse ACE
+	// order, write back via SetNamedSecurityInfo. Preserves the exact same
+	// ACEs (SID, mask, type, flags) but in reverse order — something Set-Acl
+	// would silently undo by re-canonicalising.
+	b.WriteString(`function Reverse-DaclOrder([string]$path) {
+    $rawSD = (Get-Item $path).GetAccessControl('Access').GetSecurityDescriptorBinaryForm()
+    $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($rawSD, 0)
+    $oldDacl = $sd.DiscretionaryAcl
+    if ($null -eq $oldDacl -or $oldDacl.Count -lt 2) { throw "DACL on $path has <2 ACEs, nothing to reverse" }
+    $aces = @()
+    foreach ($a in $oldDacl) { $aces += $a }
+    [array]::Reverse($aces)
+    $newDacl = New-Object System.Security.AccessControl.RawAcl(2, $aces.Count)
+    for ($i = 0; $i -lt $aces.Count; $i++) { $newDacl.InsertAce($i, $aces[$i]) }
+    $daclBytes = New-Object byte[] ($newDacl.BinaryLength)
+    $newDacl.GetBinaryForm($daclBytes, 0)
+    $ptrDacl = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($daclBytes.Length)
+    [System.Runtime.InteropServices.Marshal]::Copy($daclBytes, 0, $ptrDacl, $daclBytes.Length)
+    $ctrl = $sd.ControlFlags
+    $isProtected = ($ctrl -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
+    $flags = 0x4
+    if ($isProtected) { $flags = [int]($flags -bor 0x80000000) } else { $flags = [int]($flags -bor 0x20000000) }
+    $result = [FastAcl]::SetNamedSecurityInfo($path, 1, $flags, [IntPtr]::Zero, [IntPtr]::Zero, $ptrDacl, [IntPtr]::Zero)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
+    if ($result -ne 0) { throw "SetNamedSecurityInfo failed on $path : error $result" }
+    Write-Output "Reversed DACL order on $path ($($aces.Count) ACEs)"
+}
+`)
+
+	// S07: baseline is Deny DU:W, Allow DA:R (canonical) → reverse to Allow-first, Deny-second (non-canonical)
+	fmt.Fprintf(&b, "Reverse-DaclOrder -path '%s\\dacl_order\\S07_deny_before_allow.txt'\n", share)
+	// S08: same baseline → same non-canonical reversal
+	fmt.Fprintf(&b, "Reverse-DaclOrder -path '%s\\dacl_order\\S08_order_swap.txt'\n", share)
 
 	// ── 9–17: DACL membership — add/remove/swap ACEs ─────────────────────
 	b.WriteString("Write-Output '===== MUTATE 9-17 dacl_membership ====='\n")
