@@ -347,22 +347,26 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrGroup)
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptrDacl)
 
-    if ($result -ne 0) { throw "Error writing security info: $result" }
+    # Build unresolved_sids JSON once — emitted on both success and failure
+    # paths so the TS caller can still surface unresolved-SID warnings even
+    # when SetNamedSecurityInfo itself fails.
+    $unresolved_sid_values = @()
+    if ($unresolved_sids.Count -gt 0) {
+        $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
+    }
+    $unresolved_json = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
 
-    # Set file attributes
+    if ($result -ne 0) {
+        $script:setAclLogs.Add("SetNamedSecurityInfo failed result=$result unresolvedSidCount=$($unresolved_sid_values.Count)")
+        $log_json = '[' + ((@($script:setAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
+        Write-Output ('{"success":false,"error":"Failed to set security info","unresolved_sids":' + $unresolved_json + ',"logs":' + $log_json + '}')
+        return
+    }
+
     if ($securityInfo.Attributes) {
         $attrEnum = [System.Enum]::Parse([System.IO.FileAttributes], $securityInfo.Attributes)
         [System.IO.File]::SetAttributes($path, $attrEnum)
         $script:setAclLogs.Add("applied attributes=$($securityInfo.Attributes)")
-    }
-        
-    $unresolved_sid_values = @()
-    if ($unresolved_sids.Count -gt 0) {
-        $unresolved_sid_values = @($unresolved_sids | ForEach-Object { $_.Value })
-        # Manually build JSON array
-        $json_array = '[' + (($unresolved_sid_values | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']'
-    } else {
-        $json_array = '[]'
     }
     $script:setAclLogs.Add("done unresolvedSidCount=$($unresolved_sid_values.Count)")
 
@@ -372,7 +376,7 @@ function Set-FileSecurityFast([string]$path, [string]$aclJson) {
     # JSON.parse the stdout for the unresolved_sids field) pick it up
     # without any contract change.
     $log_json = '[' + ((@($script:setAclLogs) | ForEach-Object { $_ | ConvertTo-Json -Compress }) -join ',') + ']'
-    Write-Output ('{"success":true, "unresolved_sids":' + $json_array + ',"logs":' + $log_json + '}')
+    Write-Output ('{"success":true,"unresolved_sids":' + $unresolved_json + ',"logs":' + $log_json + '}')
 }
 
 function Resolve-UsernamesToSid {
