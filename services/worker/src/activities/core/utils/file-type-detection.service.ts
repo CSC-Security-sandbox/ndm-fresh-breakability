@@ -21,8 +21,11 @@ export class FileTypeDetectionService {
     async detectFileType(sourceContentPath: string, sourceStat: fs.Stats): Promise<FileType> {
         let symlinkType: FileType | undefined;
         if (process.platform === 'win32') {
-            // Check if symbolic link or directory (to detect junctions and volume mount points)
-            if (sourceStat.isSymbolicLink() || sourceStat.isDirectory()) {
+            // Check if symbolic link or directory (to detect junctions and volume mount points).
+            // Only reparse points can be junctions/symlinks/mount points, so gate the
+            // expensive PowerShell call behind a cheap native reparse-point check.
+            if ((sourceStat.isSymbolicLink() || sourceStat.isDirectory())
+                && this.winOperationService.isReparsePoint(sourceContentPath)) {
                 try {
                     // Detect detailed link type (junction, volume mount point, symbolic link)
                     const linkInfo = await this.winOperationService.detectSymbolicLinkType(sourceContentPath);

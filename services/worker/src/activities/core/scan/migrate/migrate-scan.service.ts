@@ -60,7 +60,6 @@ export class MigrateScanService {
         try {
             sourceRootStat = await fs.promises.lstat(sourcePath);
             targetRootStat = await fs.promises.lstat(targetPath);
-            this.logger.debug(`DLM root exists on destination: ${targetPath}`);
         } catch (err) {
             if (!sourceRootStat) {
                 this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);

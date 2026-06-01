@@ -27,8 +27,7 @@ let FindFirstStreamW: any;
 let FindNextStreamW: any;
 let FindClose: any;
 let WIN32_FIND_STREAM_DATA: any;
-
-
+let GetFileAttributesW: any;
 
 @Injectable()
 export class WinOperationService {
@@ -37,6 +36,8 @@ export class WinOperationService {
 
   private readonly ADS_SUFFIX = ':$DATA';
   private readonly DEFAULT_STREAM = '::$DATA';
+  private readonly FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
+  private readonly INVALID_FILE_ATTRIBUTES = 0xffffffff;
   private hasWindowsAPIs:boolean = true;
 
   constructor(
@@ -72,6 +73,7 @@ export class WinOperationService {
         'void *', koffi.pointer(WIN32_FIND_STREAM_DATA)
       ]);
       FindClose = kernel32.func('FindClose', 'bool', ['void *']);
+      GetFileAttributesW = kernel32.func('GetFileAttributesW', 'uint32', ['str16']);
     } catch (error) {
       // If Windows API initialization fails, functions will remain undefined
       console.error('Failed to initialize Windows API for ADS detection:', error);
@@ -401,14 +403,30 @@ export class WinOperationService {
     }
     return usernameToSidMap;
   }
+  
+  /*
+     do reparse check via koffi, so that it is fast and use it for ignoring the dir.
+     Incase we are getting invalid_file_attributes we assume as true and fallback to powershell.
+  */
+  isReparsePoint(filePath: string): boolean {
+    if (!GetFileAttributesW) return true;
+    const startedAt = process.hrtime.bigint();
+    const attrs = GetFileAttributesW(filePath);
+    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    this.logger.debug(`[reparse-check-timing] native reparse check for ${filePath} took ${elapsedMs.toFixed(4)}ms`);
+    if (attrs === this.INVALID_FILE_ATTRIBUTES) return true;
+    return (attrs & this.FILE_ATTRIBUTE_REPARSE_POINT) !== 0;
+  }
 
   async detectSymbolicLinkType(path: string): Promise<FileType> {
+    const startedAt = Date.now();
     try {
       const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetLinkInfoScript}`;
       const output = await this.winShellService.executeCommand(script);
       if (output.stderr) throw new Error(output.stderr);
       const result = JSON.parse(output.stdout);
 
+      this.logger.debug(`[link-detect-timing] PowerShell link detection for ${path} took ${Date.now() - startedAt}ms`);
       this.logger.debug(`Parsed link detection result for path ${path} is : ${JSON.stringify(result, null, 2)}`);
 
       if (result.IsJunction) return FileType.JUNCTION;

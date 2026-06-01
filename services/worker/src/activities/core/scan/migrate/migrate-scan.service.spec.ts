@@ -1482,7 +1482,6 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
         jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('DLM root exists on destination'));
     });
 
     it('calls publishDlmRootPermissionStamp when preservePermissions is true', async () => {

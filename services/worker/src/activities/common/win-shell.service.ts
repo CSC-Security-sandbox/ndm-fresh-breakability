@@ -225,12 +225,9 @@ class PersistentShell extends EventEmitter {
             }
         }, cmd.timeout);
         
-        // Clear any potential state contamination and reset PowerShell variables
         const stateResetCmd = `
 $ErrorActionPreference = 'Stop'
 $Error.Clear()
-Remove-Variable -Name * -Force -ErrorAction SilentlyContinue
-[System.GC]::Collect()
 `;
         
         // Wrap command with state isolation and error handling

@@ -11,6 +11,7 @@ import { SourceAclError, TargetAclError, WindowsAPINotAvailableError } from './a
 import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
+import * as koffi from 'koffi';
 
 // Import correct types
 type SecurityDescriptor = {
@@ -2070,6 +2071,72 @@ describe('WinOperationService', () => {
           expect(result).toHaveProperty('streamCount');
         },
       );
+    });
+  });
+
+  describe('isReparsePoint', () => {
+    const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
+    const INVALID_FILE_ATTRIBUTES = 0xffffffff;
+    const testPath = 'C:\\test\\junction';
+
+    describe('when GetFileAttributesW is not initialized', () => {
+      it('should return true (fallback to PowerShell)', () => {
+        expect(service.isReparsePoint(testPath)).toBe(true);
+      });
+    });
+
+    describe('when GetFileAttributesW is bound via koffi', () => {
+      const mockGetFileAttributesW = jest.fn();
+      let koffiLoadSpy: jest.SpyInstance;
+
+      beforeAll(() => {
+        koffiLoadSpy = jest.spyOn(koffi, 'load').mockReturnValue({
+          func: jest.fn((name: string) => {
+            if (name === 'GetFileAttributesW') return mockGetFileAttributesW;
+            return jest.fn();
+          }),
+        } as ReturnType<typeof koffi.load>);
+        service.initializeWindowsAPI();
+      });
+
+      afterAll(() => {
+        koffiLoadSpy.mockRestore();
+      });
+
+      beforeEach(() => {
+        mockGetFileAttributesW.mockReset();
+      });
+
+      it('should return true when GetFileAttributesW returns INVALID_FILE_ATTRIBUTES (fallback to PowerShell)', () => {
+        mockGetFileAttributesW.mockReturnValue(INVALID_FILE_ATTRIBUTES);
+
+        expect(service.isReparsePoint(testPath)).toBe(true);
+        expect(mockGetFileAttributesW).toHaveBeenCalledWith(testPath);
+      });
+
+      it('should return true when FILE_ATTRIBUTE_REPARSE_POINT bit is set', () => {
+        mockGetFileAttributesW.mockReturnValue(FILE_ATTRIBUTE_REPARSE_POINT | 0x10);
+
+        expect(service.isReparsePoint(testPath)).toBe(true);
+        expect(mockGetFileAttributesW).toHaveBeenCalledWith(testPath);
+      });
+
+      it('should return false when reparse point bit is not set', () => {
+        mockGetFileAttributesW.mockReturnValue(0x10);
+
+        expect(service.isReparsePoint(testPath)).toBe(false);
+        expect(mockGetFileAttributesW).toHaveBeenCalledWith(testPath);
+      });
+
+      it('should log native check timing when GetFileAttributesW is available', () => {
+        mockGetFileAttributesW.mockReturnValue(0);
+
+        service.isReparsePoint(testPath);
+
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          expect.stringMatching(/^\[reparse-check-timing\] native reparse check for .+ took [\d.]+ms$/),
+        );
+      });
     });
   });
 });

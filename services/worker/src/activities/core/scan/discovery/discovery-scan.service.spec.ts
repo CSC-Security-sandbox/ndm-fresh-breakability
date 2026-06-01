@@ -17,7 +17,6 @@ jest.mock('fs', () => {
   return {
     ...actualFs,
     promises: {
-      access: jest.fn(),
       readdir: jest.fn(),
       opendir: jest.fn(),
       lstat: jest.fn(),
@@ -191,8 +190,6 @@ describe('DiscoveryScanService', () => {
         { name: 'subdir' },
       ]);
 
-      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
-
       (shouldExcludeOrSkip as jest.Mock).mockReturnValue(false);
       (getFileInfo as jest.Mock).mockResolvedValue({ fileName: 'file1.txt' });
       (getFilePermissions as jest.Mock).mockReturnValue('755');
@@ -270,6 +267,53 @@ describe('DiscoveryScanService', () => {
         }as any),
       ).rejects.toThrow(lstatError);
 
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    it('should throw FatalError and publish to error stream when opendir reports ENOENT', async () => {
+      const enoent: any = new Error('no such directory');
+      enoent.code = 'ENOENT';
+      (fs.promises.opendir as jest.Mock).mockRejectedValueOnce(enoent);
+
+      await expect(
+        service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/missing',
+          sourcePrefix: '/missing',
+          command: mockCommand,
+          settings: {
+            excludePatterns: [],
+            skipFile: 0,
+          },
+        } as any),
+      ).rejects.toBeInstanceOf(FatalError);
+
+      expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
+    });
+
+    it('should rethrow non-ENOENT opendir errors without wrapping in FatalError', async () => {
+      const eacces: any = new Error('permission denied');
+      eacces.code = 'EACCES';
+      (fs.promises.opendir as jest.Mock).mockRejectedValueOnce(eacces);
+
+      let caught: any;
+      try {
+        await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath: '/denied',
+          sourcePrefix: '/denied',
+          command: mockCommand,
+          settings: {
+            excludePatterns: [],
+            skipFile: 0,
+          },
+        } as any);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBe(eacces);
+      expect(caught).not.toBeInstanceOf(FatalError);
       expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
     });
 

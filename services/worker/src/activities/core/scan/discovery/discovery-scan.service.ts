@@ -8,11 +8,11 @@ import { Operation, Origin } from "src/activities/utils/utils.types";
 import { FatalError } from "src/errors/errors.types";
 import { PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
-import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 import { WinOperationService } from '../../migrate/command-execution/win-opeartions/win-operation.service';
+import { openDirIfExists } from "../../utils/utils";
 
 
 export class DiscoveryScanService {
@@ -41,13 +41,7 @@ export class DiscoveryScanService {
         const lowerCaseSourceDirs = new Set<string>();
         const shouldScanADS:boolean = jobContext.jobConfig?.options?.shouldScanADS;
         try {
-            const pathExists = await isPathExists(sourcePath);
-            if (!pathExists) {
-                throw new FatalError(`Source directory does not exist: ${sourcePath}`);
-            }
-
-            // Stream directory entries using opendir() — O(1) memory per entry
-            const dir = await fs.promises.opendir(sourcePath);
+            let dir: fs.Dir = await openDirIfExists(sourcePath);            
             try {
                 for await (const item of dir) {
                     const sourceContentPath = path.join(sourcePath, item.name);

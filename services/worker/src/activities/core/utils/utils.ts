@@ -1,6 +1,7 @@
 import { Cmd, JobManagerContext, TaskInfo, TaskStatus, TaskType } from "@netapp-cloud-datamigrate/jobs-lib";
 import { uuid4 } from "@temporalio/workflow";
 import * as fs from 'fs';
+import { FatalError } from "src/errors/errors.types";
 
 
 export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  JobManagerContext, commands: Cmd[]): TaskInfo => new TaskInfo(
@@ -27,6 +28,24 @@ export const isPathExists = async (path: string): Promise<boolean> => {
   }
   return false;
 }
+
+
+/*
+  throws FatalError if directory does not exist, otherwise returns the opened directory handle.
+*/
+export const openDirIfExists = async (path: string): Promise<fs.Dir> => {
+  let dir: fs.Dir;
+  try {
+    dir = await fs.promises.opendir(path);
+    return dir;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new FatalError(`Source directory does not exist: ${path}`);
+    }
+    throw error;
+  }
+};
+
 
 export const isExists = async (path: string): Promise<boolean> => {
   try {
