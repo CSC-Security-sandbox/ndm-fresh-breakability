@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -1336,6 +1337,84 @@ func sshRunScript(config SSHConfig, script string) (string, error) {
 		return "", fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
 	}
 
+	return stdout.String(), nil
+}
+
+// sshRunPowerShellScript ships an arbitrarily long PowerShell script body to
+// a Windows worker via SFTP (no command-line length limit) and executes it.
+// This is used when the script body is too large for cmd.exe's 8191-char
+// command-line cap (e.g. the 14-KB ACL-mismatch seeder).
+//
+// Transport:
+//  1. Open one SSH connection.
+//  2. Open an SFTP subsystem on it. Ensure C:/Temp exists.
+//  3. Stream the script bytes into C:\Temp\<name>.ps1.
+//  4. Execute the file via a separate SSH session: `powershell.exe -File`.
+//
+// Returns stdout of the execution step. Stderr is folded into the error value
+// on non-zero exit, matching sshRunScript's contract.
+func sshRunPowerShellScript(config SSHConfig, name, psBody string) (string, error) {
+	sshConfig := &ssh.ClientConfig{
+		User:            config.Username,
+		Auth:            []ssh.AuthMethod{ssh.Password(config.Password)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	client, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to SSH server: %w", err)
+	}
+	defer client.Close()
+
+	// pkg/sftp uses forward-slash paths on Windows; the executor still gets
+	// the backslash form because powershell.exe -File accepts either.
+	remotePathFwd := fmt.Sprintf("C:/Temp/%s.ps1", name)
+	remotePathBs := fmt.Sprintf(`C:\Temp\%s.ps1`, name)
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return "", fmt.Errorf("failed to start SFTP subsystem (is OpenSSH server's sftp subsystem enabled on the worker?): %w", err)
+	}
+	defer sftpClient.Close()
+
+	// MkdirAll is a no-op if C:/Temp already exists.
+	if err := sftpClient.MkdirAll("C:/Temp"); err != nil {
+		return "", fmt.Errorf("failed to ensure C:/Temp exists: %w", err)
+	}
+
+	f, err := sftpClient.Create(remotePathFwd)
+	if err != nil {
+		return "", fmt.Errorf("failed to create remote file %s: %w", remotePathFwd, err)
+	}
+	if _, err := f.Write([]byte(psBody)); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("failed to write remote file %s: %w", remotePathFwd, err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("failed to close remote file %s: %w", remotePathFwd, err)
+	}
+
+	// Execute the uploaded script.
+	execCmd := fmt.Sprintf(
+		`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%s"`,
+		remotePathBs)
+	return runOneWithOutput(client, execCmd)
+}
+
+// runOneWithOutput runs a command and returns stdout; stderr is folded into
+// the error on non-zero exit.
+func runOneWithOutput(client *ssh.Client, cmd string) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	if err := session.Run(cmd); err != nil {
+		return stdout.String(), fmt.Errorf("failed to run script: %w\nstderr: %s", err, stderr.String())
+	}
 	return stdout.String(), nil
 }
 
