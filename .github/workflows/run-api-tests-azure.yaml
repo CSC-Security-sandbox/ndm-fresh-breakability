@@ -1615,160 +1615,160 @@ jobs:
           cd $TF_DIR
           terraform init
 
-      - name: Cleanup ONTAP Snapshots
-        if: always()
-        run: |
-          ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
-          ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
-          ONTAP_SYSTEM_MANAGER_SRC_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}"
-          ONTAP_SRC_SVM_NAME="${{ vars.ONTAP_SRC_SVM_NAME }}"
-          ONTAP_DST_API_URL="${{ vars.ONTAP_DST_API_URL }}"
-          ONTAP_SYSTEM_MANAGER_DST_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}"
-          ONTAP_SYSTEM_MANAGER_DST_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}"
-          ONTAP_DST_SVM_NAME="${{ vars.ONTAP_DST_SVM_NAME }}"
-          ONTAP_NFS_SOURCE_VOLUMES="${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}"
-          ONTAP_NFS_DEST_VOLUMES="${{ vars.ONTAP_NFS_DEST_VOLUMES }}"
-          ONTAP_SMB_SOURCE_VOLUMES="${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}"
-          ONTAP_SMB_DEST_VOLUMES="${{ vars.ONTAP_SMB_DEST_VOLUMES }}"
-          
-          cleanup_snapshots_for_volume() {
-            local ONTAP_URL=$1
-            local USERNAME=$2
-            local PASSWORD=$3
-            local SVM_NAME=$4
-            local VOLUME_NAME=$5
-            
-            echo "[CLEANUP] Processing volume '$VOLUME_NAME'"
-            
-            MAX_RETRIES=3
-            RETRY_COUNT=0
-            HTTP_CODE="000"
-            
-            while [ "$HTTP_CODE" = "000" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if [ $RETRY_COUNT -gt 0 ]; then
-                echo "Retry attempt $RETRY_COUNT/$MAX_RETRIES for volume '$VOLUME_NAME'"
-                sleep 2
-              fi
-              
-              VOLUME_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
-                "$ONTAP_URL/api/storage/volumes?svm.name=$SVM_NAME&name=$VOLUME_NAME" 2>&1)
-              
-              HTTP_CODE=$(echo "$VOLUME_RESPONSE" | tail -n1)
-              VOLUME_BODY=$(echo "$VOLUME_RESPONSE" | sed '$d')
-              
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-            done
-            
-            if [ "$HTTP_CODE" = "000" ]; then
-              echo "Failed to connect to ONTAP API at '$ONTAP_URL' after $MAX_RETRIES attempts - check URL and network connectivity"
-              return 1
-            fi
-            
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "Failed to get volume '$VOLUME_NAME': HTTP $HTTP_CODE"
-              return 1
-            fi
-            
-            VOLUME_UUID=$(echo "$VOLUME_BODY" | jq -r '.records[0].uuid // empty')
-            
-            if [ -z "$VOLUME_UUID" ] || [ "$VOLUME_UUID" = "null" ]; then
-              echo "[CLEANUP] Volume '$VOLUME_NAME' not found"
-              return 1
-            fi
-            
-            SNAPSHOTS_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
-              "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots")
-            
-            SNAPSHOTS_HTTP_CODE=$(echo "$SNAPSHOTS_RESPONSE" | tail -n1)
-            SNAPSHOTS_BODY=$(echo "$SNAPSHOTS_RESPONSE" | sed '$d')
-            
-            if [ "$SNAPSHOTS_HTTP_CODE" != "200" ]; then
-              echo "[CLEANUP] Failed to list snapshots for volume '$VOLUME_NAME': HTTP $SNAPSHOTS_HTTP_CODE"
-              return 1
-            fi
-            
-            SNAPSHOT_UUIDS=$(echo "$SNAPSHOTS_BODY" | jq -r '.records[]?.uuid // empty')
-            
-            if [ -z "$SNAPSHOT_UUIDS" ]; then
-              echo "[CLEANUP] No snapshots found on volume '$VOLUME_NAME'"
-              return 0
-            fi
-            
-            while IFS= read -r SNAP_UUID; do
-              [ -z "$SNAP_UUID" ] && continue
-              
-              curl -sk -u "$USERNAME:$PASSWORD" -X DELETE \
-                "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots/$SNAP_UUID" > /dev/null 2>&1
-            done <<< "$SNAPSHOT_UUIDS"
-            
-            echo "[CLEANUP] Completed snapshot cleanup for volume '$VOLUME_NAME'"
-            return 0
-          }
-          
-          cleanup_snapshots_for_protocol() {
-            local PROTOCOL=$1
-            local SOURCE_VOLUMES_STR=$2
-            local DEST_VOLUMES_STR=$3
-            
-            if [ -z "$SOURCE_VOLUMES_STR" ] || [ -z "$DEST_VOLUMES_STR" ]; then
-              echo "Skipping $PROTOCOL snapshot cleanup - volume GitHub variables not set"
-              return 0
-            fi
-            
-            echo "Cleaning up $PROTOCOL snapshots"
-            
-            if [ -n "$ONTAP_SRC_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" ] && \
-               [ -n "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" ] && [ -n "$ONTAP_SRC_SVM_NAME" ]; then
-              
-              IFS=',' read -ra SOURCE_VOLUMES <<< "$SOURCE_VOLUMES_STR"
-              for VOL in "${SOURCE_VOLUMES[@]}"; do
-                VOL=$(echo "$VOL" | xargs)
-                [ -z "$VOL" ] && continue
-                
-                cleanup_snapshots_for_volume "$ONTAP_SRC_API_URL" \
-                  "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" \
-                  "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" \
-                  "$ONTAP_SRC_SVM_NAME" \
-                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for source volume '$VOL'"
-                
-                echo "Waiting 30 seconds to avoid ONTAP rate limits"
-                sleep 30
-              done
-            else
-              echo "Skipping $PROTOCOL source snapshot cleanup - ONTAP configuration incomplete"
-            fi
-            
-            if [ -n "$ONTAP_DST_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" ] && \
-               [ -n "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" ] && [ -n "$ONTAP_DST_SVM_NAME" ]; then
-              
-              IFS=',' read -ra DEST_VOLUMES <<< "$DEST_VOLUMES_STR"
-              for VOL in "${DEST_VOLUMES[@]}"; do
-                VOL=$(echo "$VOL" | xargs)
-                [ -z "$VOL" ] && continue
-                
-                cleanup_snapshots_for_volume "$ONTAP_DST_API_URL" \
-                  "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" \
-                  "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" \
-                  "$ONTAP_DST_SVM_NAME" \
-                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for destination volume '$VOL'"
-                
-                echo "Waiting 30 seconds to avoid ONTAP rate limits"
-                sleep 30
-              done
-            else
-              echo "Skipping $PROTOCOL destination snapshot cleanup - ONTAP configuration incomplete"
-            fi
-          }
-          
-          cleanup_snapshots_for_protocol "NFS" "$ONTAP_NFS_SOURCE_VOLUMES" "$ONTAP_NFS_DEST_VOLUMES"
-          cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
-          echo "Snapshot cleanup completed"
+      # - name: Cleanup ONTAP Snapshots
+      #   if: always()
+      #   run: |
+      #     ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
+      #     ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
+      #     ONTAP_SYSTEM_MANAGER_SRC_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}"
+      #     ONTAP_SRC_SVM_NAME="${{ vars.ONTAP_SRC_SVM_NAME }}"
+      #     ONTAP_DST_API_URL="${{ vars.ONTAP_DST_API_URL }}"
+      #     ONTAP_SYSTEM_MANAGER_DST_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}"
+      #     ONTAP_SYSTEM_MANAGER_DST_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}"
+      #     ONTAP_DST_SVM_NAME="${{ vars.ONTAP_DST_SVM_NAME }}"
+      #     ONTAP_NFS_SOURCE_VOLUMES="${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}"
+      #     ONTAP_NFS_DEST_VOLUMES="${{ vars.ONTAP_NFS_DEST_VOLUMES }}"
+      #     ONTAP_SMB_SOURCE_VOLUMES="${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}"
+      #     ONTAP_SMB_DEST_VOLUMES="${{ vars.ONTAP_SMB_DEST_VOLUMES }}"
+      #     
+      #     cleanup_snapshots_for_volume() {
+      #       local ONTAP_URL=$1
+      #       local USERNAME=$2
+      #       local PASSWORD=$3
+      #       local SVM_NAME=$4
+      #       local VOLUME_NAME=$5
+      #       
+      #       echo "[CLEANUP] Processing volume '$VOLUME_NAME'"
+      #       
+      #       MAX_RETRIES=3
+      #       RETRY_COUNT=0
+      #       HTTP_CODE="000"
+      #       
+      #       while [ "$HTTP_CODE" = "000" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+      #         if [ $RETRY_COUNT -gt 0 ]; then
+      #           echo "Retry attempt $RETRY_COUNT/$MAX_RETRIES for volume '$VOLUME_NAME'"
+      #           sleep 2
+      #         fi
+      #         
+      #         VOLUME_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+      #           "$ONTAP_URL/api/storage/volumes?svm.name=$SVM_NAME&name=$VOLUME_NAME" 2>&1)
+      #         
+      #         HTTP_CODE=$(echo "$VOLUME_RESPONSE" | tail -n1)
+      #         VOLUME_BODY=$(echo "$VOLUME_RESPONSE" | sed '$d')
+      #         
+      #         RETRY_COUNT=$((RETRY_COUNT + 1))
+      #       done
+      #       
+      #       if [ "$HTTP_CODE" = "000" ]; then
+      #         echo "Failed to connect to ONTAP API at '$ONTAP_URL' after $MAX_RETRIES attempts - check URL and network connectivity"
+      #         return 1
+      #       fi
+      #       
+      #       if [ "$HTTP_CODE" != "200" ]; then
+      #         echo "Failed to get volume '$VOLUME_NAME': HTTP $HTTP_CODE"
+      #         return 1
+      #       fi
+      #       
+      #       VOLUME_UUID=$(echo "$VOLUME_BODY" | jq -r '.records[0].uuid // empty')
+      #       
+      #       if [ -z "$VOLUME_UUID" ] || [ "$VOLUME_UUID" = "null" ]; then
+      #         echo "[CLEANUP] Volume '$VOLUME_NAME' not found"
+      #         return 1
+      #       fi
+      #       
+      #       SNAPSHOTS_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+      #         "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots")
+      #       
+      #       SNAPSHOTS_HTTP_CODE=$(echo "$SNAPSHOTS_RESPONSE" | tail -n1)
+      #       SNAPSHOTS_BODY=$(echo "$SNAPSHOTS_RESPONSE" | sed '$d')
+      #       
+      #       if [ "$SNAPSHOTS_HTTP_CODE" != "200" ]; then
+      #         echo "[CLEANUP] Failed to list snapshots for volume '$VOLUME_NAME': HTTP $SNAPSHOTS_HTTP_CODE"
+      #         return 1
+      #       fi
+      #       
+      #       SNAPSHOT_UUIDS=$(echo "$SNAPSHOTS_BODY" | jq -r '.records[]?.uuid // empty')
+      #       
+      #       if [ -z "$SNAPSHOT_UUIDS" ]; then
+      #         echo "[CLEANUP] No snapshots found on volume '$VOLUME_NAME'"
+      #         return 0
+      #       fi
+      #       
+      #       while IFS= read -r SNAP_UUID; do
+      #         [ -z "$SNAP_UUID" ] && continue
+      #         
+      #         curl -sk -u "$USERNAME:$PASSWORD" -X DELETE \
+      #           "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots/$SNAP_UUID" > /dev/null 2>&1
+      #       done <<< "$SNAPSHOT_UUIDS"
+      #       
+      #       echo "[CLEANUP] Completed snapshot cleanup for volume '$VOLUME_NAME'"
+      #       return 0
+      #     }
+      #     
+      #     cleanup_snapshots_for_protocol() {
+      #       local PROTOCOL=$1
+      #       local SOURCE_VOLUMES_STR=$2
+      #       local DEST_VOLUMES_STR=$3
+      #       
+      #       if [ -z "$SOURCE_VOLUMES_STR" ] || [ -z "$DEST_VOLUMES_STR" ]; then
+      #         echo "Skipping $PROTOCOL snapshot cleanup - volume GitHub variables not set"
+      #         return 0
+      #       fi
+      #       
+      #       echo "Cleaning up $PROTOCOL snapshots"
+      #       
+      #       if [ -n "$ONTAP_SRC_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" ] && \
+      #          [ -n "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" ] && [ -n "$ONTAP_SRC_SVM_NAME" ]; then
+      #         
+      #         IFS=',' read -ra SOURCE_VOLUMES <<< "$SOURCE_VOLUMES_STR"
+      #         for VOL in "${SOURCE_VOLUMES[@]}"; do
+      #           VOL=$(echo "$VOL" | xargs)
+      #           [ -z "$VOL" ] && continue
+      #           
+      #           cleanup_snapshots_for_volume "$ONTAP_SRC_API_URL" \
+      #             "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" \
+      #             "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" \
+      #             "$ONTAP_SRC_SVM_NAME" \
+      #             "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for source volume '$VOL'"
+      #           
+      #           echo "Waiting 30 seconds to avoid ONTAP rate limits"
+      #           sleep 30
+      #         done
+      #       else
+      #         echo "Skipping $PROTOCOL source snapshot cleanup - ONTAP configuration incomplete"
+      #       fi
+      #       
+      #       if [ -n "$ONTAP_DST_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" ] && \
+      #          [ -n "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" ] && [ -n "$ONTAP_DST_SVM_NAME" ]; then
+      #         
+      #         IFS=',' read -ra DEST_VOLUMES <<< "$DEST_VOLUMES_STR"
+      #         for VOL in "${DEST_VOLUMES[@]}"; do
+      #           VOL=$(echo "$VOL" | xargs)
+      #           [ -z "$VOL" ] && continue
+      #           
+      #           cleanup_snapshots_for_volume "$ONTAP_DST_API_URL" \
+      #             "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" \
+      #             "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" \
+      #             "$ONTAP_DST_SVM_NAME" \
+      #             "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for destination volume '$VOL'"
+      #           
+      #           echo "Waiting 30 seconds to avoid ONTAP rate limits"
+      #           sleep 30
+      #         done
+      #       else
+      #         echo "Skipping $PROTOCOL destination snapshot cleanup - ONTAP configuration incomplete"
+      #       fi
+      #     }
+      #     
+      #     cleanup_snapshots_for_protocol "NFS" "$ONTAP_NFS_SOURCE_VOLUMES" "$ONTAP_NFS_DEST_VOLUMES"
+      #     cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
+      #     echo "Snapshot cleanup completed"
 
-      - name: Destroy Terraform Resources
-        run: |
-          cd $TF_DIR
-          terraform destroy -auto-approve
+      # - name: Destroy Terraform Resources
+      #   run: |
+      #     cd $TF_DIR
+      #     terraform destroy -auto-approve
 
-      - name: Clean Up Temporary Files
-        run: |
-          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
+      # - name: Clean Up Temporary Files
+      #   run: |
+      #     rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true
