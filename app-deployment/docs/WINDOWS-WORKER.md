@@ -20,9 +20,6 @@ Follow these steps to create the installer:
 
 - Rename your worker binary to `worker.exe`.
 - Place both `worker.exe` and `winsw.exe` into the `wininstaller` directory.
-- Copy the following helper scripts from the repo `scripts/` directory into the same `wininstaller` directory so they get bundled into the installer:
-  - `scripts/stamp-metadata.ps1`
-  - `scripts/README-stamp-metadata.md`
 
 ### Open the Inno Setup Script
 
@@ -58,13 +55,6 @@ Follow these steps to create the installer:
   ```
   C:\datamigrator\logs
   ```
-
-- Helper scripts are installed at:
-  ```
-  C:\datamigrator\scripts
-  ```
-  This directory contains:
-  - `stamp-metadata.ps1` — admin utility to stamp NTFS ACLs, owner/group SIDs, timestamps, and file attributes from a source SMB share onto a destination SMB share. See `README-stamp-metadata.md` in the same folder for usage.
 
 - Tail Logs in Real-Time. Open **PowerShell** and run:
   ```powershell

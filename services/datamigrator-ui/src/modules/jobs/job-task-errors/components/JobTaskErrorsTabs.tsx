@@ -47,22 +47,15 @@ const JobTaskErrorsTabs = ({
     [JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR]: getErrorCount(
       JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
     ),
-    [JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT]: getErrorCount(
-      JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT
-    ),
   };
   const showFatalError = errorCounts[JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR] > 0;
   const showTransientError =
     errorCounts[JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR] > 0;
-  const showMetadataUpdateConflictError =
-    errorCounts[JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT] > 0;
 
   useEffect(() => {
     let defaultTab = JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR;
     if (!showFatalError) {
-      defaultTab = showTransientError
-        ? JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR
-        : JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT;
+      defaultTab = JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR;
     }
     setCurrentErrorType(defaultTab);
   }, [errorList]);
@@ -97,20 +90,6 @@ const JobTaskErrorsTabs = ({
           </InnerTab.Button>
         </Show.When>
 
-        {/* METADATA_UPDATE_CONFLICT */}
-        <Show.When isTrue={showMetadataUpdateConflictError}>
-          <InnerTab.Button
-            isActive={
-              currentErrorType === JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT
-            }
-            onClick={() =>
-              setCurrentErrorType(JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT)
-            }
-          >
-            Metadata update conflicts (
-            {errorCounts[JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT]})
-          </InnerTab.Button>
-        </Show.When>
       </Show>
     </InnerTab>
   );
