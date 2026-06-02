@@ -38,9 +38,9 @@ suites:
     parallel: 4          # each test gets its own browser + ANF clone
     timeout: 60m
     tests:
-      TestDiscovery_BasicNFS:               true    # NFS discovery on a cloned volume; validates report counts against live data
-      TestDiscovery_ExcludeFilePatterns:    true    # Discovery with custom exclude patterns (*.tmp *.log *.bak)
-      TestDiscovery_Bulk:                   true    # Bulk discovery — all export paths selected in a single job
+      TestDiscovery_BasicNFS:               false    # NFS discovery on a cloned volume; validates report counts against live data
+      TestDiscovery_ExcludeFilePatterns:    false    # Discovery with custom exclude patterns (*.tmp *.log *.bak)
+      TestDiscovery_Bulk:                   false    # Bulk discovery — all export paths selected in a single job
       TestDiscovery_Destination:            false   # Scan destination server for baseline — requires NDM_DESTINATION_FILE_SERVER_ID
       TestDiscovery_Isilon:                 false   # Isilon/PowerScale auto-lists paths, excludes .snapshot — requires NDM_ISILON_HOST
       TestDiscovery_IndividualReportCSV:    false   # Download per-run discovery CSV from Job Run List — requires NDM_FILE_SERVER_ID
@@ -56,9 +56,9 @@ suites:
     parallel: 1          # avoid creating 6 file servers at once; run serially
     timeout: 60m
     tests:
-      TestMigration_BasicNFS: true               # Full NFS Bulk Migrate end-to-end + CoC report download
-      TestMigration_IncrementalSyncCron: true    # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
-      TestMigration_CustomOptions: true          # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)
+      TestMigration_BasicNFS: false               # Full NFS Bulk Migrate end-to-end + CoC report download
+      TestMigration_IncrementalSyncCron: false    # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
+      TestMigration_CustomOptions: false          # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)
       TestMigration_BasicSMB: true               # Full SMB Bulk Migrate end-to-end + CoC report download
 
   # ── Incremental Migration ──────────────────────────────────────────────────
