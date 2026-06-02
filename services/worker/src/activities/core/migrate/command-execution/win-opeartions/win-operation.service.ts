@@ -406,7 +406,7 @@ export class WinOperationService {
       };
     }
 
-    return { ...acl, DaclAces: acl.DaclAces.filter(ace => !ace.IsInherited) };
+    return acl;
   }
 
   /**

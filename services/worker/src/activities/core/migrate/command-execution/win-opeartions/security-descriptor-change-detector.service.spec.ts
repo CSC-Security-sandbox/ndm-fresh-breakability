@@ -1737,13 +1737,14 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(result.reason?.field).toBe('aceMissingOnDestination');
       });
 
-      it('L3 INHERIT_PERMS_AS_IS: inherited ACEs dropped from expected', () => {
+      it('L3 INHERIT_PERMS_AS_IS: ACL returned unchanged (no filtering)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
         );
-        expect(transformed.DaclAces).toHaveLength(1);
+        expect(transformed.DaclAces).toHaveLength(2);
         expect(transformed.DaclAces[0].Sid).toBe('SidX');
+        expect(transformed.DaclAces[1].Sid).toBe('SidY');
       });
 
       it('L4 INHERIT_PERMS_AS_IS: dest inherited ACE invisible to gate (filtered) -> equal', () => {
@@ -1758,13 +1759,14 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(result.equal).toBe(true);
       });
 
-      it('L7 unknown mode behaves like INHERIT_PERMS_AS_IS (drop inherited)', () => {
+      it('L7 unknown mode behaves like INHERIT_PERMS_AS_IS (returns unchanged)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           'UNKNOWN_MODE' as SmbPermissionInheritanceMode,
         );
-        expect(transformed.DaclAces).toHaveLength(1);
+        expect(transformed.DaclAces).toHaveLength(2);
         expect(transformed.DaclAces[0].Sid).toBe('SidX');
+        expect(transformed.DaclAces[1].Sid).toBe('SidY');
       });
 
       it('L-extra DaclAces undefined -> SD returned unchanged', () => {
