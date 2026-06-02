@@ -51,6 +51,15 @@ type migrationFixture struct {
 func newMigrationBrowserFixture(t *testing.T, prefix string) (*fixtures.AuthFixture, *pages.MigrationPage) {
 	t.Helper()
 	f := fixtures.NewAdminFixture(t)
+
+	if utils.SetupProjectName != "" {
+		require.NoError(t,
+			pages.SwitchToProject(f.Page, utils.SetupProjectName),
+			"switch to setup project %s", utils.SetupProjectName,
+		)
+		t.Logf("[%s] switched to setup project %s", prefix, utils.SetupProjectName)
+	}
+
 	mp := pages.NewMigrationPage(f.Page, prefix)
 	return f, mp
 }
