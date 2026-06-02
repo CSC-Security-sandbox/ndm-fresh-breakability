@@ -541,33 +541,35 @@ export class WinOperationService {
       output.targetSID += `ACE in target: SID(${ace.Sid}), AccessMask(${ace.AccessMask}), AceType(${ace.AceType}). `;
     });
 
-    // For each source ACE, check if any target ACE with same SID and AceType has all required AccessMask bits
-    // and an exactly equal AceFlags byte (AceFlags packs inheritance shape: OBJECT_INHERIT 0x01,
-    // CONTAINER_INHERIT 0x02, NO_PROPAGATE 0x04, INHERIT_ONLY 0x08, INHERITED_ACE 0x10 — drift here
-    // silently changes propagation; strict equality implicitly covers IsInherited which mirrors bit 0x10).
-    // For S-1-3-0 (Creator Owner), only require SID and AceType match, ignore AccessMask and AceFlags.
+    // Strict bidirectional comparison: anything missing or extra at destination is flagged.
+    // For S-1-3-0 (Creator Owner), only match SID + AceType (ignore AccessMask/AceFlags).
+    const aceMatch = (a: Ace, b: Ace): boolean => {
+      if (a.Sid === 'S-1-3-0' || b.Sid === 'S-1-3-0') {
+        return a.Sid === b.Sid && a.AceType === b.AceType;
+      }
+      return (
+        a.Sid === b.Sid &&
+        a.AceType === b.AceType &&
+        (a.AccessMask | 0) === (b.AccessMask | 0) &&
+        a.AceFlags === b.AceFlags
+      );
+    };
+
     for (const srcAce of sourceAcls) {
-      if (srcAce.Sid === 'S-1-3-0') {
-        const found = targetAcls.some(
-          (tgtAce) =>
-            tgtAce.Sid === srcAce.Sid && tgtAce.AceType === srcAce.AceType,
-        );
-        if (!found) {
-          output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AceType(${srcAce.AceType}). `;
-        }
-      } else {
-        const matchingTargetAces = targetAcls.filter(
-          (tgtAce) =>
-            tgtAce.Sid === srcAce.Sid && tgtAce.AceType === srcAce.AceType,
-        );
-        const found = matchingTargetAces.some(
-          (tgtAce) =>
-            (tgtAce.AccessMask | 0) === (srcAce.AccessMask | 0) &&
-            tgtAce.AceFlags === srcAce.AceFlags,
-        );
-        if (!found) {
-          output.inValid += `Missing ACE in target: SID(${srcAce.Sid}), AccessMask(${srcAce.AccessMask}), AceType(${srcAce.AceType}), AceFlags(0x${(srcAce.AceFlags ?? 0).toString(16)}). `;
-        }
+      const found = targetAcls.some((tgtAce) => aceMatch(srcAce, tgtAce));
+      if (!found) {
+        output.inValid += srcAce.Sid === 'S-1-3-0'
+          ? `Missing ACE in target: SID(${srcAce.Sid}), AceType(${srcAce.AceType}). `
+          : `Missing ACE in target: SID(${srcAce.Sid}), AccessMask(${srcAce.AccessMask}), AceType(${srcAce.AceType}), AceFlags(0x${(srcAce.AceFlags ?? 0).toString(16)}). `;
+      }
+    }
+
+    for (const tgtAce of targetAcls) {
+      const found = sourceAcls.some((srcAce) => aceMatch(tgtAce, srcAce));
+      if (!found) {
+        output.inValid += tgtAce.Sid === 'S-1-3-0'
+          ? `Extra ACE in target: SID(${tgtAce.Sid}), AceType(${tgtAce.AceType}). `
+          : `Extra ACE in target: SID(${tgtAce.Sid}), AccessMask(${tgtAce.AccessMask}), AceType(${tgtAce.AceType}), AceFlags(0x${(tgtAce.AceFlags ?? 0).toString(16)}). `;
       }
     }
 

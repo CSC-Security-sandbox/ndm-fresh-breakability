@@ -2115,13 +2115,14 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(validate.inValid).toBe('');
       });
 
-      it('R2 KNOWN DIVERGENCE: dest has extra ACE -> gate flags, validate silent', async () => {
+      it('R2 dest has extra ACE -> both gate and validate flag it', async () => {
         const A = mkAce({ Sid: 'S-1-5-21-A' });
         const B = mkAce({ Sid: 'S-1-5-21-B' });
         const { gate, validate } = await runRow([A], [A, B]);
         expect(gate.equal).toBe(false);
         expect(gate.reason?.field).toBe('aceExtraOnDestination');
-        expect(validate.inValid).toBe('');
+        expect(validate.inValid).not.toBe('');
+        expect(validate.inValid).toContain('Extra ACE in target');
       });
 
       it('R3 dest mask is superset -> gate flags drift, validate also flags (both strict equality)', async () => {

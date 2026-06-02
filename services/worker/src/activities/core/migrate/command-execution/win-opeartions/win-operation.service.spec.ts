@@ -1225,7 +1225,8 @@ describe('WinOperationService', () => {
       const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
-        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0), AceFlags(0x0). ',
+        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0), AceFlags(0x0). ' +
+        'Extra ACE in target: SID(S-1-5-21-user), AccessMask(1048576), AceType(0), AceFlags(0x0). ',
       );
     });
 
