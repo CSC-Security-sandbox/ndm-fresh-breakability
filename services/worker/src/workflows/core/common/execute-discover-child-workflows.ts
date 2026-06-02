@@ -54,16 +54,43 @@ export const executeDiscoveryChildWorkflows = async ( {jobRunId } : DiscoveryWor
     };
 
 
-    wf.setHandler(actionSignal, async (action:string) => {  
+    wf.setHandler(actionSignal, async (action:string) => {
         if(action == JobRunStatus.Stopped){
-            scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
-            output.status = JobRunStatus.Stopped;
+            try {
+                scanWorkflow && await cancelWorkflowIfRunning(scanWorkflow.workflowId);
+                output.status = JobRunStatus.Stopped;
+            } catch (error) {
+                console.error(`[${jobRunId}] Failed to stop child workflows: ${error.message}`);
+                output.status = JobRunStatus.Failed;
+                await updateWorkerResponse(jobRunId, 'all', {
+                    status: JobRunStatus.Failed,
+                    code: 'SIGNAL_FAILURE',
+                    operation: 'Stop Workflow',
+                    occurrence: 1,
+                    origin: 'DiscoveryWorkflow',
+                    message: `Failed to stop child workflows: ${error.message}`,
+                    createdAt: new Date(),
+                });
+            }
             return;
         }
-        await signalIfRunning(scanWorkflow, 'scanActionSignal', action); 
+        try {
+            await signalIfRunning(scanWorkflow, 'scanActionSignal', action);
+        } catch (error) {
+            console.error(`[${jobRunId}] Failed to forward signal '${action}' to scan workflow: ${error.message}`);
+            await updateWorkerResponse(jobRunId, 'all', {
+                status: JobRunStatus.Failed,
+                code: 'SIGNAL_FAILURE',
+                operation: 'Forward Signal',
+                occurrence: 1,
+                origin: 'DiscoveryWorkflow',
+                message: `Failed to forward '${action}' signal to scan workflow: ${error.message}`,
+                createdAt: new Date(),
+            });
+        }
     });
 
-    if(output.status !== JobRunStatus.Stopped) {
+    if(output.status !== JobRunStatus.Stopped && output.status !== JobRunStatus.Failed) {
         const { concurrency: workerConcurrency, batchSize } = await getWorkerScanConfigActivity();
 
         scanWorkflow = await wf.startChild('ChildScanWorkflow', {

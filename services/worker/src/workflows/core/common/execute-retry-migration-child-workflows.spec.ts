@@ -274,6 +274,92 @@ describe('executeRetryMigrationChildWorkflows', () => {
         });
     });
 
+    describe('signal failure handling', () => {
+        it('should report SIGNAL_FAILURE and set Failed when cancelling children throws on stop', async () => {
+            mockCancelWorkflowIfRunning.mockRejectedValue(new Error('Cancel timed out'));
+
+            let capturedHandler: (action: string) => Promise<void>;
+            mockSetHandler.mockImplementation((_signal, handler) => {
+                capturedHandler = handler;
+            });
+
+            const workflowPromise = executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+            await new Promise((resolve) => setImmediate(resolve));
+
+            await capturedHandler!(JobRunStatus.Stopped);
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId,
+                'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                    operation: 'Stop Workflow',
+                }),
+            );
+
+            await workflowPromise;
+        });
+
+        it('should report SIGNAL_FAILURE when forwarding pause signal to children throws', async () => {
+            mockSignalIfRunning.mockRejectedValue(new Error('Signal delivery failed'));
+
+            let capturedHandler: (action: string) => Promise<void>;
+            mockSetHandler.mockImplementation((_signal, handler) => {
+                capturedHandler = handler;
+            });
+
+            const workflowPromise = executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+            await new Promise((resolve) => setImmediate(resolve));
+
+            await capturedHandler!(JobRunStatus.Paused);
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId,
+                'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    operation: 'Forward Signal',
+                }),
+            );
+
+            // Let mocked workflows resolve so the workflow can complete cleanly
+            mockSignalIfRunning.mockResolvedValue(undefined);
+            await workflowPromise;
+        });
+
+        it('should report SIGNAL_FAILURE and mark scan Failed when scanResultSignal to sync fails', async () => {
+            mockSignalIfRunning.mockImplementation((_wf: any, signalName: string) => {
+                if (signalName === 'scanResultSignal') return Promise.reject(new Error('Signal lost'));
+                return Promise.resolve();
+            });
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            const result = await executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId });
+
+            expect(mockUpdateWorkerResponse).toHaveBeenCalledWith(
+                jobRunId,
+                'all',
+                expect.objectContaining({
+                    code: 'SIGNAL_FAILURE',
+                    status: JobRunStatus.Failed,
+                    operation: 'Scan Result Signal',
+                }),
+            );
+            expect(result.retryScanJobStatus).toBe(JobRunStatus.Failed);
+        });
+
+        it('should complete cleanly even if sibling cancel throws after scan failure', async () => {
+            mockRetryScanWorkflowHandle.result.mockRejectedValue(new Error('Scan crashed'));
+            mockCancelWorkflowIfRunning.mockRejectedValue(new Error('Cancel also failed'));
+            mockGetUnifiedJobStatus.mockReturnValue(JobRunStatus.Failed);
+
+            await expect(
+                executeRetryMigrationChildWorkflows({ jobRunId, originalJobRunId }),
+            ).resolves.toBeDefined();
+        });
+    });
+
     describe('status determination', () => {
         it('should return Failed if scan fails', async () => {
             mockRetryScanWorkflowHandle.result.mockResolvedValue({ status: JobRunStatus.Failed });
