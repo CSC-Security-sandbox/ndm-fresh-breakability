@@ -2,10 +2,12 @@ package utils
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -255,11 +257,57 @@ func updateUserProfile(userID, adminToken string) error {
 	return nil
 }
 
-// setupAppAdmin ensures the admin account is ready for use. It first tries
-// to obtain a bearer token with the current credentials. If that succeeds,
-// the account is already configured and no Keycloak changes are needed.
-// On a fresh CP (first login) the token will fail because of pending
-// requiredActions, so we reset the password and update the profile.
+// generateRandomPassword creates a cryptographically random password of the
+// given length, guaranteed to include at least one lowercase, one uppercase,
+// one digit, and one special character (satisfying Keycloak's default policy).
+func generateRandomPassword(length int) (string, error) {
+	const (
+		lower    = "abcdefghijklmnopqrstuvwxyz"
+		upper    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		digits   = "0123456789"
+		special  = "!@#$%^&*()-_=+[]{}|;:,.<>/?"
+		allChars = lower + upper + digits + special
+	)
+
+	if length < 8 {
+		length = 8
+	}
+
+	categories := []string{lower, upper, digits, special}
+	password := make([]byte, 0, length)
+
+	for _, cat := range categories {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(cat))))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, cat[idx.Int64()])
+	}
+
+	for i := len(password); i < length; i++ {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(allChars))))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, allChars[idx.Int64()])
+	}
+
+	for i := range password {
+		j, err := rand.Int(rand.Reader, big.NewInt(int64(len(password))))
+		if err != nil {
+			return "", err
+		}
+		password[i], password[j.Int64()] = password[j.Int64()], password[i]
+	}
+
+	return string(password), nil
+}
+
+// setupAppAdmin ensures the admin account is ready for use. It generates a
+// fresh random password (bypassing Keycloak's password history policy), resets
+// the user to that password, clears requiredActions, and verifies the bearer
+// token works. The new password is written back to config.Password so that
+// Playwright login uses it.
 func setupAppAdmin() error {
 	// Fast path: if we can already get a bearer token, the admin is set up.
 	if _, err := getBearerToken(); err == nil {
@@ -279,39 +327,31 @@ func setupAppAdmin() error {
 		return fmt.Errorf("fetch user ID for %s: %w", config.Username, err)
 	}
 
-	// Clear requiredActions first — if the password was already set by a
-	// prior run, this alone unblocks the bearer token login.
+	// Generate a random password — never collides with history.
+	newPassword, err := generateRandomPassword(12)
+	if err != nil {
+		return fmt.Errorf("generate random password: %w", err)
+	}
+
+	if err := resetUserPassword(userID, adminToken, newPassword); err != nil {
+		return fmt.Errorf("reset password: %w", err)
+	}
+
+	// Clear requiredActions AFTER the password is set (mirrors API test pattern).
 	if err := updateUserProfile(userID, adminToken); err != nil {
 		return fmt.Errorf("update profile: %w", err)
 	}
 
-	// Retry bearer token now that requiredActions are cleared.
-	if _, err := getBearerToken(); err == nil {
-		logSetup("App admin %s configured (profile cleared, bearer token OK)", config.Username)
-		return nil
+	// Update config.Password so Playwright login and getBearerToken use
+	// the new password for the rest of this test run.
+	config.Password = newPassword
+
+	// Verify the token actually works.
+	if _, err := getBearerToken(); err != nil {
+		return fmt.Errorf("bearer token still failing after password reset: %w", err)
 	}
 
-	// Still failing — password must differ from what we want. Reset it.
-	if err := resetUserPassword(userID, adminToken, config.Password); err != nil {
-		// Keycloak's password history policy rejects reuse of the last 3 passwords.
-		// Cycle through 3 interim passwords to flush the desired one out of history.
-		if strings.Contains(err.Error(), "invalidPasswordHistory") {
-			logSetup("*** Password matches history — cycling 3 intermediate passwords...")
-			for i := 1; i <= 3; i++ {
-				interimPw := fmt.Sprintf("%s_cycle_%d", config.Password, i)
-				if err2 := resetUserPassword(userID, adminToken, interimPw); err2 != nil {
-					return fmt.Errorf("reset to interim password %d: %w", i, err2)
-				}
-			}
-			if err2 := resetUserPassword(userID, adminToken, config.Password); err2 != nil {
-				return fmt.Errorf("reset back to desired password: %w", err2)
-			}
-		} else {
-			return fmt.Errorf("reset password: %w", err)
-		}
-	}
-
-	logSetup("App admin %s configured", config.Username)
+	logSetup("App admin %s configured (random password set, bearer token OK)", config.Username)
 	return nil
 }
 
