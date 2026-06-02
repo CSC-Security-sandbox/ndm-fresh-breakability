@@ -1413,6 +1413,48 @@ func (p *MigrationPage) SubmitCutover() error {
 	return nil
 }
 
+// readFirstCutoverRowStatus reads the status text from the first Cutover
+// row in the Job Run List table.
+func (p *MigrationPage) readFirstCutoverRowStatus() string {
+	result, err := p.page.Evaluate(`() => {
+		const known = ['running','completed','errored','failed','paused','pausing',
+		               'stopped','stopping','ready','pending','blocked'];
+
+		// Try bxp Table (data-testid rows)
+		const rows = document.querySelectorAll('[data-testid^="table-row-"]');
+		for (const row of rows) {
+			if (!/cutover/i.test(row.textContent)) continue;
+			const caps = row.querySelectorAll('[data-testid="cell-status"], .capitalize');
+			for (const el of caps) {
+				const t = el.textContent.trim().toLowerCase();
+				if (known.includes(t)) return t;
+			}
+			for (const s of known) {
+				if (row.textContent.toLowerCase().includes(s)) return s;
+			}
+		}
+		// Fallback: native tbody tr
+		const trows = document.querySelectorAll('tbody tr');
+		for (const row of trows) {
+			if (!/cutover/i.test(row.textContent)) continue;
+			const caps = row.querySelectorAll('[data-testid="cell-status"], .capitalize');
+			for (const el of caps) {
+				const t = el.textContent.trim().toLowerCase();
+				if (known.includes(t)) return t;
+			}
+			for (const s of known) {
+				if (row.textContent.toLowerCase().includes(s)) return s;
+			}
+		}
+		return '';
+	}`, nil)
+	if err != nil {
+		return ""
+	}
+	s, _ := result.(string)
+	return s
+}
+
 // WaitForCutoverBlocked polls the Job Run List until the cutover job enters
 // "Blocked" state (waiting for human approval) or completes/errors.
 func (p *MigrationPage) WaitForCutoverBlocked(timeoutMs float64) error {
@@ -1428,7 +1470,7 @@ func (p *MigrationPage) WaitForCutoverBlocked(timeoutMs float64) error {
 		})
 		p.sleep(2000)
 
-		status := p.readFirstMigrationRowStatus()
+		status := p.readFirstCutoverRowStatus()
 		log.Printf("[WaitForCutoverBlocked] attempt %d: status=%q", attempt, status)
 
 		switch strings.ToLower(status) {
