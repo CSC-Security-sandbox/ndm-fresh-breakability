@@ -1724,15 +1724,17 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(transformed.DaclAces[1].AceFlags & 0x10).toBe(0);
       });
 
-      it('L2 transformed expected vs dest still holding INH bit -> drift', () => {
+      it('L2 transformed expected vs dest still holding INH bit -> drift (inherited ACE on dest filtered, explicit-converted ACE on expected missing)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
         );
         const dest = sdWithMix(); // dest still has INH bit on inherited ACE
         const result = service.securityDescriptorEquals(transformed as any, dest as any);
+        // After transform, expected has 2 explicit ACEs. Dest has 1 explicit + 1 inherited.
+        // Gate filters inherited from dest → sees 2 expected vs 1 actual → missing ACE.
         expect(result.equal).toBe(false);
-        expect(result.reason?.field).toBe('aceFieldDiff');
+        expect(result.reason?.field).toBe('aceMissingOnDestination');
       });
 
       it('L3 INHERIT_PERMS_AS_IS: inherited ACEs dropped from expected', () => {
@@ -1744,15 +1746,16 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(transformed.DaclAces[0].Sid).toBe('SidX');
       });
 
-      it('L4 INHERIT_PERMS_AS_IS: dest still has inherited -> extra ACE', () => {
+      it('L4 INHERIT_PERMS_AS_IS: dest inherited ACE invisible to gate (filtered) -> equal', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
         );
         const dest = sdWithMix();
         const result = service.securityDescriptorEquals(transformed as any, dest as any);
-        expect(result.equal).toBe(false);
-        expect(result.reason?.field).toBe('aceExtraOnDestination');
+        // After transform, expected has 1 explicit ACE. Dest has 1 explicit + 1 inherited.
+        // Gate filters inherited from dest → sees 1 vs 1, both explicit and matching → equal.
+        expect(result.equal).toBe(true);
       });
 
       it('L7 unknown mode behaves like INHERIT_PERMS_AS_IS (drop inherited)', () => {

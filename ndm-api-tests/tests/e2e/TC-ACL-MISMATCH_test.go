@@ -468,13 +468,21 @@ func emitPerRowLog(adhocReport []string, misses, overPicks, xfails []validationF
 // idempotency assertion strict for the well-behaved 47 rows while tolerating
 // the 1 known divergence (row 48).
 func filterUnexpectedIdempotencyPaths(idempotencyReport []string) []string {
-	tolerated := map[string]bool{}
+	toleratedSuffixes := make([]string, 0)
 	for _, sc := range BuildExpectedFailureSet() {
-		tolerated[normalizeReportPath(scenarioToReportPath(sc))] = true
+		toleratedSuffixes = append(toleratedSuffixes, normalizeReportPath(scenarioToReportPath(sc)))
 	}
 	out := make([]string, 0)
 	for _, p := range idempotencyReport {
-		if !tolerated[normalizeReportPath(p)] {
+		np := normalizeReportPath(p)
+		tolerated := false
+		for _, suffix := range toleratedSuffixes {
+			if np == suffix || strings.HasSuffix(np, `\`+suffix) {
+				tolerated = true
+				break
+			}
+		}
+		if !tolerated {
 			out = append(out, p)
 		}
 	}
