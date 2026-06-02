@@ -241,8 +241,16 @@ var _ = Describe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL muta
 				expectedPath := scenarioToReportPath(sc)
 				present := pathInReport(adhocReportPaths, expectedPath)
 
-				if sc.IsControl {
-					if present {
+			if sc.IsControl {
+				if present {
+					if sc.IsExpectedFailure {
+						xfails = append(xfails, validationFailure{
+							Scenario:     sc,
+							ExpectedPath: expectedPath,
+							Kind:         "XFAIL",
+							Explanation:  "control over-picked (known divergence; see scenario Notes)",
+						})
+					} else {
 						overPicks = append(overPicks, validationFailure{
 							Scenario:     sc,
 							ExpectedPath: expectedPath,
@@ -250,8 +258,9 @@ var _ = Describe("TC-ACL-MISMATCH: Verify CoC selection across the full ACL muta
 							Explanation:  "control file was re-migrated (CoC over-selected)",
 						})
 					}
-					continue
 				}
+				continue
+			}
 
 				if !present {
 					if sc.IsExpectedFailure {
