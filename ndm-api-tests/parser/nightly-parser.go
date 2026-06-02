@@ -63,6 +63,7 @@ type ParsedTestSuite struct {
 	Passed   int    `json:"passed"`
 	Failed   int    `json:"failed"`
 	Pending  int    `json:"pending"`
+	Flaked   int    `json:"flaked"`
 	Skipped  int    `json:"skipped"`
 	Total    int    `json:"total"`
 	Status   string `json:"status"`
@@ -95,6 +96,8 @@ func outputGitHubActionsFormat(results map[string]*ParsedTestResults, runURL, su
 	// Calculate totals
 	totalPassed := 0
 	totalFailed := 0
+	totalPending := 0
+	totalFlaked := 0
 	totalSkipped := 0
 	totalTests := 0
 
@@ -102,6 +105,8 @@ func outputGitHubActionsFormat(results map[string]*ParsedTestResults, runURL, su
 		for _, suite := range result.TestSuites {
 			totalPassed += suite.Passed
 			totalFailed += suite.Failed
+			totalPending += suite.Pending
+			totalFlaked += suite.Flaked
 			totalSkipped += suite.Skipped
 			totalTests += suite.Total
 		}
@@ -111,6 +116,8 @@ func outputGitHubActionsFormat(results map[string]*ParsedTestResults, runURL, su
 	fmt.Printf("TOTAL_TESTS=%d\n", totalTests)
 	fmt.Printf("TOTAL_PASSED=%d\n", totalPassed)
 	fmt.Printf("TOTAL_FAILED=%d\n", totalFailed)
+	fmt.Printf("TOTAL_PENDING=%d\n", totalPending)
+	fmt.Printf("TOTAL_FLAKED=%d\n", totalFlaked)
 	fmt.Printf("TOTAL_SKIPPED=%d\n", totalSkipped)
 	fmt.Printf("PIPELINE_URL=%s\n", runURL)
 
@@ -131,9 +138,9 @@ func outputGitHubActionsFormat(results map[string]*ParsedTestResults, runURL, su
 				for _, suite := range result.TestSuites {
 					if suite.Type == testType && suite.Protocol == protocol {
 						// Output formatted line for this test suite
-						fmt.Printf("%s_%s_LINE=%s: %2d Passed | %2d Failed | %2d Skipped\n", 
-							strings.ToUpper(testType), strings.ToUpper(protocol), 
-							suite.Protocol, suite.Passed, suite.Failed, suite.Skipped)
+						fmt.Printf("%s_%s_LINE=%s: %2d Passed | %2d Failed | %2d Pending | %2d Flaked | %2d Skipped\n",
+							strings.ToUpper(testType), strings.ToUpper(protocol),
+							suite.Protocol, suite.Passed, suite.Failed, suite.Pending, suite.Flaked, suite.Skipped)
 					}
 				}
 			}
@@ -517,12 +524,17 @@ func parseSuiteFromLines(lines []string, suiteType, protocol string) *ParsedTest
 			if i+1 < len(lines) {
 				nextLine := lines[i+1]
 
-				// Match SUCCESS pattern: SUCCESS! -- 8 Passed | 0 Failed | 0 Pending | 0 Skipped
-				if successMatch := regexp.MustCompile(`SUCCESS!\s*--\s*(\d+)\s*Passed\s*\|\s*(\d+)\s*Failed\s*\|\s*(\d+)\s*Pending\s*\|\s*(\d+)\s*Skipped`).FindStringSubmatch(nextLine); successMatch != nil {
+				// Match SUCCESS pattern. Ginkgo optionally inserts a "Flaked" column when
+				// specs were retried, e.g.:
+				//   SUCCESS! -- 8 Passed | 0 Failed | 0 Pending | 0 Skipped
+				//   SUCCESS! -- 14 Passed | 0 Failed | 1 Flaked | 0 Pending | 7 Skipped
+				if successMatch := regexp.MustCompile(`SUCCESS!\s*--\s*(\d+)\s*Passed\s*\|\s*(\d+)\s*Failed\s*\|\s*(?:(\d+)\s*Flaked\s*\|\s*)?(\d+)\s*Pending\s*\|\s*(\d+)\s*Skipped`).FindStringSubmatch(nextLine); successMatch != nil {
 					passed, _ := strconv.Atoi(successMatch[1])
 					failed, _ := strconv.Atoi(successMatch[2])
-					pending, _ := strconv.Atoi(successMatch[3])
-					skipped, _ := strconv.Atoi(successMatch[4])
+					flaked, _ := strconv.Atoi(successMatch[3]) // empty group -> 0
+					pending, _ := strconv.Atoi(successMatch[4])
+					skipped, _ := strconv.Atoi(successMatch[5])
+					// Flaked specs are already counted within Passed, so they are not added to Total.
 					total := passed + failed + pending + skipped
 
 					return &ParsedTestSuite{
@@ -531,18 +543,22 @@ func parseSuiteFromLines(lines []string, suiteType, protocol string) *ParsedTest
 						Passed:   passed,
 						Failed:   failed,
 						Pending:  pending,
+						Flaked:   flaked,
 						Skipped:  skipped,
 						Total:    total,
 						Status:   "completed",
 					}
 				}
 
-				// Match FAILURE pattern: FAIL! -- X Passed | Y Failed | Z Pending | W Skipped
-				if failMatch := regexp.MustCompile(`FAIL!\s*--\s*(\d+)\s*Passed\s*\|\s*(\d+)\s*Failed\s*\|\s*(\d+)\s*Pending\s*\|\s*(\d+)\s*Skipped`).FindStringSubmatch(nextLine); failMatch != nil {
+				// Match FAILURE pattern. Same optional "Flaked" column as above:
+				//   FAIL! -- X Passed | Y Failed | Z Pending | W Skipped
+				//   FAIL! -- X Passed | Y Failed | F Flaked | Z Pending | W Skipped
+				if failMatch := regexp.MustCompile(`FAIL!\s*--\s*(\d+)\s*Passed\s*\|\s*(\d+)\s*Failed\s*\|\s*(?:(\d+)\s*Flaked\s*\|\s*)?(\d+)\s*Pending\s*\|\s*(\d+)\s*Skipped`).FindStringSubmatch(nextLine); failMatch != nil {
 					passed, _ := strconv.Atoi(failMatch[1])
 					failed, _ := strconv.Atoi(failMatch[2])
-					pending, _ := strconv.Atoi(failMatch[3])
-					skipped, _ := strconv.Atoi(failMatch[4])
+					flaked, _ := strconv.Atoi(failMatch[3]) // empty group -> 0
+					pending, _ := strconv.Atoi(failMatch[4])
+					skipped, _ := strconv.Atoi(failMatch[5])
 					total := passed + failed + pending + skipped
 
 					return &ParsedTestSuite{
@@ -551,6 +567,7 @@ func parseSuiteFromLines(lines []string, suiteType, protocol string) *ParsedTest
 						Passed:   passed,
 						Failed:   failed,
 						Pending:  pending,
+						Flaked:   flaked,
 						Skipped:  skipped,
 						Total:    total,
 						Status:   "failed",
@@ -696,8 +713,8 @@ func generateTestSummary(results map[string]*ParsedTestResults, runURL string) s
 			for _, result := range results {
 				for _, suite := range result.TestSuites {
 					if suite.Type == testType && suite.Protocol == protocol {
-						summary.WriteString(fmt.Sprintf("  %s: %d Passed | %d Failed | %d Skipped\n",
-							suite.Protocol, suite.Passed, suite.Failed, suite.Skipped))
+						summary.WriteString(fmt.Sprintf("  %s: %d Passed | %d Failed | %d Pending | %d Flaked | %d Skipped\n",
+							suite.Protocol, suite.Passed, suite.Failed, suite.Pending, suite.Flaked, suite.Skipped))
 						found = true
 					}
 				}
@@ -713,6 +730,8 @@ func generateTestSummary(results map[string]*ParsedTestResults, runURL string) s
 	// Calculate totals
 	totalPassed := 0
 	totalFailed := 0
+	totalPending := 0
+	totalFlaked := 0
 	totalSkipped := 0
 	totalTests := 0
 
@@ -720,12 +739,15 @@ func generateTestSummary(results map[string]*ParsedTestResults, runURL string) s
 		for _, suite := range result.TestSuites {
 			totalPassed += suite.Passed
 			totalFailed += suite.Failed
+			totalPending += suite.Pending
+			totalFlaked += suite.Flaked
 			totalSkipped += suite.Skipped
 			totalTests += suite.Total
 		}
 	}
 
-	summary.WriteString(fmt.Sprintf("Total: %d tests, %d passed, %d failed\n", totalTests, totalPassed, totalFailed))
+	summary.WriteString(fmt.Sprintf("Total: %d tests, %d passed, %d failed, %d pending, %d flaked, %d skipped\n",
+		totalTests, totalPassed, totalFailed, totalPending, totalFlaked, totalSkipped))
 
 	// Add failure details section if there are failures
 	if totalFailed > 0 {

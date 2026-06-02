@@ -1053,6 +1053,8 @@ jobs:
         TOTAL_TESTS=$(echo "$OUTPUT" | grep "TOTAL_TESTS=" | cut -d'=' -f2)
         TOTAL_PASSED=$(echo "$OUTPUT" | grep "TOTAL_PASSED=" | cut -d'=' -f2)
         TOTAL_FAILED=$(echo "$OUTPUT" | grep "TOTAL_FAILED=" | cut -d'=' -f2)
+        TOTAL_PENDING=$(echo "$OUTPUT" | grep "TOTAL_PENDING=" | cut -d'=' -f2)
+        TOTAL_FLAKED=$(echo "$OUTPUT" | grep "TOTAL_FLAKED=" | cut -d'=' -f2)
         TOTAL_SKIPPED=$(echo "$OUTPUT" | grep "TOTAL_SKIPPED=" | cut -d'=' -f2)
         PIPELINE_URL=$(echo "$OUTPUT" | grep "PIPELINE_URL=" | cut -d'=' -f2-)
         TEST_STATUS=$(echo "$OUTPUT" | grep "TEST_STATUS=" | cut -d'=' -f2)
@@ -1085,6 +1087,8 @@ jobs:
         echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
         echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
         echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+        echo "total_pending=$TOTAL_PENDING" >> $GITHUB_OUTPUT
+        echo "total_flaked=$TOTAL_FLAKED" >> $GITHUB_OUTPUT
         echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
         echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
         echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
@@ -1148,6 +1152,8 @@ jobs:
         TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
         TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
         TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
+        TOTAL_PENDING="${{ steps.parser.outputs.total_pending }}"
+        TOTAL_FLAKED="${{ steps.parser.outputs.total_flaked }}"
         TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
         TEST_STATUS="${{ steps.parser.outputs.test_status }}"
         CLONE_PROVIDER="${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}"
@@ -1181,6 +1187,14 @@ jobs:
                 {
                   "title": "Failed:",
                   "value": "${TOTAL_FAILED}"
+                },
+                {
+                  "title": "Pending:",
+                  "value": "${TOTAL_PENDING}"
+                },
+                {
+                  "title": "Flaked:",
+                  "value": "${TOTAL_FLAKED}"
                 },
                 {
                   "title": "Skipped:",
@@ -1399,6 +1413,8 @@ jobs:
         | Total Tests | ${{ steps.parser.outputs.total_tests }} |
         | Passed | ${{ steps.parser.outputs.total_passed }} |
         | Failed | ${{ steps.parser.outputs.total_failed }} |
+        | Pending | ${{ steps.parser.outputs.total_pending }} |
+        | Flaked | ${{ steps.parser.outputs.total_flaked }} |
         | Skipped | ${{ steps.parser.outputs.total_skipped }} |
         | Status | ${{ steps.parser.outputs.test_status }} |
         | Clone Backend | ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }} |
