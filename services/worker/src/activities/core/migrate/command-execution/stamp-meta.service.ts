@@ -208,6 +208,7 @@ export class StampMetaService {
     @Timed({ category: 'stamp_phase', phase: 'preserve_time' })
     async preserveAccessAndModifiedTime({ command, jobContext, sourcePath, targetPath, errorType }: CommandExecInput): Promise<StampMetaOutput> {
         const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
+        if (command.isDir) return output;
         if (command.metadata.mtime && command.metadata.atime && jobContext.jobConfig.options.preserveAccessTime) {
             try {
                 if (command?.metadata?.isSymLink) {

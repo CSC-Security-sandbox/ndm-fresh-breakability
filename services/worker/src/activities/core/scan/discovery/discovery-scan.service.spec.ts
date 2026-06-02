@@ -20,6 +20,7 @@ jest.mock('fs', () => {
       readdir: jest.fn(),
       opendir: jest.fn(),
       lstat: jest.fn(),
+      utimes: jest.fn(),
     },
   };
 });
@@ -265,7 +266,7 @@ describe('DiscoveryScanService', () => {
             skipFile: 0,
           },
         }as any),
-      ).rejects.toThrow(lstatError);
+      ).rejects.toThrow('lstat fail');
 
       expect(mockJobContext.publishToErrorStream).toHaveBeenCalled();
     });
@@ -370,7 +371,9 @@ describe('DiscoveryScanService', () => {
       },
       } as any);
 
-      // The errorType is only used if an error occurs, so let's force an error
+      // Force an error so the errorType branch is exercised.
+      // One rejection is enough — captureSourceDirAtimeStat now throws on lstat
+      // failure, aborting the scan before opendir is reached.
       mockOpendir([{ name: 'file1.txt' }]);
       (fs.promises.lstat as jest.Mock).mockRejectedValueOnce(new Error('fail'));
       await expect(
@@ -504,6 +507,257 @@ describe('DiscoveryScanService', () => {
       expect(result.subDirs).toEqual(['Folder', 'folder', 'FOLder']);
       expect(mockJobContext.publishToErrorStream).not.toHaveBeenCalled();
       Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    describe('preserveSourceDirAtime — atime restoration after opendir', () => {
+      const sourcePath = '/mock';
+      const sourceDirAtime = new Date('2024-03-01T10:00:00.000Z');
+      const sourceDirMtime = new Date('2024-03-01T09:00:00.000Z');
+      const sourceDirStat = {
+        atime: sourceDirAtime,
+        mtime: sourceDirMtime,
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+      };
+      const childStat = {
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+        atime: new Date(),
+        mtime: new Date(),
+        birthtime: new Date(),
+        size: 100,
+        ino: 1,
+      };
+
+      beforeEach(() => {
+        mockOpendir([{ name: 'file1.txt' }]);
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+      });
+
+      it('calls utimes with sourcePath and the pre-opendir stat atime/mtime', async () => {
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath
+            ? Promise.resolve(sourceDirStat)
+            : Promise.resolve(childStat),
+        );
+
+        await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath,
+          sourcePrefix: sourcePath,
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        expect(fs.promises.utimes).toHaveBeenCalledTimes(1);
+        expect(fs.promises.utimes).toHaveBeenCalledWith(sourcePath, sourceDirAtime, sourceDirMtime);
+      });
+
+      it('lstat fails — warns, publishes to error stream, aborts scan for this dir (does not proceed to opendir)', async () => {
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath
+            ? Promise.reject(new Error('lstat EPERM'))
+            : Promise.resolve(childStat),
+        );
+
+        // scanDirectory rejects — the directory's children are NOT read
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).rejects.toThrow('lstat EPERM');
+
+        // utimes never reached because opendir was never called
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+        // error logged by captureSourceDirAtimeStat, error published at least once
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('skipping all children of this directory'),
+        );
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+          expect.objectContaining({ error: expect.objectContaining({ message: expect.stringContaining('Failed to stat source dir') }) }),
+        );
+      });
+
+      it('lstat fails — opendir is never called (no atime bump on the source dir)', async () => {
+        // Core regression guard: the whole point of captureSourceDirAtimeStat throwing
+        // is to prevent opendir from running. If opendir ran, the atime would be bumped
+        // and we could no longer restore it.
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath
+            ? Promise.reject(new Error('lstat EPERM'))
+            : Promise.resolve(childStat),
+        );
+
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).rejects.toThrow();
+
+        // opendir must never have been called
+        expect(fs.promises.opendir).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+      });
+
+      it('lstat fails AND publishToErrorStream fails — error logged, opendir still not called, scan throws with Redis error', async () => {
+        // Verifies the double-failure path:
+        //   lstat fails → outer catch: error already logged, publishToErrorStream throws Redis
+        //   → scanDirectory rejects with the Redis error
+        // opendir must NEVER be called despite the cascading Redis failure.
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath
+            ? Promise.reject(new Error('lstat EPERM'))
+            : Promise.resolve(childStat),
+        );
+        mockJobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).rejects.toThrow('Redis down');
+
+        // error IS logged before publishToErrorStream is even called
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('skipping all children of this directory'),
+        );
+        // opendir never reached — no atime bump
+        expect(fs.promises.opendir).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+        // publishToErrorStream attempted exactly once — by the outer catch
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(1);
+      });
+
+      it('lstat fails with ENOENT — throws FatalError, outer catch marks errorType FATAL', async () => {
+        // Verifies that captureSourceDirAtimeStat throws FatalError for ENOENT.
+        // The discovery outer catch gates on instanceof FatalError and upgrades
+        // errorType to FATAL_ERROR so the published error reaches the UI as FATAL.
+        const enoent = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath ? Promise.reject(enoent) : Promise.resolve(childStat),
+        );
+
+        const caught = await service
+          .scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any)
+          .catch((e) => e);
+
+        // captureSourceDirAtimeStat wraps and re-throws as FatalError; the outer
+        // catch in scanDirectory re-throws it, so the caller receives a FatalError.
+        expect(caught).toBeInstanceOf(FatalError);
+        expect(caught.message).toContain('skipping all children of this directory');
+        // opendir never reached
+        expect(fs.promises.opendir).not.toHaveBeenCalled();
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('skipping all children of this directory'),
+        );
+      });
+
+      it('logs error, publishes to error stream, and does not throw when utimes fails', async () => {
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath
+            ? Promise.resolve(sourceDirStat)
+            : Promise.resolve(childStat),
+        );
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).resolves.not.toThrow();
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to restore atime for source dir'),
+        );
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+          expect.objectContaining({ error: expect.objectContaining({ message: expect.stringContaining('Failed to restore atime for source dir') }) }),
+        );
+      });
+
+      it('calls utimes even for an empty directory', async () => {
+        mockOpendir([]);
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath ? Promise.resolve(sourceDirStat) : Promise.resolve(childStat),
+        );
+
+        await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath,
+          sourcePrefix: sourcePath,
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        expect(fs.promises.utimes).toHaveBeenCalledWith(sourcePath, sourceDirAtime, sourceDirMtime);
+      });
+
+      it('scan result is correct when utimes fails — only atime restoration fails, not the scan', async () => {
+        // The opendir loop ran fine; only the post-loop utimes step failed.
+        // scanDirectory should return the correct counts.
+        mockOpendir([{ name: 'file1.txt' }]);
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath ? Promise.resolve(sourceDirStat) : Promise.resolve(childStat),
+        );
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+
+        const result = await service.scanDirectory({
+          jobContext: mockJobContext,
+          sourcePath,
+          sourcePrefix: sourcePath,
+          command: mockCommand,
+          settings: { excludePatterns: [], skipFile: 0 },
+        } as any);
+
+        expect(result.fileCount).toBe(1);
+        expect(result.dirCount).toBe(0);
+      });
+
+      it('publishToErrorStream fails after utimes fails — outer catch rethrows, scan throws', async () => {
+        // Verifies the try-catch chain:
+        //   utimes fails → publishToErrorStream in preserveSourceDirAtime → also fails
+        //   → propagates to outer catch → outer catch re-publishes → also fails → rethrows
+        //   → scanDirectory rejects with the Redis error
+        (fs.promises.lstat as jest.Mock).mockImplementation((filePath: string) =>
+          filePath === sourcePath ? Promise.resolve(sourceDirStat) : Promise.resolve(childStat),
+        );
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+        mockJobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+        await expect(
+          service.scanDirectory({
+            jobContext: mockJobContext,
+            sourcePath,
+            sourcePrefix: sourcePath,
+            command: mockCommand,
+            settings: { excludePatterns: [], skipFile: 0 },
+          } as any),
+        ).rejects.toThrow('Redis down');
+
+        // Called twice: once inside preserveSourceDirAtime, once inside the outer catch
+        expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2);
+      });
     });
 
     describe('WindowsAPINotAvailableError handling', () => {

@@ -22,6 +22,7 @@ jest.mock('fs', () => {
             lstat: jest.fn(),
             stat: jest.fn(),
             access: jest.fn(),
+            utimes: jest.fn(),
         },
     };
 });
@@ -1539,5 +1540,230 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         const mtimeSpy = jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
         expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
+    });
+});
+
+// --- preserveSourceDirAtime via scanDirectory ---
+describe('MigrateScanService.scanDirectory - preserveSourceDirAtime', () => {
+    let service: MigrateScanService;
+    let configService: ConfigService;
+    let fileTypeDetectionService: Partial<FileTypeDetectionService>;
+    let commandGenerationService: Partial<CommandGenerationService>;
+    let jobContext: any;
+    let scanInput: any;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const mockStat: Partial<fs.Stats> = {
+        atime: new Date('2024-01-01T10:00:00Z'),
+        mtime: new Date('2024-01-01T09:00:00Z'),
+    };
+
+    beforeEach(() => {
+        configService = {
+            get: jest.fn((key: string) => {
+                const values = {
+                    'worker.workerId': 'test-worker',
+                    'worker.maxMigrationCommand': 2,
+                    'worker.maxCommandConcurrency': 5,
+                    'worker.maxRetryCount': 2,
+                };
+                return values[key];
+            }),
+        } as any;
+
+        commandGenerationService = {
+            processItems: jest.fn().mockResolvedValue({
+                fileCount: 0,
+                dirCount: 0,
+                subDirs: [],
+                commands: [],
+            }),
+        } as Partial<CommandGenerationService>;
+
+        fileTypeDetectionService = {
+            detectFileType: jest.fn(),
+        } as Partial<FileTypeDetectionService>;
+
+        service = new MigrateScanService(
+            configService,
+            mockLoggerFactory as LoggerFactory,
+            fileTypeDetectionService as FileTypeDetectionService,
+            commandGenerationService as CommandGenerationService,
+            { add: jest.fn() } as any,
+        );
+
+        jobContext = {
+            publishToErrorStream: jest.fn(),
+            publishBulkToCommandStream: jest.fn(),
+            jobConfig: {
+                options: {
+                    preserveAccessTime: true,
+                    skipDelete: true,
+                },
+                jobType: 'MIGRATION',
+            },
+        };
+
+        scanInput = {
+            jobContext,
+            command: { fPath: '/foo', id: 'cmd1' },
+            sourcePath: '/src/foo',
+            targetPath: '/dst/foo',
+            sourcePrefix: '/src',
+            targetPrefix: '/dst',
+            settings: { excludePatterns: [], skipFile: 0 },
+        };
+
+        jest.clearAllMocks();
+        jest.spyOn(service, 'getDirContents').mockResolvedValue(new Set());
+    });
+
+    it('calls utimes with the pre-readdir stat when preserveAccessTime is true', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(mockStat);
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+        await service.scanDirectory(scanInput);
+
+        expect(fs.promises.lstat).toHaveBeenCalledWith('/src/foo');
+        expect(fs.promises.utimes).toHaveBeenCalledWith('/src/foo', mockStat.atime, mockStat.mtime);
+    });
+
+    it('does not call lstat or utimes when preserveAccessTime is false', async () => {
+        jobContext.jobConfig.options.preserveAccessTime = false;
+
+        await service.scanDirectory(scanInput);
+
+        expect(fs.promises.lstat).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    it('does not call lstat or utimes when preserveAccessTime is not set', async () => {
+        delete jobContext.jobConfig.options.preserveAccessTime;
+
+        await service.scanDirectory(scanInput);
+
+        expect(fs.promises.lstat).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    it('logs error and publishes to error stream (does not throw) when utimes fails', async () => {
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(mockStat);
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('EPERM'));
+        const errorSpy = jest.spyOn(mockLogger, 'error');
+
+        await expect(service.scanDirectory(scanInput)).resolves.not.toThrow();
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to restore atime for source dir'));
+        expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+            expect.objectContaining({ error: expect.objectContaining({ message: expect.stringContaining('Failed to restore atime for source dir') }) }),
+        );
+    });
+
+    it('lstat fails — warns, publishes to error stream, aborts scan for this dir (getDirContents never called)', async () => {
+        (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+        // scanDirectory rejects — children are NOT read
+        await expect(service.scanDirectory(scanInput)).rejects.toThrow('ENOENT');
+
+        // utimes never reached
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+        // user is notified via warn log and error stream
+        expect(mockLogger.error).toHaveBeenCalledWith(
+            expect.stringContaining('skipping all children of this directory'),
+        );
+        expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+            expect.objectContaining({ error: expect.objectContaining({ message: expect.stringContaining('Failed to stat source dir') }) }),
+        );
+    });
+
+    it('lstat fails — getDirContents (readdir) is never called, no atime bump on source dir', async () => {
+        // Core regression guard: getDirContents being called would bump atime on the
+        // source dir via readdir. captureSourceDirAtimeStat must prevent that entirely.
+        (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('EPERM'));
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+        await expect(service.scanDirectory(scanInput)).rejects.toThrow();
+
+        // getDirContents is a spy — verify it was never invoked
+        expect(service.getDirContents).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+    });
+
+    it('lstat fails AND publishToErrorStream fails — warn logged, getDirContents never called, scanDirectory throws with Redis error', async () => {
+        // Verifies double-failure:
+        //   lstat fails → scanDirectory's inline lstat catch: warn already logged,
+        //   publishToErrorStream throws Redis → Redis error propagates out of scanDirectory
+        // getDirContents must NEVER be called — source dir atime cannot be preserved.
+        (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('EPERM'));
+        jobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+        await expect(service.scanDirectory(scanInput)).rejects.toThrow('Redis down');
+
+        // error IS logged before publishToErrorStream is attempted
+        expect(mockLogger.error).toHaveBeenCalledWith(
+            expect.stringContaining('skipping all children of this directory'),
+        );
+        // getDirContents never called — no readdir, no atime bump
+        expect(service.getDirContents).not.toHaveBeenCalled();
+        expect(fs.promises.utimes).not.toHaveBeenCalled();
+        // publishToErrorStream attempted exactly once — by the inline lstat catch in scanDirectory
+        expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('publishToErrorStream fails after utimes fails — scanDirectory throws with the Redis error', async () => {
+        // Verifies the try-catch chain:
+        //   utimes fails → publishToErrorStream inside preserveSourceDirAtime → also fails
+        //   → no outer try-catch in scanDirectory → propagates directly to caller
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(mockStat);
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('EPERM'));
+        jobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+        await expect(service.scanDirectory(scanInput)).rejects.toThrow('Redis down');
+        expect(jobContext.publishToErrorStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('scan result is correct when utimes fails — getDirContents result is unaffected', async () => {
+        // utimes failing only breaks atime restoration; the actual scan output is intact
+        (fs.promises.lstat as jest.Mock).mockResolvedValue(mockStat);
+        (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('EPERM'));
+
+        const result = await service.scanDirectory(scanInput);
+
+        expect(result).toBeDefined();
+        expect(result.fileCount).toBe(0);
+        expect(result.dirCount).toBe(0);
+    });
+
+    it('restores original atime even after readdir bumps it (strictatime simulation)', async () => {
+        const originalAtime = new Date('2024-01-01T10:00:00Z');
+        const originalMtime = new Date('2024-01-01T09:00:00Z');
+        const bumpedAtime   = new Date('2024-01-01T12:00:00Z'); // what strictatime readdir would set
+
+        // lstat captures original atime BEFORE readdir
+        (fs.promises.lstat as jest.Mock).mockResolvedValue({
+            atime: originalAtime,
+            mtime: originalMtime,
+        });
+
+        // getDirContents (readdir) bumps source dir atime as a side effect
+        jest.spyOn(service, 'getDirContents').mockImplementation(async () => {
+            // simulate: source dir atime is now bumpedAtime on the filesystem
+            (fs.promises.lstat as jest.Mock).mockResolvedValue({
+                atime: bumpedAtime,
+                mtime: originalMtime,
+            });
+            return new Set<string>();
+        });
+
+        (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+
+        await service.scanDirectory(scanInput);
+
+        // utimes must be called with the ORIGINAL atime (captured before readdir), not the bumped one
+        expect(fs.promises.utimes).toHaveBeenCalledWith('/src/foo', originalAtime, originalMtime);
+        expect(fs.promises.utimes).not.toHaveBeenCalledWith('/src/foo', bumpedAtime, expect.anything());
     });
 });

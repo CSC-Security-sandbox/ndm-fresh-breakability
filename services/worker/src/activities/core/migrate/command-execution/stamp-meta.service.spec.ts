@@ -659,6 +659,24 @@ describe('StampMetaService', () => {
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
+
+    it('should skip source utimes for directories (handled by scan workflow)', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+        },
+        { preserveAccessTime: true },
+        true, // isDir
+      );
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect(mockFs.promises.lutimes).not.toHaveBeenCalled();
+    });
   });
 
   describe('stampObjectACL', () => {
@@ -1118,7 +1136,7 @@ describe('StampMetaService', () => {
       expect(sourceCalls).toHaveLength(0);
     });
 
-    it('directory: preserve runs on source, stampAccessAndModifiedTime skips dest (isDir early return)', async () => {
+    it('directory: both preserveAccessAndModifiedTime and stampAccessAndModifiedTime skip utimes (scan workflow owns source dir atime)', async () => {
       const input = createAtimeInput({}, { preserveAccessTime: true }, true /* isDir */);
       input.sourcePath = '/source/test-dir';
       input.targetPath = '/target/test-dir';
@@ -1129,9 +1147,9 @@ describe('StampMetaService', () => {
       const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
       const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-dir');
       const targetCalls = utimesCalls.filter(c => c[0] === '/target/test-dir');
-      // preserve normalizes source dir atime so it matches what DeferredDirStampService stamps on dest
-      expect(sourceCalls).toHaveLength(1);
-      // stampAccessAndModifiedTime returns early for dirs — dest is handled by DeferredDirStampService
+      // source dir atime is now restored by preserveSourceDirAtime in the scan workflow
+      expect(sourceCalls).toHaveLength(0);
+      // dest dir atime is handled by DeferredDirStampService restamp pass
       expect(targetCalls).toHaveLength(0);
       expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
     });

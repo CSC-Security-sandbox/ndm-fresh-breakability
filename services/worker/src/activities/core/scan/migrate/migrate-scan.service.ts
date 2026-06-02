@@ -14,6 +14,7 @@ import { isPathExists } from "../../utils/utils";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
 import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
+import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
 
 
 @Injectable()
@@ -131,7 +132,24 @@ export class MigrateScanService {
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
+
+        const preserveAccessTime = jobContext.jobConfig?.options?.preserveAccessTime;
+        let sourceDirStat: fs.Stats | undefined;
+        if (preserveAccessTime) {
+            try {
+                sourceDirStat = await captureSourceDirAtimeStat(sourcePath, this.logger);
+            } catch (err) {
+                const dmErr = dmError('OPERATION', Origin.SOURCE, Operation.READ_DIR, errorType, command.id, err, { name: command.fPath, path: sourcePath });
+                await jobContext.publishToErrorStream(dmErr);
+                throw err;
+            }
+        }
+
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
+
+        if (sourceDirStat) {
+            await preserveSourceDirAtime(sourcePath, sourceDirStat, jobContext, command, this.logger, errorType);
+        }
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
 
         const items = Array.from(sourceContent, name => ({ name }));

@@ -520,7 +520,7 @@ export class CommandGenerationService {
       );
     }
 
-    if (await isMetaUpdated(sFile, dFile, this.redisService, jobContext, this.securityDescriptorChangeDetector, sourceAbsPath, targetAbsPath, applyInheritanceMode)) {
+    if (jobContext?.jobConfig?.options?.preservePermissions && await isMetaUpdated(sFile, dFile, this.redisService, jobContext, this.securityDescriptorChangeDetector, sourceAbsPath, targetAbsPath, applyInheritanceMode)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),

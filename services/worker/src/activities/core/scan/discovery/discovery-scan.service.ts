@@ -1,10 +1,11 @@
-import { Catch, Inject } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
 import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
+import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
 import { FatalError } from "src/errors/errors.types";
 import { PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
@@ -41,7 +42,10 @@ export class DiscoveryScanService {
         const lowerCaseSourceDirs = new Set<string>();
         const shouldScanADS:boolean = jobContext.jobConfig?.options?.shouldScanADS;
         try {
-            let dir: fs.Dir = await openDirIfExists(sourcePath);            
+            const sourceDirStat = await captureSourceDirAtimeStat(sourcePath, this.logger);
+
+            let dir: fs.Dir = await openDirIfExists(sourcePath);
+
             try {
                 for await (const item of dir) {
                     const sourceContentPath = path.join(sourcePath, item.name);
@@ -87,6 +91,10 @@ export class DiscoveryScanService {
             } catch (error){
                 this.logger.error(`Error scanning directory ${sourcePath}: ${error.message}`);
                 throw error;
+            }
+
+            if (sourceDirStat) {
+                await preserveSourceDirAtime(sourcePath, sourceDirStat, jobContext, command, this.logger, ErrorType.TRANSIENT_ERROR);
             }
         }catch(error) {
             if(error instanceof FatalError)

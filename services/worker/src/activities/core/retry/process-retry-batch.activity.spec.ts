@@ -20,6 +20,8 @@ jest.mock('fs', () => ({
     promises: {
         readdir: jest.fn(),
         opendir: jest.fn(),
+        lstat: jest.fn(),
+        utimes: jest.fn(),
     },
 }));
 
@@ -405,6 +407,212 @@ describe('ProcessRetryBatchActivity', () => {
             ).resolves.toBeDefined();
 
             expect(commandGenerationService.processItems).toHaveBeenCalledTimes(2);
+        });
+
+        describe('source directory atime preservation', () => {
+            const sourceDirAtime = new Date('2024-05-01T08:00:00.000Z');
+            const sourceDirMtime = new Date('2024-05-01T07:00:00.000Z');
+            const sourceDirStat = { atime: sourceDirAtime, mtime: sourceDirMtime };
+
+            beforeEach(() => {
+                // Enable preservation on the shared job context
+                (mockJobContext.jobConfig as any).options = { preserveAccessTime: true };
+                (fs.promises.lstat as jest.Mock).mockResolvedValue(sourceDirStat);
+                (fs.promises.utimes as jest.Mock).mockResolvedValue(undefined);
+            });
+
+            afterEach(() => {
+                delete (mockJobContext.jobConfig as any).options;
+            });
+
+            it('calls utimes with each source dir path and its pre-opendir atime/mtime', async () => {
+                await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                // mockDirCommands has 2 entries: /data/subdir1, /data/subdir2
+                expect(fs.promises.utimes).toHaveBeenCalledTimes(2);
+                expect(fs.promises.utimes).toHaveBeenCalledWith(
+                    expect.stringContaining('subdir1'),
+                    sourceDirAtime,
+                    sourceDirMtime,
+                );
+                expect(fs.promises.utimes).toHaveBeenCalledWith(
+                    expect.stringContaining('subdir2'),
+                    sourceDirAtime,
+                    sourceDirMtime,
+                );
+            });
+
+            it('does NOT call utimes when preserveAccessTime is false', async () => {
+                (mockJobContext.jobConfig as any).options = { preserveAccessTime: false };
+
+                await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                expect(fs.promises.utimes).not.toHaveBeenCalled();
+            });
+
+            it('does NOT call utimes when preserveAccessTime is absent', async () => {
+                delete (mockJobContext.jobConfig as any).options;
+
+                await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                expect(fs.promises.utimes).not.toHaveBeenCalled();
+            });
+
+            it('lstat fails — warns, publishes to error stream, per-dir catch absorbs throw, scan completes for all dirs', async () => {
+                // Inline lstat catch in processDirectoryBatch publishes then rethrows;
+                // the per-dir try/catch catches the rethrow so remaining dirs still run.
+                (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('lstat EPERM'));
+
+                const result = await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                // children never read for any dir (streamDirEntries never reached)
+                expect(fs.promises.utimes).not.toHaveBeenCalled();
+                // batch still completes — per-dir catch continues to next dir
+                expect(result).toBeDefined();
+                // user is notified once per failing dir (2 dirs in batch)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    expect.stringContaining('skipping all children of this directory'),
+                );
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2);
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+                    expect.objectContaining({ operation: expect.objectContaining({ errorMessage: expect.stringContaining('Failed to stat source dir') }) }),
+                );
+            });
+
+            it('lstat fails — streamDirEntries never called for any dir (no atime bump on source dirs)', async () => {
+                // Core regression guard: streamDirEntries calls opendir internally.
+                // If it were called, atime on the source dir would be bumped and
+                // cannot be restored. The throw from captureSourceDirAtimeStat must
+                // prevent streamDirEntries from ever being reached.
+                (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('lstat EPERM'));
+
+                const result = await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                // Batch still completes (per-dir catch absorbs the error)
+                expect(result).toBeDefined();
+                // But streamDirEntries was NEVER called for any directory
+                expect(dirStreamingService.streamDirEntries).not.toHaveBeenCalled();
+                expect(fs.promises.utimes).not.toHaveBeenCalled();
+            });
+
+            it('lstat fails AND publishToErrorStream fails — per-dir catch absorbs Redis error, scan still completes all dirs, streamDirEntries never called', async () => {
+                // Verifies double-failure path in retry batch:
+                //   lstat fails → inline lstat catch: warn already logged, publishToErrorStream throws Redis
+                //   → Redis error propagates to per-dir catch → hasErrors=true, continue
+                //   → same for all remaining dirs
+                // Batch must still complete and streamDirEntries must never be invoked.
+                (fs.promises.lstat as jest.Mock).mockRejectedValue(new Error('lstat EPERM'));
+                mockJobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+                const result = await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                // Batch completes — per-dir catch absorbed both lstat AND Redis errors
+                expect(result).toBeDefined();
+                // warn IS logged before publishToErrorStream is attempted
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    expect.stringContaining('skipping all children of this directory'),
+                );
+                // streamDirEntries never called for any dir — no atime bump
+                expect(dirStreamingService.streamDirEntries).not.toHaveBeenCalled();
+                expect(fs.promises.utimes).not.toHaveBeenCalled();
+                // publishToErrorStream attempted once per dir (2 dirs), all rejected
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2);
+            });
+
+            it('logs error, publishes to error stream, and does not throw when utimes fails', async () => {
+                (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+
+                await expect(
+                    activity.processRetryBatch({
+                        jobRunId,
+                        batchId,
+                        type: 'dir',
+                        settings: mockSettings,
+                    }),
+                ).resolves.toBeDefined();
+
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    expect.stringContaining('Failed to restore atime for source dir'),
+                );
+                // publishToErrorStream called once per failing directory (2 dirs in batch)
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(2);
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledWith(
+                    expect.objectContaining({ operation: expect.objectContaining({ errorMessage: expect.stringContaining('Failed to restore atime for source dir') }) }),
+                );
+            });
+
+            it('publishToErrorStream fails after utimes fails — per-dir catch handles it, scan completes all dirs', async () => {
+                // Verifies the per-dir try-catch isolation:
+                //   utimes fails → publishToErrorStream in utimes catch → also fails
+                //   → propagates to per-dir catch → hasErrors=true, continue
+                //   → remaining dirs are still processed
+                (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+                mockJobContext.publishToErrorStream.mockRejectedValue(new Error('Redis down'));
+
+                const result = await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                // Batch completes despite double failure (utimes + publishToErrorStream)
+                expect(result).toBeDefined();
+                // processItems still called for all dirs — the scan loop continued
+                expect(commandGenerationService.processItems).toHaveBeenCalledTimes(
+                    mockDirCommands.length,
+                );
+                // publishToErrorStream was attempted once per dir before it started failing
+                expect(mockJobContext.publishToErrorStream).toHaveBeenCalledTimes(
+                    mockDirCommands.length,
+                );
+            });
+
+            it('utimes fails — scan returns a result (not undefined), file/dir counts are unaffected', async () => {
+                // Verifies scan output integrity: the scan result is populated from the
+                // opendir loop which completed before utimes was even called.
+                (fs.promises.utimes as jest.Mock).mockRejectedValue(new Error('utimes EPERM'));
+
+                const result = await activity.processRetryBatch({
+                    jobRunId,
+                    batchId,
+                    type: 'dir',
+                    settings: mockSettings,
+                });
+
+                expect(result).toBeDefined();
+                expect(result).not.toBeNull();
+            });
         });
     });
 

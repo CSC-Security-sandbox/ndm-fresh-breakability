@@ -266,6 +266,7 @@ describe('CommandGenerationService', () => {
             mockIsMetaUpdated.mockReturnValue(true);
             const result = await service.processItems({
                 ...baseInput,
+                jobContext: { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preservePermissions: true } } } as any,
                 items: [{ name: 'meta.txt' }],
                 targetContent: new LocalSetLookup(new Set(['meta.txt'])),
             });
@@ -486,6 +487,7 @@ describe('CommandGenerationService', () => {
 
             const result = await service.processItems({
                 ...baseInput,
+                jobContext: { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preservePermissions: true } } } as any,
                 items: [{ name: 'existingdir', originalCommandId: 'orig-cmd-dir', fPath: 'data/existingdir', isDir: true }],
                 targetContent: new LocalSetLookup(new Set(['existingdir'])),
             });
@@ -601,6 +603,7 @@ describe('CommandGenerationService', () => {
 
             const result = await service.processItems({
                 ...baseInput,
+                jobContext: { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preservePermissions: true } } } as any,
                 items: [{ name: 'existingdir' }],
                 targetContent: new LocalSetLookup(new Set(['existingdir'])),
             });
@@ -746,7 +749,8 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = await service.buildCommand(sFile, 'path/file.txt', undefined);
+            const jobCtx = { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preservePermissions: true } } };
+            const result = await service.buildCommand(sFile, 'path/file.txt', undefined, undefined, jobCtx as any);
             expect(result).toBeDefined();
         });
 
@@ -862,7 +866,8 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const result = await service.buildCommand(sFile, 'path/file.txt', sFile);
+            const jobCtx = { ...mockJobContext, jobConfig: { ...mockJobContext.jobConfig, options: { preservePermissions: true, preserveAccessTime: true } } };
+            const result = await service.buildCommand(sFile, 'path/file.txt', sFile, undefined, jobCtx as any);
             expect(result).toBeDefined();
             expect(result!.ops[OPS_CMD.STAMP_ATIME]).toBeUndefined();
             expect(result!.ops[OPS_CMD.STAMP_META]).toBeDefined();
@@ -911,7 +916,7 @@ describe('CommandGenerationService', () => {
                 birthtime: new Date(),
                 ino: 1,
             } as fs.Stats;
-            const dummyCtx = { jobConfig: { sourceDirectoryPath: '/src-root' } } as any;
+            const dummyCtx = { jobConfig: { sourceDirectoryPath: '/src-root', options: { preservePermissions: true } } } as any;
 
             beforeEach(() => {
                 mockIsContentUpdate.mockReturnValue(false);
