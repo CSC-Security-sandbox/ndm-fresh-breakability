@@ -529,7 +529,16 @@ describe('CommandExecService', () => {
         });
 
         describe('copyContentStatus and stampMetaDataStatus (COC report)', () => {
-            it('should pass copyContentStatus not_applicable and stampMetaDataStatus to buildFileInfo for COPY_DIR only', async () => {
+            it('writes stampMetaDataStatus=not_applicable when COPY_DIR-only command has no STAMP_META op this turn (was silently writing success)', async () => {
+                // Regression pin: previously, the OR-chain
+                //   stampMetaOp?.params?.error?.length ? 'failed' : 'success'
+                // collapsed "STAMP_META op missing entirely" into the same
+                // 'success' bucket as "STAMP_META op ran and validator was
+                // clean". That meant an incremental scan that decided no
+                // drift (and therefore added no STAMP_META op) silently
+                // wrote 'success' to the CoC, overwriting a previous run's
+                // legitimate 'failed'. The fix differentiates "didn't run
+                // STAMP_META this turn" → 'not_applicable'.
                 const createMockCommand = () => ({
                     id: 'cmd-dir',
                     fPath: '/testdir',
@@ -574,10 +583,19 @@ describe('CommandExecService', () => {
                 expect(buildFileInfoSpy).toHaveBeenCalled();
                 const callInput = buildFileInfoSpy.mock.calls[0][0];
                 expect(callInput.copyContentStatus).toBe('not_applicable');
-                expect(callInput.stampMetaDataStatus).toBe('success');
+                // The dir was created (so `shouldStampMeta=true` flowed
+                // through baseCmdRes) but no STAMP_META op was attached
+                // for this turn → status must be 'not_applicable', not
+                // the misleading 'success' the OR-chain previously emitted.
+                expect(callInput.stampMetaDataStatus).toBe('not_applicable');
             });
 
-            it('should set copyContentStatus success and stampMetaDataStatus when COPY_FILE completed and stamp succeeds', async () => {
+            it('writes stampMetaDataStatus=not_applicable when COPY_FILE completed but no STAMP_META op this turn', async () => {
+                // Same incremental-scan no-op pattern as above, but for the
+                // COPY_FILE path: the file is already on the destination
+                // with matching checksums, the comparator gate decided no
+                // metadata drift, so the command has no STAMP_META op. We
+                // must not write 'success' here.
                 const createMockCommand = () => ({
                     id: 'cmd-file',
                     fPath: '/test.txt',
@@ -621,6 +639,55 @@ describe('CommandExecService', () => {
                 expect(buildFileInfoSpy).toHaveBeenCalled();
                 const callInput = buildFileInfoSpy.mock.calls[0][0];
                 expect(callInput.copyContentStatus).toBe('success');
+                expect(callInput.stampMetaDataStatus).toBe('not_applicable');
+            });
+
+            it('writes stampMetaDataStatus=success only when STAMP_META op actually ran this turn and validator was clean', async () => {
+                // Positive pin: the only path that may legitimately write
+                // 'success' is the one where the command carries a
+                // STAMP_META op (i.e. the scan-time gate decided to act)
+                // AND the post-stamp validator produced no errors.
+                const createMockCommand = () => ({
+                    id: 'cmd-file-stamped',
+                    fPath: '/test.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {
+                        [OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
+                        [OPS_CMD.STAMP_META]: { status: OPS_STATUS.READY, params: {} },
+                    },
+                    metadata: {
+                        size: 1024,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456,
+                    },
+                    serialize: jest.fn(),
+                });
+                stampMetaService.stampMetaData.mockResolvedValue({
+                    shouldStampMeta: true,
+                    sourceErrors: [],
+                    targetErrors: [],
+                    shouldUpdateItemInfo: true,
+                });
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+                const input = {
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                await service.executeCommand(input);
+
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
                 expect(callInput.stampMetaDataStatus).toBe('success');
             });
 
@@ -652,6 +719,65 @@ describe('CommandExecService', () => {
                     shouldStampMeta: false,
                     sourceErrors: [],
                     targetErrors: ['EACCES'],
+                    shouldUpdateItemInfo: true,
+                });
+                const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);
+                const input = {
+                    sourcePath: '/source/test.txt',
+                    targetPath: '/target/test.txt',
+                    jobContext: mockJobContext,
+                    command: createMockCommand(),
+                    errorType: ErrorType.RECOVERABLE_ERROR,
+                };
+
+                await service.executeCommand(input);
+
+                const callInput = buildFileInfoSpy.mock.calls[0][0];
+                expect(callInput.stampMetaDataStatus).toBe('failed');
+            });
+
+            it('writes stampMetaDataStatus=failed when STAMP_META op carries a validator error on params.error (CoC side-channel path)', async () => {
+                // Pins the second 'failed' branch:
+                //   stampMetaOp?.params?.error?.length ? 'failed' : …
+                // This is the post-stamp validator-mismatch path. The
+                // stamp itself returned no hard errors (targetErrors=[]),
+                // but `validateAclOperation` later compared source vs
+                // re-read target and found a diff (e.g. ACE missing on
+                // destination from the INHERITED-bit kernel strip), which
+                // `stampAclOperation` writes onto
+                //   command.ops[STAMP_META].params.error.
+                // The CoC must surface this as 'failed' even though
+                // stampMetaData() reported clean source/target errors.
+                const createMockCommand = () => ({
+                    id: 'cmd-file-validator-failed',
+                    fPath: '/test.txt',
+                    status: CommandStatus.READY,
+                    isDir: false,
+                    ops: {
+                        [OPS_CMD.COPY_FILE]: { status: OPS_STATUS.COMPLETED, params: {} },
+                        [OPS_CMD.STAMP_META]: {
+                            status: OPS_STATUS.READY,
+                            params: { error: 'Missing ACE in target: SID(S-1-5-21-x), AccessMask(2032127), AceType(0), AceFlags(0x13).' },
+                        },
+                    },
+                    metadata: {
+                        size: 1024,
+                        mtime: new Date(),
+                        atime: new Date(),
+                        ctime: new Date(),
+                        birthtime: new Date(),
+                        mode: 644,
+                        uid: 1000,
+                        gid: 1000,
+                        sid: 'test-sid',
+                        inode: 123456,
+                    },
+                    serialize: jest.fn(),
+                });
+                stampMetaService.stampMetaData.mockResolvedValue({
+                    shouldStampMeta: true,
+                    sourceErrors: [],
+                    targetErrors: [],
                     shouldUpdateItemInfo: true,
                 });
                 const buildFileInfoSpy = jest.spyOn(service, 'buildFileInfo').mockResolvedValue({} as any);

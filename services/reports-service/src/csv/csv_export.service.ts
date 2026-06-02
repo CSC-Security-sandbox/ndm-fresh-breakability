@@ -17,7 +17,6 @@ export const CSV_FILE_NAMES = {
     EXCLUDED: 'excluded-report.csv',
     SKIPPED: 'skipped-report.csv',
     DELETED: 'deleted-report.csv',
-    METADATA_CONFLICT_ERRORS: 'metadata_conflict_errors.csv',
 } as const;
 
 export type CocBundleFileEntry =
@@ -26,18 +25,13 @@ export type CocBundleFileEntry =
         readonly fileName: string;
         readonly kind: 'list';
         readonly listType: 'excluded' | 'skipped' | 'deleted';
-    }
-    | {
-        readonly fileName: string;
-        readonly kind: 'metadataConflictErrors';
-      };
+    };
 
 export const COC_BUNDLE_ENTRIES: readonly CocBundleFileEntry[] = [
     { fileName: CSV_FILE_NAMES.COC, kind: 'inventory' },
     // { fileName: CSV_FILE_NAMES.EXCLUDED, kind: 'list', listType: 'excluded' }, // temporarily disabled
     // { fileName: CSV_FILE_NAMES.SKIPPED, kind: 'list', listType: 'skipped' },  // temporarily disabled
     { fileName: CSV_FILE_NAMES.DELETED, kind: 'list', listType: 'deleted' },
-    { fileName: CSV_FILE_NAMES.METADATA_CONFLICT_ERRORS, kind: 'metadataConflictErrors' },
 ];
 
 interface CsvStrategy {
@@ -90,27 +84,6 @@ export class CsvService {
         const strategy: CsvStrategy = {
             fetchBatch: async (limit, cursor) => {
                 const q = await this.getListEntriesQuery(jobRunId, limit, cursor, type, protocol, sourceDirSuffix);
-                return this.dataSource.query(q.query, q.values);
-            },
-            nextCursor: (lastRow) => lastRow?._cursor_path ?? null,
-            toRow: ({ _cursor_path, ...csvRow }) => csvRow,
-        };
-        await this.generateCsvCore(filePath, jobRunId, batchSize, resumeCursor, strategy);
-    }
-
-    async generatePermStampCtimeConflictCsv(
-        filePath: string,
-        jobRunId: string,
-        batchSize: number = 10000,
-        jobType?: string,
-        resumeCursor?: string | null,
-    ) {
-        const { protocol, sourceDirSuffix, targetDirSuffix } = await this.getJobRunContext(jobRunId);
-        const strategy: CsvStrategy = {
-            fetchBatch: async (limit, cursor) => {
-                const q = jobType?.toUpperCase() === JobType.CutOver
-                    ? await this.getCutoverPermStampCtimeConflictQuery(jobRunId, limit, cursor, protocol, sourceDirSuffix, targetDirSuffix)
-                    : await this.getPermStampCtimeConflictQuery(jobRunId, limit, cursor, protocol, sourceDirSuffix, targetDirSuffix);
                 return this.dataSource.query(q.query, q.values);
             },
             nextCursor: (lastRow) => lastRow?._cursor_path ?? null,
@@ -347,126 +320,6 @@ export class CsvService {
         `;
         return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? '', targetDirSuffix ?? ''] };
     }
-
-    async getPermStampCtimeConflictQuery(
-        jobRunId: string,
-        limit: number,
-        cursor: string | null,
-        protocol?: string,
-        sourceDirSuffix?: string,
-        targetDirSuffix?: string,
-    ) {
-        const dbSchema = process.env.SCHEMA;
-        const isSmb = (protocol || '').toUpperCase() === CsvService.PROTOCOL_SMB;
-        const fPathExpr = isSmb ? `REPLACE(o.f_path, '/', '\\')` : `o.f_path`;
-        const query = `
-            WITH latest_unresolved_errors AS (
-                SELECT DISTINCT ON (o.f_path)
-                    o.f_path AS _cursor_path,
-                    COALESCE(v_source.volume_path, '') || $4 || ${fPathExpr} AS "Source Path",
-                    COALESCE(v_target.volume_path, '') || $5 || ${fPathExpr} AS "Destination Path",
-                    oe.error_type AS "Error Type",
-                    oe.error_code AS "Error Code",
-                    oe.error_message AS "Error Message",
-                    oe.origin AS "Origin",
-                    oe.operation_type AS "Operation",
-                    o.job_run_id AS "Job Run Id",
-                    TO_CHAR(oe.created_at AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') AS "Last Failed Timestamp (UTC)"
-                FROM ${dbSchema}.operation_errors oe
-                JOIN ${dbSchema}.operations o ON o.id = oe.operation_id
-                JOIN ${dbSchema}.jobrun jr ON jr.id = o.job_run_id
-                JOIN ${dbSchema}.jobconfig jc ON jc.id = jr.job_config_id
-                LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
-                LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
-                WHERE o.job_run_id = $1
-                  AND o.f_path IS NOT NULL
-                  AND oe.error_type IN ('METADATA_UPDATE_CONFLICT')
-                  AND ($2::text IS NULL OR o.f_path > $2::text)
-                ORDER BY o.f_path, oe.created_at DESC, oe.id DESC
-            )
-            SELECT
-                _cursor_path,
-                "Source Path",
-                "Destination Path",
-                "Error Type",
-                "Error Code",
-                "Error Message",
-                "Origin",
-                "Operation",
-                "Job Run Id",
-                "Last Failed Timestamp (UTC)"
-            FROM latest_unresolved_errors
-            ORDER BY _cursor_path
-            LIMIT $3;
-        `;
-        return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? '', targetDirSuffix ?? ''] };
-    }
-
-    async getCutoverPermStampCtimeConflictQuery(
-        jobRunId: string,
-        limit: number,
-        cursor: string | null,
-        protocol?: string,
-        sourceDirSuffix?: string,
-        targetDirSuffix?: string,
-    ) {
-        const dbSchema = process.env.SCHEMA;
-        const isSmb = (protocol || '').toUpperCase() === CsvService.PROTOCOL_SMB;
-        const fPathExpr = isSmb ? `REPLACE(o.f_path, '/', '\\')` : `o.f_path`;
-        const query = `
-            WITH all_related_jobs AS (
-                SELECT jr.id, jr.start_time
-                FROM ${dbSchema}.jobrun jr
-                JOIN ${dbSchema}.jobconfig jc ON jr.job_config_id = jc.id
-                WHERE (jc.source_path_id, jc.target_path_id) = (
-                    SELECT jc2.source_path_id, jc2.target_path_id
-                    FROM ${dbSchema}.jobrun jr2
-                    JOIN ${dbSchema}.jobconfig jc2 ON jr2.job_config_id = jc2.id
-                    WHERE jr2.id = $1
-                )
-            ),
-            latest_unresolved_errors AS (
-                SELECT DISTINCT ON (o.f_path)
-                    o.f_path AS _cursor_path,
-                    COALESCE(v_source.volume_path, '') || $4 || ${fPathExpr} AS "Source Path",
-                    COALESCE(v_target.volume_path, '') || $5 || ${fPathExpr} AS "Destination Path",
-                    oe.error_type AS "Error Type",
-                    oe.error_code AS "Error Code",
-                    oe.error_message AS "Error Message",
-                    oe.origin AS "Origin",
-                    oe.operation_type AS "Operation",
-                    o.job_run_id AS "Job Run Id",
-                    TO_CHAR(oe.created_at AT TIME ZONE 'UTC', 'Dy Mon DD YYYY HH24:MI:SS') AS "Last Failed Timestamp (UTC)"
-                FROM ${dbSchema}.operation_errors oe
-                JOIN ${dbSchema}.operations o ON o.id = oe.operation_id
-                JOIN all_related_jobs arj ON arj.id = o.job_run_id
-                JOIN ${dbSchema}.jobrun jr ON jr.id = o.job_run_id
-                JOIN ${dbSchema}.jobconfig jc ON jc.id = jr.job_config_id
-                LEFT JOIN ${dbSchema}.volume v_source ON jc.source_path_id = v_source.id
-                LEFT JOIN ${dbSchema}.volume v_target ON jc.target_path_id = v_target.id
-                WHERE o.f_path IS NOT NULL
-                  AND oe.error_type IN ('METADATA_UPDATE_CONFLICT')
-                  AND ($2::text IS NULL OR o.f_path > $2::text)
-                ORDER BY o.f_path, oe.created_at DESC, oe.id DESC
-            )
-            SELECT
-                _cursor_path,
-                "Source Path",
-                "Destination Path",
-                "Error Type",
-                "Error Code",
-                "Error Message",
-                "Origin",
-                "Operation",
-                "Job Run Id",
-                "Last Failed Timestamp (UTC)"
-            FROM latest_unresolved_errors
-            ORDER BY _cursor_path
-            LIMIT $3;
-        `;
-        return { query, values: [jobRunId, cursor, limit, sourceDirSuffix ?? '', targetDirSuffix ?? ''] };
-    }
-
 
     getMigrationCoCColumns(protocol: string, includeCocStatusColumns: boolean = false): string {
         const statusColumns = includeCocStatusColumns

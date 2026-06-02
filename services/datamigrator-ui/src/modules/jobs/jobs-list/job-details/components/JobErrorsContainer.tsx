@@ -52,9 +52,6 @@ const JobErrorsContainer = ({
 
   const fatalErrorCount = getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.FATAL_ERROR);
   const transientErrorCount = getErrorCount(JOB_RUN_ERRORS_TYPE_KEY.TRANSIENT_ERROR);
-  const metadataUpdateConflictErrorCount = getErrorCount(
-    JOB_RUN_ERRORS_TYPE_KEY.METADATA_UPDATE_CONFLICT
-  );
 
   return (
     <CardContent className="flex flex-col gap-4">
@@ -66,11 +63,6 @@ const JobErrorsContainer = ({
       {transientErrorCount !== 0 && (
         <Notification type="warning">
           Transient Errors ({transientErrorCount})
-        </Notification>
-      )}
-      {metadataUpdateConflictErrorCount !== 0 && (
-        <Notification type="warning">
-          Metadata update conflicts ({metadataUpdateConflictErrorCount})
         </Notification>
       )}
     </CardContent>
