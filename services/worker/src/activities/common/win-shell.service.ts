@@ -448,7 +448,8 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
         // Detect ACL operations and adjust timeout
         const isAclOperation = command.includes('Set-FileSecurityFast') || command.includes('$aclJson') || command.includes('Get-Acl') || command.includes('Set-Acl');
-        const adjustedTimeout = isAclOperation ? Math.max(timeout, 90000) : timeout; // Minimum 90s for ACL operations
+        const aclTimeout = parseInt(process.env.ACL_OPERATION_TIMEOUT || '90000', 10);
+        const adjustedTimeout = isAclOperation ? Math.max(timeout, aclTimeout) : timeout;
 
         if (target.getQueueLength() >= this.maxQueuePerShell) {
             if (this.dropWhenFull) {

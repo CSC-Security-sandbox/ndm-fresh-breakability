@@ -1,10 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SetupExportsPathPermissionService } from './setup-exports-path-permission.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
-import { WinShellService } from 'src/activities/common/win-shell.service';
 import { RedisService } from 'src/redis/redis.service';
-import { FileServerDetails } from '@netapp-cloud-datamigrate/jobs-lib';
 import { ProtocolTypes } from 'src/protocols/protocols';
+import { WinOperationService } from '../migrate/command-execution/win-opeartions/win-operation.service';
 import { isDirectoryLevelMigration } from 'src/activities/utils/utils';
 
 jest.mock('src/activities/utils/utils', () => ({
@@ -15,9 +14,24 @@ jest.mock('src/activities/utils/utils', () => ({
 describe('SetupExportsPathPermissionService', () => {
   let service: SetupExportsPathPermissionService;
   let mockLoggerFactory: jest.Mocked<LoggerFactory>;
-  let mockWinShellService: jest.Mocked<WinShellService>;
+  let mockWinOperationService: jest.Mocked<WinOperationService>;
   let mockRedisService: jest.Mocked<RedisService>;
   let mockLogger: any;
+
+  const makeSourceAcl = (overrides: Record<string, any> = {}): SecurityDescriptor => ({
+    Owner: 'S-1-5-21-111-222-333-1001',
+    Group: 'S-1-5-21-111-222-333-513',
+    DaclAces: [
+      { Sid: 'S-1-5-21-111-222-333-1001', AccessMask: 2032127, AceType: 0, AceFlags: 3, IsInherited: false, originalSid: undefined as any },
+    ],
+    Attributes: 'Directory',
+    DaclPresent: true,
+    DaclProtected: false,
+    DaclAutoInherit: true,
+    originalOwner: undefined as any,
+    originalGroup: undefined as any,
+    ...overrides,
+  });
 
   beforeEach(async () => {
     mockLogger = {
@@ -32,8 +46,11 @@ describe('SetupExportsPathPermissionService', () => {
       create: jest.fn().mockReturnValue(mockLogger),
     } as any;
 
-    mockWinShellService = {
-      executeCommand: jest.fn(),
+    mockWinOperationService = {
+      getAclOperation: jest.fn(),
+      setAclOperation: jest.fn(),
+      mapSIDToTarget: jest.fn(),
+      validateAclOperation: jest.fn(),
     } as any;
 
     mockRedisService = {
@@ -45,7 +62,7 @@ describe('SetupExportsPathPermissionService', () => {
       providers: [
         SetupExportsPathPermissionService,
         { provide: LoggerFactory, useValue: mockLoggerFactory },
-        { provide: WinShellService, useValue: mockWinShellService },
+        { provide: WinOperationService, useValue: mockWinOperationService },
         { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
@@ -97,17 +114,18 @@ describe('SetupExportsPathPermissionService', () => {
       await service.setupExportPathPermission(jobRunId);
 
       expect(mockLogger.debug).toHaveBeenCalledWith(`Skipping ACL setup for jobRunId: ${jobRunId} - preservePermissions is disabled`);
-      expect(mockWinShellService.executeCommand).not.toHaveBeenCalled();
+      expect(mockWinOperationService.getAclOperation).not.toHaveBeenCalled();
     });
 
     it('should proceed with setup for SMB protocol when preservePermissions is true', async () => {
       const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
       const jobContext = {
         jobConfig: {
           destinationFileServer: {
             protocols: [{ type: ProtocolTypes.SMB }],
-            hostname: 'test-host',
-            path: 'test-path'
+            hostname: 'dest-host',
+            path: 'dest-path'
           },
           sourceFileServer: {
             hostname: 'source-host',
@@ -118,11 +136,16 @@ describe('SetupExportsPathPermissionService', () => {
       } as any;
 
       mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
-      mockWinShellService.executeCommand.mockResolvedValue({ stdout: 'test-host\\test-path', stderr: '' });
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(sourceAcl);
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+      mockWinOperationService.validateAclOperation.mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
 
       await service.setupExportPathPermission(jobRunId);
 
       expect(mockLogger.log).toHaveBeenCalledWith(`Starting ACL setup for jobRunId: ${jobRunId}`);
+      expect(mockWinOperationService.getAclOperation).toHaveBeenCalledTimes(2);
     });
 
     it('should propagate errors thrown by setup() instead of swallowing them', async () => {
@@ -143,7 +166,6 @@ describe('SetupExportsPathPermissionService', () => {
       } as any;
 
       mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
-      // Force setup() itself to throw by replacing it on the instance
       const setupError = new Error('Unexpected runtime error');
       jest.spyOn(service, 'setup').mockRejectedValue(setupError);
 
@@ -191,438 +213,166 @@ describe('SetupExportsPathPermissionService', () => {
       await expect(service.setup('test-id', {})).rejects.toThrow('Invalid context: missing file server configuration');
     });
 
-    it('should handle setup with valid source and destination ACLs', async () => {
+    it('should read source ACL, stamp it on destination, and validate', async () => {
       const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
       const context = {
         jobConfig: {
-          destinationFileServer: {
-            hostname: 'dest-host',
-            path: 'dest-path'
-          },
-          sourceFileServer: {
-            hostname: 'source-host',
-            path: 'source-path'
-          }
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
         }
       };
 
-      const sourceAclOutput = 'source-host\\source-path testuser:(F)';
-      const destAclOutput = 'dest-host\\dest-path destuser:(R)';
-
-      mockWinShellService.executeCommand
-        .mockResolvedValueOnce({ stdout: destAclOutput, stderr: '' }) // destination ACL
-        .mockResolvedValueOnce({ stdout: sourceAclOutput, stderr: '' }) // source ACL
-        .mockResolvedValue({ stdout: 'Successfully processed 1 files', stderr: '' }); // add/remove operations
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(sourceAcl);
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+      mockWinOperationService.validateAclOperation.mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
 
       await service.setup(jobRunId, context);
 
-      expect(mockWinShellService.executeCommand).toHaveBeenCalledTimes(4); // 2 ACL reads + 1 add + 1 remove
+      expect(mockWinOperationService.getAclOperation).toHaveBeenNthCalledWith(
+        1, '\\\\source-host/source-path', true, jobRunId
+      );
+      expect(mockWinOperationService.setAclOperation).toHaveBeenCalledWith(
+        '\\\\dest-host/dest-path', sourceAcl, jobRunId
+      );
+      expect(mockWinOperationService.getAclOperation).toHaveBeenNthCalledWith(
+        2, '\\\\dest-host/dest-path', false, jobRunId
+      );
+      expect(mockWinOperationService.validateAclOperation).toHaveBeenCalledWith(
+        sourceAcl, sourceAcl, expect.objectContaining({ workflowId: jobRunId })
+      );
     });
 
-    it('should handle case with no source ACL', async () => {
+    it('should apply SID mapping when isIdentityMappingAvailable is true', async () => {
       const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
+      const mappedAcl = makeSourceAcl({
+        Owner: 'S-1-5-21-999-888-777-2001',
+        originalOwner: sourceAcl.Owner,
+      });
       const context = {
         jobConfig: {
-          destinationFileServer: {
-            hostname: 'dest-host',
-            path: 'dest-path'
-          },
-          sourceFileServer: {
-            hostname: 'source-host',
-            path: 'source-path'
-          }
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
+          options: { isIdentityMappingAvailable: true },
         }
       };
 
-      mockWinShellService.executeCommand
-        .mockResolvedValueOnce({ stdout: 'dest-host\\dest-path', stderr: '' }) // destination ACL
-        .mockResolvedValueOnce({ stdout: 'source-host\\source-path', stderr: '' }); // source ACL
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(mappedAcl);
+      mockWinOperationService.mapSIDToTarget.mockResolvedValue(mappedAcl);
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+      mockWinOperationService.validateAclOperation.mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
 
       await service.setup(jobRunId, context);
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('No principals found in source ACL to add');
+      expect(mockWinOperationService.mapSIDToTarget).toHaveBeenCalledWith(sourceAcl, jobRunId);
+      expect(mockWinOperationService.setAclOperation).toHaveBeenCalledWith(
+        '\\\\dest-host/dest-path', mappedAcl, jobRunId
+      );
     });
 
-    it('should handle error when removing principals', async () => {
+    it('should not apply SID mapping when isIdentityMappingAvailable is falsy', async () => {
       const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
       const context = {
         jobConfig: {
-          destinationFileServer: {
-            hostname: 'dest-host',
-            path: 'dest-path'
-          },
-          sourceFileServer: {
-            hostname: 'source-host',
-            path: 'source-path'
-          }
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
+          options: {},
         }
       };
 
-      const sourceAclOutput = '\\\\source-host/source-path testuser:(F)';
-      const destAclOutput = '\\\\dest-host/dest-path destuser:(R)\ntestuser:(F)';
-
-      mockWinShellService.executeCommand
-        .mockResolvedValueOnce({ stdout: destAclOutput, stderr: '' }) // destination ACL
-        .mockResolvedValueOnce({ stdout: sourceAclOutput, stderr: '' }) // source ACL
-        .mockResolvedValueOnce({ stdout: 'Successfully processed 1 files', stderr: '' }) // add operation
-        .mockRejectedValueOnce(new Error('Remove failed')); // remove operation fails
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(sourceAcl);
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+      mockWinOperationService.validateAclOperation.mockResolvedValue({ sourceSID: '', targetSID: '', inValid: '' });
 
       await service.setup(jobRunId, context);
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error removing principal destuser from destination: Remove failed',
-        expect.any(String)
-      );
-    });
-  });
-
-  describe('parseIcaclsOutput', () => {
-    it('should throw error for invalid output', () => {
-      expect(() => service.parseIcaclsOutput('', 'test-path')).toThrow('Invalid icacls output');
-      expect(() => service.parseIcaclsOutput(null as any, 'test-path')).toThrow('Invalid icacls output');
+      expect(mockWinOperationService.mapSIDToTarget).not.toHaveBeenCalled();
     });
 
-    it('should throw error for empty output', () => {
-      expect(() => service.parseIcaclsOutput('   \n  \n   ', 'test-path')).toThrow('Empty icacls output');
-    });
-
-    it('should parse valid icacls output', () => {
-      const output = `test-path testuser:(F)
-                      BUILTIN\\Users:(RX)
-                      Successfully processed 1 files.`;
-      
-      const result = service.parseIcaclsOutput(output, 'test-path');
-      
-      expect(result.permissions).toHaveLength(2);
-      expect(result.permissions[0].principal).toBe('testuser');
-      expect(result.permissions[0].permissions).toContainEqual({ code: 'F', description: 'Full control' });
-      expect(result.permissions[1].principal).toBe('BUILTIN\\Users');
-      expect(result.permissions[1].permissions).toContainEqual({ code: 'RX', description: 'Read & Execute' });
-    });
-
-    it('should handle ACL line parsing errors gracefully', () => {
-      const output = `test-path
-                      :(invalid-no-user)
-                      testuser:(F)`;
-      
-      const result = service.parseIcaclsOutput(output, 'test-path');
-      
-      expect(result.permissions).toHaveLength(1);
-      expect(result.permissions[0].principal).toBe('testuser');
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Failed to parse ACL line: :(invalid-no-user)',
-        expect.any(Error)
-      );
-    });
-
-    it('should handle error parsing first line ACL info', () => {
-      const output = `test-path malformed-user:(F)
-                      testuser:(RX)`;
-      
-      // Mock parseAclLine to throw an error on first call only
-      const originalParseAclLine = (service as any).parseAclLine;
-      let callCount = 0;
-      (service as any).parseAclLine = jest.fn().mockImplementation((line, permissions) => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error('Parse error on first line');
+    it('should throw when source ACL read fails', async () => {
+      const jobRunId = 'test-job-run-id';
+      const context = {
+        jobConfig: {
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
         }
-        return originalParseAclLine.call(service, line, permissions);
+      };
+
+      mockWinOperationService.getAclOperation.mockRejectedValue(new Error('Access denied'));
+
+      await expect(service.setup(jobRunId, context)).rejects.toThrow('Access denied');
+      expect(mockWinOperationService.setAclOperation).not.toHaveBeenCalled();
+    });
+
+    it('should throw when destination ACL set fails', async () => {
+      const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
+      const context = {
+        jobConfig: {
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
+        }
+      };
+
+      mockWinOperationService.getAclOperation.mockResolvedValueOnce(sourceAcl);
+      mockWinOperationService.setAclOperation.mockRejectedValue(new Error('SetNamedSecurityInfo failed'));
+
+      await expect(service.setup(jobRunId, context)).rejects.toThrow('SetNamedSecurityInfo failed');
+    });
+
+    it('should throw when destination ACL read-back fails', async () => {
+      const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
+      const context = {
+        jobConfig: {
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
+        }
+      };
+
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockRejectedValueOnce(new Error('Read-back failed'));
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+
+      await expect(service.setup(jobRunId, context)).rejects.toThrow('Read-back failed');
+      expect(mockWinOperationService.validateAclOperation).not.toHaveBeenCalled();
+    });
+
+    it('should warn but not throw when post-stamp validation finds mismatches', async () => {
+      const jobRunId = 'test-job-run-id';
+      const sourceAcl = makeSourceAcl();
+      const destAcl = makeSourceAcl({ Owner: 'S-1-5-21-different' });
+      const context = {
+        jobConfig: {
+          destinationFileServer: { hostname: 'dest-host', path: 'dest-path' },
+          sourceFileServer: { hostname: 'source-host', path: 'source-path' },
+        }
+      };
+
+      mockWinOperationService.getAclOperation
+        .mockResolvedValueOnce(sourceAcl)
+        .mockResolvedValueOnce(destAcl);
+      mockWinOperationService.setAclOperation.mockResolvedValue({ stdout: '{"success":true}' });
+      mockWinOperationService.validateAclOperation.mockResolvedValue({
+        sourceSID: '',
+        targetSID: '',
+        inValid: 'Owner mismatch: Expected(S-1-5-21-111-222-333-1001) Target(S-1-5-21-different). ',
       });
-      
-      const result = service.parseIcaclsOutput(output, 'test-path');
-      
-      expect(result.permissions).toHaveLength(1);
-      expect(result.permissions[0].principal).toBe('testuser');
+
+      await service.setup(jobRunId, context);
+
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Failed to parse ACL line: malformed-user:(F)',
-        expect.any(Error)
+        expect.stringContaining('ACL post-stamp validation mismatch')
       );
-      
-      // Restore original method
-      (service as any).parseAclLine = originalParseAclLine;
-    });
-  });
-
-  describe('getFileACL', () => {
-    it('should return null for invalid fileServer', async () => {
-      const result = await service.getFileACL(null as any, 'test-job');
-      
-      expect(result).toBeNull();
-      expect(mockLogger.error).toHaveBeenCalledWith('Invalid fileServer parameter');
-    });
-
-    it('should return null when command fails with stderr', async () => {
-      const fileServer: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: '',
-        stderr: 'Access denied'
-      });
-
-      const result = await service.getFileACL(fileServer, 'test-job');
-
-      expect(result).toBeNull();
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Error getting ACL for \\\\test-host/test-path: Access denied'
-      );
-    });
-
-    it('should return parsed ACL for valid output', async () => {
-      const fileServer: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      const aclOutput = '\\\\test-host/test-path testuser:(F)';
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: aclOutput,
-        stderr: ''
-      });
-
-      const result = await service.getFileACL(fileServer, 'test-job');
-      
-      expect(result).not.toBeNull();
-      expect(result!.permissions).toHaveLength(1);
-      expect(result!.permissions[0].principal).toBe('testuser');
-    });
-
-    it('should throw when command execution fails (network/process error)', async () => {
-      const fileServer: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockRejectedValueOnce(new Error('Command failed'));
-
-      await expect(service.getFileACL(fileServer, 'test-job')).rejects.toThrow('Command failed');
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to get ACL for'),
-        expect.anything()
-      );
-    });
-  });
-
-  describe('addPrincipals', () => {
-    it('should throw error for invalid parameters', async () => {
-      await expect(service.addPrincipals(null as any, '', '')).rejects.toThrow(
-        'Invalid parameters: destinationPath, principal, and permission are required'
-      );
-    });
-
-    it('should execute icacls grant command successfully', async () => {
-      const destinationPath: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: 'Successfully processed 1 files.',
-        stderr: ''
-      });
-
-      await service.addPrincipals(destinationPath, 'testuser', '(F)', 'test-job');
-
-      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
-        'icacls "\\\\test-host/test-path" /grant "testuser:(F)"'
-      );
-    });
-
-    it('should resolve principal identity when jobRunId provided', async () => {
-      const destinationPath: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockRedisService.getOwnerIdentity.mockResolvedValue('S-1-5-21-123456789-123456789-123456789-1001');
-      // First call (SidToName) returns 'testuser', second call (icacls) returns success
-      mockWinShellService.executeCommand
-        .mockResolvedValueOnce({ stdout: 'testuser', stderr: '' }) // SidToName
-        .mockResolvedValueOnce({ stdout: 'Successfully processed 1 files.', stderr: '' }); // icacls
-
-      await service.addPrincipals(destinationPath, 'testuser', '(F)', 'test-job');
-
-      expect(mockRedisService.getOwnerIdentity).toHaveBeenCalledWith('test-job', 'testuser', 'SID');
-      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
-        'icacls "\\\\test-host/test-path" /grant "testuser:(F)"'
-      );
-    });
-
-    it('should throw error when icacls command fails', async () => {
-      const destinationPath: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: '',
-        stderr: 'Access denied'
-      });
-
-      await expect(service.addPrincipals(destinationPath, 'testuser', '(F)')).rejects.toThrow('Access denied');
-    });
-  });
-
-  describe('removePrincipals', () => {
-    it('should throw error for invalid parameters', async () => {
-      await expect(service.removePrincipals(null as any, '')).rejects.toThrow(
-        'Invalid parameters: destinationPath and principal are required'
-      );
-    });
-
-    it('should execute icacls remove command successfully', async () => {
-      const destinationPath: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: 'Successfully processed 1 files.',
-        stderr: ''
-      });
-
-      await service.removePrincipals(destinationPath, 'testuser');
-
-      expect(mockWinShellService.executeCommand).toHaveBeenCalledWith(
-        'icacls "\\\\test-host/test-path" /remove "testuser"'
-      );
-    });
-
-    it('should throw error when icacls remove command fails', async () => {
-      const destinationPath: FileServerDetails = {
-        hostname: 'test-host',
-        path: 'test-path'
-      } as any;
-
-      mockWinShellService.executeCommand.mockResolvedValue({
-        stdout: '',
-        stderr: 'The account name is invalid'
-      });
-
-      await expect(service.removePrincipals(destinationPath, 'testuser')).rejects.toThrow('The account name is invalid');
-    });
-  });
-
-  describe('formatPermissions', () => {
-    it('should return empty string for invalid input', () => {
-      // Access the private method for testing
-      const result1 = (service as any).formatPermissions(null);
-      const result2 = (service as any).formatPermissions([]);
-      
-      expect(result1).toBe('');
-      expect(result2).toBe('');
-    });
-
-    it('should format permissions correctly', () => {
-      const permissions = [
-        { code: 'F', description: 'Full control' },
-        { code: 'I', description: 'Inherited' }, // Should be filtered out
-        { code: 'RX', description: 'Read & Execute' }
-      ];
-      
-      const result = (service as any).formatPermissions(permissions);
-      
-      // Expect the actual implementation format: non-inheritance permissions grouped together
-      expect(result).toBe('(F,RX)');
-    });
-  });
-
-  describe('normalizePrincipal', () => {
-    it('should handle empty principal', () => {
-      const result = (service as any).normalizePrincipal('');
-      expect(result).toBe('');
-    });
-
-    it('should not lowercase SIDs', () => {
-      const sid = 'S-1-5-21-123456789-123456789-123456789-1001';
-      const result = (service as any).normalizePrincipal(sid);
-      expect(result).toBe(sid);
-    });
-
-    it('should lowercase non-SID principals', () => {
-      const result = (service as any).normalizePrincipal('DOMAIN\\TestUser');
-      expect(result).toBe('domain\\testuser');
-    });
-  });
-
-  describe('parseAclLine', () => {
-    it('should throw error for invalid line format', () => {
-      const permissions: any[] = [];
-      
-      expect(() => (service as any).parseAclLine('invalid-line', permissions)).toThrow('Invalid ACL line format');
-      expect(() => (service as any).parseAclLine('', permissions)).toThrow('Invalid ACL line');
-    });
-
-    it('should parse ACL line with DENY access type', () => {
-      const permissions: any[] = [];
-      
-      (service as any).parseAclLine('testuser:(DENY)(F)', permissions);
-      
-      expect(permissions).toHaveLength(1);
-      expect(permissions[0].accessType).toBe('deny');
-      expect(permissions[0].principal).toBe('testuser');
-    });
-
-    it('should parse ACL line with allow permissions', () => {
-      const permissions: any[] = [];
-      
-      (service as any).parseAclLine('testuser:(F)(RX)', permissions);
-      
-      expect(permissions).toHaveLength(1);
-      expect(permissions[0].accessType).toBe('allow');
-      expect(permissions[0].permissions).toContainEqual({ code: 'F', description: 'Full control' });
-      expect(permissions[0].permissions).toContainEqual({ code: 'RX', description: 'Read & Execute' });
-    });
-
-    it('should handle errors in permission string parsing within parseAclLine', () => {
-      const permissions: any[] = [];
-      
-      // Mock parsePermissionString to throw an error
-      const originalParsePermissionString = (service as any).parsePermissionString;
-      (service as any).parsePermissionString = jest.fn().mockImplementation(() => {
-        throw new Error('Parse error');
-      });
-      
-      (service as any).parseAclLine('testuser:(INVALID)', permissions);
-      
-      // Entry is not added because parsing failed and no permissions were added
-      expect(permissions).toHaveLength(0);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Failed to parse permission string: INVALID',
-        expect.any(Error)
-      );
-      
-      // Restore original method
-      (service as any).parsePermissionString = originalParsePermissionString;
-    });
-  });
-
-  describe('parsePermissionString', () => {
-    it('should return empty array for invalid input', () => {
-      const result1 = (service as any).parsePermissionString('');
-      const result2 = (service as any).parsePermissionString(null);
-      
-      expect(result1).toEqual([]);
-      expect(result2).toEqual([]);
-    });
-
-    it('should parse permission string with inheritance flags', () => {
-      const result = (service as any).parsePermissionString('F,OI,CI', true);
-      
-      expect(result).toHaveLength(3);
-      expect(result).toContainEqual({ code: 'F', description: 'Full control' });
-      expect(result).toContainEqual({ code: 'OI', description: 'Object inherit' });
-      expect(result).toContainEqual({ code: 'CI', description: 'Container inherit' });
-    });
-
-    it('should exclude inheritance flags when requested', () => {
-      const result = (service as any).parsePermissionString('F,OI,CI', false);
-      
-      expect(result).toHaveLength(1);
-      expect(result).toContainEqual({ code: 'F', description: 'Full control' });
     });
   });
 });
