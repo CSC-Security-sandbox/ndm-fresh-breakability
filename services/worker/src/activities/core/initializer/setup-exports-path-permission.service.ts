@@ -114,7 +114,7 @@ export class SetupExportsPathPermissionService {
             const cmd = new Cmd(operationId, '\\', CommandStatus.ERROR, false, null);
             const task = new TaskInfo(
                 randomUUID(), jobRunId, TaskType.MIGRATE, TaskStatus.COMPLETED_WITH_ERROR,
-                context.jobConfig?.workerId ?? 'initializer',
+                context.jobConfig?.workerIds?.[0] ?? null,
                 context.jobConfig?.sourceFileServer?.pathId,
                 [cmd],
                 context.jobConfig?.destinationFileServer?.pathId,
