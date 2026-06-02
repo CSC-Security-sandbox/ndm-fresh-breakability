@@ -211,7 +211,7 @@ export function withBulkMigrateCreateForm(
         preserve_a_time: true,
         preserve_permissions: true,
         smb_permission_inheritance_mode:
-          SMB_PERMISSION_INHERITANCE_MODE.INHERIT_PERMS_AS_EXPLICIT,
+          SMB_PERMISSION_INHERITANCE_MODE.INHERIT_PERMS_AS_IS,
         sid_mapping: "",
         uid_mapping: "",
         migrate_file_option: MIGRATE_OPTION_ENUM.ALL,

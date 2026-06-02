@@ -656,7 +656,7 @@ export class JobRunInitService {
           ? {
               smbPermissionInheritanceMode:
                 jobRunConfig.smbPermissionInheritanceMode ??
-                "INHERIT_PERMS_AS_EXPLICIT",
+                "INHERIT_PERMS_AS_IS",
             }
           : {}),
       },

@@ -95,11 +95,11 @@ If the SID maps to `Invalid` and customer expects byte-faithful stamping, the fi
 
 Only fires on the DLM root. Check `command.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode === true` for the affected command.
 
-If yes AND `smbPermissionInheritanceMode: INHERIT_PERMS_AS_IS`:
+If yes AND `smbPermissionInheritanceMode: INHERIT_PERMS_AS_IS` (default):
 - Inherited ACEs are dropped.
 - Source ACE has `IsInherited: true` or `AceFlags & 0x10`? Then this transform is the cause.
 
-If yes AND `smbPermissionInheritanceMode: INHERIT_PERMS_AS_EXPLICIT` (default):
+If yes AND `smbPermissionInheritanceMode: INHERIT_PERMS_AS_EXPLICIT`:
 - Inherited ACEs are converted to explicit, not dropped.
 - Different bug if ACEs are missing.
 

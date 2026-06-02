@@ -168,8 +168,8 @@ Two modes, applied only at the DLM root (controlled by `command.ops[OPS_CMD.STAM
 
 | Mode | Effect on inherited ACEs |
 |---|---|
-| `INHERIT_PERMS_AS_EXPLICIT` (default) | Flip `IsInherited: true → false`, clear `AceFlags & 0x10`. Result: ACEs that were inherited on source become explicit on destination. |
-| `INHERIT_PERMS_AS_IS` | Drop ACEs with `IsInherited: true` entirely. |
+| `INHERIT_PERMS_AS_IS` (default) | Drop ACEs with `IsInherited: true` entirely. |
+| `INHERIT_PERMS_AS_EXPLICIT` | Flip `IsInherited: true → false`, clear `AceFlags & 0x10`. Result: ACEs that were inherited on source become explicit on destination. |
 
 Rationale: the migration root has no meaningful parent on destination (different domain, different identity, no inheritance source). Keeping ACEs as "inherited" would be semantically wrong, so the root is either flattened-to-explicit or stripped of inherited entries.
 

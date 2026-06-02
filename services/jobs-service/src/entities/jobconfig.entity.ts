@@ -48,7 +48,7 @@ export class JobConfigEntity extends Base {
     type: 'varchar',
     length: 64,
     nullable: true,
-    default: 'INHERIT_PERMS_AS_EXPLICIT',
+    default: 'INHERIT_PERMS_AS_IS',
   })
   smbPermissionInheritanceMode: string | null;
 

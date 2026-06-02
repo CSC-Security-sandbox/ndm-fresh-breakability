@@ -37,7 +37,7 @@ export const ConvertInheritedPermissionsReadOnly = ({
   }
 
   const status =
-    displayLabel ?? formatSmbPermissionInheritanceMode(mode) ?? "Enabled";
+    displayLabel ?? formatSmbPermissionInheritanceMode(mode) ?? "Disabled";
 
   return (
     <Box>

@@ -11,7 +11,7 @@ export const isConvertInheritedPermissionsEnabled = (
   mode?: string | null
 ): boolean => {
   if (mode == null) {
-    return true;
+    return false;
   }
   return mode === SMB_PERMISSION_INHERITANCE_MODE.INHERIT_PERMS_AS_EXPLICIT;
 };
@@ -27,7 +27,7 @@ export const formatSmbPermissionInheritanceMode = (
   mode?: string | null
 ): "Enabled" | "Disabled" | null => {
   if (mode == null) {
-    return "Enabled";
+    return "Disabled";
   }
   return isConvertInheritedPermissionsEnabled(mode) ? "Enabled" : "Disabled";
 };
