@@ -293,7 +293,22 @@ func setupAppAdmin() error {
 
 	// Still failing — password must differ from what we want. Reset it.
 	if err := resetUserPassword(userID, adminToken, config.Password); err != nil {
-		return fmt.Errorf("reset password: %w", err)
+		// Keycloak's password history policy rejects reuse of the last 3 passwords.
+		// Cycle through 3 interim passwords to flush the desired one out of history.
+		if strings.Contains(err.Error(), "invalidPasswordHistory") {
+			logSetup("*** Password matches history — cycling 3 intermediate passwords...")
+			for i := 1; i <= 3; i++ {
+				interimPw := fmt.Sprintf("%s_cycle_%d", config.Password, i)
+				if err2 := resetUserPassword(userID, adminToken, interimPw); err2 != nil {
+					return fmt.Errorf("reset to interim password %d: %w", i, err2)
+				}
+			}
+			if err2 := resetUserPassword(userID, adminToken, config.Password); err2 != nil {
+				return fmt.Errorf("reset back to desired password: %w", err2)
+			}
+		} else {
+			return fmt.Errorf("reset password: %w", err)
+		}
 	}
 
 	logSetup("App admin %s configured", config.Username)
