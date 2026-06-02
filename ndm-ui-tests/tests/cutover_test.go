@@ -10,6 +10,9 @@
 //   7. Proceed to Review step
 //   8. Submit the cutover job
 //   9. Wait for cutover to reach "Blocked" state (awaiting approval)
+//  10. Open the "..." menu on the blocked row → click "Review"
+//  11. Check "I have reviewed" checkbox → click "Confirm"
+//  12. Wait for cutover job to reach "Approved" state
 //
 // Required env vars (same as NFS migration):
 //   NDM_NFS_SOURCE_HOST
@@ -41,6 +44,15 @@ import (
 func newCutoverBrowserFixture(t *testing.T, prefix string) (*fixtures.AuthFixture, *pages.MigrationPage) {
 	t.Helper()
 	f := fixtures.NewAdminFixture(t)
+
+	if utils.SetupProjectName != "" {
+		require.NoError(t,
+			pages.SwitchToProject(f.Page, utils.SetupProjectName),
+			"switch to setup project %s", utils.SetupProjectName,
+		)
+		t.Logf("[%s] switched to setup project %s", prefix, utils.SetupProjectName)
+	}
+
 	mp := pages.NewMigrationPage(f.Page, prefix)
 	return f, mp
 }
@@ -211,6 +223,21 @@ func TestCutover_BasicNFS(t *testing.T) {
 	f.Screenshot(prefix + "-cutover-blocked")
 	t.Log("[C-001] cutover job reached Blocked state (awaiting approval)")
 
+	// ── 19. Approve the cutover ──────────────────────────────────────────────
+	By(t, "Approving cutover via Review dialog")
+	require.NoError(t, mp.ApproveCutover(), "approve cutover")
+	f.Screenshot(prefix + "-cutover-approved-action")
+	t.Log("[C-001] cutover approval submitted")
+
+	// ── 20. Wait for cutover to reach Approved state ─────────────────────────
+	By(t, "Waiting for cutover job to reach Approved state")
+	require.NoError(t,
+		mp.WaitForCutoverApproved(config.MigrationTimeoutMs),
+		"cutover job did not reach Approved state within timeout",
+	)
+	f.Screenshot(prefix + "-cutover-approved")
+	t.Log("[C-001] cutover job reached Approved state")
+
 	fmt.Printf("[C-001] src=%s dst=%s\n", mf.srcFSName, mf.dstFSName)
-	fmt.Println("[CUTOVER C-001 PASSED] Baseline migration + Bulk Cutover submitted — cutover job reached Blocked state")
+	fmt.Println("[CUTOVER C-001 PASSED] Baseline migration + Bulk Cutover approved successfully")
 }

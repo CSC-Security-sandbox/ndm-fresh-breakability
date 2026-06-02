@@ -1418,7 +1418,7 @@ func (p *MigrationPage) SubmitCutover() error {
 func (p *MigrationPage) readFirstCutoverRowStatus() string {
 	result, err := p.page.Evaluate(`() => {
 		const known = ['running','completed','errored','failed','paused','pausing',
-		               'stopped','stopping','ready','pending','blocked'];
+		               'stopped','stopping','ready','pending','blocked','approved'];
 
 		// Try bxp Table (data-testid rows)
 		const rows = document.querySelectorAll('[data-testid^="table-row-"]');
@@ -1492,6 +1492,141 @@ func (p *MigrationPage) WaitForCutoverBlocked(timeoutMs float64) error {
 
 	p.screenshot("cutover-job-timeout")
 	return fmt.Errorf("cutover job did not reach Blocked state within %.0fs", timeoutMs/1000)
+}
+
+// ApproveCutover clicks the "..." menu on the first Cutover row, selects
+// "Review", checks the "I have reviewed" checkbox in the Cutover Confirmation
+// dialog, and clicks "Confirm".
+func (p *MigrationPage) ApproveCutover() error {
+	// 1. Click the "..." actions menu on the first Cutover row.
+	actionBtn, err := p.page.Evaluate(`() => {
+		const rows = document.querySelectorAll('[data-testid^="table-row-"]');
+		for (const row of rows) {
+			if (!/cutover/i.test(row.textContent)) continue;
+			const btn = row.querySelector('[data-testid="row-actions"], [data-testid="actions-menu"], button[aria-label*="action" i], button[aria-label*="more" i]');
+			if (btn) { btn.click(); return "clicked"; }
+			const btns = row.querySelectorAll('button');
+			const last = btns[btns.length - 1];
+			if (last) { last.click(); return "clicked-last"; }
+		}
+		// Fallback: native tbody
+		const trows = document.querySelectorAll('tbody tr');
+		for (const row of trows) {
+			if (!/cutover/i.test(row.textContent)) continue;
+			const btns = row.querySelectorAll('button');
+			const last = btns[btns.length - 1];
+			if (last) { last.click(); return "clicked-fallback"; }
+		}
+		return "not-found";
+	}`, nil)
+	if err != nil {
+		return fmt.Errorf("evaluate actions menu click: %w", err)
+	}
+	result, _ := actionBtn.(string)
+	if result == "not-found" {
+		return fmt.Errorf("could not find actions menu on Cutover row")
+	}
+	log.Printf("[ApproveCutover] actions menu: %s", result)
+	p.sleep(1500)
+	p.screenshot("cutover-actions-menu-opened")
+
+	// 2. Click "Review" from the dropdown menu.
+	reviewOption := p.page.GetByText("Review", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)}).First()
+	if !p.isVisible(reviewOption) {
+		reviewOption = p.page.Locator(`[role="menuitem"]:has-text("Review"), li:has-text("Review"), a:has-text("Review")`).First()
+	}
+	if err := p.expectVisible(reviewOption, 10000); err != nil {
+		return fmt.Errorf("'Review' menu item not visible: %w", err)
+	}
+	if err := reviewOption.Click(); err != nil {
+		return fmt.Errorf("click 'Review': %w", err)
+	}
+	p.sleep(2000)
+	p.screenshot("cutover-review-dialog-opened")
+	log.Printf("[ApproveCutover] Review dialog opened")
+
+	// 3. Wait for the "Cutover Confirmation" dialog to appear.
+	confirmBtn := p.page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Confirm"})
+	if err := p.expectVisible(confirmBtn, 15000); err != nil {
+		return fmt.Errorf("Cutover Confirmation dialog did not appear: %w", err)
+	}
+
+	// 4. Check the "I have reviewed and verified the COC document..." checkbox.
+	checkbox := p.page.Locator(`input[type="checkbox"]`).First()
+	if !p.isVisible(checkbox) {
+		checkbox = p.page.GetByText("I have reviewed").Locator("..").Locator(`input[type="checkbox"]`).First()
+	}
+	if !p.isVisible(checkbox) {
+		// Try clicking the label text itself to toggle the checkbox.
+		label := p.page.GetByText("I have reviewed and verified").First()
+		if p.isVisible(label) {
+			if err := label.Click(); err != nil {
+				return fmt.Errorf("click review checkbox label: %w", err)
+			}
+		}
+	} else {
+		checked, _ := checkbox.IsChecked()
+		if !checked {
+			if err := checkbox.Check(); err != nil {
+				// Fallback: click the parent label.
+				label := p.page.GetByText("I have reviewed and verified").First()
+				if err2 := label.Click(); err2 != nil {
+					return fmt.Errorf("check 'I have reviewed' checkbox: %w (label click: %v)", err, err2)
+				}
+			}
+		}
+	}
+	p.sleep(500)
+	p.screenshot("cutover-review-checkbox-checked")
+	log.Printf("[ApproveCutover] 'I have reviewed' checkbox checked")
+
+	// 5. Click "Confirm".
+	if err := confirmBtn.Click(); err != nil {
+		return fmt.Errorf("click Confirm button: %w", err)
+	}
+	p.sleep(2000)
+	p.screenshot("cutover-confirm-clicked")
+	log.Printf("[ApproveCutover] Confirm clicked — cutover approved")
+	return nil
+}
+
+// WaitForCutoverApproved polls the Job Run List until the cutover job enters
+// "Approved" state after being confirmed.
+func (p *MigrationPage) WaitForCutoverApproved(timeoutMs float64) error {
+	const pollInterval = 8000.0
+	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
+	attempt := 0
+
+	for time.Now().Before(deadline) {
+		attempt++
+		p.page.Reload(playwright.PageReloadOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+			Timeout:   playwright.Float(30000),
+		})
+		p.sleep(2000)
+
+		status := p.readFirstCutoverRowStatus()
+		log.Printf("[WaitForCutoverApproved] attempt %d: status=%q", attempt, status)
+
+		switch strings.ToLower(status) {
+		case "approved":
+			p.screenshot("cutover-job-approved")
+			log.Printf("[WaitForCutoverApproved] cutover job reached Approved state after %d poll(s)", attempt)
+			return nil
+		case "completed":
+			p.screenshot("cutover-job-completed")
+			log.Printf("[WaitForCutoverApproved] cutover job completed after %d poll(s)", attempt)
+			return nil
+		case "errored", "failed":
+			p.screenshot("cutover-job-errored")
+			return fmt.Errorf("cutover job entered %s state", status)
+		}
+
+		p.sleep(pollInterval)
+	}
+
+	p.screenshot("cutover-approved-timeout")
+	return fmt.Errorf("cutover job did not reach Approved state within %.0fs", timeoutMs/1000)
 }
 
 func (p *MigrationPage) screenshot(name string) {
