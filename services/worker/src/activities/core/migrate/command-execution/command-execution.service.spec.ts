@@ -1341,11 +1341,39 @@ describe('CommandExecService', () => {
 
             const result = await service.copyFile(input as any);
 
-            expect(coreUtils.isPathExists).toHaveBeenCalledWith('/source/nonexistent.txt');
+            expect(coreUtils.isPathExists).toHaveBeenCalledWith('/source/nonexistent.txt', true);
             expect(coreUtils.isNotWritable).toHaveBeenCalledWith('/target/test.txt');
             expect(result.sourceErrors).toEqual(['ENOENT']);
             expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
             expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
+        });
+
+        it('should handle preflight NFS stall — EIO thrown by isPathExists(strict=true)', async () => {
+            const eioError = Object.assign(new Error('EIO: i/o error, access /source/test.txt'), { code: 'EIO', syscall: 'access', errno: -5 });
+            coreUtils.isPathExists.mockRejectedValue(eioError);
+            coreUtils.isNotWritable.mockResolvedValue(false);
+
+            const command = createMockCommand();
+            const input = {
+                sourcePath: '/source/test.txt',
+                targetPath: '/target/test.txt',
+                jobContext: {
+                    publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+                    jobConfig: { jobRunId: 'run-1' },
+                },
+                command,
+                errorType: ErrorType.RECOVERABLE_ERROR,
+            };
+
+            const result = await service.copyFile(input as any);
+
+            // preflight catch fires — migrateWorkerThread never reached
+            expect(workerThreadService.migrateWorkerThread).not.toHaveBeenCalled();
+            // SOURCE-origin error published with real error code
+            expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
+            expect(result.sourceErrors).toEqual(['EIO']);
+            // command marked ERROR
+            expect(command.ops[OPS_CMD.COPY_FILE].status).toBe(OPS_STATUS.ERROR);
         });
 
         it('should reset file attributes when target path exists (lines 92-93)', async () => {

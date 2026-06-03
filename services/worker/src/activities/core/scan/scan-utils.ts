@@ -29,7 +29,7 @@ export async function captureSourceDirAtimeStat(
         if (err.code === 'ENOENT') {
             throw new FatalError(msg);
         }
-        throw new Error(msg);
+        throw Object.assign(new Error(msg), { code: err.code });
     }
 }
 
@@ -51,7 +51,7 @@ export async function preserveSourceDirAtime(
     } catch (err) {
         const msg = `Failed to restore atime for source dir '${sourcePath}' after opendir — atime may have been bumped: ${err.message}`;
         logger.error(msg);
-        const dmErr = dmError('OPERATION', Origin.SOURCE, Operation.READ_DIR, errorType, command.id, new Error(msg), { name: command.fPath, path: sourcePath });
+        const dmErr = dmError('OPERATION', Origin.SOURCE, Operation.READ_DIR, errorType, command.id, Object.assign(new Error(msg), { code: err.code }), { name: command.fPath, path: sourcePath });
         await jobContext.publishToErrorStream(dmErr);
     }
 }

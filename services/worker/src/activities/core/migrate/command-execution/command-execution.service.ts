@@ -129,10 +129,24 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            let [srcPathExists, targetPathExists] = await Promise.all([
-                  isPathExists(sourcePath),
-                  isNotWritable(targetPath),
-            ])
+            let srcPathExists: boolean;
+            let targetPathExists: boolean;
+            try {
+                [srcPathExists, targetPathExists] = await Promise.all([
+                    isPathExists(sourcePath, true),
+                    isNotWritable(targetPath),
+                ]);
+            } catch (preflightError: unknown) {
+                const err = preflightError instanceof Error ? preflightError : new Error(String(preflightError));
+                const code = (preflightError as NodeJS.ErrnoException | undefined)?.code;
+                command.ops[OPS_CMD.COPY_FILE] = { ...command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR };
+                this.logger.error(`Preflight check failed for source path ${sourcePath}: ${err.message}`, err.stack);
+                const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id,
+                    preflightError, {name: command.fPath, path: sourcePath});
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+                output.sourceErrors.push(code ?? 'UNKNOWN');
+                return output;
+            }
             if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});

@@ -376,7 +376,7 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
   switch (type) {
     case 'OPERATION': {
       const errorCode = getErrorCode(error, type);
-      return new DMError(null, { operationId: correlationId, origin, operationName, errorCode, errorMessage: error.message, errorFiles: { fileName: file.name, filePath: file.path }, errorType })
+      return new DMError(null, { operationId: correlationId, origin, operationName, errorCode, errorMessage: error?.message, errorFiles: { fileName: file.name, filePath: file.path }, errorType })
     }
     case 'TASK': {
       const errorCode = customError?.errorCode ?  customError.errorCode.map(code => getErrorCode({code}, 'TASK')).join('\n') : ''
@@ -384,7 +384,7 @@ export const dmError = (type: 'TASK' | 'OPERATION', origin :Origin, operationNam
     }
     default: {
       const errorCode = getErrorCode(error, type);
-      return new DMError({ taskId: correlationId,  errorCode, errorMessage: error.message , errorType})
+      return new DMError({ taskId: correlationId,  errorCode, errorMessage: error?.message , errorType})
     }
   }
 }
@@ -399,19 +399,16 @@ export const basePrefix = (jobRunId: string, pathId: string, directoryPath?: str
   return dirPath ? `${basePath}/${dirPath.replace(/^\/+/, '')}` : basePath;
 }
 
-const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'])
+const SOURCE_FATAL_CODE = new Set<string>(['EACCES', 'ENOSPC'])
 const FATAL_CODE = new Set<string>([
   'EACCES',
   'ENOSPC',
   'EROFS',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'ENETDOWN',
-  'ECONNREFUSED',
   'IDENTITY_MAPPING_NOT_FOUND',
 ]);
 
 const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
+
 
 // File server down errno numbers (negative values as reported by Node.js)
 const FileServerDownErrorNo = new Set<number>([-116, -96]); // ESTALE, EADDRNOTAVAIL

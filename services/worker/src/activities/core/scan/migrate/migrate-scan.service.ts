@@ -111,7 +111,7 @@ export class MigrateScanService {
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            const pathExists = await isPathExists(path);
+            const pathExists = await isPathExists(path, true);
             if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
@@ -217,7 +217,7 @@ export class MigrateScanService {
             if (!sourceContent.has(targetItem)) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
-                    const targetContentExists = await isPathExists(targetContentPath);
+                    const targetContentExists = await isPathExists(targetContentPath, true);
                     if (targetContentExists) {
                         const targetStat = await fs.promises.lstat(targetContentPath);  
 

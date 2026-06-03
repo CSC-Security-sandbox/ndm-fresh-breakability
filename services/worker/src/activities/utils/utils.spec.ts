@@ -13,7 +13,10 @@ import {
     isAtimeUpdated,
     getErrorCode,
     formatDate,
-    basePrefix
+    basePrefix,
+    isFatalError,
+    isSourceFatalError,
+    isTransientError,
 } from './utils';
 import { JobContext, JobContextFactory } from "@netapp-cloud-datamigrate/jobs-lib";
 import { FileType } from '../types/tasks';
@@ -596,6 +599,35 @@ describe('utils', () => {
                 expect(getErrorCode({ code }, 'TASK')).toBe(task);
                 expect(getErrorCode({ code }, 'OPERATION')).toBe(op);
             });
+        });
+    });
+
+    describe('isFatalError / isSourceFatalError — network codes must not be fatal', () => {
+        const networkCodes = ['EIO', 'ECONNRESET', 'ETIMEDOUT', 'ENETDOWN', 'ECONNREFUSED'];
+
+        networkCodes.forEach(code => {
+            it(`isFatalError('${code}') should be false — network error is transient, not fatal`, () => {
+                expect(isFatalError(code)).toBeFalsy();
+            });
+
+            it(`isSourceFatalError('${code}') should be false — source network error is transient, not fatal`, () => {
+                expect(isSourceFatalError(code)).toBeFalsy();
+            });
+        });
+
+        it('isFatalError should still be true for disk/permission errors', () => {
+            expect(isFatalError('ENOSPC')).toBe(true);
+            expect(isFatalError('EACCES')).toBe(true);
+            expect(isFatalError('EROFS')).toBe(true);
+        });
+
+        it('isSourceFatalError should still be true for EACCES and ENOSPC at source', () => {
+            expect(isSourceFatalError('EACCES')).toBe(true);
+            expect(isSourceFatalError('ENOSPC')).toBe(true);
+        });
+
+        it('isTransientError should be true for E8DOT3_COLLISION', () => {
+            expect(isTransientError('E8DOT3_COLLISION')).toBe(true);
         });
     });
 

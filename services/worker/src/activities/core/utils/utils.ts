@@ -17,16 +17,25 @@ export const buildTask = (taskType: TaskType, jobRunId: string, jobContext:  Job
   0
 )
 
-export const isPathExists = async (path: string): Promise<boolean> => {
+/*
+  Returns true if path exists, false if the path does not exist (ENOENT).
+  strict=false (default): swallows all other errors and returns false — safe for pre-job
+    mount-directory checks where any failure should be treated as "not present".
+  strict=true: re-throws any non-ENOENT error (e.g. EIO, ECONNRESET) with the original
+    error.code intact — used by mid-job callers so NFS stall errors propagate to the
+    caller's dmError handler instead of being silently masked as "does not exist".
+*/
+export const isPathExists = async (path: string, strict = false): Promise<boolean> => {
   try {
     await fs.promises.access(path, fs.constants.F_OK);
     return true;
   } catch (error) {
-    if (error.code === 'ENOENT') {      
-      return false; // Path does not exist
+    if (error.code === 'ENOENT') {
+      return false;
     }
+    if (strict) throw error;
+    return false;
   }
-  return false;
 }
 
 

@@ -374,8 +374,9 @@ describe('Utils', () => {
       );
     });
 
-    it('should return false when path does not exist', async () => {
-      mockAccess.mockRejectedValue(new Error('Path not found'));
+    it('should return false when path does not exist (ENOENT)', async () => {
+      const enoentError = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+      mockAccess.mockRejectedValue(enoentError);
 
       const result = await isPathExists('/non/existing/path');
 
@@ -387,7 +388,8 @@ describe('Utils', () => {
     });
 
     it('should handle empty path', async () => {
-      mockAccess.mockRejectedValue(new Error('Invalid path'));
+      const enoentError = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+      mockAccess.mockRejectedValue(enoentError);
 
       const result = await isPathExists('');
 
@@ -407,7 +409,8 @@ describe('Utils', () => {
 
     it('should handle very long path', async () => {
       const longPath = '/very/long/path/' + 'a'.repeat(1000) + '/file.txt';
-      mockAccess.mockRejectedValue(new Error('Path too long'));
+      const enoentError = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+      mockAccess.mockRejectedValue(enoentError);
 
       const result = await isPathExists(longPath);
 
@@ -444,6 +447,58 @@ describe('Utils', () => {
 
       expect(result).toBe(true);
       expect(mockAccess).toHaveBeenCalledWith(networkPath, fs.constants.F_OK);
+    });
+
+    describe('strict=false (default) — swallows non-ENOENT errors', () => {
+      it('should return false on EIO without throwing', async () => {
+        const eioError = Object.assign(new Error('Input/output error'), { code: 'EIO' });
+        mockAccess.mockRejectedValue(eioError);
+
+        const result = await isPathExists('/nfs/path');
+
+        expect(result).toBe(false);
+      });
+
+      it('should return false on ECONNRESET without throwing', async () => {
+        const err = Object.assign(new Error('Connection reset by peer'), { code: 'ECONNRESET' });
+        mockAccess.mockRejectedValue(err);
+
+        const result = await isPathExists('/nfs/path');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('strict=true — re-throws non-ENOENT errors with original error.code', () => {
+      it('should still return false on ENOENT', async () => {
+        const enoentError = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+        mockAccess.mockRejectedValue(enoentError);
+
+        const result = await isPathExists('/non/existing/path', true);
+
+        expect(result).toBe(false);
+      });
+
+      it('should throw on EIO preserving error.code', async () => {
+        const eioError = Object.assign(new Error('Input/output error'), { code: 'EIO' });
+        mockAccess.mockRejectedValue(eioError);
+
+        await expect(isPathExists('/nfs/stalled/path', true)).rejects.toMatchObject({ code: 'EIO' });
+      });
+
+      it('should throw on ECONNRESET preserving error.code', async () => {
+        const err = Object.assign(new Error('Connection reset by peer'), { code: 'ECONNRESET' });
+        mockAccess.mockRejectedValue(err);
+
+        await expect(isPathExists('/nfs/stalled/path', true)).rejects.toMatchObject({ code: 'ECONNRESET' });
+      });
+
+      it('should throw on ETIMEDOUT preserving error.code', async () => {
+        const err = Object.assign(new Error('Connection timed out'), { code: 'ETIMEDOUT' });
+        mockAccess.mockRejectedValue(err);
+
+        await expect(isPathExists('/nfs/stalled/path', true)).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+      });
     });
   });
 

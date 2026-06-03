@@ -58,7 +58,7 @@ export class DirStreamingService {
         const lowercaseRedisKey = buildLowercaseSet ? `${redisKey}:lc` : undefined;
 
         try {
-            const pathExists = await isPathExists(dirPath);
+            const pathExists = await isPathExists(dirPath, true);
             if (!pathExists) {
                 if (origin === Origin.SOURCE) {
                     throw new FatalError(`Source directory does not exist: ${dirPath}`);
