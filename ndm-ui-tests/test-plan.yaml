@@ -46,6 +46,7 @@ suites:
       TestDiscovery_IndividualReportCSV:    false   # Download per-run discovery CSV from Job Run List — requires NDM_FILE_SERVER_ID
       TestDiscovery_ConsolidatedCSV:        false   # Generate and download consolidated discovery CSV — requires NDM_FILE_SERVER_ID
       TestDiscovery_ValidateReportAgainstVolume: false   # Validate CSV counts against live NFS volume — requires NDM_FILE_SERVER_ID
+      TestDiscovery_JobConfigSummaryConsistency: true   # Summary of Last Run cards match latest Run History row (Files, Size, Errors)
 
   # ── Migration ────────────────────────────────────────────────────────────────
   # End-to-end Bulk Migrate flows — NFS source → NFS destination.
@@ -60,6 +61,7 @@ suites:
       TestMigration_IncrementalSyncCron: true    # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
       TestMigration_CustomOptions: true          # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)
       TestMigration_BasicSMB: true               # Full SMB Bulk Migrate end-to-end + CoC report download
+      TestMigration_JobConfigSummaryConsistency: true   # Summary of Last Run cards match latest Run History row (Files, Size, Errors)
 
   # ── Incremental Migration ──────────────────────────────────────────────────
   # Validates adhoc migration runs after source-side changes.

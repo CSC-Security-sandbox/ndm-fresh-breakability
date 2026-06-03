@@ -21,6 +21,7 @@
 //	5.18 TestDiscovery_Isilon              — Isilon paths auto-listed
 //	5.19 TestDiscovery_ConsolidatedCSV     — Consolidated report as CSV
 //	5.20 TestDiscovery_IndividualReportCSV — Individual report CSV from Job Run List
+//	5.22 TestDiscovery_JobConfigSummaryConsistency — Summary of Last Run matches Run History table
 package tests
 
 import (
@@ -804,4 +805,90 @@ func TestDiscovery_ValidateReportAgainstVolume(t *testing.T) {
 
 	t.Log("[5.21] discovery report matches actual volume data — zero diff")
 	fmt.Println("[DISCOVERY 5.21 PASSED] Report validated against real volume data")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 5.22  Job Config Details — Summary vs Run History Consistency
+//
+// Validates that the "Summary of Last Run" cards on the Job Config Details
+// page match the latest row in the Run History table:
+//   - Files count in summary = Files in latest Run History row
+//   - Size in summary = Size in latest Run History row
+//   - Latest Errors (N) in summary = Errors in latest Run History row
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestDiscovery_JobConfigSummaryConsistency(t *testing.T) {
+	t.Parallel()
+	clone := resolveNFSClone(t)
+	requireEnv(t, clone.hostIP, "NDM_SOURCE_HOST")
+	requireEnv(t, clone.exportPath, "NDM_NFS_EXPORT_PATH")
+
+	f, dp := newDiscoveryFixture(t)
+	defer f.Close()
+
+	// ── 1. Create file server and run discovery ──────────────────────────────
+	By(t, "Creating file server and running discovery")
+	fsID, _ := createFreshFileServer(t, f, clone.hostIP)
+	waitForCloneExport(t, dp, fsID, clone)
+
+	configID := runBulkDiscovery(t, dp, f, fsID, "NFS", clone.exportPath, false, nil)
+	waitForDiscoveryCompletion(t, dp, f, configID, config.DiscoveryTimeoutMs)
+	t.Logf("[5.22] discovery completed (config: %s)", configID)
+
+	// ── 2. Navigate to Job Config Details ────────────────────────────────────
+	By(t, "Navigating to Job Config Details")
+	mp := pages.NewMigrationPage(f.Page, "d522")
+	require.NoError(t, mp.NavigateToJobConfigDetails(configID),
+		"navigate to job config details")
+	f.Screenshot("d522-job-config-details")
+
+	// ── 3. Read the summary section ──────────────────────────────────────────
+	By(t, "Reading Job Config Summary")
+	summary, err := mp.GetJobConfigSummary()
+	require.NoError(t, err, "read job config summary")
+	t.Logf("[5.22] summary: files=%s size=%s errors=%s",
+		summary.Files, summary.Size, summary.Errors)
+
+	// ── 4. Read the Run History table ────────────────────────────────────────
+	By(t, "Reading Run History table")
+	mp.ClickRunHistoryTab()
+	f.Screenshot("d522-run-history-table")
+
+	rows, err := mp.GetRunHistoryRows()
+	require.NoError(t, err, "read run history rows")
+	require.NotEmpty(t, rows, "run history table should have at least one row")
+	t.Logf("[5.22] run history: %d row(s), latest: files=%s size=%s errors=%s status=%s",
+		len(rows), rows[0].Files, rows[0].Size, rows[0].Errors, rows[0].Status)
+
+	latestRow := rows[0]
+
+	// ── 5. Validate: Summary Files = Latest Row Files ────────────────────────
+	By(t, "Validating summary Files matches latest run Files")
+	require.Equal(t, summary.Files, latestRow.Files,
+		"summary Files (%s) should match latest Run History row Files (%s)",
+		summary.Files, latestRow.Files)
+
+	// ── 6. Validate: Summary Size = Latest Row Size ──────────────────────────
+	By(t, "Validating summary Size matches latest run Size")
+	require.Equal(t, summary.Size, latestRow.Size,
+		"summary Size (%s) should match latest Run History row Size (%s)",
+		summary.Size, latestRow.Size)
+
+	// ── 7. Validate: Latest Errors count = Latest Row Errors ─────────────────
+	By(t, "Validating Latest Errors count matches latest run Errors")
+	expectedErrors := summary.Errors
+	if expectedErrors == "" {
+		expectedErrors = "0"
+	}
+	actualErrors := latestRow.Errors
+	if actualErrors == "" || actualErrors == "-" {
+		actualErrors = "0"
+	}
+	require.Equal(t, expectedErrors, actualErrors,
+		"summary Latest Errors (%s) should match latest Run History row Errors (%s)",
+		expectedErrors, actualErrors)
+
+	t.Log("[5.22] all summary vs Run History validations passed")
+	fmt.Printf("[5.22] files=%s size=%s errors=%s\n", summary.Files, summary.Size, summary.Errors)
+	fmt.Println("[DISCOVERY 5.22 PASSED] Job Config Details summary is consistent with Run History")
 }

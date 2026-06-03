@@ -16,9 +16,10 @@
 //
 // Test index:
 //
-//	M-001 TestMigration_BasicNFS              — full Bulk Migrate flow (NFS → NFS)
-//	M-002 TestMigration_IncrementalSyncCron   — Bulk Migrate with cron-based incremental sync
-//	M-003 TestMigration_CustomOptions         — Bulk Migrate with all config options changed
+//	M-001 TestMigration_BasicNFS                      — full Bulk Migrate flow (NFS → NFS)
+//	M-002 TestMigration_IncrementalSyncCron           — Bulk Migrate with cron-based incremental sync
+//	M-003 TestMigration_CustomOptions                 — Bulk Migrate with all config options changed
+//	M-005 TestMigration_JobConfigSummaryConsistency   — Summary of Last Run matches Run History table
 package tests
 
 import (
@@ -852,6 +853,155 @@ func createFreshSMBDestinationFileServer(t *testing.T, f *fixtures.AuthFixture, 
 	)
 	t.Logf("[setup] SMB destination file server %s is now Active", fsName)
 	return fsID, fsName
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// M-005  Job Config Details — Summary vs Run History Consistency
+//
+// Validates that the "Summary of Last Run" cards on the Job Config Details
+// page match the latest row in the Run History table:
+//   - Files count in summary = Files in latest Run History row
+//   - Size in summary = Size in latest Run History row
+//   - Latest Errors (N) in summary = Errors in latest Run History row
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestMigration_JobConfigSummaryConsistency(t *testing.T) {
+	t.Parallel()
+	srcExportPath := config.GetSourceExportPath(0)
+	requireEnv(t, srcExportPath, "NDM_NFS_SOURCE_EXPORT_PATH")
+	dstExportPath := config.GetDestinationExportPath(0)
+	requireEnv(t, dstExportPath, "NDM_NFS_DESTINATION_EXPORT_PATH")
+
+	const prefix = "m005"
+	f, mp := newMigrationBrowserFixture(t, prefix)
+	defer f.Close()
+
+	t.Cleanup(func() {
+		dstExport := fmt.Sprintf("%s:%s", config.NfsDestinationHost, dstExportPath)
+		if err := utils.ClearNFSVolume(dstExport); err != nil {
+			t.Logf("[M-005] WARNING: could not clear destination volume %s: %v", dstExport, err)
+		} else {
+			t.Log("[M-005] destination volume cleared successfully")
+		}
+	})
+
+	mf := &migrationFixture{}
+
+	// ── 1. Create source + destination file servers ──────────────────────────
+	By(t, "Creating source NFS file server")
+	mf.srcFSID, mf.srcFSName = createFreshSourceFileServer(t, f, prefix)
+	t.Logf("[M-005] source: %s (ID: %s)", mf.srcFSName, mf.srcFSID)
+
+	By(t, "Creating destination NFS file server")
+	mf.dstFSID, mf.dstFSName = createFreshDestinationFileServer(t, f, prefix)
+	t.Logf("[M-005] destination: %s (ID: %s)", mf.dstFSName, mf.dstFSID)
+
+	// ── 2. Run Bulk Migrate ──────────────────────────────────────────────────
+	By(t, "Navigating to source file server overview")
+	require.NoError(t, mp.NavigateToFileServerOverview(mf.srcFSID),
+		"navigate to source file server overview")
+
+	By(t, "Opening Bulk Migrate wizard")
+	require.NoError(t, mp.OpenBulkMigrateForm(), "open Bulk Migrate form")
+
+	By(t, "Selecting source export path")
+	require.NoError(t, mp.SelectSourcePath(srcExportPath),
+		"select source path %s", srcExportPath)
+
+	By(t, "Selecting destination file server")
+	require.NoError(t,
+		mp.SelectDestinationFileServerWithRetry(mf.srcFSID, mf.dstFSName, srcExportPath, 3),
+		"select destination file server %s", mf.dstFSName)
+
+	By(t, "Selecting destination export path")
+	require.NoError(t, mp.SelectDestinationPath(dstExportPath),
+		"select destination path %s", dstExportPath)
+
+	By(t, "Adding path mapping")
+	require.NoError(t, mp.AddMapping(), "add mapping")
+
+	By(t, "Proceeding from Mapping step")
+	require.NoError(t, mp.ProceedFromMapping(), "proceed from mapping step")
+
+	By(t, "Proceeding from Options step (defaults)")
+	require.NoError(t, mp.ProceedFromOptions(), "proceed from options step")
+
+	By(t, "Selecting all mappings on Review step")
+	require.NoError(t, mp.SelectAllMappingsOnReview(), "select all mappings on review")
+
+	By(t, "Submitting migration job")
+	require.NoError(t, mp.SubmitMigration(), "submit migration job")
+
+	// ── 3. Navigate to Job Run List and wait for completion ───────────────────
+	By(t, "Navigating to Job Run List")
+	require.NoError(t, mp.NavigateToJobRunList(), "navigate to job run list")
+
+	By(t, "Waiting for migration job to complete")
+	require.NoError(t,
+		mp.WaitForMigrationCompleted(config.MigrationTimeoutMs),
+		"migration job did not complete within timeout")
+	t.Log("[M-005] migration job completed")
+	f.Screenshot(prefix + "-mig-completed")
+
+	// ── 4. Navigate to Job Config Details via overflow menu ───────────────────
+	By(t, "Navigating to Job Config Details from Job Run List")
+	configID := navigateToJobConfigFromRunList(t, mp)
+	require.NotEmpty(t, configID, "job config ID should not be empty")
+	t.Logf("[M-005] job config ID: %s", configID)
+
+	require.NoError(t, mp.NavigateToJobConfigDetails(configID),
+		"navigate to job config details")
+	f.Screenshot(prefix + "-job-config-details")
+
+	// ── 5. Read the summary section ──────────────────────────────────────────
+	By(t, "Reading Job Config Summary")
+	summary, err := mp.GetJobConfigSummary()
+	require.NoError(t, err, "read job config summary")
+	t.Logf("[M-005] summary: files=%s size=%s errors=%s",
+		summary.Files, summary.Size, summary.Errors)
+
+	// ── 6. Read the Run History table ────────────────────────────────────────
+	By(t, "Reading Run History table")
+	mp.ClickRunHistoryTab()
+	f.Screenshot(prefix + "-run-history-table")
+
+	rows, err := mp.GetRunHistoryRows()
+	require.NoError(t, err, "read run history rows")
+	require.NotEmpty(t, rows, "run history table should have at least one row")
+	t.Logf("[M-005] run history: %d row(s), latest: files=%s size=%s errors=%s status=%s",
+		len(rows), rows[0].Files, rows[0].Size, rows[0].Errors, rows[0].Status)
+
+	latestRow := rows[0]
+
+	// ── 7. Validate: Summary Files = Latest Row Files ────────────────────────
+	By(t, "Validating summary Files matches latest run Files")
+	require.Equal(t, summary.Files, latestRow.Files,
+		"summary Files (%s) should match latest Run History row Files (%s)",
+		summary.Files, latestRow.Files)
+
+	// ── 8. Validate: Summary Size = Latest Row Size ──────────────────────────
+	By(t, "Validating summary Size matches latest run Size")
+	require.Equal(t, summary.Size, latestRow.Size,
+		"summary Size (%s) should match latest Run History row Size (%s)",
+		summary.Size, latestRow.Size)
+
+	// ── 9. Validate: Latest Errors count = Latest Row Errors ─────────────────
+	By(t, "Validating Latest Errors count matches latest run Errors")
+	expectedErrors := summary.Errors
+	if expectedErrors == "" {
+		expectedErrors = "0"
+	}
+	actualErrors := latestRow.Errors
+	if actualErrors == "" || actualErrors == "-" {
+		actualErrors = "0"
+	}
+	require.Equal(t, expectedErrors, actualErrors,
+		"summary Latest Errors (%s) should match latest Run History row Errors (%s)",
+		expectedErrors, actualErrors)
+
+	t.Log("[M-005] all summary vs Run History validations passed")
+	fmt.Printf("[M-005] files=%s size=%s errors=%s\n", summary.Files, summary.Size, summary.Errors)
+	fmt.Println("[MIGRATION M-005 PASSED] Job Config Details summary is consistent with Run History")
 }
 
 // By logs a step label so test output is easy to follow.

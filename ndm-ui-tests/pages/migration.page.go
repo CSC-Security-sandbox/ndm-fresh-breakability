@@ -1073,6 +1073,188 @@ func (p *MigrationPage) GetJobConfigIDFromURL() string {
 	return ""
 }
 
+// JobConfigSummary holds the "Summary of Last Run" card values from the
+// Job Config Details page.
+type JobConfigSummary struct {
+	Files       string
+	Directories string
+	TimeElapsed string
+	Size        string
+	Errors      string
+}
+
+// GetJobConfigSummary reads the "Summary of Last Run" section on the Job
+// Config Details page. Returns the headline metric values.
+func (p *MigrationPage) GetJobConfigSummary() (*JobConfigSummary, error) {
+	p.sleep(2000)
+
+	result, err := p.page.Evaluate(`() => {
+		const summary = {};
+
+		// The top summary cards have large numeric values with labels beneath.
+		// Look for elements that contain Files, Directories, Time Elapsed, size (GiB/MiB/etc).
+		const allText = document.body.innerText;
+
+		// Strategy: find the summary section (contains "Summary of Last Run")
+		// then read each metric card value.
+		const cards = document.querySelectorAll('[class*="summary"], [class*="metric"], [class*="stat"], [class*="card"]');
+
+		// Fallback: parse the entire page text for known patterns
+		// Files count — the big number above "Files"
+		const filesMatch = allText.match(/(\d[\d,]*)\s*\n?\s*Files/);
+		if (filesMatch) summary.files = filesMatch[1].replace(/,/g, '');
+
+		// Directories count
+		const dirsMatch = allText.match(/(\d[\d,]*)\s*\n?\s*Directories/);
+		if (dirsMatch) summary.directories = dirsMatch[1].replace(/,/g, '');
+
+		// Time Elapsed
+		const timeMatch = allText.match(/([\d]+ \w+)\s*\n?\s*Time Elapsed/);
+		if (timeMatch) summary.timeElapsed = timeMatch[1];
+
+		// Size (Discovered or Migrated) — e.g. "4.67 GiB" above "Discovered" or "Migrated"
+		const sizeMatch = allText.match(/([\d.]+ \w+)\s*\n?\s*(?:Discovered|Migrated)/);
+		if (sizeMatch) summary.size = sizeMatch[1];
+
+		// Latest Errors count from the "Latest Errors (N)" heading
+		const errorsMatch = allText.match(/Latest Errors\s*\((\d+)\)/);
+		if (errorsMatch) summary.errors = errorsMatch[1];
+
+		return summary;
+	}`, nil)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate job config summary: %w", err)
+	}
+
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type from summary evaluation")
+	}
+
+	s := &JobConfigSummary{}
+	if v, ok := m["files"].(string); ok {
+		s.Files = v
+	}
+	if v, ok := m["directories"].(string); ok {
+		s.Directories = v
+	}
+	if v, ok := m["timeElapsed"].(string); ok {
+		s.TimeElapsed = v
+	}
+	if v, ok := m["size"].(string); ok {
+		s.Size = v
+	}
+	if v, ok := m["errors"].(string); ok {
+		s.Errors = v
+	}
+
+	log.Printf("[GetJobConfigSummary] files=%s dirs=%s time=%s size=%s errors=%s",
+		s.Files, s.Directories, s.TimeElapsed, s.Size, s.Errors)
+	return s, nil
+}
+
+// RunHistoryRow holds data from a single row in the Run History table.
+type RunHistoryRow struct {
+	JobRunID string
+	Files    string
+	Size     string
+	Status   string
+	Errors   string
+}
+
+// GetRunHistoryRows reads all visible rows from the Run History table on the
+// Job Config Details page. Returns rows in display order (latest first).
+func (p *MigrationPage) GetRunHistoryRows() ([]RunHistoryRow, error) {
+	p.sleep(2000)
+
+	result, err := p.page.Evaluate(`() => {
+		const rows = [];
+
+		// Try data-testid rows first
+		let tableRows = document.querySelectorAll('[data-testid^="table-row-"]');
+		if (tableRows.length === 0) {
+			tableRows = document.querySelectorAll('tbody tr');
+		}
+
+		for (const row of tableRows) {
+			const cells = row.querySelectorAll('td, [data-testid^="cell-"]');
+			if (cells.length < 5) continue;
+
+			const getText = (el) => el ? el.textContent.trim() : '';
+			const rowData = {};
+
+			// Parse cells — Run History table columns:
+			// Job Run ID | Start Date & Time | End Date & Time | Time Elapsed | Files | Size | Status | Errors
+			const allCells = Array.from(cells).map(c => c.textContent.trim());
+
+			// Find Files column (pure numeric value, typically large)
+			// Find Size column (contains GiB/MiB/B)
+			// Find Status column (Completed/Running/etc)
+			// Find Errors column (number or -)
+			rowData.jobRunId = allCells[0] || '';
+
+			for (const val of allCells) {
+				if (/^\d[\d,]*$/.test(val) && !rowData.files) {
+					rowData.files = val.replace(/,/g, '');
+				} else if (/[\d.]+ (?:GiB|MiB|KiB|B|GB|MB|KB)/.test(val) && !rowData.size) {
+					rowData.size = val;
+				} else if (/^(Completed|Running|Ready|Errored|Failed|Blocked|Approved|Pending)$/i.test(val) && !rowData.status) {
+					rowData.status = val.toLowerCase();
+				}
+			}
+
+			// Errors: last cell or cell with just a number/dash
+			const lastCell = allCells[allCells.length - 1];
+			const errCell = allCells.find(v => /^(\d+|-)$/.test(v) && v !== rowData.files);
+			rowData.errors = errCell || lastCell || '0';
+			if (rowData.errors === '-') rowData.errors = '0';
+
+			rows.push(rowData);
+		}
+		return rows;
+	}`, nil)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate run history rows: %w", err)
+	}
+
+	arr, ok := result.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type from run history evaluation")
+	}
+
+	var rows []RunHistoryRow
+	for _, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		row := RunHistoryRow{}
+		if v, ok := m["jobRunId"].(string); ok {
+			row.JobRunID = v
+		}
+		if v, ok := m["files"].(string); ok {
+			row.Files = v
+		}
+		if v, ok := m["size"].(string); ok {
+			row.Size = v
+		}
+		if v, ok := m["status"].(string); ok {
+			row.Status = v
+		}
+		if v, ok := m["errors"].(string); ok {
+			row.Errors = v
+		}
+		rows = append(rows, row)
+	}
+
+	log.Printf("[GetRunHistoryRows] found %d row(s)", len(rows))
+	for i, r := range rows {
+		log.Printf("[GetRunHistoryRows]   [%d] files=%s size=%s status=%s errors=%s",
+			i, r.Files, r.Size, r.Status, r.Errors)
+	}
+	return rows, nil
+}
+
 // DownloadCoCReportByRowIndex downloads the CoC report from a specific row
 // in the Run History table (0-based index, 0 = most recent run).
 func (p *MigrationPage) DownloadCoCReportByRowIndex(downloadDir string, rowIndex int) (string, error) {
