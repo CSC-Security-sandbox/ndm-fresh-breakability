@@ -85,6 +85,11 @@ func RequiredCloneSelectionForTest(testIdentifier string, protocol Protocol) Clo
 		}
 	case ProtocolSMB:
 		switch {
+		case strings.Contains(normalized, "TC-ACL-MISMATCH"):
+			return CloneSelection{
+				SourceIndices: []int{2},
+				DestIndices:   []int{2},
+			}
 		case strings.Contains(normalized, "TC-SMB-PERMISSIONS"),
 			strings.Contains(normalized, "TC-SMB-SID-MAPPING"),
 			strings.Contains(normalized, "TC-SMB-NO-SID-MAPPING"):
