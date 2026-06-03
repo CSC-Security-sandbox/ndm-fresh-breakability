@@ -5,6 +5,7 @@ import * as path from 'path';
 import archiver from 'archiver';
 import { promisify } from 'util';
 import { exec as execCb } from 'child_process';
+import { createGunzip } from 'zlib';
 import { ConfigService } from '@nestjs/config';
 
 const exec = promisify(execCb);
@@ -289,7 +290,14 @@ export class LogGeneratorActivity {
   }
 
   /**
-   * Create zip file with filtered content maintaining directory structure
+   * Create zip file with filtered content maintaining directory structure.
+   *
+   * Directories (e.g. no-project) are expanded to individual files before
+   * archiving so that .gz detection applies uniformly to every file.
+   * Files ending in .gz are decompressed on-the-fly via createGunzip() so the
+   * portal receives plain .log files regardless of how they are stored on disk.
+   * Plain .log files are added as-is for backward compatibility with deployments
+   * that predate the Fluentd compress gzip change.
    */
   private async createFilteredZip(
     filteredPaths: Array<{ sourcePath: string, relativePath: string, isDirectory?: boolean }>,
@@ -297,13 +305,53 @@ export class LogGeneratorActivity {
     zipRoot: string,
     traceId: string
   ): Promise<any> {
+    // Expand directory entries to individual files so every entry goes through
+    // the same .gz detection path.
+    const resolvedEntries: Array<{ sourcePath: string; zipEntryName: string }> = [];
+
+    for (const fileInfo of filteredPaths) {
+      if (fileInfo.isDirectory) {
+        const files = await this.findFilesInDirectory(fileInfo.sourcePath, traceId);
+        for (const filePath of files) {
+          const relPath = path.relative(this.baseLogPath, filePath);
+          resolvedEntries.push({
+            sourcePath: filePath,
+            zipEntryName: `${zipRoot}/ndm_logs/${relPath}`,
+          });
+        }
+      } else {
+        resolvedEntries.push({
+          sourcePath: fileInfo.sourcePath,
+          zipEntryName: `${zipRoot}/ndm_logs/${fileInfo.relativePath}`,
+        });
+      }
+    }
+
+    this.logger.log(`[${traceId}] Resolved ${resolvedEntries.length} entries for archiving`);
+
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(zipPath);
       const archive = archiver('zip', { zlib: { level: 9 } });
 
       let totalFilesAdded = 0;
+      let settled = false;
+
+      // calls archive.abort() then reject()
+      const fail = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        archive.abort();
+        reject(err);
+      };
+
+      output.on('error', (err) => {
+        this.logger.error(`[${traceId}] Output stream error writing ${zipPath}:`, err);
+        fail(new Error(`Failed to write zip file ${zipPath}: ${err.message}`));
+      });
 
       output.on('close', () => {
+        if (settled) return;
+        settled = true;
         this.logger.log(`[${traceId}] Zip created successfully at: ${zipPath}`);
         this.logger.log(`[${traceId}] Total bytes written: ${archive.pointer()}`);
         this.logger.log(`[${traceId}] Total files added: ${totalFilesAdded}`);
@@ -315,7 +363,7 @@ export class LogGeneratorActivity {
 
       archive.on('error', (err) => {
         this.logger.error(`[${traceId}] Archiving error:`, err);
-        reject(new Error(`Failed to create zip archive: ${err.message}`));
+        fail(new Error(`Failed to create zip archive: ${err.message}`));
       });
 
       archive.on('warning', (err) => {
@@ -323,24 +371,35 @@ export class LogGeneratorActivity {
           this.logger.warn(`[${traceId}] Archive warning:`, err);
         } else {
           this.logger.error(`[${traceId}] Archive warning:`, err);
-          reject(err);
+          fail(err);
         }
       });
 
       archive.pipe(output);
 
-      // Add each filtered file/folder to the zip maintaining structure
-      for (const fileInfo of filteredPaths) {
+      for (const entry of resolvedEntries) {
         try {
-          const zipEntryPath = `${zipRoot}/ndm_logs/${fileInfo.relativePath}`;
-          
-          if (fileInfo.isDirectory) {
-            // Add entire directory to zip
-            archive.directory(fileInfo.sourcePath, zipEntryPath);
-            this.logger.log(`[${traceId}] Added directory: ${fileInfo.sourcePath} as ${zipEntryPath}`);
+          if (entry.sourcePath.endsWith('.gz')) {
+            // Decompress on-the-fly: portal receives .log files, not .gz.
+            // Attach error handlers to both streams — stream errors are async
+            // and will not be caught by the surrounding try/catch.
+            const zipName = entry.zipEntryName.endsWith('.gz')
+              ? entry.zipEntryName.slice(0, -3)
+              : entry.zipEntryName;
+            const readStream = fs.createReadStream(entry.sourcePath);
+            const gunzipStream = createGunzip();
+            readStream.on('error', (err) => {
+              this.logger.error(`[${traceId}] Error reading ${entry.sourcePath}:`, err);
+              fail(new Error(`Failed to read file ${entry.sourcePath}: ${err.message}`));
+            });
+            gunzipStream.on('error', (err) => {
+              this.logger.error(`[${traceId}] Error decompressing ${entry.sourcePath}:`, err);
+              fail(new Error(`Failed to decompress file ${entry.sourcePath}: ${err.message}`));
+            });
+            archive.append(readStream.pipe(gunzipStream), { name: zipName });
+            this.logger.log(`[${traceId}] Added (decompressed): ${entry.sourcePath} as ${zipName}`);
           } else {
-            // Add individual file to zip
-            archive.file(fileInfo.sourcePath, { name: zipEntryPath });
+            archive.file(entry.sourcePath, { name: entry.zipEntryName });
           }
           totalFilesAdded++;
 
@@ -348,15 +407,15 @@ export class LogGeneratorActivity {
             this.logger.log(`[${traceId}] Processed ${totalFilesAdded} files...`);
           }
         } catch (err) {
-          this.logger.error(`[${traceId}] Error adding file ${fileInfo.sourcePath}:`, err);
-          reject(new Error(`Failed to add file ${fileInfo.sourcePath} to zip: ${err.message}`));
+          this.logger.error(`[${traceId}] Error adding file ${entry.sourcePath}:`, err);
+          fail(new Error(`Failed to add file ${entry.sourcePath} to zip: ${err.message}`));
           return;
         }
       }
 
       archive.finalize().catch((err) => {
         this.logger.error(`[${traceId}] Error finalizing archive:`, err);
-        reject(new Error(`Failed to finalize zip archive: ${err.message}`));
+        fail(new Error(`Failed to finalize zip archive: ${err.message}`));
       });
     });
   }

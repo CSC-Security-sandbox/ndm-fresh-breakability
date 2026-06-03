@@ -1,0 +1,37 @@
+#!/bin/bash
+# Delete rotated containerd log files from snap/microk8s only after verifying
+# that Fluentd has already flushed yesterday's logs to /ndm-logs.
+# Rotated files (1.log, 2.log, ...) are deleted; 0.log (active) is never touched.
+#
+# Safety rules:
+#   1. Yesterday's /ndm-logs/YYYY-MM-DD/ exists → flush confirmed → delete all rotated files.
+#   2. Directory absent but rotated files are > STALE_DAYS old → Fluentd had extra time
+#      and still hasn't consumed them → delete as a staleness fallback.
+#   3. Directory absent AND files are recent (≤ STALE_DAYS) → Fluentd flush may still
+#      be in progress → skip to avoid data loss.
+#
+# Kubelet rotation limits (container_log_max_size/files) cap disk growth
+# during any delay window.
+set -euo pipefail
+
+NDM_LOGS_DIR=/ndm-logs
+CONTAINERD_PODS_DIR=/var/snap/microk8s/common/var/log/pods
+YESTERDAY=$(date -u -d yesterday +%Y-%m-%d)
+NDM_DATE_DIR="${NDM_LOGS_DIR}/${YESTERDAY}"
+STALE_DAYS=2
+
+ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+
+if [ -d "$NDM_DATE_DIR" ]; then
+  echo "$(ts) ${NDM_DATE_DIR} confirmed. Deleting rotated containerd log files..."
+  find "$CONTAINERD_PODS_DIR" -type f -name "[1-9]*.log" -delete
+  echo "$(ts) Containerd rotated log cleanup complete."
+else
+  STALE_COUNT=$(find "$CONTAINERD_PODS_DIR" -type f -name "[1-9]*.log" -mtime +${STALE_DAYS} | wc -l)
+  if [ "$STALE_COUNT" -gt 0 ]; then
+    echo "$(ts) WARNING: ${NDM_DATE_DIR} not found but ${STALE_COUNT} rotated file(s) older than ${STALE_DAYS} days found. Deleting stale rotated files."
+    find "$CONTAINERD_PODS_DIR" -type f -name "[1-9]*.log" -mtime +${STALE_DAYS} -delete
+  else
+    echo "$(ts) WARNING: ${NDM_DATE_DIR} not found and rotated files are recent. Skipping cleanup — Fluentd flush may still be in progress."
+  fi
+fi

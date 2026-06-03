@@ -62,6 +62,111 @@
     default: true
     state: present
 
+# Deploy a systemd timer + service that deletes rotated containerd log files from
+# snap/microk8s. Before deleting, the script verifies that Fluentd has actually
+# flushed yesterday's logs to /ndm-logs (checks for the YYYY-MM-DD date directory).
+# If the directory is absent the cleanup is skipped to avoid data loss.
+# Only rotated files (1.log, 2.log, ...) are deleted; 0.log (active) is never touched.
+- name: Deploy ndm-containerd-log-cleanup script
+  become: yes
+  template:
+    src: ndm-containerd-log-cleanup.sh.j2
+    dest: /usr/local/bin/ndm-containerd-log-cleanup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy ndm-containerd-log-cleanup systemd service
+  become: yes
+  copy:
+    dest: /etc/systemd/system/ndm-containerd-log-cleanup.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Delete rotated containerd log files from snap/microk8s
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/ndm-containerd-log-cleanup.sh
+
+- name: Deploy ndm-containerd-log-cleanup systemd timer (runs at 00:30 UTC)
+  become: yes
+  copy:
+    dest: /etc/systemd/system/ndm-containerd-log-cleanup.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily cleanup of rotated containerd log files at 00:30 UTC
+      [Timer]
+      OnCalendar=*-*-* 00:30:00 UTC
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable and start ndm-containerd-log-cleanup timer
+  become: yes
+  systemd:
+    name: ndm-containerd-log-cleanup.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+# Hybrid /ndm-logs retention: delete date dirs older than ndm_logs_retention_days
+# only when total /ndm-logs size exceeds ndm_logs_size_threshold_gb.
+# With compress gzip, /ndm-logs grows at ~20 MB/day, so the threshold is rarely
+# crossed in normal operation. On verbose setups, oldest dirs are pruned first
+# until size drops below the threshold. Dirs < ndm_logs_retention_days old are
+# never deleted regardless of total size.
+- name: Deploy ndm-logs-cleanup script
+  become: yes
+  template:
+    src: ./templates/ndm-logs-cleanup.sh.j2
+    dest: /usr/local/bin/ndm-logs-cleanup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy ndm-logs-cleanup systemd service
+  become: yes
+  copy:
+    dest: /etc/systemd/system/ndm-logs-cleanup.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Prune /ndm-logs date dirs when total size exceeds threshold
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/ndm-logs-cleanup.sh
+
+- name: Deploy ndm-logs-cleanup systemd timer (runs at 01:00 UTC)
+  become: yes
+  copy:
+    dest: /etc/systemd/system/ndm-logs-cleanup.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily hybrid size+age cleanup of /ndm-logs
+      [Timer]
+      OnCalendar=*-*-* 01:00:00 UTC
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable and start ndm-logs-cleanup timer
+  become: yes
+  systemd:
+    name: ndm-logs-cleanup.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
 - name: Create Fluentd directory
   become: yes
   file:

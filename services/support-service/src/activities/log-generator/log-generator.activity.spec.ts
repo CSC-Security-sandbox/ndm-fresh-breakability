@@ -14,6 +14,15 @@ jest.mock('fs', () => ({
     unlink: jest.fn(),
   },
   createWriteStream: jest.fn(),
+  createReadStream: jest.fn(),
+}));
+
+// Mock zlib — createGunzip is used for on-the-fly .gz decompression
+jest.mock('zlib', () => ({
+  createGunzip: jest.fn(() => ({
+    pipe: jest.fn(),
+    on: jest.fn(),
+  })),
 }));
 
 // Mock archiver with default export
@@ -512,6 +521,7 @@ describe('LogGeneratorActivity', () => {
         pipe: jest.fn(),
         file: jest.fn(),
         directory: jest.fn(),
+        abort: jest.fn(),
         finalize: jest.fn().mockReturnValue({
           catch: jest.fn(),
         }),
@@ -617,13 +627,78 @@ describe('LogGeneratorActivity', () => {
       );
     });
 
+    describe('.gz decompression', () => {
+      it('should decompress .gz files on-the-fly and strip .gz from the zip entry name', async () => {
+        mockFsPromises.access.mockImplementation((p) => {
+          if (p.toString().includes('no-project')) return Promise.reject(new Error('ENOENT'));
+          return Promise.resolve(undefined);
+        });
+
+        const mockOutput = {
+          on: jest.fn((event, callback) => {
+            if (event === 'close') setTimeout(callback, 0);
+          }),
+        };
+        const mockArchive = {
+          on: jest.fn(),
+          pipe: jest.fn(),
+          file: jest.fn(),
+          directory: jest.fn(),
+          append: jest.fn(),
+          finalize: jest.fn().mockResolvedValue(undefined),
+          pointer: jest.fn().mockReturnValue(1024),
+        };
+
+        mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+        mockArchiver.mockReturnValue(mockArchive as any);
+
+        // find returns a .gz file — triggers the decompression branch
+        mockExec.mockImplementation((cmd, callback) => {
+          callback(null, '/test/logs/2024-01-01/project-1/control-plane/app.log.gz\n', '');
+        });
+
+        // Wire up createReadStream → pipe → createGunzip
+        const mockGunzipStream = { on: jest.fn().mockReturnThis() };
+        const mockReadStream = {
+          on: jest.fn().mockReturnThis(),
+          pipe: jest.fn().mockReturnValue(mockGunzipStream),
+        };
+        mockFs.createReadStream.mockReturnValue(mockReadStream as any);
+        const zlibMock = require('zlib');
+        zlibMock.createGunzip.mockReturnValue(mockGunzipStream);
+
+        const result = await activity.fetchAndZipLogs({ traceId, payload: mockPayload });
+
+        expect(result.success).toBe(true);
+
+        // archive.file() must NOT be called for .gz entries
+        expect(mockArchive.file).not.toHaveBeenCalled();
+
+        // archive.append() must be called with the decompressed stream
+        expect(mockArchive.append).toHaveBeenCalledWith(
+          mockGunzipStream,
+          expect.objectContaining({
+            // .gz stripped from the entry name: app.log.gz → app.log
+            name: expect.stringMatching(/app\.log$/),
+          }),
+        );
+
+        // createReadStream must be called with the .gz source path
+        expect(mockFs.createReadStream).toHaveBeenCalledWith(
+          '/test/logs/2024-01-01/project-1/control-plane/app.log.gz',
+        );
+
+        expect(mockLogger.log).toHaveBeenCalledWith(
+          expect.stringContaining('Added (decompressed):'),
+        );
+      });
+    });
+
     describe('no-project folder handling', () => {
-      it('should include no-project folder as directory when it exists', async () => {
+      it('should include no-project folder files in zip when it exists', async () => {
         mockFsPromises.access.mockImplementation((path) => {
           const pathStr = path.toString();
-          // Mock no-project folder exists
           if (pathStr.includes('no-project')) return Promise.resolve(undefined);
-          // Mock other required paths exist
           if (pathStr === baseLogPath) return Promise.resolve(undefined);
           if (pathStr === outputZipPath) return Promise.resolve(undefined);
           if (pathStr.includes('2024-01-01') || pathStr.includes('2024-01-02') || pathStr.includes('2024-01-03')) return Promise.resolve(undefined);
@@ -651,7 +726,7 @@ describe('LogGeneratorActivity', () => {
         mockFs.createWriteStream.mockReturnValue(mockOutput as any);
         mockArchiver.mockReturnValue(mockArchive as any);
 
-        // Mock exec to return files from project directories
+        // exec is called both for no-project expansion and for project file discovery
         mockExec.mockImplementation((cmd, callback) => {
           callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log\n', '');
         });
@@ -662,19 +737,11 @@ describe('LogGeneratorActivity', () => {
         });
 
         expect(result.success).toBe(true);
-        // Verify that directory method was called for no-project folders
-        expect(mockArchive.directory).toHaveBeenCalledWith(
-          '/test/logs/2024-01-01/no-project',
-          'ndm_logs_test-user-123/ndm_logs/2024-01-01/no-project'
-        );
-        expect(mockArchive.directory).toHaveBeenCalledWith(
-          '/test/logs/2024-01-02/no-project',
-          'ndm_logs_test-user-123/ndm_logs/2024-01-02/no-project'
-        );
-        expect(mockArchive.directory).toHaveBeenCalledWith(
-          '/test/logs/2024-01-03/no-project',
-          'ndm_logs_test-user-123/ndm_logs/2024-01-03/no-project'
-        );
+        // archive.directory() is no longer used — no-project is expanded to individual
+        // files via findFilesInDirectory so .gz detection applies uniformly to all files
+        expect(mockArchive.directory).not.toHaveBeenCalled();
+        // archive.file() is called for all resolved files (no-project + project)
+        expect(mockArchive.file).toHaveBeenCalled();
       });
 
       it('should skip no-project folder when it does not exist', async () => {
@@ -1096,6 +1163,7 @@ describe('LogGeneratorActivity', () => {
         pipe: jest.fn(),
         file: jest.fn(),
         directory: jest.fn(),
+        abort: jest.fn(),
         finalize: jest.fn().mockRejectedValue(new Error('Finalize failed')),
         pointer: jest.fn().mockReturnValue(1024),
       };
@@ -1113,6 +1181,121 @@ describe('LogGeneratorActivity', () => {
         success: false,
         message: 'Failed to finalize zip archive: Finalize failed'
       });
+    });
+
+    it('should reject when createReadStream emits an error for a .gz file', async () => {
+      const mockPayload = {
+        userId: 'test-user',
+        startDate: '2024-01-01',
+        endDate: '2024-01-01',
+        projectWorkerMap: [{ projectId: 'project-1', workerIds: ['worker-1'] }],
+      };
+
+      mockFsPromises.access.mockImplementation((p) => {
+        if (p.toString().includes('no-project')) return Promise.reject(new Error('ENOENT'));
+        return Promise.resolve(undefined);
+      });
+
+      const mockOutput = { on: jest.fn() };
+      const mockArchive = {
+        on: jest.fn(),
+        pipe: jest.fn(),
+        file: jest.fn(),
+        directory: jest.fn(),
+        append: jest.fn(),
+        abort: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      // exec returns a .gz file path to trigger the decompression branch
+      mockExec.mockImplementation((cmd, callback) => {
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log.gz\n', '');
+      });
+
+      // createReadStream returns a stream that immediately emits an error
+      const mockReadStream = {
+        on: jest.fn((event, handler) => {
+          if (event === 'error') {
+            setTimeout(() => handler(new Error('EACCES: permission denied')), 0);
+          }
+          return mockReadStream;
+        }),
+        pipe: jest.fn().mockReturnValue({ on: jest.fn() }),
+      };
+      mockFs.createReadStream.mockReturnValue(mockReadStream as any);
+
+      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      expect(result).toStrictEqual({
+        success: false,
+        message: 'Failed to read file /test/logs/2024-01-01/project-1/control-plane/test1.log.gz: EACCES: permission denied',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[test] Error reading /test/logs/2024-01-01/project-1/control-plane/test1.log.gz:',
+        expect.any(Error),
+      );
+    });
+
+    it('should reject when createGunzip emits an error for a corrupt .gz file', async () => {
+      const mockPayload = {
+        userId: 'test-user',
+        startDate: '2024-01-01',
+        endDate: '2024-01-01',
+        projectWorkerMap: [{ projectId: 'project-1', workerIds: ['worker-1'] }],
+      };
+
+      mockFsPromises.access.mockImplementation((p) => {
+        if (p.toString().includes('no-project')) return Promise.reject(new Error('ENOENT'));
+        return Promise.resolve(undefined);
+      });
+
+      const mockOutput = { on: jest.fn() };
+      const mockArchive = {
+        on: jest.fn(),
+        pipe: jest.fn(),
+        file: jest.fn(),
+        directory: jest.fn(),
+        append: jest.fn(),
+        abort: jest.fn(),
+        finalize: jest.fn().mockResolvedValue(undefined),
+        pointer: jest.fn().mockReturnValue(1024),
+      };
+      mockFs.createWriteStream.mockReturnValue(mockOutput as any);
+      mockArchiver.mockReturnValue(mockArchive as any);
+
+      mockExec.mockImplementation((cmd, callback) => {
+        callback(null, '/test/logs/2024-01-01/project-1/control-plane/test1.log.gz\n', '');
+      });
+
+      // createGunzip returns a stream that immediately emits an error (corrupt data)
+      const mockGunzipStream = {
+        on: jest.fn((event, handler) => {
+          if (event === 'error') {
+            setTimeout(() => handler(new Error('incorrect header check')), 0);
+          }
+          return mockGunzipStream;
+        }),
+      };
+      const mockReadStream = {
+        on: jest.fn().mockReturnThis(),
+        pipe: jest.fn().mockReturnValue(mockGunzipStream),
+      };
+      mockFs.createReadStream.mockReturnValue(mockReadStream as any);
+
+      const zlibMock = require('zlib');
+      zlibMock.createGunzip.mockReturnValue(mockGunzipStream);
+
+      const result = await activity.fetchAndZipLogs({ traceId: 'test', payload: mockPayload });
+      expect(result).toStrictEqual({
+        success: false,
+        message: 'Failed to decompress file /test/logs/2024-01-01/project-1/control-plane/test1.log.gz: incorrect header check',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[test] Error decompressing /test/logs/2024-01-01/project-1/control-plane/test1.log.gz:',
+        expect.any(Error),
+      );
     });
   });
 });

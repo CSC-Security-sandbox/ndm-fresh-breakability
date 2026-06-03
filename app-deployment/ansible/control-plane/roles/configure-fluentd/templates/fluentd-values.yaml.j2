@@ -334,6 +334,7 @@ fileConfigs:
         @type file
         path /ndm-logs/%Y-%m-%d/${project_id}/${component_type}/${service_name}
         append true
+        compress gzip
         <buffer time,project_id,component_type,service_name>
           @type file
           path /var/log/fluentd-buffers/datamigrator
@@ -343,6 +344,7 @@ fileConfigs:
           flush_mode interval
           flush_interval 5s
           flush_at_shutdown true
+          compress gzip
         </buffer>
 
         <format>
@@ -369,6 +371,7 @@ fileConfigs:
         @type file
         path /ndm-logs/%Y-%m-%d/${project_id}/worker/${worker_name}/worker
         append true
+        compress gzip
         <buffer time,project_id,worker_name>
           @type file
           path /var/log/fluentd-buffers/worker
@@ -378,6 +381,7 @@ fileConfigs:
           flush_mode interval
           flush_interval 5s
           flush_at_shutdown true
+          compress gzip
         </buffer>
 
         <format>
