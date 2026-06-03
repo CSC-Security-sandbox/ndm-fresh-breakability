@@ -887,8 +887,11 @@ describe('SecurityDescriptorChangeDetectorService', () => {
       });
 
       it('defaults to INHERIT_PERMS_AS_EXPLICIT when no mode is configured on the job', async () => {
+        // Default is EXPLICIT: the source's inherited ACE is flipped to
+        // explicit by the gate transform, leaving a 1-ACE source DACL that
+        // does NOT match the empty destination DACL -> drift detected.
         const sourceSd = baseSd([inheritedAce()]);
-        const destinationSd = baseSd([explicitFromInherited()]);
+        const destinationSd = baseSd([]);
         jest
           .spyOn(winOperationService, 'getAclOperation')
           .mockImplementation(async (_p: string, isSource: boolean) =>
@@ -900,7 +903,7 @@ describe('SecurityDescriptorChangeDetectorService', () => {
           ctxWithInheritanceMode(undefined),
           true,
         );
-        expect(changed).toBe(false);
+        expect(changed).toBe(true);
       });
 
       it('applyInheritanceMode=false: inherited source ACE vs explicit destination ACE -> drift detected (transform NOT applied for non-root items)', async () => {

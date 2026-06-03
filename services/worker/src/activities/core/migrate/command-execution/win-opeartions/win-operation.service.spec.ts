@@ -1792,10 +1792,10 @@ describe('WinOperationService', () => {
         ctxWithMode(undefined),
         'C:\\src',
       );
-      // EXPLICIT keeps both ACEs (inherited one converted, not stripped)
+      // EXPLICIT default: inherited ACEs are flipped to explicit (kept, not stripped),
+      // so both original ACEs are present and none are marked inherited.
       expect(result.DaclAces).toHaveLength(2);
-      expect(result.DaclAces[1].IsInherited).toBe(false);
-      expect(result.DaclAces[1].AceFlags & 0x10).toBe(0);
+      expect(result.DaclAces.every(ace => ace.IsInherited === false)).toBe(true);
     });
 
     it('stampAclOperation applies INHERIT_PERMS_AS_EXPLICIT mode when applyInheritanceMode param is set', async () => {

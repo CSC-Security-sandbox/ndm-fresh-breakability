@@ -85,7 +85,7 @@ export class JobRunService {
       return null;
     }
     return (
-      options.smbPermissionInheritanceMode ?? "INHERIT_PERMS_AS_EXPLICIT"
+      options.smbPermissionInheritanceMode ?? "INHERIT_PERMS_AS_IS"
     );
   }
 

@@ -675,7 +675,7 @@ describe("JobRunService", () => {
       );
     });
 
-    it("should default smbPermissionInheritanceMode when null for SMB directory-level run", async () => {
+    it("should default smbPermissionInheritanceMode to INHERIT_PERMS_AS_IS when null for SMB directory-level run", async () => {
       const mockJobRun = {
         id: jobId,
         startTime: new Date(),
@@ -713,7 +713,7 @@ describe("JobRunService", () => {
       const result = await service.getJobStatsId(jobId);
 
       expect(result.jobOptions.smbPermissionInheritanceMode).toBe(
-        "INHERIT_PERMS_AS_EXPLICIT",
+        "INHERIT_PERMS_AS_IS",
       );
     });
 
