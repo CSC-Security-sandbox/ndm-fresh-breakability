@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	. "ndm-api-tests/utils"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,7 +32,14 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	By("Setting up global test environment (Process #1)")
 	flag.Parse()
 	UpdateConfVariables(ProtocolType, Environment)
-	InitTestEnv()
+
+	// Post-upgrade reuses the workers left attached by the pre-upgrade run; all
+	// other runs create a project and attach workers.
+	if os.Getenv("REUSE_EXISTING_WORKERS") == "true" {
+		InitTestEnvReusingWorkers()
+	} else {
+		InitTestEnv()
+	}
 
 	LogDebug(fmt.Sprintf("[Process #1] Global project created: %s (ID: %s) with %d workers", 
 		GlobalProjectName, GlobalProjectId, len(GlobalAttachedWorkersConfig)))
@@ -83,6 +91,13 @@ var _ = SynchronizedAfterSuite(func() {
 }, func() {
 	// This runs ONLY on Process #1 after all other processes finish
 	By("Cleaning up global test environment (Process #1)")
+
+	// The pre-upgrade run sets SKIP_WORKER_CLEANUP=true to leave its workers
+	// attached so the in-place upgrade has registered workers to act on.
+	if os.Getenv("SKIP_WORKER_CLEANUP") == "true" {
+		LogDebug("SKIP_WORKER_CLEANUP=true - leaving workers attached and skipping test env cleanup")
+		return
+	}
 
 	if len(GlobalAttachedWorkersConfig) > 0 {
 		LogDebug("Stopping and detaching workers")

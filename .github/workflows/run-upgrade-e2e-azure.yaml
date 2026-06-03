@@ -4,6 +4,7 @@ env:
   GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
   TERRAFORM_VERSION: 1.12.1
   NODE_VERSION: 22.15.0
+  GO_VERSION: 1.24.2
 
 on:
   workflow_dispatch:
@@ -32,6 +33,11 @@ on:
         description: 'Reference type (releases or branches)'
         required: true
         type: string
+      volume_clone_provider:
+        description: 'Volume clone backend for the pre/post-upgrade migration tests (anf/ontap)'
+        required: false
+        default: 'anf'
+        type: string
 
   workflow_call:
     inputs:
@@ -58,6 +64,11 @@ on:
       ref_type:
         description: 'Reference type (releases or branches)'
         required: true
+        type: string
+      volume_clone_provider:
+        description: 'Volume clone backend for the pre/post-upgrade migration tests (anf/ontap)'
+        required: false
+        default: 'anf'
         type: string
 
 permissions:
@@ -224,12 +235,142 @@ jobs:
           echo "Old NDM version is running — ready for upgrade."
 
   # ---------------------------------------------------------------------------
-  # Job 2: Upload upgrade bundle via NDM API and trigger upgrade
+  # Job 2: Pre-upgrade migration — attach NFS (Linux) + SMB (Windows) workers on
+  # the OLD build and run a single migration (TC-001) per protocol. Workers are
+  # intentionally LEFT ATTACHED (SKIP_WORKER_CLEANUP=true) so the in-place worker
+  # upgrade has registered workers to act on and can be validated afterwards.
+  # ---------------------------------------------------------------------------
+  pre-upgrade-e2e:
+    name: Pre-Upgrade Migration + Attach Workers (NFS & SMB)
+    runs-on: openlab
+    needs: setup-infrastructure
+    env:
+      CLOUD_PROVIDER: azure
+      CLOUD_ENVIRONMENT: Azure
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'anf' }}
+      SKIP_WORKER_CLEANUP: 'true'
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # NFS (Linux) worker + ANF volume config
+      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      AZURE_NFS_DEST_VOLUMES: ${{ vars.AZURE_NFS_DEST_VOLUMES }}
+      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_POOL_NAME }}
+      AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      # SMB (Windows) worker + ANF volume config
+      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      AZURE_SMB_DEST_VOLUMES: ${{ vars.AZURE_SMB_DEST_VOLUMES }}
+      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      AZURE_SMB_DOMAIN_NAME: ${{ vars.AZURE_SMB_DOMAIN_NAME }}
+      AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_POOL_NAME }}
+      AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      # Pre-upgrade SMB worker is installed from the OLD installer copied to the VM in setup
+      SMB_EXECUTABLE_FILENAME: 'C:\Temp\prev-windows-worker-installer.exe'
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup worker SSH credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "::add-mask::$VM_PASSWORD"
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+          echo "PATH=$PATH:$(go env GOPATH)/bin" >> $GITHUB_ENV
+
+      - name: Wait for Windows worker SSH to be ready
+        run: |
+          WINDOWS_IPS='${{ needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses }}'
+          for ip in $(echo "$WINDOWS_IPS" | jq -r '.[]'); do
+            echo "Waiting for SSH (22) on Windows VM $ip..."
+            for i in $(seq 1 60); do
+              if timeout 5 bash -c "</dev/tcp/$ip/22" 2>/dev/null; then
+                echo "SSH is up on $ip"; break
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Pre-upgrade NFS migration (TC-001) + attach Linux workers
+        run: |
+          cd ndm-api-tests
+          ginkgo run -v --focus="TC-001" --timeout=2h ./tests/e2e -- \
+            --protocol_type=NFS --environment=Azure
+
+      - name: Pre-upgrade SMB migration (TC-001) + attach Windows workers
+        run: |
+          cd ndm-api-tests
+          ginkgo run -v --focus="TC-001" --timeout=2h ./tests/e2e -- \
+            --protocol_type=SMB --environment=Azure
+
+      - name: Upload pre-upgrade test logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pre-upgrade-e2e-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Upload upgrade bundle via NDM API and trigger upgrade
   # ---------------------------------------------------------------------------
   run-upgrade:
     name: Upload Bundle and Trigger Upgrade via API
     runs-on: openlab
-    needs: setup-infrastructure
+    needs: [setup-infrastructure, pre-upgrade-e2e]
     env:
       CP_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       CHUNK_SIZE: 15728640  # 15 MB — matches server default
@@ -367,7 +508,7 @@ jobs:
         run: |
           BASE_URL="https://${CP_IP}/api/v1/upgrade"
 
-          # uploadStatus transitions: uploading → processing → success / failed
+          # uploadStatus transitions: uploading -> processing -> success / failed
           # Poll every 5 seconds for up to 10 minutes (120 attempts).
           MAX_RETRIES=120
           RETRY=0
@@ -390,12 +531,12 @@ jobs:
               success)
                 BUNDLE_ID=$(echo "${STATUS_RESPONSE}" | jq -r '.bundleId // empty')
                 UPLOAD_VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
-                echo "✅ Processing complete! version=${UPLOAD_VERSION}, bundleId=${BUNDLE_ID}"
+                echo "Processing complete! version=${UPLOAD_VERSION}, bundleId=${BUNDLE_ID}"
                 echo "BUNDLE_ID=${BUNDLE_ID}" >> $GITHUB_ENV
                 break
                 ;;
               failed)
-                echo "❌ Processing failed. Response: ${STATUS_RESPONSE}"
+                echo "Processing failed. Response: ${STATUS_RESPONSE}"
                 exit 1
                 ;;
               processing|uploading)
@@ -408,7 +549,7 @@ jobs:
           done
 
           if [ "${UPLOAD_STATUS}" != "success" ]; then
-            echo "❌ Processing timed out after $(( MAX_RETRIES * 5 / 60 )) minutes. Last status: ${UPLOAD_STATUS}"
+            echo "Processing timed out after $(( MAX_RETRIES * 5 / 60 )) minutes. Last status: ${UPLOAD_STATUS}"
             exit 1
           fi
 
@@ -477,28 +618,28 @@ jobs:
             case "${UPGRADE_STATUS}" in
               success)
                 REPORTED_VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
-                echo "  [${RETRY}/${MAX_RETRIES}] ✅ Upgrade succeeded! Version: ${REPORTED_VERSION}"
+                echo "  [${RETRY}/${MAX_RETRIES}] Upgrade succeeded! Version: ${REPORTED_VERSION}"
                 break
                 ;;
               failed)
-                echo "  [${RETRY}/${MAX_RETRIES}] ❌ Upgrade FAILED. Response: ${STATUS_RESPONSE}"
+                echo "  [${RETRY}/${MAX_RETRIES}] Upgrade FAILED. Response: ${STATUS_RESPONSE}"
                 exit 1
                 ;;
               rolled_back)
-                echo "  [${RETRY}/${MAX_RETRIES}] ❌ Upgrade ROLLED BACK. Response: ${STATUS_RESPONSE}"
+                echo "  [${RETRY}/${MAX_RETRIES}] Upgrade ROLLED BACK. Response: ${STATUS_RESPONSE}"
                 exit 1
                 ;;
               staged|pending)
-                echo "  [${RETRY}/${MAX_RETRIES}] ⏳ Upgrade in progress (status=${UPGRADE_STATUS})..."
+                echo "  [${RETRY}/${MAX_RETRIES}] Upgrade in progress (status=${UPGRADE_STATUS})..."
                 ;;
               *)
-                echo "  [${RETRY}/${MAX_RETRIES}] ⏳ Waiting... (status=${UPGRADE_STATUS:-unknown})"
+                echo "  [${RETRY}/${MAX_RETRIES}] Waiting... (status=${UPGRADE_STATUS:-unknown})"
                 ;;
             esac
           done
 
           if [ "${UPGRADE_STATUS}" != "success" ]; then
-            echo "❌ Upgrade timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${UPGRADE_STATUS}"
+            echo "Upgrade timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${UPGRADE_STATUS}"
             exit 1
           fi
 
@@ -521,18 +662,18 @@ jobs:
           echo "Multicast status: ${MULTICAST_STATUS} | workers: ${COMPLETED}/${TOTAL} completed, ${FAILED} failed"
 
           if [ "${FAILED}" -gt 0 ]; then
-            echo "❌ ${FAILED} worker(s) failed to receive the upgrade bundle."
+            echo "${FAILED} worker(s) failed to receive the upgrade bundle."
             echo "$(echo ${MULTICAST_RESPONSE} | jq .)"
             exit 1
           fi
 
           if [ "${MULTICAST_STATUS}" != "COMPLETED" ]; then
-            echo "❌ Multicast workflow is not COMPLETED (status=${MULTICAST_STATUS}). Workers may not have finished downloading the binary."
+            echo "Multicast workflow is not COMPLETED (status=${MULTICAST_STATUS}). Workers may not have finished downloading the binary."
             echo "$(echo ${MULTICAST_RESPONSE} | jq .)"
             exit 1
           fi
 
-          echo "✅ All ${COMPLETED}/${TOTAL} workers have staged the upgrade binary."
+          echo "All ${COMPLETED}/${TOTAL} workers have staged the upgrade binary."
 
       - name: Execute worker upgrades
         run: |
@@ -549,7 +690,7 @@ jobs:
 
           WORKFLOW_ID=$(echo "${EXECUTE_RESPONSE}" | jq -r '.workflowId // empty')
           if [ -z "${WORKFLOW_ID}" ]; then
-            echo "❌ Execute worker upgrade failed — no workflowId returned."
+            echo "Execute worker upgrade failed — no workflowId returned."
             echo "Full response: ${EXECUTE_RESPONSE}"
             exit 1
           fi
@@ -562,7 +703,7 @@ jobs:
           NDM_USERNAME="${{ secrets.NDM_APP_USERNAME }}"
           NDM_PASSWORD="${{ secrets.NDM_APP_PASSWORD }}"
 
-          # Allow up to 15 minutes (90 × 10s) for workers to stop, swap binary and restart.
+          # Allow up to 15 minutes (90 * 10s) for workers to stop, swap binary and restart.
           MAX_RETRIES=90
           RETRY=0
           WORKER_UPGRADE_STATUS=""
@@ -599,11 +740,11 @@ jobs:
 
             case "${WORKER_UPGRADE_STATUS}" in
               success)
-                echo "  ✅ All ${COMPLETED}/${TOTAL} workers upgraded successfully."
+                echo "  All ${COMPLETED}/${TOTAL} workers upgraded successfully."
                 break
                 ;;
               failure)
-                echo "  ❌ Worker upgrade failed. ${FAILED} worker(s) did not complete."
+                echo "  Worker upgrade failed. ${FAILED} worker(s) did not complete."
                 echo "  Not completed: $(echo ${EXEC_RESPONSE} | jq -c '.notCompleted')"
                 exit 1
                 ;;
@@ -611,18 +752,18 @@ jobs:
                 # Keep polling
                 ;;
               *)
-                echo "  ⏳ Waiting... (status=${WORKER_UPGRADE_STATUS:-unknown})"
+                echo "  Waiting... (status=${WORKER_UPGRADE_STATUS:-unknown})"
                 ;;
             esac
           done
 
           if [ "${WORKER_UPGRADE_STATUS}" != "success" ]; then
-            echo "❌ Worker upgrade execution timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${WORKER_UPGRADE_STATUS}"
+            echo "Worker upgrade execution timed out after $(( MAX_RETRIES * 10 / 60 )) minutes. Last status: ${WORKER_UPGRADE_STATUS}"
             exit 1
           fi
 
   # ---------------------------------------------------------------------------
-  # Job 3: Verify the new version is running via API
+  # Job 4: Verify the new version is running via API (CP + all registered workers)
   # ---------------------------------------------------------------------------
   verify-upgrade:
     name: Verify Upgrade Success
@@ -671,16 +812,16 @@ jobs:
           VERSION=$(echo "${STATUS_RESPONSE}" | jq -r '.version // empty')
 
           if [ "${STATUS}" != "success" ]; then
-            echo "❌ upgrade-status is '${STATUS}', expected 'success'"
+            echo "upgrade-status is '${STATUS}', expected 'success'"
             exit 1
           fi
 
           if [ "${VERSION}" != "${BUILD_VERSION}" ]; then
-            echo "❌ Version mismatch: expected '${BUILD_VERSION}', got '${VERSION}'"
+            echo "Version mismatch: expected '${BUILD_VERSION}', got '${VERSION}'"
             exit 1
           fi
 
-          echo "✅ CP upgrade verified: status=success, version=${VERSION}"
+          echo "CP upgrade verified: status=success, version=${VERSION}"
 
       - name: Verify latest-upload-status shows upgradeStatus success
         run: |
@@ -694,12 +835,12 @@ jobs:
 
           UPGRADE_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.upgradeStatus // empty')
           if [ "${UPGRADE_STATUS}" != "success" ]; then
-            echo "❌ upgradeStatus is '${UPGRADE_STATUS}', expected 'success'"
+            echo "upgradeStatus is '${UPGRADE_STATUS}', expected 'success'"
             exit 1
           fi
 
           WORKER_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.workerUpgradeStatus // "unknown"')
-          echo "✅ upgradeStatus=success | workerUpgradeStatus=${WORKER_STATUS}"
+          echo "upgradeStatus=success | workerUpgradeStatus=${WORKER_STATUS}"
 
       - name: Verify CP and worker versions via About NDM
         run: |
@@ -717,12 +858,12 @@ jobs:
           # ── CP version (from Prometheus) ──────────────────────────────────
           NEW_CP_VERSION=$(echo "${ABOUT}" | jq -r '.build.controlPlane_version.version // empty')
           if [ -z "${NEW_CP_VERSION}" ] || [ "${NEW_CP_VERSION}" = "N/A" ]; then
-            echo "⚠️  CP version not yet available in Prometheus (may still be starting)"
+            echo "CP version not yet available in Prometheus (may still be starting)"
           elif [ "${NEW_CP_VERSION}" != "${BUILD_VERSION}" ]; then
-            echo "❌ CP version mismatch: about-ndm reports '${NEW_CP_VERSION}', expected '${BUILD_VERSION}'"
+            echo "CP version mismatch: about-ndm reports '${NEW_CP_VERSION}', expected '${BUILD_VERSION}'"
             FAIL=1
           else
-            echo "✅ CP version confirmed via about-ndm: ${NEW_CP_VERSION}"
+            echo "CP version confirmed via about-ndm: ${NEW_CP_VERSION}"
           fi
 
           # ── Worker versions (from DB) ─────────────────────────────────────
@@ -743,33 +884,161 @@ jobs:
           echo "Total registered workers   : ${TOTAL_WORKERS}"
 
           if [ "${TOTAL_WORKERS}" -eq 0 ]; then
-            echo "⚠️  No workers registered — skipping worker version check"
+            echo "No workers registered — skipping worker version check"
           else
             if [ "${WORKERS_ON_OTHER}" -gt 0 ]; then
-              echo "❌ ${WORKERS_ON_OTHER} worker(s) still on an old version:"
+              echo "${WORKERS_ON_OTHER} worker(s) still on an old version:"
               echo "${ABOUT}" | jq -r \
                 --arg v "${BUILD_VERSION}" \
                 '.build.workersByVersion // {} | to_entries[] | select(.key != $v) | "  [\(.key)] " + (.value | map(.workerName) | join(", "))'
               FAIL=1
             fi
             if [ "${WORKERS_ON_TARGET}" -eq 0 ]; then
-              echo "❌ No workers found on target version ${BUILD_VERSION}"
+              echo "No workers found on target version ${BUILD_VERSION}"
               FAIL=1
             else
-              echo "✅ All ${WORKERS_ON_TARGET} worker(s) confirmed on ${BUILD_VERSION}"
+              echo "All ${WORKERS_ON_TARGET} worker(s) confirmed on ${BUILD_VERSION}"
             fi
           fi
 
           [ "${FAIL}" -eq 1 ] && exit 1
-          echo "✅ About NDM version checks passed"
+          echo "About NDM version checks passed"
 
   # ---------------------------------------------------------------------------
-  # Job 4: Always destroy provisioned VMs
+  # Job 5: Post-upgrade migration — re-run a single migration (TC-001) per
+  # protocol against the UPGRADED control plane, reusing the workers that were
+  # upgraded in place (REUSE_EXISTING_WORKERS=true), so no reinstall is needed.
+  # ---------------------------------------------------------------------------
+  post-upgrade-e2e:
+    name: Post-Upgrade Migration (NFS & SMB)
+    runs-on: openlab
+    needs: [setup-infrastructure, run-upgrade, verify-upgrade]
+    env:
+      CLOUD_PROVIDER: azure
+      CLOUD_ENVIRONMENT: Azure
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'anf' }}
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_SP_USERNAME }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_SP_PASSWORD }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # NFS (Linux) worker + ANF volume config
+      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      AZURE_NFS_DEST_VOLUMES: ${{ vars.AZURE_NFS_DEST_VOLUMES }}
+      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_POOL_NAME }}
+      AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+      # SMB (Windows) worker + ANF volume config
+      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      AZURE_SMB_DEST_VOLUMES: ${{ vars.AZURE_SMB_DEST_VOLUMES }}
+      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      AZURE_SMB_DOMAIN_NAME: ${{ vars.AZURE_SMB_DOMAIN_NAME }}
+      AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_POOL_NAME }}
+      AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+      # Reuse the workers upgraded in place instead of re-attaching them.
+      REUSE_EXISTING_WORKERS: 'true'
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup worker SSH credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "::add-mask::$VM_PASSWORD"
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+          echo "PATH=$PATH:$(go env GOPATH)/bin" >> $GITHUB_ENV
+
+      - name: Wait for Windows worker SSH to be ready
+        run: |
+          WINDOWS_IPS='${{ needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses }}'
+          for ip in $(echo "$WINDOWS_IPS" | jq -r '.[]'); do
+            echo "Waiting for SSH (22) on Windows VM $ip..."
+            for i in $(seq 1 60); do
+              if timeout 5 bash -c "</dev/tcp/$ip/22" 2>/dev/null; then
+                echo "SSH is up on $ip"; break
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Post-upgrade NFS migration (TC-001)
+        run: |
+          cd ndm-api-tests
+          ginkgo run -v --focus="TC-001" --timeout=2h ./tests/e2e -- \
+            --protocol_type=NFS --environment=Azure
+
+      - name: Post-upgrade SMB migration (TC-001)
+        run: |
+          cd ndm-api-tests
+          ginkgo run -v --focus="TC-001" --timeout=2h ./tests/e2e -- \
+            --protocol_type=SMB --environment=Azure
+
+      - name: Upload post-upgrade test logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: post-upgrade-e2e-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Job 6: Always destroy provisioned VMs
   # ---------------------------------------------------------------------------
   cleanup:
     name: Cleanup Infrastructure
     runs-on: openlab
-    needs: [setup-infrastructure, run-upgrade, verify-upgrade]
+    needs: [setup-infrastructure, pre-upgrade-e2e, run-upgrade, verify-upgrade, post-upgrade-e2e]
     if: always()
     steps:
       - name: Harden the runner (Audit all outbound calls)

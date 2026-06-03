@@ -21,6 +21,7 @@ type Worker struct {
 	WorkerName string  `json:"workerName"`
 	IPAddress  string  `json:"ipAddress"`
 	Status     string  `json:"status"`
+	Platform   string  `json:"platform"`
 	Stats      Stats   `json:"stats"`
 }
 
@@ -76,6 +77,30 @@ func ListWorkers(projectID string, headers map[string]string) ([]Worker, error) 
 	}
 
 	return nil, fmt.Errorf("no workers found for project ID: %s", projectID)
+}
+
+// ListAllWorkers returns every worker registered on the control plane across all
+// projects (no projectId filter), used to discover workers to reuse.
+func ListAllWorkers(headers map[string]string) ([]Worker, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/workers", JOB_SERVICE_URL)
+
+	resp, err := SendAPIRequest(http.MethodGet, fullURL, nil, headers)
+	if err != nil {
+		return nil, fmt.Errorf("error while sending api request , err : %v", err)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	var response WorkerResponse
+	if err = json.Unmarshal(bodyBytes, &response); err != nil {
+		return nil, fmt.Errorf("error unmarshalling response JSON: %w", err)
+	}
+
+	return response.Data.Items, nil
 }
 
 // GetWorkerStatus returns the status of a worker by its ID

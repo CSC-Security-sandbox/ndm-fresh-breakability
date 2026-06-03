@@ -2139,7 +2139,7 @@ jobs:
   # ---------------------------------------------------------------------------
   run-upgrade-e2e-azure:
     if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_e2e == 'true')) && needs.fetch-previous-nightly-images.outputs.old_cp_image_version != '' && needs.fetch-previous-nightly-images.outputs.old_worker_image_version != '' && needs.create-upgrade-bundle.outputs.upgrade_bundle_path != '' }}
-    needs: [fetch-previous-nightly-images, create-upgrade-bundle, packer, package-artifacts, upload-windows-installer]
+    needs: [fetch-previous-nightly-images, create-upgrade-bundle, packer, package-artifacts]
     uses: ./.github/workflows/run-upgrade-e2e-azure.yaml
     with:
       old_cp_image_version: ${{ needs.fetch-previous-nightly-images.outputs.old_cp_image_version }}
@@ -2148,4 +2148,5 @@ jobs:
       upgrade_bundle_path: ${{ needs.create-upgrade-bundle.outputs.upgrade_bundle_path }}
       build_version: ${{ needs.package-artifacts.outputs.build_version }}
       ref_type: ${{ needs.package-artifacts.outputs.ref_type }}
+      volume_clone_provider: 'anf'
     secrets: inherit

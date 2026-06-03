@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"ndm-api-tests/tests/smoke/parser"
+	"strings"
 
 	"os"
 	"path/filepath"
@@ -153,6 +154,125 @@ func InitTestEnvWithoutWorkers() {
 	}
 
 	LogDebug("Test environment initialized (auth tokens and configs only, no global workers)")
+}
+
+// InitTestEnvReusingWorkers sets up auth tokens and reuses workers already
+// registered on the control plane instead of creating a new project and
+// attaching workers. Used by the post-upgrade pass to validate the workers that
+// were upgraded in place. Workers are matched by platform (NFS -> LINUX,
+// SMB -> WINDOWS) and their existing project is reused.
+func InitTestEnvReusingWorkers() {
+	var tokenErr, keycloakErr, roleIdsErr error
+
+	creds, keycloakErr := GetKeyCloakAdminCredentials()
+	if keycloakErr != nil {
+		LogFatalf("Error getting Keycloak secrets: %v", keycloakErr)
+	} else {
+		KeycloakUser = creds.AdminUser
+		KeycloakPassword = creds.AdminPassword
+		CLIENT_SECRET = creds.ClientSecret
+	}
+
+	if err := UpdateAppAdmin(KeycloakUser, KeycloakPassword); err != nil {
+		LogFatalf("Error updating app admin: %v", err)
+	}
+
+	AuthToken, RefreshToken, tokenErr = GetBearerToken("", "")
+	if tokenErr != nil {
+		LogFatalf("Error getting bearer token: %v", tokenErr)
+	}
+
+	AppAdminId, ProjectAdminId, ProjectViewerId, roleIdsErr = GetRoleId(AuthToken)
+	if roleIdsErr != nil {
+		LogFatalf("Error getting Role Ids: %v", roleIdsErr)
+	}
+
+	var targetPlatform string
+	switch PROTOCOL_TYPE {
+	case ProtocolNFS:
+		targetPlatform = "LINUX"
+	case ProtocolSMB:
+		targetPlatform = "WINDOWS"
+	default:
+		LogFatalf("Cannot reuse workers for unsupported protocol: %s", PROTOCOL_TYPE)
+	}
+
+	expected := len(EnvWorkersConfigList)
+	if expected == 0 {
+		LogFatalf("No workers configured in the environment; cannot reuse existing workers")
+	}
+
+	headers := GetHeaders(AuthToken, ContentTypeJSON)
+	var matched []Worker
+	var projectId string
+	for attempt := 1; attempt <= MaxWorkerStatusRetries; attempt++ {
+		workers, err := ListAllWorkers(headers)
+		if err != nil {
+			LogDebug(fmt.Sprintf("Error listing workers while discovering existing %s workers (attempt %d): %v", targetPlatform, attempt, err))
+			Wait(DefaultPollInterval)
+			continue
+		}
+
+		byProject := make(map[string][]Worker)
+		for _, w := range workers {
+			if strings.EqualFold(w.Platform, targetPlatform) && w.Status == "Online" {
+				byProject[w.ProjectID] = append(byProject[w.ProjectID], w)
+			}
+		}
+
+		matched = nil
+		projectId = ""
+		for pid, ws := range byProject {
+			if len(ws) >= expected {
+				projectId = pid
+				matched = ws[:expected]
+				break
+			}
+		}
+		if projectId != "" {
+			break
+		}
+
+		LogDebug(fmt.Sprintf("Waiting for %d online %s workers to reuse (attempt %d/%d)", expected, targetPlatform, attempt, MaxWorkerStatusRetries))
+		Wait(DefaultPollInterval)
+	}
+
+	if projectId == "" {
+		LogFatalf("Could not find %d online %s workers to reuse after %d seconds", expected, targetPlatform, MaxWorkerStatusRetries*DefaultPollInterval)
+	}
+
+	// Pair each discovered worker with an env SSH config: exact IP match first,
+	// then positional fallback.
+	AttachedWorkersConfig = make(map[string]SSHConfig)
+	used := make([]bool, len(EnvWorkersConfigList))
+	for _, w := range matched {
+		for i, cfg := range EnvWorkersConfigList {
+			if !used[i] && cfg.Host == w.IPAddress {
+				AttachedWorkersConfig[w.WorkerID] = cfg
+				used[i] = true
+				break
+			}
+		}
+	}
+	for _, w := range matched {
+		if _, ok := AttachedWorkersConfig[w.WorkerID]; ok {
+			continue
+		}
+		for i, cfg := range EnvWorkersConfigList {
+			if !used[i] {
+				AttachedWorkersConfig[w.WorkerID] = cfg
+				used[i] = true
+				break
+			}
+		}
+	}
+
+	ProjectID = projectId
+	GlobalProjectId = projectId
+	GlobalProjectName = ""
+	GlobalAttachedWorkersConfig = AttachedWorkersConfig
+
+	LogDebug(fmt.Sprintf("Reusing existing project %s with %d %s workers (no re-attach)", projectId, len(AttachedWorkersConfig), targetPlatform))
 }
 
 func ensureSMBWorkersDomainJoinedIfNeeded() error {
