@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"ndm-ui-tests/config"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -332,6 +334,92 @@ func runSSHWithOutput(cfg SSHConfig, cmd string) (string, error) {
 			err, stdout.String(), stderr.String())
 	}
 	return stdout.String(), nil
+}
+
+// ClearNFSVolume mounts nfsExport read-write and deletes all files and
+// directories inside it, leaving the volume itself intact and empty.
+// Excludes .snapshot (read-only on ANF) to avoid exit-code failures.
+func ClearNFSVolume(nfsExport string) error {
+	uid := fmt.Sprintf("%d", time.Now().UnixNano())
+	mp := fmt.Sprintf("/mnt/clear_nfs_%s", uid)
+
+	script := fmt.Sprintf(`set -e
+if ! command -v mount.nfs >/dev/null 2>&1; then
+  sudo apt-get install -y nfs-common >/dev/null 2>&1
+fi
+sudo mkdir -p "%[1]s"
+sudo mount -t nfs "%[2]s" "%[1]s"
+
+sudo find "%[1]s" -mindepth 1 -maxdepth 1 ! -name ".snapshot" -exec rm -rf {} +
+
+sudo umount "%[1]s" || sudo umount -l "%[1]s"
+sudo rm -rf "%[1]s"
+`, mp, nfsExport)
+
+	cmd := exec.Command("bash", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("clear NFS volume %s: %w\noutput: %s", nfsExport, err, out)
+	}
+	return nil
+}
+
+// ClearSMBShare clears all files and directories inside the SMB share by
+// running a PowerShell script on the Windows worker via SSH. This avoids DNS
+// resolution issues on the Linux CI runner for AD domain names (.local).
+func ClearSMBShare(host, share, username, password string) error {
+	workerCfg := SSHConfig{
+		Host:     config.SMBWorkerHost,
+		Port:     config.SMBWorkerPort,
+		Username: config.SMBWorkerUsername,
+		Password: config.SMBWorkerPassword,
+	}
+
+	if workerCfg.Host == "" {
+		return fmt.Errorf("NDM_SMB_WORKER_HOST not set — cannot clear SMB share via Windows worker")
+	}
+
+	uncPath := fmt.Sprintf(`\\%s\%s`, host, share)
+	driveLetter := "Z:"
+
+	psScript := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+$drive = "%s"
+$share = "%s"
+$user  = "%s"
+$pass  = "%s"
+
+try { net use $drive /delete /y 2>$null | Out-Null } catch {}
+$mountOut = net use $drive $share /user:$user $pass 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "net use failed: $mountOut"
+    exit 1
+}
+
+try {
+    Get-ChildItem -Path "$drive\" -Recurse -Force -ErrorAction SilentlyContinue |
+        Sort-Object { $_.FullName.Length } -Descending |
+        Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+} catch {
+    Write-Warning "Some items could not be removed: $_"
+}
+
+try { net use $drive /delete /y 2>$null | Out-Null } catch {}
+Write-Output "OK"
+`, driveLetter, uncPath, username, password)
+
+	cmd := fmt.Sprintf(`powershell.exe -NoProfile -NonInteractive -EncodedCommand "%s"`,
+		encodeSMBPowerShell(psScript))
+
+	output, err := RunScript(workerCfg, cmd)
+	if err != nil {
+		return fmt.Errorf("clear SMB share %s via worker: %w\noutput: %s", uncPath, err, output)
+	}
+
+	if !strings.Contains(output, "OK") {
+		return fmt.Errorf("clear SMB share %s: unexpected output: %s", uncPath, output)
+	}
+	return nil
 }
 
 // lastNonEmpty returns the last non-whitespace line from s.

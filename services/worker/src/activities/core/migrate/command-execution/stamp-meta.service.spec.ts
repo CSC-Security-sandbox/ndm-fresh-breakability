@@ -16,7 +16,6 @@ import { MetricsService } from 'src/metrics/metrics.service';
 import { CommandExecInput } from './command-execution.type';
 import { WinOperationService } from './win-opeartions/win-operation.service';
 import { DeferredDirStampService } from '../../shared/deferred-dir-stamp.service';
-import { CtimeTestTriggersService } from '../ctime-test-triggers.service';
 
 // Mock fs module
 jest.mock('fs', () => ({
@@ -106,8 +105,7 @@ describe('StampMetaService', () => {
         { provide: WinOperationService, useValue: winOperationService },
         { provide: MetricsService, useValue: mockMetricsService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: DeferredDirStampService, useValue: { add: jest.fn(), updateSourceCtime: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
-        { provide: CtimeTestTriggersService, useValue: { testExhaustAllRetries: jest.fn(), testChangeBetweenT2AndT3: jest.fn(), testChangeBetweenT3AndDirRestamp: jest.fn() } },
+        { provide: DeferredDirStampService, useValue: { add: jest.fn(), popBatch: jest.fn(), cleanup: jest.fn(), count: jest.fn() } },
       ],
     }).compile();
 
@@ -661,6 +659,24 @@ describe('StampMetaService', () => {
       );
       expect(input.jobContext.publishToErrorStream).toHaveBeenCalled();
     });
+
+    it('should skip source utimes for directories (handled by scan workflow)', async () => {
+      const input = createMockInput(
+        {
+          mtime: new Date('2023-01-02T12:00:00Z'),
+          atime: new Date('2023-01-02T14:00:00Z'),
+        },
+        { preserveAccessTime: true },
+        true, // isDir
+      );
+
+      const result = await service.preserveAccessAndModifiedTime(input);
+
+      expect(result.sourceErrors).toEqual([]);
+      expect(result.targetErrors).toEqual([]);
+      expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+      expect(mockFs.promises.lutimes).not.toHaveBeenCalled();
+    });
   });
 
   describe('stampObjectACL', () => {
@@ -1035,54 +1051,6 @@ describe('StampMetaService', () => {
     });
   });
 
-  describe('ctime validation (win32 path)', () => {
-    beforeEach(() => {
-      Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
-      winOperationService.stampAclOperation.mockResolvedValue({ output: null, errors: [] });
-    });
-
-    it('with preserveAccessTime=true: passes when T3 <= T2', async () => {
-      const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock)
-        .mockResolvedValueOnce({ ctimeMs: 1000 })  // T1
-        .mockResolvedValueOnce({ ctimeMs: 2000 })  // T2 (from preserveAccessAndModifiedTimeAndCaptureT2)
-        .mockResolvedValueOnce({ ctimeMs: 2000 }); // T3 = T2, no change
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toEqual([]);
-      expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.COMPLETED);
-    });
-
-    it('with preserveAccessTime=true: retries and exhausts when T3 > T2', async () => {
-      const input = createMockInput({}, { preserveAccessTime: true });
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: Date.now() });
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
-    });
-
-    it('updates deferred dir stamp when isDir=true and ctime passes', async () => {
-      const input = createMockInput({}, {}, true);
-      (mockFs.promises.lstat as jest.Mock).mockResolvedValue({ ctimeMs: 5000 });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toEqual([]);
-    });
-
-    it('updates deferred dir stamp when isDir=true and ctime exhausted', async () => {
-      const input = createMockInput({}, {}, true);
-      let callCount = 0;
-      (mockFs.promises.lstat as jest.Mock).mockImplementation(() => {
-        callCount++;
-        return Promise.resolve({ ctimeMs: callCount * 1000 });
-      });
-      const result = await service.stampMetaData(input);
-      expect(result.sourceErrors).toContain('METADATA_UPDATE_CONFLICT');
-    });
-  });
-
   describe('executeStampAtimeAndPreserveSource (via STAMP_ATIME op)', () => {
     const createAtimeInput = (
       metadata = {},
@@ -1168,7 +1136,7 @@ describe('StampMetaService', () => {
       expect(sourceCalls).toHaveLength(0);
     });
 
-    it('directory: preserve runs on source, stampAccessAndModifiedTime skips dest (isDir early return)', async () => {
+    it('directory: both preserveAccessAndModifiedTime and stampAccessAndModifiedTime skip utimes (scan workflow owns source dir atime)', async () => {
       const input = createAtimeInput({}, { preserveAccessTime: true }, true /* isDir */);
       input.sourcePath = '/source/test-dir';
       input.targetPath = '/target/test-dir';
@@ -1179,9 +1147,9 @@ describe('StampMetaService', () => {
       const utimesCalls = (mockFs.promises.utimes as jest.Mock).mock.calls;
       const sourceCalls = utimesCalls.filter(c => c[0] === '/source/test-dir');
       const targetCalls = utimesCalls.filter(c => c[0] === '/target/test-dir');
-      // preserve normalizes source dir atime so it matches what DeferredDirStampService stamps on dest
-      expect(sourceCalls).toHaveLength(1);
-      // stampAccessAndModifiedTime returns early for dirs — dest is handled by DeferredDirStampService
+      // source dir atime is now restored by preserveSourceDirAtime in the scan workflow
+      expect(sourceCalls).toHaveLength(0);
+      // dest dir atime is handled by DeferredDirStampService restamp pass
       expect(targetCalls).toHaveLength(0);
       expect(input.command.ops[OPS_CMD.STAMP_ATIME].status).toBe(OPS_STATUS.COMPLETED);
     });

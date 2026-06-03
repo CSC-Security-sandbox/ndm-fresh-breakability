@@ -14,6 +14,7 @@ import { isPathExists } from "../../utils/utils";
 import { FileTypeDetectionService } from "../../utils/file-type-detection.service";
 import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
+import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
 
 
 @Injectable()
@@ -22,7 +23,6 @@ export class MigrateScanService {
     readonly maxMigrationCommand : number;
     readonly maxConcurrency: number;
     readonly maxRetryCount: number;
-    readonly metaUpdatedToleranceMs: number;
     private readonly logger: LoggerService;
 
     constructor(
@@ -37,7 +37,6 @@ export class MigrateScanService {
         this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
         this.maxConcurrency = this.configService.get('worker.maxCommandConcurrency') || 100; 
         this.maxRetryCount = this.configService.get('worker.maxRetryCount') || 3;
-        this.metaUpdatedToleranceMs = this.configService.get<number>('worker.metaUpdatedToleranceMs') ;
         this.logger = loggerFactory.create(MigrateScanService.name);
     }
 
@@ -60,7 +59,6 @@ export class MigrateScanService {
         try {
             sourceRootStat = await fs.promises.lstat(sourcePath);
             targetRootStat = await fs.promises.lstat(targetPath);
-            this.logger.debug(`DLM root exists on destination: ${targetPath}`);
         } catch (err) {
             if (!sourceRootStat) {
                 this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
@@ -70,7 +68,7 @@ export class MigrateScanService {
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext);
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
         }
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
@@ -79,9 +77,22 @@ export class MigrateScanService {
         sourceRootStat: fs.Stats,
         targetRootStat: fs.Stats | undefined,
         jobContext: JobManagerContext,
+        sourcePath: string,
+        targetPath: string,
     ): Promise<void> {
+        // This method is the single decision point for "is this the DLM
+        // root?" — both the stamp-side flag on the command (set below) and
+        // the gate-side `applyInheritanceMode` arg to buildCommand are
+        // pinned to `true` here. buildCommand threads the arg through to
+        // isMetaUpdated -> hasSecurityDescriptorChanged so the gate's
+        // expected-destination SD matches what stamp will actually write.
+        //
+        // sourcePath/targetPath are required: on win32, when destination
+        // already exists and target mtime matches source (the steady state
+        // after the previous run's deferred dir-stamp), buildCommand falls
+        // through to isMetaUpdated, which needs both abs paths.
         const rootCmd = await this.commandGenerationService.buildCommand(
-            sourceRootStat, '/', targetRootStat, undefined, jobContext,
+            sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
         );
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
@@ -100,7 +111,7 @@ export class MigrateScanService {
     async getDirContents({path, origin, jobContext, errorType, command}: DirContentsInput): Promise<Set<string>>{
         let content = new Set<string>();
         try{
-            const pathExists = await isPathExists(path);
+            const pathExists = await isPathExists(path, true);
             if (!pathExists) {
                 if (origin === Origin.SOURCE)  
                     throw new FatalError(`Source directory does not exist: ${path}`);
@@ -121,7 +132,24 @@ export class MigrateScanService {
 
         const output: ScanDirectoryOutput = { fileCount: 0, dirCount: 0, subDirs: []}
         let commands: Cmd[] = [];
+
+        const preserveAccessTime = jobContext.jobConfig?.options?.preserveAccessTime;
+        let sourceDirStat: fs.Stats | undefined;
+        if (preserveAccessTime) {
+            try {
+                sourceDirStat = await captureSourceDirAtimeStat(sourcePath, this.logger);
+            } catch (err) {
+                const dmErr = dmError('OPERATION', Origin.SOURCE, Operation.READ_DIR, errorType, command.id, err, { name: command.fPath, path: sourcePath });
+                await jobContext.publishToErrorStream(dmErr);
+                throw err;
+            }
+        }
+
         const sourceContent = await this.getDirContents({path: sourcePath, origin: Origin.SOURCE, jobContext, errorType, command});
+
+        if (sourceDirStat) {
+            await preserveSourceDirAtime(sourcePath, sourceDirStat, jobContext, command, this.logger, errorType);
+        }
         const targetContent = await this.getDirContents({path: targetPath, origin: Origin.DESTINATION, jobContext, errorType, command});
 
         const items = Array.from(sourceContent, name => ({ name }));
@@ -189,7 +217,7 @@ export class MigrateScanService {
             if (!sourceContent.has(targetItem)) {
                 const targetContentPath = path.join(targetPath, targetItem);
                 try {
-                    const targetContentExists = await isPathExists(targetContentPath);
+                    const targetContentExists = await isPathExists(targetContentPath, true);
                     if (targetContentExists) {
                         const targetStat = await fs.promises.lstat(targetContentPath);  
 
@@ -267,7 +295,7 @@ export class MigrateScanService {
         }
       
 
-        if (await isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs)) {
+        if (await isMetaUpdated(sFile, dFile)) {
             const isDirectory = sFile.isDirectory();
             return new Cmd(
                 uuid4(),

@@ -329,3 +329,10 @@ fluentd_version: 0.5.3
 fluentd_data_volume_size: 10Gi
 
 otel_collector_version: 0.131.0
+
+container_log_max_size: "500Mi"
+container_log_max_files: 50
+
+# /ndm-logs hybrid retention — script runs at 01:00 UTC daily.
+ndm_logs_size_threshold_gb: 10
+ndm_logs_retention_days: 30

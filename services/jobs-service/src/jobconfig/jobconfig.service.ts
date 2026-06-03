@@ -189,7 +189,7 @@ export class JobConfigService {
       return this.formatSmbPermissionInheritanceMode(mode) ?? String(mode);
     }
     if (this.isSmbDirectoryLevelJobConfig(jobConfig)) {
-      return "Enabled";
+      return "Disabled";
     }
     return null;
   }
@@ -209,7 +209,7 @@ export class JobConfigService {
       return null;
     }
     return (
-      requestedMode ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT
+      requestedMode ?? SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS
     );
   }
 

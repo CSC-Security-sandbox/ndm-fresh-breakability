@@ -77,13 +77,8 @@ export class CommandExecService {
             output.sourceErrors.push(...metaResult.sourceErrors);
         }
 
-        // COC report: compute copyContentStatus and stampMetaDataStatus for ItemInfo
         input.copyContentStatus = this.getCopyContentStatus(input.command);
-        input.stampMetaDataStatus = baseCmdRes.shouldStampMeta
-            ? (metaResult && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0))
-                ? 'failed'
-                : 'success'
-            : 'not_applicable';
+        input.stampMetaDataStatus = this.getStampMetaDataStatus(baseCmdRes, metaResult, input.command);
 
         if( baseCmdRes.shouldUpdateItemInfo ) {
             output.itemInfo = await this.buildFileInfo(input);
@@ -134,10 +129,24 @@ export class CommandExecService {
             return output;  // skip if already completed
         }
         if( command.ops[OPS_CMD.COPY_FILE].status !== OPS_STATUS.COMPLETED) {
-            let [srcPathExists, targetPathExists] = await Promise.all([
-                  isPathExists(sourcePath),
-                  isNotWritable(targetPath),
-            ])
+            let srcPathExists: boolean;
+            let targetPathExists: boolean;
+            try {
+                [srcPathExists, targetPathExists] = await Promise.all([
+                    isPathExists(sourcePath, true),
+                    isNotWritable(targetPath),
+                ]);
+            } catch (preflightError: unknown) {
+                const err = preflightError instanceof Error ? preflightError : new Error(String(preflightError));
+                const code = (preflightError as NodeJS.ErrnoException | undefined)?.code;
+                command.ops[OPS_CMD.COPY_FILE] = { ...command.ops[OPS_CMD.COPY_FILE], status: OPS_STATUS.ERROR };
+                this.logger.error(`Preflight check failed for source path ${sourcePath}: ${err.message}`, err.stack);
+                const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id,
+                    preflightError, {name: command.fPath, path: sourcePath});
+                await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+                output.sourceErrors.push(code ?? 'UNKNOWN');
+                return output;
+            }
             if(!srcPathExists) {
                 const dmErr = dmError("OPERATION", Origin.SOURCE, Operation.COPY_CONTENT, errorType, command.id, 
                     new Error(`Source path does not exist: ${sourcePath}`), {name: command.fPath, path: sourcePath});
@@ -276,6 +285,30 @@ export class CommandExecService {
             return command.ops[OPS_CMD.COPY_FILE].status === OPS_STATUS.COMPLETED ? 'success' : 'failed';
         }
         return 'not_applicable';
+    }
+
+    private getStampMetaDataStatus(
+        baseCmdRes: CommandOutput,
+        metaResult: CommandOutput | null,
+        command: Cmd,
+    ): 'success' | 'failed' | 'not_applicable' {
+        if (!baseCmdRes.shouldStampMeta) {
+            return 'not_applicable';
+        }
+
+        const hasStampErrors = metaResult
+            && (metaResult.targetErrors.length > 0 || metaResult.sourceErrors.length > 0);
+        if (hasStampErrors) {
+            return 'failed';
+        }
+
+        const hasValidatorMismatch = command.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length > 0;
+        if (hasValidatorMismatch) {
+            return 'failed';
+        }
+
+        const stampMetaOpExists = !!command.ops?.[OPS_CMD.STAMP_META];
+        return stampMetaOpExists ? 'success' : 'not_applicable';
     }
 
     private async markDirectoryContentsAsDeleted(directoryPath: string, jobContext: JobManagerContext): Promise<void> {
@@ -441,9 +474,6 @@ export class CommandExecService {
         
         if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
-
-        if(shouldPreservePermissions && cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error?.length) 
-            validateMisMatch += `Stamping Errors Detected: ${cmd.ops?.[OPS_CMD.STAMP_META]?.params?.error} \n`;
 
         if(validateMisMatch.length > 0) {
             const error = new Error(validateMisMatch);

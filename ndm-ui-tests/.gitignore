@@ -6,3 +6,7 @@ test-results/
 
 # Go build cache
 *.test
+
+# Compiled binaries
+nfs-compare
+cmd/nfs-compare/nfs-compare

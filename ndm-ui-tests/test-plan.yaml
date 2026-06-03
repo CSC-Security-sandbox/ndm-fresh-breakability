@@ -39,11 +39,35 @@ suites:
     timeout: 60m
     tests:
       TestDiscovery_BasicNFS:               true    # NFS discovery on a cloned volume; validates report counts against live data
-      TestDiscovery_BasicSMB:               true    # SMB discovery with share selection and report generation
-      TestDiscovery_ExcludeFilePatterns:    false    # Discovery with custom exclude patterns (*.tmp *.log *.bak)
-      TestDiscovery_Bulk:                   false    # Bulk discovery — all export paths selected in a single job
+      TestDiscovery_ExcludeFilePatterns:    true    # Discovery with custom exclude patterns (*.tmp *.log *.bak)
+      TestDiscovery_Bulk:                   true    # Bulk discovery — all export paths selected in a single job
       TestDiscovery_Destination:            false   # Scan destination server for baseline — requires NDM_DESTINATION_FILE_SERVER_ID
       TestDiscovery_Isilon:                 false   # Isilon/PowerScale auto-lists paths, excludes .snapshot — requires NDM_ISILON_HOST
       TestDiscovery_IndividualReportCSV:    false   # Download per-run discovery CSV from Job Run List — requires NDM_FILE_SERVER_ID
       TestDiscovery_ConsolidatedCSV:        false   # Generate and download consolidated discovery CSV — requires NDM_FILE_SERVER_ID
       TestDiscovery_ValidateReportAgainstVolume: false   # Validate CSV counts against live NFS volume — requires NDM_FILE_SERVER_ID
+
+  # ── Migration ────────────────────────────────────────────────────────────────
+  # End-to-end Bulk Migrate flows — NFS source → NFS destination.
+  # Creates fresh file servers, runs migration, validates job completion,
+  # and downloads CoC (Chain of Custody) reports.
+  migration:
+    enabled: true
+    parallel: 1          # avoid creating 6 file servers at once; run serially
+    timeout: 60m
+    tests:
+      TestMigration_BasicNFS: true               # Full NFS Bulk Migrate end-to-end + CoC report download
+      TestMigration_IncrementalSyncCron: true    # Bulk Migrate with cron-based incremental sync (waits for 2nd job run)
+      TestMigration_CustomOptions: true          # Bulk Migrate with custom options (a-time off, permissions off, exclude patterns)
+      TestMigration_BasicSMB: true               # Full SMB Bulk Migrate end-to-end + CoC report download
+
+  # ── Incremental Migration ──────────────────────────────────────────────────
+  # Validates adhoc migration runs after source-side changes.
+  # Runs baseline migration, applies 10% metadata + 10% file churn on source
+  # via SSH, triggers adhoc run, downloads CoC reports, and reverts source.
+  incremental:
+    enabled: true
+    parallel: 1          # sequential — single source volume under churn
+    timeout: 90m
+    tests:
+      TestIncremental_AdhocAfterChurn: true    # Baseline + 10% metadata/file churn + adhoc run + both CoC reports

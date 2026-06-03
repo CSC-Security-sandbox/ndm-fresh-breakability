@@ -12,6 +12,7 @@ import { isExists } from "../utils/utils";
 import { FileTypeDetectionService } from "../utils/file-type-detection.service";
 import { FileType } from "src/activities/types/tasks";
 import { DeferredDirStamp, DeferredDirStampService } from "./deferred-dir-stamp.service";
+import { SecurityDescriptorChangeDetectorService } from "../migrate/command-execution/win-opeartions/security-descriptor-change-detector.service";
 
 /**
  * Interface for target content membership lookups.
@@ -128,7 +129,6 @@ export interface ProcessItemsResult {
 
 @Injectable()
 export class CommandGenerationService {
-  private readonly metaUpdatedToleranceMs: number;
   private readonly maxMigrationCommand: number;
   private readonly logger: LoggerService;
 
@@ -136,9 +136,9 @@ export class CommandGenerationService {
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
     private readonly fileTypeDetectionService: FileTypeDetectionService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
+    private readonly securityDescriptorChangeDetector: SecurityDescriptorChangeDetectorService,
   ) {
-    this.metaUpdatedToleranceMs = this.configService.get<number>('worker.metaUpdatedToleranceMs');
     this.maxMigrationCommand = this.configService.get('worker.maxMigrationCommand') || 100;
     this.logger = loggerFactory.create(CommandGenerationService.name);
   }
@@ -289,7 +289,7 @@ export class CommandGenerationService {
             // Do NOT recurse: that would inflate error counts with phantom child errors.
             const targetDirPath = path.join(targetPath, itemName);
             const targetDirStat = await fs.promises.lstat(targetDirPath);
-            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId, jobContext);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, itemData.originalCommandId, jobContext, sourceContentPath, targetDirPath);
             if (newCommand) result.commands.push(newCommand);
             await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
           } else {
@@ -302,7 +302,7 @@ export class CommandGenerationService {
             const targetDirExists = await isExists(targetDirPath);
             if (targetDirExists) {
                 const targetDirStat = await fs.promises.lstat(targetDirPath);
-                const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, undefined, jobContext);
+                const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetDirStat, undefined, jobContext, sourceContentPath, targetDirPath);
                 if (newCommand) result.commands.push(newCommand);  // STAMP_META only if needed
             }
             await this.recordDeferredDirStamp(input.deferredDirStampService, jobContext, relativeSourcePath, sourceStat);
@@ -326,7 +326,7 @@ export class CommandGenerationService {
             // Target exists for symlink - compare and potentially update
             const targetFilePath = path.join(targetPath, itemName);
             const targetStatLstat = await fs.promises.lstat(targetFilePath);
-            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId, jobContext);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStatLstat, itemData.originalCommandId, jobContext, sourceContentPath, targetFilePath);
             if (newCommand) result.commands.push(newCommand);
           }
         } else if (!itemInTarget) {
@@ -347,7 +347,7 @@ export class CommandGenerationService {
             } else {
               targetStat = await fs.promises.stat(targetFilePath);
             }
-            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId, jobContext);
+            const newCommand = await this.buildCommand(sourceStat, fileInfo.path, targetStat, itemData.originalCommandId, jobContext, sourceContentPath, targetFilePath);
             if (newCommand) result.commands.push(newCommand);
           }
         }
@@ -464,8 +464,31 @@ export class CommandGenerationService {
    * Builds a command based on source and optional target stats.
    * Used for both scan and retry operations - compares source vs target.
    * Returns undefined if no update is needed.
+   *
+   * `sourceAbsPath` and `targetAbsPath` are required on SMB when `dFile` is
+   * defined (the scan-time metadata-update check reads both ACLs directly).
+   * They are unused when `dFile` is undefined (first-time-stamp case never
+   * reaches the comparator) and on non-Windows platforms (NFS branch uses
+   * `Stats` fields only).
+   *
+   * `applyInheritanceMode` mirrors stamp's
+   * `OPS_CMD.STAMP_META.params.applyInheritanceMode` flag. It must be
+   * decided by the caller (single source of truth: `initDlmRootStamp` ->
+   * `publishDlmRootPermissionStamp`, which is the only call site that
+   * passes `true`). Threaded through to `isMetaUpdated` so the gate's
+   * expected-destination SD matches what stamp would actually write on
+   * the DLM root.
    */
-  async buildCommand(sFile: fs.Stats, fPath: string, dFile?: fs.Stats, originalCommandId?: string, jobContext?: JobManagerContext): Promise<Cmd | undefined> {
+  async buildCommand(
+    sFile: fs.Stats,
+    fPath: string,
+    dFile?: fs.Stats,
+    originalCommandId?: string,
+    jobContext?: JobManagerContext,
+    sourceAbsPath?: string,
+    targetAbsPath?: string,
+    applyInheritanceMode = false,
+  ): Promise<Cmd | undefined> {
     const metadata: CmdMeta = {
       size: sFile.size,
       mtime: sFile.mtime,
@@ -497,7 +520,7 @@ export class CommandGenerationService {
       );
     }
 
-    if (await isMetaUpdated(sFile, dFile, this.metaUpdatedToleranceMs, this.redisService, jobContext)) {
+    if (jobContext?.jobConfig?.options?.preservePermissions && await isMetaUpdated(sFile, dFile, this.redisService, jobContext, this.securityDescriptorChangeDetector, sourceAbsPath, targetAbsPath, applyInheritanceMode)) {
       const isDirectory = sFile.isDirectory();
       return new Cmd(
         uuid4(),

@@ -204,4 +204,4 @@ export enum SmbPermissionInheritanceMode {
  * Error types that should be displayed to users in UI, reports, and emails.
  * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism.
  */
-export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT'] as const;
+export const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;

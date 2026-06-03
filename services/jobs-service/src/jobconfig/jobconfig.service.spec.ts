@@ -1443,7 +1443,7 @@ describe("JobConfigService", () => {
         excludeFilePatterns: mockBulkMigrate.options.excludeFilePatterns,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
         preservePermissions: mockBulkMigrate.options.preservePermissions,
-        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
+        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_IS",
         excludeOlderThan: mockBulkMigrate.options.excludeOlderThan,
         skipFile: mockBulkMigrate.options.skipFile,
         firstRunAt: mockBulkMigrate.firstRunAt,
@@ -1458,7 +1458,7 @@ describe("JobConfigService", () => {
       jobType: JobType.MIGRATE,
       preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
       preservePermissions: mockBulkMigrate.options.preservePermissions,
-      smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
+      smbPermissionInheritanceMode: "INHERIT_PERMS_AS_IS",
       sourcePathId: "sourcePath1",
       sourceDirectoryPath,
       targetPathId: "destinationPath2",
@@ -1476,7 +1476,7 @@ describe("JobConfigService", () => {
         jobType: JobType.MIGRATE,
         preserveAccessTime: mockBulkMigrate.options.preserveAccessTime,
         preservePermissions: mockBulkMigrate.options.preservePermissions,
-        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_EXPLICIT",
+        smbPermissionInheritanceMode: "INHERIT_PERMS_AS_IS",
         sourcePathId: "sourcePath1",
         sourceDirectoryPath,
         targetPathId: mockBulkMigrate.migrateConfigs[0].destinationPathId[1],
@@ -3001,7 +3001,7 @@ describe("JobConfigService", () => {
       expect(result["Excluded Path Patterns"]).toEqual(["*/logs/*", "*/tmp/*"]);
     });
 
-    it("should expose convert inherited permissions as Enabled for SMB directory-level MIGRATE when DB value is null", () => {
+    it("should expose convert inherited permissions as Disabled for SMB directory-level MIGRATE when DB value is null", () => {
       const jobConfig = {
         jobType: JobType.MIGRATE,
         skipFile: "35-M",
@@ -3021,7 +3021,7 @@ describe("JobConfigService", () => {
       const result = service.getConfigurationsSetToJob(jobConfig as any);
       expect(
         result[JobConfigurationEnum.smbPermissionInheritanceMode],
-      ).toBe("Enabled");
+      ).toBe("Disabled");
     });
 
     it("should omit convert inherited permissions when preservePermissions is disabled", () => {
@@ -5028,7 +5028,7 @@ describe("JobConfigService", () => {
         );
       });
 
-      it("defaults to INHERIT_PERMS_AS_EXPLICIT for SMB directory-level when mode omitted from payload", async () => {
+      it("defaults to INHERIT_PERMS_AS_IS for SMB directory-level when mode omitted from payload", async () => {
         setupNewMigrateMocks(Protocol.SMB);
         const bulkMigrate: BulkMigrateJobConfig = {
           migrateConfigs: [
@@ -5052,7 +5052,7 @@ describe("JobConfigService", () => {
         expect(jobConfigRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
             smbPermissionInheritanceMode:
-              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+              SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
           }),
         );
       });
@@ -5669,7 +5669,7 @@ describe("JobConfigService", () => {
         
         expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
           "oe.errorType IN (:...errorTypes)", 
-          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR", "METADATA_UPDATE_CONFLICT"]) }
+          { errorTypes: expect.arrayContaining(["FATAL_ERROR", "TRANSIENT_ERROR"]) }
         );
         expect(result).toEqual(mockErrorCounts);
         expect(result.find(e => e.errortype === "RECOVERABLE_ERROR")).toBeUndefined();

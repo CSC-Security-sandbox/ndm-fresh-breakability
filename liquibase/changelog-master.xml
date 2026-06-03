@@ -741,4 +741,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260602_01_change_smb_permission_inheritance_mode_default.sql" author="achyutas">
+      <sqlFile path="liquibase/20260602_01_change_smb_permission_inheritance_mode_default.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260602_01_change_smb_permission_inheritance_mode_default_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

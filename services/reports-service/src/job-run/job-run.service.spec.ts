@@ -122,7 +122,6 @@ describe("JobRunService", () => {
     mockCsvService = {
       generateCsv: jest.fn(),
       generateListCsv: jest.fn().mockResolvedValue(undefined),
-      generatePermStampCtimeConflictCsv: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockLogger = {
@@ -676,7 +675,7 @@ describe("JobRunService", () => {
       );
     });
 
-    it("should default smbPermissionInheritanceMode when null for SMB directory-level run", async () => {
+    it("should default smbPermissionInheritanceMode to INHERIT_PERMS_AS_IS when null for SMB directory-level run", async () => {
       const mockJobRun = {
         id: jobId,
         startTime: new Date(),
@@ -714,7 +713,7 @@ describe("JobRunService", () => {
       const result = await service.getJobStatsId(jobId);
 
       expect(result.jobOptions.smbPermissionInheritanceMode).toBe(
-        "INHERIT_PERMS_AS_EXPLICIT",
+        "INHERIT_PERMS_AS_IS",
       );
     });
 
@@ -1036,7 +1035,6 @@ describe("JobRunService", () => {
     const cocCsvBundleForJob = (id: string) => ([
       path.resolve(cocReportsBaseDir, `${id}-coc-report/coc-report.csv`),
       path.resolve(cocReportsBaseDir, `${id}-coc-report/deleted-report.csv`),
-      path.resolve(cocReportsBaseDir, `${id}-coc-report/metadata_conflict_errors.csv`),
     ]);
 
 
@@ -1113,8 +1111,7 @@ describe("JobRunService", () => {
         .spyOn(service as any, "fileExists")
         .mockResolvedValueOnce(false)  // ZIP does not exist
         .mockResolvedValueOnce(false)  // coc-report.csv
-        .mockResolvedValueOnce(false)  // deleted-report.csv
-        .mockResolvedValueOnce(false); // metadata_conflict_errors.csv
+        .mockResolvedValueOnce(false); // deleted-report.csv
       // ZIP verified present after creation
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
 
@@ -1132,7 +1129,6 @@ describe("JobRunService", () => {
       // All CSVs generated via unified per-file loop (excluded/skipped temporarily disabled)
       expect(mockCsvService.generateCsv).toHaveBeenCalledTimes(1);
       expect(mockCsvService.generateListCsv).toHaveBeenCalledTimes(1);
-      expect(mockCsvService.generatePermStampCtimeConflictCsv).toHaveBeenCalledTimes(1);
       expect(mockCsvService.generateCsv).toHaveBeenCalledWith(
         expect.stringContaining("coc-report.csv"), jobRunId, 50000, JobType.Migrate, null,
       );
@@ -1306,7 +1302,6 @@ describe("JobRunService", () => {
     const mockBundle = [
       path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/metadata_conflict_errors.csv`),
     ];
 
     beforeEach(() => {
@@ -1448,7 +1443,6 @@ describe("JobRunService", () => {
     const mockBundle = [
       path.resolve(mockBase, `${jobRunId}-coc-report/coc-report.csv`),
       path.resolve(mockBase, `${jobRunId}-coc-report/deleted-report.csv`),
-      path.resolve(mockBase, `${jobRunId}-coc-report/metadata_conflict_errors.csv`),
     ];
 
     beforeEach(() => {
@@ -1550,7 +1544,6 @@ describe("JobRunService", () => {
     const bundlePaths = [
       path.resolve(bundleDir, "coc-report.csv"),
       path.resolve(bundleDir, "deleted-report.csv"),
-      path.resolve(bundleDir, "metadata_conflict_errors.csv"),
     ];
 
     beforeEach(() => {
@@ -1949,16 +1942,6 @@ describe("JobRunService", () => {
 
       const result = await (service as any).getResumeCursor("any.csv", "/vol", "proj");
       expect(result).toBeNull();
-    });
-
-    it("should normalize SMB backslash path for metadataConflictErrors entry", async () => {
-      const volPath = "\\\\server\\vol";
-      const entry = { kind: "metadataConflictErrors", fileName: "metadata_conflict_errors.csv" };
-      (firstline as jest.MockedFunction<any>).mockResolvedValue('"Source Path"');
-      (readLastLines.read as jest.Mock).mockResolvedValue(`${volPath}\\dir\\file.txt\n`);
-
-      const result = await (service as any).getResumeCursor("any.csv", volPath, "proj", entry);
-      expect(result).toBe("/dir/file.txt");
     });
 
     it("should normalize SMB backslash path for list entry when listType is not deleted", async () => {

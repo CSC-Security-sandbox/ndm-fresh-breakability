@@ -1,7 +1,5 @@
 import { ErrorType } from '@netapp-cloud-datamigrate/jobs-lib';
 
-export const METADATA_UPDATE_CONFLICT = 'METADATA_UPDATE_CONFLICT' as const;
-
 export const IDENTITY_MAPPING_NOT_FOUND = 'IDENTITY_MAPPING_NOT_FOUND' as const;
 
 export class IdentityMappingNotFoundError extends Error {
@@ -52,17 +50,3 @@ export class E8Dot3CollisionError extends Error {
   }
 }
 
-export class MetadataUpdateConflictError extends Error {
-  code: string;
-  filePath: string;
-  errorType: ErrorType;
-
-  constructor(filePath: string) {
-    const message = 'Metadata update conflict: Unable to apply permission changes';
-    super(message);
-    this.name = 'MetadataUpdateConflictError';
-    this.code = METADATA_UPDATE_CONFLICT;
-    this.filePath = filePath;
-    this.errorType = ErrorType.METADATA_UPDATE_CONFLICT;
-  }
-}

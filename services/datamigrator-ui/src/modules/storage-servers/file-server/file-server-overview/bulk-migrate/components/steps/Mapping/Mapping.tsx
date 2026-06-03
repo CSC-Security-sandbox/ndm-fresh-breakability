@@ -602,7 +602,7 @@ const Mapping = () => {
               )}
             />
           </Box>
-          <Box className="flex flex-col gap-2 md:pl-10 w-full">
+          <Box className="flex flex-col gap-2 md:pl-10 w-full" data-testid="select-destination-path">
             <Text className="text-sm font-semibold text-gray-900">Select Destination Path</Text>
             <Autocomplete
               options={destinationPathOptions}
@@ -746,6 +746,7 @@ const Mapping = () => {
 
         <Box className="flex justify-center mt-8">
           <Button
+            data-testid="btn-add-mapping"
             color="primary"
             disabled={!canAddMapping}
             onClick={handleAddMapping}

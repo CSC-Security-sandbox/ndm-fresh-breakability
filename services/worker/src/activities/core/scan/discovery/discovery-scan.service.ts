@@ -1,18 +1,19 @@
-import { Catch, Inject } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cmd, ErrorType, FileInfo, JobManagerContext, ItemInfo, ItemMeta } from "@netapp-cloud-datamigrate/jobs-lib";
 import * as fs from 'fs';
 import * as path from 'path';
 import { dmError, getFilePermissions, removePrefix, shouldExcludeOrSkip, checkCaseSensitiveConflict } from "src/activities/utils/utils";
 import { Operation, Origin } from "src/activities/utils/utils.types";
+import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
 import { FatalError } from "src/errors/errors.types";
 import { PublishItemInfoInput } from "./discovery-scan.type";
 import { ScanDirectoryInput, ScanDirectoryOutput } from "../scan-activity.type";
-import { isPathExists } from "../../utils/utils";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { FileType } from "src/activities/types/tasks";
 import { FileTypeDetectionService } from '../../utils/file-type-detection.service';
 import { WinOperationService } from '../../migrate/command-execution/win-opeartions/win-operation.service';
+import { openDirIfExists } from "../../utils/utils";
 
 
 export class DiscoveryScanService {
@@ -41,13 +42,10 @@ export class DiscoveryScanService {
         const lowerCaseSourceDirs = new Set<string>();
         const shouldScanADS:boolean = jobContext.jobConfig?.options?.shouldScanADS;
         try {
-            const pathExists = await isPathExists(sourcePath);
-            if (!pathExists) {
-                throw new FatalError(`Source directory does not exist: ${sourcePath}`);
-            }
+            const sourceDirStat = await captureSourceDirAtimeStat(sourcePath, this.logger);
 
-            // Stream directory entries using opendir() — O(1) memory per entry
-            const dir = await fs.promises.opendir(sourcePath);
+            let dir: fs.Dir = await openDirIfExists(sourcePath);
+
             try {
                 for await (const item of dir) {
                     const sourceContentPath = path.join(sourcePath, item.name);
@@ -93,6 +91,10 @@ export class DiscoveryScanService {
             } catch (error){
                 this.logger.error(`Error scanning directory ${sourcePath}: ${error.message}`);
                 throw error;
+            }
+
+            if (sourceDirStat) {
+                await preserveSourceDirAtime(sourcePath, sourceDirStat, jobContext, command, this.logger, ErrorType.TRANSIENT_ERROR);
             }
         }catch(error) {
             if(error instanceof FatalError)

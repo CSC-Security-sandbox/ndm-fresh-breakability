@@ -61,7 +61,7 @@ export class MigrateJobConfigOptions {
       'Convert inherited permissions into explicit (SMB directory-level migrate only; set at job creation, not updatable via job config PATCH)',
     enum: SmbPermissionInheritanceMode,
     required: false,
-    example: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
+    example: SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
   })
   @IsOptional()
   @IsEnum(SmbPermissionInheritanceMode)

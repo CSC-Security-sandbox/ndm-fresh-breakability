@@ -38,14 +38,16 @@ ndm-ui-tests/
 │   └── auth.go                  ← NewAdminFixture, NewAuthFixture (login via UI)
 ├── pages/
 │   ├── login.page.go            ← Navigate, Login, LoginWithTempPassword
-│   ├── settings_common.go       ← openSettingsDrawer, clickSettingsTab, clickAny, fillByLabelOrTestID
-│   ├── user_management.page.go  ← AddUser, AssignUsersToProject, selectComboValue
-│   ├── projects.page.go         ← Create, Navigate, Exists, IsCreateButtonVisible
-│   ├── file_server.page.go      ← CreateNFSFileServer, CreateSMBFileServer, CreateIsilonFileServer, WaitForFileServerActive
-│   └── discovery.page.go        ← Bulk Discover, Job Run tracking, Report CSV downloads
+    │   ├── settings_common.go       ← openSettingsDrawer, clickSettingsTab, clickAny, fillByLabelOrTestID
+    │   ├── user_management.page.go  ← AddUser, AssignUsersToProject, selectComboValue
+    │   ├── projects.page.go         ← Create, Navigate, Exists, IsCreateButtonVisible
+    │   ├── file_server.page.go      ← CreateNFSFileServer, CreateSMBFileServer, CreateIsilonFileServer, WaitForFileServerActive
+    │   ├── discovery.page.go        ← Bulk Discover, Job Run tracking, Report CSV downloads
+    │   └── migration.page.go        ← Bulk Migrate wizard, WaitForMigrationCompleted, DownloadCoCReport
 └── tests/
     ├── user_management_test.go  ← Create 3 users, project, associate roles, first-login
     ├── discovery_test.go        ← NFS/SMB/Isilon discovery, CSV reports, job control
+    ├── migration_test.go        ← NFS Bulk Migrate end-to-end, CoC report download
     └── <new tests go here>
 ```
 
@@ -196,6 +198,107 @@ waitForDiscoveryCompletion(t, dp, f, configID, config.DiscoveryTimeoutMs)
 | `runBulkDiscovery(...)` | Opens Bulk Discover form, fills protocol/paths, submits, diffs job IDs to find new config |
 | `waitForDiscoveryCompletion(...)` | API-based polling for job completion (falls back to UI polling) |
 | `navigateToRunListAndWaitForStatus(...)` | Waits for a specific job state then navigates to Job Run List |
+
+---
+
+## Covered Flow: Migration
+
+### Architecture
+
+Migration tests use a **create-fresh-servers pattern** — both source and destination NFS file servers are created via the wizard before running the Bulk Migrate wizard.
+
+```go
+f, mp := newMigrationBrowserFixture(t)   // fixtures.NewAdminFixture + pages.NewMigrationPage
+defer f.Close()
+
+srcFSID, srcFSName := createFreshSourceFileServer(t, f)
+dstFSID, dstFSName := createFreshDestinationFileServer(t, f)
+
+mp.NavigateToFileServerOverview(srcFSID)
+mp.OpenBulkMigrateForm()
+mp.SelectDestinationFileServer(dstFSName)
+mp.SelectSourcePath(config.NfsSourceExportPath)
+mp.SelectDestinationPath(config.NfsDestinationExportPath)
+mp.AddMapping()
+mp.ProceedFromMapping()
+mp.ProceedFromOptions()          // leaves all options at defaults
+mp.SelectAllMappingsOnReview()
+mp.SubmitMigration()
+mp.NavigateToJobRunList()
+mp.WaitForMigrationCompleted(config.MigrationTimeoutMs)
+cocPath, err := mp.DownloadCoCReport(downloadDir)
+```
+
+### Test Index (`migration_test.go`)
+
+| ID | Test Function | What It Covers |
+|----|---------------|----------------|
+| M-001 | `TestMigration_BasicNFS` | Create source + destination NFS FS → Bulk Migrate wizard → wait for Completed → download CoC Report |
+
+### Shared Test Helpers (`migration_test.go`)
+
+| Helper | Purpose |
+|--------|---------|
+| `createFreshSourceFileServer(t, f)` | Creates NFS source FS named `<NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX>-<timestamp>` |
+| `createFreshDestinationFileServer(t, f)` | Creates NFS destination FS named `<NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX>-<timestamp>` |
+| `newMigrationBrowserFixture(t)` | Returns `AuthFixture` + `MigrationPage` |
+| `By(t, step)` | Logs a step label (Ginkgo-style) to test output |
+
+### data-testid Map (Bulk Migrate wizard)
+
+| Element | `data-testid` | File |
+|---------|---------------|------|
+| Destination FS select wrapper | `bulk-migrate-dst-fs-select` | `Mapping.tsx` |
+| Source Path Autocomplete input | `bulk-migrate-src-path-input` | `Mapping.tsx` |
+| Destination Path Autocomplete input | `bulk-migrate-dst-path-input` | `Mapping.tsx` |
+| Source Path option (per value) | `bulk-migrate-src-path-option-<value>` | `Mapping.tsx` |
+| Destination Path option (per value) | `bulk-migrate-dst-path-option-<value>` | `Mapping.tsx` |
+| Add Mapping button | `btn-add-mapping` | `Mapping.tsx` |
+| Back button | `btn-bulk-migrate-back` | `BulkMigrateFooter.tsx` |
+| Cancel button | `btn-bulk-migrate-cancel` | `BulkMigrateFooter.tsx` |
+| Proceed / Submit button | `btn-bulk-migrate-proceed` | `BulkMigrateProceedButton.tsx` |
+
+### Page Object: `migration.page.go`
+
+Key methods on `MigrationPage`:
+
+**Navigation:**
+- `NavigateToFileServerOverview(fsID)` — goes to `/file-server/{id}`, waits for "File Server Overview" heading
+- `NavigateToJobRunList()` — goes to `/jobs-run-list`
+
+**Bulk Migrate Wizard:**
+- `OpenBulkMigrateForm()` — clicks "Bulk Migrate", waits for `/bulk-migrate` URL
+- `SelectDestinationFileServer(name)` — opens `[data-testid="bulk-migrate-dst-fs-select"]`, waits for `[role="option"]` in portal, selects by partial name
+- `SelectSourcePath(path)` — clicks `[data-testid="bulk-migrate-src-path-input"]`, picks from MUI Autocomplete listbox
+- `SelectDestinationPath(path)` — clicks `[data-testid="bulk-migrate-dst-path-input"]`, picks from MUI Autocomplete listbox
+- `AddMapping()` — clicks `[data-testid="btn-add-mapping"]`, verifies mapping row appears
+- `ProceedFromMapping()` — clicks `[data-testid="btn-bulk-migrate-proceed"]`, waits 3s
+- `ProceedFromOptions()` — waits for "Preserve a-time" toggle, clicks Proceed
+- `SelectAllMappingsOnReview()` — checks `thead [role="checkbox"]` to select all rows
+- `SubmitMigration()` — clicks `[data-testid="btn-bulk-migrate-proceed"]` (shows "Submit" text on review step), waits for "Bulk Migrate Job has been created" toast
+
+**Job Run Tracking:**
+- `WaitForMigrationCompleted(timeoutMs)` — reloads page every 8s, reads status from first Migration row via JS DOM traversal, returns when `completed` or errors on `errored`/`failed`
+- `DownloadCoCReport(downloadDir)` — finds first Migration row, opens ⋯ overflow menu, clicks "Download CoC Report", saves file via Playwright download API
+
+### Required `.env` vars
+
+```
+NDM_NFS_SOURCE_HOST=<ip>
+NDM_NFS_SOURCE_EXPORT_PATH=/vol1
+NDM_NFS_SOURCE_FILE_SERVER_NAME_PREFIX=NFS_Source
+NDM_NFS_PROTOCOL_USERNAME=root
+NDM_NFS_PROTOCOL_PASSWORD=
+
+NDM_NFS_DESTINATION_HOST=<ip>
+NDM_NFS_DESTINATION_EXPORT_PATH=/vol1
+NDM_NFS_DESTINATION_FILE_SERVER_NAME_PREFIX=NFS_Destination
+NDM_NFS_DESTINATION_PROTOCOL_USERNAME=root
+NDM_NFS_DESTINATION_PROTOCOL_PASSWORD=
+
+NDM_MIN_WORKERS=1
+NDM_MIGRATION_TIMEOUT_MS=600000
+```
 
 ### Key Variable: `lastDiscoveredFSID`
 

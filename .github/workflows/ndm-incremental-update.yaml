@@ -1,0 +1,1355 @@
+name: NDM Incremental Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_image_version:
+        description: 'Azure gallery version for CP VM (e.g. 1.0.1748209492)'
+        required: true
+        type: string
+
+      worker_image_version:
+        description: 'Azure gallery version for Linux worker VM'
+        required: true
+        type: string
+
+      windows_worker_installer_url:
+        description: 'Artifactory URL for windows-worker-installer.exe (required for SMB/Both protocol)'
+        required: false
+        type: string
+
+      base_ref:
+        description: 'Base branch to diff against for change detection (default: main)'
+        required: false
+        default: 'main'
+        type: string
+
+      protocol:
+        description: 'Test protocol'
+        required: true
+        type: choice
+        options:
+          - NFS
+          - SMB
+          - Both
+
+      volume_clone_provider:
+        description: 'Volume clone backend'
+        required: true
+        type: choice
+        default: ontap
+        options:
+          - ontap
+          - anf
+
+      skip_rollback:
+        description: 'Skip post-test rollback (set true for debugging only)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+      cleanup_vms:
+        description: 'Destroy Azure VMs after workflow completes'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+      vm_name_prefix:
+        description: 'Prefix for VM names (e.g. "mytest" → mytest-cp, mytest-lnx1). Auto-generated from timestamp if not provided.'
+        required: false
+        type: string
+
+env:
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  GO_VERSION: '1.24.2'
+  NODE_VERSION: '22.15.0'
+  TERRAFORM_VERSION: '1.12.1'
+
+permissions:
+  contents: read
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 0 — Provision Azure Infrastructure
+# Creates CP, Linux worker, and Windows worker VMs via Terraform.
+# Runs in parallel with change detection; outputs VM IPs used by all downstream jobs.
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  provision-infrastructure:
+    name: Provision Azure Infrastructure
+    runs-on: openlab
+    outputs:
+      cp_ip: ${{ steps.infra-info.outputs.cp_ip }}
+      linux_worker_ips: ${{ steps.infra-info.outputs.linux_worker_ips }}
+      windows_worker_ips: ${{ steps.infra-info.outputs.windows_worker_ips }}
+      vm_owner: ${{ steps.tf-vars.outputs.vm_owner }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve VM credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure Azure credentials and Terraform variables
+        id: tf-vars
+        run: |
+          if [ -n "${{ inputs.vm_name_prefix }}" ]; then
+            VM_OWNER="${{ inputs.vm_name_prefix }}"
+          else
+            TIME_SUFFIX=$(date +"%H%M%S")
+            VM_OWNER="incr${TIME_SUFFIX}"
+          fi
+          echo "vm_owner=${VM_OWNER}" >> "${GITHUB_OUTPUT}"
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
+          echo "TF_VAR_control_plane_image_version=${{ inputs.control_plane_image_version }}" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image_version=${{ inputs.worker_image_version }}" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
+
+      - name: Initialize Terraform
+        run: |
+          cd $TF_DIR
+          terraform init
+
+      - name: Validate Terraform Configuration
+        run: |
+          cd $TF_DIR
+          terraform validate
+
+      - name: Create Terraform Plan
+        run: |
+          cd $TF_DIR
+          terraform plan -out=tfplan
+
+      - name: Apply Terraform Plan
+        run: |
+          cd $TF_DIR
+          terraform apply -auto-approve tfplan
+
+      - name: Upload Terraform State
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: terraform-state-incremental
+          path: |
+            ${{ env.TF_DIR }}/terraform.tfstate
+            ${{ env.TF_DIR }}/.terraform.lock.hcl
+            ${{ env.TF_DIR }}/.terraform
+
+      - name: Extract deployment information
+        id: infra-info
+        run: |
+          cd $TF_DIR
+          CP_IP=$(terraform output -raw control_plane_private_ip)
+          LINUX_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
+          WIN_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
+          echo "cp_ip=$CP_IP" >> $GITHUB_OUTPUT
+          echo "linux_worker_ips=$LINUX_IPS" >> $GITHUB_OUTPUT
+          echo "windows_worker_ips=$WIN_IPS" >> $GITHUB_OUTPUT
+          echo "Control Plane IP  : $CP_IP"
+          echo "Linux Worker IPs  : $LINUX_IPS"
+          echo "Windows Worker IPs: $WIN_IPS"
+
+      - name: Install sshpass
+        run: |
+          echo "Installing sshpass..."
+          sudo pkill -9 -f unattended-upgrade 2>/dev/null || true
+          sudo pkill -9 -f apt.systemd.daily 2>/dev/null || true
+          sleep 2
+          if ! pgrep -f 'apt|dpkg' > /dev/null 2>&1; then
+            sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+            sudo dpkg --configure -a 2>/dev/null || true
+          fi
+          for i in {1..60}; do
+            if sudo apt-get update -qq 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for apt locks... (attempt $i/60)"
+            sleep 5
+          done
+          sudo apt-get install -y sshpass
+          echo "sshpass installed successfully."
+
+      - name: Download Windows worker installer
+        if: ${{ inputs.protocol == 'SMB' || inputs.protocol == 'Both' }}
+        run: |
+          WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url }}"
+          if [ -n "$WINDOWS_INSTALLER_URL" ]; then
+            echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
+            curl -fSL -o "windows-worker-installer.exe" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              "$WINDOWS_INSTALLER_URL"
+            if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
+              echo "Error: Failed to download Windows installer or file is empty"
+              exit 1
+            fi
+            echo "Windows installer downloaded successfully."
+          else
+            if [ "${{ needs.detect-changes.outputs.update_worker }}" = "true" ]; then
+              echo "Error: windows_worker_installer_url is required when worker changes are present and protocol is SMB/Both"
+              exit 1
+            fi
+            echo "No Windows installer URL provided and worker unchanged — using pre-seeded installer on VMs"
+          fi
+
+      - name: Copy Windows installer to Windows VMs
+        if: ${{ inputs.protocol == 'SMB' || inputs.protocol == 'Both' }}
+        run: |
+          WIN_IPS='${{ steps.infra-info.outputs.windows_worker_ips }}'
+
+          if [ ! -f "windows-worker-installer.exe" ]; then
+            echo "Windows installer file not found, skipping copy to Windows VMs"
+            exit 0
+          fi
+
+          mapfile -t WIN_IP_ARRAY < <(echo "$WIN_IPS" | jq -r '.[]')
+
+          if [ ${#WIN_IP_ARRAY[@]} -eq 0 ]; then
+            echo "No Windows VM IPs found, skipping copy"
+            exit 0
+          fi
+
+          echo "Found ${#WIN_IP_ARRAY[@]} Windows VM(s), copying installer to each..."
+
+          for i in "${!WIN_IP_ARRAY[@]}"; do
+            WIN_IP="${WIN_IP_ARRAY[$i]}"
+            VM_INDEX=$((i + 1))
+            echo "Waiting for SSH on Windows VM #$VM_INDEX ($WIN_IP)..."
+            SSH_READY=false
+            for attempt in {1..30}; do
+              if SSHPASS="$VM_PASSWORD" sshpass -e ssh \
+                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 "$VM_USERNAME@$WIN_IP" "echo ready" 2>/dev/null; then
+                echo "SSH ready on Windows VM #$VM_INDEX"
+                SSH_READY=true
+                break
+              fi
+              echo "  attempt $attempt/30 — waiting 20s..."
+              sleep 20
+            done
+
+            if [ "$SSH_READY" = "false" ]; then
+              echo "SSH never became ready on Windows VM #$VM_INDEX ($WIN_IP), skipping"
+              continue
+            fi
+
+            # Ensure C:\Temp exists and SCP to home dir first, then move to C:\Temp\
+            SSHPASS="$VM_PASSWORD" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "$VM_USERNAME@$WIN_IP" \
+              "powershell -Command \"New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null\""
+
+            SSHPASS="$VM_PASSWORD" sshpass -e scp -O \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              windows-worker-installer.exe "$VM_USERNAME@$WIN_IP:windows-worker-installer.exe"
+
+            SSHPASS="$VM_PASSWORD" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "$VM_USERNAME@$WIN_IP" \
+              "powershell -Command \"Copy-Item -Path (Join-Path \$HOME 'windows-worker-installer.exe') -Destination 'C:\\Temp\\windows-worker-installer.exe' -Force; Remove-Item -Path (Join-Path \$HOME 'windows-worker-installer.exe') -Force\""
+
+            echo "  ✓ Windows installer copied to VM #$VM_INDEX ($WIN_IP)"
+          done
+
+      - name: Wait for Service Boot Setup to Complete
+        run: |
+          echo "Monitoring service boot on ${{ steps.infra-info.outputs.cp_ip }}..."
+          chmod +x ./app-deployment/scripts/service_check.sh
+          ./app-deployment/scripts/service_check.sh \
+            "${{ steps.infra-info.outputs.cp_ip }}" \
+            "$VM_USERNAME" \
+            "$VM_PASSWORD"
+          if [ $? -ne 0 ]; then
+            echo "Service setup failed or timed out"
+            exit 1
+          fi
+          echo "Service setup completed successfully"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 1 — Change Detection
+# ─────────────────────────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: openlab
+    outputs:
+      services_to_update: ${{ steps.detect.outputs.services_to_update }}
+      update_worker: ${{ steps.detect.outputs.update_worker }}
+      any_cp_changes: ${{ steps.detect.outputs.any_cp_changes }}
+      new_tag: ${{ steps.detect.outputs.new_tag }}
+      rollback_tag: ${{ steps.detect.outputs.rollback_tag }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: detect
+        run: |
+          NEW_TAG="${GITHUB_SHA::7}"
+          ROLLBACK_TAG="pre-pr-${NEW_TAG}"
+
+          git fetch origin "${{ inputs.base_ref }}"
+          BASE_SHA=$(git rev-parse "origin/${{ inputs.base_ref }}")
+          CHANGED=$(git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}")
+
+          echo "Changed files between ${BASE_SHA} and ${GITHUB_SHA}:"
+          echo "${CHANGED}"
+          echo "---"
+
+          SERVICES_TO_UPDATE=""
+          for SERVICE in admin-service config-service jobs-service reports-service \
+                         db-writer datamigrator-ui support-service; do
+            if echo "${CHANGED}" | grep -q "^services/${SERVICE}/"; then
+              SERVICES_TO_UPDATE="${SERVICES_TO_UPDATE} ${SERVICE}"
+            fi
+          done
+
+          if echo "${CHANGED}" | grep -q "^liquibase/"; then
+            SERVICES_TO_UPDATE="${SERVICES_TO_UPDATE} db-migrations"
+          fi
+
+          UPDATE_WORKER="false"
+          if echo "${CHANGED}" | grep -q "^services/worker/"; then
+            UPDATE_WORKER="true"
+          fi
+
+          if echo "${CHANGED}" | grep -q "^services/keycloak-customizations/"; then
+            echo "WARNING: keycloak-customizations changes detected."
+            echo "  Keycloak customizations are baked into the VM image and cannot be"
+            echo "  incrementally deployed. A full image rebuild is required for these changes."
+          fi
+
+          SERVICES_TO_UPDATE=$(echo "${SERVICES_TO_UPDATE}" | xargs)
+          ANY_CP_CHANGES="false"
+          [ -n "${SERVICES_TO_UPDATE}" ] && ANY_CP_CHANGES="true"
+
+          {
+            echo "services_to_update=${SERVICES_TO_UPDATE}"
+            echo "update_worker=${UPDATE_WORKER}"
+            echo "any_cp_changes=${ANY_CP_CHANGES}"
+            echo "new_tag=${NEW_TAG}"
+            echo "rollback_tag=${ROLLBACK_TAG}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "=== Detection summary ==="
+          echo "  CP services to update : ${SERVICES_TO_UPDATE:-none}"
+          echo "  Worker update needed  : ${UPDATE_WORKER}"
+          echo "  New image tag         : ${NEW_TAG}"
+          echo "  DB rollback tag       : ${ROLLBACK_TAG}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 2 — CP Service Update (build → import → helm upgrade → verify)
+# ─────────────────────────────────────────────────────────────────────────────
+  update-cp-services:
+    name: Build and Update CP Services
+    runs-on: openlab
+    needs: [detect-changes, provision-infrastructure]
+    if: needs.detect-changes.outputs.any_cp_changes == 'true'
+    env:
+      CP_VM_IP: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      NEW_TAG: ${{ needs.detect-changes.outputs.new_tag }}
+      ROLLBACK_TAG: ${{ needs.detect-changes.outputs.rollback_tag }}
+      SERVICES_TO_UPDATE: ${{ needs.detect-changes.outputs.services_to_update }}
+    outputs:
+      old_db_migrations_tag: ${{ steps.capture-state.outputs.old_db_migrations_tag }}
+      initial_helm_revision: ${{ steps.capture-state.outputs.initial_helm_revision }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve VM credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Log in to Azure Container Registry
+        env:
+          AZURE_SP_USERNAME: ${{ secrets.AZURE_SP_USERNAME }}
+          AZURE_SP_PASSWORD: ${{ secrets.AZURE_SP_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          az login --service-principal \
+            --username "${AZURE_SP_USERNAME}" \
+            --password "${AZURE_SP_PASSWORD}" \
+            --tenant "${AZURE_TENANT_ID}"
+          az acr login --name datamigratedev
+
+      # Step 0 — Capture state + stamp DB rollback tag (runs ONCE before any service upgrade)
+      - name: Capture state and stamp DB rollback tag
+        id: capture-state
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          # Locate the nightly image bundle on the CP VM, read the db-migrations tag directly
+          # from its manifest.json, then import all images into containerd.
+          # Using the tar as the source of truth avoids guessing the tag from an unrelated
+          # deployment (db-writer) and guarantees the image reference matches what containerd
+          # will have after the import.
+          OLD_DB_MIGRATIONS_TAG=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            TAR=\$(sudo bash -c 'ls /root/datamigrator-images-*.tar 2>/dev/null | head -1')
+            if [ -z \"\$TAR\" ]; then
+              echo 'ERROR: No image bundle found at /root/datamigrator-images-*.tar' >&2
+              exit 1
+            fi
+            sudo tar -xOf \"\$TAR\" manifest.json \
+              | jq -r '.[].RepoTags[]' \
+              | grep 'ndm-db-migrations:' \
+              | cut -d: -f2 \
+              | head -1
+          " 2>/dev/null || echo 'unknown')
+          OLD_DB_MIGRATIONS_TAG="${OLD_DB_MIGRATIONS_TAG:-unknown}"
+
+          if [ "${OLD_DB_MIGRATIONS_TAG}" = "unknown" ]; then
+            echo "ERROR: Could not determine OLD_DB_MIGRATIONS_TAG from tar bundle — aborting to prevent a broken Liquibase stamp/rollback"
+            exit 1
+          fi
+
+          echo "old_db_migrations_tag=${OLD_DB_MIGRATIONS_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "OLD_DB_MIGRATIONS_TAG=${OLD_DB_MIGRATIONS_TAG}" >> "${GITHUB_ENV}"
+          echo "Resolved db-migrations tag from tar bundle: ${OLD_DB_MIGRATIONS_TAG}"
+
+          # Import all images from the bundle into containerd.
+          # The Helm hook pod that runs db-migrations is ephemeral — its image gets
+          # garbage-collected by containerd after the pod completes, so we re-import
+          # from the bundle on every incremental run.
+          echo "Importing images from tar bundle into containerd..."
+          sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            TAR=\$(sudo bash -c 'ls /root/datamigrator-images-*.tar 2>/dev/null | head -1')
+            sudo microk8s ctr images import \"\$TAR\"
+          "
+          echo "ndm-db-migrations:${OLD_DB_MIGRATIONS_TAG} is ready in containerd"
+
+          # Fetch Postgres credentials from OpenBao
+          POSTGRES_USER=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo microk8s kubectl exec -n openbao openbao-0 -- \
+              bao kv get -format=json secrets/postgres-secrets/postgres-creds 2>/dev/null \
+              | jq -r '.data.POSTGRES_USER'
+          ")
+          POSTGRES_PASSWORD=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo microk8s kubectl exec -n openbao openbao-0 -- \
+              bao kv get -format=json secrets/postgres-secrets/postgres-creds 2>/dev/null \
+              | jq -r '.data.POSTGRES_PASSWORD'
+          ")
+
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+          echo "POSTGRES_USER=${POSTGRES_USER}" >> "${GITHUB_ENV}"
+          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> "${GITHUB_ENV}"
+
+          # Stamp the DB with a rollback tag that marks the exact schema state
+          # before any new Liquibase changesets run.
+          echo "Stamping Liquibase rollback tag '${ROLLBACK_TAG}' on DB..."
+          sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo microk8s kubectl run liquibase-tag-${NEW_TAG} -i --restart=Never \
+              -n datamigrator \
+              --image=ndm-db-migrations:${OLD_DB_MIGRATIONS_TAG} \
+              --overrides='{\"apiVersion\":\"v1\",\"metadata\":{\"annotations\":{\"sidecar.istio.io/inject\":\"false\"}}}' \
+              --env='LIQUIBASE_COMMAND_URL=jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator' \
+              --env='LIQUIBASE_COMMAND_USERNAME=${POSTGRES_USER}' \
+              --env='LIQUIBASE_COMMAND_PASSWORD=${POSTGRES_PASSWORD}' \
+              --env='LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME=datamigrator' \
+              --env='LIQUIBASE_LIQUIBASE_SCHEMA_NAME=liquibase' \
+              --env='LIQUIBASE_SEARCH_PATH=/app' \
+              --command -- liquibase tag '${ROLLBACK_TAG}'
+            sudo microk8s kubectl delete pod liquibase-tag-${NEW_TAG} \
+              -n datamigrator --ignore-not-found
+          "
+          echo "DB rollback tag '${ROLLBACK_TAG}' stamped successfully"
+
+          # Capture the current deployed Helm revision before any service upgrades.
+          # Used by fail-fast rollback and post-test rollback to restore the exact
+          # baseline state regardless of how many services were upgraded.
+          INITIAL_HELM_REVISION=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo KUBECONFIG=/var/snap/microk8s/current/credentials/client.config \
+              helm history datamigrator -n datamigrator --output json \
+              | python3 -c \"import json,sys; revs=json.load(sys.stdin); print(max(r['revision'] for r in revs if r['status']=='deployed'))\"
+          ")
+          echo "initial_helm_revision=${INITIAL_HELM_REVISION}" >> "${GITHUB_OUTPUT}"
+          echo "INITIAL_HELM_REVISION=${INITIAL_HELM_REVISION}" >> "${GITHUB_ENV}"
+          echo "Captured INITIAL_HELM_REVISION=${INITIAL_HELM_REVISION} (rollback target)"
+
+      # Steps 1–3 — For each changed CP service: build → import → upgrade → verify
+      - name: Build and deploy CP services
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+
+          for SERVICE in ${SERVICES_TO_UPDATE}; do
+            echo "================================================================="
+            echo "  Processing: ${SERVICE}  →  tag: ${NEW_TAG}"
+            echo "================================================================="
+
+            # Resolve image and build-context names for db-migrations (liquibase) special case
+            IMAGE_NAME="ndm-${SERVICE}"
+            BUILD_CONTEXT="services/${SERVICE}"
+            if [ "${SERVICE}" = "db-migrations" ]; then
+              IMAGE_NAME="ndm-db-migrations"
+              BUILD_CONTEXT="liquibase"
+            fi
+
+            # Capture OLD_TAG for this service (used by fail-fast rollback below)
+            OLD_TAG=$(sshpass -p "${VM_PASSWORD}" ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${CP_VM_IP}" "
+              sudo microk8s kubectl get deployment/${SERVICE} -n datamigrator \
+                -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
+                | cut -d: -f2
+            " 2>/dev/null || echo "${NEW_TAG}")
+            OLD_TAG="${OLD_TAG:-${NEW_TAG}}"
+            echo "  OLD_TAG: ${OLD_TAG}  →  NEW_TAG: ${NEW_TAG}"
+
+            # Step 1 — Build image and transfer to CP VM
+            echo "--- Step 1: Building ${IMAGE_NAME}:${NEW_TAG} from ${BUILD_CONTEXT}/ ---"
+            docker buildx build \
+              --platform linux/amd64 \
+              --secret id=git_token,env=GITOPS_USER_GITHUB_TOKEN \
+              -t "${IMAGE_NAME}:${NEW_TAG}" \
+              --load \
+              "${BUILD_CONTEXT}/"
+
+            docker save "${IMAGE_NAME}:${NEW_TAG}" | gzip > "/tmp/${IMAGE_NAME}-${NEW_TAG}.tar.gz"
+
+            sshpass -p "${VM_PASSWORD}" scp \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "/tmp/${IMAGE_NAME}-${NEW_TAG}.tar.gz" \
+              "${VM_USERNAME}@${CP_VM_IP}:/tmp/"
+
+            # Import is additive — OLD_TAG image stays in containerd for rollback
+            sshpass -p "${VM_PASSWORD}" ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${CP_VM_IP}" "
+              gunzip -c /tmp/${IMAGE_NAME}-${NEW_TAG}.tar.gz | sudo microk8s ctr images import -
+              rm -f /tmp/${IMAGE_NAME}-${NEW_TAG}.tar.gz
+            "
+            rm -f "/tmp/${IMAGE_NAME}-${NEW_TAG}.tar.gz"
+
+            # Step 2 — Helm upgrade (--reuse-values preserves all other service tags)
+            echo "--- Step 2: Helm upgrade  --set '${SERVICE}.image.tag=${NEW_TAG}' ---"
+            sshpass -p "${VM_PASSWORD}" ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${CP_VM_IP}" "
+              CHART=\$(sudo bash -c 'ls /root/datamigrator-helmchart-*.tgz 2>/dev/null | head -1 || echo /root/helm-chart.tgz')
+              sudo KUBECONFIG=/var/snap/microk8s/current/credentials/client.config \
+                helm upgrade --install datamigrator -n datamigrator \
+                "\$CHART" \
+                --set '${SERVICE}.image.tag=${NEW_TAG}' \
+                --reuse-values \
+                --timeout 15m
+            "
+
+            # Step 3 — Verify rollout; fail-fast rollback on bad deploy
+            # db-migrations is a Liquibase Job, not a long-lived Deployment — skip rollout check
+            if [ "${SERVICE}" != "db-migrations" ]; then
+              echo "--- Step 3: Verifying rollout for deployment/${SERVICE} ---"
+              if ! sshpass -p "${VM_PASSWORD}" ssh \
+                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                "${VM_USERNAME}@${CP_VM_IP}" "
+                sudo microk8s kubectl rollout status deployment/${SERVICE} -n datamigrator --timeout=5m
+              "; then
+                echo "ERROR: Rollout failed for ${SERVICE} — initiating fail-fast rollback"
+
+                # Use NEW image if db-migrations was rebuilt this run (it has new changesets
+                # + their rollback SQL). Fall back to old nightly if db-migrations was not changed.
+                if echo "${SERVICES_TO_UPDATE}" | grep -q "db-migrations"; then
+                  DB_MIGRATIONS_ROLLBACK_IMAGE="ndm-db-migrations:${NEW_TAG}"
+                else
+                  DB_MIGRATIONS_ROLLBACK_IMAGE="ndm-db-migrations:${OLD_DB_MIGRATIONS_TAG}"
+                fi
+                echo "Using Liquibase rollback image: ${DB_MIGRATIONS_ROLLBACK_IMAGE}"
+
+                sshpass -p "${VM_PASSWORD}" ssh \
+                  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                  "${VM_USERNAME}@${CP_VM_IP}" "
+                  sudo microk8s kubectl scale deployment/db-writer deployment/jobs-service \
+                    -n datamigrator --replicas=0
+
+                  sudo microk8s kubectl run liquibase-rollback-${NEW_TAG} -i --restart=Never \
+                    -n datamigrator \
+                    --image=${DB_MIGRATIONS_ROLLBACK_IMAGE} \
+                    --overrides='{\"apiVersion\":\"v1\",\"metadata\":{\"annotations\":{\"sidecar.istio.io/inject\":\"false\"}}}' \
+                    --env='LIQUIBASE_COMMAND_URL=jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator' \
+                    --env='LIQUIBASE_COMMAND_USERNAME=${POSTGRES_USER}' \
+                    --env='LIQUIBASE_COMMAND_PASSWORD=${POSTGRES_PASSWORD}' \
+                    --env='LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME=datamigrator' \
+                    --env='LIQUIBASE_LIQUIBASE_SCHEMA_NAME=liquibase' \
+                    --env='LIQUIBASE_SEARCH_PATH=/app' \
+                    --command -- liquibase rollback '${ROLLBACK_TAG}'
+                  sudo microk8s kubectl delete pod liquibase-rollback-${NEW_TAG} \
+                    -n datamigrator --ignore-not-found
+
+                  sudo microk8s kubectl scale deployment/db-writer deployment/jobs-service \
+                    -n datamigrator --replicas=1
+
+                  sudo KUBECONFIG=/var/snap/microk8s/current/credentials/client.config \
+                    helm rollback datamigrator ${INITIAL_HELM_REVISION} -n datamigrator
+                "
+                exit 1
+              fi
+            fi
+
+            echo "  ✓ ${SERVICE} updated to ${NEW_TAG}"
+            echo ""
+          done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 3 — Linux Worker Update
+# ─────────────────────────────────────────────────────────────────────────────
+  update-linux-workers:
+    name: Build and Update Linux Workers
+    runs-on: openlab
+    needs: [detect-changes, provision-infrastructure]
+    if: needs.detect-changes.outputs.update_worker == 'true'
+    env:
+      LINUX_WORKER_IPS: ${{ join(fromJSON(needs.provision-infrastructure.outputs.linux_worker_ips), ',') }}
+      BINARY_NAME: 'dm-worker-linux-x64-v1.0.0'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Resolve VM credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Build Linux worker binary
+        working-directory: services/worker
+        run: |
+          npm ci
+          npm run build
+          npm install -g pkg
+          npm run pkg
+          echo "Linux binary built at: services/worker/pkg/worker-linux-x64"
+
+      - name: Deploy Linux worker binary to worker VMs
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          for WORKER_IP in ${LINUX_WORKER_IPS//,/ }; do
+            echo "=== Deploying Linux worker to ${WORKER_IP} ==="
+
+            sshpass -p "${VM_PASSWORD}" scp \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              services/worker/pkg/worker-linux-x64 \
+              "${VM_USERNAME}@${WORKER_IP}:/tmp/new-worker-binary"
+
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+            BRANCH="${{ github.ref_name }}"
+
+            sshpass -p "${VM_PASSWORD}" ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WORKER_IP}" "
+              # Backup current binary before swap
+              sudo cp /opt/datamigrator/binary/${BINARY_NAME} \
+                      /opt/datamigrator/binary/${BINARY_NAME}.bak
+
+              sudo systemctl stop datamigrator-worker
+              sudo mv /tmp/new-worker-binary /opt/datamigrator/binary/${BINARY_NAME}
+              sudo chmod +x /opt/datamigrator/binary/${BINARY_NAME}
+              sudo systemctl start datamigrator-worker
+
+              sleep 10
+              if ! systemctl is-active --quiet datamigrator-worker; then
+                echo 'Worker failed to start — rolling back to backup'
+                sudo systemctl stop datamigrator-worker
+                sudo cp /opt/datamigrator/binary/${BINARY_NAME}.bak \
+                        /opt/datamigrator/binary/${BINARY_NAME}
+                sudo systemctl start datamigrator-worker
+                exit 1
+              fi
+
+              # Write version marker so the binary is identifiable on the VM
+              echo 'pr-sha: ${SHORT_SHA} | branch: ${BRANCH} | updated: '\$(date -u '+%Y-%m-%d %H:%M:%S UTC') \
+                | sudo tee /opt/datamigrator/binary/${BINARY_NAME}.version > /dev/null
+              echo 'Worker updated and running on ${WORKER_IP}'
+            "
+            echo "  ✓ Linux worker ${WORKER_IP} updated (sha: ${SHORT_SHA})"
+          done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 4a — Build Windows Installer (windows-latest)
+# Builds the worker binary and packages it into an Inno Setup installer,
+# mirroring the build-windows-installer job in ndm-vm-image-build.yaml.
+# ─────────────────────────────────────────────────────────────────────────────
+  build-windows-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.update_worker == 'true' &&
+      (inputs.protocol == 'SMB' || inputs.protocol == 'Both')
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build Windows worker binary
+        working-directory: services/worker
+        shell: pwsh
+        run: |
+          npm install -g pkg
+          npm ci
+          npm run build
+          npm run pkg:windows
+          Write-Host "Windows binary built at: services/worker/pkg/worker-win-x64.exe"
+
+      - name: Prepare installer directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path wininstaller
+          New-Item -ItemType Directory -Force -Path wininstaller\redist
+          New-Item -ItemType Directory -Force -Path wininstaller\fluentd
+          Move-Item -Path "services\worker\pkg\worker-win-x64.exe" -Destination "wininstaller\worker.exe" -Force
+
+      - name: Copy repo files into installer directory
+        shell: pwsh
+        run: |
+          Copy-Item -Path "app-deployment\ansible\worker\roles\configure-worker\templates\worker.env.j2" -Destination "wininstaller\worker.env.j2" -Force
+          Copy-Item -Path "services\worker\wininstaller\installer.iss" -Destination "wininstaller\installer.iss" -Force
+          Copy-Item -Path "services\worker\wininstaller\service.xml" -Destination "wininstaller\service.xml" -Force
+          Copy-Item -Path "services\worker\wininstaller\fluentd.conf" -Destination "wininstaller\fluentd.conf" -Force
+          Copy-Item -Path "scripts\stamp-metadata.ps1" -Destination "wininstaller\stamp-metadata.ps1" -Force
+          Copy-Item -Path "scripts\README-stamp-metadata.md" -Destination "wininstaller\README-stamp-metadata.md" -Force
+
+      - name: Update installer version
+        shell: pwsh
+        run: |
+          $SHORT_SHA = "${env:GITHUB_SHA}".Substring(0, 7)
+          (Get-Content "wininstaller\installer.iss") -replace '#define ApplicationVersion ".*"', "#define ApplicationVersion `"$SHORT_SHA`"" | Set-Content "wininstaller\installer.iss"
+          Write-Host "Updated installer version to: $SHORT_SHA"
+
+      - name: Download WinSW
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "wininstaller\winsw.exe" -UseBasicParsing -TimeoutSec 120
+
+      - name: Download redistributables
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "wininstaller\redist\vc_redist.x64.exe" -UseBasicParsing -TimeoutSec 120
+          Invoke-WebRequest -Uri "https://s3.amazonaws.com/packages.treasuredata.com/5/windows/fluent-package-5.2.0-x64.msi" -OutFile "wininstaller\fluentd\fluent-package-5.2.0-x64.msi" -UseBasicParsing -TimeoutSec 120
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y
+
+      - name: Build Windows installer with Inno Setup
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "wininstaller\installer.iss"
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-installer-incremental
+          path: wininstaller\datamigrator-worker-setup.exe
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 4b — Windows Worker Update (deploy only)
+# Downloads the built installer artifact and deploys it to each Windows VM.
+# ─────────────────────────────────────────────────────────────────────────────
+  update-windows-workers:
+    name: Deploy Windows Installer to Workers
+    runs-on: openlab
+    needs: [detect-changes, build-windows-installer, provision-infrastructure]
+    if: |
+      needs.detect-changes.outputs.update_worker == 'true' &&
+      (inputs.protocol == 'SMB' || inputs.protocol == 'Both')
+    env:
+      WINDOWS_WORKER_IPS: ${{ join(fromJSON(needs.provision-infrastructure.outputs.windows_worker_ips), ',') }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Resolve VM credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-installer-incremental
+          path: .
+
+      - name: Rename installer to expected filename
+        run: mv datamigrator-worker-setup.exe windows-worker-installer.exe
+
+      - name: Deploy Windows installer to worker VMs
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          BRANCH="${{ github.ref_name }}"
+
+          for WIN_IP in ${WINDOWS_WORKER_IPS//,/ }; do
+            echo "=== Deploying Windows installer to ${WIN_IP} ==="
+
+            # Ensure C:\Temp exists and backup any existing installer (best-effort on first run)
+            SSHPASS="${VM_PASSWORD}" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WIN_IP}" \
+              "powershell -Command \"New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null; Copy-Item 'C:\\Temp\\windows-worker-installer.exe' 'C:\\Temp\\windows-worker-installer.exe.backup' -Force -ErrorAction SilentlyContinue\""
+
+            # SCP to home dir first (relative path avoids Windows drive-letter SCP issues)
+            SSHPASS="${VM_PASSWORD}" sshpass -e scp -O \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              windows-worker-installer.exe \
+              "${VM_USERNAME}@${WIN_IP}:windows-worker-installer.exe"
+
+            # Kill any running installer process (releases file lock), then copy to C:\Temp\ and clean up home dir
+            SSHPASS="${VM_PASSWORD}" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WIN_IP}" \
+              "powershell -Command \"Stop-Process -Name 'windows-worker-installer' -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'windows-worker-installer.tmp' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Copy-Item -Path (Join-Path \$HOME 'windows-worker-installer.exe') -Destination 'C:\\Temp\\windows-worker-installer.exe' -Force; Remove-Item -Path (Join-Path \$HOME 'windows-worker-installer.exe') -Force\""
+
+            # Write version marker so the installer is identifiable on the VM
+            SSHPASS="${VM_PASSWORD}" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WIN_IP}" \
+              "powershell -Command \"'pr-sha: ${SHORT_SHA} | branch: ${BRANCH} | updated: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' UTC' | Out-File -FilePath 'C:\\Temp\\windows-worker-installer.version' -Force -Encoding UTF8\""
+
+            echo "  ✓ Windows installer updated on ${WIN_IP} (sha: ${SHORT_SHA})"
+          done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 5 — Run e2e Tests
+# Runs after updates complete (or skips if updates were skipped — not failed).
+# VM IPs sourced from provision-infrastructure job outputs.
+# ─────────────────────────────────────────────────────────────────────────────
+  run-smb-tests:
+    name: Run SMB E2E Tests
+    runs-on: openlab
+    needs: [detect-changes, provision-infrastructure, update-cp-services, update-windows-workers]
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.update-cp-services.result != 'failure' &&
+      needs.update-windows-workers.result != 'failure' &&
+      (inputs.protocol == 'SMB' || inputs.protocol == 'Both')
+    env:
+      CLOUD_ENVIRONMENT: Azure
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || 'ontap' }}
+
+      JOB_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      CONFIG_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      ADMIN_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      KEYCLOAK_IP: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      NDM_VM_HOST: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.provision-infrastructure.outputs.windows_worker_ips), ',') }}
+      AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
+      AZURE_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_SMB_SOURCE_VOLUMES }}
+      AZURE_SMB_DEST_VOLUMES: ${{ vars.AZURE_SMB_DEST_VOLUMES }}
+      AZURE_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_DESTINATION_HOST_IP: ${{ vars.AZURE_SMB_DESTINATION_HOST_IP }}
+      AZURE_SMB_DOMAIN_NAME: ${{ vars.AZURE_SMB_DOMAIN_NAME }}
+      AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_SMB_SOURCE_POOL_NAME }}
+      AZURE_ANF_SMB_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_SMB_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_SMB_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_SMB_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_SMB_DEST_POOL_NAME: ${{ vars.AZURE_ANF_SMB_DEST_POOL_NAME }}
+      AZURE_AD_SMB_SOURCE_VOLUMES: ${{ vars.AZURE_AD_SMB_SOURCE_VOLUMES }}
+      AZURE_AD_SMB_SOURCE_HOST_IP: ${{ vars.AZURE_AD_SMB_SOURCE_HOST_IP }}
+      AZURE_SMB_PROTOCOL_USERNAME: ${{ secrets.AZURE_SMB_PROTOCOL_USERNAME }}
+      AZURE_SMB_PROTOCOL_PASSWORD: ${{ secrets.AZURE_SMB_PROTOCOL_PASSWORD }}
+
+      ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
+      ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
+      ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
+      ONTAP_SMB_DST_HOST_IP: ${{ vars.ONTAP_SMB_DST_HOST_IP }}
+      ONTAP_SRC_API_URL: ${{ vars.ONTAP_SRC_API_URL }}
+      ONTAP_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}
+      ONTAP_SRC_SVM_NAME: ${{ vars.ONTAP_SRC_SVM_NAME }}
+      ONTAP_DST_API_URL: ${{ vars.ONTAP_DST_API_URL }}
+      ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
+      ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
+
+      SMB_EXECUTABLE_FILENAME: 'C:\Temp\windows-worker-installer.exe'
+      BUILD_VERSION: ${{ needs.detect-changes.outputs.new_tag }}
+      REF_TYPE: branches
+      RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
+      PROTOCOL_TYPE: SMB
+      WIN_AD_DNS_SERVERS: ${{ vars.AZURE_WIN_DNS_SERVERS }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup VM and worker credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "::add-mask::${VM_PASSWORD}"
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> "${GITHUB_ENV}"
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> "${GITHUB_ENV}"
+          echo "AZURE_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> "${GITHUB_ENV}"
+          echo "AZURE_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> "${GITHUB_ENV}"
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> "${GITHUB_ENV}"
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> "${GITHUB_ENV}"
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+
+      - name: Run SMB E2E Tests
+        run: |
+          cd ndm-api-tests
+          chmod +x ./run-smb-azure-automation.sh
+          echo "Running SMB tests (clone provider: ${VOLUME_CLONE_PROVIDER})"
+          ./run-smb-azure-automation.sh --smoke --e2e --regression
+
+      - name: Upload SMB Test Reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-test-reports-smb-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+  run-nfs-tests:
+    name: Run NFS E2E Tests
+    runs-on: openlab
+    needs: [detect-changes, provision-infrastructure, update-cp-services, update-linux-workers]
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.update-cp-services.result != 'failure' &&
+      needs.update-linux-workers.result != 'failure' &&
+      (inputs.protocol == 'NFS' || inputs.protocol == 'Both')
+    env:
+      CLOUD_ENVIRONMENT: Azure
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || 'ontap' }}
+
+      JOB_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      CONFIG_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      ADMIN_SERVICE_URL: https://${{ needs.provision-infrastructure.outputs.cp_ip }}
+      KEYCLOAK_IP: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      NDM_VM_HOST: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.provision-infrastructure.outputs.linux_worker_ips), ',') }}
+      AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}
+      AZURE_NFS_SOURCE_VOLUMES: ${{ vars.AZURE_NFS_SOURCE_VOLUMES }}
+      AZURE_NFS_DEST_VOLUMES: ${{ vars.AZURE_NFS_DEST_VOLUMES }}
+      AZURE_NFS_SOURCE_HOST_IP: ${{ vars.AZURE_NFS_SOURCE_HOST_IP }}
+      AZURE_NFS_DESTINATION_HOST_IP: ${{ vars.AZURE_NFS_DESTINATION_HOST_IP }}
+      AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_SOURCE_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_SOURCE_POOL_NAME: ${{ vars.AZURE_ANF_NFS_SOURCE_POOL_NAME }}
+      AZURE_ANF_NFS_DEST_RESOURCE_GROUP: ${{ vars.AZURE_ANF_NFS_DEST_RESOURCE_GROUP }}
+      AZURE_ANF_NFS_DEST_ACCOUNT_NAME: ${{ vars.AZURE_ANF_NFS_DEST_ACCOUNT_NAME }}
+      AZURE_ANF_NFS_DEST_POOL_NAME: ${{ vars.AZURE_ANF_NFS_DEST_POOL_NAME }}
+      AZURE_NFS_PROTOCOL_USERNAME: ${{ vars.AZURE_NFS_PROTOCOL_USERNAME }}
+
+      ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
+      ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
+      ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
+      ONTAP_NFS_DST_HOST_IP: ${{ vars.ONTAP_NFS_DST_HOST_IP }}
+      ONTAP_SRC_API_URL: ${{ vars.ONTAP_SRC_API_URL }}
+      ONTAP_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}
+      ONTAP_SRC_SVM_NAME: ${{ vars.ONTAP_SRC_SVM_NAME }}
+      ONTAP_DST_API_URL: ${{ vars.ONTAP_DST_API_URL }}
+      ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
+      ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
+
+      BUILD_VERSION: ${{ needs.detect-changes.outputs.new_tag }}
+      REF_TYPE: branches
+      RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
+      PROTOCOL_TYPE: NFS
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup VM and worker credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "::add-mask::${VM_PASSWORD}"
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> "${GITHUB_ENV}"
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> "${GITHUB_ENV}"
+          echo "AZURE_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> "${GITHUB_ENV}"
+          echo "AZURE_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> "${GITHUB_ENV}"
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> "${GITHUB_ENV}"
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> "${GITHUB_ENV}"
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+
+      - name: Run NFS E2E Tests
+        run: |
+          cd ndm-api-tests
+          chmod +x ./run-nfs-azure-automation.sh
+          echo "Running NFS tests (clone provider: ${VOLUME_CLONE_PROVIDER})"
+          ./run-nfs-azure-automation.sh --smoke --e2e --regression
+
+      - name: Upload NFS Test Reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-test-reports-nfs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 6 — Post-Test Rollback
+# Only runs when cleanup_vms == 'false' (VMs are kept for reuse).
+# When VMs are destroyed by cleanup-infrastructure, rollback is not needed.
+# Rolls back CP (Helm + Liquibase) and workers (binary / installer backup swap).
+# ─────────────────────────────────────────────────────────────────────────────
+  post-test-rollback:
+    name: Post-Test Rollback
+    runs-on: openlab
+    needs:
+      - detect-changes
+      - provision-infrastructure
+      - update-cp-services
+      - update-linux-workers
+      - update-windows-workers
+      - run-smb-tests
+      - run-nfs-tests
+    if: |
+      always() &&
+      !cancelled() &&
+      inputs.skip_rollback != 'true' &&
+      inputs.cleanup_vms != 'true'
+    env:
+      CP_VM_IP: ${{ needs.provision-infrastructure.outputs.cp_ip }}
+      LINUX_WORKER_IPS: ${{ join(fromJSON(needs.provision-infrastructure.outputs.linux_worker_ips), ',') }}
+      WINDOWS_WORKER_IPS: ${{ join(fromJSON(needs.provision-infrastructure.outputs.windows_worker_ips), ',') }}
+      NEW_TAG: ${{ needs.detect-changes.outputs.new_tag }}
+      ROLLBACK_TAG: ${{ needs.detect-changes.outputs.rollback_tag }}
+      ANY_CP_CHANGES: ${{ needs.detect-changes.outputs.any_cp_changes }}
+      UPDATE_WORKER: ${{ needs.detect-changes.outputs.update_worker }}
+      SERVICES_TO_UPDATE: ${{ needs.detect-changes.outputs.services_to_update }}
+      OLD_DB_MIGRATIONS_TAG: ${{ needs.update-cp-services.outputs.old_db_migrations_tag }}
+      INITIAL_HELM_REVISION: ${{ needs.update-cp-services.outputs.initial_helm_revision }}
+      BINARY_NAME: 'dm-worker-linux-x64-v1.0.0'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Resolve VM credentials
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      # CP rollback: Helm rollback to previous revision + Liquibase rollback to stamped tag
+      - name: Rollback CP services
+        if: env.ANY_CP_CHANGES == 'true'
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          echo "=== CP Rollback: reverting Helm release to revision ${INITIAL_HELM_REVISION} ==="
+          sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo KUBECONFIG=/var/snap/microk8s/current/credentials/client.config \
+              helm rollback datamigrator ${INITIAL_HELM_REVISION} -n datamigrator
+          "
+
+          # Re-fetch Postgres credentials from OpenBao (cannot be passed between jobs securely)
+          POSTGRES_USER=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo microk8s kubectl exec -n openbao openbao-0 -- \
+              bao kv get -format=json secrets/postgres-secrets/postgres-creds 2>/dev/null \
+              | jq -r '.data.POSTGRES_USER'
+          ")
+          POSTGRES_PASSWORD=$(sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            sudo microk8s kubectl exec -n openbao openbao-0 -- \
+              bao kv get -format=json secrets/postgres-secrets/postgres-creds 2>/dev/null \
+              | jq -r '.data.POSTGRES_PASSWORD'
+          ")
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+
+          # Use NEW image if db-migrations was rebuilt this run (it has new changesets
+          # + their rollback SQL). Fall back to old nightly if db-migrations was not changed.
+          if echo "${SERVICES_TO_UPDATE}" | grep -q "db-migrations"; then
+            DB_MIGRATIONS_ROLLBACK_IMAGE="ndm-db-migrations:${NEW_TAG}"
+          else
+            DB_MIGRATIONS_ROLLBACK_IMAGE="ndm-db-migrations:${OLD_DB_MIGRATIONS_TAG}"
+          fi
+          echo "Using Liquibase rollback image: ${DB_MIGRATIONS_ROLLBACK_IMAGE}"
+
+          echo "=== CP Rollback: reverting DB schema to tag '${ROLLBACK_TAG}' ==="
+          sshpass -p "${VM_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "${VM_USERNAME}@${CP_VM_IP}" "
+            # Stop DB-writing pods before reverting schema
+            sudo microk8s kubectl scale deployment/db-writer deployment/jobs-service \
+              -n datamigrator --replicas=0
+
+            sudo microk8s kubectl run liquibase-rollback-${NEW_TAG} -i --restart=Never \
+              -n datamigrator \
+              --image=${DB_MIGRATIONS_ROLLBACK_IMAGE} \
+              --overrides='{\"apiVersion\":\"v1\",\"metadata\":{\"annotations\":{\"sidecar.istio.io/inject\":\"false\"}}}' \
+              --env='LIQUIBASE_COMMAND_URL=jdbc:postgresql://postgresql.postgres.svc.cluster.local:5432/datamigrator' \
+              --env='LIQUIBASE_COMMAND_USERNAME=${POSTGRES_USER}' \
+              --env='LIQUIBASE_COMMAND_PASSWORD=${POSTGRES_PASSWORD}' \
+              --env='LIQUIBASE_COMMAND_DEFAULT_SCHEMA_NAME=datamigrator' \
+              --env='LIQUIBASE_LIQUIBASE_SCHEMA_NAME=liquibase' \
+              --env='LIQUIBASE_SEARCH_PATH=/app' \
+              --command -- liquibase rollback '${ROLLBACK_TAG}'
+            sudo microk8s kubectl delete pod liquibase-rollback-${NEW_TAG} \
+              -n datamigrator --ignore-not-found
+
+            sudo microk8s kubectl scale deployment/db-writer deployment/jobs-service \
+              -n datamigrator --replicas=1
+          "
+          echo "  ✓ CP rollback complete"
+
+      # Linux worker rollback: restore binary from .bak if present
+      - name: Rollback Linux workers
+        if: env.UPDATE_WORKER == 'true'
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          for WORKER_IP in ${LINUX_WORKER_IPS//,/ }; do
+            echo "=== Rolling back Linux worker: ${WORKER_IP} ==="
+            sshpass -p "${VM_PASSWORD}" ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WORKER_IP}" "
+              if [ -f /opt/datamigrator/binary/${BINARY_NAME}.bak ]; then
+                sudo systemctl stop datamigrator-worker
+                sudo cp /opt/datamigrator/binary/${BINARY_NAME}.bak \
+                        /opt/datamigrator/binary/${BINARY_NAME}
+                sudo systemctl start datamigrator-worker
+                # Remove PR version marker — binary is now back to nightly baseline
+                sudo rm -f /opt/datamigrator/binary/${BINARY_NAME}.version
+                echo 'Linux worker rolled back to nightly baseline'
+              else
+                echo 'No backup found — worker was not changed this run, skipping'
+              fi
+            "
+          done
+
+      # Windows worker rollback: restore installer from .backup if present
+      - name: Rollback Windows workers
+        if: env.UPDATE_WORKER == 'true'
+        run: |
+          echo "::add-mask::${VM_PASSWORD}"
+
+          for WIN_IP in ${WINDOWS_WORKER_IPS//,/ }; do
+            echo "=== Rolling back Windows worker: ${WIN_IP} ==="
+            SSHPASS="${VM_PASSWORD}" sshpass -e ssh \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              "${VM_USERNAME}@${WIN_IP}" \
+              "powershell -Command \"if (Test-Path 'C:\\Temp\\windows-worker-installer.exe.backup') { Copy-Item 'C:\\Temp\\windows-worker-installer.exe.backup' 'C:\\Temp\\windows-worker-installer.exe' -Force; Remove-Item 'C:\\Temp\\windows-worker-installer.version' -Force -ErrorAction SilentlyContinue; Write-Host 'Windows installer rolled back to nightly baseline' } else { Write-Host 'No backup found — installer was not changed this run, skipping' }\""
+          done
+
+      - name: Rollback summary
+        run: |
+          echo "=== Post-Test Rollback Summary ==="
+          echo "  CP rollback performed  : ${ANY_CP_CHANGES:-false}"
+          echo "  Worker rollback        : ${UPDATE_WORKER:-false}"
+          echo "  DB tag rolled back to  : ${ROLLBACK_TAG}"
+          echo "Pool VMs are restored to pre-PR state and ready for the next run."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Part 7 — Cleanup Infrastructure
+# Destroys all Azure VMs created by provision-infrastructure via terraform destroy.
+# Only runs when cleanup_vms == 'true' (default).
+# ─────────────────────────────────────────────────────────────────────────────
+  cleanup-infrastructure:
+    name: Cleanup Azure Infrastructure
+    runs-on: openlab
+    needs:
+      - provision-infrastructure
+      - update-cp-services
+      - update-linux-workers
+      - update-windows-workers
+      - run-smb-tests
+      - run-nfs-tests
+      - post-test-rollback
+    if: always() && inputs.cleanup_vms == 'true'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure Azure credentials and Terraform variables
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          echo "::add-mask::$VM_PASSWORD"
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_SP_USERNAME }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_SP_PASSWORD }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_control_plane_image_version=${{ inputs.control_plane_image_version }}" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image_version=${{ inputs.worker_image_version }}" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+          echo "TF_VAR_vm_owner=${{ needs.provision-infrastructure.outputs.vm_owner }}" >> $GITHUB_ENV
+          echo "TF_DIR=app-deployment/terraform/azure/environments/api" >> $GITHUB_ENV
+
+      - name: Download Terraform State
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: terraform-state-incremental
+          path: ${{ env.TF_DIR }}
+
+      - name: Initialize Terraform for Cleanup
+        run: |
+          cd $TF_DIR
+          terraform init
+
+      - name: Destroy Terraform Resources
+        run: |
+          cd $TF_DIR
+          terraform destroy -auto-approve

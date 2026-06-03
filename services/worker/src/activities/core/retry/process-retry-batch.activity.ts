@@ -4,11 +4,13 @@ import { Context } from '@temporalio/activity';
 import { uuid4 } from '@temporalio/workflow';
 import { ErrorType, JobManagerContext, Cmd, TaskInfo, TaskStatus, TaskType, CommandStatus } from "@netapp-cloud-datamigrate/jobs-lib";
 import { LoggerService, LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { RedisService } from "src/redis/redis.service";
 import { dmError } from "src/activities/utils/utils";
-import { Origin, Operation } from "src/activities/utils/utils.types";
+import { Operation, Origin } from "src/activities/utils/utils.types";
+import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan/scan-utils";
 import { CommandGenerationService, RedisSetLookup } from "../shared/command-generation.service";
 import { DirStreamingService } from "../shared/dir-streaming.service";
 import { DeferredDirStampService } from "../shared/deferred-dir-stamp.service";
@@ -205,6 +207,7 @@ export class ProcessRetryBatchActivity {
       this.logger.debug(`Scanning directories from batch ${batchId} for job ${jobRunId}`);
 
       const jobContext = await this.redisService.getJobManagerContext(jobRunId);
+      const preserveAccessTime = jobContext.jobConfig?.options?.preserveAccessTime;
 
       // Retrieve directory commands from Redis (Cmd[] with IDs, not string[])
       const dirCommands: Cmd[] = await jobContext.getBatchDir(batchId);
@@ -243,6 +246,19 @@ export class ProcessRetryBatchActivity {
           const targetLookup = new RedisSetLookup(jobContext, targetRedisKey);
           let dirItemCount = 0;
 
+          // Capture source directory stat before streamDirEntries (which calls opendir
+          // internally) so we can restore atime after iteration completes.
+          let sourceDirStat: fs.Stats | undefined;
+          if (preserveAccessTime) {
+            try {
+              sourceDirStat = await captureSourceDirAtimeStat(sourceDirPath, this.logger);
+            } catch (err) {
+              const dmErr = dmError('OPERATION', Origin.SOURCE, Operation.READ_DIR, ErrorType.TRANSIENT_ERROR, command.id, err, { name: command.fPath, path: sourceDirPath });
+              await jobContext.publishToErrorStream(dmErr);
+              throw err;
+            }
+          }
+
           // Stream source directory entries in batches via opendir()
           for await (const batch of this.dirStreamingService.streamDirEntries(sourceDirPath)) {
             const items = batch.map(name => ({ name }));
@@ -267,6 +283,10 @@ export class ProcessRetryBatchActivity {
             }
             
             allSubDirs.push(...result.subDirs);
+          }
+
+          if (sourceDirStat) {
+            await preserveSourceDirAtime(sourceDirPath, sourceDirStat, jobContext, command, this.logger, ErrorType.TRANSIENT_ERROR);
           }
           
           this.logger.debug(

@@ -1,0 +1,48 @@
+#!/bin/bash
+# Hybrid /ndm-logs retention: only delete date directories older than
+# {{ ndm_logs_retention_days }} days when total size exceeds {{ ndm_logs_size_threshold_gb }} GB.
+# Directories are deleted oldest-first and deletion stops as soon as the
+# total drops back below the threshold. Directories younger than
+# {{ ndm_logs_retention_days }} days are never deleted regardless of size.
+set -euo pipefail
+
+NDM_LOGS_DIR=/ndm-logs
+THRESHOLD_BYTES=$(( {{ ndm_logs_size_threshold_gb }} * 1024 * 1024 * 1024 ))
+RETENTION_DAYS={{ ndm_logs_retention_days }}
+
+if [ ! -d "$NDM_LOGS_DIR" ]; then
+  echo "$NDM_LOGS_DIR does not exist yet. Nothing to clean up."
+  exit 0
+fi
+
+current_size=$(du -sb "$NDM_LOGS_DIR" 2>/dev/null | cut -f1 || echo 0)
+
+if [ "$current_size" -le "$THRESHOLD_BYTES" ]; then
+  echo "ndm-logs ${current_size} bytes is within the ${THRESHOLD_BYTES} byte threshold. No cleanup needed."
+  exit 0
+fi
+
+echo "ndm-logs ${current_size} bytes exceeds threshold. Deleting date dirs older than ${RETENTION_DAYS} days, oldest first..."
+
+# Collect candidate dirs into an array before iterating. Using a pipe with
+# 'while ... break' under pipefail causes SIGPIPE on the upstream 'sort'
+# process when the loop exits early, making the pipeline return non-zero and
+# the systemd service report failure even though cleanup succeeded.
+mapfile -t candidate_dirs < <(
+  find "$NDM_LOGS_DIR" -maxdepth 1 -mindepth 1 -type d \
+    -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' \
+    -mtime +${RETENTION_DAYS} | sort
+)
+
+for dir in "${candidate_dirs[@]}"; do
+  current_size=$(du -sb "$NDM_LOGS_DIR" 2>/dev/null | cut -f1 || echo 0)
+  if [ "$current_size" -le "$THRESHOLD_BYTES" ]; then
+    echo "Size now ${current_size} bytes, below threshold. Stopping."
+    break
+  fi
+  dir_size=$(du -sh "$dir" 2>/dev/null | cut -f1 || echo "?")
+  echo "Deleting $dir (${dir_size})"
+  rm -rf "$dir"
+done
+
+echo "Cleanup complete. Current size: $(du -sh "$NDM_LOGS_DIR" 2>/dev/null | cut -f1 || echo "?")."

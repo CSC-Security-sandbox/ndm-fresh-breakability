@@ -225,12 +225,9 @@ class PersistentShell extends EventEmitter {
             }
         }, cmd.timeout);
         
-        // Clear any potential state contamination and reset PowerShell variables
         const stateResetCmd = `
 $ErrorActionPreference = 'Stop'
 $Error.Clear()
-Remove-Variable -Name * -Force -ErrorAction SilentlyContinue
-[System.GC]::Collect()
 `;
         
         // Wrap command with state isolation and error handling
@@ -451,7 +448,9 @@ export class WinShellService implements OnModuleInit, OnModuleDestroy {
 
         // Detect ACL operations and adjust timeout
         const isAclOperation = command.includes('Set-FileSecurityFast') || command.includes('$aclJson') || command.includes('Get-Acl') || command.includes('Set-Acl');
-        const adjustedTimeout = isAclOperation ? Math.max(timeout, 90000) : timeout; // Minimum 90s for ACL operations
+        const aclTimeoutRaw = Number(process.env.ACL_CMD_TIMEOUT_MS);
+        const aclTimeout = Number.isFinite(aclTimeoutRaw) ? aclTimeoutRaw : 90000;
+        const adjustedTimeout = isAclOperation ? Math.max(timeout, aclTimeout) : timeout;
 
         if (target.getQueueLength() >= this.maxQueuePerShell) {
             if (this.dropWhenFull) {

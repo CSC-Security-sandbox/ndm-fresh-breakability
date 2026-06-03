@@ -51,3 +51,30 @@
     content: |
       127.0.0.1 api.snapcraft.io
   when: microk8s_disable_snap_autoupdate
+
+# Cap container log file size so snap/microk8s pod logs don't grow unboundedly.
+# Fluentd reads pod logs continuously into its on-disk buffer.
+# kubelet requires a microk8s restart to pick up new args (see task 4.8).
+- name: 4.7. Set kubelet container log rotation args
+  become: yes
+  lineinfile:
+    path: /var/snap/microk8s/current/args/kubelet
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    create: yes
+  loop:
+    - regexp: "^--container-log-max-size="
+      line: "--container-log-max-size={{ container_log_max_size }}"
+    - regexp: "^--container-log-max-files="
+      line: "--container-log-max-files={{ container_log_max_files }}"
+  register: kubelet_args_result
+
+# Restart only when the args file actually changed. On fresh installs this
+# runs before any application pods are deployed, so it is safe.
+# without a kubelet restart and the node will accumulate unbounded log files
+# until the next natural reboot otherwise.
+- name: 4.8. Restart MicroK8s to apply kubelet log-rotation args
+  become: yes
+  shell: microk8s stop && microk8s start
+  when: kubelet_args_result.changed
+

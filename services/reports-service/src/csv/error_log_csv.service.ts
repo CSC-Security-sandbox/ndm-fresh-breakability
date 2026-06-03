@@ -27,7 +27,7 @@ import {
  * Error types that should be visible to users
  * RECOVERABLE_ERROR is excluded as it's handled internally through retry mechanism
  */
-const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR', 'METADATA_UPDATE_CONFLICT'] as const;
+const USER_VISIBLE_ERROR_TYPES = ['FATAL_ERROR', 'TRANSIENT_ERROR'] as const;
 
 @Injectable()
 export class ErrorLogService {

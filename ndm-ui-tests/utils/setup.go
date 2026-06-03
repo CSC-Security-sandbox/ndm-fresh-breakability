@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -113,6 +114,14 @@ type keycloakCreds struct {
 }
 
 func getKeycloakCredentials() (keycloakCreds, error) {
+	// Fast path: if NDM_KEYCLOAK_CLIENT_SECRET is set directly, skip the
+	// OpenBao SSH entirely. Useful when running tests from a machine that
+	// cannot SSH into the control plane (e.g. local dev behind VPN/Tailscale).
+	if secret := config.KeycloakClientSecret; secret != "" {
+		logSetup("Using NDM_KEYCLOAK_CLIENT_SECRET from env (skipping OpenBao SSH)")
+		return keycloakCreds{ClientSecret: secret}, nil
+	}
+
 	vaultToken, err := getOpenBaoRootToken()
 	if err != nil {
 		return keycloakCreds{}, err
@@ -598,6 +607,14 @@ func InitTestEnv() error {
 	logSetup("Initializing test environment...")
 	logSetup("Control plane: %s", cpHost())
 
+	// Skip full setup for local testing against an existing CP with
+	// pre-configured projects and workers.
+	if os.Getenv("NDM_SKIP_SETUP") == "true" {
+		logSetup("NDM_SKIP_SETUP=true — skipping project creation and worker registration")
+		logSetup("Using existing project and workers on the CP")
+		return nil
+	}
+
 	// 1. Keycloak credentials from OpenBao
 	logSetup("Step 1/6: Retrieving Keycloak credentials from OpenBao...")
 	creds, err := getKeycloakCredentials()
@@ -674,6 +691,13 @@ func InitTestEnv() error {
 	logSetup("Step 7/7: Waiting for %d worker(s) to come online...", len(allWorkerIDs))
 	if err := pollWorkersOnline(SetupProjectID, SetupAuthToken, allWorkerIDs); err != nil {
 		return fmt.Errorf("poll workers: %w", err)
+	}
+
+	// 8. Domain-join SMB worker if configured (required for AD/SMB operations)
+	if len(SetupSMBWorkerIDs) > 0 {
+		if err := EnsureSMBWorkerDomainJoined(); err != nil {
+			return fmt.Errorf("SMB worker domain join: %w", err)
+		}
 	}
 
 	logSetup("═══════════════════════════════════════════════════════════")
