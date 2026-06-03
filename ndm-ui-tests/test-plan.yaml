@@ -82,4 +82,5 @@ suites:
     parallel: 1          # sequential — depends on completed migration
     timeout: 60m
     tests:
-      TestCutover_BasicNFS: true    # Baseline NFS migration + Bulk Cutover → Blocked → Review & Approve → Approved state
+      TestCutover_BasicNFS: false   # Baseline NFS migration + Bulk Cutover → Blocked → Review & Approve → Approved state
+      TestCutover_BasicSMB: true    # Baseline SMB migration + Bulk Cutover → Blocked → Review & Approve → Approved state
