@@ -203,7 +203,9 @@ export class WinOperationService {
   ): boolean {
     let payload: SetAclPayload | null = null;
     if (stdout) {
-      try { payload = JSON.parse(stdout); } catch { /* leave null */ }
+      try { payload = JSON.parse(stdout); } catch { 
+        this.logger.error(`Failed to parse Set ACL result for ${targetPath}: ${stdout}`);
+       }
     }
 
     payload?.unresolved_sids?.forEach((sid) => {
