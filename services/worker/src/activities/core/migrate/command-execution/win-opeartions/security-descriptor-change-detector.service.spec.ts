@@ -1724,44 +1724,49 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(transformed.DaclAces[1].AceFlags & 0x10).toBe(0);
       });
 
-      it('L2 transformed expected vs dest still holding INH bit -> drift', () => {
+      it('L2 transformed expected vs dest still holding INH bit -> drift (inherited ACE on dest filtered, explicit-converted ACE on expected missing)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_EXPLICIT,
         );
         const dest = sdWithMix(); // dest still has INH bit on inherited ACE
         const result = service.securityDescriptorEquals(transformed as any, dest as any);
+        // After transform, expected has 2 explicit ACEs. Dest has 1 explicit + 1 inherited.
+        // Gate filters inherited from dest → sees 2 expected vs 1 actual → missing ACE.
         expect(result.equal).toBe(false);
-        expect(result.reason?.field).toBe('aceFieldDiff');
+        expect(result.reason?.field).toBe('aceMissingOnDestination');
       });
 
-      it('L3 INHERIT_PERMS_AS_IS: inherited ACEs dropped from expected', () => {
+      it('L3 INHERIT_PERMS_AS_IS: ACL returned unchanged (no filtering)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
         );
-        expect(transformed.DaclAces).toHaveLength(1);
+        expect(transformed.DaclAces).toHaveLength(2);
         expect(transformed.DaclAces[0].Sid).toBe('SidX');
+        expect(transformed.DaclAces[1].Sid).toBe('SidY');
       });
 
-      it('L4 INHERIT_PERMS_AS_IS: dest still has inherited -> extra ACE', () => {
+      it('L4 INHERIT_PERMS_AS_IS: dest inherited ACE invisible to gate (filtered) -> equal', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           SmbPermissionInheritanceMode.INHERIT_PERMS_AS_IS,
         );
         const dest = sdWithMix();
         const result = service.securityDescriptorEquals(transformed as any, dest as any);
-        expect(result.equal).toBe(false);
-        expect(result.reason?.field).toBe('aceExtraOnDestination');
+        // After transform, expected has 1 explicit ACE. Dest has 1 explicit + 1 inherited.
+        // Gate filters inherited from dest → sees 1 vs 1, both explicit and matching → equal.
+        expect(result.equal).toBe(true);
       });
 
-      it('L7 unknown mode behaves like INHERIT_PERMS_AS_IS (drop inherited)', () => {
+      it('L7 unknown mode behaves like INHERIT_PERMS_AS_IS (returns unchanged)', () => {
         const transformed = winOperationService.applySmbInheritanceModeTransform(
           sdWithMix(),
           'UNKNOWN_MODE' as SmbPermissionInheritanceMode,
         );
-        expect(transformed.DaclAces).toHaveLength(1);
+        expect(transformed.DaclAces).toHaveLength(2);
         expect(transformed.DaclAces[0].Sid).toBe('SidX');
+        expect(transformed.DaclAces[1].Sid).toBe('SidY');
       });
 
       it('L-extra DaclAces undefined -> SD returned unchanged', () => {
@@ -2112,13 +2117,14 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         expect(validate.inValid).toBe('');
       });
 
-      it('R2 KNOWN DIVERGENCE: dest has extra ACE -> gate flags, validate silent', async () => {
+      it('R2 dest has extra ACE -> both gate and validate flag it', async () => {
         const A = mkAce({ Sid: 'S-1-5-21-A' });
         const B = mkAce({ Sid: 'S-1-5-21-B' });
         const { gate, validate } = await runRow([A], [A, B]);
         expect(gate.equal).toBe(false);
         expect(gate.reason?.field).toBe('aceExtraOnDestination');
-        expect(validate.inValid).toBe('');
+        expect(validate.inValid).not.toBe('');
+        expect(validate.inValid).toContain('Extra ACE in target');
       });
 
       it('R3 dest mask is superset -> gate flags drift, validate also flags (both strict equality)', async () => {

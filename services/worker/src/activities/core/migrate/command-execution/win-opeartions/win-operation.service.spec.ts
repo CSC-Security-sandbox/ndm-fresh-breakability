@@ -1225,7 +1225,8 @@ describe('WinOperationService', () => {
       const result = await service.validateAclOperation(acl1, acl2);
 
       expect(result.inValid).toBe(
-        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0), AceFlags(0x0). ',
+        'Missing ACE in target: SID(S-1-5-21-user), AccessMask(2032127), AceType(0), AceFlags(0x0). ' +
+        'Extra ACE in target: SID(S-1-5-21-user), AccessMask(1048576), AceType(0), AceFlags(0x0). ',
       );
     });
 
@@ -1733,7 +1734,7 @@ describe('WinOperationService', () => {
       expect(acl.DaclAces[1].IsInherited).toBe(true);
     });
 
-    it('INHERIT_PERMS_AS_IS: strips all inherited ACEs, keeps only explicit ones', () => {
+    it('INHERIT_PERMS_AS_IS: returns ACL unchanged (no filtering)', () => {
       const acl = baseAcl();
       const result = service.applySmbInheritanceMode(
         acl,
@@ -1742,13 +1743,11 @@ describe('WinOperationService', () => {
         'C:\\src',
       );
 
-      expect(result.DaclAces).toHaveLength(1);
-      expect(result.DaclAces[0].IsInherited).toBe(false);
-      // pure: input ACL is not mutated
-      expect(acl.DaclAces).toHaveLength(2);
+      expect(result.DaclAces).toHaveLength(2);
+      expect(result).toBe(acl);
     });
 
-    it('unknown mode falls back to INHERIT_PERMS_AS_IS behaviour (strips inherited ACEs)', () => {
+    it('unknown mode falls back to INHERIT_PERMS_AS_IS behaviour (returns unchanged)', () => {
       const acl = baseAcl();
       const result = service.applySmbInheritanceMode(
         acl,
@@ -1757,8 +1756,8 @@ describe('WinOperationService', () => {
         'C:\\src',
       );
 
-      expect(result.DaclAces).toHaveLength(1);
-      expect(result.DaclAces[0].IsInherited).toBe(false);
+      expect(result.DaclAces).toHaveLength(2);
+      expect(result).toBe(acl);
     });
 
     it('returns acl unchanged when DaclAces is absent', () => {
@@ -1897,11 +1896,9 @@ describe('WinOperationService', () => {
 
       await service.stampAclOperation({ command, jobContext: jobCtx, sourcePath: 'C:\\src', targetPath: 'C:\\dst' } as any);
 
-      // sourceAcl = filteredAcl (only explicitAce), targetAcl = destAcl.
-      // Third arg is the optional logContext (workflowId/source/target paths)
-      // used purely for the post-stamp validation mismatch log line.
+      // INHERIT_PERMS_AS_IS returns acl unchanged, so all ACEs are passed through.
       expect(validateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ DaclAces: [explicitAce] }),
+        expect.objectContaining({ DaclAces: [explicitAce, inheritedAce1, inheritedAce2] }),
         destAcl,
         { workflowId: 'test-job', sourcePath: 'C:\\src', targetPath: 'C:\\dst' },
       );

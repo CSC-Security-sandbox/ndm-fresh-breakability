@@ -15,6 +15,12 @@ type ComparableAce = Pick<Ace, 'Sid' | 'AccessMask' | 'AceType' | 'AceFlags'>;
  * drop ACE types we don't stamp (audit / object ACEs — `AceType` other than
  * 0 = AccessAllowed and 1 = AccessDenied).
  *
+ * Inherited ACEs (`IsInherited=true` / AceFlags bit 0x10) are excluded from
+ * comparison because they are controlled by the parent's DACL and the Windows
+ * inheritance engine — not by what NDM stamps. Including them causes
+ * false-positive drift when source and destination share roots have different
+ * inheritable ACEs, leading to infinite re-stamp loops on every incremental.
+ *
  * Order is preserved as read from the security descriptor. Windows DACLs
  * are order-sensitive (first-match decides access, and the canonical-order
  * convention assigns semantic positions to Explicit Deny / Explicit Allow /
@@ -27,6 +33,7 @@ function getComparableAces(aces: Ace[] | null | undefined): ComparableAce[] {
   const result: ComparableAce[] = [];
   for (const a of aces) {
     if (a.AceType !== 0 && a.AceType !== 1) continue;
+    if (a.IsInherited) continue;
     result.push({
       Sid: a.Sid,
       AccessMask: a.AccessMask,
