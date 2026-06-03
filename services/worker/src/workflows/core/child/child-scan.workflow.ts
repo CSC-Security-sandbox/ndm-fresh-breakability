@@ -4,7 +4,7 @@ import { CommonTaskService } from 'src/activities/core/common/common-task.servic
 import { ScanService } from 'src/activities/core/scan/scan-activity.service';
 import { JobRunStatus } from "src/activities/common/enums";
 import { updateJobStatusIfNotRunning, validateCommandStreamLength, validateFileStreamLength } from '../common/workflow-utils';
-import { ITERATIONS_LIMIT } from '../common/workflow-constants';
+import { ACL_ACTIVITY_TIMEOUT, ITERATIONS_LIMIT } from '../common/workflow-constants';
 import { ChildScanWorkflowInput, ChildScanWorkflowOutput } from './chid-scan.workflow.type';
 import { MappingResolverService } from 'src/activities/core/initializer/mapping-resolver.service';
 import { SetupExportsPathPermissionService } from 'src/activities/core/initializer/setup-exports-path-permission.service';
@@ -48,7 +48,7 @@ const {
 const {
   setupExportPathPermission: setupExportPathPermissionActivity,
 } = wf.proxyActivities<SetupExportsPathPermissionService>({
-  startToCloseTimeout: '10m',
+  startToCloseTimeout: ACL_ACTIVITY_TIMEOUT,
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
 });
 
