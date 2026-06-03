@@ -487,7 +487,7 @@ jobs:
     name: Run SMB API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: false # Temporarily disabled on this branch to isolate UI test runs
+    if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
     env:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
@@ -647,7 +647,7 @@ jobs:
     name: Run NFS API Tests
     runs-on: openlab
     needs: setup-infrastructure
-    if: false # Temporarily disabled on this branch to isolate UI test runs
+    if: ${{ inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both' }}
     env:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}
       VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'ontap' }}
