@@ -200,6 +200,37 @@
           See "Print Fluentd diagnostics" and Helm output above.
           Ensure Grafana/Loki is deployed before this play (loki-gateway.grafana.svc must exist).
 
+# Let the non-root fluent user read the root:root 0640 container logs under /var/log/pods. The UID varies across base images, so read it from the running pod (hence after the readiness block). read_from_head true means logs written before the ACL is set are still picked up, so no logs are lost.
+- name: Detect the Fluentd container UID from the running pod
+  become: yes
+  shell: POD=$(kubectl get pods -n fluentd -l app.kubernetes.io/instance=fluentd --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}'); [ -n "$POD" ] || { echo "No Running Fluentd pod found in namespace fluentd" >&2; exit 1; }; kubectl exec -n fluentd "$POD" -- id -u
+  args:
+    executable: /bin/bash
+  register: fluentd_uid
+  changed_when: false
+
+# rX grants read on files and traverse only on directories.
+- name: Grant Fluentd read access to existing container logs
+  become: yes
+  ansible.posix.acl:
+    path: /var/log/pods
+    entity: "{{ fluentd_uid.stdout | trim }}"
+    etype: user
+    permissions: rX
+    recursive: true
+    state: present
+
+# Default ACL so pod log dirs the kubelet creates later inherit the same read access automatically.
+- name: Set default ACL so new container logs are readable by Fluentd
+  become: yes
+  ansible.posix.acl:
+    path: /var/log/pods
+    entity: "{{ fluentd_uid.stdout | trim }}"
+    etype: user
+    permissions: rX
+    default: true
+    state: present
+
 - name: Check Fluentd pod status
   shell: kubectl get pods -n fluentd
   register: pod_status

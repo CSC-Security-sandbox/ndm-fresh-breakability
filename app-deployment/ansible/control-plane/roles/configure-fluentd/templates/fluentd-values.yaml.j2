@@ -1,12 +1,5 @@
 kind: DaemonSet
 
-# DAC_READ_SEARCH grants Fluentd (uid=999) the kernel capability to bypass read
-# permission checks so it can tail those files without running as root.
-containerSecurityContext:
-  capabilities:
-    add:
-    - DAC_READ_SEARCH
-
 resources:
   requests:
     cpu: 400m
