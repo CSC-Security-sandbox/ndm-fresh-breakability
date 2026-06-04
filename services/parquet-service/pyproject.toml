@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parquet-service"
+version = "0.1.0"
+description = "NDM Parquet metadata-storage redesign — ingestion / merkle / diff service"
+requires-python = ">=3.11"
+dependencies = [
+    "temporalio>=1.7.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "redis>=5.0.0",
+    "pyarrow>=17.0.0",
+    "pydantic>=2.0.0",
+    "msgpack>=1.0.0",
+    "blake3>=0.4.0",            # BLAKE3-128 directory hash (D12)
+    "prometheus-client>=0.20.0",
+    "pyjwt[crypto]>=2.8.0",     # inbound worker Bearer-JWT guard (D15)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "fakeredis>=2.26.0", "ruff>=0.6.0", "mypy>=1.10.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

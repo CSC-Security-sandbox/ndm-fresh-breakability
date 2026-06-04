@@ -1,0 +1,55 @@
+# parquet-service Helm values. Bundled into the Control Plane chart (SPEC §11/§12).
+nameOverride: parquet-service
+
+image:
+  repository: ndm/parquet-service
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Single replica — per-job isolation comes from the Temporal workflow id, not pod count (SPEC §11).
+replicaCount: 1
+
+api:
+  port: 6666
+
+# Default to jobs-service-equivalent requests/limits (SPEC §11). mem >= baseline + 2GB * concurrent merges.
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+
+pvc:
+  enabled: true
+  storageClassName: local-storage   # RWO local PVC, single-node CP (§13.4)
+  accessMode: ReadWriteOnce
+  size: 200Gi
+  mountPath: /data
+
+env:
+  TEMPORAL_ADDRESS: "temporal:7233"
+  TEMPORAL_NAMESPACE: "default"
+  TASK_QUEUE: "python-pipeline"
+  REDIS_URL: "redis://default:redis@redis:6379/0"
+  ROTATE_BYTES: "209715200"          # 200 MB
+  MERGE_FAN_IN: "16"
+  MERGE_MEM_BUDGET_BYTES: "2147483648"
+  SPILL_DIR: "/tmp"
+  DIFF_BATCH_DIRS: "1000"
+
+# JWT/mTLS material wired from existing CP secrets (D15/§11). Names are placeholders.
+auth:
+  jwtSecretName: parquet-service-jwt
+  temporalTlsSecretName: parquet-service-temporal-tls
+  jwtAlgorithms: "RS256"
+  jwtIssuer: ""
+  jwtAudience: ""
+
+networkPolicy:
+  enabled: true
+  # ingress only from these pods (SPEC §11) — worker / jobs-service
+  fromPodLabels:
+    - app: worker
+    - app: jobs-service

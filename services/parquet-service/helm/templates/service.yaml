@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.nameOverride }}
+  labels:
+    app: {{ .Values.nameOverride }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.nameOverride }}
+    component: api
+  ports:
+    - name: http
+      port: {{ .Values.api.port }}
+      targetPort: {{ .Values.api.port }}

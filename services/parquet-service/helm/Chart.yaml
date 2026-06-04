@@ -1,0 +1,6 @@
+apiVersion: v2
+name: parquet-service
+description: NDM Parquet metadata-storage redesign — ingestion / merkle / diff service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

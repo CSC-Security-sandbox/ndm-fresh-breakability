@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.nameOverride }}-api
+  labels:
+    app: {{ .Values.nameOverride }}
+    component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.nameOverride }}
+      component: api
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.nameOverride }}
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["uvicorn", "parquet_service.api.server:app", "--host", "0.0.0.0", "--port", "{{ .Values.api.port }}"]
+          ports:
+            - containerPort: {{ .Values.api.port }}
+          {{- include "parquet-service.envFrom" . | nindent 10 }}
+          volumeMounts:
+            {{- include "parquet-service.volumeMounts" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- include "parquet-service.volumes" . | nindent 8 }}

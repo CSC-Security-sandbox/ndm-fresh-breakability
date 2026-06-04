@@ -1,0 +1,15 @@
+{{- if .Values.pvc.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.nameOverride }}-data
+  labels:
+    app: {{ .Values.nameOverride }}
+spec:
+  accessModes:
+    - {{ .Values.pvc.accessMode }}
+  storageClassName: {{ .Values.pvc.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+{{- end }}

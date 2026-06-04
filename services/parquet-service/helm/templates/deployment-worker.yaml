@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.nameOverride }}-worker
+  labels:
+    app: {{ .Values.nameOverride }}
+    component: worker
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.nameOverride }}
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.nameOverride }}
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "parquet_service.worker"]
+          {{- include "parquet-service.envFrom" . | nindent 10 }}
+          volumeMounts:
+            {{- include "parquet-service.volumeMounts" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- include "parquet-service.volumes" . | nindent 8 }}
