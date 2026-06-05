@@ -129,7 +129,7 @@ export class MigrateScanService {
         directoryPath: string | undefined,
         localMountPath: string,
     ): string {
-        if (!fileServer?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return localMountPath;
+        if (process.platform !== 'win32') return localMountPath;
         if (!fileServer?.hostname || !fileServer?.path) return localMountPath;
 
         const subdir = directoryPath?.trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');

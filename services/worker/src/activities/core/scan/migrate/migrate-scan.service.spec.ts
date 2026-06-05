@@ -1543,6 +1543,148 @@ describe('MigrateScanService.initDlmRootStamp', () => {
     });
 });
 
+// --- resolveDlmRootUncPath ---
+describe('MigrateScanService.resolveDlmRootUncPath', () => {
+    let service: MigrateScanService;
+
+    const mockLoggerFactory: Partial<LoggerFactory> = {
+        create: jest.fn().mockReturnValue(mockLogger),
+    };
+
+    const smbFileServer = {
+        protocols: [{ type: 'SMB' }],
+        hostname: 'fileserver.local',
+        path: 'share1',
+    };
+
+    const nfsFileServer = {
+        protocols: [{ type: 'NFS' }],
+        hostname: 'fileserver.local',
+        path: 'share1',
+    };
+
+    beforeEach(() => {
+        service = new MigrateScanService(
+            { get: jest.fn() } as any,
+            mockLoggerFactory as LoggerFactory,
+            { detectFileType: jest.fn() } as any,
+            { processItems: jest.fn(), buildCommand: jest.fn() } as any,
+            { add: jest.fn() } as any,
+        );
+    });
+
+    const callResolve = (
+        fileServer: any,
+        directoryPath: string | undefined,
+        localMountPath: string,
+    ) => (service as any).resolveDlmRootUncPath(fileServer, directoryPath, localMountPath);
+
+    describe('non-win32 platform', () => {
+        const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+
+        beforeEach(() => {
+            Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+        });
+
+        afterEach(() => {
+            Object.defineProperty(process, 'platform', originalPlatform);
+        });
+
+        it('returns localMountPath regardless of protocol or directory', () => {
+            expect(callResolve(smbFileServer, undefined, '/mnt/src')).toBe('/mnt/src');
+            expect(callResolve(smbFileServer, 'Dir0/bucket0', '/mnt/src')).toBe('/mnt/src');
+        });
+    });
+
+    describe('win32 platform', () => {
+        const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+
+        beforeEach(() => {
+            Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+        });
+
+        afterEach(() => {
+            Object.defineProperty(process, 'platform', originalPlatform);
+        });
+
+        it('returns UNC path for NFS file server (protocol not checked, only hostname+path matter)', () => {
+            expect(callResolve(nfsFileServer, undefined, '/mnt/src')).toBe('\\\\fileserver.local/share1\\');
+        });
+
+        it('returns UNC path when protocols array is empty', () => {
+            expect(callResolve({ protocols: [], hostname: 'h', path: 's' }, undefined, '/mnt/src')).toBe('\\\\h/s\\');
+        });
+
+        it('returns UNC path when protocol type is undefined', () => {
+            expect(callResolve({ protocols: [{ type: undefined }], hostname: 'h', path: 's' }, undefined, '/mnt/src')).toBe('\\\\h/s\\');
+        });
+
+        it('returns localMountPath when fileServer is null/undefined', () => {
+            expect(callResolve(null, undefined, '/mnt/src')).toBe('/mnt/src');
+            expect(callResolve(undefined, undefined, '/mnt/src')).toBe('/mnt/src');
+        });
+
+        it('returns localMountPath when hostname is missing', () => {
+            expect(callResolve({ protocols: [{ type: 'SMB' }], hostname: '', path: 'share' }, undefined, '/mnt/src')).toBe('/mnt/src');
+        });
+
+        it('returns localMountPath when share path is missing', () => {
+            expect(callResolve({ protocols: [{ type: 'SMB' }], hostname: 'host', path: '' }, undefined, '/mnt/src')).toBe('/mnt/src');
+        });
+
+        it('returns UNC share-root path when directoryPath is empty (share-root DLM)', () => {
+            // path.join is mocked to join with '/'
+            const result = callResolve(smbFileServer, undefined, '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1\\');
+        });
+
+        it('returns UNC share-root path when directoryPath is whitespace-only', () => {
+            const result = callResolve(smbFileServer, '   ', '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1\\');
+        });
+
+        it('appends subdir for ROOT_TO_FOLDER with leading slash (Unix-style config)', () => {
+            const result = callResolve(smbFileServer, '/Dir0/bucket0', '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1/Dir0/bucket0\\');
+        });
+
+        it('appends subdir for ROOT_TO_FOLDER with trailing slash', () => {
+            const result = callResolve(smbFileServer, 'Dir0/bucket0/', '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1/Dir0/bucket0\\');
+        });
+
+        it('appends subdir for ROOT_TO_FOLDER with both leading and trailing slashes', () => {
+            const result = callResolve(smbFileServer, '/Dir0/bucket0/', '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1/Dir0/bucket0\\');
+        });
+
+        it('appends subdir for ROOT_TO_FOLDER with Windows-style backslashes', () => {
+            const result = callResolve(smbFileServer, '\\Dir0\\bucket0\\', '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1/Dir0\\bucket0\\');
+        });
+
+        it('matches SMB when it appears in the second protocol entry (some check)', () => {
+            const multiProtoServer = {
+                protocols: [{ type: 'NFS' }, { type: 'SMB' }],
+                hostname: 'fileserver.local',
+                path: 'share1',
+            };
+            const result = callResolve(multiProtoServer, undefined, '/mnt/src');
+            expect(result).toBe('\\\\fileserver.local/share1\\');
+        });
+
+        it('returns UNC path when all protocols have undefined types — no throw (protocol not checked)', () => {
+            const noTypeServer = {
+                protocols: [{ type: undefined }, { type: undefined }],
+                hostname: 'h',
+                path: 's',
+            };
+            expect(() => callResolve(noTypeServer, undefined, '/mnt/src')).not.toThrow();
+            expect(callResolve(noTypeServer, undefined, '/mnt/src')).toBe('\\\\h/s\\');
+        });
+    });
+});
+
 // --- preserveSourceDirAtime via scanDirectory ---
 describe('MigrateScanService.scanDirectory - preserveSourceDirAtime', () => {
     let service: MigrateScanService;
