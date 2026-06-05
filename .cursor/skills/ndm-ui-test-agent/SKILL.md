@@ -4,7 +4,8 @@ description: >-
   Generate or update Playwright UI tests for NDM in ndm-ui-tests/.
   Use when writing UI tests, creating page objects, fixing selectors,
   adding browser-driven E2E flows, or working with Playwright-Go in the
-  NDM Data Migrator project.
+  NDM Data Migrator project. Enforces NDM E2E test data quality for
+  migration/discovery storage flows (files+dirs, content+permissions, dir perms).
 ---
 
 # NDM UI Test Generator Agent
@@ -59,6 +60,18 @@ Before writing a test, collect or infer:
   - `create-new` — only if explicitly requested
 
 ## Mandatory Operating Rules
+
+### E2E test data quality (migration / discovery storage flows)
+
+Applies when the test drives a **migration, cutover, or incremental sync** that copies real storage. **Not** required for RBAC, user management, or pure UI flows.
+
+| Dimension | Requirement |
+|-----------|-------------|
+| **Files + directories** | Source data includes **both**; post-job validation covers files and folders |
+| **File content + file permissions** | **Both** asserted after job — checksum/static JSON **and** metadata/ACL compare; never one alone when permissions are preserved |
+| **Directory permissions** | At least one directory in the migrated tree included in permission/metadata validation |
+
+Document approved exceptions in the test doc comment (`preservePermissions: false`, RBAC-only, etc.).
 
 ### Architecture
 
@@ -174,6 +187,7 @@ presenting the output. Fix any violations before returning results.
 - [ ] The test covers the full flow end-to-end (not just the first half)
 - [ ] Console output (`fmt.Printf`) is emitted for every major step so CI can grep results
 - [ ] The doc comment at the top of the test file lists all steps in order
+- [ ] **Migration/storage flows:** files **and** directories in fixture; file content **and** file permissions validated; directory permissions validated (or documented exception)
 
 ### Correctness
 - [ ] `go build ./...` passes with zero errors

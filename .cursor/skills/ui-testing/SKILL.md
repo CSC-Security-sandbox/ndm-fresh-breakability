@@ -1,6 +1,6 @@
 ---
 name: ndm-ui-testing
-description: Write Playwright UI end-to-end tests for the NDM control plane in ndm-ui-tests using Go, testify, and playwright-go. Use when the user asks for UI tests, page objects, discovery/migration/RBAC flows through the browser, job lifecycle validation via the UI, or Playwright test authoring for NDM.
+description: Write Playwright UI end-to-end tests for the NDM control plane in ndm-ui-tests using Go, testify, and playwright-go. Use when the user asks for UI tests, page objects, discovery/migration/RBAC flows through the browser, job lifecycle validation via the UI, or Playwright test authoring for NDM. Enforces NDM E2E test data quality — files+dirs, file content+permissions, directory permissions — for migration/discovery storage scenarios.
 ---
 
 # NDM UI E2E Testing
@@ -26,6 +26,30 @@ Requires reachable NDM URL, credentials, and (for storage flows) source host/wor
 - **Allowed edits:** `ndm-ui-tests/tests/`, `pages/`, `fixtures/`, `config/`, `utils/`, `validators/`, `scripts/`
 - **Forbidden:** Product/service source changes to force tests to pass
 - **Naming:** `Test<Feature>_<Scenario>` in `*_test.go` files
+
+---
+
+## E2E test data quality (mandatory for migration / discovery storage scenarios)
+
+Applies to Playwright UI E2E only — **not** unit or component tests.
+
+Every migration, cutover, or incremental-sync UI test that copies real storage must use **rich source data** and post-job validation that covers **all three dimensions**:
+
+| Dimension | Requirement |
+|-----------|-------------|
+| **Files + directories** | Source volume/share includes **both**; asserts cover files and folders in the migrated tree |
+| **File content + file permissions** | **Both** validated on destination — Step 13b checksums **and** Step 13/14 metadata/ACL checks; never one without the other when permissions are preserved |
+| **Directory permissions** | At least one directory (root and/or nested) included in metadata/ACL comparison |
+
+**Assertion pairing in this project:**
+
+- **Content:** Step 13b static checksum JSON, CoC `Destination Checksum` columns
+- **File permissions:** Step 13 sampled uid/gid/perms (NFS) or owner/ACE (SMB); Step 14 full compare
+- **Directory permissions:** SMB ACL compare includes directory entries; NFS dir mode in metadata compare
+
+**Do not** treat a migration UI test as complete if it only runs checksum validation or only runs metadata/ACL comparison unless `preservePermissions` is off or the test documents an approved exception (RBAC-only, API-negative, etc.).
+
+Populate scripts (`populate-smb-source.ps1`, volume setup) should create **nested dirs with varied permissions**, not flat files only.
 
 ---
 
@@ -229,6 +253,10 @@ Artifacts: `test-results/screenshots/`, `test-results/videos/`, `test-results/do
 - [ ] Page Object Model — no raw selectors in test files
 - [ ] Fresh resources where isolation is required
 - [ ] Job lifecycle validated (READY → RUNNING → COMPLETED)
+- [ ] **Files and directories** both in source fixture and validation scope
+- [ ] **File content** validated (Step 13b static checksums and/or CoC checksum columns)
+- [ ] **File permissions** validated (Step 13 sample + Step 14 full metadata/ACL compare)
+- [ ] **Directory permissions** validated on at least one directory in migrated tree
 - [ ] Post-migration validation: CoC report + static checksums + direct src↔dst comparison
 - [ ] Diff files written to `test-results/` on failure for artifact upload
 - [ ] `t.Skipf` for missing optional env vars

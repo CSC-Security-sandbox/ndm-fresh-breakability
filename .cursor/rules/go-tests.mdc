@@ -32,6 +32,17 @@ This project uses **Go 1.24+** with **Ginkgo v2** and **Gomega** as the test fra
 - Never leave test resources (volumes, shares, jobs) behind after tests complete.
 - Use unique names for test resources to avoid conflicts with parallel runs.
 
+## E2E Test Data Quality (migration / discovery storage scenarios)
+
+For specs under `tests/e2e/` that run migration, cutover, or discovery against real storage:
+
+- **Files and directories:** fixture and asserts must include **both** — not files-only or dirs-only.
+- **File content and file permissions:** when `preservePermissions: true`, validate **both** checksum/content (`ValidateReport`, hash helpers) **and** ACL/uid-gid-mode (`GetSMB*`, `CompareSMB*`, NFS metadata compare). Never one without the other in the same topology.
+- **Directory permissions:** assert at least one directory (migrated root and/or nested path).
+- **Exceptions:** document in test comment when `preservePermissions: false`, pure API negatives, or discovery-only scope applies.
+
+See `.cursor/skills/e2e-testing/SKILL.md` for full criteria and Definition of Done.
+
 ## API Client Usage
 - Validate HTTP response status codes in assertions.
 - Set reasonable timeouts for API calls; do not use indefinite waits.
