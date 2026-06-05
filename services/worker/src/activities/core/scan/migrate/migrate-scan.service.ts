@@ -55,28 +55,35 @@ export class MigrateScanService {
         if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
         if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
 
-
-        const resolvedSourcePath = this.resolveDlmRootUncPath(
+        // Resolve both paths to UNC upfront. Every DLM root operation — lstat,
+        // ACL comparison, and stamp — must go through UNC so Windows accesses
+        // the real share rather than the local junction reparse-point entry.
+        const uncSourcePath = this.resolveDlmRootUncPath(
             jobContext?.jobConfig?.sourceFileServer,
             jobContext?.jobConfig?.sourceDirectoryPath,
             sourcePath,
+        );
+        const uncTargetPath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.destinationFileServer,
+            jobContext?.jobConfig?.destinationDirectoryPath,
+            targetPath,
         );
 
         let sourceRootStat: fs.Stats | undefined;
         let targetRootStat: fs.Stats | undefined;
         try {
-            sourceRootStat = await fs.promises.lstat(resolvedSourcePath);
-            targetRootStat = await fs.promises.lstat(targetPath);
+            sourceRootStat = await fs.promises.lstat(uncSourcePath);
+            targetRootStat = await fs.promises.lstat(uncTargetPath);
         } catch (err) {
             if (!sourceRootStat) {
-                this.logger.error(`Failed to stat DLM root source path: ${resolvedSourcePath} — ${err.message}`);
+                this.logger.error(`Failed to stat DLM root source path: ${uncSourcePath} — ${err.message}`);
                 return;
             }
-            this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
+            this.logger.log(`DLM root not yet present on destination: ${uncTargetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, uncSourcePath, uncTargetPath);
         }
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
@@ -85,70 +92,50 @@ export class MigrateScanService {
         sourceRootStat: fs.Stats,
         targetRootStat: fs.Stats | undefined,
         jobContext: JobManagerContext,
-        sourcePath: string,
-        targetPath: string,
+        uncSourcePath: string,
+        uncTargetPath: string,
     ): Promise<void> {
-
-        // Resolve both paths to UNC once here — used for buildCommand's abs paths
-        // (so isMetaUpdated reads the share's SD) and stashed as command params so
-        // the consumer's Get-FileSecurityFast also targets the share, not the junction.
-        const resolvedSourcePath = this.resolveDlmRootUncPath(
-            jobContext?.jobConfig?.sourceFileServer,
-            jobContext?.jobConfig?.sourceDirectoryPath,
-            sourcePath,
-        );
-        const resolvedTargetPath = this.resolveDlmRootUncPath(
-            jobContext?.jobConfig?.destinationFileServer,
-            jobContext?.jobConfig?.destinationDirectoryPath,
-            targetPath,
-        );
-
         const rootCmd = await this.commandGenerationService.buildCommand(
-            sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
+            sourceRootStat, '/', targetRootStat, undefined, jobContext, uncSourcePath, uncTargetPath, true,
         );
 
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
-
-        if (resolvedSourcePath !== sourcePath) {
-            rootCmd.ops[OPS_CMD.STAMP_META].params.uncSourcePath = resolvedSourcePath;
-        }
-
-        if (resolvedTargetPath !== targetPath) {
-            rootCmd.ops[OPS_CMD.STAMP_META].params.uncTargetPath = resolvedTargetPath;
-        }
+        rootCmd.ops[OPS_CMD.STAMP_META].params.uncSourcePath = uncSourcePath;
+        rootCmd.ops[OPS_CMD.STAMP_META].params.uncTargetPath = uncTargetPath;
 
         await this.publishCommands({ jobContext, commands: [rootCmd] });
     }
 
     /**
-     * Resolve a DLM root local mount path to its share UNC equivalent.
+     * Resolve the DLM root path to its UNC equivalent for all SMB operations
+     * (lstat, ACL comparison, and stamp). All DLM root operations must go
+     * through UNC so that Windows operates on the actual share rather than the
+     * local junction entry on the worker's C: drive.
      *
-     * Workers mount SMB shares as Windows directory junctions (`mklink /D`).
-     * Operating on the junction path directly (lstat, ACL reads/writes) targets
-     * the junction's own reparse-point entry rather than the underlying share,
-     * so the wrong SD is read or written.
-     *
-     * This method returns `\\<hostname>\<share>\` when all three conditions
-     * hold:
+     * Returns `\\<hostname>\<share>\<directoryPath>\` when:
      *   1. The file-server protocol is SMB.
-     *   2. No sub-directory is configured (directoryPath is empty) — when a
-     *      sub-directory is set the kernel traverses the junction transparently
-     *      to the correct folder, so the local path is fine.
-     *   3. Both hostname and path are present on the file-server record.
+     *   2. Both hostname and share path are present on the file-server record.
      *
-     * In all other cases (NFS, sub-directory present, missing config) the
-     * original `fallback` path is returned unchanged.
+     * A non-empty `directoryPath` (ROOT_TO_FOLDER) is stripped of leading/
+     * trailing separators and appended so the result always points at the
+     * exact share directory that is the DLM root.
+     *
+     * Falls back to the original local path only for NFS or when hostname/
+     * share are missing from the configuration.
      */
     private resolveDlmRootUncPath(
         fileServer: { protocols?: { type?: string }[]; hostname?: string; path?: string },
         directoryPath: string | undefined,
-        fallback: string,
+        localMountPath: string,
     ): string {
-        if (!fileServer?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return fallback;
-        if (directoryPath?.trim()) return fallback;
-        if (!fileServer?.hostname || !fileServer?.path) return fallback;
+        if (!fileServer?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return localMountPath;
+        if (!fileServer?.hostname || !fileServer?.path) return localMountPath;
 
+        const subdir = directoryPath?.trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+        if (subdir) {
+            return "\\\\" + path.join(fileServer.hostname, fileServer.path, subdir) + "\\";
+        }
         return "\\\\" + path.join(fileServer.hostname, fileServer.path) + "\\";
     }
 
