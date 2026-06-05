@@ -15,6 +15,7 @@ import { FileTypeDetectionService } from "../../utils/file-type-detection.servic
 import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
 import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
+import { ProtocolTypes } from "src/protocols/protocols";
 
 
 @Injectable()
@@ -80,23 +81,53 @@ export class MigrateScanService {
         sourcePath: string,
         targetPath: string,
     ): Promise<void> {
-        // This method is the single decision point for "is this the DLM
-        // root?" — both the stamp-side flag on the command (set below) and
-        // the gate-side `applyInheritanceMode` arg to buildCommand are
-        // pinned to `true` here. buildCommand threads the arg through to
-        // isMetaUpdated -> hasSecurityDescriptorChanged so the gate's
-        // expected-destination SD matches what stamp will actually write.
-        //
-        // sourcePath/targetPath are required: on win32, when destination
-        // already exists and target mtime matches source (the steady state
-        // after the previous run's deferred dir-stamp), buildCommand falls
-        // through to isMetaUpdated, which needs both abs paths.
+
         const rootCmd = await this.commandGenerationService.buildCommand(
             sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
         );
+
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
+
+        const resolvedTargetPath = this.resolveDlmRootStampTarget(
+          jobContext,
+          targetPath,
+        );
+
+        if (resolvedTargetPath !== targetPath) {
+            rootCmd.ops[OPS_CMD.STAMP_META].params.uncTargetPath = resolvedTargetPath;
+        }
+
         await this.publishCommands({ jobContext, commands: [rootCmd] });
+    }
+
+    /**
+     * Resolve the destination path the DLM root stamp should ACL.
+     *
+     * The worker mounts SMB shares as a Windows directory junction
+     * (`mklink /D`) at the local mount root. ACL ops on a path that goes
+     * *through* the junction to a real subfolder are transparently
+     * followed by the kernel, so DLM jobs with a `destinationDirectoryPath`
+     * (e.g. `team-a/sub`) ACL the SMB folder correctly via the input
+     * `targetPath` — this method returns it unchanged.
+     *
+     * The exception is when the DLM root *is* the share root: the stamp's
+     * target IS the junction itself, and ACL ops on a junction stamp its
+     * reparse-point SD on local disk instead of traversing to the share.
+     * That single case is redirected through the share UNC
+     * `\\<hostname>\<share>\`.
+     *
+     * Also returns `targetPath` unchanged when destination context is
+     * missing (non-SMB jobs, hostname/path unset) so the caller falls
+     * through to the default behaviour.
+     */
+    private resolveDlmRootStampTarget(jobContext: JobManagerContext, targetPath: string): string {
+        const dest = jobContext?.jobConfig?.destinationFileServer;
+        if (!dest?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return targetPath;
+        if (jobContext?.jobConfig?.destinationDirectoryPath?.trim()) return targetPath;
+        if (!dest?.hostname || !dest?.path) return targetPath;
+
+        return "\\\\" + path.join(dest.hostname, dest.path) + "\\";
     }
 
     private async registerDlmRootMtimeRestamp(

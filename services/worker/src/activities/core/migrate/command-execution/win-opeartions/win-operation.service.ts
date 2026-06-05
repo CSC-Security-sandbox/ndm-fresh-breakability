@@ -248,6 +248,14 @@ export class WinOperationService {
     const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
     const workflowId = jobContext?.jobRunId ?? '';
 
+    const uncTargetPath = command.ops[OPS_CMD.STAMP_META]?.params?.uncTargetPath;
+    if (uncTargetPath) {
+      this.logger.debug(
+        `[${workflowId}] Stamp target redirected to UNC - original=${targetPath} unc=${uncTargetPath}`,
+      );
+      targetPath = uncTargetPath;
+    }
+
     // 1. Get source ACL (PowerShell Get-Acl)
     let acl: SecurityDescriptor = await this.metricsService.runWithTiming(
       workflowId,
