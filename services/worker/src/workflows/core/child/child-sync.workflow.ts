@@ -23,7 +23,7 @@ const {
     syncTaskActivity: SyncTaskActivity,
 } = proxyActivities<SyncService>({ 
     retry: { initialInterval: '10s', backoffCoefficient: 1,  maximumInterval: '30s', maximumAttempts: 10, nonRetryableErrorTypes: ['FatalError', 'RetryExceededError', 'ApplicationFailure', 'CancelledFailure'], },
-     startToCloseTimeout: '500h', heartbeatTimeout: '1m' });
+     startToCloseTimeout: '500h', heartbeatTimeout: '5m' });
 
 const {
     getGroupOfTasksActivity: getGroupOfTasksActivity,
@@ -38,7 +38,7 @@ const {
     restampDirectories: restampDirectoriesActivity,
 } = proxyActivities<RestampDirectoriesService>({
     startToCloseTimeout: '500h',
-    heartbeatTimeout: '1m',
+    heartbeatTimeout: '5m',
     retry: { maximumAttempts: 3, initialInterval: '10s', backoffCoefficient: 2.0, maximumInterval: '60s' },
 });
 
