@@ -76,7 +76,7 @@ export class MigrateScanService {
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, resolvedSourcePath, targetPath);
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
         }
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
@@ -89,6 +89,20 @@ export class MigrateScanService {
         targetPath: string,
     ): Promise<void> {
 
+        // Resolve both paths to UNC once here — used for buildCommand's abs paths
+        // (so isMetaUpdated reads the share's SD) and stashed as command params so
+        // the consumer's Get-FileSecurityFast also targets the share, not the junction.
+        const resolvedSourcePath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.sourceFileServer,
+            jobContext?.jobConfig?.sourceDirectoryPath,
+            sourcePath,
+        );
+        const resolvedTargetPath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.destinationFileServer,
+            jobContext?.jobConfig?.destinationDirectoryPath,
+            targetPath,
+        );
+
         const rootCmd = await this.commandGenerationService.buildCommand(
             sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
         );
@@ -96,11 +110,9 @@ export class MigrateScanService {
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
 
-        const resolvedTargetPath = this.resolveDlmRootUncPath(
-            jobContext?.jobConfig?.destinationFileServer,
-            jobContext?.jobConfig?.destinationDirectoryPath,
-            targetPath,
-        );
+        if (resolvedSourcePath !== sourcePath) {
+            rootCmd.ops[OPS_CMD.STAMP_META].params.uncSourcePath = resolvedSourcePath;
+        }
 
         if (resolvedTargetPath !== targetPath) {
             rootCmd.ops[OPS_CMD.STAMP_META].params.uncTargetPath = resolvedTargetPath;

@@ -248,13 +248,8 @@ export class WinOperationService {
     const output: StampMetaOutput = { sourceErrors: [], targetErrors: [] };
     const workflowId = jobContext?.jobRunId ?? '';
 
-    const uncTargetPath = command.ops[OPS_CMD.STAMP_META]?.params?.uncTargetPath;
-    if (uncTargetPath) {
-      this.logger.debug(
-        `[${workflowId}] Stamp target redirected to UNC - original=${targetPath} unc=${uncTargetPath}`,
-      );
-      targetPath = uncTargetPath;
-    }
+    sourcePath = this.resolveUncStampPath(command, 'uncSourcePath', sourcePath, workflowId, 'source');
+    targetPath = this.resolveUncStampPath(command, 'uncTargetPath', targetPath, workflowId, 'target');
 
     // 1. Get source ACL (PowerShell Get-Acl)
     let acl: SecurityDescriptor = await this.metricsService.runWithTiming(
@@ -763,5 +758,18 @@ export class WinOperationService {
       this.logger.error(`Exception during ADS detection for ${filePath}: ${error.message}`, error.stack);
       return defaultResult;
     }
+  }
+
+  private resolveUncStampPath(
+    command: Cmd,
+    paramKey: 'uncSourcePath' | 'uncTargetPath',
+    path: string,
+    workflowId: string,
+    label: string,
+  ): string {
+    const unc = command.ops[OPS_CMD.STAMP_META]?.params?.[paramKey];
+    if (!unc) return path;
+    this.logger.debug(`[${workflowId}] Stamp ${label} redirected to UNC - original=${path} unc=${unc}`);
+    return unc;
   }
 }
