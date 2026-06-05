@@ -55,21 +55,28 @@ export class MigrateScanService {
         if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
         if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
 
+
+        const resolvedSourcePath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.sourceFileServer,
+            jobContext?.jobConfig?.sourceDirectoryPath,
+            sourcePath,
+        );
+
         let sourceRootStat: fs.Stats | undefined;
         let targetRootStat: fs.Stats | undefined;
         try {
-            sourceRootStat = await fs.promises.lstat(sourcePath);
+            sourceRootStat = await fs.promises.lstat(resolvedSourcePath);
             targetRootStat = await fs.promises.lstat(targetPath);
         } catch (err) {
             if (!sourceRootStat) {
-                this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
+                this.logger.error(`Failed to stat DLM root source path: ${resolvedSourcePath} — ${err.message}`);
                 return;
             }
             this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, resolvedSourcePath, targetPath);
         }
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
@@ -89,9 +96,10 @@ export class MigrateScanService {
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
 
-        const resolvedTargetPath = this.resolveDlmRootStampTarget(
-          jobContext,
-          targetPath,
+        const resolvedTargetPath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.destinationFileServer,
+            jobContext?.jobConfig?.destinationDirectoryPath,
+            targetPath,
         );
 
         if (resolvedTargetPath !== targetPath) {
@@ -102,32 +110,34 @@ export class MigrateScanService {
     }
 
     /**
-     * Resolve the destination path the DLM root stamp should ACL.
+     * Resolve a DLM root local mount path to its share UNC equivalent.
      *
-     * The worker mounts SMB shares as a Windows directory junction
-     * (`mklink /D`) at the local mount root. ACL ops on a path that goes
-     * *through* the junction to a real subfolder are transparently
-     * followed by the kernel, so DLM jobs with a `destinationDirectoryPath`
-     * (e.g. `team-a/sub`) ACL the SMB folder correctly via the input
-     * `targetPath` — this method returns it unchanged.
+     * Workers mount SMB shares as Windows directory junctions (`mklink /D`).
+     * Operating on the junction path directly (lstat, ACL reads/writes) targets
+     * the junction's own reparse-point entry rather than the underlying share,
+     * so the wrong SD is read or written.
      *
-     * The exception is when the DLM root *is* the share root: the stamp's
-     * target IS the junction itself, and ACL ops on a junction stamp its
-     * reparse-point SD on local disk instead of traversing to the share.
-     * That single case is redirected through the share UNC
-     * `\\<hostname>\<share>\`.
+     * This method returns `\\<hostname>\<share>\` when all three conditions
+     * hold:
+     *   1. The file-server protocol is SMB.
+     *   2. No sub-directory is configured (directoryPath is empty) — when a
+     *      sub-directory is set the kernel traverses the junction transparently
+     *      to the correct folder, so the local path is fine.
+     *   3. Both hostname and path are present on the file-server record.
      *
-     * Also returns `targetPath` unchanged when destination context is
-     * missing (non-SMB jobs, hostname/path unset) so the caller falls
-     * through to the default behaviour.
+     * In all other cases (NFS, sub-directory present, missing config) the
+     * original `fallback` path is returned unchanged.
      */
-    private resolveDlmRootStampTarget(jobContext: JobManagerContext, targetPath: string): string {
-        const dest = jobContext?.jobConfig?.destinationFileServer;
-        if (!dest?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return targetPath;
-        if (jobContext?.jobConfig?.destinationDirectoryPath?.trim()) return targetPath;
-        if (!dest?.hostname || !dest?.path) return targetPath;
+    private resolveDlmRootUncPath(
+        fileServer: { protocols?: { type?: string }[]; hostname?: string; path?: string },
+        directoryPath: string | undefined,
+        fallback: string,
+    ): string {
+        if (!fileServer?.protocols?.[0]?.type.includes(ProtocolTypes.SMB)) return fallback;
+        if (directoryPath?.trim()) return fallback;
+        if (!fileServer?.hostname || !fileServer?.path) return fallback;
 
-        return "\\\\" + path.join(dest.hostname, dest.path) + "\\";
+        return "\\\\" + path.join(fileServer.hostname, fileServer.path) + "\\";
     }
 
     private async registerDlmRootMtimeRestamp(
