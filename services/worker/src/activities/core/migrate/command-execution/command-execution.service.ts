@@ -386,10 +386,18 @@ export class CommandExecService {
             return itemInfo;
         }
 
-        // For copy operations, get both source and target stats
+        // For copy operations, get both source and target stats.
+        // If UNC paths are embedded in the command (DLM root on Windows SMB),
+        // use them so that lstat sees the real share directory instead of the
+        // local junction reparse-point, which would otherwise report
+        // isSymbolicLink:true / isDirectory:false and corrupt the CoC type.
+        const stampParams = command.ops?.[OPS_CMD.STAMP_META]?.params;
+        const statSourcePath: string = stampParams?.uncSourcePath ?? sourcePath;
+        const statTargetPath: string = stampParams?.uncTargetPath ?? targetPath;
+
         const [sourceStats, targetStats] = await Promise.all([
-            fs.promises.lstat(sourcePath),
-            fs.promises.lstat(targetPath),
+            fs.promises.lstat(statSourcePath),
+            fs.promises.lstat(statTargetPath),
         ]);
 
         // Capture checksum timestamp - when the checksum was generated during file copy
