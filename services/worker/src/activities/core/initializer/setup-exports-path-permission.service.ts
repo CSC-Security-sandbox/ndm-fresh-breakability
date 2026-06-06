@@ -53,27 +53,33 @@ export class SetupExportsPathPermissionService {
         try {
             await this.setup(jobRunId, jobContext);
         } catch (error: unknown) {
-            this.logger.error(`ACL setup failed for jobRunId: ${jobRunId}: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error.stack : undefined);
-
-            const destPath = this.buildUncPath(jobContext.jobConfig.destinationFileServer);
-            const operationId = randomUUID();
-            const cmd = new Cmd(operationId, '\\', CommandStatus.ERROR, false, {});
-            const task = new TaskInfo(
-                randomUUID(), jobRunId, TaskType.MIGRATE, TaskStatus.COMPLETED_WITH_ERROR,
-                jobContext.jobConfig?.workerIds?.[0] ?? null,
-                jobContext.jobConfig?.sourceFileServer?.pathId,
-                [cmd],
-                jobContext.jobConfig?.destinationFileServer?.pathId,
-            );
-            await jobContext.publishToTaskStream(task);
-
-            const dmErr = error instanceof Error ? error : new Error(String(error));
-            await jobContext.publishToErrorStream(
-                dmError('OPERATION', Origin.DESTINATION, Operation.STAMP_META, ErrorType.TRANSIENT_ERROR, operationId, dmErr, { name: '\\', path: destPath }),
-                jobRunId
-            );
-            this.logger.warn(`Published ACL setup error to UI error stream (operationId: ${operationId}, jobRunId: ${jobRunId})`);
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`ACL setup failed for jobRunId: ${jobRunId}: ${message}`, error instanceof Error ? error.stack : undefined);
+            await this.publishAclSetupError(jobRunId, message);
         }
+    }
+
+    async publishAclSetupError(jobRunId: string, errorMessage: string) {
+        const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
+        const destPath = this.buildUncPath(jobContext.jobConfig.destinationFileServer);
+
+        const operationId = randomUUID();
+        const cmd = new Cmd(operationId, '\\', CommandStatus.ERROR, false, {});
+        const task = new TaskInfo(
+            randomUUID(), jobRunId, TaskType.MIGRATE, TaskStatus.COMPLETED_WITH_ERROR,
+            jobContext.jobConfig?.workerIds?.[0] ?? null,
+            jobContext.jobConfig?.sourceFileServer?.pathId,
+            [cmd],
+            jobContext.jobConfig?.destinationFileServer?.pathId,
+        );
+        await jobContext.publishToTaskStream(task);
+
+        const error = new Error(errorMessage);
+        await jobContext.publishToErrorStream(
+            dmError('OPERATION', Origin.DESTINATION, Operation.STAMP_META, ErrorType.TRANSIENT_ERROR, operationId, error, { name: '\\', path: destPath }),
+            jobRunId
+        );
+        this.logger.warn(`Published ACL setup error to UI (operationId: ${operationId}, jobRunId: ${jobRunId})`);
     }
 
     private buildUncPath(fileServer: FileServerDetails): string {

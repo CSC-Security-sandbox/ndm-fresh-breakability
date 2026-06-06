@@ -47,6 +47,7 @@ const {
 
 const {
   setupExportPathPermission: setupExportPathPermissionActivity,
+  publishAclSetupError: publishAclSetupErrorActivity,
 } = wf.proxyActivities<SetupExportsPathPermissionService>({
   startToCloseTimeout: ACL_ACTIVITY_TIMEOUT,
   retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 1 }
@@ -66,7 +67,13 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
 
   if(isMigration){
     await resolveUsernamesToSidsActivity(jobRunId);
-    await setupExportPathPermissionActivity(jobRunId);
+    try {
+      await setupExportPathPermissionActivity(jobRunId);
+    } catch (error) {
+      const message = error?.message ?? String(error);
+      console.warn(`[${jobRunId}] setupExportPathPermission failed, continuing with scan/sync: ${message}`);
+      await publishAclSetupErrorActivity(jobRunId, `Activity failed : Share root directory ACL stamping.`);
+    }
   }
 
   if(isInitialScan)  {

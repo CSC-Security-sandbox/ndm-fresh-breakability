@@ -184,6 +184,42 @@ describe('SetupExportsPathPermissionService', () => {
       expect(jobContext.publishToErrorStream).toHaveBeenCalled();
     });
 
+    it('publishAclSetupError should publish task and error to streams', async () => {
+      const jobRunId = 'test-job-run-id';
+      const jobContext = {
+        jobConfig: {
+          destinationFileServer: {
+            hostname: 'dest-host',
+            path: 'dest-path',
+            pathId: 'dest-path-id',
+          },
+          sourceFileServer: {
+            hostname: 'source-host',
+            path: 'source-path',
+            pathId: 'source-path-id',
+          },
+          workerIds: ['worker-uuid-1'],
+        },
+        publishToTaskStream: jest.fn().mockResolvedValue(undefined),
+        publishToErrorStream: jest.fn().mockResolvedValue(undefined),
+      } as any;
+
+      mockRedisService.getJobManagerContext.mockResolvedValue(jobContext);
+
+      await service.publishAclSetupError(jobRunId, 'Activity timed out after 20m');
+
+      expect(jobContext.publishToTaskStream).toHaveBeenCalledWith(
+        expect.objectContaining({ jobRunId })
+      );
+      expect(jobContext.publishToErrorStream).toHaveBeenCalledWith(
+        expect.objectContaining({ operation: expect.any(Object) }),
+        jobRunId
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Published ACL setup error to UI')
+      );
+    });
+
     it('should skip ACL setup for DLM jobs', async () => {
       const jobRunId = 'test-job-run-id';
       const jobContext = {
