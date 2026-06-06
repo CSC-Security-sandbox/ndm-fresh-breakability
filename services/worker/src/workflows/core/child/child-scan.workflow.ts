@@ -70,9 +70,13 @@ export const ChildScanWorkflow = async ({ jobRunId, dirsToScan = ['/'], dirBatch
     try {
       await setupExportPathPermissionActivity(jobRunId);
     } catch (error) {
+      try{
       const message = error?.message ?? String(error);
       console.warn(`[${jobRunId}] setupExportPathPermission failed, continuing with scan/sync: ${message}`);
       await publishAclSetupErrorActivity(jobRunId, `Activity failed : Share root directory ACL stamping.`);
+      }catch(error){
+        console.warn(`[${jobRunId}] Failed to publish ACL setup error to UI: ${error?.message ?? String(error)}`);
+      }
     }
   }
 

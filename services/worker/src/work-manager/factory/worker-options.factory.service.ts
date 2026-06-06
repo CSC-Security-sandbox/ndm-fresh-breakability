@@ -127,6 +127,7 @@ export class WorkerOptionsService {
           isFileStreamLenValid: this.commonTaskService.isFileStreamLenValid.bind(this.commonTaskService),
           resolveUsernamesToSids: this.mappingResolverService.resolveUsernamesToSids.bind(this.mappingResolverService),
           setupExportPathPermission: this.setupExportsPathPermissionService.setupExportPathPermission.bind(this.setupExportsPathPermissionService),
+          publishAclSetupError: this.setupExportsPathPermissionService.publishAclSetupError.bind(this.setupExportsPathPermissionService),
           // Retry workflow activities
           fetchFailedOperations: this.fetchFailedOperationsActivity.fetchFailedOperations.bind(this.fetchFailedOperationsActivity),
           processRetryBatch: this.processRetryBatchActivity.processRetryBatch.bind(this.processRetryBatchActivity),
