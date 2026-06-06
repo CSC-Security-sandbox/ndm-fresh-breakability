@@ -55,12 +55,12 @@ export class SetupExportsPathPermissionService {
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
             this.logger.error(`ACL setup failed for jobRunId: ${jobRunId}: ${message}`, error instanceof Error ? error.stack : undefined);
-            await this.publishAclSetupError(jobRunId, message);
+            await this.publishAclSetupError(jobRunId, message, jobContext);
         }
     }
 
-    async publishAclSetupError(jobRunId: string, errorMessage: string) {
-        const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
+    async publishAclSetupError(jobRunId: string, errorMessage: string, existingContext?: JobManagerContext): Promise<void> {
+        const jobContext: JobManagerContext = existingContext ?? await this.redisService.getJobManagerContext(jobRunId);
         const destPath = this.buildUncPath(jobContext.jobConfig.destinationFileServer);
 
         const operationId = randomUUID();
