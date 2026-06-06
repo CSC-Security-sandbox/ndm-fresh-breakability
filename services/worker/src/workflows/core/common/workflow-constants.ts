@@ -44,4 +44,4 @@ export const SIGNAL_RETRY_DELAY = '30s';
  * Must exceed worst-case: 3 ACL commands × ACL_CMD_TIMEOUT_MS, times 3 retry attempts.
  * To change, update this constant and redeploy — env vars cannot be read in the workflow sandbox.
  */
-export const ACL_ACTIVITY_TIMEOUT = '20m';
+export const ACL_ACTIVITY_TIMEOUT = '1m';
