@@ -220,7 +220,7 @@ class PersistentShell extends EventEmitter {
                 const executionTime = Date.now() - (cmd.startTime || cmd.queuedTime);
                 console.debug(`[PersistentShell:${this.id}] ${isAclOperation ? 'ACL operation' : 'Command'} TIMEOUT after ${executionTime}ms: ${cmd.command.substring(0, 50)}...`);
                 this.currentCommand = null;
-                cmd.reject(new Error(`Command timeout: ${cmd.command}`));
+                cmd.reject(new Error(`Command timeout after ${executionTime}ms`));
                 this.processQueue();
             }
         }, cmd.timeout);
