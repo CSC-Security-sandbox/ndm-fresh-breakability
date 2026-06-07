@@ -404,7 +404,6 @@ const FATAL_CODE = new Set<string>([
   'EACCES',
   'ENOSPC',
   'EROFS',
-  'IDENTITY_MAPPING_NOT_FOUND',
 ]);
 
 const TRANSIENT_CODE = new Set<string>(['E8DOT3_COLLISION']);
