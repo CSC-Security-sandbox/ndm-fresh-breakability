@@ -748,4 +748,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260607_01_update_tag_version.sql" author="kb93278">
+      <sqlFile path="liquibase/20260607_01_update_tag_version.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260607_01_update_tag_version_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>
