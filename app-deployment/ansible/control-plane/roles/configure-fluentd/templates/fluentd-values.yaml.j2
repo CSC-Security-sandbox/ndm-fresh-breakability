@@ -269,8 +269,17 @@ fileConfigs:
           worker_platform $.worker_platform
           hostname $.hostname
         </label>
-        flush_interval 10s
-        flush_at_shutdown true
+        <buffer>
+          @type file
+          path /var/log/fluentd-buffers/worker-loki
+          chunk_limit_size 2m
+          total_limit_size 512m
+          flush_interval 5s
+          flush_at_shutdown true
+          overflow_action drop_oldest_chunk
+          retry_max_times 10
+          compress gzip
+        </buffer>
       </match>
     </label>
 
