@@ -415,28 +415,28 @@ export class AsupPackagerService {
         if (rest[0] === 'worker' && rest.length >= 3) {
           const workerId = rest[1];
           const fname = rest.slice(2).join('/');
-          if (fname === 'worker.log') return `${dd}_no_project_worker_${workerId}.log`;
-          return `${dd}_no_project_worker_${workerId}_${safe(fname)}`;
+          if (fname === 'worker.log') return `no_project_worker_${workerId}_${dd}.log`;
+          return `no_project_worker_${workerId}_${safe(fname)}_${dd}`;
         }
 
         // no-project control-plane logs
         if (rest[0] === 'control-plane' && rest.length >= 2) {
           const fname = rest.slice(1).join('/');
           const cpMap: Record<string, string> = {
-            'admin-service.log':   `${dd}_no_project_cp_admin_svc.log`,
-            'config-service.log':  `${dd}_no_project_cp_config_svc.log`,
-            'datamigrator-ui.log': `${dd}_no_project_cp_datamigrator_ui.log`,
-            'db-migrations.log':   `${dd}_no_project_cp_db_migrations.log`,
-            'db-writer.log':       `${dd}_no_project_cp_db_writer.log`,
-            'jobs-service.log':    `${dd}_no_project_cp_jobs_svc.log`,
-            'reports-service.log': `${dd}_no_project_cp_reports_svc.log`,
-            'support-service.log': `${dd}_no_project_cp_support_svc.log`,
-            'error-report.csv':    `${dd}_no_project_cp_error_report.csv`,
+            'admin-service.log':   `no_project_cp_admin_svc_${dd}.log`,
+            'config-service.log':  `no_project_cp_config_svc_${dd}.log`,
+            'datamigrator-ui.log': `no_project_cp_datamigrator_ui_${dd}.log`,
+            'db-migrations.log':   `no_project_cp_db_migrations_${dd}.log`,
+            'db-writer.log':       `no_project_cp_db_writer_${dd}.log`,
+            'jobs-service.log':    `no_project_cp_jobs_svc_${dd}.log`,
+            'reports-service.log': `no_project_cp_reports_svc_${dd}.log`,
+            'support-service.log': `no_project_cp_support_svc_${dd}.log`,
+            'error-report.csv':    `no_project_cp_error_report_${dd}.csv`,
           };
-          return cpMap[fname] ?? `${dd}_no_project_cp_${safe(fname)}`;
+          return cpMap[fname] ?? `no_project_cp_${safe(fname)}_${dd}`;
         }
 
-        return `${dd}_no_project_${safe(rest.join('_'))}`;
+        return `no_project_${safe(rest.join('_'))}_${dd}`;
       }
 
       // project: ndm_logs/<date>/<projectId>/...
@@ -450,25 +450,25 @@ export class AsupPackagerService {
       if (subDir === 'control-plane') {
         const fname = sub.slice(1).join('/');
         const cpMap: Record<string, string> = {
-          'admin-service.log':   `${dd}_cp_admin_svc_${projectId}.log`,
-          'config-service.log':  `${dd}_cp_config_svc_${projectId}.log`,
-          'datamigrator-ui.log': `${dd}_cp_datamigrator_ui_${projectId}.log`,
-          'db-migrations.log':   `${dd}_cp_db_migrations_${projectId}.log`,
-          'db-writer.log':       `${dd}_cp_db_writer_${projectId}.log`,
-          'jobs-service.log':    `${dd}_cp_jobs_svc_${projectId}.log`,
-          'reports-service.log': `${dd}_cp_reports_svc_${projectId}.log`,
-          'support-service.log': `${dd}_cp_support_svc_${projectId}.log`,
-          'error-report.csv':    `${dd}_cp_error_report_${projectId}.csv`,
+          'admin-service.log':   `cp_admin_svc_${projectId}_${dd}.log`,
+          'config-service.log':  `cp_config_svc_${projectId}_${dd}.log`,
+          'datamigrator-ui.log': `cp_datamigrator_ui_${projectId}_${dd}.log`,
+          'db-migrations.log':   `cp_db_migrations_${projectId}_${dd}.log`,
+          'db-writer.log':       `cp_db_writer_${projectId}_${dd}.log`,
+          'jobs-service.log':    `cp_jobs_svc_${projectId}_${dd}.log`,
+          'reports-service.log': `cp_reports_svc_${projectId}_${dd}.log`,
+          'support-service.log': `cp_support_svc_${projectId}_${dd}.log`,
+          'error-report.csv':    `cp_error_report_${projectId}_${dd}.csv`,
         };
-        return cpMap[fname] ?? `${dd}_cp_${projectId}_${safe(fname)}`;
+        return cpMap[fname] ?? `cp_${projectId}_${safe(fname)}_${dd}`;
       }
 
       // Worker logs: ndm_logs/<date>/<projectId>/worker/<workerId>/...
       if (subDir === 'worker' && sub.length >= 3) {
         const workerId = sub[1];
         const fname = sub.slice(2).join('/');
-        if (fname === 'worker.log') return `${dd}_worker_${workerId}_${projectId}.log`;
-        return `${dd}_${projectId}_worker_${workerId}_${safe(fname)}`;
+        if (fname === 'worker.log') return `worker_${workerId}_${projectId}_${dd}.log`;
+        return `${projectId}_worker_${workerId}_${safe(fname)}_${dd}`;
       }
 
       return safe(trimmed.replace(/\//g, '_'));
@@ -476,35 +476,35 @@ export class AsupPackagerService {
 
     // ── Metrics / State / Inventory / Config CSV files ───────────────────────
     // Epoch-ms timestamps embedded in filenames are converted to YY_MM_DD and
-    // moved to the front; the raw epoch is stripped from the end.
+    // moved to the end; the raw epoch is stripped.
     const dir = (tp[0] ?? '').toLowerCase();
     const rawFname = tp.slice(1).join('_');
 
     if (dir === 'performance metrics') {
-      // "cpu-percent-1775624021419.csv" → "26_04_08_perf_cpu_percent.csv"
+      // "cpu-percent-1775624021419.csv" → "perf_cpu_percent_26_04_08.csv"
       const { stem, date } = stripTimestamp(
         rawFname.replace(/-/g, '_').replace(/\.csv$/i, ''),
       );
-      return `${date}_perf_${safe(stem)}.csv`;
+      return `perf_${safe(stem)}_${date}.csv`;
     }
     if (dir === 'state data') {
-      // "service_pods_1775624017567.csv" → "26_04_08_state_data_service_pods.csv"
+      // "service_pods_1775624017567.csv" → "state_data_service_pods_26_04_08.csv"
       const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
-      return `${date}_state_data_${safe(stem)}.csv`;
+      return `state_data_${safe(stem)}_${date}.csv`;
     }
     if (dir === 'system inventory') {
-      // "system-inventory-disk-usage-1775624022171.csv" → "26_04_08_sys_inventory_disk_usage.csv"
+      // "system-inventory-disk-usage-1775624022171.csv" → "sys_inventory_disk_usage_26_04_08.csv"
       const base = rawFname
         .replace(/^system-inventory-/i, '')
         .replace(/-/g, '_')
         .replace(/\.csv$/i, '');
       const { stem, date } = stripTimestamp(base);
-      return `${date}_sys_inventory_${safe(stem)}.csv`;
+      return `sys_inventory_${safe(stem)}_${date}.csv`;
     }
     if (dir === 'configuration data') {
-      // "job_config_details_1775624017276.csv" → "26_04_08_job_config_details.csv"
+      // "job_config_details_1775624017276.csv" → "job_config_details_26_04_08.csv"
       const { stem, date } = stripTimestamp(rawFname.replace(/\.csv$/i, ''));
-      return `${date}_${safe(stem)}.csv`;
+      return `${safe(stem)}_${date}.csv`;
     }
 
     // Fallback: flatten path separators and sanitize
