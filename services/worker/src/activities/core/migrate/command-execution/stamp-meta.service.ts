@@ -78,11 +78,9 @@ export class StampMetaService {
         output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
         output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
-        if (aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0) {
-            const timeOutput = await this.stampAccessAndModifiedTime(input);
-            output.sourceErrors.push(...timeOutput.sourceErrors);
-            output.targetErrors.push(...timeOutput.targetErrors);
-        }
+        const timeOutput = await this.stampAccessAndModifiedTime(input);
+        output.sourceErrors.push(...timeOutput.sourceErrors);
+        output.targetErrors.push(...timeOutput.targetErrors);
     }
 
     private async executeStampMetaNfs(input: CommandExecInput, output: CommandOutput): Promise<void> {

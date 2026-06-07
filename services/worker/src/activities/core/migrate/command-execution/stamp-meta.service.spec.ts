@@ -961,7 +961,7 @@ describe('StampMetaService', () => {
         expect(winOperationService.stampAclOperation).not.toHaveBeenCalled();
       });
 
-      it('should not call stampAccessAndModifiedTime when stampObjectACL fails with errors', async () => {
+      it('should still call stampAccessAndModifiedTime even when stampObjectACL fails with errors', async () => {
         const input = createMockInput(
           {
             atime: new Date('2023-01-02T14:00:00Z'),
@@ -980,8 +980,7 @@ describe('StampMetaService', () => {
 
         expect(result.targetErrors).toContain('ACL operation failed');
         expect(input.command.ops[OPS_CMD.STAMP_META].status).toBe(OPS_STATUS.ERROR);
-        // stampAccessAndModifiedTime must not run when ACL has errors, so utimes (target) is never called
-        expect(mockFs.promises.utimes).not.toHaveBeenCalled();
+        expect(mockFs.promises.utimes).toHaveBeenCalled();
       });
 
       it('should call stampAccessAndModifiedTime on target when ACL stamping succeeds with no errors', async () => {

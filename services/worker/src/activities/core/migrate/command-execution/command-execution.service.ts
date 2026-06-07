@@ -480,7 +480,7 @@ export class CommandExecService {
         if (shouldPreservePermissions && !cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
-        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
+        if (jobContext.jobConfig.options.preserveAccessTime && !cmd.isDir && item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
         if(validateMisMatch.length > 0) {
