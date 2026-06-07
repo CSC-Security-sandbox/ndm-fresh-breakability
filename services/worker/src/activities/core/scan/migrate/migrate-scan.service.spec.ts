@@ -1535,11 +1535,14 @@ describe('MigrateScanService.initDlmRootStamp', () => {
         expect(permSpy).not.toHaveBeenCalled();
     });
 
-    it('always calls registerDlmRootMtimeRestamp regardless of preservePermissions', async () => {
+    it('always calls registerDlmRootMtimeRestamp regardless of preservePermissions, threading the UNC target path', async () => {
         (fs.promises.lstat as jest.Mock).mockResolvedValue(rootStat as fs.Stats);
         const mtimeSpy = jest.spyOn(service as any, 'registerDlmRootMtimeRestamp').mockResolvedValue(undefined);
         await service.initDlmRootStamp(makeTask() as any, jobContext, '/src', '/dst');
-        expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext);
+        // The resolved UNC destination (here the local fallback on non-win32)
+        // must be threaded through so the deferred restamp writes the root
+        // mtime via UNC instead of the local junction.
+        expect(mtimeSpy).toHaveBeenCalledWith(rootStat, jobContext, '/dst');
     });
 });
 

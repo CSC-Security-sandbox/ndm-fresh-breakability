@@ -87,6 +87,17 @@ describe('DeferredDirStampService', () => {
       );
     });
 
+    it('persists uncTargetPath in the meta payload when present (DLM root)', async () => {
+      const uncPath = '\\\\host\\share\\Test1\\';
+      await service.add('job1', { ...record, uncTargetPath: uncPath });
+
+      expect(redisClient.hSet).toHaveBeenCalledWith(
+        'job1:deferred-dir-stamps:meta',
+        '/foo/bar',
+        JSON.stringify({ atime: record.atime, mtime: record.mtime, uncTargetPath: uncPath }),
+      );
+    });
+
     it('dedupes — re-adding the same fPath updates the existing ZSET member', async () => {
       // node-redis ZADD returns 0 when the member already existed (score may
       // have been updated). Both writes should still go through and not throw.
@@ -143,6 +154,22 @@ describe('DeferredDirStampService', () => {
         'job1:deferred-dir-stamps:meta',
         ['/a/b/c', '/a'],
       );
+    });
+
+    it('restores uncTargetPath from the meta payload when present (DLM root)', async () => {
+      const uncPath = '\\\\host\\share\\Test1\\';
+      redisClient.zPopMinCount.mockResolvedValueOnce([
+        { value: '/', score: 0 },
+      ]);
+      redisClient.hmGet.mockResolvedValueOnce([
+        JSON.stringify({ atime: 'A', mtime: 'M', uncTargetPath: uncPath }),
+      ]);
+
+      const out = await service.popBatch('job1', 10);
+
+      expect(out).toEqual([
+        { fPath: '/', atime: 'A', mtime: 'M', depth: 0, uncTargetPath: uncPath },
+      ]);
     });
 
     it('drops entries whose meta is missing', async () => {

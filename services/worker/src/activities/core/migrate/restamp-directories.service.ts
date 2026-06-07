@@ -120,10 +120,16 @@ export class RestampDirectoriesService {
   ): Promise<"stamped" | "skipped"> {
     if (!rec?.fPath || !rec?.atime || !rec?.mtime) return "skipped";
 
-    // path.join handles separator normalization across platforms and trims
-    // duplicate slashes that arise from the relative `fPath` already
-    // beginning with '/'.
-    const targetPath = path.join(baseTargetPrefixPath, rec.fPath);
+    // For the DLM root the record carries an absolute UNC destination
+    // (`uncTargetPath`): write the mtime through it so the value lands on the
+    // same share directory the scan reads back over UNC. Writing through the
+    // local `mklink /D` junction need not persist the mtime across the reparse
+    // boundary, which makes the gate see drift and re-stamp the root on every
+    // incremental. Ordinary subdirectories have no `uncTargetPath` and keep the
+    // joined local path (their scan read goes through the same junction, so
+    // read and write paths already agree). path.join handles separator
+    // normalization and trims the duplicate slash from the leading-'/' fPath.
+    const targetPath = rec.uncTargetPath ?? path.join(baseTargetPrefixPath, rec.fPath);
     const atime = new Date(rec.atime);
     const mtime = new Date(rec.mtime);
     if (Number.isNaN(atime.getTime()) || Number.isNaN(mtime.getTime())) {

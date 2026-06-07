@@ -85,7 +85,7 @@ export class MigrateScanService {
         if (jobContext.jobConfig?.options?.preservePermissions) {
             await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, uncSourcePath, uncTargetPath);
         }
-        await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
+        await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext, uncTargetPath);
     }
 
     private async publishDlmRootPermissionStamp(
@@ -142,9 +142,10 @@ export class MigrateScanService {
     private async registerDlmRootMtimeRestamp(
         sourceRootStat: fs.Stats,
         jobContext: JobManagerContext,
+        uncTargetPath?: string,
     ): Promise<void> {
         await this.commandGenerationService.recordDeferredDirStamp(
-            this.deferredDirStampService, jobContext, '/', sourceRootStat,
+            this.deferredDirStampService, jobContext, '/', sourceRootStat, uncTargetPath,
         );
     }
 

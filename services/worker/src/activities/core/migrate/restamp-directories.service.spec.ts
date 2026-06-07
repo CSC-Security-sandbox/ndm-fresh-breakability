@@ -120,6 +120,29 @@ describe('RestampDirectoriesService', () => {
     expect(deferredDirStampService.cleanup).toHaveBeenCalledWith('job1');
   });
 
+  it('writes the root mtime through the UNC path when the record carries uncTargetPath', async () => {
+    const utimes = fs.promises.utimes as unknown as jest.Mock;
+    utimes.mockResolvedValue(undefined);
+
+    const uncPath = '\\\\anf-26f1.rootdomain.local\\syam-incremental-bug\\Test1\\';
+    deferredDirStampService.popBatch
+      .mockResolvedValueOnce([
+        { fPath: '/', atime: '2024-01-01T00:00:00.000Z', mtime: '2024-01-02T00:00:00.000Z', depth: 0, uncTargetPath: uncPath },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const out = await service.restampDirectories({ jobRunId: 'job1' });
+
+    expect(out).toEqual({ attempted: 1, stamped: 1, failed: 0, skipped: 0 });
+    // The UNC destination is used verbatim — NOT path.join(basePrefix, '/') —
+    // so the mtime lands on the same share dir the scan reads back over UNC.
+    expect(utimes).toHaveBeenCalledWith(
+      uncPath,
+      new Date('2024-01-01T00:00:00.000Z'),
+      new Date('2024-01-02T00:00:00.000Z'),
+    );
+  });
+
   it('treats ENOENT as skipped, not failed', async () => {
     const utimes = fs.promises.utimes as unknown as jest.Mock;
     const enoent = new Error('not found') as any;

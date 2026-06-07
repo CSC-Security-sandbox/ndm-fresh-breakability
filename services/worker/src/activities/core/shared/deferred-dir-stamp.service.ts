@@ -20,6 +20,18 @@ export interface DeferredDirStamp {
   mtime: string;
   /** Path depth — used to drain deepest-first (defensive ordering). */
   depth: number;
+  /**
+   * Absolute UNC destination to write the mtime to, bypassing the local
+   * junction. Set only for the DLM root, whose scan-time mtime read is done
+   * over UNC (`initDlmRootStamp` lstats the share directly). Writing the
+   * mtime through the same UNC path the gate reads back guarantees the value
+   * round-trips; writing through the local `mklink /D` junction does not —
+   * the reparse boundary to the remote share need not persist it, so the gate
+   * sees drift and re-stamps the root on every incremental. Absent for
+   * ordinary subdirectories, which are read and written through the same
+   * local junction path and are therefore already self-consistent.
+   */
+  uncTargetPath?: string;
 }
 
 /**
@@ -75,7 +87,10 @@ export class DeferredDirStampService {
       const client = this.redisService.getClient();
       const orderKey = this.orderKey(jobRunId);
       const metaKey = this.metaKey(jobRunId);
-      const payload = JSON.stringify({ atime: record.atime, mtime: record.mtime });
+      // JSON.stringify omits undefined fields, so a record without
+      // uncTargetPath serializes identically to the legacy {atime,mtime}
+      // payload — no migration needed for in-flight entries.
+      const payload = JSON.stringify({ atime: record.atime, mtime: record.mtime, uncTargetPath: record.uncTargetPath });
 
       // Store payload first so a successful ZADD always has a meta to read.
       await client.hSet(metaKey, record.fPath, payload);
@@ -113,9 +128,15 @@ export class DeferredDirStampService {
       const payloadStr = payloads[i];
       if (!payloadStr) continue;
       try {
-        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string };
+        const meta = JSON.parse(payloadStr) as { atime: string; mtime: string; uncTargetPath?: string };
         if (meta?.atime && meta?.mtime) {
-          records.push({ fPath, atime: meta.atime, mtime: meta.mtime, depth: -score });
+          records.push({
+            fPath,
+            atime: meta.atime,
+            mtime: meta.mtime,
+            depth: -score,
+            ...(meta.uncTargetPath ? { uncTargetPath: meta.uncTargetPath } : {}),
+          });
           fPathsToDelete.push(fPath);
         }
       } catch (error) {

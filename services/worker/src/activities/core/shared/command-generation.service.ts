@@ -587,6 +587,7 @@ export class CommandGenerationService {
     jobContext: JobManagerContext,
     relativeSourcePath: string,
     sourceStat: fs.Stats,
+    uncTargetPath?: string,
   ): Promise<void> {
     if (!deferredDirStampService) return;
     if (!sourceStat?.mtime || !sourceStat?.atime) return;
@@ -595,6 +596,9 @@ export class CommandGenerationService {
       atime: new Date(sourceStat.atime).toISOString(),
       mtime: new Date(sourceStat.mtime).toISOString(),
       depth: DeferredDirStampService.computeDepth(relativeSourcePath),
+      // Only the DLM root supplies a UNC destination; subdirs write through
+      // the local junction (read/write paths already agree there).
+      ...(uncTargetPath ? { uncTargetPath } : {}),
     };
     await deferredDirStampService.add(jobContext.jobRunId, record);
   }
