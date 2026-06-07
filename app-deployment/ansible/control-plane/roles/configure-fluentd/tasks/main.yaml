@@ -325,7 +325,7 @@
     recursive: true
     state: present
 
-# Default ACL so pod log dirs the kubelet creates later inherit the same read access automatically.
+# Default ACL applied recursively so existing pod dirs (and ones the kubelet creates later) propagate read access to new log files.
 - name: Set default ACL so new container logs are readable by Fluentd
   become: yes
   ansible.posix.acl:
@@ -334,6 +334,7 @@
     etype: user
     permissions: rX
     default: true
+    recursive: true
     state: present
 
 - name: Check Fluentd pod status

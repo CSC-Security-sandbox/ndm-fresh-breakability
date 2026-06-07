@@ -40,10 +40,18 @@ describe('RestampDirectoriesService', () => {
     jobConfig: {
       destinationFileServer: { pathId: 'dest-path-id' },
       destinationDirectoryPath: '/dest',
+      options: { preserveAccessTime: false },
       jobRunId: 'job1',
     },
     publishToErrorStream: jest.fn().mockResolvedValue(undefined),
   };
+
+  // Convenience factory for a job context with preserveAccessTime toggled.
+  const makeCtx = (preserveAccessTime: boolean, publishMock?: jest.Mock) => ({
+    ...mockJobContext,
+    jobConfig: { ...mockJobContext.jobConfig, options: { preserveAccessTime } },
+    publishToErrorStream: publishMock ?? jest.fn().mockResolvedValue(undefined),
+  });
 
   // Snapshot env so tests are deterministic across platforms.
   const originalBaseWorkingPath = process.env.BASE_WORKING_PATH;
@@ -220,6 +228,86 @@ describe('RestampDirectoriesService', () => {
     deferredDirStampService.popBatch.mockResolvedValue([]);
     await service.restampDirectories({ jobRunId: 'job1', batchSize: 13 });
     expect(deferredDirStampService.popBatch).toHaveBeenCalledWith('job1', 13);
+  });
+
+  describe('atime validation after restamp (mirrors validateCommand for dirs)', () => {
+    const ATIME = '2024-01-01T00:00:00.000Z';
+    const MTIME = '2024-01-02T00:00:00.000Z';
+    const rec = { fPath: '/a/b', atime: ATIME, mtime: MTIME, depth: 2 };
+
+    beforeEach(() => {
+      (fs.promises.utimes as unknown as jest.Mock).mockResolvedValue(undefined);
+      deferredDirStampService.popBatch
+        .mockResolvedValueOnce([rec])
+        .mockResolvedValueOnce([]);
+      deferredDirStampService.count.mockResolvedValue(1);
+    });
+
+    it('does not lstat or publish when preserveAccessTime is false', async () => {
+      const lstat = fs.promises.lstat as unknown as jest.Mock;
+      redisService.getJobManagerContext.mockResolvedValue(makeCtx(false) as any);
+
+      await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(lstat).not.toHaveBeenCalled();
+    });
+
+    it('does not publish when dest atime matches the stamped atime', async () => {
+      const lstat = fs.promises.lstat as unknown as jest.Mock;
+      lstat.mockResolvedValueOnce({ atime: new Date(ATIME) }); // exact match
+      const publishMock = jest.fn().mockResolvedValue(undefined);
+      redisService.getJobManagerContext.mockResolvedValue(makeCtx(true, publishMock) as any);
+
+      await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(lstat).toHaveBeenCalledTimes(1);
+      expect(publishMock).not.toHaveBeenCalled();
+    });
+
+    it('publishes AccessTime Mismatch when dest atime differs — same dmError format as validateCommand', async () => {
+      const lstat = fs.promises.lstat as unknown as jest.Mock;
+      lstat.mockResolvedValueOnce({ atime: new Date('2024-06-01T00:00:00.000Z') });
+      const publishMock = jest.fn().mockResolvedValue(undefined);
+      redisService.getJobManagerContext.mockResolvedValue(makeCtx(true, publishMock) as any);
+
+      const out = await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(out.stamped).toBe(1);
+      expect(publishMock).toHaveBeenCalledTimes(1);
+      expect(publishMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: expect.objectContaining({ operationId: '' }),
+        }),
+        'job1',
+      );
+    });
+
+    it('swallows lstat errors and logs a warning without publishing', async () => {
+      const lstat = fs.promises.lstat as unknown as jest.Mock;
+      lstat.mockRejectedValueOnce(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
+      const publishMock = jest.fn();
+      redisService.getJobManagerContext.mockResolvedValue(makeCtx(true, publishMock) as any);
+
+      await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(publishMock).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Could not validate atime'));
+    });
+
+    it('DLM: uses same junction targetPath for both utimes and lstat validation', async () => {
+      // On DLM/Windows non-root dirs use the junction-mounted path (not UNC) for both
+      // utimes and lstat — validation is consistent with what was stamped.
+      const lstat = fs.promises.lstat as unknown as jest.Mock;
+      lstat.mockResolvedValueOnce({ atime: new Date('2024-06-01T00:00:00.000Z') });
+      const publishMock = jest.fn().mockResolvedValue(undefined);
+      redisService.getJobManagerContext.mockResolvedValue(makeCtx(true, publishMock) as any);
+
+      const out = await service.restampDirectories({ jobRunId: 'job1' });
+
+      expect(out.stamped).toBe(1);
+      expect(lstat).toHaveBeenCalledWith(path.join('/base/job1/dest-path-id/dest', '/a/b'));
+      expect(publishMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('retries utimes and succeeds on second attempt', async () => {

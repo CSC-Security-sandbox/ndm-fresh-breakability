@@ -13,7 +13,6 @@ import { StampMetaOutput } from "./stamp-meta.type";
 import { MetricsService } from "src/metrics/metrics.service";
 import { Timed } from "src/metrics/timed.decorator";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
-import { IDENTITY_MAPPING_NOT_FOUND, IdentityMappingNotFoundError } from "src/errors/errors.types";
 
 
 @Injectable()
@@ -79,11 +78,9 @@ export class StampMetaService {
         output.sourceErrors.push(...aclStampOutput.sourceErrors, ...preserveTimeOutput.sourceErrors);
         output.targetErrors.push(...aclStampOutput.targetErrors, ...preserveTimeOutput.targetErrors);
 
-        if (aclStampOutput.sourceErrors.length === 0 && aclStampOutput.targetErrors.length === 0) {
-            const timeOutput = await this.stampAccessAndModifiedTime(input);
-            output.sourceErrors.push(...timeOutput.sourceErrors);
-            output.targetErrors.push(...timeOutput.targetErrors);
-        }
+        const timeOutput = await this.stampAccessAndModifiedTime(input);
+        output.sourceErrors.push(...timeOutput.sourceErrors);
+        output.targetErrors.push(...timeOutput.targetErrors);
     }
 
     private async executeStampMetaNfs(input: CommandExecInput, output: CommandOutput): Promise<void> {
@@ -141,23 +138,8 @@ export class StampMetaService {
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.gid?.toString(), 'GID'),
                         this.redisService.getOwnerIdentity(jobContext.jobRunId, command.metadata.uid?.toString(), 'UID'),
                     ]);
-                    const gidMissing = gid_res == null || gid_res === '';
-                    const uidMissing = uid_res == null || uid_res === '';
-                    if (gidMissing || uidMissing) {
-                        const missing: string[] = [];
-                        if (gidMissing) {
-                            missing.push(`GID '${command.metadata.gid}'`);
-                        }
-                        if (uidMissing) {
-                            missing.push(`UID '${command.metadata.uid}'`);
-                        }
-                        throw new IdentityMappingNotFoundError(
-                            `Identity mapping not found for ${missing.join(' and ')}. ` +
-                            `Ensure the uploaded GID/UID mapping CSV includes entries for these values.`,
-                        );
-                    }
-                    gid = gid_res;
-                    uid = uid_res;
+                    gid = gid_res != null && gid_res !== '' ? gid_res : gid;
+                    uid = uid_res != null && uid_res !== '' ? uid_res : uid;
                 }
                 if (command?.metadata?.isSymLink) {
                     await fs.promises.lchown(targetPath, parseInt(uid), parseInt(gid));
@@ -169,11 +151,7 @@ export class StampMetaService {
                 this.logger.error(`Stamping GID and UID from ${sourcePath} to ${targetPath}, Error: ${err.message}`, err.stack);
                 const dmErr = dmError("OPERATION", Origin.DESTINATION, Operation.STAMP_META, errorType, command.id, err, { name: command.fPath, path: targetPath });
                 await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
-                const opCode =
-                    error instanceof IdentityMappingNotFoundError
-                        ? IDENTITY_MAPPING_NOT_FOUND
-                        : (err as NodeJS.ErrnoException).code ?? getErrorCode(err, 'OPERATION');
-                output.targetErrors.push(opCode);
+                output.targetErrors.push((err as NodeJS.ErrnoException).code ?? getErrorCode(err, 'OPERATION'));
             }
         }
         return output;

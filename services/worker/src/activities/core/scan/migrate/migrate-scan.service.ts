@@ -15,6 +15,7 @@ import { FileTypeDetectionService } from "../../utils/file-type-detection.servic
 import { CommandGenerationService, LocalSetLookup } from "../../shared/command-generation.service";
 import { DeferredDirStampService } from "../../shared/deferred-dir-stamp.service";
 import { captureSourceDirAtimeStat, preserveSourceDirAtime } from "../scan-utils";
+import { ProtocolTypes } from "src/protocols/protocols";
 
 
 @Injectable()
@@ -54,21 +55,35 @@ export class MigrateScanService {
         if (!isDirectoryLevelMigration(jobContext.jobConfig)) return;
         if (task.commands.length !== 1 || task.commands[0].fPath !== '/') return;
 
+        // Resolve both paths to UNC upfront. Every DLM root operation — lstat,
+        // ACL comparison, and stamp — must go through UNC so Windows accesses
+        // the real share rather than the local junction reparse-point entry.
+        const uncSourcePath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.sourceFileServer,
+            jobContext?.jobConfig?.sourceDirectoryPath,
+            sourcePath,
+        );
+        const uncTargetPath = this.resolveDlmRootUncPath(
+            jobContext?.jobConfig?.destinationFileServer,
+            jobContext?.jobConfig?.destinationDirectoryPath,
+            targetPath,
+        );
+
         let sourceRootStat: fs.Stats | undefined;
         let targetRootStat: fs.Stats | undefined;
         try {
-            sourceRootStat = await fs.promises.lstat(sourcePath);
-            targetRootStat = await fs.promises.lstat(targetPath);
+            sourceRootStat = await fs.promises.lstat(uncSourcePath);
+            targetRootStat = await fs.promises.lstat(uncTargetPath);
         } catch (err) {
             if (!sourceRootStat) {
-                this.logger.error(`Failed to stat DLM root source path: ${sourcePath} — ${err.message}`);
+                this.logger.error(`Failed to stat DLM root source path: ${uncSourcePath} — ${err.message}`);
                 return;
             }
-            this.logger.log(`DLM root not yet present on destination: ${targetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
+            this.logger.log(`DLM root not yet present on destination: ${uncTargetPath} — first run, fresh COPY_DIR+STAMP_META will be emitted`);
         }
 
         if (jobContext.jobConfig?.options?.preservePermissions) {
-            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, sourcePath, targetPath);
+            await this.publishDlmRootPermissionStamp(sourceRootStat, targetRootStat, jobContext, uncSourcePath, uncTargetPath);
         }
         await this.registerDlmRootMtimeRestamp(sourceRootStat, jobContext);
     }
@@ -77,26 +92,51 @@ export class MigrateScanService {
         sourceRootStat: fs.Stats,
         targetRootStat: fs.Stats | undefined,
         jobContext: JobManagerContext,
-        sourcePath: string,
-        targetPath: string,
+        uncSourcePath: string,
+        uncTargetPath: string,
     ): Promise<void> {
-        // This method is the single decision point for "is this the DLM
-        // root?" — both the stamp-side flag on the command (set below) and
-        // the gate-side `applyInheritanceMode` arg to buildCommand are
-        // pinned to `true` here. buildCommand threads the arg through to
-        // isMetaUpdated -> hasSecurityDescriptorChanged so the gate's
-        // expected-destination SD matches what stamp will actually write.
-        //
-        // sourcePath/targetPath are required: on win32, when destination
-        // already exists and target mtime matches source (the steady state
-        // after the previous run's deferred dir-stamp), buildCommand falls
-        // through to isMetaUpdated, which needs both abs paths.
         const rootCmd = await this.commandGenerationService.buildCommand(
-            sourceRootStat, '/', targetRootStat, undefined, jobContext, sourcePath, targetPath, true,
+            sourceRootStat, '/', targetRootStat, undefined, jobContext, uncSourcePath, uncTargetPath, true,
         );
+
         if (!rootCmd) return;
         rootCmd.ops[OPS_CMD.STAMP_META].params.applyInheritanceMode = true;
+        rootCmd.ops[OPS_CMD.STAMP_META].params.uncSourcePath = uncSourcePath;
+        rootCmd.ops[OPS_CMD.STAMP_META].params.uncTargetPath = uncTargetPath;
+
         await this.publishCommands({ jobContext, commands: [rootCmd] });
+    }
+
+    /**
+     * Resolve the DLM root path to its UNC equivalent for all SMB operations
+     * (lstat, ACL comparison, and stamp). All DLM root operations must go
+     * through UNC so that Windows operates on the actual share rather than the
+     * local junction entry on the worker's C: drive.
+     *
+     * Returns `\\<hostname>\<share>\<directoryPath>\` when:
+     *   1. The file-server protocol is SMB.
+     *   2. Both hostname and share path are present on the file-server record.
+     *
+     * A non-empty `directoryPath` (ROOT_TO_FOLDER) is stripped of leading/
+     * trailing separators and appended so the result always points at the
+     * exact share directory that is the DLM root.
+     *
+     * Falls back to the original local path only for NFS or when hostname/
+     * share are missing from the configuration.
+     */
+    private resolveDlmRootUncPath(
+        fileServer: { protocols?: { type?: string }[]; hostname?: string; path?: string },
+        directoryPath: string | undefined,
+        localMountPath: string,
+    ): string {
+        if (process.platform !== 'win32') return localMountPath;
+        if (!fileServer?.hostname || !fileServer?.path) return localMountPath;
+
+        const subdir = directoryPath?.trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+        if (subdir) {
+            return "\\\\" + path.join(fileServer.hostname, fileServer.path, subdir) + "\\";
+        }
+        return "\\\\" + path.join(fileServer.hostname, fileServer.path) + "\\";
     }
 
     private async registerDlmRootMtimeRestamp(

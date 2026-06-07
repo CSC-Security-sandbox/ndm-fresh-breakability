@@ -386,10 +386,18 @@ export class CommandExecService {
             return itemInfo;
         }
 
-        // For copy operations, get both source and target stats
+        // For copy operations, get both source and target stats.
+        // If UNC paths are embedded in the command (DLM root on Windows SMB),
+        // use them so that lstat sees the real share directory instead of the
+        // local junction reparse-point, which would otherwise report
+        // isSymbolicLink:true / isDirectory:false and corrupt the CoC type.
+        const stampParams = command.ops?.[OPS_CMD.STAMP_META]?.params;
+        const statSourcePath: string = stampParams?.uncSourcePath ?? sourcePath;
+        const statTargetPath: string = stampParams?.uncTargetPath ?? targetPath;
+
         const [sourceStats, targetStats] = await Promise.all([
-            fs.promises.lstat(sourcePath),
-            fs.promises.lstat(targetPath),
+            fs.promises.lstat(statSourcePath),
+            fs.promises.lstat(statTargetPath),
         ]);
 
         // Capture checksum timestamp - when the checksum was generated during file copy
@@ -472,7 +480,7 @@ export class CommandExecService {
         if (shouldPreservePermissions && !cmd.metadata?.isSymLink && item.sourceMeta.permission !== item.targetMeta.permission) 
             validateMisMatch += `Permission Mismatch detected, source: ${item.sourceMeta.permission}, target: ${item.targetMeta.permission} \n`;
         
-        if (jobContext.jobConfig.options.preserveAccessTime &&  item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
+        if (jobContext.jobConfig.options.preserveAccessTime && !cmd.isDir && item.sourceMeta.accessTime.getTime() !== item.targetMeta.accessTime.getTime())
             validateMisMatch += `AccessTime Mismatch detected, source: ${item.sourceMeta.accessTime.toISOString()}, target: ${item.targetMeta.accessTime.toISOString()} \n`;
 
         if(validateMisMatch.length > 0) {

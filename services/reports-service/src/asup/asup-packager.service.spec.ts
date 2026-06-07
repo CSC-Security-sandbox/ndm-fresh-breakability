@@ -619,25 +619,25 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     // ── ndm_logs / no-project paths ──────────────────────────────────────────
 
-    it('no-project: worker.log exact match → <date>_no_project_worker_<id>.log', () => {
+    it('no-project: worker.log exact match → no_project_worker_<id>_<date>.log', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123/worker.log',
       );
-      expect(result).toBe('26_04_07_no_project_worker_wid-123.log');
+      expect(result).toBe('no_project_worker_wid-123_26_04_07.log');
     });
 
-    it('no-project: worker other file → <date>_no_project_worker_<id>_<file>', () => {
+    it('no-project: worker other file → no_project_worker_<id>_<file>_<date>', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/no-project/worker/wid-123/debug.log',
       );
-      expect(result).toBe('26_04_07_no_project_worker_wid-123_debug.log');
+      expect(result).toBe('no_project_worker_wid-123_debug.log_26_04_07');
     });
 
-    it('no-project: non-worker control-plane entry → <date>_no_project_cp_<safe>', () => {
+    it('no-project: non-worker control-plane entry → no_project_cp_<safe>_<date>', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/no-project/control-plane/admin.log',
       );
-      expect(result).toBe('26_04_07_no_project_cp_admin.log');
+      expect(result).toBe('no_project_cp_admin.log_26_04_07');
     });
 
     it('no-project: worker path with fewer than 3 rest segments falls to generic fallback', () => {
@@ -657,46 +657,46 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
       expect(result.length).toBeGreaterThan(0);
     });
 
-    it('project: control-plane known service → <date>_cp_<svc>_<projectId>.log', () => {
+    it('project: control-plane known service → cp_<svc>_<projectId>_<date>.log', () => {
       const result = (service as any).toFlatFilename(
         'ndm_logs_user/ndm_logs/2026-04-07/proj-abc/control-plane/admin-service.log',
       );
-      expect(result).toBe('26_04_07_cp_admin_svc_proj-abc.log');
+      expect(result).toBe('cp_admin_svc_proj-abc_26_04_07.log');
     });
 
-    it('project: control-plane config-service → <date>_cp_config_svc_<projectId>.log', () => {
+    it('project: control-plane config-service → cp_config_svc_<projectId>_<date>.log', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/config-service.log',
       );
-      expect(result).toBe('26_04_07_cp_config_svc_proj-abc.log');
+      expect(result).toBe('cp_config_svc_proj-abc_26_04_07.log');
     });
 
-    it('project: control-plane error-report.csv → <date>_cp_error_report_<projectId>.csv', () => {
+    it('project: control-plane error-report.csv → cp_error_report_<projectId>_<date>.csv', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/error-report.csv',
       );
-      expect(result).toBe('26_04_07_cp_error_report_proj-abc.csv');
+      expect(result).toBe('cp_error_report_proj-abc_26_04_07.csv');
     });
 
-    it('project: control-plane unknown service (cpMap miss) → <date>_cp_<projectId>_<safe>', () => {
+    it('project: control-plane unknown service (cpMap miss) → cp_<projectId>_<safe>_<date>', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/control-plane/custom-service.log',
       );
-      expect(result).toBe('26_04_07_cp_proj-abc_custom-service.log');
+      expect(result).toBe('cp_proj-abc_custom-service.log_26_04_07');
     });
 
-    it('project: worker worker.log exact match → <date>_worker_<id>_<projectId>.log', () => {
+    it('project: worker worker.log exact match → worker_<id>_<projectId>_<date>.log', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456/worker.log',
       );
-      expect(result).toBe('26_04_07_worker_wid-456_proj-abc.log');
+      expect(result).toBe('worker_wid-456_proj-abc_26_04_07.log');
     });
 
-    it('project: worker other file → <date>_<projectId>_worker_<id>_<safe>', () => {
+    it('project: worker other file → <projectId>_worker_<id>_<safe>_<date>', () => {
       const result = (service as any).toFlatFilename(
         'bundle/ndm_logs/2026-04-07/proj-abc/worker/wid-456/debug.log',
       );
-      expect(result).toBe('26_04_07_proj-abc_worker_wid-456_debug.log');
+      expect(result).toBe('proj-abc_worker_wid-456_debug.log_26_04_07');
     });
 
     it('project: worker path with fewer than 3 sub segments falls to safe flat path', () => {
@@ -718,34 +718,34 @@ X-Netapp-Asup-Content-Type: application/x-7z-compressed`;
 
     // ── CSV category paths ────────────────────────────────────────────────────
 
-    // Epoch 1744070400000 = 2025-04-08T00:00:00.000Z → date prefix "25_04_08"
-    // Epoch is stripped from output; only the derived YY_MM_DD prefix is kept.
-    it('Performance Metrics csv → <YY_MM_DD>_perf_<metric_underscored>.csv (epoch stripped)', () => {
+    // Epoch 1744070400000 = 2025-04-08T00:00:00.000Z → date suffix "25_04_08"
+    // Epoch is stripped from output; only the derived YY_MM_DD suffix is kept.
+    it('Performance Metrics csv → perf_<metric_underscored>_<YY_MM_DD>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
         'bundle/Performance Metrics/cpu-percent-1744070400000.csv',
       );
-      expect(result).toBe('25_04_08_perf_cpu_percent.csv');
+      expect(result).toBe('perf_cpu_percent_25_04_08.csv');
     });
 
-    it('State Data csv → <YY_MM_DD>_state_data_<name>.csv (epoch stripped)', () => {
+    it('State Data csv → state_data_<name>_<YY_MM_DD>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
         'bundle/State Data/service_pods_1744070400000.csv',
       );
-      expect(result).toBe('25_04_08_state_data_service_pods.csv');
+      expect(result).toBe('state_data_service_pods_25_04_08.csv');
     });
 
-    it('System Inventory csv → <YY_MM_DD>_sys_inventory_<type_underscored>.csv (epoch stripped)', () => {
+    it('System Inventory csv → sys_inventory_<type_underscored>_<YY_MM_DD>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
         'bundle/System Inventory/system-inventory-disk-usage-1744070400000.csv',
       );
-      expect(result).toBe('25_04_08_sys_inventory_disk_usage.csv');
+      expect(result).toBe('sys_inventory_disk_usage_25_04_08.csv');
     });
 
-    it('configuration data csv → <YY_MM_DD>_<filename>.csv (epoch stripped)', () => {
+    it('configuration data csv → <filename>_<YY_MM_DD>.csv (epoch stripped)', () => {
       const result = (service as any).toFlatFilename(
         'bundle/configuration data/job_config_details_1744070400000.csv',
       );
-      expect(result).toBe('25_04_08_job_config_details.csv');
+      expect(result).toBe('job_config_details_25_04_08.csv');
     });
   });
 

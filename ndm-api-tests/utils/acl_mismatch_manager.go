@@ -113,16 +113,16 @@ func BuildAclMismatchSidMappingCSV() string {
 //   - NotContentIndexed (0x2000), Temporary (0x0100) — SetAttributes silently ignored
 var AclMismatchScenarios = []AclMismatchScenario{
 	// 1–3: Controls — no mutation, must NOT re-migrate
-	{ID: "S01_CTRL_OWNER", RelPath: "control/S01_ctrl_owner.txt", Verdict: VerdictMatch, IsControl: true, Notes: "Baseline: Owner=Domain Admins, Everyone:M. Mutation: none."},
+	{ID: "S01_CTRL_OWNER", RelPath: "control/S01_ctrl_owner.txt", Verdict: VerdictMatch, IsControl: true, Notes: "Baseline: Owner=aclmap_u6, Everyone:M. Mutation: none. Owner must stamp on dest and NOT re-migrate."},
 	{ID: "S02_CTRL_DACL", RelPath: "control/S02_ctrl_dacl.txt", Verdict: VerdictMatch, IsControl: true, Notes: "Baseline: Everyone:M. Mutation: none."},
 	{ID: "S03_CTRL_ATTRS", RelPath: "control/S03_ctrl_attrs.txt", Verdict: VerdictMatch, IsControl: true, Notes: "Baseline: default attrs. Mutation: none."},
 
 	// 4–5: Owner
-	{ID: "S04_OWNER_TO_USERS", RelPath: "owner/S04_owner_to_users.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "owner", Notes: "Baseline: Owner=Domain Admins. Mutation: Owner→Domain Users."},
-	{ID: "S05_OWNER_TO_SYSTEM", RelPath: "owner/S05_owner_to_system.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "owner", Notes: "Baseline: Owner=Administrators. Mutation: Owner→NT AUTHORITY\\SYSTEM."},
+	{ID: "S04_OWNER_TO_USERS", RelPath: "owner/S04_owner_to_users.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "owner", Notes: "Baseline: Owner=aclmap_u6. Mutation: Owner→aclmap_u7."},
+	{ID: "S05_OWNER_SID_MAP", RelPath: "owner/S05_owner_sid_map.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "owner", Notes: "Baseline: Owner=aclmap_u6. Mutation: Owner→aclmap_u1 (mapped to u2). Dest has u6, expected u2 → mismatch."},
 
 	// 6: Group
-	{ID: "S06_GROUP_CHANGE", RelPath: "group/S06_group_change.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "group", Notes: "Baseline: Group=Domain Users (default). Mutation: Group→Domain Admins."},
+	{ID: "S06_GROUP_CHANGE", RelPath: "group/S06_group_change.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "group", Notes: "Baseline: Group=None (default). Mutation: Group→aclmap_u7."},
 
 	// 7–8: DACL order
 	{ID: "S07_ORDER_DENY_BEFORE_ALLOW", RelPath: "dacl_order/S07_deny_before_allow.txt", Verdict: VerdictMismatch, ExpectedReasonSub: "order", Notes: "Baseline: Deny Domain Users:W, Allow Domain Admins:R (canonical). Mutation: swap to Allow-first, Deny-second."},
@@ -184,7 +184,7 @@ var AclMismatchScenarios = []AclMismatchScenario{
 
 	// 45–46: GA|FA idempotency — dir + file at share root inheriting volume root's raw GENERIC_ALL ACE.
 	// No mutation. Must NOT re-migrate on any incremental. Validates that the stamper
-	{ID: "S45_GA_INHERIT_DIR", RelPath: "ga_inherit_test", Verdict: VerdictMatch, IsControl: true, IsExpectedFailure: true, ShareRootRelative: true, Notes: "Directory at share root inheriting volume root GA. No mutation. Known over-pick due to GA inheritance mismatch between source/dest share root."},
+	{ID: "S45_GA_INHERIT_DIR", RelPath: "ga_inherit_test", Verdict: VerdictMatch, IsControl: true, ShareRootRelative: true, Notes: "Directory at share root inheriting volume root GA. No mutation. Must NOT re-migrate."},
 	{ID: "S46_GA_INHERIT_FILE", RelPath: "ga_inherit_test/S46_ga_inherit.txt", Verdict: VerdictMatch, IsControl: true, ShareRootRelative: true, Notes: "File at share root inheriting volume root GA. No mutation. Must NOT re-migrate."},
 }
 
@@ -412,10 +412,11 @@ func parseSourcePathColumnFiltered(raw []byte, skipNoOps bool) ([]string, error)
 // Hybrid strategy inside the .ps1:
 //   - Native PS for control flow (mkdir, Set-Content, share mount, AD users,
 //     try/catch, special-state ACLs via Set-Acl/SDDL).
-//   - icacls.exe still invoked for ordinary ACE grants/owner changes so the
-//     ACL bytes match what the existing 39 working scenarios were validated
-//     against. icacls is just a native binary; calling it from PS has none
-//     of the cmd quoting problems.
+//   - icacls.exe still invoked for ordinary ACE grants so the ACL bytes
+//     match what the existing 39 working scenarios were validated against.
+//   - Owner changes use Get-Acl/Set-Acl (.NET SetOwner) instead of
+//     icacls /setowner, which triggers "An internal error occurred" on
+//     some ANF/ONTAP volumes over SMB.
 func CreateSMBFilesForAclMismatchTest(export string) error {
 	script := createAclMismatchTestStructureScript(export)
 	LogDebug(fmt.Sprintf("Creating ACL mismatch test tree on: %s", export))
@@ -442,7 +443,7 @@ func CreateSMBFilesForAclMismatchTest(export string) error {
 // to be executed on the worker. The script:
 //  1. Provisions the two SID-mapping AD users (best-effort).
 //  2. Stages an empty local tree under C:\acl_mismatch_test.
-//  3. Mounts the source share at Z:, wipes any prior acl_mismatch_test root.
+//  3. Mounts the source share at a unique drive letter, wipes any prior acl_mismatch_test root.
 //  4. Copies the local tree onto the share, resets ACLs to Everyone:(OI)(CI)F.
 //  5. Applies the per-scenario baseline ACL/attribute state.
 //  6. Unmounts and cleans up the local stage.
@@ -453,7 +454,7 @@ func createAclMismatchTestStructureScript(export string) string {
 	smbShare := fmt.Sprintf(`\\%s\%s`, host, shareName)
 
 	localTestDir := `C:\acl_mismatch_test`
-	mappedDrive := `Z:`
+	mappedDrive := getUniqueDriveLetter()
 	share := fmt.Sprintf(`%s\%s`, mappedDrive, AclMismatchTestRoot)
 
 	var b strings.Builder
@@ -519,15 +520,15 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	// ── Mount share and copy ────────────────────────────────────────────
 	// Use net.exe (not New-PSDrive) to match the existing helpers; behavior
 	// and credential semantics are identical to what the cmd version did.
-	// Best-effort unmount: net.exe writes to stderr if Z: isn't currently
-	// mapped, which $ErrorActionPreference=Stop would turn into a fatal
-	// NativeCommandError. Wrap so the script keeps going.
+	// Best-effort unmount so a stale mapping doesn't block the fresh mount.
 	fmt.Fprintf(&b, "try { & net.exe use %s /delete /y *>&1 | Out-Null } catch { }\n", mappedDrive)
 	fmt.Fprintf(&b, "& net.exe use %s %s /user:%s '%s' 2>&1 | Out-Null\n",
 		mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD)
 	fmt.Fprintf(&b, "if ($LASTEXITCODE -ne 0) { throw \"net use mount failed: exit $LASTEXITCODE\" }\n")
 	fmt.Fprintf(&b, "if (Test-Path '%s') { Remove-Item -Recurse -Force '%s' }\n", share, share)
 	fmt.Fprintf(&b, "& xcopy.exe /E /I /Y '%s' '%s' 2>&1 | Out-Null\n", localTestDir, share)
+	fmt.Fprintf(&b, "if (-not (Test-Path '%s')) { throw 'xcopy failed: %s does not exist after copy' }\n", share, share)
+	b.WriteString("Start-Sleep -Seconds 2\n")
 
 	// Break inheritance on the test root only (no /T) so the volume-root's
 	// GENERIC_ALL (0x10000000) ACE stops propagating into child dirs/files.
@@ -554,20 +555,30 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	ic := func(format string, a ...interface{}) {
 		fmt.Fprintf(&b, "& icacls.exe "+format+" 2>&1 | Out-Null\n", a...)
 	}
+	// setOwner stamps owner=aclmap_u6 directly while mounted as adadmin.
+	// adadmin holds SeRestorePrivilege (granted via the ANF AD connection's
+	// backupOperators list), so it can set ownership to any account over SMB
+	// without the old self-ownership remount workaround.
+	ownerUser := `ROOTDOMAIN\aclmap_u6`
+	setOwner := func(path string) {
+		fmt.Fprintf(&b, "$p='%s'; $a=Get-Acl $p; "+
+			"$a.SetOwner([System.Security.Principal.NTAccount]'%s'); Set-Acl -Path $p -AclObject $a\n",
+			path, ownerUser)
+	}
 
-	// ── 1–3: Controls — set Owner=Administrators, Everyone:M ────────────
+	// ── 1–3: Controls — S01 owner=aclmap_u6 (no mutation), Everyone:M ───────────
 	b.WriteString("Write-Output '===== BASELINE 1-3 controls ====='\n")
-	ic(`'%s\control\S01_ctrl_owner.txt' /setowner 'ROOTDOMAIN\Domain Admins'`, share)
+	setOwner(fmt.Sprintf(`%s\control\S01_ctrl_owner.txt`, share))
 	ic(`'%s\control\S01_ctrl_owner.txt' /grant 'Everyone:M'`, share)
 	ic(`'%s\control\S02_ctrl_dacl.txt'  /grant 'Everyone:M'`, share)
 	ic(`'%s\control\S03_ctrl_attrs.txt' /grant 'Everyone:M'`, share)
 
-	// ── 4–5: Owner — set Owner=Administrators, Everyone:M ────────────────
+	// ── 4–5: Owner — set Owner=aclmap_u6, Everyone:M ────────────────
 	b.WriteString("Write-Output '===== BASELINE 4-5 owner ====='\n")
-	ic(`'%s\owner\S04_owner_to_users.txt' /setowner 'ROOTDOMAIN\Domain Admins'`, share)
+	setOwner(fmt.Sprintf(`%s\owner\S04_owner_to_users.txt`, share))
 	ic(`'%s\owner\S04_owner_to_users.txt' /grant 'Everyone:M'`, share)
-	ic(`'%s\owner\S05_owner_to_system.txt' /setowner 'ROOTDOMAIN\Domain Admins'`, share)
-	ic(`'%s\owner\S05_owner_to_system.txt' /grant 'Everyone:M'`, share)
+	setOwner(fmt.Sprintf(`%s\owner\S05_owner_sid_map.txt`, share))
+	ic(`'%s\owner\S05_owner_sid_map.txt' /grant 'Everyone:M'`, share)
 
 	// ── 6: Group — set Everyone:M (Group defaults to None) ───────────────
 	b.WriteString("Write-Output '===== BASELINE 6 group ====='\n")
@@ -696,7 +707,7 @@ func mutateAclMismatchTestStructureScript(export string) string {
 	shareName := strings.TrimSpace(split[1])
 	smbShare := fmt.Sprintf(`\\%s\%s`, host, shareName)
 
-	mappedDrive := `Z:`
+	mappedDrive := getUniqueDriveLetter()
 	share := fmt.Sprintf(`%s\%s`, mappedDrive, AclMismatchTestRoot)
 
 	var b strings.Builder
@@ -717,9 +728,7 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 
 `, SidMapAdUser1, SidMapAdUser2, SidMapAdUser3, SidMapAdUser4, SidMapAdUser5, SidMapAdDomainStr)
 
-	// Best-effort unmount: net.exe writes to stderr if Z: isn't currently
-	// mapped, which $ErrorActionPreference=Stop would turn into a fatal
-	// NativeCommandError. Wrap so the script keeps going.
+	// Best-effort unmount so a stale mapping doesn't block the fresh mount.
 	fmt.Fprintf(&b, "try { & net.exe use %s /delete /y *>&1 | Out-Null } catch { }\n", mappedDrive)
 	fmt.Fprintf(&b, "& net.exe use %s %s /user:%s '%s' 2>&1 | Out-Null\n",
 		mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD)
@@ -728,16 +737,30 @@ foreach ($u in '%s','%s','%s','%s','%s') {
 	ic := func(format string, a ...interface{}) {
 		fmt.Fprintf(&b, "& icacls.exe "+format+" 2>&1 | Out-Null\n", a...)
 	}
+	// setOwner stamps owner=aclmap_u7 directly while mounted as adadmin.
+	// adadmin holds SeRestorePrivilege (granted via the ANF AD connection's
+	// backupOperators list), so it can set ownership to any account over SMB
+	// without the old self-ownership remount workaround.
+	mutOwnerUser := `ROOTDOMAIN\aclmap_u7`
+	setOwner := func(path string) {
+		fmt.Fprintf(&b, "$p='%s'; $a=Get-Acl $p; "+
+			"$a.SetOwner([System.Security.Principal.NTAccount]'%s'); Set-Acl -Path $p -AclObject $a\n",
+			path, mutOwnerUser)
+	}
 
-	// ── 4–5: Owner — change owner ────────────────────────────────────────
+	// ── 4–5: Owner — S04→aclmap_u7, S05→aclmap_u1 (SID-mapped to u2) ──
 	b.WriteString("Write-Output '===== MUTATE 4-5 owner ====='\n")
-	ic(`'%s\owner\S04_owner_to_users.txt' /setowner 'ROOTDOMAIN\Domain Users'`, share)
-	ic(`'%s\owner\S05_owner_to_system.txt' /setowner 'NT AUTHORITY\SYSTEM'`, share)
+	setOwner(fmt.Sprintf(`%s\owner\S04_owner_to_users.txt`, share))
+	// S05: set owner to aclmap_u1 which is SID-mapped to aclmap_u2.
+	// Worker should stamp owner=aclmap_u2 on dest; dest has aclmap_u6 → mismatch.
+	fmt.Fprintf(&b, "$p='%s\\owner\\S05_owner_sid_map.txt'; $a=Get-Acl $p; "+
+		"$a.SetOwner([System.Security.Principal.NTAccount]'%s\\%s'); Set-Acl -Path $p -AclObject $a\n",
+		share, SidMapAdDomainStr, SidMapAdUser1)
 
-	// ── 6: Group — change group to ROOTDOMAIN\Domain Admins ─────────────
+	// ── 6: Group — change group to ROOTDOMAIN\aclmap_u7 (direct as adadmin) ──
 	b.WriteString("Write-Output '===== MUTATE 6 group ====='\n")
 	fmt.Fprintf(&b, "$p='%s\\group\\S06_group_change.txt'; $a=Get-Acl $p; "+
-		"$a.SetGroup([System.Security.Principal.NTAccount]'ROOTDOMAIN\\Domain Admins'); Set-Acl $p $a\n", share)
+		"$a.SetGroup([System.Security.Principal.NTAccount]'%s'); Set-Acl $p $a\n", share, mutOwnerUser)
 
 	// ── 7–8: DACL order — rebuild with swapped order via SetNamedSecurityInfo ──
 	// Set-Acl re-canonicalizes (Deny-before-Allow), making the order swap
@@ -923,7 +946,7 @@ func destinationMutationScript(destExport string) string {
 	shareName := strings.TrimSpace(split[1])
 	smbShare := fmt.Sprintf(`\\%s\%s`, host, shareName)
 
-	mappedDrive := `Y:` // distinct from source's Z: to avoid collision
+	mappedDrive := getUniqueDriveLetter()
 	share := fmt.Sprintf(`%s\%s`, mappedDrive, AclMismatchTestRoot)
 
 	var b strings.Builder
@@ -931,9 +954,7 @@ func destinationMutationScript(destExport string) string {
 	b.WriteString("$ProgressPreference = 'SilentlyContinue'\n")
 	b.WriteString("Write-Output 'ACL-MISMATCH-DEST-MUTATE-START'\n\n")
 
-	// Best-effort unmount: net.exe writes to stderr if Z: isn't currently
-	// mapped, which $ErrorActionPreference=Stop would turn into a fatal
-	// NativeCommandError. Wrap so the script keeps going.
+	// Best-effort unmount so a stale mapping doesn't block the fresh mount.
 	fmt.Fprintf(&b, "try { & net.exe use %s /delete /y *>&1 | Out-Null } catch { }\n", mappedDrive)
 	fmt.Fprintf(&b, "& net.exe use %s %s /user:%s '%s' 2>&1 | Out-Null\n",
 		mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD)
