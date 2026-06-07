@@ -1215,7 +1215,29 @@ describe('CommandExecService', () => {
             expect(ctx.publishToErrorStream).toHaveBeenCalled();
             });
 
-         
+            it('should NOT publish accessTime mismatch error for directories even when preserveAccessTime is true', async () => {
+            const dirCmd = { ...baseCmd, isDir: true };
+            const item = {
+                ...baseItem,
+                sourceMeta: { ...baseItem.sourceMeta, accessTime: new Date('2023-01-01T00:00:00Z') },
+                targetMeta: { ...baseItem.targetMeta, accessTime: new Date('2023-01-02T00:00:00Z') }
+            };
+            const ctx = {
+                ...jobContext,
+                jobConfig: {
+                options: {
+                    preserveAccessTime: true
+                }
+                }
+            };
+            await service.validateCommand({
+                cmd: dirCmd as any,
+                item: item as any,
+                jobContext: ctx,
+                errorType: ErrorType.RECOVERABLE_ERROR
+            } as any);
+            expect(ctx.publishToErrorStream).not.toHaveBeenCalled();
+            });
 
             it('should publish error if multiple mismatches occur', async () => {
                 const cmd = {

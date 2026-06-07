@@ -64,6 +64,7 @@ export class RestampDirectoriesService {
       const jobContext: JobManagerContext = await this.redisService.getJobManagerContext(jobRunId);
       const tPathId = jobContext.jobConfig?.destinationFileServer?.pathId;
       const destDirectoryPath = jobContext.jobConfig?.destinationDirectoryPath;
+      const preserveAccessTime = jobContext.jobConfig?.options?.preserveAccessTime ?? false;
 
       if (!tPathId) {
         this.logger.warn(`[${jobRunId}] No destination pathId on job config — skipping directory restamp pass.`);
@@ -80,7 +81,7 @@ export class RestampDirectoriesService {
         if (!batch || batch.length === 0) break;
 
         const results = await Promise.allSettled(
-          batch.map(rec => this.applyStamp(baseTargetPrefixPath, rec, jobRunId, jobContext)),
+          batch.map(rec => this.applyStamp(baseTargetPrefixPath, preserveAccessTime, rec, jobRunId, jobContext)),
         );
         for (const r of results) {
           output.attempted += 1;
@@ -114,6 +115,7 @@ export class RestampDirectoriesService {
 
   private async applyStamp(
     baseTargetPrefixPath: string,
+    preserveAccessTime: boolean,
     rec: DeferredDirStamp,
     jobRunId: string,
     jobContext: JobManagerContext,
@@ -173,6 +175,26 @@ export class RestampDirectoriesService {
       );
       await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
       throw lastUtimesError;
+    }
+
+    // Mirror the atime check in validateCommand (which skips dirs at command-execution
+    if (preserveAccessTime) {
+      try {
+        const destStat = await fs.promises.lstat(targetPath);
+        if (atime.getTime() !== destStat.atime.getTime()) {
+          const mismatchMsg = `AccessTime Mismatch detected, source: ${atime.toISOString()}, target: ${destStat.atime.toISOString()}`;
+          const dmErr = dmError(
+            "OPERATION", Origin.DESTINATION, Operation.STAMP_META,
+            ErrorType.TRANSIENT_ERROR,
+            "",
+            new Error(mismatchMsg),
+            { name: rec.fPath, path: targetPath },
+          );
+          await jobContext.publishToErrorStream(dmErr, jobContext.jobConfig?.jobRunId);
+        }
+      } catch (error) {
+        this.logger.warn(`[${jobRunId}] Could not validate atime for ${rec.fPath} after restamp: ${error?.message}`);
+      }
     }
 
     return "stamped";
