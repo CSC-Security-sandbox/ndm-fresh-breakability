@@ -1,12 +1,13 @@
 # parquet-service — Specification
 
-> **Status:** Draft v0.3 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-04
+> **Status:** Draft v0.3 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-09
 > Python control-plane service for the NDM Parquet metadata-storage redesign.
 > Starting point: the `local-python-temporal` prototype (FastAPI + Temporal worker + Redis→Parquet activity).
 > Parent design: `ndm-parquet-storage-redesign.md` (technical) + CDMT Confluence proposal (planning).
 > Producer (worker) side: [`services/worker/PARQUET_PRODUCER_SPEC.md`](../worker/PARQUET_PRODUCER_SPEC.md).
 > v0.3 adds: dir own-attributes copied into the merkle Parquet (D12), single-char `file_type` (D17),
-> error Parquet co-located under `<jobRunId>/` (D18), workflow name confirmed (D2). v0.2 resolved §1 blockers.
+> error Parquet co-located under `<jobRunId>/` (D18), workflow name confirmed (D2), and the **error→command
+> replay** design (`ERROR_SCHEMA` + `attempt`/`is_dir`; `replay_errors` activity §9.1). v0.2 resolved §1 blockers.
 
 ---
 
@@ -32,7 +33,8 @@ src-vs-dst, incremental src-vs-prior) with subtree short-circuit · command emis
 
 ### 0.2 Deferred to Phase 2
 `continue_as_new` cadence · OpenTelemetry trace propagation · schema-evolution helper ·
-**error→commands** retry conversion (Phase 1 only *writes* the error Parquet) · full Prometheus suite ·
+**error→commands** retry conversion (the `replay_errors` activity, §9.1 — Phase 1 only *writes* the error
+Parquet) · full Prometheus suite ·
 rich cross-SDK signal payload.
 
 > Note: baseline (destination scan + src-vs-dst diff) is **in Phase 1** here — wider than the Confluence MVP,
@@ -180,10 +182,22 @@ MERKLE_SCHEMA = pa.schema([
 Diff per matched directory: compare the **own-attribute columns** directly (mode/uid/gid/acl_hash[/times] →
 `sm` if changed); compare `dir_hash` to decide whether to descend into children.
 
-### 3.3 Error rows — `ERROR_SCHEMA` (Phase 1: write-only)
-1:1 with `OperationError` (`lib/jobs-lib/src/types/metadata-types.ts`) + `op_kind` + `command_metadata`
-(`operation_id, file_path, file_name, error_code, error_message, error_type, operation_name, origin,
-original_job_run_id, op_kind, command_metadata, ts`).
+### 3.3 Error rows — `ERROR_SCHEMA` (Phase 1 writes; Phase 2 replays)
+Sourced 1:1 from the **enriched** `OperationError` (`lib/jobs-lib/src/types/metadata-types.ts` — the parquet
+`ParquetChildSyncWorkflow` executor adds `opKind`/`command`/`attempt`; producer SPEC §15). Columns:
+- `operation_id` — the failed `Cmd.id`; becomes the replay's `originalCmdId`.
+- `file_path`, `file_name` — identity.
+- `error_code`, `error_message`, `error_type` (`FATAL|TRANSIENT|RECOVERABLE|METADATA_UPDATE_CONFLICT` —
+  **drives retryability**), `operation_name`, `origin`, `original_job_run_id`.
+- `op_kind` (`cc|sm|sa|cf|cd|rd|rf|cs`) — **what to retry**.
+- **`command_metadata`** = `JSON.stringify(Cmd)` — **the replay source of truth** (path, `isDir`, `ops`+params,
+  `metadata`); the diff is gone by retry time, so the failed command is carried here, not re-derived.
+- **`attempt`** (int32, NEW) — retry-cap counter.
+- **`is_dir`** (bool, NEW) — filter/partition without parsing `command_metadata`.
+- `ts` (int64, epoch ns) — dedup tiebreak.
+
+Single per-jobRun stream (`${jobRunId}:errors`) → one error-Parquet area under `<jobRunId>/errors/`, sealed at
+sync completion. Phase-2 replay: §9.1.
 
 ### 3.4 Writer settings
 ZSTD level 3 · row-group ~128 MB · page 1 MiB · `use_dictionary=["file_type","acl_hash","mode","uid","gid"]`
@@ -245,7 +259,8 @@ Flow branches on `run_mode`:
 | `merge_sort` (child wf) | sorter | **k-way** merge of sorted files (fan-in 16, 2 GB, `/tmp` spill) → `merged/<run>.parquet`; 1s heartbeat, 6h S2C, transient-IO retry |
 | `build_merkle` | MerkleBuilder | after merge: children-only `dir_hash` **+ the dir's own attributes copied in** → `merkle/<run>.parquet` (retained alongside merged) |
 | `compare_diff` | ParquetComparator + StreamWriter | file-vs-file & dir-vs-dir; `dir_path` checkpoint (§10) |
-| `consume_errors` | StreamReader + ParquetWriter | `${jobRunId}:errors` → error Parquet (write-only) |
+| `consume_errors` | StreamReader + ParquetWriter | `${jobRunId}:errors` → error Parquet under `<jobRunId>/errors/`; ack-after-seal |
+| `replay_errors` (Phase 2) | ParquetReader + StreamWriter | read error Parquet → filter retryable + dedup → rebuild **failed-op-only** `Cmd` → bulk-XADD `${jobRunId}:commands` (§9.1) |
 | `promote_and_retain` | paths | on diff complete: delete older snapshot, current becomes prior (D14); drop `raw/`+`*.sorted` |
 
 Activity options (from prototype): `start_to_close=6h`, `heartbeat=5m` (1s for merge), retry
@@ -352,6 +367,28 @@ Ordering: creates depth **ASC**, deletes depth **DESC**. `CmdMeta.ctime = null` 
 in-flight directory may re-emit commands — safe (sync is idempotent on OPS_CMD). When the join completes
 (diff generation done), `promote_and_retain` deletes the older snapshot and the current becomes prior (D14).
 
+### 9.1 Error → command replay (Phase 2, `replay_errors`)
+
+The same service that emits diff commands also replays failures — there is **no re-scan** path here (the diff
+is the only command source, and it's gone by retry time; the legacy `RetryMigrationWorkflow` re-derived
+commands by re-scanning source-vs-target, producer SPEC §15). Run as a retry-mode pass over the prior run's
+error Parquet:
+
+1. Read `<jobRunId>/errors/*.parquet`.
+2. **Filter retryable:** `error_type ∈ {TRANSIENT, RECOVERABLE, METADATA_UPDATE_CONFLICT}` (drop **FATAL** —
+   `EACCES`/`ENOSPC`/identity-mapping never replay) **and** `op_kind` + `command_metadata` present (skip
+   scan/`READ_DIR` errors, which carry no command) **and** `attempt < MAX_RETRY` (~3 — caps retry storms).
+3. **Dedup** by `(file_path, op_kind)` keeping `max(ts)` — one file logs multiple rows per root cause.
+4. **Rebuild the `Cmd`** from `command_metadata`: new `id` (uuid), `originalCmdId = operation_id`,
+   `status = READY`, `attempt = attempt + 1`, and set **only the failed op `READY`** (`ops[op_kind].status =
+   READY`; leave succeeded ops `COMPLETED` — minimal re-work; the executor honors per-op status).
+5. `StreamWriter.push_bulk` the rebuilt `Cmd`s (`Cmd.to_wire()`, msgpack-b64 under `obj`) to
+   `${jobRunId}:commands`; the sync worker drains and re-executes.
+
+**Idempotent:** OPS_CMD are idempotent (cc overwrites / sm re-stamps / rf removes), `(path, op_kind)` dedup
+collapses repeats, and a checkpoint/idempotency key makes a double-run safe. A re-failure writes a fresh error
+row with `attempt+1`; once `attempt` reaches `MAX_RETRY` it is surfaced, not retried.
+
 ---
 
 ## 10. Pause / Stop / Resume (D16)
@@ -394,6 +431,8 @@ errors → error Parquet · completion signal on both-stream EOF · Postgres pip
 2. **Migration behaviour** (not storage) for SOCKET/FIFO/CHARACTER_DEVICE/BLOCK_DEVICE/STREAM/UNKNOWN —
    does NDM copy or skip them? Storage is settled (single-char code, D17).
 3. Single-char codes for `FILE_TYPE_CODES` — confirm the letters in §3.1 (esp. S/P/C/B/H/M/T).
+4. **Replay tuning (§9.1):** `MAX_RETRY` default (~3) and whether `METADATA_UPDATE_CONFLICT` is replayable
+   alongside `TRANSIENT`/`RECOVERABLE`.
 
 *Resolved since v0.2:* dir own-attrs copied into merkle (D12) · error location `<jobRunId>/errors/` (D18) ·
 workflow name `ScanIngestionWorkflow` (D2) · `file_type` single-char (D17).

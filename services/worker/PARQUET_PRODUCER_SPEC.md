@@ -1,6 +1,6 @@
 # Worker (Producer) Changes — NDM Parquet Redesign
 
-> **Status:** Draft v0.2 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-04
+> **Status:** Draft v0.3 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-09
 > The producer half of the Parquet metadata redesign. Pairs with
 > [`services/parquet-service/SPEC.md`](../parquet-service/SPEC.md) (the consumer).
 > Touches `services/worker` and `lib/jobs-lib`. All file:line refs are on branch `ab/parquet-redesign`
@@ -8,6 +8,11 @@
 > **v0.2:** the parquet path is a **separate duplicated workflow family** (`ParquetMigrationWorkflow` +
 > `ParquetChildScanWorkflow` + `ParquetChildSyncWorkflow`), selected by jobs-service routing on
 > `enable_parquet` — the legacy `MigrationWorkflow` is untouched. See §11–§14.
+> **v0.3 (2026-06-09):** `acl_hash` decisions locked (§6) — **SMB/NTFS-only** (NFS → `null`); fetched via
+> **async-koffi `GetNamedSecurityInfo`** fired in fixed-size logical batches (no native addon); hash = the
+> **stamp-comparator projection** (not raw SD bytes), **BLAKE2b-128**. The producer scan is rewritten as a
+> **threshold-chunked walk with a positional resume cursor** (§5) so a single **>1M-file directory** stays
+> memory-bounded and crash-resilient.
 
 ---
 
@@ -78,7 +83,7 @@ to get `*Ns` + `ino` as `BigInt`.
 | `mode` | number | `sFile.mode` | |
 | `uid` | number | `sFile.uid` | |
 | `gid` | number | `sFile.gid` | |
-| `acl_hash` | string \| null | **computed (net-new, §6)** | BLAKE3-128 hex |
+| `acl_hash` | string \| null | **computed (net-new, §6)** | **SMB/NTFS only** — BLAKE2b-128 hex (`v1:`-prefixed); **`null` on NFS** (POSIX perms already in `mode`/`uid`/`gid`) |
 | `atime` | **string** (epoch ns) | `sFile.atimeNs` | |
 | `birthtime` | **string** (epoch ns) | `sFile.birthtimeNs` | |
 | `ctime` | **string** (epoch ns) | `sFile.ctimeNs` | not in `ItemMeta` today; free from stat |
@@ -111,45 +116,140 @@ of once per jobRun.
 
 ---
 
-## 5. Dual-stream producer wiring
+## 5. Dual-stream producer wiring — threshold-chunked walk
 
-At `discovery-scan.service.ts:141/155`, alongside each `publishToFileStream(Bulk)` call, build the
-corresponding `ParquetItem`(s) from the same stat and publish to the per-path parquet stream **in bulk**
-(per-entry publishing dominates scan wall-clock). This block is **gated on the activity input
-`publishParquet`** (§11) — set true only when invoked by `ParquetChildScanWorkflow`, so the legacy scan path
-is byte-for-byte unchanged.
+`ParquetChildScanWorkflow`'s discovery scan replaces the legacy "publish per directory" walk with a
+**threshold-chunked walk**, because a single directory may hold **>1M files** — too large to be the atomic
+unit of work, of memory, or of crash recovery. The whole block is **gated on the activity input
+`publishParquet`** (§11), set true only by `ParquetChildScanWorkflow`, so the legacy scan path is
+byte-for-byte unchanged.
 
-**Ordering is load-bearing — files stream FIRST, parquet stream SECOND:**
-```ts
-await jobContext.publishToFileStreamBulk(items);                 // legacy (db-writer source of truth)
-await jobContext.publishToParquetStreamBulk(pathId, parquetItems); // new (additive)
-```
-Rationale: the legacy `:files` stream is the back-compat source of truth and already back-pressured; the new
-parquet stream is the path expected to lag during rollout. Writing files first preserves legacy semantics.
+`scanDirectory` (`discovery-scan.service.ts`) streams entries via the `fs.Dir` async iterator (bounded
+memory — it never materializes all entries) and accumulates them into a **chunk of `THRESHOLD`** raw entries
+(config, ~2000). Per chunk:
 
-**Non-atomic:** the two awaits aren't atomic; a crash between them leaves `:files` ahead of parquet.
-Recovery relies on existing subdir-batch idempotency (re-scan on restart) + merge-sort dedup on `filepath`
-(keep latest by stream entry-id). No extra coordination; called out so reviewers don't assume atomicity.
+1. `fs.stat(path, { bigint: true })` — **one** stat, reused for `ItemInfo`, the ns timestamps + `inode_num`,
+   and the ACL fetch — plus `FileTypeDetectionService.detectFileType` and **`acl_hash` (§6)**. The chunk's
+   ACL reads are fired concurrently and bounded by a semaphore (§6.1).
+2. Build `ItemInfo[]` (legacy) and `ParquetItem[]` (new) from the same stats.
+3. Publish in the **load-bearing order — files stream FIRST, parquet stream SECOND**:
+   ```ts
+   await jobContext.publishToFileStreamBulk(items);                   // legacy (db-writer source of truth)
+   await jobContext.publishToParquetStreamBulk(pathId, parquetItems); // new (additive)
+   ```
+   The `:files` stream is the back-compat source of truth and already back-pressured; the parquet stream is
+   the one expected to lag during rollout, so writing files first preserves legacy semantics.
+4. Check backpressure (§10) and the activity `cancellationSignal` at the chunk boundary.
+5. **Advance and persist the positional cursor** (below).
+
+Everything per chunk is **O(THRESHOLD)** — memory, publish-payload size, backpressure granularity, and
+worst-case re-work are all flat regardless of whether the directory holds 10 files or 10M.
+
+**Crash resilience — positional cursor.** Today the atomic retry unit is one directory command
+(`buildOrGetValidScanTask`, `common-task.service.ts:124`, reloads the Redis task on retry and skips
+`COMPLETED` commands; persisted via `setTask`, `scan-activity.service.ts:149`) — too coarse for a 1M-file
+directory. Extend it with a **within-command cursor**: `command.scanCursor` = the count of **raw enumeration
+entries consumed** at the last **fully-published** chunk, persisted on the same Redis task **after** that
+chunk's files+parquet writes land. On retry, restore the cursor, re-open the directory, **skip that many raw
+entries**, and continue. Correctness:
+
+- The cursor counts **raw** entries (not published items), so the skip maps exactly onto re-iteration;
+  `shouldExcludeOrSkip` is deterministic, so filtered-out entries re-evaluate identically on resume.
+- The cursor advances **only after a chunk is fully published**, so it always denotes a fully-published
+  prefix. The chunk in flight at crash time re-publishes wholesale → ingest dedup (parquet-service by
+  `filepath`, latest entry-id; db-writer upsert by path) absorbs the overlap → **no file is ever permanently
+  skipped, and re-work is ≤ one chunk.**
+- Relies on NTFS/ONTAP returning an **unchanged** directory in stable order (the `$I30` name-ordered B-tree
+  — it does). Under concurrent mutation it degrades to ordinary single-pass-`readdir` consistency (which NDM
+  already has, and which incremental scans converge), never worse.
+
+**Non-atomic, by design:** the two `publish…Bulk` awaits aren't atomic; a crash between them leaves `:files`
+ahead of parquet for the in-flight chunk. The not-yet-advanced cursor + wholesale re-publish + dedup is the
+recovery path — no cross-stream coordination. Called out so reviewers don't assume atomicity.
+
+> **Invariants** that make this safe: (1) duplicates are **free** — the contract is at-least-once, never
+> exactly-once; (2) the only hard requirement is *never permanently skip an in-scope file*; (3) the EOF
+> sentinel (§9) is emitted exactly once, only after the cursor reaches end-of-directory for **every**
+> directory of the `pathId`.
 
 ---
 
-## 6. `acl_hash` computation (net-new)
+## 6. `acl_hash` — fetch + canonical form (SMB/NTFS only)
 
-Computed **server-side on the worker**, in the same activity that produces the `ParquetItem`. (The
-parquet-service receives it pre-computed and never recomputes it.)
+Computed **server-side on the worker**, inside the chunk pipeline (§5) that produces the `ParquetItem`. The
+parquet-service receives it pre-computed and **never recomputes** it — so there is **no cross-language parity
+requirement**, which frees the algorithm choice (§6.3).
 
-- **SMB/NTFS:** PowerShell `Get-Acl` on the source share (the same retrieval the stamping pipeline already
-  uses to write `inventory.source_meta.sid`).
-- **NFSv4:** the existing NFSv4 ACL retrieval used by the NFS scan path.
-- **Hash:** `BLAKE3-128` (truncated to 128 bits, hex) over a normalized canonical form of the **source-side**
-  security descriptor, **owner SID folded in**. Needs a BLAKE3 lib on the TS side (e.g. `blake3` /
-  `hash-wasm`).
-- Destination-side / mapped SIDs are **out** of the hash; a SID-mapping change is a manual re-stamp trigger,
-  not a hash change.
+**Scope: SMB/NTFS only.** NFSv4 is **not supported by NDM**, and plain NFS has no ACLs — POSIX permissions
+are already fully captured by the `mode` / `uid` / `gid` columns, which the parquet-service diff compares
+directly. So on the NFS (Linux) worker the ACL path is a **no-op and `acl_hash` is `null`**; the whole §6
+block runs only when `process.platform === 'win32'`. (There is no "existing NFSv4 ACL retrieval" — earlier
+drafts assumed one; it never existed.)
 
-**OPEN (the one remaining producer blocker):** the exact canonical-form rules — ACE sort order, treatment
-of inherited flags, owner/group inclusion, byte encoding — must be locked before implementation. Whatever is
-chosen is the permanent definition of "metadata changed" for SMB.
+### 6.1 Fetch mechanism — async-koffi `GetNamedSecurityInfo`, logically batched
+
+The SD is read with **`GetNamedSecurityInfo(SE_FILE_OBJECT, OWNER|GROUP|DACL)`** called **directly from Node
+via koffi** — the same P/Invoke surface the stamping pipeline's `Get-FileSecurityFast` uses, and the same
+pattern discovery already uses for `FindFirstStreamW` (ADS) and `GetFileAttributesW` (reparse) in
+`win-operation.service.ts`. No PowerShell on the hot path.
+
+- **Async, not sync.** The existing koffi calls are *synchronous* and block the event loop; the ACL fetch
+  **must** use koffi `.async` so each `GetNamedSecurityInfo` runs on the libuv threadpool and never stalls
+  the scan. Concurrency is then `UV_THREADPOOL_SIZE` (raise it — currently unset, libuv default 4) instead
+  of the 10-wide PowerShell shell pool.
+- **"Batched" = logical, not a native addon.** There is **no Win32 bulk-ACL syscall** — `GetNamedSecurityInfo`
+  is strictly per-object, so N files = N calls regardless. We exploit the chunk (§5): fire a chunk's ACL
+  reads with `Promise.all` over the async-koffi call, bounded by a **semaphore (~16–32 in flight)**. A custom
+  native batch addon was **rejected**: for an SMB-latency-bound workload it has the *same* in-flight ceiling
+  as async-single (both = the threadpool) while adding a node-gyp dependency and intra-batch head-of-line
+  blocking. (Perf model: koffi-async ≈ **10–15×** PowerShell-per-file; koffi-batch ≈ koffi-async ≈ 1×; the
+  win is concurrency + dropping PowerShell's redundant `Test-Path` and interpreter/JSON overhead, not
+  batching.)
+- **`LocalFree` the SD.** Unlike `Get-FileSecurityFast` (which leaks the SD pointer), the koffi path **must**
+  `LocalFree(ppSecurityDescriptor)` per call — at scan volume the leak is not tolerable.
+- **Fallback:** a PowerShell `Get-FileSecurityFast` loop over the chunk (one command per chunk, **not** per
+  file) is the zero-native-risk fallback for hosts where the FFI path fails. It feeds the identical canonical
+  hash function (§6.2), so the hash is **independent of the fetch mechanism**.
+- **Skip where it can't matter:** symlinks / reparse / junction / volume-mount points and excluded/skipped
+  entries get `acl_hash = null` (no fetch). ADS rows share the host file's SD → carry the host's hash. A
+  fetch failure on one entry → `acl_hash = null` + a soft error, never a failed directory.
+
+### 6.2 Canonical form — the stamp-comparator projection (NOT raw SD bytes)
+
+The hash must change **iff** the stamp gate `securityDescriptorEquals` (`win-operation.service.ts:483`) would
+consider the source SD changed — that makes it a faithful, cheap proxy for "a re-stamp would do something."
+So the hash is over a normalized **projection**, **not** the raw self-relative SD bytes. (Hashing raw bytes
+is wrong: they carry `DaclAutoInherit` and CREATOR-OWNER mask/flag values the OS rewrites on its own →
+spurious drift on every incremental → restamp loops — the exact class of bug in the `ndm-acl-stamping`
+catalog.)
+
+Canonical form (`v1`):
+- **Include:** `Owner` SID, `Group` SID, `DaclPresent`, `DaclProtected`, the **stampable** `Attributes`
+  subset (`parseStampableAttributes` — excludes Compressed/Encrypted/Sparse), and the DACL ACE list.
+- **Per ACE:** `(AceType, AccessMask, AceFlags)` + `Sid`. (`IsInherited` is redundant with `AceFlags & 0x10`
+  — do not double-count.)
+- **ACE order: preserved as read** (the comparator is positional; sorting would diverge from the gate).
+- **`S-1-3-0` (CREATOR OWNER):** lenient — `(AceType, count)` only, mask/flags excluded (the kernel rewrites
+  them).
+- **Excluded:** `DaclAutoInherit` (the OS flickers it) and the SACL (not in the pipeline).
+- **Three-state DACL → distinct values:** NULL DACL (`DaclPresent=false`) → a `NULL_DACL` sentinel; empty
+  present DACL → `[]`; populated → the ACE list. (NULL = allow-all and empty = deny-all are opposites and
+  must never collide.)
+- **Owner SID folded in** (it is a field). **Source SIDs only** — mapped/destination SIDs are out; a
+  SID-mapping change is a manual re-stamp trigger, not a hash change.
+- **Deterministic encoding:** fixed field order, hex masks, lowercased SID strings, an unambiguous delimiter,
+  and a **`v1:` version prefix** so the definition can evolve (a bump intentionally forces a re-baseline).
+
+The PowerShell `Get-FileSecurityFast` JSON **is already exactly this projection** (`Owner` / `Group` /
+`DaclAces` / `DaclPresent` / `DaclProtected` / `Attributes`), so both the koffi path and the PS fallback feed
+**one** pure TS `canonicalize()` + hash function.
+
+### 6.3 Algorithm
+
+**BLAKE2b-128** (truncate `crypto.createHash('blake2b512')` to 128 bits, hex) via Node's **built-in
+`crypto`** — zero fragile native dependency. BLAKE3 is **dropped**: it was specified for cross-language
+parity, but the parquet-service never recomputes the hash, so parity is moot. The canonical string is a few
+hundred bytes, so hashing is negligible next to the SD fetch — algorithm is not a performance lever.
 
 ---
 
@@ -176,7 +276,10 @@ When the scan for a `(jobRunId, pathId)` completes, emit a final stream entry wi
 parquet stream (the parquet-service terminates on `eof="1"` or payload `filePath="LAST_FILE"`). Emit it
 **after** the final parquet `publishToParquetStreamBulk` **and** after the symmetric final `:files` write, so
 the two streams agree on the scan boundary. The orchestrating activity (not leaf scan calls) owns it — it
-must be written exactly once per `(jobRunId, pathId)`. **Not** emitted on pause; only on natural completion.
+must be written exactly once per `(jobRunId, pathId)`. **Not** emitted on pause, **nor on a crash / partial
+walk** — only after every directory's chunked walk for that `pathId` has fully drained (every positional
+cursor, §5, reached end-of-directory). On a resumed scan the sentinel is therefore emitted only on the
+attempt that actually finishes the walk.
 
 ---
 
@@ -187,7 +290,8 @@ Extend the existing file-stream gate `validateFileStreamLength` (`workflow-utils
 `isFileStreamLenValidActivity`). The gate must check `XLEN` of **both** the `:files` stream **and** the
 specific `${jobRunId}:${pathId}:parquet` stream the current activity feeds, sleeping 30s if either exceeds
 the cap (`max(xlenFiles, xlenParquet) > cap`). Check the **specific** per-path parquet stream, not a sum
-across paths (an idle path must not throttle an active one).
+across paths (an idle path must not throttle an active one). The gate is evaluated **once per published
+chunk** (§5), at the chunk boundary — the natural yield point of the chunked walk — not per file.
 
 > **Coupling risk:** one shared cap means a slow parquet-service consumer throttles the legacy db-writer path
 > too. Acceptable for v1; revisit an independent/asymmetric cap if it bites during rollout.
@@ -283,20 +387,57 @@ signal (single `JobRunStatus` string — parquet-service D16), targeting
 
 ---
 
-## 15. What stays unchanged
+## 15. Sync-error enrichment → error-Parquet replay (producer side)
+
+When `ParquetChildSyncWorkflow`'s executor fails an op, it must record **enough to replay the exact command**
+— because in the parquet world commands come from the parquet-service **diff**, which is gone by retry time.
+(The legacy `RetryMigrationWorkflow` re-derives commands by **re-scanning** source-vs-target via
+`processItems`; that path does not exist here.) So the parquet sync executor **enriches** the error it
+publishes.
+
+**Producer change — the only worker-side change for retries.** Extend `OperationError`
+(`lib/jobs-lib/src/types/metadata-types.ts:256`) with three **optional, additive** fields, populated **only**
+by the parquet sync executor (the legacy executor and db-writer ignore them):
+
+| Field | Source | Purpose |
+|---|---|---|
+| `opKind?: OPS_CMD` | the failing op (`cc`\|`sm`\|`sa`\|`cf`\|`cd`\|`rd`\|`rf`\|`cs`) | which op to retry |
+| `command?: Cmd` | the `Cmd` being executed | full replay payload (path, `isDir`, `ops`+params, `metadata`) |
+| `attempt?: number` | `command.attempt ?? 0` | retry-cap counter |
+
+Also add an optional **`attempt?: number` to `Cmd`** (`stream-datatypes.ts:79`) so a re-failure echoes
+`attempt+1` and the retry cap actually holds. Today's `DMError` carries neither `op_kind` nor a replayable
+command, so without this the error Parquet cannot be turned back into commands.
+
+The error still flows to the **single per-jobRun** `${jobRunId}:errors` stream (msgpack+base64,
+`RedisErrorCollection`); the parquet-service `consume_errors` activity writes it to `<jobRunId>/errors/`
+(parquet-service SPEC §3.3), and the **error→command replay runs in the parquet-service** (parquet-service
+SPEC, Phase 2) — it owns the error Parquet, the `Cmd` msgpack encoder, and is already the command emitter.
+Replay rebuilds the `Cmd` (new `id`, `originalCmdId` = `operation_id`, `attempt+1`, **only the failed op set
+`READY`**, succeeded ops left `COMPLETED`) and bulk-XADDs to `${jobRunId}:commands`.
+
+**Scope:** only **sync/operation** failures carry `opKind`/`command` and are replayable. **Scan/discovery**
+errors (e.g. `READ_DIR`) leave them unset — recorded, but retried by re-running discovery for that subtree,
+not via this path.
+
+---
+
+## 16. What stays unchanged
 
 **The entire legacy `MigrationWorkflow` family** (`migration-parent-workflow.ts`,
 `execute-migration-child-workflows.ts`, `child-scan.workflow.ts`, `child-sync.workflow.ts`,
 `MigrateScanService` command generation) is **left intact** — jobs-service simply routes elsewhere when the
 flag is on. Also unchanged: `db-writer` → `inventory` / `operation_errors` · the `${jobRunId}:files` stream +
 its `publishToFileStream` consumers · `RetryMigrationWorkflow` and `CutOverWorkFlow` (legacy-only for now —
-no parquet variants yet) · `DeferredDirStampService` (`${jobRunId}:deferred-dir-stamps` ZSET) · the sync
-executor / `OPS_CMD` set · `RedisCommandCollection` wire format (msgpack-lite+base64 under `obj`) · `CmdMeta`
-shape (the diff sets `ctime=null`; full removal is a later follow-up).
+no parquet variants yet) · `DeferredDirStampService` (`${jobRunId}:deferred-dir-stamps` ZSET) · the
+`OPS_CMD` set · `RedisCommandCollection` wire format (msgpack-lite+base64 under `obj`) · `CmdMeta` shape (the
+diff sets `ctime=null`; full removal is a later follow-up). **Exception:** the parquet
+`ParquetChildSyncWorkflow` executor additionally enriches `OperationError` for retry replay (§15); the legacy
+sync executor is untouched.
 
 ---
 
-## 16. Wire-format compatibility
+## 17. Wire-format compatibility
 
 The TS side encodes with **`msgpack-lite`**; the parquet-service decodes with Python **`msgpack`**. The
 prototype already round-trips NDM payloads successfully, so they're compatible — but **verify** explicitly
@@ -306,8 +447,11 @@ emits back onto `${jobRunId}:commands` (it must match `RedisCommandCollection`'s
 
 ---
 
-## 17. Open items
-1. **`acl_hash` canonical-form rules** (§6) — the one remaining blocker for the producer.
+## 18. Open items
+1. ~~**`acl_hash` canonical-form rules** (§6)~~ — **RESOLVED (v0.3, §6):** SMB-only (NFS → `null`);
+   async-koffi `GetNamedSecurityInfo` fired in logical batches (no native addon); canonical form = the
+   stamp-comparator projection with preserved ACE order; BLAKE2b-128 (`v1:`). *Remaining sub-item:* tune
+   `THRESHOLD`, `UV_THREADPOOL_SIZE`, and the ACL semaphore by benchmark on the real cluster (§5/§6.1).
 2. **int64-as-string** decision (§3 / §2.2) — confirm strings (vs. accepting ms precision) for ns
    timestamps + inode.
 3. **Per-path `parquetStream` construction** (§4) — map-by-pathId vs lazy-in-activity.
@@ -315,22 +459,34 @@ emits back onto `${jobRunId}:commands` (it must match `RedisCommandCollection`'s
    `MigrationWorkflow` vs `ParquetMigrationWorkflow` (§11).
 5. **Cross-SDK completion signal** (§13) — chosen: parquet-service signals the TS workflow id **directly**.
    Lock the minimal payload + pass signal-name/workflow-id at start; decide multi-source aggregation (N signals).
-6. **`Cmd` wire contract** verification (§16).
+6. **`Cmd` wire contract** verification (§17).
 7. **Shared-activity parameterization** (§11) — confirm the discovery scan activity takes `publishParquet`/
    `pathId` (vs. fully duplicating the activity body).
 8. **Baseline scan structure** (§12) — two scan children (source+dest) vs. one child walking both.
+9. **Retry-replay tuning** (§15) — `MAX_RETRY` default (~3) and whether `METADATA_UPDATE_CONFLICT` is
+   replayable alongside `TRANSIENT`/`RECOVERABLE` (FATAL never replays).
 
 ---
 
-## 18. Acceptance criteria
+## 19. Acceptance criteria
 - Foundation merged onto `ab/parquet-redesign`; `ParquetItem` expanded to 12 fields; per-path stream key.
 - New `ParquetMigrationWorkflow` + `ParquetChildScanWorkflow` + `ParquetChildSyncWorkflow` exist; legacy
   `MigrationWorkflow` family untouched; jobs-service routes on `enable_parquet`.
 - `ParquetChildScanWorkflow` dual-streams source (+dest at baseline) with correct ordering + NFC + bulk;
   dirs emitted as rows; `acl_hash` present; ns timestamps + inode carried without precision loss.
+- The per-directory walk is **chunked at a fixed `THRESHOLD`** (memory + publish size flat regardless of dir
+  size); a >1M-file directory is processed without materializing all entries, and a worker crash mid-directory
+  resumes from the persisted positional cursor (§5) with ≤ one chunk of (deduped) re-publish — no file
+  permanently skipped, EOF only on the attempt that finishes the walk.
+- `acl_hash` is computed only on SMB/NTFS via **async-koffi `GetNamedSecurityInfo`** (semaphore-bounded,
+  `LocalFree`'d), is `null` on NFS, equals the **stamp-comparator projection** (not raw SD bytes), and is
+  **stable across re-scans of an unchanged file** (no restamp loop).
 - EOF sentinel emitted once per `(jobRunId, pathId)`; backpressure gates on both streams.
 - Parent triggers parquet-service via activity (Bearer JWT, run_mode, idempotent), waits on
   `parquetCompletion` signal **and** sync-child completion, and forwards pause/stop to both children + the
   parquet-service.
 - Flag on → commands originate from parquet-service diff; flag off → legacy workflow runs, literally unchanged.
 - `:files` → db-writer → inventory unchanged throughout.
+- Sync op-failures publish an enriched `OperationError` (`opKind` + `command` + `attempt`); the parquet-service
+  writes them to `<jobRunId>/errors/` and (Phase 2) replays retryable rows as **failed-op-only** commands onto
+  `${jobRunId}:commands` (FATAL excluded, capped at `MAX_RETRY`, deduped by `(path, op_kind)`).
