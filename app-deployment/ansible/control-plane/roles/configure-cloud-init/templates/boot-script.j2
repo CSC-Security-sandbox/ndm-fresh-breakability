@@ -309,12 +309,16 @@ restart_keycloak_and_gateway() {
     fi
 
     # kubectl rollout status only confirms the pod passed its readiness probe, not that Keycloak's
-    # HTTP realm endpoints are fully initialized. The admin-entry job calls these APIs immediately
-    # after this function returns, so we explicitly poll the realm endpoint before proceeding.
-    log "Verifying Keycloak realm endpoint is serving HTTP..."
-    retry 10 "curl -sf --max-time 5 http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator" 15 || \
-        handle_failure "Keycloak realm endpoint did not become available after restart"
-    log "Keycloak realm endpoint is ready."
+    # HTTP is fully serving. We poll the master realm endpoint (same URL Kubernetes uses for the
+    # readiness probe) via ClusterIP since svc.cluster.local DNS is not resolvable from the host.
+    # The master realm always exists so it returns 200 as soon as Keycloak is ready to serve,
+    # before the datamigrator realm is created by the admin-entry job.
+    log "Verifying Keycloak is serving HTTP via ClusterIP..."
+    KEYCLOAK_IP=$(kubectl get svc keycloak -n keycloak -o jsonpath='{.spec.clusterIP}')
+    [ -z "$KEYCLOAK_IP" ] && handle_failure "Could not resolve Keycloak ClusterIP"
+    retry 10 "curl -sf --max-time 5 http://${KEYCLOAK_IP}/keycloak/realms/master" 15 || \
+        handle_failure "Keycloak did not become available after restart"
+    log "Keycloak is ready."
 
     log "Restarting Istio ingress gateway to reload JWT configuration..."
     if ! retry $MAX_RETRIES "kubectl rollout restart deployment istio-ingressgateway -n istio-system"; then
