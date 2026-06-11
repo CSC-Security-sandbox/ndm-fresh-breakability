@@ -17,6 +17,7 @@ import * as koffi from 'koffi';
 import { Operation, Origin } from 'src/activities/utils/utils.types';
 import { dmError } from 'src/activities/utils/utils';
 import { parseStampableAttributes } from './file-attributes';
+import { KoffiAclService } from './koffi-acl.service';
 
 export enum SmbPermissionInheritanceMode {
   INHERIT_PERMS_AS_IS       = 'INHERIT_PERMS_AS_IS',
@@ -57,10 +58,12 @@ export class WinOperationService {
     private readonly winShellService: WinShellService,
     private readonly redisService: RedisService,
     private readonly metricsService: MetricsService,
+    private readonly koffiAclService: KoffiAclService,
   ) {
     this.logger = loggerFactory.create(WinOperationService.name);
     if(process.platform === 'win32'){
       this.initializeWindowsAPI();
+      this.koffiAclService.initialize();
     }
       
   }
@@ -97,6 +100,24 @@ export class WinOperationService {
     isSource: boolean,
     workflowId = '',
   ): Promise<SecurityDescriptor> {
+    // Fast path: koffi direct Win32 call (no PowerShell overhead)
+    if (this.koffiAclService.isInitialized()) {
+      try {
+        const startedAt = process.hrtime.bigint();
+        const sd = await this.koffiAclService.getSecurityDescriptor(path);
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+        this.logger.debug(
+          `[${workflowId}] [koffi-get-acl] path=${path} elapsed=${elapsedMs.toFixed(2)}ms`,
+        );
+        return sd as SecurityDescriptor;
+      } catch (koffiError) {
+        this.logger.warn(
+          `[${workflowId}] koffi getAcl failed for ${path}, falling back to PowerShell: ${koffiError.message}`,
+        );
+      }
+    }
+
+    // Fallback: PowerShell Get-FileSecurityFast
     try {
       const script = `$srcFile = '${path.replace(/'/g, "''")}'\n${psGetAclScript}`;
       const output = await this.winShellService.executeCommand(script, workflowId);
@@ -122,6 +143,29 @@ export class WinOperationService {
     acl: SecurityDescriptor,
     workflowId = '',
   ): Promise<any> {
+    // Fast path: koffi direct Win32 call (no PowerShell overhead)
+    if (this.koffiAclService.isInitialized()) {
+      try {
+        const startedAt = process.hrtime.bigint();
+        const result = await this.koffiAclService.setSecurityDescriptor(targetPath, acl);
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+        this.logger.debug(
+          `[${workflowId}] [koffi-set-acl] targetPath=${targetPath} success=${result.success} elapsed=${elapsedMs.toFixed(2)}ms`,
+        );
+        if (result.unresolved_sids.length > 0) {
+          this.logger.debug(
+            `[${workflowId}] [koffi-set-acl] unresolved SIDs: ${result.unresolved_sids.join(', ')}`,
+          );
+        }
+        return { stdout: JSON.stringify(result), stderr: '' };
+      } catch (koffiError) {
+        this.logger.warn(
+          `[${workflowId}] koffi setAcl failed for ${targetPath}, falling back to PowerShell: ${koffiError.message}`,
+        );
+      }
+    }
+
+    // Fallback: PowerShell Set-FileSecurityFast
     try {
       const aclJsonString = JSON.stringify(acl).replace(/'/g, "''");
       const script = `$dstFile = '${targetPath.replace(/'/g, "''")}'\n$aclJson = '${aclJsonString}'\n${psSetAclScript}`;

@@ -9,6 +9,7 @@ import { WinShellService } from 'src/activities/common/win-shell.service';
 import { RedisService } from 'src/redis/redis.service';
 import { MetricsService } from 'src/metrics/metrics.service';
 import { SourceAclError } from './acl-operation.error';
+import { KoffiAclService } from './koffi-acl.service';
 
 // Local mirror of the service-internal SecurityDescriptor / Ace shape. Kept
 // in-file (rather than imported) so test data is self-describing.
@@ -89,6 +90,13 @@ describe('SecurityDescriptorChangeDetectorService', () => {
       ),
     };
 
+    const mockKoffiAclService = {
+      isInitialized: jest.fn().mockReturnValue(false),
+      initialize: jest.fn().mockReturnValue(false),
+      getSecurityDescriptor: jest.fn(),
+      setSecurityDescriptor: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WinOperationService,
@@ -97,6 +105,7 @@ describe('SecurityDescriptorChangeDetectorService', () => {
         { provide: WinShellService, useValue: mockWinShellService },
         { provide: RedisService, useValue: mockRedisService },
         { provide: MetricsService, useValue: mockMetricsService },
+        { provide: KoffiAclService, useValue: mockKoffiAclService },
       ],
     }).compile();
 

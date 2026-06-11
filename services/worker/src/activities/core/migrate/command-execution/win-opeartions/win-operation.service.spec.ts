@@ -12,6 +12,7 @@ import { LRUCache } from 'src/activities/core/utils/lru-cache';
 import { OPS_CMD } from '@netapp-cloud-datamigrate/jobs-lib';
 import { FileType } from 'src/activities/types/tasks';
 import * as koffi from 'koffi';
+import { KoffiAclService } from './koffi-acl.service';
 
 // Import correct types
 type SecurityDescriptor = {
@@ -81,6 +82,13 @@ describe('WinOperationService', () => {
       ),
     };
 
+    const mockKoffiAclService = {
+      isInitialized: jest.fn().mockReturnValue(false),
+      initialize: jest.fn().mockReturnValue(false),
+      getSecurityDescriptor: jest.fn(),
+      setSecurityDescriptor: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WinOperationService,
@@ -88,6 +96,7 @@ describe('WinOperationService', () => {
         { provide: WinShellService, useValue: mockWinShellService },
         { provide: RedisService, useValue: mockRedisService },
         { provide: MetricsService, useValue: mockMetricsService },
+        { provide: KoffiAclService, useValue: mockKoffiAclService },
       ],
     }).compile();
 
@@ -2321,6 +2330,12 @@ describe('WinOperationService', () => {
             typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
           ),
         };
+        const mockKoffiAcl = {
+          isInitialized: jest.fn().mockReturnValue(false),
+          initialize: jest.fn().mockReturnValue(false),
+          getSecurityDescriptor: jest.fn(),
+          setSecurityDescriptor: jest.fn(),
+        };
         const module = await Test.createTestingModule({
           providers: [
             WinOperationService,
@@ -2328,6 +2343,7 @@ describe('WinOperationService', () => {
             { provide: WinShellService, useValue: mockWinShellService },
             { provide: RedisService, useValue: mockRedisService },
             { provide: MetricsService, useValue: mockMetricsService },
+            { provide: KoffiAclService, useValue: mockKoffiAcl },
           ],
         }).compile();
 
@@ -2357,6 +2373,12 @@ describe('WinOperationService', () => {
             typeof fn === 'function' ? Promise.resolve(fn()) : Promise.resolve(),
           ),
         };
+        const mockKoffiAcl = {
+          isInitialized: jest.fn().mockReturnValue(false),
+          initialize: jest.fn().mockReturnValue(false),
+          getSecurityDescriptor: jest.fn(),
+          setSecurityDescriptor: jest.fn(),
+        };
         const module = await Test.createTestingModule({
           providers: [
             WinOperationService,
@@ -2364,6 +2386,7 @@ describe('WinOperationService', () => {
             { provide: WinShellService, useValue: mockWinShellService },
             { provide: RedisService, useValue: mockRedisService },
             { provide: MetricsService, useValue: mockMetricsService },
+            { provide: KoffiAclService, useValue: mockKoffiAcl },
           ],
         }).compile();
 
