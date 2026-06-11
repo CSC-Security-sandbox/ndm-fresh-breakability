@@ -79,6 +79,24 @@ handle_failure() {
     exit 1
 }
 
+wait_for_snapd() {
+    log "Waiting for MicroK8s to be fully ready..."
+    microk8s status --wait-ready --timeout=300 || handle_failure "MicroK8s did not become ready"
+
+    log "Waiting for snapd service-control queue to drain..."
+    snap_output=$(snap watch --last=service-control 2>&1)
+    snap_exit=$?
+    # "no changes found" means the queue is already empty (fast VM or change already done) - safe to proceed.
+    # Any other non-zero exit means snapd has a real problem - fail loudly instead of proceeding into cert refresh.
+    if [ $snap_exit -ne 0 ] && ! echo "$snap_output" | grep -q "no changes found"; then
+        handle_failure "snapd service-control queue did not drain: $snap_output"
+    fi
+
+    log "Extra buffer for slow VMs..."
+    sleep 10
+    log "snapd is ready. Safe to proceed."
+}
+
 check_prerequisites() {
     command -v microk8s >/dev/null 2>&1 || handle_failure "microk8s is not installed"
     command -v kubectl >/dev/null 2>&1 || handle_failure "kubectl is not installed"
@@ -88,7 +106,8 @@ check_prerequisites() {
 init_microk8s() {
     log "Starting MicroK8s..."
     retry $MAX_RETRIES "microk8s start" || handle_failure "Failed to start MicroK8s"
-    
+    wait_for_snapd
+
     log "Checking MicroK8s status..."
     if microk8s status | grep -q "microk8s is running"; then
         log "MicroK8s is running. Proceeding with certificate refresh..."
@@ -288,7 +307,15 @@ restart_keycloak_and_gateway() {
     else
         log "Keycloak restarted successfully and all pods are Ready."
     fi
-    
+
+    # kubectl rollout status only confirms the pod passed its readiness probe, not that Keycloak's
+    # HTTP realm endpoints are fully initialized. The admin-entry job calls these APIs immediately
+    # after this function returns, so we explicitly poll the realm endpoint before proceeding.
+    log "Verifying Keycloak realm endpoint is serving HTTP..."
+    retry 10 "curl -sf --max-time 5 http://keycloak.keycloak.svc.cluster.local/keycloak/realms/datamigrator" 15 || \
+        handle_failure "Keycloak realm endpoint did not become available after restart"
+    log "Keycloak realm endpoint is ready."
+
     log "Restarting Istio ingress gateway to reload JWT configuration..."
     if ! retry $MAX_RETRIES "kubectl rollout restart deployment istio-ingressgateway -n istio-system"; then
         handle_failure "Failed to restart Istio ingress gateway"
@@ -330,15 +357,18 @@ unseal_openbao() {
     
     retry $MAX_RETRIES "kubectl exec openbao-0 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-0"
 
-    # After unsealing openbao-0, move forward even if openbao-1 and openbao-2 are not ready yet
-    log "Proceeding with unsealing openbao-1 and openbao-2..."
+    # Wait for openbao-1 and openbao-2 to be Running before attempting to exec into them.
+    # Without this wait, kubectl exec fails on slow VMs where these pods are still starting up.
+    log "Waiting for openbao-1 to be ready..."
+    retry $MAX_RETRIES "kubectl wait --namespace=\"openbao\" --for=jsonpath='{.status.phase}'=Running pod/openbao-1 --timeout=${WAIT_TIMEOUT}s" || handle_failure "openbao-1 pod not ready"
 
-    # Unseal openbao-1 and openbao-2
+    log "Waiting for openbao-2 to be ready..."
+    retry $MAX_RETRIES "kubectl wait --namespace=\"openbao\" --for=jsonpath='{.status.phase}'=Running pod/openbao-2 --timeout=${WAIT_TIMEOUT}s" || handle_failure "openbao-2 pod not ready"
+
+    log "Unsealing openbao-1 and openbao-2..."
+    # These run sequentially - openbao-2 unseals only after openbao-1 completes
     retry $MAX_RETRIES "kubectl exec openbao-1 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-1"
     retry $MAX_RETRIES "kubectl exec openbao-2 -n openbao -- bao operator unseal \"$OPENBAO_UNSEAL_KEY\"" || handle_failure "Failed to unseal openbao-2"
-    
-    # Wait for both parallel tasks to complete
-    wait
 }
 
 restart_statefulsets() {
@@ -447,7 +477,13 @@ setup_metallb() {
     
     log "Disabling existing MetalLB configuration..."
     microk8s disable metallb || log "MetalLB was not enabled or failed to disable, continuing..."
-    
+
+    # Wait for MetalLB namespace to be fully terminated before re-enabling.
+    # Without this, enabling immediately after disabling can conflict with leftover
+    # CRDs and namespace resources still being deleted by Kubernetes.
+    log "Waiting for MetalLB namespace to terminate..."
+    kubectl wait --for=delete namespace/metallb-system --timeout=120s 2>/dev/null || true
+
     log "Enabling MetalLB with VM IP: ${VM_IP}/32"
     retry $MAX_RETRIES "microk8s enable metallb:${VM_IP}/32" || handle_failure "Failed to enable MetalLB"
 }
