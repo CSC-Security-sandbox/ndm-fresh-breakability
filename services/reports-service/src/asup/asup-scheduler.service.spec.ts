@@ -236,7 +236,7 @@ describe('AsupSchedulerService', () => {
       await service.handleAsupTransmission();
 
       expect(asupPackagerService.packageAsupPayload).toHaveBeenCalled();
-      expect(asupStatsService.markAsTransmitted).toHaveBeenCalled();
+      expect(asupStatsService.markAsTransmitted).toHaveBeenCalledWith(expect.any(Date));
     });
 
     it('should not throw on transmission error (catches internally)', async () => {
@@ -267,9 +267,9 @@ describe('AsupSchedulerService', () => {
       });
     });
 
-    it('should send PUT request and mark records as transmitted', async () => {
+    it('should send PUT request and mark records with cutoff timestamp', async () => {
       mockAxiosPut.mockResolvedValue({ status: 200 });
-      asupStatsService.markAsTransmitted.mockResolvedValue(2);
+      asupStatsService.markAsTransmitted.mockResolvedValue(3);
 
       await service.transmitAsupMetrics();
 
@@ -279,7 +279,7 @@ describe('AsupSchedulerService', () => {
       expect(options.headers['Content-Type']).toBe('application/x-7z-compressed');
       expect(options.headers['X-Netapp-Asup-Payload-Checksum']).toBe('def456');
       expect(options.headers['X-Custom']).toBe('value');
-      expect(asupStatsService.markAsTransmitted).toHaveBeenCalled();
+      expect(asupStatsService.markAsTransmitted).toHaveBeenCalledWith(expect.any(Date));
     });
 
     it('should not transmit when endpoint is not configured', async () => {
@@ -305,7 +305,7 @@ describe('AsupSchedulerService', () => {
       );
     });
 
-    it('should retry on transmission failure', async () => {
+    it('should retry on transmission failure and mark with cutoff', async () => {
       const originalSetTimeout = global.setTimeout;
       global.setTimeout = ((fn: () => void) => {
         fn();
@@ -316,12 +316,12 @@ describe('AsupSchedulerService', () => {
         .mockRejectedValueOnce(new Error('network error'))
         .mockRejectedValueOnce(new Error('timeout'))
         .mockResolvedValueOnce({ status: 200 });
-      asupStatsService.markAsTransmitted.mockResolvedValue(1);
+      asupStatsService.markAsTransmitted.mockResolvedValue(3);
 
       await service.transmitAsupMetrics();
 
       expect(mockAxiosPut).toHaveBeenCalledTimes(3);
-      expect(asupStatsService.markAsTransmitted).toHaveBeenCalled();
+      expect(asupStatsService.markAsTransmitted).toHaveBeenCalledWith(expect.any(Date));
       global.setTimeout = originalSetTimeout;
     });
 

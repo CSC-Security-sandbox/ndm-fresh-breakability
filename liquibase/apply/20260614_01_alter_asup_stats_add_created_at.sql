@@ -1,0 +1,2 @@
+ALTER TABLE datamigrator.asup_stats
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();

@@ -161,6 +161,10 @@ export class AsupSchedulerService {
   async transmitAsupMetrics(): Promise<void> {
     this.logger.log('Starting ASUP payload packaging (via asup-packager)...');
 
+    // Record cutoff BEFORE reading rows — any row inserted after this
+    // timestamp will not be marked as transmitted.
+    const cutoff = new Date();
+
     const payload = await this.asupPackagerService.packageAsupPayload();
     if (!payload) {
       return;
@@ -213,7 +217,7 @@ export class AsupSchedulerService {
       throw lastError;
     }
 
-    const recordsMarked = await this.asupStatsService.markAsTransmitted();
+    const recordsMarked = await this.asupStatsService.markAsTransmitted(cutoff);
     this.logger.log(`Marked ${recordsMarked} records as transmitted`);
   }
 

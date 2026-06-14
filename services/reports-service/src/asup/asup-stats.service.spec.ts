@@ -277,21 +277,23 @@ describe('AsupStatsService', () => {
   // ─── markAsTransmitted ──────────────────────────────────────
 
   describe('markAsTransmitted', () => {
-    it('should update untransmitted records and return count', async () => {
+    it('should update records created before cutoff and return count', async () => {
       dataSource.query.mockResolvedValue({ rowCount: 5 });
+      const cutoff = new Date('2026-06-14T00:00:00Z');
 
-      const count = await service.markAsTransmitted();
+      const count = await service.markAsTransmitted(cutoff);
 
       expect(count).toBe(5);
       const query = dataSource.query.mock.calls[0][0] as string;
       expect(query).toContain('SET transmitted = TRUE');
-      expect(query).toContain('WHERE transmitted = FALSE');
+      expect(query).toContain('WHERE transmitted = FALSE AND created_at <= $1');
+      expect(dataSource.query).toHaveBeenCalledWith(expect.any(String), [cutoff]);
     });
 
     it('should return 0 when no records to update', async () => {
       dataSource.query.mockResolvedValue({ rowCount: 0 });
 
-      const count = await service.markAsTransmitted();
+      const count = await service.markAsTransmitted(new Date());
 
       expect(count).toBe(0);
     });
@@ -299,7 +301,7 @@ describe('AsupStatsService', () => {
     it('should return 0 when rowCount is missing', async () => {
       dataSource.query.mockResolvedValue({});
 
-      const count = await service.markAsTransmitted();
+      const count = await service.markAsTransmitted(new Date());
 
       expect(count).toBe(0);
     });

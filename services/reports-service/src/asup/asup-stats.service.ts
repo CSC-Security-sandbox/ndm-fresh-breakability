@@ -215,18 +215,18 @@ export class AsupStatsService {
   }
 
   /**
-   * Mark all untransmitted records as transmitted.
-   * Called after successful ASUP transmission.
-   * Returns the number of records marked.
+   * Mark untransmitted records as transmitted, but only those created
+   * before the given cutoff time. This prevents marking rows that were
+   * inserted AFTER we started building the payload.
    */
-  async markAsTransmitted(): Promise<number> {
+  async markAsTransmitted(cutoff: Date): Promise<number> {
     const query = `
       UPDATE datamigrator.asup_stats
       SET transmitted = TRUE
-      WHERE transmitted = FALSE
+      WHERE transmitted = FALSE AND created_at <= $1
     `;
 
-    const result = await this.dataSource.query(query);
+    const result = await this.dataSource.query(query, [cutoff]);
     const count = (result as { rowCount?: number })?.rowCount ?? 0;
     
     this.logger.log(`Marked ${count} ASUP stats records as transmitted`);
