@@ -3440,11 +3440,7 @@ describe('UpgradeService', () => {
       await service.onModuleInit();
 
       expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
-        'orphan-1',
-        expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
-      );
-      expect(upgradeBundleRepository.update).toHaveBeenCalledWith(
-        'orphan-2',
+        { id: expect.objectContaining({ _type: 'in', _value: ['orphan-1', 'orphan-2'] }) },
         expect.objectContaining({ uploadStatus: UploadStatus.FAILED }),
       );
       expect(mockLoggerService.log).toHaveBeenCalledWith(

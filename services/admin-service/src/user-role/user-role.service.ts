@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, FindOptionsWhere, In } from 'typeorm';
+import { DataSource, Repository, FindManyOptions, FindOptionsWhere, In } from 'typeorm';
 import { CreateUserRoleDto } from './dto/create-user-role.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { User } from '../entities/user.entity';
@@ -37,6 +37,7 @@ export class UserRoleService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    private readonly dataSource: DataSource,
     @Inject(LoggerFactory) loggerFactory: LoggerFactory,
   ) {
     this.logger = loggerFactory.create(UserRoleService.name);
@@ -117,11 +118,6 @@ export class UserRoleService {
         throw error;
       }
 
-      await this.userRoleRepository.delete({
-        projectId: project.id,
-        accountId: account.id,
-      });
-
       const update: UserRole[] = userRoleRelationDto.users.map((userMap) =>
         this.userRoleRepository.create({
           projectId: project.id,
@@ -131,7 +127,13 @@ export class UserRoleService {
         }),
       );
 
-      const result = await this.userRoleRepository.save(update);
+      const result = await this.dataSource.transaction(async (manager) => {
+        await manager.delete(UserRole, {
+          projectId: project.id,
+          accountId: account.id,
+        });
+        return manager.save(UserRole, update);
+      });
       this.logger.log("Successfully completed batch create user roles", { count: result.length });
       return result;
     } catch (error) {
@@ -147,9 +149,12 @@ export class UserRoleService {
     this.logger.log("Creating user role", createUserRoleDto);
 
     try {
-      const user = await this.userRepository.findOneBy({
-        id: createUserRoleDto.user_id,
-      });
+      const [user, role, account] = await Promise.all([
+        this.userRepository.findOneBy({ id: createUserRoleDto.user_id }),
+        this.roleRepository.findOneBy({ id: createUserRoleDto.role_id }),
+        this.accountRepository.findOneBy({ id: createUserRoleDto.account_id }),
+      ]);
+
       if (!user) {
         const error = new NotFoundException(
           `User with ID ${createUserRoleDto.user_id} not found`,
@@ -158,9 +163,6 @@ export class UserRoleService {
         throw error;
       }
 
-      const role = await this.roleRepository.findOneBy({
-        id: createUserRoleDto.role_id,
-      });
       if (!role) {
         const error = new NotFoundException(
           `Role with ID ${createUserRoleDto.role_id} not found`,
@@ -169,15 +171,6 @@ export class UserRoleService {
         throw error;
       }
 
-      const project = createUserRoleDto.project_id
-        ? await this.projectRepository.findOneBy({
-            id: createUserRoleDto.project_id,
-          })
-        : null;
-
-      const account = await this.accountRepository.findOneBy({
-        id: createUserRoleDto.account_id,
-      });
       if (!account) {
         const error = new NotFoundException(
           `Account with ID ${createUserRoleDto.account_id} not found`,
@@ -185,6 +178,12 @@ export class UserRoleService {
         this.logger.error("Account not found during user role creation", error);
         throw error;
       }
+
+      const project = createUserRoleDto.project_id
+        ? await this.projectRepository.findOneBy({
+            id: createUserRoleDto.project_id,
+          })
+        : null;
 
       const userRole = this.userRoleRepository.create({
         id: randomUUID(),
@@ -221,9 +220,12 @@ export class UserRoleService {
         throw error;
       }
 
-      const user = await this.userRepository.findOneBy({
-        id: updateUserRoleDto.user_id,
-      });
+      const [user, role, account] = await Promise.all([
+        this.userRepository.findOneBy({ id: updateUserRoleDto.user_id }),
+        this.roleRepository.findOneBy({ id: updateUserRoleDto.role_id }),
+        this.accountRepository.findOneBy({ id: updateUserRoleDto.account_id }),
+      ]);
+
       if (!user) {
         const error = new NotFoundException(
           `User with ID ${updateUserRoleDto.user_id} not found`,
@@ -232,9 +234,6 @@ export class UserRoleService {
         throw error;
       }
 
-      const role = await this.roleRepository.findOneBy({
-        id: updateUserRoleDto.role_id,
-      });
       if (!role) {
         const error = new NotFoundException(
           `Role with ID ${updateUserRoleDto.role_id} not found`,
@@ -243,15 +242,6 @@ export class UserRoleService {
         throw error;
       }
 
-      const project = updateUserRoleDto.project_id
-        ? await this.projectRepository.findOneBy({
-            id: updateUserRoleDto.project_id,
-          })
-        : null;
-
-      const account = await this.accountRepository.findOneBy({
-        id: updateUserRoleDto.account_id,
-      });
       if (!account) {
         const error = new NotFoundException(
           `Account with ID ${updateUserRoleDto.account_id} not found`,
@@ -259,6 +249,12 @@ export class UserRoleService {
         this.logger.error("Account not found during user role update", error);
         throw error;
       }
+
+      const project = updateUserRoleDto.project_id
+        ? await this.projectRepository.findOneBy({
+            id: updateUserRoleDto.project_id,
+          })
+        : null;
 
       userRole.user = user;
       userRole.role = role;

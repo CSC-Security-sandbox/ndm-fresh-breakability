@@ -6,12 +6,15 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Request,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RoleDescription } from '../swagger/swagger-summary';
 import { UserPermissionResponse } from '../auth/user-permission-response-type';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
@@ -40,12 +43,19 @@ export class RoleController {
   @Auth(Permission.ManageProject)
   @ApiBearerAuth()
   @Get()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(10000)
   @ApiOperation({
     summary: 'Get a paginated list of Roles',
     description: RoleDescription.GetAllRolesDescription,
   })
-  findAll() {
-    return this.roleService.findAll();
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
+  findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 100,
+  ) {
+    return this.roleService.findAll(page, limit);
   }
 
   @Auth()

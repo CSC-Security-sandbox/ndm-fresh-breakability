@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Client,
@@ -69,36 +69,46 @@ export class WorkflowService {
   async getWorkflowStatus(workflowId: string): Promise<{
     status: string;
     id: string;
-    pending: any[];
-    completed: any;
+    pending: unknown[];
+    completed: unknown;
   }> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    const details: WorkflowExecutionDescription = await handle.describe();
-    if (details.status.name === WorkflowExecutionStatus.COMPLETED) {
+    try {
+      const client = await this.getClient();
+      const handle = client.workflow.getHandle(workflowId);
+      const details: WorkflowExecutionDescription = await handle.describe();
+      if (details.status.name === WorkflowExecutionStatus.COMPLETED) {
+        return {
+          status: details.status.name,
+          id: details.workflowId,
+          pending: [],
+          completed: await handle.result(),
+        };
+      }
       return {
         status: details.status.name,
         id: details.workflowId,
-        pending: [],
-        completed: await handle.result(),
+        pending: details?.raw?.pendingChildren || [],
+        completed: [],
       };
+    } catch (error) {
+      this.logger.error(`Failed to get workflow status for ${workflowId}`, error);
+      throw new InternalServerErrorException(`Failed to get workflow status for ${workflowId}`);
     }
-    return {
-      status: details.status.name,
-      id: details.workflowId,
-      pending: details?.raw?.pendingChildren || [],
-      completed: [],
-    };
   }
 
   async terminateWorkflow(workflowId: string): Promise<boolean> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    const details: WorkflowExecutionDescription = await handle.describe();
-    if (details.status.name === WorkflowExecutionStatus.RUNNING) {
-      await handle.terminate();
-      return true;
+    try {
+      const client = await this.getClient();
+      const handle = client.workflow.getHandle(workflowId);
+      const details: WorkflowExecutionDescription = await handle.describe();
+      if (details.status.name === WorkflowExecutionStatus.RUNNING) {
+        await handle.terminate();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.logger.error(`Failed to terminate workflow ${workflowId}`, error);
+      throw new InternalServerErrorException(`Failed to terminate workflow ${workflowId}`);
     }
-    return false;
   }
 }

@@ -3,15 +3,26 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
 import { UserPermissionResponse } from './user-permission-response-type';
+import { IsEmail, IsString, IsNotEmpty, IsBoolean } from 'class-validator';
 
 class InviteUserDto {
+  @IsEmail()
   username: string;
+
+  @IsString()
+  @IsNotEmpty()
   firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
   lastName: string;
 }
 
 class UserStatusDto {
+  @IsEmail()
   email: string;
+
+  @IsBoolean()
   enable: boolean;
 }
 
@@ -83,8 +94,8 @@ export class AuthController {
     },
   })
   async resetPassword(@Body('email') email: string) {
-    const newPassword = await this.authService.resetPassword(email);
-    return { email, newPassword };
+    await this.authService.resetPassword(email);
+    return { email, message: 'Password has been reset. The user will receive a temporary password via email.' };
   }
 
   @Auth(Permission.InviteUser, Permission.CreateUser)

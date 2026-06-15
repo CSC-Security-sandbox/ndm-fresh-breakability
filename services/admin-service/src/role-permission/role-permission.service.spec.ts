@@ -353,6 +353,8 @@ describe('RolePermissionService', () => {
       };
 
       jest.spyOn(rolePermissionRepository, 'findOneBy').mockResolvedValue(null);
+      jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue({ id: 'role-id' } as Role);
+      jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue({ id: 'permission-id' } as Permission);
 
       await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(
         NotFoundException,
@@ -371,6 +373,7 @@ describe('RolePermissionService', () => {
         .spyOn(rolePermissionRepository, 'findOneBy')
         .mockResolvedValue(rolePermission);
       jest.spyOn(roleRepository, 'findOneBy').mockResolvedValue(null);
+      jest.spyOn(permissionRepository, 'findOneBy').mockResolvedValue({ id: 'permission-id' } as Permission);
 
       await expect(service.update(id, updateRolePermissionDto)).rejects.toThrow(
         NotFoundException,

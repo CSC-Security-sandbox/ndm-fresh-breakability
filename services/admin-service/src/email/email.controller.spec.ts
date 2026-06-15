@@ -7,6 +7,7 @@ import { GlobalSettings } from 'src/entities/global-setting.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SyncEmail } from 'src/entities/sync-email.entity';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
+import { JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { mockLoggerFactory, resetLoggerMocks, mockLoggerService } from '../test-utils/logger-mocks';
 
 jest.mock('nodemailer-express-handlebars', () => ({
@@ -50,6 +51,10 @@ describe('EmailController', () => {
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,
+        },
+        {
+          provide: JwtService,
+          useValue: { verifyToken: jest.fn() },
         },
       ],
     }).compile();

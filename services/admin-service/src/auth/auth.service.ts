@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -136,12 +137,50 @@ export class AuthService {
       });
 
       user.populateWhoColumns(userPermissionResponse.user.id);
-      const savedUser = await this.userRepository.save(user);
 
-      return { user: savedUser, tempPassword: encryptedPassword };
+      try {
+        const savedUser = await this.userRepository.save(user);
+        return { user: savedUser, tempPassword: encryptedPassword };
+      } catch (dbError) {
+        try {
+          const keycloakUsers = await makeAxiosRequest<any[]>({
+            method: 'GET',
+            url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users`,
+            headers: { Authorization: `Bearer ${token}` },
+            params: { email: username },
+          });
+          if (keycloakUsers.length > 0) {
+            await makeAxiosRequest({
+              method: 'DELETE',
+              url: `${process.env.KEYCLOAK_BASE_URL}/admin/realms/${process.env.KEYCLOAK_REALM}/users/${keycloakUsers[0].id}`,
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          }
+        } catch (cleanupError) {
+          this.logger.error(
+            `Failed to clean up Keycloak user after DB save failure: ${cleanupError.message}`,
+          );
+        }
+        if (dbError?.code === '23505' || dbError?.driverError?.code === '23505') {
+          throw new ConflictException(
+            `Cannot create user: the email id '${username}' already exists.`,
+          );
+        }
+        throw new InternalServerErrorException(
+          `Failed to save user to database, error: ${dbError.message}`,
+        );
+      }
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
+      }
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      if (error?.code === '23505' || error?.driverError?.code === '23505') {
+        throw new ConflictException(
+          `Cannot create user: the email id '${username}' already exists.`,
+        );
       }
       throw new InternalServerErrorException(
         `Failed to create user in Keycloak, error: ${error.message}`,
@@ -151,9 +190,9 @@ export class AuthService {
 
   async resetPassword(email: string): Promise<string> {
     const newPassword = this.generateRandomPassword(12);
-    const token = await this.getKeycloakToken();
 
     try {
+      const token = await this.getKeycloakToken();
       const encryptedPassword = encryptData(newPassword);
       const users = await makeAxiosRequest<any[]>({
         method: 'GET',
@@ -183,9 +222,11 @@ export class AuthService {
 
       return encryptedPassword;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
-        'Failed to reset password in Keycloak, : error',
-        error.message,
+        `Failed to reset password in Keycloak, error: ${error.message}`,
       );
     }
   }
@@ -200,9 +241,6 @@ export class AuthService {
         `User not found, Please verify the user ID and try again.`,
       );
     }
-
-    user.user_status = enable ? 'active' : 'inactive';
-    await this.userRepository.save(user);
 
     const token = await this.getKeycloakToken();
 
@@ -241,6 +279,10 @@ export class AuthService {
           },
         });
       }
+
+      user.user_status = enable ? 'active' : 'inactive';
+      await this.userRepository.save(user);
+
       const state = enable ? 'enabled' : 'disabled';
       return {
         message: `Access has been successfully ${state} for a user: ${email}`,

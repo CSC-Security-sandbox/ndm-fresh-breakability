@@ -82,18 +82,17 @@ export class RolePermissionService {
         rolePermissionId: id
       });
 
-      const rolePermission = await this.rolePermissionRepository.findOneBy({
-        id,
-      });
+      const [rolePermission, role, permission] = await Promise.all([
+        this.rolePermissionRepository.findOneBy({ id }),
+        this.roleRepository.findOneBy({ id: updateRolePermissionDto.role_id }),
+        this.permissionRepository.findOneBy({ id: updateRolePermissionDto.permission_id }),
+      ]);
 
       if (!rolePermission) {
         this.logger.warn('Role permission not found for update', { rolePermissionId: id });
         throw new NotFoundException(`RolePermission with ID ${id} not found`);
       }
 
-      const role = await this.roleRepository.findOneBy({
-        id: updateRolePermissionDto.role_id,
-      });
       if (!role) {
         this.logger.warn('Role not found for role permission update', {
           roleId: updateRolePermissionDto.role_id
@@ -103,9 +102,6 @@ export class RolePermissionService {
         );
       }
 
-      const permission = await this.permissionRepository.findOneBy({
-        id: updateRolePermissionDto.permission_id,
-      });
       if (!permission) {
         this.logger.warn('Permission not found for role permission update', {
           permissionId: updateRolePermissionDto.permission_id

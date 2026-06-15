@@ -108,17 +108,16 @@ export class UserService {
       });
 
       let users: User[];
+      let total: number;
 
       if (projectId) {
-        // When projectId is provided, get users associated with that project OR app admins
-        // App admins have roles with projectId: null and should have access to all projects
         const userRoles = await this.userRoleRepository.find({
           where: [
-            { projectId }, // Users with roles for the specific project
-            { projectId: IsNull() } // App admins with global access (projectId is null)
+            { projectId },
+            { projectId: IsNull() }
           ],
-          relations: { user: true },
-          select: { userId: true }
+          select: { userId: true },
+          take: 10000,
         });
 
         if (userRoles.length === 0) {
@@ -138,9 +137,8 @@ export class UserService {
           },
         };
 
-        users = await this.userRepository.find(options);
+        [users, total] = await this.userRepository.findAndCount(options);
       } else {
-        // Original logic when no projectId is provided
         const options: FindManyOptions<User> = {
           skip: (page - 1) * limit,
           take: limit,
@@ -148,7 +146,7 @@ export class UserService {
           where: filter,
         };
 
-        users = await this.userRepository.find(options);
+        [users, total] = await this.userRepository.findAndCount(options);
       }
 
     if (users.length === 0) {
@@ -213,6 +211,7 @@ export class UserService {
 
     this.logger.log('Successfully retrieved users', {
       count: transformedUsers.length,
+      total,
       page,
       limit,
       projectId: projectId || 'all'

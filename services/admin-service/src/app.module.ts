@@ -3,6 +3,9 @@ import {
   Module,
   NestModule,
 } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AccountModule } from './account/account.module';
@@ -36,6 +39,15 @@ import { UpgradeModule } from './upgrade/upgrade.module';
 @Module({
   imports: [
     LoggerModule.forRoot(),
+    ThrottlerModule.forRoot([{
+      ttl: 60,
+      limit: 100,
+    }]),
+    CacheModule.register({
+      ttl: 5000,
+      max: 100,
+      isGlobal: true,
+    }),
     TypeOrmModule.forFeature([
       User,
       Role,
@@ -62,7 +74,13 @@ import { UpgradeModule } from './upgrade/upgrade.module';
     UpgradeModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule implements NestModule{
   configure(consumer: MiddlewareConsumer) {

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserRoleController } from './user-role.controller';
 import { UserRoleService } from './user-role.service';
 import { Role } from '../entities/role.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Permission } from '../entities/permission.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserRole } from '../entities/user-role.entity';
@@ -64,6 +64,15 @@ describe('UserRoleController', () => {
         },
         { provide: getRepositoryToken(Project), useClass: Repository },
         { provide: getRepositoryToken(Account), useClass: Repository },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((cb) => cb({
+              delete: jest.fn(),
+              save: jest.fn(),
+            })),
+          },
+        },
         {
           provide: LoggerFactory,
           useValue: mockLoggerFactory,

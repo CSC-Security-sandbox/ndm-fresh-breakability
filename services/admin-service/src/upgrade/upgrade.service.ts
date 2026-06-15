@@ -90,6 +90,8 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
   private sessions: Map<string, UploadSession> = new Map();
   private processingErrors: Map<string, { errors: string[]; isValidation: boolean }> = new Map();
   private upgradePoller: ReturnType<typeof setInterval> | null = null;
+  private upgradePollerConsecutiveFailures = 0;
+  private static readonly UPGRADE_POLLER_MAX_FAILURES = 10;
 
   // MULTICAST (Worker Distribution) fields
   constructor(
@@ -176,11 +178,18 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    this.upgradePollerConsecutiveFailures = 0;
     this.upgradePoller = setInterval(async () => {
       try {
         await this.pollUpgradeCompletion(bundleId);
+        this.upgradePollerConsecutiveFailures = 0;
       } catch (error) {
-        this.logger.error(`Upgrade poller error: ${error.message}`);
+        this.upgradePollerConsecutiveFailures++;
+        this.logger.error(`Upgrade poller error (${this.upgradePollerConsecutiveFailures}/${UpgradeService.UPGRADE_POLLER_MAX_FAILURES}): ${error.message}`);
+        if (this.upgradePollerConsecutiveFailures >= UpgradeService.UPGRADE_POLLER_MAX_FAILURES) {
+          this.logger.warn(`Upgrade poller reached ${UpgradeService.UPGRADE_POLLER_MAX_FAILURES} consecutive failures — stopping`);
+          this.stopUpgradePoller();
+        }
       }
     }, UpgradeService.UPGRADE_POLL_INTERVAL_MS);
 
@@ -298,7 +307,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         `Worker upgrade for ${bundle.version} already in progress or completed (upload=${bundle.workerUploadStatus}, upgrade=${bundle.workerUpgradeStatus}) — skipping`,
       );
     } catch (error) {
-      this.logger.error(`Failed to auto-trigger worker upgrade: ${error.message}`);
+      this.logger.error(`Failed to auto-trigger worker upgrade for bundle ${bundle.id}: ${error.message}`, error.stack);
     }
   }
 
@@ -342,15 +351,16 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         ],
       });
 
-      for (const record of orphanedUploads) {
-        this.logger.warn(`Marking orphaned upload as FAILED on startup: ${record.id} (${record.fileName})`);
-        await this.upgradeBundleRepository.update(record.id, {
-          uploadStatus: UploadStatus.FAILED,
-          uploadCompletedAt: new Date(),
-        });
-      }
-
       if (orphanedUploads.length > 0) {
+        for (const record of orphanedUploads) {
+          this.logger.warn(`Marking orphaned upload as FAILED on startup: ${record.id} (${record.fileName})`);
+        }
+        const ids = orphanedUploads.map(u => u.id);
+        await this.upgradeBundleRepository.update(
+          { id: In(ids) },
+          { uploadStatus: UploadStatus.FAILED, uploadCompletedAt: new Date() },
+        );
+
         this.logger.log(`Cleaned up ${orphanedUploads.length} orphaned upload(s) on startup`);
         // Also cleanup temp directory from any interrupted uploads
         const tempDir = path.join(this.uploadPath, 'temp');
@@ -771,16 +781,18 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         });
       });
 
-      writeStream.on('error', (err) => {
+      writeStream.on('error', async (err) => {
         this.logger.error(`Error writing chunk ${chunkIndex}: ${err.message}`);
         
         // Update DB to FAILED immediately on write error (disk full, permission, etc.)
-        this.upgradeBundleRepository.update(session.bundleId, {
-          uploadStatus: UploadStatus.FAILED,
-          uploadCompletedAt: new Date(),
-        }).catch(dbErr => {
+        try {
+          await this.upgradeBundleRepository.update(session.bundleId, {
+            uploadStatus: UploadStatus.FAILED,
+            uploadCompletedAt: new Date(),
+          });
+        } catch (dbErr) {
           this.logger.error(`Failed to update DB on write error: ${dbErr.message}`);
-        });
+        }
         
         // Cleanup session
         this.sessions.delete(uploadId);
@@ -788,17 +800,19 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
         reject(new InternalServerErrorException('Failed to write chunk'));
       });
 
-      req.on('error', (err) => {
+      req.on('error', async (err) => {
         this.logger.error(`Error receiving chunk ${chunkIndex}: ${err.message}`);
         writeStream.destroy();
         
         // Update DB to FAILED immediately on error
-        this.upgradeBundleRepository.update(session.bundleId, {
-          uploadStatus: UploadStatus.FAILED,
-          uploadCompletedAt: new Date(),
-        }).catch(dbErr => {
+        try {
+          await this.upgradeBundleRepository.update(session.bundleId, {
+            uploadStatus: UploadStatus.FAILED,
+            uploadCompletedAt: new Date(),
+          });
+        } catch (dbErr) {
           this.logger.error(`Failed to update DB on error: ${dbErr.message}`);
-        });
+        }
         
         // Cleanup session
         this.sessions.delete(uploadId);
@@ -809,18 +823,20 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       // Handle request abort (user refresh, tab close, network disconnect)
       // Note: In Node.js 15.5+, 'close' fires on normal completion too.
       // Use req.complete to distinguish normal close from actual abort.
-      req.on('close', () => {
+      req.on('close', async () => {
         if (!isCompleted && !(req as any).complete) {
           this.logger.warn(`Request aborted for chunk ${chunkIndex}, upload ${uploadId}`);
           writeStream.destroy();
           
           // Update DB to FAILED immediately on abort
-          this.upgradeBundleRepository.update(session.bundleId, {
-            uploadStatus: UploadStatus.FAILED,
-            uploadCompletedAt: new Date(),
-          }).catch(dbErr => {
+          try {
+            await this.upgradeBundleRepository.update(session.bundleId, {
+              uploadStatus: UploadStatus.FAILED,
+              uploadCompletedAt: new Date(),
+            });
+          } catch (dbErr) {
             this.logger.error(`Failed to update DB on abort: ${dbErr.message}`);
-          });
+          }
           
           // Cleanup session
           this.sessions.delete(uploadId);
@@ -1728,16 +1744,18 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Executing upgrade on host via systemd-run: ${nsenterCmd}`);
 
     exec(cleanupCmd, () => {
-      exec(nsenterCmd, (error, _stdout, stderr) => {
+      exec(nsenterCmd, async (error, _stdout, stderr) => {
         if (error) {
           this.logger.error(`Failed to start upgrade process: ${error.message}`);
           this.logger.error(`stderr: ${stderr}`);
-          this.upgradeBundleRepository.update(bundle.id, {
-            upgradeStatus: UpgradeStatus.FAILED,
-            upgradeCompletedAt: new Date(),
-          }).catch((dbErr) => {
+          try {
+            await this.upgradeBundleRepository.update(bundle.id, {
+              upgradeStatus: UpgradeStatus.FAILED,
+              upgradeCompletedAt: new Date(),
+            });
+          } catch (dbErr) {
             this.logger.error(`Failed to update DB after nsenter failure: ${dbErr.message}`);
-          });
+          }
         } else {
           this.logger.log('Upgrade process started on host successfully');
         }
@@ -2244,6 +2262,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       const workers = await this.workerRepository.find({
         relations: { stats: true },
         where: { currentMulticastWorkflowId: workflowId },
+        take: 5000,
       });
 
       const healthTimeout = WORKER_HEALTH_TIMEOUT_SECONDS;
@@ -2310,6 +2329,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
           upgradeBundleStaged: UpgradeBundleStatus.COMPLETED,
           stagedVersion: dto.version,
         },
+        take: 5000,
       });
 
       if (stagedWorkers.length === 0) {
@@ -2408,6 +2428,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       // Only fetch workers that were part of the staging run for this bundle
       const allWorkers = await this.workerRepository.find({
         where: { currentMulticastWorkflowId: bundle.multicastWorkflowId },
+        take: 5000,
       });
 
       const executionWorkers = allWorkers.filter(

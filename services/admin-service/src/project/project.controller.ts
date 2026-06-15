@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -92,12 +93,20 @@ export class ProjectController {
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query('filter') filter: string,
   ) {
+    let parsedFilter = {};
+    if (filter != null) {
+      try {
+        parsedFilter = JSON.parse(filter);
+      } catch {
+        throw new BadRequestException('Invalid filter JSON');
+      }
+    }
     return this.projectService.findAll(
       page,
       limit,
       sortField,
       sortOrder,
-      filter != null ? JSON.parse(filter) : {},
+      parsedFilter,
     );
   }
 
@@ -148,13 +157,21 @@ export class ProjectController {
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
     @Query('filter') filter?: string,
   ) {
+    let parsedFilter = {};
+    if (filter != null) {
+      try {
+        parsedFilter = JSON.parse(filter);
+      } catch {
+        throw new BadRequestException('Invalid filter JSON');
+      }
+    }
     return this.projectService.findByAccount(
       account_id,
       page,
       limit,
       sortField,
       sortOrder,
-      filter != null ? JSON.parse(filter) : {},
+      parsedFilter,
       userPermissionResponse,
     );
   }

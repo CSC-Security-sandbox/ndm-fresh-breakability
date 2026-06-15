@@ -7,7 +7,9 @@ import {
   Patch,
   Post,
   Request,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
@@ -44,6 +46,8 @@ export class PermissionController {
   @Auth()
   @ApiBearerAuth()
   @Get()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(10000)
   @ApiOperation({
     summary: 'Retrieve All Permissions',
     description: PermissionDescription.GetAllPermissionsDescription,

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -93,12 +94,21 @@ export class UserController {
     @Query('filter') filter: string = '{}',
     @Query('projectId') projectId?: string,
   ) {
+    let parsedFilter: Partial<CreateUserDto> = {};
+    try {
+      const parsed = JSON.parse(filter);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        parsedFilter = parsed;
+      }
+    } catch {
+      throw new BadRequestException('Invalid filter JSON');
+    }
     return this.userService.findAll(
       page,
       limit,
       sortField,
       sortOrder,
-      JSON.parse(filter),
+      parsedFilter,
       projectId,
     );
   }

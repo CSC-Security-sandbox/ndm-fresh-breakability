@@ -220,10 +220,10 @@ describe('UserService', () => {
       },
     ];
 
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 2]);
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users) // First call - main query
-      .mockResolvedValueOnce([]) // Second call - createdByUsers
-      .mockResolvedValueOnce([]); // Third call - updatedByUsers
+      .mockResolvedValueOnce([]) // createdByUsers
+      .mockResolvedValueOnce([]); // updatedByUsers
 
     jest.spyOn(userRoleRepository, 'find')
       .mockResolvedValueOnce([
@@ -231,7 +231,7 @@ describe('UserService', () => {
       ]);
 
     const result = await service.findAll();
-    expect(userRepository.find).toHaveBeenCalled();
+    expect(userRepository.findAndCount).toHaveBeenCalled();
 
     expect(result).toEqual(
       expect.arrayContaining([
@@ -325,8 +325,8 @@ describe('UserService', () => {
         buildUserRoleMock({ userId: '2', roleId: 'role-2', projectId, role: { role_name: 'Project Viewer' } }),
       ]);
 
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 3]);
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users)
       .mockResolvedValueOnce(createdByUsers)
       .mockResolvedValueOnce(updatedByUsers);
 
@@ -337,8 +337,8 @@ describe('UserService', () => {
         { projectId },
         { projectId: IsNull() }
       ],
-      relations: { user: true },
-      select: { userId: true }
+      select: { userId: true },
+      take: 10000,
     });
 
     expect(result).toHaveLength(3);
@@ -380,20 +380,20 @@ describe('UserService', () => {
         { projectId },
         { projectId: IsNull() }
       ],
-      relations: { user: true },
-      select: { userId: true }
+      select: { userId: true },
+      take: 10000,
     });
 
     expect(result).toEqual([]);
-    expect(userRepository.find).not.toHaveBeenCalled();
+    expect(userRepository.findAndCount).not.toHaveBeenCalled();
   });
 
   it('should return empty array when users query returns no results', async () => {
-    jest.spyOn(userRepository, 'find').mockResolvedValue([]);
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValue([[], 0]);
 
     const result = await service.findAll();
 
-    expect(userRepository.find).toHaveBeenCalled();
+    expect(userRepository.findAndCount).toHaveBeenCalled();
     expect(result).toEqual([]);
   });
 
@@ -416,8 +416,8 @@ describe('UserService', () => {
       },
     ];
 
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
@@ -456,8 +456,8 @@ describe('UserService', () => {
       },
     ];
 
+    jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
     jest.spyOn(userRepository, 'find')
-      .mockResolvedValueOnce(users)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
@@ -467,7 +467,7 @@ describe('UserService', () => {
     const filter = { user_status: 'active' };
     const result = await service.findAll(2, 5, 'email', 'DESC', filter);
 
-    expect(userRepository.find).toHaveBeenCalledWith({
+    expect(userRepository.findAndCount).toHaveBeenCalledWith({
       skip: 5,
       take: 5,
       order: { email: 'DESC' },
@@ -504,8 +504,8 @@ describe('UserService', () => {
           buildUserRoleMock({ userId: '1', roleId: 'r1', role: { role_name: 'App Admin' } }),
         ]);
 
+      jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
       jest.spyOn(userRepository, 'find')
-        .mockResolvedValueOnce(users)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
@@ -527,8 +527,8 @@ describe('UserService', () => {
           buildUserRoleMock({ userId: '1', roleId: 'r1', projectId, role: { role_name: 'Project Viewer' } }),
         ]);
 
+      jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
       jest.spyOn(userRepository, 'find')
-        .mockResolvedValueOnce(users)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
@@ -543,8 +543,8 @@ describe('UserService', () => {
     it('should set roleName to null for users with no matching role', async () => {
       const users = [makeUser('1', 'norole@test.com')];
 
+      jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
       jest.spyOn(userRepository, 'find')
-        .mockResolvedValueOnce(users)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
@@ -573,8 +573,8 @@ describe('UserService', () => {
           buildUserRoleMock({ userId: '1', roleId: 'r2', projectId, role: { role_name: 'Project Admin' } }),
         ]);
 
+      jest.spyOn(userRepository, 'findAndCount').mockResolvedValueOnce([users, 1]);
       jest.spyOn(userRepository, 'find')
-        .mockResolvedValueOnce(users)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
@@ -901,7 +901,7 @@ describe('UserService', () => {
 
     it('should handle database errors in findAll and log them', async () => {
       const dbError = new Error('Database query failed');
-      jest.spyOn(userRepository, 'find').mockRejectedValue(dbError);
+      jest.spyOn(userRepository, 'findAndCount').mockRejectedValue(dbError);
 
       await expect(service.findAll()).rejects.toThrow('Database query failed');
       expect(mockLoggerFactory.create().error).toHaveBeenCalledWith(

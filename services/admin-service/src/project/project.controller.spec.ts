@@ -152,7 +152,7 @@ describe('ProjectController', () => {
 
   describe('findAll', () => {
     it('should return an empty list when no projects exist', async () => {
-      jest.spyOn(service, 'findAll').mockResolvedValue([]);
+      jest.spyOn(service, 'findAll').mockResolvedValue({ data: [], total: 0, page: 1, limit: 10 });
 
       const result = await controller.findAll(1, 10, 'id', 'ASC', '{}');
       const result2 = await controller.findAll(
@@ -184,12 +184,13 @@ describe('ProjectController', () => {
         undefined,
       );
       const result6 = await controller.findAll(1, 10, 'id', 'ASC', undefined);
-      expect(result).toEqual([]);
-      expect(result2).toEqual([]);
-      expect(result3).toEqual([]);
-      expect(result4).toEqual([]);
-      expect(result5).toEqual([]);
-      expect(result6).toEqual([]);
+      const emptyResult = { data: [], total: 0, page: 1, limit: 10 };
+      expect(result).toEqual(emptyResult);
+      expect(result2).toEqual(emptyResult);
+      expect(result3).toEqual(emptyResult);
+      expect(result4).toEqual(emptyResult);
+      expect(result5).toEqual(emptyResult);
+      expect(result6).toEqual(emptyResult);
       expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {});
     });
 
@@ -210,10 +211,10 @@ describe('ProjectController', () => {
           populateWhoColumns: jest.fn(),
         },
       ];
-      jest.spyOn(service, 'findAll').mockResolvedValue(projects);
+      jest.spyOn(service, 'findAll').mockResolvedValue({ data: projects, total: 1, page: 1, limit: 10 });
 
       const result = await controller.findAll(1, 10, 'id', 'ASC', '{}');
-      expect(result).toEqual(projects);
+      expect(result).toEqual({ data: projects, total: 1, page: 1, limit: 10 });
       expect(service.findAll).toHaveBeenCalledWith(1, 10, 'id', 'ASC', {});
     });
 
@@ -230,7 +231,7 @@ describe('ProjectController', () => {
 
   describe('findByAccountId', () => {
     it('should return an empty list when no projects exist for an account', async () => {
-      jest.spyOn(service, 'findByAccount').mockResolvedValue([]);
+      jest.spyOn(service, 'findByAccount').mockResolvedValue({ data: [], total: 0, page: 1, limit: 10 });
 
       const result = await controller.findByAccountId(
         userPermissionResponseMock,
@@ -242,8 +243,8 @@ describe('ProjectController', () => {
         '{}',
       );
 
-      expect(result).toEqual([]);
-      expect(result).toEqual([]);
+      expect(result).toEqual({ data: [], total: 0, page: 1, limit: 10 });
+      expect(result).toEqual({ data: [], total: 0, page: 1, limit: 10 });
       expect(service.findByAccount).toHaveBeenCalledWith(
         '1',
         1,
@@ -273,7 +274,7 @@ describe('ProjectController', () => {
         },
       ];
 
-      jest.spyOn(service, 'findByAccount').mockResolvedValue(projects);
+      jest.spyOn(service, 'findByAccount').mockResolvedValue({ data: projects, total: 1, page: 1, limit: 10 });
 
       const userPermissionResponseMock = {
         user: {
@@ -298,7 +299,7 @@ describe('ProjectController', () => {
         '{}',
       );
 
-      expect(result).toEqual(projects);
+      expect(result).toEqual({ data: projects, total: 1, page: 1, limit: 10 });
       expect(service.findByAccount).toHaveBeenCalledWith(
         '1',
         1,

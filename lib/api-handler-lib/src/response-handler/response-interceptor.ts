@@ -6,13 +6,14 @@ import {
     Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Observable, catchError, map, throwError } from 'rxjs';
 import { Request, Response } from 'express';
 import { ResponseHandler } from './response-handler';
 import {CustomErrorDTO} from '../dto/custom-error-dto';
 import {CustomSuccessDTO} from '../dto/custom-success-dto';
 import {LoggerFactory, LoggerService} from "@netapp-cloud-datamigrate/logger-lib";
+
+const HTTP_CODE_METADATA = '__httpCode__';
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, any> {

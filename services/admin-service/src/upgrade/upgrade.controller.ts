@@ -9,6 +9,7 @@ import {
   Res,
   Request,
   Header,
+  Inject,
   ParseUUIDPipe,
   BadRequestException,
   HttpCode,
@@ -25,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { Request as ExpressRequest, Response } from 'express';
 import { Auth, Permission, AuthWorker } from '@netapp-cloud-datamigrate/auth-lib';
+import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
 import { UpgradeService } from './upgrade.service';
 import {
   InitUploadDto,
@@ -47,7 +49,14 @@ import { UserPermissionResponse } from '../auth/user-permission-response-type';
 @ApiTags('upgrade')
 @Controller('/api/v1/upgrade')
 export class UpgradeController {
-  constructor(private readonly upgradeService: UpgradeService) {}
+  private readonly logger: LoggerService;
+
+  constructor(
+    private readonly upgradeService: UpgradeService,
+    @Inject(LoggerFactory) loggerFactory: LoggerFactory,
+  ) {
+    this.logger = loggerFactory.create(UpgradeController.name);
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // GET LATEST STATUS - For UI state restoration after page refresh
@@ -251,7 +260,14 @@ export class UpgradeController {
       'Cache-Control': 'no-cache',
     });
 
-    streamableFile.getStream().pipe(res);
+    const stream = streamableFile.getStream();
+    stream.on('error', (err) => {
+      this.logger.error('Error streaming bundle file', err);
+      if (!res.headersSent) {
+        res.status(500).end();
+      }
+    });
+    stream.pipe(res);
   }
 
   // ═══════════════════════════════════════════════════════════════

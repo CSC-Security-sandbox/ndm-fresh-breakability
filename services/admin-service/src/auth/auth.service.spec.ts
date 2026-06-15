@@ -235,9 +235,7 @@ describe('AuthService', () => {
     jest.spyOn(service, 'getKeycloakToken').mockResolvedValue(token);
 
     await expect(service.resetPassword(email)).rejects.toThrow(
-      new InternalServerErrorException(
-        'Failed to reset password in Keycloak, : error',
-      ),
+      new NotFoundException('User not found in Keycloak'),
     );
   });
 
@@ -398,9 +396,37 @@ describe('AuthService', () => {
         ),
       ).rejects.toThrow(
         new InternalServerErrorException(
-          'Failed to create user in Keycloak, error: Database connection failed',
+          'Failed to save user to database, error: Database connection failed',
         ),
       );
+    });
+
+    it('should throw ConflictException when DB unique constraint is violated on inviteUser', async () => {
+      const username = 'duplicate@example.com';
+      const firstName = 'Jane';
+      const lastName = 'Doe';
+
+      const constraintError: any = new Error('duplicate key value violates unique constraint');
+      constraintError.code = '23505';
+
+      mockUserRepository.findOne.mockResolvedValue(null);
+      (makeAxiosRequest as jest.Mock).mockResolvedValue(mockKeycloakResponse);
+      mockUserRepository.create.mockReturnValue({
+        email: username,
+        first_name: firstName,
+        last_name: lastName,
+        populateWhoColumns: jest.fn(),
+      });
+      mockUserRepository.save.mockRejectedValue(constraintError);
+
+      await expect(
+        service.inviteUser(
+          username,
+          firstName,
+          lastName,
+          userPermissionResponseMock,
+        ),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should handle repository findOne errors in setUserStatus', async () => {
@@ -425,9 +451,76 @@ describe('AuthService', () => {
 
       mockUserRepository.findOne.mockResolvedValue(user);
       mockUserRepository.save.mockRejectedValue(dbError);
+      (makeAxiosRequest as jest.Mock).mockResolvedValue([{ id: 'user-id' }]);
 
       await expect(service.setUserStatus(email, enable)).rejects.toThrow(
-        dbError,
+        new InternalServerErrorException(
+          'Failed to update user status in Keycloak, error: Save operation failed',
+        ),
+      );
+    });
+
+    it('should disable user and call logout endpoint', async () => {
+      const email = 'user@example.com';
+      const user = new User();
+      user.email = email;
+      user.user_status = 'active';
+
+      mockUserRepository.findOne.mockResolvedValue(user);
+      mockUserRepository.save.mockResolvedValue(user);
+      (makeAxiosRequest as jest.Mock)
+        .mockResolvedValueOnce([{ id: 'keycloak-user-id' }])
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined);
+
+      const result = await service.setUserStatus(email, false);
+
+      expect(result.message).toContain('disabled');
+      expect(result.user.user_status).toBe('inactive');
+    });
+
+    it('should successfully reset password', async () => {
+      (makeAxiosRequest as jest.Mock)
+        .mockResolvedValueOnce([{ id: 'kc-user-id' }])
+        .mockResolvedValueOnce(undefined);
+
+      const result = await service.resetPassword('user@example.com');
+      expect(result).toContain('encrypted:');
+    });
+
+    it('should throw InternalServerErrorException for non-HTTP errors in resetPassword', async () => {
+      const genericError = new Error('Network timeout');
+      (makeAxiosRequest as jest.Mock)
+        .mockRejectedValueOnce(genericError);
+
+      await expect(service.resetPassword('user@example.com')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should cleanup Keycloak user when DB save fails in inviteUser', async () => {
+      const username = 'cleanup@example.com';
+      const dbError = new Error('DB constraint');
+
+      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUserRepository.create.mockReturnValue({
+        email: username,
+        first_name: 'Test',
+        last_name: 'User',
+        populateWhoColumns: jest.fn(),
+      });
+      mockUserRepository.save.mockRejectedValue(dbError);
+      (makeAxiosRequest as jest.Mock)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce([{ id: 'kc-user-to-delete' }])
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.inviteUser(username, 'Test', 'User', userPermissionResponseMock),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(makeAxiosRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'DELETE' }),
       );
     });
   });

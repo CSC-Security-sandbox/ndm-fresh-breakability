@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -92,12 +93,20 @@ export class RolePermissionController {
     @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'ASC',
     @Query('filter') filter: string,
   ) {
+    let parsedFilter = {};
+    if (filter != null) {
+      try {
+        parsedFilter = JSON.parse(filter);
+      } catch {
+        throw new BadRequestException('Invalid filter JSON');
+      }
+    }
     return this.rolePermissionService.findAll(
       page,
       limit,
       sortField,
       sortOrder,
-      filter != null ? JSON.parse(filter) : {},
+      parsedFilter,
     );
   }
 

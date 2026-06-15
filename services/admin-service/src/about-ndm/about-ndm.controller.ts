@@ -1,4 +1,5 @@
-import { Controller, Get, Inject } from '@nestjs/common';
+import { Controller, Get, Inject, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import {
   ApiTags,
   ApiOperation,
@@ -16,6 +17,7 @@ import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 
 @ApiTags('about-ndm')
 @Controller('/api/v1/about-ndm')
+@UseInterceptors(CacheInterceptor)
 export class AboutNdmController {
   private readonly logger: LoggerService;
 
@@ -29,6 +31,7 @@ export class AboutNdmController {
   @Auth()
   @ApiBearerAuth()
   @Get()
+  @CacheTTL(30000)
   @ApiOperation({
     summary: 'Get NDM product and build information from Prometheus',
   })

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { NotFoundException } from '@nestjs/common';
 import { Permission } from '../entities/permission.entity';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
@@ -109,7 +110,10 @@ describe('PermissionService', () => {
     jest.spyOn(repository, 'find').mockResolvedValue(permissions);
 
     expect(await service.findAll()).toEqual(permissions);
-    expect(repository.find).toHaveBeenCalled();
+    expect(repository.find).toHaveBeenCalledWith({
+      where: { permission_status: 'active' },
+      take: 1000,
+    });
   });
 
   it('should find one permission by id', async () => {
@@ -137,6 +141,7 @@ describe('PermissionService', () => {
       permission_name: 'test',
     };
 
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 
     await service.update('1', updatePermissionDto, userPermissionResponseMock);
@@ -147,6 +152,7 @@ describe('PermissionService', () => {
   });
 
   it('should delete an permission', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
     jest.spyOn(repository, 'delete').mockResolvedValue(undefined);
 
     await service.delete('1');
@@ -154,11 +160,83 @@ describe('PermissionService', () => {
   });
 
   it('should inactivate a permission', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
     jest.spyOn(repository, 'update').mockResolvedValue(undefined);
 
     await service.inactivate('1');
     expect(repository.update).toHaveBeenCalledWith('1', {
       permission_status: 'inactive',
     });
+  });
+
+  it('should throw error when create fails', async () => {
+    const mockPermission = { populateWhoColumns: jest.fn() } as any;
+    jest.spyOn(repository, 'create').mockReturnValue(mockPermission);
+    jest.spyOn(repository, 'save').mockRejectedValue(new Error('DB error'));
+
+    await expect(
+      service.create({ permission_name: 'test' }, userPermissionResponseMock),
+    ).rejects.toThrow('DB error');
+  });
+
+  it('should throw error when findAll fails', async () => {
+    jest.spyOn(repository, 'find').mockRejectedValue(new Error('DB error'));
+
+    await expect(service.findAll()).rejects.toThrow('DB error');
+  });
+
+  it('should throw NotFoundException when findOne gets null', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+  });
+
+  it('should throw error when findOne has DB failure', async () => {
+    jest.spyOn(repository, 'findOneBy').mockRejectedValue(new Error('DB error'));
+
+    await expect(service.findOne('1')).rejects.toThrow('DB error');
+  });
+
+  it('should throw NotFoundException when update target does not exist', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(
+      service.update('nonexistent', { permission_name: 'x' }, userPermissionResponseMock),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('should throw error when update has DB failure', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
+    jest.spyOn(repository, 'update').mockRejectedValue(new Error('DB error'));
+
+    await expect(
+      service.update('1', { permission_name: 'x' }, userPermissionResponseMock),
+    ).rejects.toThrow('DB error');
+  });
+
+  it('should throw NotFoundException when delete target does not exist', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.delete('nonexistent')).rejects.toThrow(NotFoundException);
+  });
+
+  it('should throw error when delete has DB failure', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
+    jest.spyOn(repository, 'delete').mockRejectedValue(new Error('DB error'));
+
+    await expect(service.delete('1')).rejects.toThrow('DB error');
+  });
+
+  it('should throw NotFoundException when inactivate target does not exist', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+    await expect(service.inactivate('nonexistent')).rejects.toThrow(NotFoundException);
+  });
+
+  it('should throw error when inactivate has DB failure', async () => {
+    jest.spyOn(repository, 'findOneBy').mockResolvedValue({ id: '1' } as Permission);
+    jest.spyOn(repository, 'update').mockRejectedValue(new Error('DB error'));
+
+    await expect(service.inactivate('1')).rejects.toThrow('DB error');
   });
 });

@@ -17,6 +17,7 @@ const mockSettingsRepo = {
   findOne: jest.fn(),
   save: jest.fn(),
   create: jest.fn(),
+  upsert: jest.fn(),
 };
 jest.mock('nodemailer-express-handlebars', () => ({
   __esModule: true,
@@ -132,18 +133,14 @@ describe('SettingService', () => {
         populateWhoColumns: jest.fn(),
       };
 
-      jest.spyOn(settingsRepo, 'find').mockResolvedValue([]);
       jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
       jest.spyOn(settingsRepo, 'create').mockReturnValue(createdEntity);
-      jest.spyOn(settingsRepo, 'save').mockResolvedValue(createdEntity);
+      jest.spyOn(settingsRepo, 'upsert').mockResolvedValue(undefined);
 
       const result = await service.create(createSettingDto);
 
-      expect(settingsRepo.find).toHaveBeenCalledTimes(createSettingDto.length);
-      expect(settingsRepo.create).toHaveBeenCalledTimes(
-        createSettingDto.length,
-      );
-      expect(settingsRepo.save).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(settingsRepo.create).toHaveBeenCalledTimes(createSettingDto.length);
+      expect(settingsRepo.upsert).toHaveBeenCalled();
       expect(result).toEqual({
         message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
@@ -304,35 +301,31 @@ describe('SettingService', () => {
 
       expect(settingsRepo.find).toHaveBeenCalled();
       expect(result).toEqual({
-        message: 'Settings retrieved successfully',
-        statusCode: HttpStatus.OK,
-        data: {
-          SMTP: [
-            {
-              id: '1',
-              settingKey: 'SMTP_HOST',
-              settingValue: 'smtp.gmail.com',
-              description: 'SMTP Host for sending emails',
-              settingType: 'SMTP',
-            },
-            {
-              id: '2',
-              settingKey: 'SMTP_PORT',
-              settingValue: '587',
-              description: 'SMTP Port',
-              settingType: 'SMTP',
-            },
-          ],
-          API: [
-            {
-              id: '3',
-              settingKey: 'API_KEY',
-              settingValue: 'abc123',
-              description: 'API Key',
-              settingType: 'API',
-            },
-          ],
-        },
+        SMTP: [
+          {
+            id: '1',
+            settingKey: 'SMTP_HOST',
+            settingValue: 'smtp.gmail.com',
+            description: 'SMTP Host for sending emails',
+            settingType: 'SMTP',
+          },
+          {
+            id: '2',
+            settingKey: 'SMTP_PORT',
+            settingValue: '587',
+            description: 'SMTP Port',
+            settingType: 'SMTP',
+          },
+        ],
+        API: [
+          {
+            id: '3',
+            settingKey: 'API_KEY',
+            settingValue: 'abc123',
+            description: 'API Key',
+            settingType: 'API',
+          },
+        ],
       });
     });
   });
@@ -384,12 +377,12 @@ describe('SettingService', () => {
       };
 
       jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
-      jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(existingSetting);
-      jest.spyOn(settingsRepo, 'save').mockResolvedValue({
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue([existingSetting]);
+      jest.spyOn(settingsRepo, 'save').mockResolvedValue([{
         ...existingSetting,
         ...updateSettingDto[0],
         populateWhoColumns: jest.fn(),
-      });
+      }] as any);
 
       const result = await service.updateSetting(updateSettingDto);
       expect(result).toEqual({
@@ -413,7 +406,7 @@ describe('SettingService', () => {
       await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
         new HttpException(
           {
-            message: 'Error updating setting',
+            message: 'SMTP connection test failed',
             statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
             error: 'SMTP connection test failed',
           },
@@ -459,10 +452,48 @@ describe('SettingService', () => {
           settingType: SettingType.SMTP,
         },
       ];
-      jest.spyOn(settingsRepo, 'findOne').mockResolvedValue(null);
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue([]);
 
       await expect(service.updateSetting(updateSettingDto)).rejects.toThrow(
         HttpException,
+      );
+    });
+
+    it('should batch-save all settings in one call', async () => {
+      const updateSettingDto: CreateSettingDto[] = [
+        {
+          settingKey: 'SMTP_HOST',
+          settingValue: 'newhost.example.com',
+          description: 'Updated Host',
+          settingType: SettingType.SMTP,
+        },
+        {
+          settingKey: 'SMTP_PORT',
+          settingValue: '465',
+          description: 'Updated Port',
+          settingType: SettingType.SMTP,
+        },
+      ];
+
+      const existingSettings = [
+        { settingKey: 'SMTP_HOST', settingValue: 'old.example.com', description: 'Host', settingType: 'SMTP' },
+        { settingKey: 'SMTP_PORT', settingValue: '587', description: 'Port', settingType: 'SMTP' },
+      ];
+
+      jest.spyOn(service, 'testSMTPConnection').mockResolvedValue(true);
+      jest.spyOn(settingsRepo, 'find').mockResolvedValue(existingSettings as any);
+      jest.spyOn(settingsRepo, 'save').mockResolvedValue(existingSettings as any);
+
+      await service.updateSetting(updateSettingDto);
+
+      expect(settingsRepo.find).toHaveBeenCalledTimes(1);
+      expect(settingsRepo.save).toHaveBeenCalledTimes(1);
+      expect(settingsRepo.save).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ settingKey: 'SMTP_HOST', settingValue: 'newhost.example.com' }),
+          expect.objectContaining({ settingKey: 'SMTP_PORT', settingValue: '465' }),
+        ]),
       );
     });
   });

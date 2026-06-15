@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateSettingDto } from './dto/create-setting.dto';
 import { GlobalSettings } from 'src/entities/global-setting.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
@@ -72,31 +72,23 @@ export class SettingService {
       // Validate SMTP connection
       await this.validateSMTPConnection(createSettingDto);
 
-      const createdSettings = await Promise.all(
-        createSettingDto.map(async (setting) => {
-          const existingSetting = await this.settingsRepo.find({
-            where: { settingKey: setting.settingKey },
-          });
-          if (existingSetting.length > 0) {
-            throw new HttpException(
-              {
-                message: `Setting with key ${setting.settingKey} already exists`,
-                statusCode: HttpStatus.BAD_REQUEST,
-                error: `Setting with key ${setting.settingKey} already exists`,
-              },
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          const settingEntity = this.settingsRepo.create(setting);
-          return await this.settingsRepo.save(settingEntity);
-        }),
+      const entities = createSettingDto.map((setting) =>
+        this.settingsRepo.create(setting),
       );
+
+      await this.settingsRepo.upsert(entities, {
+        conflictPaths: ['settingKey'],
+        skipUpdateIfNoValuesChanged: true,
+      });
 
       return {
         message: 'SMTP details added successfully.',
         statusCode: HttpStatus.CREATED,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         {
           message: 'SMTP server is not reachable',
@@ -187,7 +179,7 @@ export class SettingService {
 
   async findAll() {
     try {
-      const settings = await this.settingsRepo.find();
+      const settings = await this.settingsRepo.find({ take: 1000 });
       const groupedSettings = settings.reduce((acc, setting) => {
         const type = setting.settingType;
         if (!acc[type]) {
@@ -197,7 +189,6 @@ export class SettingService {
         acc[type].push({
           id: setting.id,
           settingKey: setting.settingKey,
-          // Do not send SMTP_PASSWORD in any response to protect sensitive data.
           settingValue:
             setting.settingKey === 'SMTP_PASSWORD' ? '' : setting.settingValue,
           description: setting.description,
@@ -206,19 +197,11 @@ export class SettingService {
         return acc;
       }, {});
 
-      return {
-        message: 'Settings retrieved successfully',
-        statusCode: HttpStatus.OK,
-        data: groupedSettings,
-      };
+      return groupedSettings;
     } catch (error) {
       this.logger.error('Error retrieving settings', error);
       throw new HttpException(
-        {
-          message: 'Error retrieving settings',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          error: error.message,
-        },
+        'Error retrieving settings',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -228,15 +211,12 @@ export class SettingService {
     try {
       return await this.settingsRepo.find({
         where: { settingType: settingType },
+        take: 1000,
       });
     } catch (error) {
       this.logger.error('Error finding settings by type', error);
       throw new HttpException(
-        {
-          message: 'Error finding settings',
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          error: error.message,
-        },
+        'Error finding settings',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -264,11 +244,14 @@ export class SettingService {
       // Validate SMTP connection
       await this.validateSMTPConnection(updateSettingDto);
 
+      const keys = updateSettingDto.map((s) => s.settingKey);
+      const existingSettings = await this.settingsRepo.find({
+        where: { settingKey: In(keys) },
+      });
+
+      const existingMap = new Map(existingSettings.map((s) => [s.settingKey, s]));
       for (const settingObj of updateSettingDto) {
-        const setting = await this.settingsRepo.findOne({
-          where: { settingKey: settingObj.settingKey },
-        });
-        if (!setting) {
+        if (!existingMap.has(settingObj.settingKey)) {
           throw new HttpException(
             {
               message: `Setting with key ${settingObj.settingKey} not found`,
@@ -278,15 +261,25 @@ export class SettingService {
             HttpStatus.NOT_FOUND,
           );
         }
-        setting.settingValue = settingObj.settingValue;
-        setting.description = settingObj.description;
-        await this.settingsRepo.save(setting);
       }
+
+      const toSave = updateSettingDto.map((settingObj) => {
+        const existing = existingMap.get(settingObj.settingKey);
+        existing.settingValue = settingObj.settingValue;
+        existing.description = settingObj.description;
+        return existing;
+      });
+
+      await this.settingsRepo.save(toSave);
+
       return {
         message: 'Setting updated successfully',
         statusCode: HttpStatus.OK,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error('Error updating setting', error);
       throw new HttpException(
         {

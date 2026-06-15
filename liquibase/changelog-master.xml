@@ -755,4 +755,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260615_01_add_unique_constraints_project_user.sql" author="si82974">
+      <sqlFile path="liquibase/20260615_01_add_unique_constraints_project_user.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260615_01_add_unique_constraints_project_user_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

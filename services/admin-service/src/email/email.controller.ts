@@ -1,5 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Auth } from '@netapp-cloud-datamigrate/auth-lib';
 import { EmailDto, SuccessEventEmailDto } from './dto/emailDto';
 import { EmailService } from './email.service';
 import { NOTIFICATION_TYPE } from './dto/notification.type';
@@ -7,6 +8,9 @@ import { NOTIFICATION_TYPE } from './dto/notification.type';
 @Controller('/api/v1/email')
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
+
+  @Auth()
+  @ApiBearerAuth()
   @Post('/external')
   @ApiOperation({
     summary: 'Send Email Notification',
@@ -22,6 +26,8 @@ export class EmailController {
     );
   }
 
+  @Auth()
+  @ApiBearerAuth()
   @Post('/internal')
   @ApiOperation({
     summary: 'Send Email Notification',

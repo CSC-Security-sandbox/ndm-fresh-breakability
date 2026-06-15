@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CacheModule } from '@nestjs/cache-manager';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RoleController } from './role.controller';
 import { RoleService } from './role.service';
@@ -32,6 +33,7 @@ describe('RoleController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      imports: [CacheModule.register()],
       controllers: [RoleController],
       providers: [
         RoleService,

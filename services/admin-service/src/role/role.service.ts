@@ -54,19 +54,29 @@ export class RoleService {
     }
   }
 
-  async findAll(): Promise<Role[]> {
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<Role[]> {
     try {
-      this.logger.log('Retrieving active roles list');
+      this.logger.log('Retrieving active roles list', {
+        page,
+        limit
+      });
 
       const roles = await this.roleRepository.find({
         where: {
           role_status: 'active',
         },
         relations: { role_permissions: true },
+        skip: (page - 1) * limit,
+        take: limit,
       });
 
       this.logger.log('Successfully retrieved roles', {
-        count: roles.length
+        count: roles.length,
+        page,
+        limit
       });
       return roles;
     } catch (error) {

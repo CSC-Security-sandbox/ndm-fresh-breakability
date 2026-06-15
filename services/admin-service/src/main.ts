@@ -40,7 +40,7 @@ async function bootstrap() {
   SwaggerModule.setup('/api/v1/admin-docs', app, document, {
     jsonDocumentUrl: '/swagger/json',
   });
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
   app.enableCors();
   
   const server = await app.listen(3000);

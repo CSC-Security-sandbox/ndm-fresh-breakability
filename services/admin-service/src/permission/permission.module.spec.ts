@@ -1,4 +1,5 @@
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -15,6 +16,7 @@ describe('PermissionModule', () => {
   beforeEach(async () => {
     module = await Test.createTestingModule({
       imports: [
+        CacheModule.register({ isGlobal: true }),
         TypeOrmModule.forRoot({
           type: 'better-sqlite3',
           database: ':memory:',

@@ -135,13 +135,12 @@ describe('AuthController', () => {
   describe('resetPassword', () => {
     it('should reset the password for the given email and return the new password', async () => {
       const email = 'testuser@example.com';
-      const newPassword = 'newRandomPass123';
 
-      mockAuthService.resetPassword.mockResolvedValue(newPassword);
+      mockAuthService.resetPassword.mockResolvedValue(undefined);
 
       const result = await authController.resetPassword(email);
 
-      expect(result).toEqual({ email, newPassword });
+      expect(result).toEqual({ email, message: 'Password has been reset. The user will receive a temporary password via email.' });
       expect(mockAuthService.resetPassword).toHaveBeenCalledWith(email);
     });
 

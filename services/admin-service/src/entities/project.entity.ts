@@ -5,12 +5,14 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Account } from './account.entity';
 import { Base } from './base.entity';
 import { UserRole } from './user-role.entity';
 
 @Entity('project')
+@Unique('UQ_project_account_name', ['account', 'project_name'])
 export class Project extends Base {
   @PrimaryGeneratedColumn('uuid')
   id: string;

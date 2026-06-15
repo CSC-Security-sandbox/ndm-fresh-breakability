@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AboutNdmController } from './about-ndm.controller';
 import { AboutNdmService } from './about-ndm.service';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
@@ -26,6 +27,7 @@ describe('AboutNdmController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [CacheModule.register()],
       controllers: [AboutNdmController],
       providers: [
         {
