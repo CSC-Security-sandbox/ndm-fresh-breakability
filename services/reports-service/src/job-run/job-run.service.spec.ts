@@ -1485,7 +1485,7 @@ describe("JobRunService", () => {
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "stat").mockRejectedValue("string-read-error");
+      jest.spyOn(fs.promises, "stat").mockRejectedValueOnce("string-read-error");
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-read-error");
     });
   });
