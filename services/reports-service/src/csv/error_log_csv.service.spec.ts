@@ -97,6 +97,16 @@ describe("ErrorLogService", () => {
         service.handleError(undefined, "b")
       ).resolves.toBeUndefined();
     });
+    it('should throw if jobRunId is "undefined" string and jobConfigId is missing', async () => {
+      await expect(
+        service.handleError("undefined", undefined)
+      ).rejects.toThrow(BadRequestException);
+    });
+    it('should throw if jobConfigId is "undefined" string and jobRunId is missing', async () => {
+      await expect(
+        service.handleError(undefined, "undefined")
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe("getPaginatedErrors", () => {
@@ -109,6 +119,49 @@ describe("ErrorLogService", () => {
       });
       expect(result).toEqual([{ id: 1 }]);
       expect(mockOperationErrorRepo.query).toHaveBeenCalled();
+    });
+    it("should call repo.query with correct params for jobRunId", async () => {
+      mockOperationErrorRepo.query.mockResolvedValue([{ id: 2 }]);
+      const result = await service.getPaginatedErrors({
+        jobRunId: "run",
+        pageSize: 5,
+        offset: 10,
+      });
+      expect(result).toEqual([{ id: 2 }]);
+      expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("o.job_run_id = $1"),
+        expect.arrayContaining(["run"])
+      );
+    });
+  });
+
+  describe("getPaginatedErrorsKeyset", () => {
+    it("should build cursor clause when cursorCreatedAt and cursorId provided", async () => {
+      mockOperationErrorRepo.query.mockResolvedValue([{ id: 3 }]);
+      const result = await (service as any).getPaginatedErrorsKeyset({
+        jobRunId: "run",
+        pageSize: 100,
+        cursorCreatedAt: "2024-01-01T00:00:00Z",
+        cursorId: "uuid-123",
+      });
+      expect(result).toEqual([{ id: 3 }]);
+      expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining("oe.created_at"),
+        expect.arrayContaining(["run", "2024-01-01T00:00:00Z", "uuid-123"])
+      );
+    });
+    it("should not include cursor clause when cursors are null", async () => {
+      mockOperationErrorRepo.query.mockResolvedValue([]);
+      await (service as any).getPaginatedErrorsKeyset({
+        jobConfigId: "cfg",
+        pageSize: 50,
+        cursorCreatedAt: null,
+        cursorId: null,
+      });
+      expect(mockOperationErrorRepo.query).toHaveBeenCalledWith(
+        expect.not.stringContaining("oe.created_at, oe.id"),
+        expect.any(Array)
+      );
     });
   });
 
@@ -169,6 +222,27 @@ describe("ErrorLogService", () => {
     });
   });
 
+  describe("getErrorLogsDirectory", () => {
+    it("should return env var when set", () => {
+      const original = process.env.ERROR_LOGS_DOWNLOAD_LOCATION;
+      process.env.ERROR_LOGS_DOWNLOAD_LOCATION = "/custom/path";
+      expect(service.getErrorLogsDirectory).toBe("/custom/path");
+      if (original !== undefined) {
+        process.env.ERROR_LOGS_DOWNLOAD_LOCATION = original;
+      } else {
+        delete process.env.ERROR_LOGS_DOWNLOAD_LOCATION;
+      }
+    });
+    it("should return default when env var not set", () => {
+      const original = process.env.ERROR_LOGS_DOWNLOAD_LOCATION;
+      delete process.env.ERROR_LOGS_DOWNLOAD_LOCATION;
+      expect(service.getErrorLogsDirectory).toBe("./error-logs");
+      if (original !== undefined) {
+        process.env.ERROR_LOGS_DOWNLOAD_LOCATION = original;
+      }
+    });
+  });
+
   describe("getTotalErrorCountForJobRun", () => {
     it("should sum opCount and workerSetupCount", async () => {
       mockOperationErrorRepo.query.mockResolvedValue([{ count: "3" }]);
@@ -194,10 +268,26 @@ describe("ErrorLogService", () => {
   });
 
   describe("getWorkerSetupCount", () => {
-    it("should return count from repo", async () => {
+    it("should return count from repo for array", async () => {
       mockWorkerJobRunMapRepo.count.mockResolvedValue(7);
       const result = await (service as any).getWorkerSetupCount(["a"]);
       expect(result).toBe(7);
+    });
+    it("should handle single string jobRunId", async () => {
+      mockWorkerJobRunMapRepo.count.mockResolvedValue(3);
+      const result = await (service as any).getWorkerSetupCount("run1");
+      expect(result).toBe(3);
+    });
+  });
+
+  describe("constructor", () => {
+    it("should use fallback Logger when loggerFactory is not provided", () => {
+      const svc = new ErrorLogService(
+        mockOperationErrorRepo as any,
+        mockWorkerJobRunMapRepo as any,
+        undefined
+      );
+      expect(svc).toBeDefined();
     });
   });
 
@@ -250,6 +340,66 @@ describe("ErrorLogService", () => {
       (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
       const result = await service.createCsvFileForJob("job-run", "run");
       expect(result).toBeDefined();
+    });
+
+    it("should clean up old files and generate CSV when dir exists (jobConfigId path)", async () => {
+      (service as any).extractJobIdentifiers = jest
+        .fn()
+        .mockReturnValue({ jobConfigId: "cfg" });
+      jest.spyOn(service, "handleError").mockResolvedValue(undefined);
+      jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(2);
+      (fs.promises.access as jest.Mock).mockImplementation((p: string) => {
+        if (p === "cfg-error-2.csv") return Promise.reject(new Error("ENOENT"));
+        return Promise.resolve(undefined);
+      });
+      (fs.promises.readdir as jest.Mock).mockResolvedValue([
+        "cfg-error-1.csv",
+        "cfg-error-2.csv",
+        "other-file.txt",
+      ]);
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
+      jest
+        .spyOn(service, "writeLargeCsvToDisk")
+        .mockResolvedValue(undefined);
+      const result = await service.createCsvFileForJob("job-config", "cfg");
+      expect(result).toEqual({ message: "CSV generation started" });
+      expect(fs.promises.unlink).toHaveBeenCalledWith("cfg-error-1.csv");
+    });
+
+    it("should throw when unlink fails during cleanup", async () => {
+      (service as any).extractJobIdentifiers = jest
+        .fn()
+        .mockReturnValue({ jobConfigId: "cfg" });
+      jest.spyOn(service, "handleError").mockResolvedValue(undefined);
+      jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(2);
+      (fs.promises.access as jest.Mock).mockImplementation((p: string) => {
+        if (p === "cfg-error-2.csv") return Promise.reject(new Error("ENOENT"));
+        return Promise.resolve(undefined);
+      });
+      (fs.promises.readdir as jest.Mock).mockResolvedValue(["cfg-error-1.csv"]);
+      (fs.promises.unlink as jest.Mock).mockRejectedValue(
+        new Error("Permission denied")
+      );
+      await expect(
+        service.createCsvFileForJob("job-config", "cfg")
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should skip cleanup when directory does not exist", async () => {
+      (service as any).extractJobIdentifiers = jest
+        .fn()
+        .mockReturnValue({ jobRunId: "run" });
+      jest.spyOn(service, "handleError").mockResolvedValue(undefined);
+      jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(1);
+      (fs.promises.access as jest.Mock).mockRejectedValue(
+        new Error("ENOENT")
+      );
+      jest
+        .spyOn(service, "writeLargeCsvToDisk")
+        .mockResolvedValue(undefined);
+      const result = await service.createCsvFileForJob("job-run", "run");
+      expect(result).toEqual({ message: "CSV generation started" });
+      expect(fs.promises.readdir).not.toHaveBeenCalled();
     });
 
     it("should throw BadRequestException on error", async () => {
@@ -387,6 +537,32 @@ describe("ErrorLogService", () => {
       await expect(
         service.writeLargeCsvToDisk("file.csv", "run", undefined, 10000)
       ).rejects.toThrow("fail");
+    });
+
+    it("should paginate with cursor when batch equals pageSize (jobConfigId path)", async () => {
+      jest.spyOn(service, "getJobRunIds").mockResolvedValue(["r1"]);
+      jest
+        .spyOn<any, any>(Object.getPrototypeOf(service), "fetchFormattedSetupErrors")
+        .mockResolvedValue([]);
+      let callCount = 0;
+      jest.spyOn(service as any, "getPaginatedErrorsKeyset").mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return [{ "Created At": "2024-01-01", "Error Id": "id1", a: 1 }];
+        }
+        return [];
+      });
+
+      await expect(
+        service.writeLargeCsvToDisk("file.csv", undefined, "cfg", 1)
+      ).resolves.toBeUndefined();
+      expect((service as any).getPaginatedErrorsKeyset).toHaveBeenCalledTimes(2);
+      expect((service as any).getPaginatedErrorsKeyset).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cursorCreatedAt: "2024-01-01",
+          cursorId: "id1",
+        })
+      );
     });
   });
 
