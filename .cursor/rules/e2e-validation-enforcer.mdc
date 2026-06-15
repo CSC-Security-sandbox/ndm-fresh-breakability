@@ -1,0 +1,37 @@
+---
+description: "Always-on guardrails for robust E2E validation in ndm-api-tests. Enforces 12 rules covering CoC/cutover/discovery report fixtures, deletion-sync, exact incremental counts, pause/resume, custom migration options, rate-limiting smoke, support-bundle reports, and focus markers."
+globs: "ndm-api-tests/**/*.{go,json}"
+alwaysApply: false
+---
+
+# E2E Validation Enforcer — Guardrails
+
+Whenever you edit anything under `ndm-api-tests/` (Go tests or JSON fixtures), the 12 rules below MUST hold. For the full audit/fix workflow, detection patterns, column lists, and fix recipes, follow [`.cursor/skills/e2e-validation-enforcer/SKILL.md`](../skills/e2e-validation-enforcer/SKILL.md). Go/Ginkgo conventions are in [`go-tests.mdc`](go-tests.mdc).
+
+## MUST
+
+1. **R1** Migration CoC fixtures (`validators/**/*migration*.json`) MUST assert all **16 columns** the service emits (10 protocol-agnostic + 6 SMB SID/ACE **or** 6 NFS UID/GID/permission). See column list in `e2e-validation-enforcer/reference.md`.
+2. **R2** Every test that runs cutover (calls `CreateBulkCutoverJob` / produces a `cutoverRunID`) MUST call `ValidateReport(cutoverRunID, JobTypeCutover, <fixture>, ...)` after `WaitForJobState(cutoverRunID, APPROVED_JOBRUN)`.
+3. **R3** Cutover JSON fixtures MUST use only real cutover CSV columns: `Source Path`, `Destination Path`, `Source Checksum`, `Destination Checksum`, `ChecksumMatchStatus`, `Checksum Generated Timestamp (UTC)`, `Type`.
+4. **R4** Discovery fixtures (`validators/**/*discovery*.json`) MUST assert at least the **25 stable `sub_category` keys** (File System Stats, Max/Avg Values, File Server Info, Job Run Stats, Directory) from `reference.md`.
+5. **R5** Deletion-sync runs MUST assert `deleted-report.csv` via `CountDeletedReportRows(jobRunID)` with `Equal(expected)`.
+6. **R6** Incremental / delta assertions MUST use `Equal(expected)`. No `BeNumerically(">", ...)` or `BeNumerically(">=", ...)` on file/row counts.
+7. **R7** Pause/resume sequences MUST call `WaitForJobState(jobRunID, "PAUSED")` between any `HandleJobRunStateChange(..., "PAUSE", ...)` and the next `HandleJobRunStateChange(..., "RESUME", ...)`. Reference pattern: `ndm-api-tests/tests/e2e/TC-003_test.go` lines 195-201.
+8. **R8** When a test sets `excludeFilePatterns`, `preserveAccessTime: false`, or `preservePermissions: false` in `MigrationJobParams.Options`, it MUST also assert the destination reflects each option (excluded files absent; atime / permissions differ as expected).
+9. **R10** Support-bundle and other bundle-style tests that run migration/cutover MUST call `ValidateReport` and/or `CountMigrationReportRows` on both phases.
+
+## MUST NOT
+
+10. **R9** MUST NOT commit `XIt(`, `PIt(`, or `Pending(` on rate-limiting / 429 tests under `ndm-api-tests/tests/smoke/`.
+11. **R11** MUST NOT commit focus markers anywhere under `ndm-api-tests/`: `FIt(`, `FDescribe(`, `FContext(`, `FSpecify(`, `FWhen(`.
+12. **R3** MUST NOT introduce `Target Checksum` in any fixture — that column does not exist; use `Destination Checksum`.
+13. **R12** MUST NOT commit a cutover fixture that is `[]` or whose only keys are unknown to the CSV (passes vacuously).
+14. MUST NOT add new validator paths under `TC-009-JSON` (the directory does not exist; this was the cause of the original disabled-cutover incident).
+15. MUST NOT bypass the helpers in `ndm-api-tests/utils/report_validator.go` by hand-parsing CSV ZIPs in tests. Reuse `ValidateReport`, `CountMigrationReportRows`, `CountCocFileOnlyRows`, `CountDeletedReportRows`.
+
+## When a violation is detected during editing
+
+1. Stop editing.
+2. Surface the violation as `R<n> ndm-api-tests/<path>:<line> — <description>`.
+3. Apply the matching fix recipe from [`e2e-validation-enforcer/SKILL.md`](../skills/e2e-validation-enforcer/SKILL.md) only after confirming with the user.
+4. Run `go build ./...` from `ndm-api-tests/` after the fix.
