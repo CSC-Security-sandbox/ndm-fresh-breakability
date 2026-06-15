@@ -389,9 +389,9 @@ describe("OverviewService", () => {
       mockProjectRepository.query
         .mockResolvedValueOnce([{ count: '3' }]) // file server count
         .mockResolvedValueOnce([
-          { job_type: 'Discover', count: '2' },
-          { job_type: 'Migrate', count: '1' },
-          { job_type: 'CutOver', count: '1' },
+          { job_type: 'DISCOVER', count: '2' },
+          { job_type: 'MIGRATE', count: '1' },
+          { job_type: 'CUT_OVER', count: '1' },
         ]); // job counts
 
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([

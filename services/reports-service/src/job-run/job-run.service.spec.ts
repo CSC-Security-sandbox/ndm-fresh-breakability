@@ -1044,6 +1044,11 @@ describe("JobRunService", () => {
         .mockResolvedValue(cocReportsBaseDir);
       jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
       mockCsvService.generateCsv.mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 12345 } as any);
+      const { Readable } = require("stream");
+      jest.spyOn(fs, "createReadStream").mockImplementation(() =>
+        Readable.from([Buffer.from("test-zip-content")])
+      );
     });
 
     it("should throw NotFoundException if jobRun not found in getCocReportByJobRunId", async () => {
@@ -1136,7 +1141,7 @@ describe("JobRunService", () => {
         { id: jobRunId },
         { isReportReady: true }
       );
-      expect(fs.promises.readFile).toHaveBeenCalledWith(expectedCocPath);
+      expect(fs.promises.stat).toHaveBeenCalledWith(expectedCocPath);
       expect(mockReportsRepo.create).toHaveBeenCalledWith({
         jobRunId,
         reportData: expect.any(String),
@@ -1349,7 +1354,7 @@ describe("JobRunService", () => {
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "readFile").mockRejectedValue(new Error("read failed"));
+      jest.spyOn(fs.promises, "stat").mockRejectedValue(new Error("read failed"));
 
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toThrow("read failed");
     });
@@ -1480,7 +1485,7 @@ describe("JobRunService", () => {
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "readFile").mockRejectedValue("string-read-error");
+      jest.spyOn(fs.promises, "stat").mockRejectedValue("string-read-error");
       await expect(service.getCocReportByJobRunId(jobRunId)).rejects.toBe("string-read-error");
     });
   });
@@ -1558,7 +1563,11 @@ describe("JobRunService", () => {
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
-      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("zip") as any);
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 12345 } as any);
+      const { Readable } = require("stream");
+      jest.spyOn(fs, "createReadStream").mockImplementation(() =>
+        Readable.from([Buffer.from("test-zip-content")])
+      );
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});
     });
@@ -1917,7 +1926,11 @@ describe("JobRunService", () => {
       jest.spyOn(service as any, "createZipFile").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined as any);
-      jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("data") as any);
+      jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 12345 } as any);
+      const { Readable } = require("stream");
+      jest.spyOn(fs, "createReadStream").mockImplementation(() =>
+        Readable.from([Buffer.from("test-zip-content")])
+      );
       mockCsvService.generateCsv.mockResolvedValue(undefined);
       mockReportsRepo.create.mockReturnValue({});
       mockReportsRepo.save.mockResolvedValue({});

@@ -10,7 +10,16 @@ jest.mock("../utils/file-utils", () => ({
   sanitizeIdentifier: (id: string) => id,
 }));
 
-jest.mock("fs");
+jest.mock("fs", () => {
+  const actual = jest.createMockFromModule("fs") as any;
+  actual.promises = {
+    access: jest.fn(),
+    writeFile: jest.fn().mockResolvedValue(undefined),
+    unlink: jest.fn().mockResolvedValue(undefined),
+    readdir: jest.fn().mockResolvedValue([]),
+  };
+  return actual;
+});
 
 const mockOperationErrorRepo = {
   query: jest.fn(),
@@ -199,8 +208,10 @@ describe("ErrorLogService", () => {
         .mockReturnValue({ jobRunId: "run" });
       jest.spyOn(service, "handleError").mockResolvedValue(undefined);
       jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(1);
-      (fs.existsSync as jest.Mock).mockImplementation((file) =>
-        file.endsWith(".csv") ? true : false
+      (fs.promises.access as jest.Mock).mockImplementation((file: string) =>
+        file.endsWith(".processing")
+          ? Promise.reject(new Error("ENOENT"))
+          : Promise.resolve(undefined)
       );
       const result = await service.isCsvFileReady("job-run", "run");
       expect(result).toEqual({ ready: true, processing: false });
@@ -211,8 +222,10 @@ describe("ErrorLogService", () => {
         .mockReturnValue({ jobConfigId: "cfg" });
       jest.spyOn(service, "handleError").mockResolvedValue(undefined);
       jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(1);
-      (fs.existsSync as jest.Mock).mockImplementation((file) =>
-        file.endsWith(".processing") ? true : false
+      (fs.promises.access as jest.Mock).mockImplementation((file: string) =>
+        file.endsWith(".processing")
+          ? Promise.resolve(undefined)
+          : Promise.reject(new Error("ENOENT"))
       );
       const result = await service.isCsvFileReady("job-config", "cfg");
       expect(result).toEqual({ ready: false, processing: true });
@@ -234,7 +247,7 @@ describe("ErrorLogService", () => {
         .mockReturnValue({ jobRunId: "run" });
       jest.spyOn(service, "handleError").mockResolvedValue(undefined);
       jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(1);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
       const result = await service.createCsvFileForJob("job-run", "run");
       expect(result).toBeDefined();
     });
@@ -256,7 +269,7 @@ describe("ErrorLogService", () => {
         .mockReturnValue({ jobRunId: "run" });
       jest.spyOn(service, "handleError").mockResolvedValue(undefined);
       jest.spyOn(service, "getTotalErrorCountForJobRun").mockResolvedValue(1);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.promises.access as jest.Mock).mockResolvedValue(undefined);
       (fs.createReadStream as jest.Mock).mockReturnValue("stream");
       const result = await service.downloadErrorLogCsvFile("job-run", "run");
       expect(result).toBeInstanceOf(StreamableFile);
@@ -267,7 +280,7 @@ describe("ErrorLogService", () => {
         .mockReturnValue({ jobConfigId: "cfg" });
       jest.spyOn(service, "handleError").mockResolvedValue(undefined);
       jest.spyOn(service, "getTotalErrorCountForConfig").mockResolvedValue(1);
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.promises.access as jest.Mock).mockRejectedValue(new Error("ENOENT"));
       jest.spyOn(service, "createCsvFileForJob").mockResolvedValue(undefined);
       (fs.createReadStream as jest.Mock).mockReturnValue("stream");
       const result = await service.downloadErrorLogCsvFile("job-config", "cfg");
@@ -337,21 +350,18 @@ describe("ErrorLogService", () => {
       (fs.unlinkSync as jest.Mock).mockReturnValue(undefined);
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       (fs.readdirSync as jest.Mock).mockReturnValue([]);
+      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
       jest.spyOn(require("fast-csv"), "format").mockReturnValue(mockCsvStream);
     });
 
     it("should write CSV and resolve on finish", async () => {
-      jest.spyOn(service, "getPaginatedErrors").mockResolvedValue([{ a: 1 }]);
       jest.spyOn(service, "getJobRunIds").mockResolvedValue([]);
       jest
-        .spyOn<
-          any,
-          any
-        >(Object.getPrototypeOf(service), "fetchFormattedSetupErrors")
+        .spyOn<any, any>(Object.getPrototypeOf(service), "fetchFormattedSetupErrors")
         .mockResolvedValue([]);
-      // Simulate only one chunk
       let callCount = 0;
-      (service.getPaginatedErrors as jest.Mock).mockImplementation(() => {
+      jest.spyOn(service as any, "getPaginatedErrorsKeyset").mockImplementation(() => {
         callCount++;
         return callCount === 1 ? [{ a: 1 }] : [];
       });
@@ -361,23 +371,19 @@ describe("ErrorLogService", () => {
       ).resolves.toBeUndefined();
       expect(mockCsvStream.write).toHaveBeenCalledWith({ a: 1 });
       expect(mockCsvStream.end).toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalled();
+      expect(fs.promises.unlink).toHaveBeenCalled();
     });
 
     it("should handle error event on writeStream", async () => {
-      // Simulate error event
       mockWriteStream.on = jest.fn((event, cb) => {
         if (event === "error") setTimeout(() => cb(new Error("fail")), 0);
         return mockWriteStream;
       });
-      jest.spyOn(service, "getPaginatedErrors").mockResolvedValue([{ a: 1 }]);
       jest.spyOn(service, "getJobRunIds").mockResolvedValue([]);
       jest
-        .spyOn<
-          any,
-          any
-        >(Object.getPrototypeOf(service), "fetchFormattedSetupErrors")
+        .spyOn<any, any>(Object.getPrototypeOf(service), "fetchFormattedSetupErrors")
         .mockResolvedValue([]);
+      jest.spyOn(service as any, "getPaginatedErrorsKeyset").mockResolvedValue([{ a: 1 }]);
       await expect(
         service.writeLargeCsvToDisk("file.csv", "run", undefined, 10000)
       ).rejects.toThrow("fail");

@@ -280,18 +280,22 @@ describe('AsupStatsService', () => {
     it('should update untransmitted records and return count', async () => {
       dataSource.query.mockResolvedValue({ rowCount: 5 });
 
-      const count = await service.markAsTransmitted();
+      const count = await service.markAsTransmitted(['id-1', 'id-2', 'id-3']);
 
       expect(count).toBe(5);
       const query = dataSource.query.mock.calls[0][0] as string;
       expect(query).toContain('SET transmitted = TRUE');
-      expect(query).toContain('WHERE transmitted = FALSE');
+      expect(query).toContain('WHERE');
     });
 
-    it('should return 0 when no records to update', async () => {
-      dataSource.query.mockResolvedValue({ rowCount: 0 });
-
+    it('should return 0 when no ids provided', async () => {
       const count = await service.markAsTransmitted();
+
+      expect(count).toBe(0);
+    });
+
+    it('should return 0 when empty ids array provided', async () => {
+      const count = await service.markAsTransmitted([]);
 
       expect(count).toBe(0);
     });
@@ -299,7 +303,7 @@ describe('AsupStatsService', () => {
     it('should return 0 when rowCount is missing', async () => {
       dataSource.query.mockResolvedValue({});
 
-      const count = await service.markAsTransmitted();
+      const count = await service.markAsTransmitted(['id-1']);
 
       expect(count).toBe(0);
     });

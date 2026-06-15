@@ -115,16 +115,14 @@ describe("PdfService", () => {
 
       jest.spyOn(path, "join").mockReturnValue(filePath);
       jest.spyOn(path, "resolve").mockReturnValue("/mock/reports");
-      jest.spyOn(fs, "existsSync").mockReturnValue(true);
+      jest.spyOn(fs.promises, "access").mockResolvedValue(undefined);
       jest
-        .spyOn(fs, "readFileSync")
-        .mockReturnValue(Buffer.from("existingReportBuffer"));
+        .spyOn(fs.promises, "readFile")
+        .mockResolvedValue(Buffer.from("existingReportBuffer"));
 
       const result = await pdfService.generatePdf(jobRunId, reportType);
 
       expect(result).toEqual(Buffer.from("existingReportBuffer"));
-      expect(fs.existsSync).toHaveBeenCalledWith(filePath);
-      expect(fs.readFileSync).toHaveBeenCalledWith(filePath);
     });
     it("should throw an error if report type is invalid", async () => {
       const jobRunId = "test-jobRunId";

@@ -299,7 +299,7 @@ describe('DiscoveryController', () => {
 
   describe('generateJobsReport', () => {
     it('should call createJobsPDFReportData and return OK', async () => {
-      mockDiscoveryService.createJobsPDFReportData.mockReturnValue(undefined);
+      mockDiscoveryService.createJobsPDFReportData.mockResolvedValue(undefined);
 
       const result = await controller.generateJobsReport('job-1');
 

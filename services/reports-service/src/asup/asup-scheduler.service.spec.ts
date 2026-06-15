@@ -69,6 +69,7 @@ describe('AsupSchedulerService', () => {
 
     asupStatsService = {
       getUntransmittedCount: jest.fn(),
+      getUntransmittedIds: jest.fn().mockResolvedValue(['id-1', 'id-2', 'id-3']),
       markAsTransmitted: jest.fn(),
       getUntransmittedStatsGroupedByProject: jest.fn(),
       recordJobRunStats: jest.fn(),
@@ -357,6 +358,8 @@ describe('AsupSchedulerService', () => {
 
   describe('transmitSupportBundle', () => {
     beforeEach(() => {
+      mockAxiosPut.mockClear();
+      mockAxiosPut.mockResolvedValue({ status: 200 });
       asupPackagerService.packageSupportBundlePayload.mockResolvedValue({
         archivePath: '/tmp/asup-reports/support-bundle-asup-123.7z',
         md5Checksum: 'sb-md5-abc',

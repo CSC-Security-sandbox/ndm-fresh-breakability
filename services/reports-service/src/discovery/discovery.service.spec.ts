@@ -992,6 +992,10 @@ describe("DiscoveryService", () => {
         close: mockClose,
       });
 
+      jest.spyOn(service as any, "getDiscoveryTemplate").mockResolvedValue(
+        (data: any) => `<html>${JSON.stringify(data)}</html>`
+      );
+
       await service.generatePdfFromData(maliciousData);
 
       const htmlArg = mockSetContent.mock.calls[0][0];

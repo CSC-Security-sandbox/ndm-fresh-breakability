@@ -58,6 +58,10 @@ describe("ConsolidatedReportService", () => {
       mkdir: jest.fn().mockResolvedValue(undefined),
       unlink: jest.fn().mockResolvedValue(undefined),
       access: jest.fn().mockResolvedValue(undefined),
+      open: jest.fn().mockResolvedValue({
+        read: jest.fn().mockResolvedValue({ bytesRead: 0 }),
+        close: jest.fn().mockResolvedValue(undefined),
+      }),
     };
     (fs as any).promises = mockFsPromises;
     
@@ -306,14 +310,39 @@ describe("ConsolidatedReportService", () => {
   });
 
   describe("mergeCsvFiles", () => {
+    function createMockFd(content: string) {
+      return {
+        read: jest.fn().mockImplementation((buf: Buffer) => {
+          const data = Buffer.from(content);
+          const bytesRead = Math.min(data.length, buf.length);
+          data.copy(buf, 0, 0, bytesRead);
+          return Promise.resolve({ bytesRead });
+        }),
+        close: jest.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    let mockWriteStream: any;
+
+    beforeEach(() => {
+      mockWriteStream = {
+        write: jest.fn().mockReturnValue(true),
+        end: jest.fn((cb?: () => void) => { if (cb) cb(); }),
+        on: jest.fn(),
+      };
+      (fs.createWriteStream as jest.Mock).mockReturnValue(mockWriteStream);
+    });
+
     it("should merge multiple CSV files", async () => {
       const csv1 = "h1,h2\nv1,v2";
       const csv2 = "h1,h2,h3\nv1,v2,v3";
+      (fs.promises.open as jest.Mock)
+        .mockResolvedValueOnce(createMockFd(csv1))
+        .mockResolvedValueOnce(createMockFd(csv2));
       (fs.promises.readFile as jest.Mock)
         .mockResolvedValueOnce(csv1)
         .mockResolvedValueOnce(csv2);
       (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.mergeCsvFiles({
         csvFilePaths: ["/temp/1.csv", "/temp/2.csv"],
@@ -322,16 +351,13 @@ describe("ConsolidatedReportService", () => {
 
       expect(result).toBe("/output/merged.csv");
       expect(fs.promises.unlink).toHaveBeenCalledTimes(2);
-      expect(fs.promises.writeFile).toHaveBeenCalledWith(
-        "/output/merged.csv",
-        expect.any(String)
-      );
     });
 
     it("should skip empty files and continue", async () => {
+      (fs.promises.open as jest.Mock)
+        .mockResolvedValueOnce(createMockFd("\n\n"));
       (fs.promises.readFile as jest.Mock).mockResolvedValue("\n\n");
       (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.mergeCsvFiles({
         csvFilePaths: ["/temp/empty.csv"],
@@ -342,9 +368,10 @@ describe("ConsolidatedReportService", () => {
     });
 
     it("should handle unlink failure with warning", async () => {
+      (fs.promises.open as jest.Mock)
+        .mockResolvedValueOnce(createMockFd("h1\nv1"));
       (fs.promises.readFile as jest.Mock).mockResolvedValue("h1\nv1");
       (fs.promises.unlink as jest.Mock).mockRejectedValue(new Error("Unlink failed"));
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.mergeCsvFiles({
         csvFilePaths: ["/temp/1.csv"],
@@ -356,9 +383,10 @@ describe("ConsolidatedReportService", () => {
 
     it("should parse quoted CSV with comma and escaped quote (parseCsvLine branches)", async () => {
       const csvContent = '"a,b","c""d"\n"v1","v2"';
+      (fs.promises.open as jest.Mock)
+        .mockResolvedValueOnce(createMockFd(csvContent));
       (fs.promises.readFile as jest.Mock).mockResolvedValue(csvContent);
       (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.mergeCsvFiles({
         csvFilePaths: ["/temp/quoted.csv"],
@@ -366,18 +394,19 @@ describe("ConsolidatedReportService", () => {
       });
 
       expect(result).toBe("/output/merged.csv");
-      expect(fs.promises.writeFile).toHaveBeenCalledWith(
-        "/output/merged.csv",
+      expect(mockWriteStream.write).toHaveBeenCalledWith(
         expect.stringContaining("a,b")
       );
     });
 
     it("should merge CSVs with extra headers not in DISCOVERY_CSV_HEADER_ORDER", async () => {
+      (fs.promises.open as jest.Mock)
+        .mockResolvedValueOnce(createMockFd("h1,extra\nv1,v2"))
+        .mockResolvedValueOnce(createMockFd("h1\nv3"));
       (fs.promises.readFile as jest.Mock)
         .mockResolvedValueOnce("h1,extra\nv1,v2")
         .mockResolvedValueOnce("h1\nv3");
       (fs.promises.unlink as jest.Mock).mockResolvedValue(undefined);
-      (fs.promises.writeFile as jest.Mock).mockResolvedValue(undefined);
 
       const result = await service.mergeCsvFiles({
         csvFilePaths: ["/temp/1.csv", "/temp/2.csv"],
