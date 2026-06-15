@@ -100,6 +100,31 @@ var (
 	VSPHERE_SMB_SOURCE_HOST_IP        string
 	VSPHERE_SMB_DESTINATION_HOST_IP   string
 
+	// GCP NFS
+	GCP_NFS_NDM_WORKERS_HOST      string
+	GCP_NFS_NDM_WORKERS_USER_NAME string
+	GCP_NFS_NDM_WORKERS_PORT      string
+	GCP_NFS_NDM_WORKERS_PASSWORD  string
+	GCP_NFS_SOURCE_VOLUMES        string
+	GCP_NFS_DEST_VOLUMES          string
+	GCP_NFS_SOURCE_HOST_IP        string
+	GCP_NFS_DESTINATION_HOST_IP   string
+	GCP_NFS_PROTOCOL_USERNAME     string
+	GCP_NFS_PROTOCOL_PASSWORD     string
+
+	// GCP SMB
+	GCP_SMB_NDM_WORKERS_HOST      string
+	GCP_SMB_NDM_WORKERS_USER_NAME string
+	GCP_SMB_NDM_WORKERS_PORT      string
+	GCP_SMB_NDM_WORKERS_PASSWORD  string
+	GCP_SMB_SOURCE_VOLUMES        string
+	GCP_SMB_DEST_VOLUMES          string
+	GCP_SMB_SOURCE_HOST_IP        string
+	GCP_SMB_DESTINATION_HOST_IP   string
+	GCP_SMB_PROTOCOL_USERNAME     string
+	GCP_SMB_PROTOCOL_PASSWORD     string
+	GCP_SMB_DOMAIN_NAME           string
+
 	// SMB Executable
 	SMB_EXECUTABLE_FILENAME string
 
@@ -390,8 +415,21 @@ func UpdateConfVariables(protocolType, environment string) {
 			NDM_WORKERS_PORT = os.Getenv("VSPHERE_SMB_NDM_WORKERS_PORT")
 			NDM_WORKERS_PASSWORD = os.Getenv("VSPHERE_SMB_NDM_WORKERS_PASSWORD")
 		}
+	case GcpEnv:
+		switch PROTOCOL_TYPE {
+		case ProtocolNFS:
+			NDM_WORKERS_HOST = os.Getenv("GCP_NFS_NDM_WORKERS_HOST")
+			NDM_WORKERS_USER_NAME = os.Getenv("GCP_NFS_NDM_WORKERS_USER_NAME")
+			NDM_WORKERS_PORT = os.Getenv("GCP_NFS_NDM_WORKERS_PORT")
+			NDM_WORKERS_PASSWORD = os.Getenv("GCP_NFS_NDM_WORKERS_PASSWORD")
+		case ProtocolSMB:
+			NDM_WORKERS_HOST = os.Getenv("GCP_SMB_NDM_WORKERS_HOST")
+			NDM_WORKERS_USER_NAME = os.Getenv("GCP_SMB_NDM_WORKERS_USER_NAME")
+			NDM_WORKERS_PORT = os.Getenv("GCP_SMB_NDM_WORKERS_PORT")
+			NDM_WORKERS_PASSWORD = os.Getenv("GCP_SMB_NDM_WORKERS_PASSWORD")
+		}
 	default:
-		LogFatalf("Invalid cloud environment: %s. Valid environments are: Azure / AWS / vSphere.", environment)
+		LogFatalf("Invalid cloud environment: %s. Valid environments are: Azure / AWS / vSphere / GCP.", environment)
 	}
 
 	// ── 2. Volume clone vars ──────────────────────────────────────────────────
@@ -422,6 +460,19 @@ func UpdateConfVariables(protocolType, environment string) {
 			SOURCE_HOST_IP = os.Getenv("AWS_FSXN_SMB_SRC_HOST_IP")
 			DESTINATION_HOST_IP = os.Getenv("AWS_FSXN_SMB_DST_HOST_IP")
 		}
+	case VolumeCloneProviderGCNV:
+		switch PROTOCOL_TYPE {
+		case ProtocolNFS:
+			SOURCE_VOLUMES_LIST = os.Getenv("GCP_NFS_SOURCE_VOLUMES")
+			DESTINATION_VOLUMES_LIST = os.Getenv("GCP_NFS_DEST_VOLUMES")
+			SOURCE_HOST_IP = os.Getenv("GCP_NFS_SOURCE_HOST_IP")
+			DESTINATION_HOST_IP = os.Getenv("GCP_NFS_DESTINATION_HOST_IP")
+		case ProtocolSMB:
+			SOURCE_VOLUMES_LIST = os.Getenv("GCP_SMB_SOURCE_VOLUMES")
+			DESTINATION_VOLUMES_LIST = os.Getenv("GCP_SMB_DEST_VOLUMES")
+			SOURCE_HOST_IP = os.Getenv("GCP_SMB_SOURCE_HOST_IP")
+			DESTINATION_HOST_IP = os.Getenv("GCP_SMB_DESTINATION_HOST_IP")
+		}
 	default: // VolumeCloneProviderONTAP (and vSphere which also uses ONTAP)
 		switch PROTOCOL_TYPE {
 		case ProtocolNFS:
@@ -445,6 +496,9 @@ func UpdateConfVariables(protocolType, environment string) {
 		case VolumeCloneProviderFSxN:
 			PROTOCOL_USERNAME = os.Getenv("AWS_NFS_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AWS_NFS_PROTOCOL_PASSWORD")
+		case VolumeCloneProviderGCNV:
+			PROTOCOL_USERNAME = os.Getenv("GCP_NFS_PROTOCOL_USERNAME")
+			PROTOCOL_PASSWORD = os.Getenv("GCP_NFS_PROTOCOL_PASSWORD")
 		default: // ANF / ONTAP → Azure AD
 			PROTOCOL_USERNAME = os.Getenv("AZURE_NFS_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_NFS_PROTOCOL_PASSWORD")
@@ -457,6 +511,10 @@ func UpdateConfVariables(protocolType, environment string) {
 			PROTOCOL_USERNAME = os.Getenv("AWS_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AWS_SMB_PROTOCOL_PASSWORD")
 			PROTOCOL_DOMAIN_NAME = os.Getenv("AWS_SMB_DOMAIN_NAME")
+		case VolumeCloneProviderGCNV:
+			PROTOCOL_USERNAME = os.Getenv("GCP_SMB_PROTOCOL_USERNAME")
+			PROTOCOL_PASSWORD = os.Getenv("GCP_SMB_PROTOCOL_PASSWORD")
+			PROTOCOL_DOMAIN_NAME = os.Getenv("GCP_SMB_DOMAIN_NAME")
 		default: // ANF / ONTAP → Azure AD
 			PROTOCOL_USERNAME = os.Getenv("AZURE_SMB_PROTOCOL_USERNAME")
 			PROTOCOL_PASSWORD = os.Getenv("AZURE_SMB_PROTOCOL_PASSWORD")

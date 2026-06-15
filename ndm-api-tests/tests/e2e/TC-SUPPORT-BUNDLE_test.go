@@ -72,6 +72,8 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			var sourceConfigID, sourcePathID1, sourcePathID2 string
 			var sourceJobConfigIDs, destinationJobConfigIDs, jobConfigIDs, migrationJobConfigIDs, cutoverRunIDs []string
 			var destinationConfigID, destinationPathID1, destinationPathID2 string
+			var resp *http.Response
+			var err error
 
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
@@ -91,25 +93,37 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+
+			if NeedsGCNVManualUpload() {
+				sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0], clonedSourceVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				var resp *http.Response
+				sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+				defer resp.Body.Close()
+				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			}
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetSourcePathIDForGCNV(clonedSourceVolumes[1], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating a new discovery job for the source")
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -153,24 +167,36 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0], clonedDestVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+				defer resp.Body.Close()
+				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			}
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			defer resp.Body.Close()
-			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetSourcePathIDForGCNV(clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating a new discovery job for destination")
 			destinationJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,

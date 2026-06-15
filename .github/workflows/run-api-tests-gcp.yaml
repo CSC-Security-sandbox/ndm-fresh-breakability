@@ -1,0 +1,1443 @@
+name: Run E2E API Automation Tests for NDM on GCP
+
+env:
+  GITOPS_USER_GITHUB_TOKEN: ${{ secrets.GITOPS_USER_GITHUB_TOKEN }}
+  TERRAFORM_VERSION: 1.12.1
+  GO_VERSION: 1.24.2
+  NODE_VERSION: 22.15.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_image:
+        description: 'Image name/self-link for control plane (leave empty for latest)'
+        required: false
+        type: string
+        default: ''
+      worker_image:
+        description: 'Image name/self-link for Linux workers (leave empty for latest)'
+        required: false
+        type: string
+        default: ''
+      windows_worker_installer_url:
+        description: 'Artifactory URL for windows worker installer'
+        required: true
+        type: string
+      build_version:
+        description: 'Build version for support bundle uploads'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
+        type: string
+      protocol:
+        description: 'Select protocol to test'
+        required: false
+        default: 'Both'
+        type: choice
+        options:
+          - 'Both'
+          - 'SMB'
+          - 'NFS'
+      volume_clone_provider:
+        description: 'Volume clone backend'
+        required: false
+        default: 'gcnv'
+        type: choice
+        options:
+          - 'gcnv'
+      run_smoke_tests:
+        description: 'Run smoke tests'
+        required: false
+        default: true
+        type: boolean
+      run_e2e_tests:
+        description: 'Run end-to-end tests'
+        required: false
+        default: true
+        type: boolean
+      run_regression_tests:
+        description: 'Run regression tests'
+        required: false
+        default: true
+        type: boolean
+
+  workflow_call:
+    inputs:
+      control_plane_image:
+        description: 'Image name/self-link for control plane (leave empty for latest)'
+        required: false
+        type: string
+        default: ''
+      worker_image:
+        description: 'Image name/self-link for Linux workers (leave empty for latest)'
+        required: false
+        type: string
+        default: ''
+      windows_worker_installer_url:
+        description: 'Artifactory URL for windows worker installer'
+        type: string
+      build_version:
+        description: 'Build version for support bundle uploads'
+        required: true
+        type: string
+      ref_type:
+        description: 'Reference type (releases or branches)'
+        required: true
+        type: string
+      protocol:
+        description: 'Select protocol to test (Both/SMB/NFS)'
+        required: false
+        default: 'Both'
+        type: string
+      volume_clone_provider:
+        description: 'Volume clone backend (gcnv)'
+        required: false
+        default: 'gcnv'
+        type: string
+      trigger_type:
+        description: 'Original trigger type (schedule/workflow_dispatch/workflow_call)'
+        required: false
+        default: ''
+        type: string
+      run_smoke_tests:
+        description: 'Whether to run smoke tests (true/false)'
+        required: false
+        default: true
+        type: boolean
+      run_e2e_tests:
+        description: 'Whether to run end-to-end tests (true/false)'
+        required: false
+        default: true
+        type: boolean
+      run_regression_tests:
+        description: 'Whether to run regression tests (true/false)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  setup-infrastructure:
+    name: Setup Infrastructure and Services
+    runs-on: openlab
+    outputs:
+      control_plane_vm_ip_address: ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}
+      linux_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.linux_worker_vm_ip_addresses }}
+      windows_worker_vm_ip_addresses: ${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}
+    steps:
+
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7
+        with:
+          version: 'latest'
+
+      - name: Generate SSH key pair for VM access
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/credentials
+          ssh-keygen -t ed25519 -f $GITHUB_WORKSPACE/credentials/vm_key -N "" -q
+          echo "SSH_PRIVATE_KEY_PATH=$GITHUB_WORKSPACE/credentials/vm_key" >> $GITHUB_ENV
+          echo "SSH key pair generated for VM access"
+
+      - name: Configure Provider Credentials
+        id: credentials
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/credentials
+
+          echo "Setting VM credentials..."
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+
+          echo "VM_USERNAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+
+          SSH_PUB_KEY=$(cat $GITHUB_WORKSPACE/credentials/vm_key.pub)
+          echo "TF_VAR_admin_ssh_public_key=$SSH_PUB_KEY" >> $GITHUB_ENV
+
+          SSH_PRIV_KEY=$(cat $GITHUB_WORKSPACE/credentials/vm_key)
+          echo "::add-mask::$SSH_PRIV_KEY"
+          {
+            echo "TF_VAR_admin_ssh_private_key<<SSHKEYEOF"
+            echo "$SSH_PRIV_KEY"
+            echo "SSHKEYEOF"
+          } >> $GITHUB_ENV
+
+          # Resolve images — use input if provided, otherwise discover latest from GCP
+          GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}"
+          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image || github.event.inputs.control_plane_image }}"
+          WORKER_IMAGE="${{ inputs.worker_image || github.event.inputs.worker_image }}"
+
+          if [ -z "$CONTROL_PLANE_IMAGE" ]; then
+            echo "No control plane image specified, discovering latest..."
+            CONTROL_PLANE_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'cp|control-plane'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+            echo "Discovered control plane image: $CONTROL_PLANE_IMAGE"
+          fi
+
+          if [ -z "$WORKER_IMAGE" ]; then
+            echo "No worker image specified, discovering latest..."
+            WORKER_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'worker'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+            echo "Discovered worker image: $WORKER_IMAGE"
+          fi
+
+          # GCP Terraform Variables
+          echo "TF_VAR_control_plane_image=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image=$WORKER_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
+          echo "TF_VAR_region=${{ vars.GCP_REGION || 'us-east4' }}" >> $GITHUB_ENV
+
+          # Keep vm_owner compact so the final Terraform VM names stay within 63 characters.
+          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIME_SUFFIX=$(date +"%H%M%S")
+          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+            VM_OWNER="ntly${TIME_SUFFIX}"
+            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          else
+            VM_OWNER="adhc${TIME_SUFFIX}"
+            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          fi
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.GCP_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Initialize Terraform
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform init
+
+      - name: Validate Terraform Configuration
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform validate
+
+      - name: Create Terraform Plan
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform plan -out=tfplan
+
+      - name: Apply Terraform Plan
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform apply -auto-approve tfplan
+
+      - name: Upload Terraform State
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: terraform-state
+          path: |
+            app-deployment/terraform/automation-gcp/environments/api/terraform.tfstate
+            app-deployment/terraform/automation-gcp/environments/api/.terraform.lock.hcl
+            app-deployment/terraform/automation-gcp/environments/api/.terraform
+
+      - name: Extract Deployment Information
+        id: deployment-info
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          CONTROL_PLANE_IP=$(terraform output -raw control_plane_private_ip)
+          LINUX_WORKER_IPS=$(terraform output -json linux_worker_private_ips | jq -c .)
+          WINDOWS_WORKER_IPS=$(terraform output -json windows_worker_private_ips | jq -c .)
+          echo "control_plane_vm_ip_address=$CONTROL_PLANE_IP" >> $GITHUB_OUTPUT
+          echo "linux_worker_vm_ip_addresses=$LINUX_WORKER_IPS" >> $GITHUB_OUTPUT
+          echo "windows_worker_vm_ip_addresses=$WINDOWS_WORKER_IPS" >> $GITHUB_OUTPUT
+          echo "Control Plane IP: $CONTROL_PLANE_IP"
+          echo "Linux Worker IPs (NFS): $LINUX_WORKER_IPS"
+          echo "Windows Worker IPs (SMB): $WINDOWS_WORKER_IPS"
+
+      - name: Install sshpass
+        run: |
+          echo "Installing sshpass..."
+          
+          # Wait for apt locks to be released (max 5 minutes)
+          for i in {1..60}; do
+            if sudo apt-get update -qq 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for apt locks... (attempt $i/60)"
+            sleep 5
+          done
+          
+          # Install sshpass with retry
+          sudo apt-get install -y sshpass || {
+            echo "First attempt failed, retrying after cleanup..."
+            sudo pkill -9 unattended-upgrade 2>/dev/null || true
+            sleep 5
+            sudo apt-get install -y sshpass
+          }
+          
+          echo "sshpass installed successfully."
+
+      - name: Download Windows installer
+        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
+        run: |
+          WINDOWS_INSTALLER_URL="${{ inputs.windows_worker_installer_url || github.event.inputs.windows_worker_installer_url }}"
+          if [ -n "$WINDOWS_INSTALLER_URL" ]; then
+            echo "Downloading Windows installer from: $WINDOWS_INSTALLER_URL"
+            curl -s -o "windows-worker-installer.exe" \
+              -u "${{ secrets.NDM_NEXUS_USERNAME }}":"${{ secrets.NDM_NEXUS_PASSWORD }}" \
+              "$WINDOWS_INSTALLER_URL"
+            
+            if [ ! -f "windows-worker-installer.exe" ] || [ ! -s "windows-worker-installer.exe" ]; then
+              echo "Error: Failed to download Windows installer or file is empty"
+              exit 1
+            fi
+            echo "Windows installer downloaded successfully."
+          else
+            echo "No Windows installer URL provided, skipping download"
+          fi
+
+      - name: Copy Windows installer to Windows VMs
+        if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
+        run: |
+          WINDOWS_IPS='${{ steps.deployment-info.outputs.windows_worker_vm_ip_addresses }}'
+          
+          if [ ! -f "windows-worker-installer.exe" ]; then
+            echo "Windows installer file not found, skipping copy to Windows VMs"
+            exit 0
+          fi
+          
+          WINDOWS_IP_ARRAY=($(echo "$WINDOWS_IPS" | jq -r '.[]'))
+          
+          if [ ${#WINDOWS_IP_ARRAY[@]} -eq 0 ]; then
+            echo "No Windows VM IP addresses found, skipping copy"
+            exit 0
+          fi
+          
+          echo "Found ${#WINDOWS_IP_ARRAY[@]} Windows VM(s)"
+          echo "Waiting 120s for Windows VMs to boot and start OpenSSH..."
+          sleep 120
+          
+          echo "Checking SSH readiness on Windows VMs..."
+          for ip in "${WINDOWS_IP_ARRAY[@]}"; do
+            SSH_READY=false
+            for check in $(seq 1 12); do
+              if SSHPASS="$VM_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 "$VM_USERNAME@$ip" "echo ssh_ok" >/dev/null 2>&1; then
+                echo "SSH is ready on $ip"
+                SSH_READY=true
+                break
+              fi
+              echo "SSH not ready on $ip (${check}/12), retrying in 15s..."
+              sleep 15
+            done
+            if [ "$SSH_READY" = false ]; then
+              echo "WARNING: SSH did not become available on $ip within 3 minutes"
+            fi
+          done
+          
+          echo "Copying installer to each Windows VM..."
+          
+          MAX_RETRIES=5
+          RETRY_WAIT=15
+          TOTAL_SUCCESS=0
+          TOTAL_FAILED=0
+          
+          for i in "${!WINDOWS_IP_ARRAY[@]}"; do
+            WINDOWS_IP="${WINDOWS_IP_ARRAY[$i]}"
+            echo "$WINDOWS_IP"
+            VM_INDEX=$((i + 1))
+            COPY_SUCCESS=false
+            
+            for attempt in $(seq 1 $MAX_RETRIES); do
+              echo "Copying Windows installer to Windows VM #$VM_INDEX at $WINDOWS_IP (attempt $attempt/$MAX_RETRIES)"
+              if SSHPASS="$VM_PASSWORD" sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=30 windows-worker-installer.exe "$VM_USERNAME@$WINDOWS_IP:/C:/Temp/"; then
+                echo "Windows installer copied successfully to Windows VM #$VM_INDEX ($WINDOWS_IP)"
+                COPY_SUCCESS=true
+                TOTAL_SUCCESS=$((TOTAL_SUCCESS + 1))
+                break
+              else
+                echo "Attempt $attempt failed for Windows VM #$VM_INDEX ($WINDOWS_IP)"
+                if [ $attempt -lt $MAX_RETRIES ]; then
+                  echo "Waiting ${RETRY_WAIT}s before retry (VM may still be booting OpenSSH)..."
+                  sleep $RETRY_WAIT
+                fi
+              fi
+            done
+            
+            if [ "$COPY_SUCCESS" = false ]; then
+              TOTAL_FAILED=$((TOTAL_FAILED + 1))
+              echo "ERROR: Failed to copy installer to Windows VM #$VM_INDEX ($WINDOWS_IP) after $MAX_RETRIES attempts"
+            fi
+          done
+          
+          echo "Copy results: $TOTAL_SUCCESS succeeded, $TOTAL_FAILED failed out of ${#WINDOWS_IP_ARRAY[@]} Windows VMs"
+          if [ $TOTAL_FAILED -gt 0 ]; then
+            echo "WARNING: Not all Windows VMs received the installer"
+            exit 1
+          fi
+
+      - name: Wait for Service Boot Setup to Complete
+        run: |
+          echo "Monitoring service boot setup on ${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}..."
+          
+          # Ensure script is executable
+          chmod +x ./app-deployment/scripts/service_check_gcp.sh
+          
+          # Run the GCP service check script (uses SSH key auth)
+          ./app-deployment/scripts/service_check_gcp.sh \
+          "${{ steps.deployment-info.outputs.control_plane_vm_ip_address }}" \
+          "$VM_USERNAME" \
+          "$SSH_PRIVATE_KEY_PATH"
+
+          if [ $? -ne 0 ]; then
+            echo "Service setup failed or timed out"
+            exit 1
+          fi
+          
+          echo "Service setup completed successfully"
+
+  run-smb-tests:
+    name: Run SMB API Tests
+    runs-on: openlab
+    needs: setup-infrastructure
+    if: ${{ (inputs.protocol == 'SMB' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'SMB' || github.event.inputs.protocol == 'Both') }}
+    env:
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
+      GCP_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.windows_worker_vm_ip_addresses), ',') }}
+      GCP_SMB_NDM_WORKERS_PORT: ${{ vars.GCP_SMB_NDM_WORKERS_PORT }}
+      GCP_SMB_SOURCE_VOLUMES: ${{ vars.GCP_SMB_SOURCE_VOLUMES }}
+      GCP_SMB_DEST_VOLUMES: ${{ vars.GCP_SMB_DEST_VOLUMES }}
+      GCP_SMB_SOURCE_HOST_IP: ${{ vars.GCP_SMB_SOURCE_HOST_IP }}
+      GCP_SMB_DESTINATION_HOST_IP: ${{ vars.GCP_SMB_DESTINATION_HOST_IP }}
+      GCP_SMB_DOMAIN_NAME: ${{ vars.GCP_SMB_DOMAIN_NAME }}
+      GCP_SMB_PROTOCOL_USERNAME: ${{ secrets.GCP_SMB_PROTOCOL_USERNAME }}
+      GCP_SMB_PROTOCOL_PASSWORD: ${{ secrets.GCP_SMB_PROTOCOL_PASSWORD }}
+
+      GCP_GCNV_PROJECT_ID: ${{ vars.GCP_GCNV_PROJECT_ID }}
+      GCP_GCNV_LOCATION: ${{ vars.GCP_GCNV_LOCATION }}
+      GCP_GCNV_SMB_SOURCE_STORAGE_POOL: ${{ vars.GCP_GCNV_SMB_SOURCE_STORAGE_POOL }}
+      GCP_GCNV_SMB_DEST_STORAGE_POOL: ${{ vars.GCP_GCNV_SMB_DEST_STORAGE_POOL }}
+
+      ONTAP_SMB_SOURCE_VOLUMES: ${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}
+      ONTAP_SMB_DEST_VOLUMES: ${{ vars.ONTAP_SMB_DEST_VOLUMES }}
+      ONTAP_SMB_SRC_HOST_IP: ${{ vars.ONTAP_SMB_SRC_HOST_IP }}
+      ONTAP_SMB_DST_HOST_IP: ${{ vars.ONTAP_SMB_DST_HOST_IP }}
+      ONTAP_SRC_API_URL: ${{ vars.ONTAP_SRC_API_URL }}
+      ONTAP_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}
+      ONTAP_SRC_SVM_NAME: ${{ vars.ONTAP_SRC_SVM_NAME }}
+      ONTAP_DST_API_URL: ${{ vars.ONTAP_DST_API_URL }}
+      ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
+      ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
+
+      SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+      RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
+      PROTOCOL_TYPE: SMB
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7
+        with:
+          version: 'latest'
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup credentials for SMB tests
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "GCP_SMB_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "GCP_SMB_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+          echo "Ginkgo and Gomega installed successfully."
+
+      - name: Run SMB API Tests
+        run: |
+          cd ndm-api-tests
+          chmod +x ./run-smb-gcp-automation.sh
+
+          SCRIPT_ARGS=""
+          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
+          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
+          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
+          
+          if [ "$RUN_SMOKE" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
+          fi
+          
+          if [ "$RUN_E2E" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
+          fi
+          
+          if [ "$RUN_REGRESSION" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
+          fi
+          
+          echo "Running SMB tests with arguments: $SCRIPT_ARGS"
+          ./run-smb-gcp-automation.sh $SCRIPT_ARGS
+        continue-on-error: true
+
+      - name: Upload SMB Test Logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: smb-test-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+  run-nfs-tests:
+    name: Run NFS API Tests
+    runs-on: openlab
+    needs: setup-infrastructure
+    if: ${{ (inputs.protocol == 'NFS' || inputs.protocol == 'Both' || github.event.inputs.protocol == 'NFS' || github.event.inputs.protocol == 'Both') }}
+    env:
+      VOLUME_CLONE_PROVIDER: ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+
+      NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
+      PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+
+      GCP_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.setup-infrastructure.outputs.linux_worker_vm_ip_addresses), ',') }}
+      GCP_NFS_NDM_WORKERS_PORT: ${{ vars.GCP_NFS_NDM_WORKERS_PORT }}
+      GCP_NFS_SOURCE_VOLUMES: ${{ vars.GCP_NFS_SOURCE_VOLUMES }}
+      GCP_NFS_DEST_VOLUMES: ${{ vars.GCP_NFS_DEST_VOLUMES }}
+      GCP_NFS_SOURCE_HOST_IP: ${{ vars.GCP_NFS_SOURCE_HOST_IP }}
+      GCP_NFS_DESTINATION_HOST_IP: ${{ vars.GCP_NFS_DESTINATION_HOST_IP }}
+      GCP_NFS_PROTOCOL_USERNAME: ${{ vars.GCP_NFS_PROTOCOL_USERNAME }}
+
+      GCP_GCNV_PROJECT_ID: ${{ vars.GCP_GCNV_PROJECT_ID }}
+      GCP_GCNV_LOCATION: ${{ vars.GCP_GCNV_LOCATION }}
+      GCP_GCNV_NFS_SOURCE_STORAGE_POOL: ${{ vars.GCP_GCNV_NFS_SOURCE_STORAGE_POOL }}
+      GCP_GCNV_NFS_DEST_STORAGE_POOL: ${{ vars.GCP_GCNV_NFS_DEST_STORAGE_POOL }}
+
+      ONTAP_NFS_SOURCE_VOLUMES: ${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}
+      ONTAP_NFS_DEST_VOLUMES: ${{ vars.ONTAP_NFS_DEST_VOLUMES }}
+      ONTAP_NFS_SRC_HOST_IP: ${{ vars.ONTAP_NFS_SRC_HOST_IP }}
+      ONTAP_NFS_DST_HOST_IP: ${{ vars.ONTAP_NFS_DST_HOST_IP }}
+      ONTAP_SRC_API_URL: ${{ vars.ONTAP_SRC_API_URL }}
+      ONTAP_SYSTEM_MANAGER_SRC_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_SRC_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}
+      ONTAP_SRC_SVM_NAME: ${{ vars.ONTAP_SRC_SVM_NAME }}
+      ONTAP_DST_API_URL: ${{ vars.ONTAP_DST_API_URL }}
+      ONTAP_SYSTEM_MANAGER_DST_USERNAME: ${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}
+      ONTAP_SYSTEM_MANAGER_DST_PASSWORD: ${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}
+      ONTAP_DST_SVM_NAME: ${{ vars.ONTAP_DST_SVM_NAME }}
+
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+      RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ: ${{ vars.RATE_LIMIT_MAX_ALLOWED_SUCCESS_REQ }}
+      PROTOCOL_TYPE: NFS
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Waiting
+        run: |
+          sleep 30
+          echo "Wait completed"
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7
+        with:
+          version: 'latest'
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup credentials for NFS tests
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "::add-mask::$VM_PASSWORD"
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "GCP_NFS_NDM_WORKERS_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "GCP_NFS_NDM_WORKERS_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Install Ginkgo
+        run: |
+          cd ndm-api-tests
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go get github.com/onsi/gomega/...
+          go mod tidy
+          echo "Ginkgo and Gomega installed successfully."
+
+      - name: Run NFS API Tests
+        run: |
+          cd ndm-api-tests
+          chmod +x ./run-nfs-gcp-automation.sh
+          
+          SCRIPT_ARGS=""
+          RUN_SMOKE="${{ inputs.run_smoke_tests || github.event.inputs.run_smoke_tests || 'true' }}"
+          RUN_E2E="${{ inputs.run_e2e_tests || github.event.inputs.run_e2e_tests || 'true' }}"
+          RUN_REGRESSION="${{ inputs.run_regression_tests || github.event.inputs.run_regression_tests || 'true' }}"
+          
+          if [ "$RUN_SMOKE" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --smoke"
+          fi
+          
+          if [ "$RUN_E2E" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --e2e"
+          fi
+          
+          if [ "$RUN_REGRESSION" = "true" ]; then
+            SCRIPT_ARGS="$SCRIPT_ARGS --regression"
+          fi
+          
+          echo "Running NFS tests with arguments: $SCRIPT_ARGS"
+          ./run-nfs-gcp-automation.sh $SCRIPT_ARGS
+        continue-on-error: true
+
+      - name: Upload NFS Test Logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nfs-test-logs-${{ github.run_id }}
+          path: ndm-api-tests/reports/
+          retention-days: 30
+
+  send-workflow-card:
+    name: Parse Test Results & Send Notifications
+    runs-on: openlab
+    if: ${{ github.event_name == 'schedule' || inputs.trigger_type == 'schedule' }}
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    outputs:
+      test_status: ${{ steps.workflow_outputs.outputs.test_status }}
+      total_tests: ${{ steps.workflow_outputs.outputs.total_tests }}
+      total_failed: ${{ steps.workflow_outputs.outputs.total_failed }}
+      pipeline_url: ${{ steps.workflow_outputs.outputs.pipeline_url }}
+      badge_color: ${{ steps.workflow_outputs.outputs.badge_color }}
+      badge_message: ${{ steps.workflow_outputs.outputs.badge_message }}
+
+    steps:
+    - name: Harden the runner (Audit all outbound calls)
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+      with:
+        egress-policy: audit
+
+    - name: Checkout repository
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+    - name: Set up Go for Parser
+      uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Setup GitHub Token
+      run: |
+        echo "GITHUB_TOKEN=${{ secrets.GITOPS_USER_GITHUB_TOKEN }}" >> $GITHUB_ENV
+
+    - name: Run Nightly Parser and Capture Output
+      id: parser
+      run: |
+        cd ndm-api-tests/parser
+        echo "Installing Go dependencies..."
+        go mod tidy
+        echo "Go dependencies installed successfully"
+        echo ""
+        echo "Running nightly parser..."
+        echo "=========================="
+        
+        # Capture parser output
+        OUTPUT=$(go run nightly-parser.go 2>&1)
+        echo "$OUTPUT"
+        
+        # Extract summary between markers
+        SUMMARY=$(echo "$OUTPUT" | sed -n '/TEST_SUMMARY_START/,/TEST_SUMMARY_END/p' | sed '1d;$d')
+        
+        # Extract JSON results between markers
+        JSON_RESULTS=$(echo "$OUTPUT" | sed -n '/JSON_RESULTS_START/,/JSON_RESULTS_END/p' | sed '1d;$d')
+        
+        # Extract individual metrics
+        TOTAL_TESTS=$(echo "$OUTPUT" | grep "TOTAL_TESTS=" | cut -d'=' -f2)
+        TOTAL_PASSED=$(echo "$OUTPUT" | grep "TOTAL_PASSED=" | cut -d'=' -f2)
+        TOTAL_FAILED=$(echo "$OUTPUT" | grep "TOTAL_FAILED=" | cut -d'=' -f2)
+        TOTAL_SKIPPED=$(echo "$OUTPUT" | grep "TOTAL_SKIPPED=" | cut -d'=' -f2)
+        PIPELINE_URL=$(echo "$OUTPUT" | grep "PIPELINE_URL=" | cut -d'=' -f2-)
+        TEST_STATUS=$(echo "$OUTPUT" | grep "TEST_STATUS=" | cut -d'=' -f2)
+        
+        # Extract individual test result lines
+        SMOKE_SMB_LINE=$(echo "$OUTPUT" | grep "SMOKE_SMB_LINE=" | cut -d'=' -f2- || echo "")
+        SMOKE_NFS_LINE=$(echo "$OUTPUT" | grep "SMOKE_NFS_LINE=" | cut -d'=' -f2- || echo "")
+        E2E_SMB_LINE=$(echo "$OUTPUT" | grep "E2E_SMB_LINE=" | cut -d'=' -f2- || echo "")
+        E2E_NFS_LINE=$(echo "$OUTPUT" | grep "E2E_NFS_LINE=" | cut -d'=' -f2- || echo "")
+        REGRESSION_SMB_LINE=$(echo "$OUTPUT" | grep "REGRESSION_SMB_LINE=" | cut -d'=' -f2- || echo "")
+        REGRESSION_NFS_LINE=$(echo "$OUTPUT" | grep "REGRESSION_NFS_LINE=" | cut -d'=' -f2- || echo "")
+        
+        # Extract individual failure summaries
+        SMOKE_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        SMOKE_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/SMOKE_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        E2E_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        E2E_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/E2E_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        REGRESSION_SMB_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_SMB_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        REGRESSION_NFS_FAILURE=$(echo "$OUTPUT" | sed -n '/REGRESSION_NFS_FAILURE<<EOF/,/^EOF$/p' | sed '1d;$d' || echo "")
+        
+        # Set GitHub Actions outputs
+        echo "summary<<EOF" >> $GITHUB_OUTPUT
+        echo "$SUMMARY" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "json_results<<EOF" >> $GITHUB_OUTPUT
+        echo "$JSON_RESULTS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+        echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
+        echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+        echo "total_skipped=$TOTAL_SKIPPED" >> $GITHUB_OUTPUT
+        echo "pipeline_url=$PIPELINE_URL" >> $GITHUB_OUTPUT
+        echo "test_status=$TEST_STATUS" >> $GITHUB_OUTPUT
+        
+        echo "smoke_smb_line=$SMOKE_SMB_LINE" >> $GITHUB_OUTPUT
+        echo "smoke_nfs_line=$SMOKE_NFS_LINE" >> $GITHUB_OUTPUT
+        echo "e2e_smb_line=$E2E_SMB_LINE" >> $GITHUB_OUTPUT
+        echo "e2e_nfs_line=$E2E_NFS_LINE" >> $GITHUB_OUTPUT
+        echo "regression_smb_line=$REGRESSION_SMB_LINE" >> $GITHUB_OUTPUT
+        echo "regression_nfs_line=$REGRESSION_NFS_LINE" >> $GITHUB_OUTPUT
+        
+        echo "smoke_smb_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$SMOKE_SMB_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "smoke_nfs_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$SMOKE_NFS_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "e2e_smb_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$E2E_SMB_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "e2e_nfs_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$E2E_NFS_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "regression_smb_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$REGRESSION_SMB_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "regression_nfs_failure<<EOF" >> $GITHUB_OUTPUT
+        echo "$REGRESSION_NFS_FAILURE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "=========================="
+        echo "Parser execution completed."
+
+    - name: Display Captured Results
+      run: |
+        echo "=== CAPTURED TEST SUMMARY ==="
+        echo "${{ steps.parser.outputs.summary }}"
+        echo ""
+        echo "=== TEST METRICS ==="
+        echo "Total Tests: ${{ steps.parser.outputs.total_tests }}"
+        echo "Passed: ${{ steps.parser.outputs.total_passed }}"
+        echo "Failed: ${{ steps.parser.outputs.total_failed }}"
+        echo "Skipped: ${{ steps.parser.outputs.total_skipped }}"
+        echo "Status: ${{ steps.parser.outputs.test_status }}"
+        echo "Pipeline: ${{ steps.parser.outputs.pipeline_url }}"
+        echo ""
+        echo "=== JSON RESULTS ==="
+        echo "${{ steps.parser.outputs.json_results }}"
+
+    - name: Send Teams Notification Card
+      if: always()
+      run: |
+        TOTAL_FAILED="${{ steps.parser.outputs.total_failed }}"
+        TOTAL_TESTS="${{ steps.parser.outputs.total_tests }}"
+        TOTAL_PASSED="${{ steps.parser.outputs.total_passed }}"
+        TOTAL_SKIPPED="${{ steps.parser.outputs.total_skipped }}"
+        TEST_STATUS="${{ steps.parser.outputs.test_status }}"
+        CLONE_PROVIDER="${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }}"
+        PROVIDER_LABEL=$(echo "$CLONE_PROVIDER" | tr '[:lower:]' '[:upper:]')
+        
+        CARD_TITLE="NDM GCP Test Results - ${PROVIDER_LABEL}"
+        
+        cat > teams_card.json << EOF
+        {
+          "type": "AdaptiveCard",
+          "version": "1.5",
+          "body": [
+            {
+              "type": "TextBlock",
+              "text": "${CARD_TITLE}",
+              "size": "Medium",
+              "weight": "Bolder"
+            },
+            {
+              "type": "FactSet",
+              "facts": [
+                { "title": "Total Tests:", "value": "${TOTAL_TESTS}" },
+                { "title": "Passed:", "value": "${TOTAL_PASSED}" },
+                { "title": "Failed:", "value": "${TOTAL_FAILED}" },
+                { "title": "Skipped:", "value": "${TOTAL_SKIPPED}" },
+                { "title": "Status:", "value": "${TEST_STATUS}" },
+                { "title": "Clone Backend:", "value": "${PROVIDER_LABEL}" },
+                { "title": "Cloud:", "value": "GCP" }
+              ]
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Test Results:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Smoke Tests -**",
+              "weight": "Bolder",
+              "spacing": "Small"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.smoke_smb_line }}",
+              "wrap": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.smoke_nfs_line }}",
+              "wrap": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "**Regression Tests -**",
+              "weight": "Bolder",
+              "spacing": "Small"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.regression_smb_line }}",
+              "wrap": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.regression_nfs_line }}",
+              "wrap": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "**End-to-End (E2E) Tests -**",
+              "weight": "Bolder",
+              "spacing": "Small"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.e2e_smb_line }}",
+              "wrap": true,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.e2e_nfs_line }}",
+              "wrap": true,
+              "spacing": "None"
+            }
+        EOF
+        
+        if [ "${TOTAL_FAILED}" != "0" ]; then
+          cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "**Failures:**",
+              "weight": "Bolder",
+              "spacing": "Medium"
+            }
+        EOF
+          
+          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.smoke_smb_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.smoke_nfs_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.regression_smb_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.regression_nfs_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.e2e_smb_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
+            cat >> teams_card.json << 'EOF'
+            ,
+            {
+              "type": "TextBlock",
+              "text": "${{ steps.parser.outputs.e2e_nfs_failure }}",
+              "wrap": true,
+              "spacing": "Small",
+              "fontType": "Monospace"
+            }
+        EOF
+          fi
+        fi
+        
+        cat >> teams_card.json << 'EOF'
+          ],
+          "actions": [
+            {
+              "type": "Action.OpenUrl",
+              "title": "View Pipeline",
+              "url": "${{ steps.parser.outputs.pipeline_url }}"
+            }
+          ]
+        }
+        EOF
+        
+        echo "=== TEAMS CARD PAYLOAD ==="
+        cat teams_card.json | jq . 2>/dev/null || cat teams_card.json
+        echo ""
+        echo "=========================="
+        
+        if [ -n "${{ secrets.POWER_AUTOMATE_URL }}" ]; then
+          echo "Sending Teams notification..."
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d @teams_card.json \
+            "${{ secrets.POWER_AUTOMATE_URL }}"
+          
+          if [ $? -eq 0 ]; then
+            echo "Teams notification sent successfully!"
+          else
+            echo "Failed to send Teams notification"
+          fi
+        else
+          echo "POWER_AUTOMATE_URL not configured, skipping Teams notification"
+        fi
+
+    - name: Create Test Summary for GitHub Actions
+      if: always()
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        ## GCP Nightly Test Results Summary (${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }})
+        
+        ### Test Metrics
+        | Metric | Count |
+        |--------|-------|
+        | Total Tests | ${{ steps.parser.outputs.total_tests }} |
+        | Passed | ${{ steps.parser.outputs.total_passed }} |
+        | Failed | ${{ steps.parser.outputs.total_failed }} |
+        | Skipped | ${{ steps.parser.outputs.total_skipped }} |
+        | Status | ${{ steps.parser.outputs.test_status }} |
+        | Clone Backend | ${{ inputs.volume_clone_provider || github.event.inputs.volume_clone_provider || 'gcnv' }} |
+        | Cloud | GCP |
+        
+        ### Test Results
+        
+        **Pipeline:** [${{ steps.parser.outputs.pipeline_url }}](${{ steps.parser.outputs.pipeline_url }})
+        
+        **Smoke Tests:**
+        - ${{ steps.parser.outputs.smoke_smb_line }}
+        - ${{ steps.parser.outputs.smoke_nfs_line }}
+        
+        **E2E Tests:**
+        - ${{ steps.parser.outputs.e2e_smb_line }}
+        - ${{ steps.parser.outputs.e2e_nfs_line }}
+        
+        **Regression Tests:**
+        - ${{ steps.parser.outputs.regression_smb_line }}
+        - ${{ steps.parser.outputs.regression_nfs_line }}
+        EOF
+        
+        if [ "${{ steps.parser.outputs.total_failed }}" != "0" ]; then
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ### Failures
+        EOF
+          
+          if [ -n "${{ steps.parser.outputs.smoke_smb_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.smoke_smb_failure }}
+        ```
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.smoke_nfs_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.smoke_nfs_failure }}
+        ```
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.regression_smb_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.regression_smb_failure }}
+        ```
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.regression_nfs_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.regression_nfs_failure }}
+        ```
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.e2e_smb_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.e2e_smb_failure }}
+        ```
+        EOF
+          fi
+          
+          if [ -n "${{ steps.parser.outputs.e2e_nfs_failure }}" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        
+        ```
+        ${{ steps.parser.outputs.e2e_nfs_failure }}
+        ```
+        EOF
+          fi
+        fi
+        
+        cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+        EOF
+        
+        echo "GitHub Actions Job Summary created!"
+
+  upload-support-bundle:
+    name: Upload Support Bundles
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests]
+    if: always()
+    env:
+      JOB_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      CONFIG_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      ADMIN_SERVICE_URL: https://${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      KEYCLOAK_IP: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
+      NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
+      BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
+      REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Go for API Tests
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Setup credentials for support bundle
+        run: |
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+          
+          echo "NDM_VM_USER_NAME=$VM_USERNAME" >> $GITHUB_ENV
+          echo "NDM_VM_PASSWORD=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "NDM_NEXUS_USERNAME=${{ secrets.NDM_NEXUS_USERNAME }}" >> $GITHUB_ENV
+          echo "NDM_NEXUS_PASSWORD=${{ secrets.NDM_NEXUS_PASSWORD }}" >> $GITHUB_ENV
+          echo "NDM_USERNAME=${{ secrets.NDM_APP_USERNAME }}" >> $GITHUB_ENV
+          echo "PASSWORD=${{ secrets.NDM_APP_PASSWORD }}" >> $GITHUB_ENV
+      - name: Install Go dependencies
+        run: |
+          cd ndm-api-tests
+          go mod tidy
+          echo "Go dependencies installed successfully"
+          cd support-bundle
+          go run support_bundle.go
+          echo "Support bundle uploaded successfully"
+
+  cleanup:
+    name: Cleanup Infrastructure
+    runs-on: openlab
+    needs: [setup-infrastructure, run-nfs-tests, run-smb-tests, upload-support-bundle]
+    if: always()
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Provider Credentials for Cleanup
+        run: |
+          GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID || 'app-microservices-cm' }}"
+
+          VM_USERNAME=$(echo "${{ secrets.NDM_SSH_USERNAME }}" | base64 --decode)
+          VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
+
+          CONTROL_PLANE_IMAGE="${{ inputs.control_plane_image || github.event.inputs.control_plane_image }}"
+          WORKER_IMAGE="${{ inputs.worker_image || github.event.inputs.worker_image }}"
+
+          if [ -z "$CONTROL_PLANE_IMAGE" ]; then
+            CONTROL_PLANE_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'cp|control-plane'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+          fi
+
+          if [ -z "$WORKER_IMAGE" ]; then
+            WORKER_IMAGE=$(gcloud compute images list \
+              --project="${GCP_PROJECT_ID}" \
+              --filter="name~'worker'" \
+              --sort-by="~creationTimestamp" \
+              --limit=1 \
+              --format="get(selfLink)")
+          fi
+
+          echo "TF_VAR_control_plane_image=$CONTROL_PLANE_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_worker_image=$WORKER_IMAGE" >> $GITHUB_ENV
+          echo "TF_VAR_project_id=$GCP_PROJECT_ID" >> $GITHUB_ENV
+          echo "TF_VAR_region=${{ vars.GCP_REGION || 'us-east4' }}" >> $GITHUB_ENV
+
+          # Keep vm_owner compact so the final Terraform VM names stay within 63 characters.
+          TRIGGER_TYPE="${{ inputs.trigger_type || github.event_name }}"
+          TIME_SUFFIX=$(date +"%H%M%S")
+          if [[ "$TRIGGER_TYPE" == "schedule" ]]; then
+            VM_OWNER="ntly${TIME_SUFFIX}"
+            echo "Nightly build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          else
+            VM_OWNER="adhc${TIME_SUFFIX}"
+            echo "Adhoc/called build detected (trigger: $TRIGGER_TYPE) - VM owner set to: $VM_OWNER"
+          fi
+          echo "TF_VAR_vm_owner=$VM_OWNER" >> $GITHUB_ENV
+          echo "TF_VAR_admin_username=$VM_USERNAME" >> $GITHUB_ENV
+          echo "TF_VAR_admin_password=$VM_PASSWORD" >> $GITHUB_ENV
+          echo "TF_VAR_dns_servers=${{ vars.GCP_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Download Terraform State
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: terraform-state
+          path: app-deployment/terraform/automation-gcp/environments/api
+
+      - name: Initialize Terraform for Cleanup
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform init
+
+      - name: Cleanup ONTAP Snapshots
+        if: always() && github.event_name == 'workflow_call' && contains(inputs.build_version, '-nightly')
+        run: |
+          ONTAP_SRC_API_URL="${{ vars.ONTAP_SRC_API_URL }}"
+          ONTAP_SYSTEM_MANAGER_SRC_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_SRC_USERNAME }}"
+          ONTAP_SYSTEM_MANAGER_SRC_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_SRC_PASSWORD }}"
+          ONTAP_SRC_SVM_NAME="${{ vars.ONTAP_SRC_SVM_NAME }}"
+          ONTAP_DST_API_URL="${{ vars.ONTAP_DST_API_URL }}"
+          ONTAP_SYSTEM_MANAGER_DST_USERNAME="${{ vars.ONTAP_SYSTEM_MANAGER_DST_USERNAME }}"
+          ONTAP_SYSTEM_MANAGER_DST_PASSWORD="${{ secrets.ONTAP_SYSTEM_MANAGER_DST_PASSWORD }}"
+          ONTAP_DST_SVM_NAME="${{ vars.ONTAP_DST_SVM_NAME }}"
+          ONTAP_NFS_SOURCE_VOLUMES="${{ vars.ONTAP_NFS_SOURCE_VOLUMES }}"
+          ONTAP_NFS_DEST_VOLUMES="${{ vars.ONTAP_NFS_DEST_VOLUMES }}"
+          ONTAP_SMB_SOURCE_VOLUMES="${{ vars.ONTAP_SMB_SOURCE_VOLUMES }}"
+          ONTAP_SMB_DEST_VOLUMES="${{ vars.ONTAP_SMB_DEST_VOLUMES }}"
+          
+          cleanup_snapshots_for_volume() {
+            local ONTAP_URL=$1
+            local USERNAME=$2
+            local PASSWORD=$3
+            local SVM_NAME=$4
+            local VOLUME_NAME=$5
+            
+            echo "[CLEANUP] Processing volume '$VOLUME_NAME'"
+            
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            HTTP_CODE="000"
+            
+            while [ "$HTTP_CODE" = "000" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if [ $RETRY_COUNT -gt 0 ]; then
+                echo "Retry attempt $RETRY_COUNT/$MAX_RETRIES for volume '$VOLUME_NAME'"
+                sleep 2
+              fi
+              
+              VOLUME_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+                "$ONTAP_URL/api/storage/volumes?svm.name=$SVM_NAME&name=$VOLUME_NAME" 2>&1)
+              
+              HTTP_CODE=$(echo "$VOLUME_RESPONSE" | tail -n1)
+              VOLUME_BODY=$(echo "$VOLUME_RESPONSE" | sed '$d')
+              
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+            done
+            
+            if [ "$HTTP_CODE" = "000" ]; then
+              echo "Failed to connect to ONTAP API at '$ONTAP_URL' after $MAX_RETRIES attempts - check URL and network connectivity"
+              return 1
+            fi
+            
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "Failed to get volume '$VOLUME_NAME': HTTP $HTTP_CODE"
+              return 1
+            fi
+            
+            VOLUME_UUID=$(echo "$VOLUME_BODY" | jq -r '.records[0].uuid // empty')
+            
+            if [ -z "$VOLUME_UUID" ] || [ "$VOLUME_UUID" = "null" ]; then
+              echo "[CLEANUP] Volume '$VOLUME_NAME' not found"
+              return 1
+            fi
+            
+            SNAPSHOTS_RESPONSE=$(curl -sk -w "\n%{http_code}" -u "$USERNAME:$PASSWORD" \
+              "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots")
+            
+            SNAPSHOTS_HTTP_CODE=$(echo "$SNAPSHOTS_RESPONSE" | tail -n1)
+            SNAPSHOTS_BODY=$(echo "$SNAPSHOTS_RESPONSE" | sed '$d')
+            
+            if [ "$SNAPSHOTS_HTTP_CODE" != "200" ]; then
+              echo "[CLEANUP] Failed to list snapshots for volume '$VOLUME_NAME': HTTP $SNAPSHOTS_HTTP_CODE"
+              return 1
+            fi
+            
+            SNAPSHOT_UUIDS=$(echo "$SNAPSHOTS_BODY" | jq -r '.records[]?.uuid // empty')
+            
+            if [ -z "$SNAPSHOT_UUIDS" ]; then
+              echo "[CLEANUP] No snapshots found on volume '$VOLUME_NAME'"
+              return 0
+            fi
+            
+            while IFS= read -r SNAP_UUID; do
+              [ -z "$SNAP_UUID" ] && continue
+              
+              curl -sk -u "$USERNAME:$PASSWORD" -X DELETE \
+                "$ONTAP_URL/api/storage/volumes/$VOLUME_UUID/snapshots/$SNAP_UUID" > /dev/null 2>&1
+            done <<< "$SNAPSHOT_UUIDS"
+            
+            echo "[CLEANUP] Completed snapshot cleanup for volume '$VOLUME_NAME'"
+            return 0
+          }
+          
+          cleanup_snapshots_for_protocol() {
+            local PROTOCOL=$1
+            local SOURCE_VOLUMES_STR=$2
+            local DEST_VOLUMES_STR=$3
+            
+            if [ -z "$SOURCE_VOLUMES_STR" ] || [ -z "$DEST_VOLUMES_STR" ]; then
+              echo "Skipping $PROTOCOL snapshot cleanup - volume GitHub variables not set"
+              return 0
+            fi
+            
+            echo "Cleaning up $PROTOCOL snapshots"
+            
+            if [ -n "$ONTAP_SRC_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" ] && \
+               [ -n "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" ] && [ -n "$ONTAP_SRC_SVM_NAME" ]; then
+              
+              IFS=',' read -ra SOURCE_VOLUMES <<< "$SOURCE_VOLUMES_STR"
+              for VOL in "${SOURCE_VOLUMES[@]}"; do
+                VOL=$(echo "$VOL" | xargs)
+                [ -z "$VOL" ] && continue
+                
+                cleanup_snapshots_for_volume "$ONTAP_SRC_API_URL" \
+                  "$ONTAP_SYSTEM_MANAGER_SRC_USERNAME" \
+                  "$ONTAP_SYSTEM_MANAGER_SRC_PASSWORD" \
+                  "$ONTAP_SRC_SVM_NAME" \
+                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for source volume '$VOL'"
+                
+                echo "Waiting 30 seconds to avoid ONTAP rate limits"
+                sleep 30
+              done
+            else
+              echo "Skipping $PROTOCOL source snapshot cleanup - ONTAP configuration incomplete"
+            fi
+            
+            if [ -n "$ONTAP_DST_API_URL" ] && [ -n "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" ] && \
+               [ -n "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" ] && [ -n "$ONTAP_DST_SVM_NAME" ]; then
+              
+              IFS=',' read -ra DEST_VOLUMES <<< "$DEST_VOLUMES_STR"
+              for VOL in "${DEST_VOLUMES[@]}"; do
+                VOL=$(echo "$VOL" | xargs)
+                [ -z "$VOL" ] && continue
+                
+                cleanup_snapshots_for_volume "$ONTAP_DST_API_URL" \
+                  "$ONTAP_SYSTEM_MANAGER_DST_USERNAME" \
+                  "$ONTAP_SYSTEM_MANAGER_DST_PASSWORD" \
+                  "$ONTAP_DST_SVM_NAME" \
+                  "$VOL" || echo "[CLEANUP] Warning: Failed to cleanup snapshots for destination volume '$VOL'"
+                
+                echo "Waiting 30 seconds to avoid ONTAP rate limits"
+                sleep 30
+              done
+            else
+              echo "Skipping $PROTOCOL destination snapshot cleanup - ONTAP configuration incomplete"
+            fi
+          }
+          
+          cleanup_snapshots_for_protocol "NFS" "$ONTAP_NFS_SOURCE_VOLUMES" "$ONTAP_NFS_DEST_VOLUMES"
+          cleanup_snapshots_for_protocol "SMB" "$ONTAP_SMB_SOURCE_VOLUMES" "$ONTAP_SMB_DEST_VOLUMES"
+          echo "Snapshot cleanup completed"
+
+      - name: Destroy Terraform Resources
+        run: |
+          cd app-deployment/terraform/automation-gcp/environments/api
+          terraform destroy -auto-approve
+
+      - name: Clean Up Temporary Files
+        run: |
+          rm -rf $GITHUB_WORKSPACE/credentials 2>/dev/null || true

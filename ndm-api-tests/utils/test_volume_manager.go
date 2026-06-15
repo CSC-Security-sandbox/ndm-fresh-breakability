@@ -20,6 +20,7 @@ type TestVolumeManager struct {
 	CloneProvider  VolumeCloneProvider
 	OntapClient    *OntapClient
 	ANFConfig      *ANFEndpointConfig
+	GCNVConfig     *GCNVEndpointConfig
 	SVMName        string
 	RunnerID       string
 	CreatedVolumes []VolumeCleanupInfo
@@ -54,6 +55,15 @@ func NewANFTestVolumeManager(config ANFEndpointConfig) *TestVolumeManager {
 	}
 }
 
+// NewGCNVTestVolumeManager creates a test volume manager backed by Google Cloud NetApp Volumes.
+func NewGCNVTestVolumeManager(config GCNVEndpointConfig) *TestVolumeManager {
+	return &TestVolumeManager{
+		CloneProvider:  VolumeCloneProviderGCNV,
+		GCNVConfig:     &config,
+		CreatedVolumes: []VolumeCleanupInfo{},
+	}
+}
+
 // GenerateVolumeName creates a unique volume name for the test run.
 // ONTAP format: {baseVolumeName}_{testCase_truncated_10chars}_{uniqueID}
 // ANF format: {baseVolumeName}-{testCaseID}-{uniqueID}
@@ -71,6 +81,10 @@ func (tm *TestVolumeManager) GenerateVolumeName(baseVolumeName string) string {
 
 	if tm.CloneProvider == VolumeCloneProviderANF {
 		return buildANFCloneVolumeName(baseVolumeName, testCase, uniqueID)
+	}
+
+	if tm.CloneProvider == VolumeCloneProviderGCNV {
+		return buildGCNVCloneVolumeName(baseVolumeName, testCase, uniqueID)
 	}
 
 	// Remove leading/trailing slashes and spaces
@@ -147,6 +161,17 @@ func (tm *TestVolumeManager) CreateCloneVolume(masterVolumeName string) (string,
 
 		tm.CreatedVolumes = append(tm.CreatedVolumes, volInfo)
 		LogDebug(fmt.Sprintf("Successfully created ANF clone volume '%s' from master '%s'", volInfo.Name, masterVolumeName))
+		return volInfo.Name, nil
+	}
+
+	if tm.CloneProvider == VolumeCloneProviderGCNV {
+		volInfo, err := tm.createGCNVCloneVolume(masterVolumeName)
+		if err != nil {
+			return "", err
+		}
+
+		tm.CreatedVolumes = append(tm.CreatedVolumes, volInfo)
+		LogDebug(fmt.Sprintf("Successfully created GCNV clone volume '%s' from master '%s'", volInfo.Name, masterVolumeName))
 		return volInfo.Name, nil
 	}
 
@@ -281,6 +306,17 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 			}
 
 			LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted ANF clone '%s'", volInfo.Name))
+			continue
+		}
+
+		if tm.CloneProvider == VolumeCloneProviderGCNV {
+			LogDebug(fmt.Sprintf("[CLEANUP] Deleting GCNV clone '%s'", volInfo.Name))
+			if err := tm.deleteGCNVCloneResources(volInfo); err != nil {
+				LogError(fmt.Sprintf("[CLEANUP] Failed to delete GCNV clone '%s': %v (continuing)", volInfo.Name, err))
+				continue
+			}
+
+			LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted GCNV clone '%s'", volInfo.Name))
 			continue
 		}
 

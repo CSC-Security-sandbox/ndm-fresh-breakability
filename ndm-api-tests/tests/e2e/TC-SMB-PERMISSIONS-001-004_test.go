@@ -84,6 +84,8 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
 			var sourceJobConfigIDs, migrationJobConfigIDs []string
+			var resp *http.Response
+			var err error
 
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
@@ -103,13 +105,23 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating source SMB file server")
+
+			if NeedsGCNVManualUpload() {
+				sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[3]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating source SMB file server")
+				defer resp.Body.Close()
+			}
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the source file server export path ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[3], sourceConfigID, headers)
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting source export path, err : %s", err))
 
 			By("Creating files with DEFAULT inherited permissions on source SMB volume")
@@ -174,7 +186,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       true,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -217,13 +229,23 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating destination SMB file server")
+
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[2]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating destination SMB file server")
+				defer resp.Body.Close()
+			}
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the destination file server export path ID")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[2], destinationConfigID, headers)
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting destination export path, err : %s", err))
 
 			By("Creating a migration job to migrate permissions")
@@ -335,7 +357,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			destinationJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
