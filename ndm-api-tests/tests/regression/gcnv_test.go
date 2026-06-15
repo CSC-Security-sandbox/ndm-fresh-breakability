@@ -43,11 +43,19 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 		workerId2 = workerIds[1]
 		headers = GetHeaders(AuthToken, ContentTypeJSON)
 
-		// Setup ONTAP volume cloning for test execution
+		// Setup volume cloning for test execution
 		clonedSourceVolumes, clonedDestVolumes, sourceVolumeManager, destVolumeManager, err = SetupTestVolumesBeforeEach()
 		if err != nil {
 			Skip(fmt.Sprintf("Failed to setup test volumes: %v", err))
 		}
+
+		// Guarantee cleanup of cloned volumes even on manual interrupt (Ctrl+C)
+		DeferCleanup(func() {
+			err := CleanupTestVolumesAfterEach(sourceVolumeManager, destVolumeManager)
+			if err != nil {
+				LogError(fmt.Sprintf("Failed to cleanup test volumes: %v", err))
+			}
+		})
 	})
 
 	AfterAll(func() {
@@ -105,7 +113,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
 			Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(ManualUpload), "Expected export path source to be ManualUpload")
 			Expect(len(fileServerDetails.FileServers)).To(BeNumerically("==", 1), "Expected exactly one file server to be returned")
-			Expect(fileServerDetails.FileServers[0].Protocol).To(Equal(ProtocolNFS), "Expected protocol to be NFS")
+			Expect(fileServerDetails.FileServers[0].Protocol).To(Equal(PROTOCOL_TYPE), "Expected protocol to match configured protocol type")
 			Expect(fileServerDetails.FileServers[0].ProtocolVersion).To(Equal(ProtocolVersion3), "Expected protocol version to be 3")
 			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 0), "Expected no volumes to be present in the file server")
 			FileServerId = fileServerDetails.FileServers[0].Id
@@ -507,7 +515,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			jobParams := DiscoveryJobParams{
 		SourcePathIDs:            []string{invalidVolume.ID},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -540,7 +548,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{invalidVolume.ID},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -576,7 +584,7 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			jobParams := DiscoveryJobParams{
 			SourcePathIDs:            []string{validVolume.ID},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -600,20 +608,23 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(jobRunDetails.JobType).To(Equal("DISCOVER"), "Expected jobType to be DISCOVER for config %s", sourceJobConfigIDs[0])
 		})
 
-		It("Should create a destination file server with auto upload option", func() {
+		It("Should create a destination file server", func() {
 			By("Creating the destination file server")
 			destinationServerParams := CreateServereParams{
-				ConfigName:       "destination_auto_upload",
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         "Root",
-				Password:         "",
-				Protocol:         ProtocolNFS,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IPs[0],
-				Workers:          []string{workerId1, workerId2},
+				ConfigName:      "destination_file_server",
+				ConfigType:      ConfigTypeFile,
+				ProjectID:       ProjectId,
+				ServerType:      ServerTypeOtherNAS,
+				UserName:        PROTOCOL_USERNAME,
+				Password:        PROTOCOL_PASSWORD,
+				Protocol:        PROTOCOL_TYPE,
+				ProtocolVersion: ProtocolVersion3,
+				Host:            DESTINATION_HOST_IPs[0],
+				Workers:         []string{workerId1, workerId2},
 				WorkingDirectory: "",
+			}
+			if VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+				destinationServerParams.ExportPathSource = PtrExportPathSource(ManualUpload)
 			}
 			var err error
 			var resp *http.Response
@@ -622,27 +633,61 @@ var _ = Describe("GCNV Flex Test regression", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-			destPath := fmt.Sprintf("/%s", clonedDestVolumes[0])
-			_, err = GetExportPathID("destination", destPath, DestinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-			
 		})
 
-		It("Should verify the file server creation with auto upload option", func() {
+		It("Should verify the destination file server creation", func() {
 			By("Fetching the latest created file server")
-			Wait(40)
+			if VOLUME_CLONE_PROVIDER != VolumeCloneProviderGCNV {
+				Wait(40)
+			}
 			Expect(DestinationConfigID).NotTo(BeEmpty(), "DestinationConfigID is empty")
 			fileServerDetails, err := GetFileServerDetails(DestinationConfigID, headers)
 
 			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
-			Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(AutoDiscover), "Expected export path source to be AutoDiscover")
 			Expect(len(fileServerDetails.FileServers)).To(BeNumerically("==", 1), "Expected exactly one file server to be returned")
-			Expect(fileServerDetails.FileServers[0].Protocol).To(Equal(ProtocolNFS), "Expected protocol to be NFS")
+			Expect(fileServerDetails.FileServers[0].Protocol).To(Equal(PROTOCOL_TYPE), "Expected protocol to match configured protocol type")
 			Expect(fileServerDetails.FileServers[0].ProtocolVersion).To(Equal(ProtocolVersion3), "Expected protocol version to be 3")
-			Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(AutoDiscover), "Expected export path source to be AutoDiscover")
-			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "Expected volumes to be present in the file server")
+			if VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+				Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(ManualUpload), "Expected export path source to be ManualUpload")
+				Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 0), "Expected no volumes to be present in the file server")
+			} else {
+				Expect(fileServerDetails.FileServers[0].ExportPathSource).To(Equal(AutoDiscover), "Expected export path source to be AutoDiscover")
+				Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically(">", 0), "Expected volumes to be present in the file server")
+			}
 			DestinationFileServerId = fileServerDetails.FileServers[0].Id
 			Expect(DestinationFileServerId).NotTo(BeEmpty(), "DestinationFileServerId is empty")
+		})
+
+		It("Should upload destination path file to the destination file server", func() {
+			if VOLUME_CLONE_PROVIDER != VolumeCloneProviderGCNV {
+				Skip("Destination path file upload is only needed for GCNV clone provider")
+			}
+			By("Uploading destination volume paths to the destination file server")
+			destPath0 := fmt.Sprintf("/%s", clonedDestVolumes[0])
+			destPath1 := fmt.Sprintf("/%s", clonedDestVolumes[1])
+			fileContent := FileContent{
+				FileName: "dest_paths.csv",
+				FileSize: 1024,
+				Contents: fmt.Sprintf("path\n%s\n%s", destPath0, destPath1),
+			}
+			resp, uploadStats, err := UploadPathFile(DestinationFileServerId, fileContent, headers)
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(err).NotTo(HaveOccurred(), "Error uploading destination path file")
+			defer resp.Body.Close()
+			Expect(uploadStats.UploadId).NotTo(BeEmpty(), "Expected non-empty upload ID")
+			Expect(uploadStats.NewPaths).To(BeNumerically("==", 2), "Expected two new paths to be uploaded")
+			Wait(10)
+
+			confirmResp, confirmStats, err := ConfirmPathFileUpload(uploadStats.UploadId, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error confirming destination path file upload")
+			Expect(confirmResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			Expect(confirmStats.WorkflowId).NotTo(BeEmpty(), "Expected non-empty workflow ID")
+			Wait(60)
+
+			By("Confirming destination volumes were created")
+			fileServerDetails, err := GetFileServerDetails(DestinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
+			Expect(len(fileServerDetails.FileServers[0].Volumes)).To(BeNumerically("==", 2), "Expected two volumes to be present in the destination file server")
 		})
 
 		It("Should return an error when trying to run migration job on the invalid enabled volume", func() {

@@ -28,7 +28,10 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 	BeforeAll(func() {
 		if PROTOCOL_TYPE == ProtocolSMB {
-			Skip("GCNV Flex Test e2e is skipped in CI/CD as it is not supported in SMB")
+			Skip("GCNV Flex Test e2e is skipped as it is not supported in SMB")
+		}
+		if VOLUME_CLONE_PROVIDER == VolumeCloneProviderGCNV {
+			Skip("GCNV Flex Test e2e is skipped when clone provider is GCNV - upload functionality is already tested in other e2e tests via NeedsGCNVManualUpload")
 		}
 		var err error
 		ProjectId, ProjectName, attachedWorkersConfig, err = GetGlobalTestEnv()
@@ -192,7 +195,7 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{validVolume.ID},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -223,7 +226,6 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 		It("Should run migration job on the valid volume", func() {
 			By("Running migration job")
-		// Use the formatted path from the upload step
 		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 		fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")
@@ -268,7 +270,6 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 
 		It("Should run cutover job on the valid volume", func() {
 			By("Running cutover job")
-		// Use the formatted path from the upload step
 		sourcePath2 := fmt.Sprintf("/%s", clonedSourceVolumes[1])
 		fileServerDetails, err := GetFileServerDetails(SourceConfigID, headers)
 		Expect(err).NotTo(HaveOccurred(), "Error sending get file server details API request")

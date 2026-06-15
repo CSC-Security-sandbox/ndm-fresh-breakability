@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	. "ndm-api-tests/utils"
+	"net/http"
 	"strings"
 	"time"
 
@@ -66,6 +67,7 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 			var destinationConfigID, destinationPathID1, destinationPathID2, destinationJobConfigID1, destinationJobConfigID2 string
 			var migrationJobRunID string
 			var list []string
+			var resp *http.Response
 
 			uniqueID := uuid.New().String()[:8]
 			protocol := strings.ToLower(string(PROTOCOL_TYPE))
@@ -86,17 +88,30 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			sourceConfigID1, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+
+			if NeedsGCNVManualUpload() {
+				sourceConfigID1, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0], clonedSourceVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				var resp *http.Response
+				sourceConfigID1, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create source file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(sourceConfigID1).NotTo(BeEmpty(), "sourceConfigID1 is empty")
-			defer resp.Body.Close()
 
 			By("Getting the source file server by config ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID1, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID1, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceConfigID1, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetSourcePathIDForGCNV(clonedSourceVolumes[1], sourceConfigID1, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID1, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID1, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating the destination file server")
 			destinationParams := CreateServereParams{
@@ -112,23 +127,36 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				Workers:          []string{workerId1, workerId2},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0], clonedDestVolumes[1]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				var resp *http.Response
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error sending create destination file server API request")
+				defer resp.Body.Close()
+			}
 			Expect(destinationConfigID).NotTo(BeEmpty(), "destinationConfigID is empty")
-			defer resp.Body.Close()
 
 			By("Getting the destination file server by configId")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
-
-			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetSourcePathIDForGCNV(clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
+				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
+			}
 
 			By("Creating a new discovery job for the source")
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1, sourcePathID2},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,
@@ -195,7 +223,7 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 			destinationJobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{destinationPathID1, destinationPathID2},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       false,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,

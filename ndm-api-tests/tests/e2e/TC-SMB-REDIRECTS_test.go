@@ -88,7 +88,7 @@ var _ = Describe("TC-SMB-REDIRECTS: Test Redirect in SMB discovery", func() {
 			jobParams := DiscoveryJobParams{
 				SourcePathIDs:            []string{sourcePathID1},
 				ExcludeOlderThan:         nil,
-				ExcludeFilePatterns:      "",
+				ExcludeFilePatterns:      "*/.snapshot",
 				PreserveAccessTime:       true,
 				FirstRunAt:               GetCurrentUTCTimestamp(),
 				CreatedBy:                nil,

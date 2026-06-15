@@ -62,62 +62,86 @@ var _ = Describe("TC-007_delete_job: Test job deletion with and without active j
 				destinationPathID2  string
 			)
 
-			By("Creating source file server")
-			uniqueID := uuid.New().String()[:8]
-			sourceParams := CreateServereParams{
-				ConfigName:       fmt.Sprintf("source-delete-test-%s", uniqueID),
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             SOURCE_HOST_IPs[0],
-				Workers:          []string{workerId},
-				WorkingDirectory: "",
-			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
-			Expect(sourceConfigID).NotTo(BeEmpty(), "Source config ID should not be empty")
-			defer resp.Body.Close()
+		By("Creating source file server")
+		uniqueID := uuid.New().String()[:8]
+		sourceParams := CreateServereParams{
+			ConfigName:       fmt.Sprintf("source-delete-test-%s", uniqueID),
+			ConfigType:       ConfigTypeFile,
+			ProjectID:        ProjectId,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         PROTOCOL_USERNAME,
+			Password:         PROTOCOL_PASSWORD,
+			Protocol:         PROTOCOL_TYPE,
+			ProtocolVersion:  ProtocolVersion3,
+			Host:             SOURCE_HOST_IPs[0],
+			Workers:          []string{workerId},
+			WorkingDirectory: "",
+		}
 
-			By("Getting source export path IDs")
+		var resp *http.Response
+		if NeedsGCNVManualUpload() {
+			sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0], clonedSourceVolumes[1]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+		} else {
+			sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
+			defer resp.Body.Close()
+		}
+		Expect(sourceConfigID).NotTo(BeEmpty(), "Source config ID should not be empty")
+
+		By("Getting source export path IDs")
+		if NeedsGCNVManualUpload() {
+			sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 1")
+			sourcePathID2, err = GetSourcePathIDForGCNV(clonedSourceVolumes[1], sourceConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 2")
+		} else {
 			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 1")
-			Expect(sourcePathID1).NotTo(BeEmpty(), "Source path ID 1 should not be empty")
-
 			sourcePathID2, err = GetExportPathID("source", clonedSourceVolumes[1], sourceConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting source path ID 2")
-			Expect(sourcePathID2).NotTo(BeEmpty(), "Source path ID 2 should not be empty")
+		}
+		Expect(sourcePathID1).NotTo(BeEmpty(), "Source path ID 1 should not be empty")
+		Expect(sourcePathID2).NotTo(BeEmpty(), "Source path ID 2 should not be empty")
 
-			By("Creating destination file server")
-			destinationParams := CreateServereParams{
-				ConfigName:       fmt.Sprintf("dest-delete-test-%s", uniqueID),
-				ConfigType:       ConfigTypeFile,
-				ProjectID:        ProjectId,
-				ServerType:       ServerTypeOtherNAS,
-				UserName:         PROTOCOL_USERNAME,
-				Password:         PROTOCOL_PASSWORD,
-				Protocol:         PROTOCOL_TYPE,
-				ProtocolVersion:  ProtocolVersion3,
-				Host:             DESTINATION_HOST_IPs[0],
-				Workers:          []string{workerId},
-				WorkingDirectory: "",
-			}
+		By("Creating destination file server")
+		destinationParams := CreateServereParams{
+			ConfigName:       fmt.Sprintf("dest-delete-test-%s", uniqueID),
+			ConfigType:       ConfigTypeFile,
+			ProjectID:        ProjectId,
+			ServerType:       ServerTypeOtherNAS,
+			UserName:         PROTOCOL_USERNAME,
+			Password:         PROTOCOL_PASSWORD,
+			Protocol:         PROTOCOL_TYPE,
+			ProtocolVersion:  ProtocolVersion3,
+			Host:             DESTINATION_HOST_IPs[0],
+			Workers:          []string{workerId},
+			WorkingDirectory: "",
+		}
+		if NeedsGCNVManualUpload() {
+			destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0], clonedDestVolumes[1]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+		} else {
 			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
-			Expect(destinationConfigID).NotTo(BeEmpty(), "Destination config ID should not be empty")
 			defer resp.Body.Close()
+		}
+		Expect(destinationConfigID).NotTo(BeEmpty(), "Destination config ID should not be empty")
 
-			By("Getting destination export path IDs")
+		By("Getting destination export path IDs")
+		if NeedsGCNVManualUpload() {
+			destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 1")
+			destinationPathID2, err = GetSourcePathIDForGCNV(clonedDestVolumes[1], destinationConfigID, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 2")
+		} else {
 			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 1")
-			Expect(destinationPathID1).NotTo(BeEmpty(), "Destination path ID 1 should not be empty")
-
 			destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 			Expect(err).NotTo(HaveOccurred(), "Error getting destination path ID 2")
-			Expect(destinationPathID2).NotTo(BeEmpty(), "Destination path ID 2 should not be empty")
+		}
+		Expect(destinationPathID1).NotTo(BeEmpty(), "Destination path ID 1 should not be empty")
+		Expect(destinationPathID2).NotTo(BeEmpty(), "Destination path ID 2 should not be empty")
 
 			By("Creating first migration job")
 			migrationParams := MigrationJobParams{

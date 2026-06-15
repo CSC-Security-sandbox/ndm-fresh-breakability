@@ -25,7 +25,7 @@ var _ = BeforeSuite(func() {
 	By("Setting before the suite")
 	flag.Parse()
 	UpdateConfVariables(ProtocolType, Environment)
-	
+
 	// Clear any workers left in memory from smoke/e2e suites
 	// (Global AttachedWorkersConfig persists across sequential suite runs)
 	if len(AttachedWorkersConfig) > 0 {
