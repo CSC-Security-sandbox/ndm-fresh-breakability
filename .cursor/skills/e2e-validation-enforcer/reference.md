@@ -163,6 +163,16 @@ From [`ndm-api-tests/utils/jobs.go`](../../../ndm-api-tests/utils/jobs.go) (and 
 
 ---
 
+## File vs directory rows (R13 / R14)
+
+Directories appear in the reports distinctly from files, so directory parity is verifiable:
+
+- **CoC report (`coc-report.csv`):** directory rows have `Type` = `"directory"` and an **empty** `Destination Checksum` / `Source Checksum`. File rows have non-empty checksums. `CountCocFileOnlyRows` counts file rows (non-empty `Destination Checksum`); subtract from total (`CountMigrationReportRows`) to get directory rows, or add a `CountCocDirectoryRows` helper.
+- **Discovery report:** directories roll into `Total Number of Directories`, `total_directories`, and `Total Space for Directories`.
+- **Metadata columns apply to directory rows too:** SMB `Source/Target Owner SID`, `Source/Target Group SID`, `Source/Target ACE Details`; NFS `Source/Destination UID`, `Source/Destination GID`, `Source/Destination Unix Permissions`. Use these to assert R14 directory metadata parity.
+
+The current data helpers in [`ndm-api-tests/utils/file_server.go`](../../../ndm-api-tests/utils/file_server.go) (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`) operate on **files only** — add directory-equivalent helpers (e.g. `AddDirToVolume`, `RemoveDirFromVolume`, `SetPermissionsOnDir`) mirroring them when fixing R13/R14.
+
 ## Job type / report layout cheatsheet
 
 | Job type | CSV filename(s) | Validator job type constant | Notes |

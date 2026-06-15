@@ -1,6 +1,6 @@
 ---
 name: e2e-validation-enforcer
-description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 12 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, and DLM focus markers. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking E2E robustness, or when working in ndm-api-tests/.
+description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 14 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, DLM focus markers, file/directory operation parity, and file/directory metadata-change parity. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking directory coverage parity with files, when checking E2E robustness, or when working in ndm-api-tests/.
 disable-model-invocation: true
 ---
 
@@ -20,7 +20,7 @@ Audits and (on confirmation) fixes NDM API E2E tests in [ndm-api-tests/](../../.
 - Never touch product source under `services/`. Fixtures must match what the service actually emits (see [reference.md](reference.md)).
 - Treat `disable-model-invocation: true`: only run when explicitly invoked.
 
-## The 12 rules
+## The 14 rules
 
 Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 
@@ -38,6 +38,8 @@ Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 | 10 | Support bundle tests validate migration + cutover reports | `TC-SUPPORT-BUNDLE_test.go` (or any bundle test) runs migration/cutover without `ValidateReport` or `CountMigrationReportRows` | blocker |
 | 11 | DLM and integration-branch scenarios contain no focus markers | `FIt(`, `FDescribe(`, `FContext(`, `FSpecify(`, `FWhen(` anywhere under `ndm-api-tests/` | blocker |
 | 12 | Cutover fixtures actually fail when content is wrong | A cutover fixture with no rows, or with rows whose checksum/path values are stale placeholders. Covered by rules 2 and 3. | blocker |
+| 13 | File add/change/delete operations have a matching directory operation | A test that adds, changes, or deletes **files** (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`, or any helper that only touches files) without a corresponding directory add/change/delete in the same scenario | major |
+| 14 | File metadata-change steps have a matching directory metadata-change step | A step that changes **file** metadata (atime, mtime, permissions/mode, owner/group, SID/ACL, stamp) without a corresponding **directory** metadata change | major |
 
 ## Canonical column sets
 
@@ -67,6 +69,8 @@ E2E Validation Enforcer — Findings
 - [ ] R10 Support-bundle report checks:   <count> test(s)
 - [ ] R11 No focus markers (FIt/etc.):    <count> file(s)
 - [ ] R12 Cutover fixtures non-vacuous:   <count> file(s)
+- [ ] R13 File ops have directory ops:    <count> test(s)
+- [ ] R14 File meta has directory meta:   <count> step(s)
 ```
 
 Under each rule, list `path/to/file.go:LINE — short description`.
@@ -89,6 +93,8 @@ Run these searches (use the `Grep`/`Glob` tools, not shell):
 | R10 | files that call `cutover` / `migration` but not `ValidateReport\|CountMigrationReportRows\|CountCocFileOnlyRows` | `ndm-api-tests/tests/e2e/TC-SUPPORT-BUNDLE*_test.go` (and other bundle tests) |
 | R11 | `\bFIt\(\|\bFDescribe\(\|\bFContext\(\|\bFSpecify\(\|\bFWhen\(` | `ndm-api-tests/**/*_test.go` |
 | R12 | JSON cutover fixture with `[]` or only stale `Target Checksum` keys | `ndm-api-tests/validators/**/*cutover*.json` |
+| R13 | `AddDataToVolume\|ModifyDataOnVolume\|RemoveDeltaFromVolume\|AddData\|ModifyData\|RemoveData\|createnew\|fsutil file\|dd if=` (file ops) — then confirm the same scenario also has a directory op (`mkdir`/`rmdir`/`AddDir`/`RemoveDir`/rename of a directory) | `ndm-api-tests/tests/**/*_test.go` |
+| R14 | `preserveAccessTime\|preservePermissions\|atime\|mtime\|chmod\|chown\|Chmod\|Chown\|SetPermissions\|StampMetaData\|ModifyMetadata\|touch -` (file metadata change) — then confirm a matching directory metadata change exists | `ndm-api-tests/tests/**/*_test.go` |
 
 ### Step 2 — Cite each finding
 
@@ -102,6 +108,8 @@ Example findings produced against the current tree:
 - `ndm-api-tests/validators/TC-002-JSON/SMB/src_vol_discovery.json:1 — R4 fixture asserts 2 sub_category keys; expected 20+ stable discovery sub_categories.`
 - `ndm-api-tests/tests/smoke/ratelimiting_test.go:22 — R9 XIt disables the only HTTP-429 regression check.`
 - `ndm-api-tests/tests/e2e/TC-SUPPORT-BUNDLE_test.go — R10 runs migration + cutover with no ValidateReport / CountMigrationReportRows calls.`
+- `ndm-api-tests/tests/e2e/TC-004_test.go:293 — R13 AddDataToVolume / RemoveDeltaFromVolume act on files only; no matching directory add/delete in the scenario.`
+- `ndm-api-tests/tests/e2e/TC-002_test.go:220 — R14 preserveAccessTime/preservePermissions exercise file metadata only; no directory metadata change step.`
 
 ### Step 3 — Confirm
 
@@ -246,6 +254,68 @@ Replace `FIt(` → `It(`, `FDescribe(` → `Describe(`, `FContext(` → `Context
 
 Confirmed by R2 + R3: re-enabled validation with valid columns and at least one row whose `Destination Checksum` matches a real migrated file. An empty array `[]` passes vacuously and is a violation.
 
+### R13 — Directory operation parity with file operations
+
+Principle: **anytime files are added, changed, or deleted, there must be a corresponding action for directories** in the same scenario, and that directory action must be validated the same way the file action is.
+
+For each file operation in the test, add the matching directory operation immediately alongside it:
+
+| File operation in test | Add the directory counterpart |
+|------------------------|-------------------------------|
+| Add files (`AddDataToVolume`, `fsutil file createnew`, `dd if=`) | Create one or more directories in the same delta path (`mkdir`/`AddDirToVolume`) |
+| Change files (`ModifyDataOnVolume`) | Change a directory (rename, move, or re-create a subdirectory) |
+| Delete files (`RemoveDeltaFromVolume`) | Delete a directory (`rmdir`/`RemoveDirFromVolume`) |
+
+Then assert the directory change reaches the destination and appears in the report. Directory rows in the CoC report have `Type: "directory"` and an empty `Destination Checksum`; in discovery they roll into `Total Number of Directories` / `total_directories`. Example shape:
+
+```go
+By("Adding files AND directories to the source (R13 parity)")
+deltaFolder, err := AddDataToVolume(sourceVolumePath1) // files
+Expect(err).NotTo(HaveOccurred())
+err = AddDirToVolume(sourceVolumePath1, deltaFolder)    // directories — parity
+Expect(err).NotTo(HaveOccurred())
+
+// ...after migration...
+By("Validating directory rows reached destination (R13)")
+dirRows, err := CountCocDirectoryRows(migrationJobRunID) // directory-only rows
+Expect(err).NotTo(HaveOccurred())
+Expect(dirRows).To(Equal(expectedDirCount),
+    "expected %d directory rows in CoC but got %d", expectedDirCount, dirRows)
+```
+
+If a directory-specific helper (e.g. `AddDirToVolume`, `RemoveDirFromVolume`, `CountCocDirectoryRows`) does not exist yet, add it under `ndm-api-tests/utils/` mirroring the existing file helpers in [`file_server.go`](../../../ndm-api-tests/utils/file_server.go) — do not change product source.
+
+### R14 — Directory metadata-change parity with file metadata changes
+
+Principle: **anytime there is a step to change metadata for files, a metadata change for directories must be added.** Metadata = atime, mtime, permissions/mode, owner/group, SID/ACL, and stamp options.
+
+For each file metadata step, add the directory equivalent and assert it on the destination:
+
+| File metadata step | Add the directory counterpart |
+|--------------------|-------------------------------|
+| `preserveAccessTime` / atime change on files | Same atime change/assertion on a directory |
+| `preservePermissions` / `chmod` on files | `chmod` + assertion on a directory |
+| `chown` / owner/group on files | `chown` + assertion on a directory |
+| SID / ACL stamp on files | SID/ACL stamp + assertion on a directory |
+
+Example shape:
+
+```go
+By("Changing permissions on files AND directories (R14 parity)")
+err = SetPermissionsOnFile(sourceVolumePath1, fileRelPath, 0640)
+Expect(err).NotTo(HaveOccurred())
+err = SetPermissionsOnDir(sourceVolumePath1, dirRelPath, 0750) // parity
+Expect(err).NotTo(HaveOccurred())
+
+// ...after migration...
+By("Verifying directory permissions on destination (R14)")
+destDirPerm, err := GetDirPermissions(destinationVolumePath1, dirRelPath)
+Expect(err).NotTo(HaveOccurred())
+Expect(destDirPerm).To(Equal(expectedDirPerm))
+```
+
+Tie directory metadata into the report assertions too: for SMB confirm `Source/Target ACE Details` and SID columns on directory rows; for NFS confirm `Source/Destination Unix Permissions`, UID, and GID on directory rows.
+
 ## Verification after fixes
 
 ```bash
@@ -263,4 +333,4 @@ Re-run the audit. The findings checklist must be all-zero before declaring done.
 - Column source of truth: [reference.md](reference.md)
 - E2E test conventions: [`.cursor/skills/e2e-testing/SKILL.md`](../e2e-testing/SKILL.md)
 - Go/Ginkgo review rules: [`.cursor/rules/go-tests.mdc`](../../rules/go-tests.mdc)
-- Always-on guardrails for the same 12 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)
+- Always-on guardrails for the same 14 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)
