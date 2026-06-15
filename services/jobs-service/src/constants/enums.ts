@@ -129,6 +129,7 @@ export enum WorkFlows {
   SPEED_TEST = "SpeedTestWorkflow",
   PRECHECK = "PreCheckValidationWorkflow",
   MIGRATE = "MigrationWorkflow",
+  PARQUET_MIGRATE = "ParquetMigrationWorkflow",
   RETRY = "RetryMigrationWorkflow",
   CUT_OVER = "CutOverWorkFlow",
 }

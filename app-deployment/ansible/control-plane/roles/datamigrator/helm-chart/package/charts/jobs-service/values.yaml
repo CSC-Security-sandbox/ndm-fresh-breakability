@@ -123,6 +123,8 @@ env:
     value: "180"
   - name: PURGE_BATCH_SIZE
     value: "50000"
+  - name: ENABLE_PARQUET
+    value: "false"
 
 service:
   type: ClusterIP

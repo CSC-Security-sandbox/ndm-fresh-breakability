@@ -21,6 +21,9 @@ export default registerAs(
       sendMail: process.env.SEND_EMAIL || "http://localhost:3001",
       enabled: process.env.EMAIL_ENABLED !== "false", // Default to true, set EMAIL_ENABLED=false to disable
     },
+    parquet: {
+      enabled: process.env.ENABLE_PARQUET === "true", // Default false; set ENABLE_PARQUET=true to use the Parquet pipeline
+    },
     worker: {
       healthCheckStatusTimout:
         parseInt(process.env.HEALTHCHECK_STATUS_TIMEOUT_SEC) || 60,

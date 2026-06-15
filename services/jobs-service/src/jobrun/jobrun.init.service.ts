@@ -56,6 +56,7 @@ import { getWorkflowId } from "./jobrun.util";
 export class JobRunInitService {
   private readonly logger: LoggerService;
   private readonly mountBasePath: string;
+  private readonly enableParquet: boolean;
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -84,6 +85,7 @@ export class JobRunInitService {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath",
     );
+    this.enableParquet = this.configService.get<boolean>('app.parquet.enabled');
   }
 
   // ------------------ Cron schedule -------------------- //
@@ -219,7 +221,7 @@ export class JobRunInitService {
       });
       await this.buildJobContext(jobRun.id, details);
       await this.initiateWorkflow(jobRun.id, details, projectId);
-      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId);
+      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId, this.enableParquet);
       return await this.jobRunRepo.save(jobRun);
     } catch (error) {
       this.logger.error(`Failed to create job run for ${jobConfigId}: ${error.message}`);
@@ -491,8 +493,18 @@ export class JobRunInitService {
       }
 
       default: {
+        let workflowName: WorkFlows;
+        switch (this.enableParquet){
+          case true: {
+            //TODO : STUB this is a stub for the parquet workflow
+            workflowName = WorkFlows.PARQUET_MIGRATE;
+            break;
+          }
+          default : 
+            workflowName = WorkFlows.MIGRATE;
+        }
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
+          workflowId: `${workflowName}-${jobRunId}`,
           taskQueue: "ParentWorkflow-TaskQueue",
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
@@ -500,7 +512,7 @@ export class JobRunInitService {
           options: options,
         };
         await this.workFlowService.startWorkflow(
-          WorkFlows.MIGRATE,
+          workflowName,
           startWorkFlowPayload,
         );
         break;
