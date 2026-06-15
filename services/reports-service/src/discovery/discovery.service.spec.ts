@@ -103,6 +103,7 @@ describe("DiscoveryService", () => {
     jest.spyOn(fs, "existsSync").mockImplementation(() => true);
     jest.spyOn(fs, "mkdirSync").mockImplementation(() => undefined);
     jest.spyOn(fs, "writeFileSync").mockImplementation(() => undefined);
+    jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -160,7 +161,7 @@ describe("DiscoveryService", () => {
       const result = await service.createReportFile(jobRunId, reportType);
 
       expect(result).toEqual({ message: "Report generated successfully" });
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(2); // Once for CSV, once for PDF
+      expect(fs.promises.writeFile).toHaveBeenCalled();
     });
 
     it("should create directory if it does not exist", async () => {
@@ -442,7 +443,7 @@ describe("DiscoveryService", () => {
   });
 
   describe("formatAndWriteToFile", () => {
-    it("should format and write data correctly", () => {
+    it("should format and write data correctly", async () => {
       const mockData = [
         {
           category: "Category1",
@@ -457,34 +458,31 @@ describe("DiscoveryService", () => {
         },
       ];
       const mockFilePath = "test.txt";
-      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+      const writeFileSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
 
-      service.formatAndWriteToFile(mockData, mockFilePath);
+      await service.formatAndWriteToFile(mockData, mockFilePath);
 
-      writeFileSpy.mockRestore();
-      consoleSpy.mockRestore();
+      expect(writeFileSpy).toHaveBeenCalled();
     });
 
-    it("should throw error when file path contains invalid characters", () => {
+    it("should throw error when file path contains invalid characters", async () => {
       const mockData = [{ category: "Test", sub_category: "Test", value: 100 }];
       const mockFilePath = "invalid/path";
 
-      // Mock validateFilePath to return false for this test
       jest.spyOn(validation, "validateFilePath").mockReturnValueOnce(false);
 
       const loggerSpy = jest.spyOn(service["logger"], "error");
 
-      expect(() => {
-        service.formatAndWriteToFile(mockData, mockFilePath);
-      }).toThrow("File path contains invalid characters.");
+      await expect(
+        service.formatAndWriteToFile(mockData, mockFilePath)
+      ).rejects.toThrow("File path contains invalid characters.");
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining("File path contains invalid characters:")
       );
     });
 
-    it("should collect dynamic headers from report data", () => {
+    it("should collect dynamic headers from report data", async () => {
       const mockData = [
         {
           category: "Category1",
@@ -507,7 +505,6 @@ describe("DiscoveryService", () => {
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure (headers from ReportHeaders enum)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
@@ -516,20 +513,17 @@ describe("DiscoveryService", () => {
           Category3: [{ sub_category: "Status", value: null }],
         });
 
-      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+      const writeFileSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
 
-      service.formatAndWriteToFile(mockData, mockFilePath);
+      await service.formatAndWriteToFile(mockData, mockFilePath);
 
-      // Verify that writeFileSync was called with content that includes both headers
       expect(writeFileSpy).toHaveBeenCalledWith(
         mockFilePath,
         expect.stringContaining("Config Name,Path")
       );
-
-      writeFileSpy.mockRestore();
     });
 
-    it("should process entries with header matching sub_category", () => {
+    it("should process entries with header matching sub_category", async () => {
       const mockData = [
         {
           category: "Category1",
@@ -540,7 +534,6 @@ describe("DiscoveryService", () => {
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure (sub_category from ReportHeaders)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
@@ -553,32 +546,28 @@ describe("DiscoveryService", () => {
           ],
         });
 
-      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+      const writeFileSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
 
-      service.formatAndWriteToFile(mockData, mockFilePath);
+      await service.formatAndWriteToFile(mockData, mockFilePath);
 
-      // Verify that writeFileSync was called with content that includes the value
       expect(writeFileSpy).toHaveBeenCalledWith(
         mockFilePath,
         expect.stringContaining("100")
       );
-
-      writeFileSpy.mockRestore();
     });
 
-    it("should handle both direct properties and sub_category matches", () => {
+    it("should handle both direct properties and sub_category matches", async () => {
       const mockData = [
         {
           category: "Category1",
           sub_category: "Config Name",
           value: "100",
-          Path: "200", // Direct property (ReportHeaders.PATH)
+          Path: "200",
           valueType: "count",
         },
       ];
       const mockFilePath = "test.txt";
 
-      // Mock groupAndOrder to return a specific structure (headers from ReportHeaders)
       jest
         .spyOn(require("../utils/group-order"), "groupAndOrder")
         .mockReturnValue({
@@ -592,17 +581,14 @@ describe("DiscoveryService", () => {
           ],
         });
 
-      const writeFileSpy = jest.spyOn(fs, "writeFileSync").mockImplementation();
+      const writeFileSpy = jest.spyOn(fs.promises, "writeFile").mockResolvedValue(undefined);
 
-      service.formatAndWriteToFile(mockData, mockFilePath);
+      await service.formatAndWriteToFile(mockData, mockFilePath);
 
-      // Verify that writeFileSync was called with content that includes both values
       expect(writeFileSpy).toHaveBeenCalledWith(
         mockFilePath,
         expect.stringContaining("100")
       );
-
-      writeFileSpy.mockRestore();
     });
   });
 

@@ -84,6 +84,7 @@ describe("OverviewService", () => {
 
     mockProjectRepository = {
       find: jest.fn(),
+      query: jest.fn().mockResolvedValue([]),
     };
 
     mockStorageOverviewSummaryRepository = {
@@ -160,32 +161,9 @@ describe("OverviewService", () => {
     });
 
     it("should return formatted sizes and job details when no job runs found", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [
-                        {
-                          jobType: JobType.Discover,
-                          isDeleted: false,
-                          jobRuns: [],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ]);
-      mockInventoryRepository.query = jest
-        .fn()
-        .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '1' }]) // file server count
+        .mockResolvedValueOnce([{ job_type: 'Discover', count: '1' }]); // job counts
       
       // Mock storage overview summary repository for project-level query
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([
@@ -210,38 +188,9 @@ describe("OverviewService", () => {
     });
 
     it("should skip migration query if no migrate or cutover runs", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [
-                        {
-                          jobType: JobType.Discover,
-                          isDeleted: false,
-                          jobRuns: [
-                            {
-                              id: "run1",
-                              status: JobRunStatus.Completed,
-                              createdAt: new Date(),
-                            },
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ]);
-      mockInventoryRepository.query = jest
-        .fn()
-        .mockResolvedValue([{ totalDiscoveredSize: 100 }]);
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '1' }]) // file server count
+        .mockResolvedValueOnce([{ job_type: 'Discover', count: '1' }]); // job counts
       
       // Mock storage overview summary repository for project-level query
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([
@@ -262,26 +211,9 @@ describe("OverviewService", () => {
     });
 
     it("should handle missing jobRunIds gracefully", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ]);
-      mockInventoryRepository.query = jest
-        .fn()
-        .mockResolvedValue([{ totalDiscoveredSize: 0 }]);
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '0' }]) // file server count
+        .mockResolvedValueOnce([]); // no job counts
       
       // Mock storage overview summary repository for project-level query
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([
@@ -302,50 +234,12 @@ describe("OverviewService", () => {
     });
 
     it("should handle when migrateRun and cutOverRun are present", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [
-                        {
-                          jobType: JobType.Migrate,
-                          isDeleted: false,
-                          jobRuns: [
-                            {
-                              id: "run2",
-                              status: JobRunStatus.Completed,
-                              createdAt: new Date(),
-                            },
-                          ],
-                        },
-                        {
-                          jobType: JobType.CutOver,
-                          isDeleted: false,
-                          jobRuns: [
-                            {
-                              id: "run3",
-                              status: JobRunStatus.Completed,
-                              createdAt: new Date(),
-                            },
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ]);
-      mockInventoryRepository.query = jest
-        .fn()
-        .mockResolvedValueOnce([{ totalDiscoveredSize: 200 }])
-        .mockResolvedValueOnce([{ totalMigratedSize: 150 }]);
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '1' }]) // file server count
+        .mockResolvedValueOnce([
+          { job_type: 'Migrate', count: '1' },
+          { job_type: 'CutOver', count: '1' },
+        ]); // job counts
       
       // Mock storage overview summary repository for project-level query
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([
@@ -416,27 +310,12 @@ describe("OverviewService", () => {
     });
   });
 
-  describe("where clause construction", () => {
-    beforeEach(() => {
-      mockInventoryRepository.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest
-          .fn()
-          .mockResolvedValue([{ totalSize: 0, totalMigratedSize: 0 }]),
-      }));
-    });
+  describe("aggregate query construction", () => {
+    it("should pass configId to SQL query", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '2' }])
+        .mockResolvedValueOnce([]);
 
-    it("should build correct where clause with configId only", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [],
-        },
-      ]);
-
-      // Mock storage overview summary repository for config-level query
       mockStorageOverviewSummaryRepository.findOne.mockResolvedValue({
         totalDiscoveredSize: 0,
         totalMigratedSize: 0,
@@ -445,67 +324,33 @@ describe("OverviewService", () => {
 
       await service.getStorageAndJobsOverview(null, "config1", null);
 
-      expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {
-          configs: {
-            id: "config1",
-          },
-        },
-        relations: [
-          "configs",
-          "configs.fileServers",
-          "configs.fileServers.volumes",
-          "configs.fileServers.volumes.sourceConfig",
-        ],
-      });
+      expect(mockProjectRepository.query).toHaveBeenCalledWith(
+        expect.stringContaining('config'),
+        expect.arrayContaining(["config1"])
+      );
     });
 
-    it("should build correct where clause with jobConfigId only", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [],
-        },
-      ]);
+    it("should pass jobConfigId to job count SQL query", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '0' }])
+        .mockResolvedValueOnce([]);
 
-      // Mock storage overview summary repository for default case (no project/config specific data)
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([]);
       mockStorageOverviewSummaryRepository.findOne.mockResolvedValue(null);
 
       await service.getStorageAndJobsOverview(null, null, "job1");
 
-      expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {
-          configs: {
-            fileServers: {
-              volumes: {
-                sourceConfig: {
-                  id: "job1",
-                  isDeleted: false,
-                  jobRuns: {
-                    status: JobRunStatus.Completed,
-                  },
-                },
-              },
-            },
-          },
-        },
-        relations: [
-          "configs",
-          "configs.fileServers",
-          "configs.fileServers.volumes",
-          "configs.fileServers.volumes.sourceConfig",
-        ],
-      });
+      expect(mockProjectRepository.query).toHaveBeenCalledWith(
+        expect.stringContaining('jc.id'),
+        expect.arrayContaining(["job1"])
+      );
     });
 
-    it("should build correct where clause with only projectId", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [],
-        },
-      ]);
+    it("should pass projectId to SQL query", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '1' }])
+        .mockResolvedValueOnce([]);
 
-      // Mock storage overview summary repository for project-level query
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([
         {
           totalDiscoveredSize: 0,
@@ -516,184 +361,76 @@ describe("OverviewService", () => {
 
       await service.getStorageAndJobsOverview("project1", null, null);
 
-      expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {
-          id: "project1",
-        },
-        relations: [
-          "configs",
-          "configs.fileServers",
-          "configs.fileServers.volumes",
-          "configs.fileServers.volumes.sourceConfig",
-        ],
-      });
+      expect(mockProjectRepository.query).toHaveBeenCalledWith(
+        expect.stringContaining('project_id'),
+        expect.arrayContaining(["project1"])
+      );
     });
 
-    it("should handle null parameters", async () => {
-      mockProjectRepository.find.mockResolvedValue([
-        {
-          configs: [],
-        },
-      ]);
+    it("should pass no params when all null", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '0' }])
+        .mockResolvedValueOnce([]);
 
-      // Mock storage overview summary repository for default case (no project/config specific data)
       mockStorageOverviewSummaryRepository.find.mockResolvedValue([]);
       mockStorageOverviewSummaryRepository.findOne.mockResolvedValue(null);
 
       await service.getStorageAndJobsOverview(null, null, null);
 
-      expect(mockProjectRepository.find).toHaveBeenCalledWith({
-        where: {},
-        relations: [
-          "configs",
-          "configs.fileServers",
-          "configs.fileServers.volumes",
-          "configs.fileServers.volumes.sourceConfig",
-        ],
-      });
+      expect(mockProjectRepository.query).toHaveBeenCalledWith(
+        expect.any(String),
+        []
+      );
     });
   });
 
-  describe("countAllJobTypes", () => {
-    let service: OverviewService;
+  describe("getAggregatedCounts", () => {
+    it("should return correct counts from SQL results", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '3' }]) // file server count
+        .mockResolvedValueOnce([
+          { job_type: 'Discover', count: '2' },
+          { job_type: 'Migrate', count: '1' },
+          { job_type: 'CutOver', count: '1' },
+        ]); // job counts
 
-    beforeEach(() => {
-      service = new OverviewService({} as any, {} as any, {} as any);
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        { totalDiscoveredSize: 0, totalMigratedSize: 0, lastRefreshed: new Date() },
+      ]);
+
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalFileServers).toBe(3);
+      expect(result.jobDetails.totalDiscoverJobs).toBe(2);
+      expect(result.jobDetails.totalMigrateJobs).toBe(1);
+      expect(result.jobDetails.totalCutoverJobs).toBe(1);
     });
 
-    it("should return correct counts for each job type", () => {
-      const projects = [
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [
-                        { jobType: JobType.Discover, isDeleted: false },
-                        { jobType: JobType.Migrate, isDeleted: false },
-                        { jobType: JobType.CutOver, isDeleted: false },
-                        { jobType: JobType.Discover, isDeleted: false },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ];
-      const result = service.countAllJobTypes(projects);
-      expect(result).toEqual({
-        totalDiscoverJobs: 2,
-        totalMigrationJobs: 1,
-        totalCutOverJobs: 1,
-      });
+    it("should return zeros when query returns empty", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce([{ count: '0' }])
+        .mockResolvedValueOnce([]);
+
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([
+        { totalDiscoveredSize: 0, totalMigratedSize: 0, lastRefreshed: new Date() },
+      ]);
+
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalFileServers).toBe(0);
+      expect(result.jobDetails.totalDiscoverJobs).toBe(0);
+      expect(result.jobDetails.totalMigrateJobs).toBe(0);
+      expect(result.jobDetails.totalCutoverJobs).toBe(0);
     });
 
-    it("should return zeros if projects is undefined", () => {
-      const result = service.countAllJobTypes(undefined);
-      expect(result).toEqual({
-        totalDiscoverJobs: 0,
-        totalMigrationJobs: 0,
-        totalCutOverJobs: 0,
-      });
-    });
+    it("should handle null query results gracefully", async () => {
+      mockProjectRepository.query
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
 
-    it("should return zeros if configs or sourceConfig are missing", () => {
-      const projects = [
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [{}],
-                },
-              ],
-            },
-          ],
-        },
-      ];
-      const result = service.countAllJobTypes(projects);
-      expect(result).toEqual({
-        totalDiscoverJobs: 0,
-        totalMigrationJobs: 0,
-        totalCutOverJobs: 0,
-      });
-    });
+      mockStorageOverviewSummaryRepository.find.mockResolvedValue([]);
 
-    it("should handle errors gracefully", () => {
-      const badProjects = [
-        {
-          configs: null,
-        },
-      ];
-      const result = service.countAllJobTypes(badProjects);
-      expect(result).toEqual({
-        totalDiscoverJobs: 0,
-        totalMigrationJobs: 0,
-        totalCutOverJobs: 0,
-      });
-    });
-
-    it("should count jobs when some nested arrays are missing", () => {
-      const projects = [
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [
-                        { jobType: JobType.Discover, isDeleted: false },
-                        { jobType: JobType.Migrate, isDeleted: false },
-                      ],
-                    },
-                    {},
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          configs: [
-            {
-              fileServers: [
-                {
-                  volumes: [
-                    {
-                      sourceConfig: [{ jobType: JobType.CutOver, isDeleted: false }],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ];
-      const result = service.countAllJobTypes(projects);
-      expect(result).toEqual({
-        totalDiscoverJobs: 1,
-        totalMigrationJobs: 1,
-        totalCutOverJobs: 1,
-      });
-    });
-
-    it("should return zeros if all arrays are empty", () => {
-      const projects = [
-        {
-          configs: [],
-        },
-      ];
-      const result = service.countAllJobTypes(projects);
-      expect(result).toEqual({
-        totalDiscoverJobs: 0,
-        totalMigrationJobs: 0,
-        totalCutOverJobs: 0,
-      });
+      const result = await service.getStorageAndJobsOverview("project1", null, null);
+      expect(result.storageDetails.totalFileServers).toBe(0);
+      expect(result.jobDetails.totalDiscoverJobs).toBe(0);
     });
   });
 });

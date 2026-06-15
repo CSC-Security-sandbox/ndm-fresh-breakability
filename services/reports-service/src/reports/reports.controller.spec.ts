@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException, StreamableFile } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ReportsController } from './reports.controller';
 import { TemporalClientService } from 'src/temporal/temporal-client.service';
 import { ConsolidatedReportService } from 'src/activities/consolidated-report/consolidated-report.service';
@@ -7,6 +7,7 @@ import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { JwtAuthGuard, JwtService } from '@netapp-cloud-datamigrate/auth-lib';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
+import * as fs from 'fs';
 
 describe('ReportsController', () => {
   let controller: ReportsController;
@@ -352,21 +353,39 @@ describe('ReportsController', () => {
   });
 
   describe('downloadConsolidatedReport', () => {
-    it('should download report successfully', async () => {
+    let mockRes: any;
+    let mockStream: any;
+
+    beforeEach(() => {
+      mockStream = {
+        pipe: jest.fn(),
+        on: jest.fn().mockReturnThis(),
+        destroy: jest.fn(),
+      };
+      mockRes = {
+        set: jest.fn(),
+        on: jest.fn(),
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 1024 } as any);
+    });
+
+    it('should stream report file to response', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
-      const reportBuffer = Buffer.from('pdf-content');
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(reportBuffer);
-      consolidatedReportService.clearStatus.mockResolvedValue(undefined);
 
-      const result = await controller.downloadConsolidatedReport(fileServerId);
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
 
-      expect(result).toBeInstanceOf(StreamableFile);
       expect(consolidatedReportService.getReportFilePath).toHaveBeenCalledWith(fileServerId);
-      expect(consolidatedReportService.readReportFile).toHaveBeenCalledWith(reportPath);
-      expect(consolidatedReportService.clearStatus).toHaveBeenCalledWith(fileServerId);
+      expect(mockRes.set).toHaveBeenCalledWith(expect.objectContaining({
+        'Content-Type': 'application/pdf',
+      }));
+      expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
     });
 
     it('should throw NotFoundException when report not found', async () => {
@@ -374,108 +393,97 @@ describe('ReportsController', () => {
       consolidatedReportService.getReportFilePath.mockResolvedValue(null);
 
       await expect(
-        controller.downloadConsolidatedReport(fileServerId)
+        controller.downloadConsolidatedReport(fileServerId, mockRes)
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException when fileServerId is missing', async () => {
       await expect(
-        controller.downloadConsolidatedReport('')
+        controller.downloadConsolidatedReport('', mockRes)
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException when fileServerId is null', async () => {
       await expect(
-        controller.downloadConsolidatedReport(null as any)
+        controller.downloadConsolidatedReport(null as any, mockRes)
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should clear status after successful download', async () => {
+    it('should clear status on response finish', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
-      const reportBuffer = Buffer.from('pdf-content');
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(reportBuffer);
       consolidatedReportService.clearStatus.mockResolvedValue(undefined);
 
-      await controller.downloadConsolidatedReport(fileServerId);
+      let finishHandler: () => void;
+      mockRes.on.mockImplementation((event: string, cb: any) => {
+        if (event === 'finish') finishHandler = cb;
+      });
+
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
+      await finishHandler!();
 
       expect(consolidatedReportService.clearStatus).toHaveBeenCalledWith(fileServerId);
     });
 
-    it('should handle large files', async () => {
+    it('should handle large files via streaming', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/large-report.pdf';
-      const largeBuffer = Buffer.alloc(10 * 1024 * 1024); // 10MB
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(largeBuffer);
-      consolidatedReportService.clearStatus.mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 10 * 1024 * 1024 } as any);
 
-      const result = await controller.downloadConsolidatedReport(fileServerId);
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
 
-      expect(result).toBeInstanceOf(StreamableFile);
+      expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
     });
 
-    it('should set correct content type for PDF download', async () => {
+    it('should set correct content type for CSV download', async () => {
       const fileServerId = 'test-file-server-123';
-      const reportPath = '/path/to/report.pdf';
-      const reportBuffer = Buffer.from('pdf-content');
+      const reportPath = '/path/to/report.csv';
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(reportBuffer);
-      consolidatedReportService.clearStatus.mockResolvedValue(undefined);
 
-      const result = await controller.downloadConsolidatedReport(fileServerId);
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
 
-      expect(result).toBeInstanceOf(StreamableFile);
+      expect(mockRes.set).toHaveBeenCalledWith(expect.objectContaining({
+        'Content-Type': 'text/csv',
+      }));
     });
 
-    it('should throw NotFoundException with descriptive message when report file read fails', async () => {
+    it('should throw NotFoundException when stat fails', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockImplementation(() => {
-        throw new Error('File read error');
-      });
+      jest.spyOn(fs.promises, 'stat').mockRejectedValue(new Error('File not found'));
 
       await expect(
-        controller.downloadConsolidatedReport(fileServerId)
+        controller.downloadConsolidatedReport(fileServerId, mockRes)
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should log download request', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
-      const reportBuffer = Buffer.from('pdf-content');
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(reportBuffer);
-      consolidatedReportService.clearStatus.mockResolvedValue(undefined);
 
-      await controller.downloadConsolidatedReport(fileServerId);
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
 
       expect(mockLogger.log).toHaveBeenCalledWith(
         expect.stringContaining(fileServerId)
       );
     });
 
-    it('should not clear status if download file read fails', async () => {
+    it('should not clear status before stream finishes', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockImplementation(() => {
-        throw new Error('File read error');
-      });
 
-      try {
-        await controller.downloadConsolidatedReport(fileServerId);
-      } catch (e) {
-        // Expected to fail
-      }
+      await controller.downloadConsolidatedReport(fileServerId, mockRes);
 
       expect(consolidatedReportService.clearStatus).not.toHaveBeenCalled();
     });
@@ -486,7 +494,7 @@ describe('ReportsController', () => {
       consolidatedReportService.getReportFilePath.mockRejectedValue(new Error('Database error'));
 
       await expect(
-        controller.downloadConsolidatedReport(fileServerId)
+        controller.downloadConsolidatedReport(fileServerId, mockRes)
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -501,19 +509,20 @@ describe('ReportsController', () => {
     it('should handle concurrent requests to download same report', async () => {
       const fileServerId = 'test-file-server-123';
       const reportPath = '/path/to/report.pdf';
-      const reportBuffer = Buffer.from('pdf-content');
+      const mockStream = { pipe: jest.fn(), on: jest.fn().mockReturnThis(), destroy: jest.fn() };
+      const mockRes1: any = { set: jest.fn(), on: jest.fn(), headersSent: false, status: jest.fn().mockReturnThis(), end: jest.fn() };
+      const mockRes2: any = { set: jest.fn(), on: jest.fn(), headersSent: false, status: jest.fn().mockReturnThis(), end: jest.fn() };
 
       consolidatedReportService.getReportFilePath.mockResolvedValue(reportPath);
-      consolidatedReportService.readReportFile.mockResolvedValue(reportBuffer);
-      consolidatedReportService.clearStatus.mockResolvedValue(undefined);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 1024 } as any);
+      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream as any);
 
-      const result1 = controller.downloadConsolidatedReport(fileServerId);
-      const result2 = controller.downloadConsolidatedReport(fileServerId);
+      const result1 = controller.downloadConsolidatedReport(fileServerId, mockRes1);
+      const result2 = controller.downloadConsolidatedReport(fileServerId, mockRes2);
 
       await Promise.all([result1, result2]);
 
       expect(consolidatedReportService.getReportFilePath).toHaveBeenCalledTimes(2);
-      expect(consolidatedReportService.clearStatus).toHaveBeenCalledTimes(2);
     });
 
     it('should handle special characters in fileServerId', async () => {

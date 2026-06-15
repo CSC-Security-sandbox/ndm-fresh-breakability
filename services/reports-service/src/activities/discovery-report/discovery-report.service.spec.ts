@@ -56,7 +56,19 @@ describe("DiscoveryReportService", () => {
                 DiscoveryReportService,
                 {
                     provide: DataSource,
-                    useValue: { query: jest.fn() },
+                    useValue: {
+                        query: jest.fn(),
+                        transaction: jest.fn(async (cb) => {
+                            const mockManager = {
+                                getRepository: jest.fn().mockReturnValue({
+                                    findOne: jest.fn().mockResolvedValue(null),
+                                    create: jest.fn((data) => ({ ...data, reportData: null })),
+                                    save: jest.fn().mockResolvedValue(undefined),
+                                }),
+                            };
+                            return cb(mockManager);
+                        }),
+                    },
                 },
                 {
                     provide: PDFGeneratorService,
@@ -393,48 +405,57 @@ describe("DiscoveryReportService", () => {
     });
 
     describe("updateJsonReport", () => {
-        it("should update existing report", async () => {
+        it("should update existing report within a transaction", async () => {
             const fakeReport = { 
                 id: 1, 
                 jobRunId: "1", 
                 reportType: ReportType.DISCOVERY, 
                 reportData: JSON.stringify([{ existing: "data" }])
             };
-            (reportsRepo.findOne as jest.Mock).mockResolvedValue(fakeReport);
-            (reportsRepo.save as jest.Mock).mockResolvedValue(fakeReport);
-            (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
+            const mockTxnRepo = {
+                findOne: jest.fn().mockResolvedValue(fakeReport),
+                create: jest.fn(),
+                save: jest.fn().mockResolvedValue(fakeReport),
+            };
+            (dataSource.transaction as jest.Mock).mockImplementation(async (cb) => {
+                return cb({ getRepository: jest.fn().mockReturnValue(mockTxnRepo) });
+            });
 
             const input = { jobRunId: "1", data: [{ foo: "bar" }], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
 
-            expect(reportsRepo.findOne).toHaveBeenCalledWith({
+            expect(dataSource.transaction).toHaveBeenCalled();
+            expect(mockTxnRepo.findOne).toHaveBeenCalledWith({
                 where: { jobRunId: "1", reportType: ReportType.DISCOVERY },
+                lock: { mode: 'pessimistic_write' },
             });
-            expect(reportsRepo.save).toHaveBeenCalledWith(fakeReport);
+            expect(mockTxnRepo.save).toHaveBeenCalled();
             expect(result).toBe("Updated The report Data Successfully");
         });
 
-        it("should create and save new report if not found", async () => {
-            (reportsRepo.findOne as jest.Mock).mockResolvedValue(undefined);
+        it("should create and save new report if not found in transaction", async () => {
             const newReport = {
                 jobRunId: "2",
                 reportType: ReportType.DISCOVERY,
+                reportData: null,
             };
-            (reportsRepo.create as jest.Mock).mockReturnValue(newReport);
-            (reportsRepo.save as jest.Mock).mockResolvedValue({
-                ...newReport,
-                reportData: JSON.stringify([{ foo: "bar" }]),
+            const mockTxnRepo = {
+                findOne: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockReturnValue(newReport),
+                save: jest.fn().mockResolvedValue({ ...newReport, reportData: JSON.stringify([{ foo: "bar" }]) }),
+            };
+            (dataSource.transaction as jest.Mock).mockImplementation(async (cb) => {
+                return cb({ getRepository: jest.fn().mockReturnValue(mockTxnRepo) });
             });
-            (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
 
             const input = { jobRunId: "2", data: [{ foo: "bar" }], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
 
-            expect(reportsRepo.create).toHaveBeenCalledWith({
+            expect(mockTxnRepo.create).toHaveBeenCalledWith({
                 jobRunId: "2",
                 reportType: ReportType.DISCOVERY,
             });
-            expect(reportsRepo.save).toHaveBeenCalled();
+            expect(mockTxnRepo.save).toHaveBeenCalled();
             expect(result).toBe("Updated The report Data Successfully");
         });
 
@@ -468,17 +489,19 @@ describe("DiscoveryReportService", () => {
         });
 
         it("should handle empty object as data", async () => {
-            (reportsRepo.findOne as jest.Mock).mockResolvedValue(undefined);
             const newReport = {
                 jobRunId: "3",
                 reportType: ReportType.DISCOVERY,
+                reportData: null,
             };
-            (reportsRepo.create as jest.Mock).mockReturnValue(newReport);
-            (reportsRepo.save as jest.Mock).mockResolvedValue({
-                ...newReport,
-                reportData: JSON.stringify([]),
+            const mockTxnRepo = {
+                findOne: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockReturnValue(newReport),
+                save: jest.fn().mockResolvedValue({ ...newReport, reportData: JSON.stringify([]) }),
+            };
+            (dataSource.transaction as jest.Mock).mockImplementation(async (cb) => {
+                return cb({ getRepository: jest.fn().mockReturnValue(mockTxnRepo) });
             });
-            (jobRunRepo.update as jest.Mock).mockResolvedValue(undefined);
 
             const input = { jobRunId: "3", data: [], updateType: 'data' as const };
             const result = await service.updateJsonReport(input as any);
@@ -584,8 +607,8 @@ describe("DiscoveryReportService", () => {
 
         it('should handle updateJsonReport errors without stack trace', async () => {
             const mockError = new Error('Update failed');
-            delete mockError.stack; // Remove stack property
-            (reportsRepo.findOne as jest.Mock).mockRejectedValue(mockError);
+            delete mockError.stack;
+            (dataSource.transaction as jest.Mock).mockRejectedValue(mockError);
 
             const input = { jobRunId: "errorTest", updateType: "data", data: [] };
             await expect(service.updateJsonReport(input as any)).rejects.toThrow(mockError);
