@@ -168,66 +168,139 @@ export class ErrorLogService {
     jobConfigId?: string,
     pageSize: number = 10000
   ): Promise<void> {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        const safeFilePath = sanitizeAndValidateFilePath(
-          path.basename(filePath)
-        );
-        const writeStream = fs.createWriteStream(safeFilePath);
-        const csvStream = fastCsv.format({ headers: true });
-        csvStream.pipe(writeStream);
-        const processingFilePath = sanitizeAndValidateFilePath(
-          `${path.basename(filePath)}.processing`
-        );
-        fs.writeFileSync(processingFilePath, "processing");
+    const safeFilePath = sanitizeAndValidateFilePath(
+      path.basename(filePath)
+    );
+    const processingFilePath = sanitizeAndValidateFilePath(
+      `${path.basename(filePath)}.processing`
+    );
+    await fs.promises.writeFile(processingFilePath, "processing");
 
-        let offset = 0;
-        let hasMore = true;
+    try {
+      const writeStream = fs.createWriteStream(safeFilePath);
+      const csvStream = fastCsv.format({ headers: true });
+      csvStream.pipe(writeStream);
 
-        while (hasMore) {
-          const ErrorsHashMap = await this.getPaginatedErrors({
-            jobConfigId,
-            jobRunId,
-            pageSize,
-            offset,
-          });
-
-          const totalJobRunIds = jobConfigId
-            ? await this.getJobRunIds(jobConfigId)
-            : jobRunId;
-
-          const setupFailedError =
-            offset === 0
-              ? await this.fetchFormattedSetupErrors(totalJobRunIds)
-              : [];
-
-          const chunk =
-            offset === 0
-              ? [...ErrorsHashMap, ...setupFailedError]
-              : ErrorsHashMap;
-
-          for (const row of chunk) {
-            csvStream.write(row);
-          }
-
-          hasMore = ErrorsHashMap.length === pageSize;
-          offset += pageSize;
-        }
-        csvStream.end();
-        writeStream.on("finish", () => {
-          fs.unlinkSync(processingFilePath);
-          resolve();
-        });
+      const streamDone = new Promise<void>((resolve, reject) => {
+        writeStream.on("finish", resolve);
         writeStream.on("error", reject);
         csvStream.on("error", reject);
-      } catch (error) {
-        throw new BadRequestException({
-          displayMessage:
-            "Something went wrong while writing errors on the file.",
-          message: error.message,
+      });
+
+      let lastCreatedAt: string | null = null;
+      let lastId: string | null = null;
+      let isFirstBatch = true;
+
+      while (true) {
+        const errors = await this.getPaginatedErrorsKeyset({
+          jobConfigId,
+          jobRunId,
+          pageSize,
+          cursorCreatedAt: lastCreatedAt,
+          cursorId: lastId,
         });
+
+        const setupFailedError = isFirstBatch
+          ? await this.fetchFormattedSetupErrors(
+              jobConfigId ? await this.getJobRunIds(jobConfigId) : jobRunId
+            )
+          : [];
+
+        const chunk = isFirstBatch
+          ? [...errors, ...setupFailedError]
+          : errors;
+
+        for (const row of chunk) {
+          csvStream.write(row);
+        }
+
+        if (errors.length < pageSize) break;
+        const lastRow = errors[errors.length - 1];
+        lastCreatedAt = lastRow["Created At"];
+        lastId = lastRow["Error Id"];
+        isFirstBatch = false;
       }
-    });
+
+      csvStream.end();
+      await streamDone;
+    } finally {
+      await fs.promises.unlink(processingFilePath).catch(() => {});
+    }
+  }
+
+  private async getPaginatedErrorsKeyset({
+    jobConfigId,
+    jobRunId,
+    pageSize,
+    cursorCreatedAt,
+    cursorId,
+  }: {
+    jobConfigId?: string;
+    jobRunId?: string;
+    pageSize: number;
+    cursorCreatedAt: string | null;
+    cursorId: string | null;
+  }) {
+    await this.handleError(jobRunId, jobConfigId);
+    const params: (string | number | string[])[] = [];
+    let whereClause = "";
+
+    if (jobConfigId) {
+      whereClause = "jc.id = $1";
+      params.push(jobConfigId);
+    } else {
+      whereClause = "o.job_run_id = $1";
+      params.push(jobRunId);
+    }
+
+    const errorTypesIdx = params.length + 1;
+    params.push([...USER_VISIBLE_ERROR_TYPES]);
+
+    let cursorClause = "";
+    if (cursorCreatedAt && cursorId) {
+      const createdAtIdx = params.length + 1;
+      const idIdx = params.length + 2;
+      params.push(cursorCreatedAt, cursorId);
+      cursorClause = `AND (oe.created_at, oe.id) < ($${createdAtIdx}::timestamptz, $${idIdx}::uuid)`;
+    }
+
+    const limitIdx = params.length + 1;
+    params.push(pageSize);
+
+    const query = `
+      SELECT
+        oe.id::text                AS "Error Id",
+        oe.created_at              AS "Created At",
+        o.job_run_id               AS "Job Run Id",
+        jc.job_type                AS "Job Type",
+        oe.error_type              AS "Error Type",
+        CASE
+          WHEN oe.file_path IS NOT NULL AND LENGTH(oe.file_path) > 10 THEN
+            REGEXP_REPLACE(
+              oe.error_message,
+              '[''"]?' || REPLACE(SUBSTRING(oe.file_path FROM 1 FOR 10), E'\\\\', E'\\\\\\\\') || '[^''"\\s]*([''".\\s]|$)',
+              oe.file_name,
+              'g'
+            )
+          ELSE oe.error_message
+        END AS "Error Details",
+        oe.file_name               AS "File Name",
+        oe.file_path               AS "File Path",
+        oe.origin                  AS "Origin",
+        oe.operation_type          AS "Operation",
+        oe.error_code              AS "Code"
+      FROM datamigrator.operation_errors oe
+      LEFT JOIN datamigrator.operations o ON o.id = oe.operation_id
+      LEFT JOIN datamigrator.jobrun jr ON jr.id = o.job_run_id
+      LEFT JOIN datamigrator.jobconfig jc ON jc.id = jr.job_config_id
+      WHERE ${whereClause}
+        AND oe.error_type = ANY($${errorTypesIdx})
+        ${cursorClause}
+      ORDER BY oe.created_at DESC, oe.id DESC
+      LIMIT $${limitIdx}
+    `;
+
+    return this.operationErrorRepo.query(query, params);
   }
 
   // Helper to parse worker_response safely
@@ -317,17 +390,18 @@ export class ErrorLogService {
       const dir = this.getErrorLogsDirectory;
       const filePath = sanitizeAndValidateFilePath(fileName);
 
-      // If the latest file already exists, return it
-      if (fs.existsSync(filePath)) {
+      const fileExists = await fs.promises.access(filePath).then(() => true).catch(() => false);
+      if (fileExists) {
         return filePath;
       }
 
-      // Clean up old files matching the pattern (except the one being created)
-      if (fs.existsSync(dir)) {
-        for (const f of fs.readdirSync(dir)) {
+      const dirExists = await fs.promises.access(dir).then(() => true).catch(() => false);
+      if (dirExists) {
+        const files = await fs.promises.readdir(dir);
+        for (const f of files) {
           if (filePattern.test(f) && f !== fileName) {
             try {
-              fs.unlinkSync(sanitizeAndValidateFilePath(f));
+              await fs.promises.unlink(sanitizeAndValidateFilePath(f));
             } catch (err) {
               throw new BadRequestException({
                 displayMessage:
@@ -365,8 +439,8 @@ export class ErrorLogService {
         fileName = `${jobRunId}-error-${errorCount}.csv`;
       }
       const filePath = sanitizeAndValidateFilePath(fileName);
-      if (!fs.existsSync(filePath)) {
-        // If file does not exist, create it first
+      const csvExists = await fs.promises.access(filePath).then(() => true).catch(() => false);
+      if (!csvExists) {
         await this.createCsvFileForJob(jobRunId, jobConfigId);
       }
       const fileStream = fs.createReadStream(filePath);
@@ -500,8 +574,8 @@ export class ErrorLogService {
       const processingFilePath = sanitizeAndValidateFilePath(
         `${fileName}.processing`
       );
-      const processing = fs.existsSync(processingFilePath);
-      const ready = !processing && fs.existsSync(filePath);
+      const processing = await fs.promises.access(processingFilePath).then(() => true).catch(() => false);
+      const ready = !processing && await fs.promises.access(filePath).then(() => true).catch(() => false);
       return { ready, processing };
     } catch (error) {
       throw new BadRequestException({

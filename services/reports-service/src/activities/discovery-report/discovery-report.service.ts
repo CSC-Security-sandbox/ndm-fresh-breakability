@@ -167,24 +167,29 @@ export class DiscoveryReportService {
         
         try {
             if(updateType === 'status') {
-                const update = await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
+                await this.jobRunRepo.update({ id: jobRunId }, { isReportReady: true });
                 this.logger.log(`projectId: ${projectId} Discovery report status updated for jobRunId: ${jobRunId}`);
                 return "Updated The report status Successfully";
             }
 
-            let report = await this.reportsRepo.findOne({ where: { jobRunId, reportType: ReportType.DISCOVERY } });
-            if (!report) {
-                this.logger.log(`projectId: ${projectId} Creating new discovery report entry for jobRunId: ${jobRunId}`);
-                report = this.reportsRepo.create({
-                    jobRunId,
-                    reportType: ReportType.DISCOVERY,
+            await this.dataSource.transaction(async (manager) => {
+                const reportsRepo = manager.getRepository(ReportsEntity);
+                let report = await reportsRepo.findOne({
+                    where: { jobRunId, reportType: ReportType.DISCOVERY },
+                    lock: { mode: 'pessimistic_write' },
                 });
-            }
+                if (!report) {
+                    report = reportsRepo.create({
+                        jobRunId,
+                        reportType: ReportType.DISCOVERY,
+                    });
+                }
 
-            const currentData = report.reportData ? JSON.parse(report.reportData) : [];
-            const updatedData = [...currentData, ...data];
-            report.reportData = JSON.stringify(updatedData);
-            await this.reportsRepo.save(report);
+                const currentData = report.reportData ? JSON.parse(report.reportData) : [];
+                const updatedData = [...currentData, ...data];
+                report.reportData = JSON.stringify(updatedData);
+                await reportsRepo.save(report);
+            });
             
             this.logger.log(`projectId: ${projectId} Updated discovery report data for jobRunId: ${jobRunId}, added ${data.length} new entries`);
             return "Updated The report Data Successfully";

@@ -54,9 +54,10 @@ export class PdfService {
           return response;
         }
         
-        if (fs.existsSync(filePath) && reportType == ReportType.DISCOVERY) { 
+        const fileExists = await fs.promises.access(filePath).then(() => true).catch(() => false);
+        if (fileExists && reportType == ReportType.DISCOVERY) { 
             this.logger.log(`projectId: ${projectId} Report found. Returning existing report: ${filePath}`);
-            return fs.readFileSync(filePath); 
+            return fs.promises.readFile(filePath); 
         } else {
           this.logger.warn(`projectId: ${projectId} Report not found for jobRunId: ${jobRunId}, reportType: ${reportType}`);
           throw new HttpException("Report not found, try again later",  HttpStatus.INTERNAL_SERVER_ERROR);
@@ -114,7 +115,7 @@ export class PdfService {
         // add customerInfo and report generation date
         reportData.customerInfo = {
           projectName: projectData.length > 0 ? projectData[0].project_name : 'NetApp Data Migrator',
-          reportDate: new Date().toLocaleDateString(),
+          reportDate: new Date().toISOString().slice(0, 10),
         }
         
         this.logger.log(`projectId: ${projectId} Generating PDF for jobs report, jobRunId: ${jobRunId}`);

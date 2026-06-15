@@ -39,72 +39,14 @@ export class OverviewService {
   ) {
     const getStorageAndJobsOverviewStart = Date.now();
     const schema = process.env.SCHEMA || "datamigrator";
-    const whereClause = {};
-    if (projectId) {
-      whereClause["id"] = projectId;
-    }
 
-    if (configId) {
-      whereClause["configs"] = {
-        ...whereClause["configs"],
-        id: configId,
-      };
-    }
-
-    if (jobConfigId) {
-      whereClause["configs"] = {
-        ...whereClause["configs"],
-        fileServers: {
-          ...whereClause["configs?.fileServers"],
-          volumes: {
-            sourceConfig: {
-              id: jobConfigId,
-              isDeleted: false,
-              jobRuns: {
-                status: JobRunStatus.Completed,
-              },
-            },
-          },
-        },
-      };
-    }
-
-    const projectQueryStart = Date.now();
-
-    const projectDetails = await this.projectRepository.find({
-      where: whereClause,
-      relations: [
-        "configs",
-        "configs.fileServers",
-        "configs.fileServers.volumes",
-        "configs.fileServers.volumes.sourceConfig",
-      ],
-    });
-
-    const projectQueryEnd = Date.now();
-
-    this.logger.debug("projectDetails - " + projectDetails.length);
-    this.logger.debug("projectDetails - " + JSON.stringify(projectDetails));
-
-    this.logger.debug(
-      `projectDetails query took ${projectQueryEnd - projectQueryStart} ms`
-    );
-
-    let totalDiscoveredSize = 0;
-    let totalMigratedSize = 0;
-    let totalFileServers = projectDetails?.flatMap(
-      (project) => project?.configs ?? []
-    ).flatMap(
-      (config) => config?.fileServers ?? []
-    ).length;
+    const { totalFileServers, totalDiscoverJobs, totalMigrationJobs, totalCutOverJobs } =
+      await this.getAggregatedCounts(schema, projectId, configId, jobConfigId);
 
     this.logger.log(`totalFileServers - ${totalFileServers}`);
 
-    const {
-      totalDiscoverJobs,
-      totalMigrationJobs,
-      totalCutOverJobs
-    } = this.countAllJobTypes(projectDetails);
+    let totalDiscoveredSize = 0;
+    let totalMigratedSize = 0;
     let lastRefreshed: Date = new Date();
     if(projectId){
       this.logger.log(`Project ID provided: ${projectId}`);
@@ -176,53 +118,80 @@ export class OverviewService {
     return overViewData;
   }
 
-  countAllJobTypes(projects: any) {
-    try {
-      const allConfigs = (
-        projects?.flatMap((project) =>
-          project?.configs?.flatMap((config) =>
-            config?.fileServers?.flatMap((fileServer) =>
-              fileServer?.volumes?.flatMap((volume) =>
-                (volume?.sourceConfig ?? []).filter(
-                  (sc: any) => sc && !sc.isDeleted
-                )
-              )
-            )
-          )
-        ) || []
-      ).filter(Boolean);
+  private async getAggregatedCounts(
+    schema: string,
+    projectId?: string,
+    configId?: string,
+    jobConfigId?: string,
+  ): Promise<{
+    totalFileServers: number;
+    totalDiscoverJobs: number;
+    totalMigrationJobs: number;
+    totalCutOverJobs: number;
+  }> {
+    const conditions: string[] = [];
+    const params: string[] = [];
 
-      let totalDiscoverJobs = 0;
-      let totalMigrationJobs = 0;
-      let totalCutOverJobs = 0;
-
-      for (const config of allConfigs) {
-        switch (config.jobType) {
-          case JobType.Discover:
-            totalDiscoverJobs++;
-            break;
-          case JobType.Migrate:
-            totalMigrationJobs++;
-            break;
-          case JobType.CutOver:
-            totalCutOverJobs++;
-            break;
-        }
-      }
-
-      return {
-        totalDiscoverJobs,
-        totalMigrationJobs,
-        totalCutOverJobs,
-      };
-    } catch (error) {
-      this.logger.error('Error counting job configs:', error?.message);
-      return {
-        totalDiscoverJobs: 0,
-        totalMigrationJobs: 0,
-        totalCutOverJobs: 0,
-      };
+    if (projectId) {
+      params.push(projectId);
+      conditions.push(`c.project_id = $${params.length}`);
     }
+    if (configId) {
+      params.push(configId);
+      conditions.push(`c.id = $${params.length}`);
+    }
+
+    const whereStr = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const fsCountQuery = `
+      SELECT COUNT(DISTINCT fs.id) AS count
+      FROM ${schema}.file_server fs
+      JOIN ${schema}.config c ON c.id = fs.config_id
+      ${whereStr}
+    `;
+    const fsResult = await this.projectRepository.query(fsCountQuery, params);
+    const totalFileServers = parseInt(fsResult?.[0]?.count || '0', 10);
+
+    let jobWhere = `jc.is_deleted = false`;
+    const jobParams: string[] = [...params];
+    if (conditions.length > 0) {
+      jobWhere += ` AND ${conditions.join(' AND ')}`;
+    }
+    if (jobConfigId) {
+      jobParams.push(jobConfigId);
+      jobWhere += ` AND jc.id = $${jobParams.length}`;
+    }
+
+    const jobCountQuery = `
+      SELECT jc.job_type, COUNT(*) AS count
+      FROM ${schema}.jobconfig jc
+      JOIN ${schema}.volume v ON v.id = jc.source_path_id
+      JOIN ${schema}.file_server fs ON fs.id = v.file_server_id
+      JOIN ${schema}.config c ON c.id = fs.config_id
+      WHERE ${jobWhere}
+      GROUP BY jc.job_type
+    `;
+    const jobResult = await this.projectRepository.query(jobCountQuery, jobParams);
+
+    let totalDiscoverJobs = 0;
+    let totalMigrationJobs = 0;
+    let totalCutOverJobs = 0;
+    for (const row of jobResult || []) {
+      const count = parseInt(row.count, 10) || 0;
+      switch (row.job_type) {
+        case JobType.Discover:
+          totalDiscoverJobs = count;
+          break;
+        case JobType.Migrate:
+          totalMigrationJobs = count;
+          break;
+        case JobType.CutOver:
+          totalCutOverJobs = count;
+          break;
+      }
+    }
+
+    return { totalFileServers, totalDiscoverJobs, totalMigrationJobs, totalCutOverJobs };
   }
   
 }

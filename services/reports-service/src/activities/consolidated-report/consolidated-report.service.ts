@@ -235,35 +235,55 @@ export class ConsolidatedReportService {
     }
   }
 
+  private static readonly PDF_MERGE_CHUNK_SIZE = 5;
+
   async mergePdfFiles(input: MergePdfFilesInput): Promise<string> {
     const { pdfFilePaths, outputPath } = input;
     this.logger.log(`Merging ${pdfFilePaths.length} PDF files into ${outputPath}`);
 
+    if (pdfFilePaths.length <= ConsolidatedReportService.PDF_MERGE_CHUNK_SIZE) {
+      await this.mergePdfChunk(pdfFilePaths, outputPath);
+      return outputPath;
+    }
+
+    const intermediateFiles: string[] = [];
+    try {
+      for (let i = 0; i < pdfFilePaths.length; i += ConsolidatedReportService.PDF_MERGE_CHUNK_SIZE) {
+        const chunk = pdfFilePaths.slice(i, i + ConsolidatedReportService.PDF_MERGE_CHUNK_SIZE);
+        const intermediatePath = path.join(this.tempDirectory, `merge-intermediate-${i}-${Date.now()}.pdf`);
+        await this.mergePdfChunk(chunk, intermediatePath);
+        intermediateFiles.push(intermediatePath);
+        this.logger.log(`Created intermediate PDF ${intermediateFiles.length} from ${chunk.length} inputs`);
+      }
+      await this.mergePdfChunk(intermediateFiles, outputPath);
+    } finally {
+      for (const f of intermediateFiles) {
+        await fsPromises.unlink(f).catch(() => {});
+      }
+    }
+
+    this.logger.log(`PDF merge complete: ${outputPath}`);
+    return outputPath;
+  }
+
+  private async mergePdfChunk(filePaths: string[], outputPath: string): Promise<void> {
     const mergedPdf = await PDFDocument.create();
 
-    for (let i = 0; i < pdfFilePaths.length; i++) {
+    for (let i = 0; i < filePaths.length; i++) {
       try {
-        const pdfBuffer = await fsPromises.readFile(pdfFilePaths[i]);
+        const pdfBuffer = await fsPromises.readFile(filePaths[i]);
         const pdf = await PDFDocument.load(pdfBuffer);
         const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        
-        copiedPages.forEach((page) => {
-          mergedPdf.addPage(page);
-        });
-        
-        this.logger.log(`Added ${copiedPages.length} pages from PDF ${i + 1}`);
-        await fsPromises.unlink(pdfFilePaths[i]);
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+        await fsPromises.unlink(filePaths[i]);
       } catch (error) {
-        this.logger.error(`Failed to process PDF buffer ${i + 1}: ${error.message}`);
+        this.logger.error(`Failed to process PDF ${i + 1}: ${error.message}`);
         throw new Error(`Failed to process PDF ${i + 1}: ${error.message}`);
       }
     }
 
     const mergedPdfBytes = await mergedPdf.save();
     await fsPromises.writeFile(outputPath, Buffer.from(mergedPdfBytes));
-    this.logger.log(`PDF merge complete. Total pages: ${mergedPdf.getPageCount()}`);
-
-    return outputPath;
   }
 
   async getConsolidatedReportPath(input: GetConsolidatedReportPathInput): Promise<string> {
@@ -333,37 +353,17 @@ export class ConsolidatedReportService {
     this.logger.log(`Merging ${csvFilePaths.length} CSV files into ${outputPath}`);
 
     const allHeaders: string[] = [];
-    const allRows: Record<string, string>[] = [];
 
-    for (let i = 0; i < csvFilePaths.length; i++) {
-      const content = await fsPromises.readFile(csvFilePaths[i], 'utf8');
-      const lines = content.split(/\r?\n/).filter((line) => line.trim());
-      if (lines.length === 0) continue;
-
-      const headerLine = lines[0];
-      const headers = this.parseCsvLine(headerLine);
-      const fileRows: Record<string, string>[] = [];
-
-      for (let j = 1; j < lines.length; j++) {
-        const values = this.parseCsvLine(lines[j]);
-        const row: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          row[h] = values[idx] ?? '';
-        });
-        fileRows.push(row);
-      }
-
+    for (const filePath of csvFilePaths) {
+      const fd = await fsPromises.open(filePath, 'r');
+      const buf = Buffer.alloc(4096);
+      const { bytesRead } = await fd.read(buf, 0, buf.length, 0);
+      await fd.close();
+      const firstLine = buf.toString('utf8', 0, bytesRead).split(/\r?\n/)[0];
+      if (!firstLine) continue;
+      const headers = this.parseCsvLine(firstLine);
       for (const h of headers) {
-        if (!allHeaders.includes(h)) {
-          allHeaders.push(h);
-        }
-      }
-      allRows.push(...fileRows);
-
-      try {
-        await fsPromises.unlink(csvFilePaths[i]);
-      } catch (e) {
-        this.logger.warn(`Failed to unlink temp CSV ${csvFilePaths[i]}: ${e?.message}`);
+        if (!allHeaders.includes(h)) allHeaders.push(h);
       }
     }
 
@@ -371,14 +371,47 @@ export class ConsolidatedReportService {
     const extraHeaders = allHeaders.filter((h) => !DISCOVERY_CSV_HEADER_ORDER.includes(h));
     const allHeadersOrdered = [...orderedHeaders, ...extraHeaders];
 
-    const headerLine = allHeadersOrdered.map((h) => (h.includes(',') || h.includes('"') ? `"${h.replace(/"/g, '""')}"` : h)).join(',');
-    const dataLines = allRows.map((row) =>
-      allHeadersOrdered.map((h) => escapeCsvValue(row[h] ?? '')).join(',')
-    );
-    const outputContent = [headerLine, ...dataLines].join('\n');
-    await fsPromises.writeFile(outputPath, outputContent);
+    const headerLine = allHeadersOrdered.map((h) =>
+      (h.includes(',') || h.includes('"') ? `"${h.replace(/"/g, '""')}"` : h)
+    ).join(',');
 
-    this.logger.log(`CSV merge complete. Total rows: ${allRows.length}`);
+    const writeStream = fs.createWriteStream(outputPath);
+    writeStream.write(headerLine + '\n');
+
+    let totalRows = 0;
+    for (const filePath of csvFilePaths) {
+      const content = await fsPromises.readFile(filePath, 'utf8');
+      const lines = content.split(/\r?\n/).filter((line) => line.trim());
+      if (lines.length <= 1) {
+        await fsPromises.unlink(filePath).catch(() => {});
+        continue;
+      }
+
+      const fileHeaders = this.parseCsvLine(lines[0]);
+      for (let j = 1; j < lines.length; j++) {
+        const values = this.parseCsvLine(lines[j]);
+        const outputLine = allHeadersOrdered.map((h) => {
+          const idx = fileHeaders.indexOf(h);
+          return escapeCsvValue(idx >= 0 ? (values[idx] ?? '') : '');
+        }).join(',');
+        const canContinue = writeStream.write(outputLine + '\n');
+        if (!canContinue) {
+          await new Promise<void>((resolve) => writeStream.once('drain', resolve));
+        }
+        totalRows++;
+      }
+
+      await fsPromises.unlink(filePath).catch((e) => {
+        this.logger.warn(`Failed to unlink temp CSV ${filePath}: ${e?.message}`);
+      });
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      writeStream.end(() => resolve());
+      writeStream.on('error', reject);
+    });
+
+    this.logger.log(`CSV merge complete. Total rows: ${totalRows}`);
     return outputPath;
   }
 

@@ -1,5 +1,6 @@
-import { Controller, BadRequestException, Get, Post, Body, StreamableFile, Logger, Inject, Optional, Param, NotFoundException } from '@nestjs/common';
+import { Controller, BadRequestException, Get, Post, Body, StreamableFile, Logger, Inject, Optional, Param, NotFoundException, Res } from '@nestjs/common';
 import * as path from 'path';
+import * as fs from 'fs';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { Auth, Permission } from '@netapp-cloud-datamigrate/auth-lib';
 import { LoggerFactory, LoggerService } from '@netapp-cloud-datamigrate/logger-lib';
@@ -73,14 +74,17 @@ export class ReportsController {
 
     const workflowId = `consolidated-report-${fileServerId}-${Date.now()}`;
     
-    // Initialize status in database before starting workflow
-    await this.consolidatedReportService.initializeStatus(fileServerId, workflowId, configName);
-
-    await this.temporalClientService.startWorkflow({
-      workflowName: WORKFLOWS.CONSOLIDATED_REPORT,
-      workflowId,
-      args: [{ fileServerId, configName, format: reportFormat }],
-    });
+    try {
+      await this.temporalClientService.startWorkflow({
+        workflowName: WORKFLOWS.CONSOLIDATED_REPORT,
+        workflowId,
+        args: [{ fileServerId, configName, format: reportFormat }],
+      });
+      await this.consolidatedReportService.initializeStatus(fileServerId, workflowId, configName);
+    } catch (error) {
+      this.logger.error(`Failed to start consolidated report workflow: ${error.message}`);
+      throw error;
+    }
 
     return {
       workflowId,
@@ -155,7 +159,8 @@ export class ReportsController {
   @ApiResponse({ status: 404, description: 'Report not found' })
   async downloadConsolidatedReport(
     @Param('fileServerId') fileServerId: string,
-  ): Promise<StreamableFile> {
+    @Res() res: import('express').Response,
+  ): Promise<void> {
     if (!fileServerId) {
       throw new BadRequestException('fileServerId is required');
     }
@@ -169,18 +174,32 @@ export class ReportsController {
         throw new NotFoundException(`Consolidated report not found for file server ${fileServerId}`);
       }
 
-      const reportBuffer =  await this.consolidatedReportService.readReportFile(reportPath);
- 
-      await this.consolidatedReportService.clearStatus(fileServerId);
-
       const ext = path.extname(reportPath).toLowerCase();
       const isCsv = ext === '.csv';
       const contentType = isCsv ? 'text/csv' : 'application/pdf';
       const extension = isCsv ? '.csv' : '.pdf';
-      
-      return new StreamableFile(reportBuffer, {
-        type: contentType,
-        disposition: `attachment; filename="consolidated-discovery-report-${fileServerId}${extension}"`,
+
+      const stat = await fs.promises.stat(reportPath);
+      res.set({
+        'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="consolidated-discovery-report-${fileServerId}${extension}"`,
+        'Content-Length': stat.size.toString(),
+      });
+
+      const stream = fs.createReadStream(reportPath);
+      stream.pipe(res);
+
+      res.on('finish', () => {
+        this.consolidatedReportService.clearStatus(fileServerId).catch((err) => {
+          this.logger.error(`Failed to clear status after download: ${err.message}`);
+        });
+      });
+
+      stream.on('error', (err) => {
+        this.logger.error(`Stream error during consolidated report download: ${err.message}`);
+        if (!res.headersSent) {
+          res.status(500).end('Download failed');
+        }
       });
     } catch (error) {
       this.logger.error(`Error downloading consolidated report: ${error.message}`);

@@ -117,10 +117,10 @@ export class DiscoveryService {
         const reportData = JSON.parse(latestReport[0]?.reportData);
         const csvFileName = `${jobRunId}-${reportType.toLowerCase()}-report.csv`;
         const csvFilePath = path.join(this.reportsDirectory, csvFileName);
-        this.formatAndWriteToFile(reportData, csvFilePath);
+        await this.formatAndWriteToFile(reportData, csvFilePath);
 
         const pdfBuffer = await this.generatePdfFromData(reportData);
-        fs.writeFileSync(pdfFilePath, pdfBuffer);
+        await fs.promises.writeFile(pdfFilePath, pdfBuffer);
 
         return {
           message: "Report generated successfully",
@@ -134,15 +134,22 @@ export class DiscoveryService {
     }
   }
 
+  private compiledDiscoveryTemplate: ReturnType<typeof hbs.compile> | null = null;
+
+  private async getDiscoveryTemplate(): Promise<ReturnType<typeof hbs.compile>> {
+    if (!this.compiledDiscoveryTemplate) {
+      const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
+      const templateSource = await fs.promises.readFile(templatePath, 'utf8');
+      this.compiledDiscoveryTemplate = hbs.compile(templateSource);
+    }
+    return this.compiledDiscoveryTemplate;
+  }
+
   async generatePdfFromData(reportData: any[]): Promise<Buffer> {
-    const templatePath = path.join(__dirname, '../../templates/views/discovery_pdf_report.hbs');
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
-    const template = hbs.compile(templateSource);
-
+    const template = await this.getDiscoveryTemplate();
     const categories: { [key: string]: any[] } = groupAndOrder(reportData, ReportType.DISCOVERY);
-
-    // Step 2: Generate HTML from template and data
     const htmlOutput = template(categories);
+
     const browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -154,12 +161,14 @@ export class DiscoveryService {
       ],
       protocolTimeout: 60000,
     });
-    const page = await browser.newPage();
-    await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-
-    await browser.close();
-    return Buffer.from(pdfBuffer);
+    try {
+      const page = await browser.newPage();
+      await page.setContent(htmlOutput, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+      return Buffer.from(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
   }
 
   async createJobsPDFReportData(jobRunId: string): Promise<any> {
@@ -184,7 +193,7 @@ export class DiscoveryService {
     }
   }
 
-  formatAndWriteToFile(reportData: any[], filePath: string) {
+  async formatAndWriteToFile(reportData: any[], filePath: string) {
     if (!validateFilePath(filePath)) {
       this.logger.error(`File path contains invalid characters: ${filePath}`);
       throw new Error("File path contains invalid characters.");
@@ -227,7 +236,7 @@ export class DiscoveryService {
       row.map(escapeCsvValue).join(","),
     ].join("\n");
 
-    fs.writeFileSync(filePath, csvContent);
+    await fs.promises.writeFile(filePath, csvContent);
   }
 
   /**
@@ -496,21 +505,28 @@ export class DiscoveryService {
   }
 
   async createZipArchive(filePaths: string[]): Promise<Buffer> {
+    const tempZipPath = path.join(os.tmpdir(), `ndm-zip-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`);
+    await this.createZipArchiveToFile(filePaths, tempZipPath);
+    try {
+      return await fs.promises.readFile(tempZipPath);
+    } finally {
+      await fs.promises.unlink(tempZipPath).catch(() => {});
+    }
+  }
+
+  private createZipArchiveToFile(filePaths: string[], outputPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(outputPath);
       const archive = archiver("zip", { zlib: { level: 9 } });
-      const buffers: Buffer[] = [];
 
-      filePaths.forEach((filePath) => {
-        const fileName = path.basename(filePath);
-        archive.file(filePath, { name: fileName });
-      });
-
-      archive.on("data", (data) => buffers.push(data));
-
-      archive.on("end", () => resolve(Buffer.concat(buffers)));
-
+      output.on("close", () => resolve());
+      output.on("error", (err) => reject(err));
       archive.on("error", (err) => reject(err));
 
+      archive.pipe(output);
+      filePaths.forEach((filePath) => {
+        archive.file(filePath, { name: path.basename(filePath) });
+      });
       archive.finalize();
     });
   }
@@ -519,6 +535,10 @@ export class DiscoveryService {
     const singleRecord = await this.inventoryRepo.findOne({
       where: { fileServerPathId: fileServerId },
     });
+
+    if (!singleRecord) {
+      return [];
+    }
 
     const data = await this.getDataFromParentPath(
       fileServerId,

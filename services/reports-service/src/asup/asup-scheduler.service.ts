@@ -161,6 +161,12 @@ export class AsupSchedulerService {
   async transmitAsupMetrics(): Promise<void> {
     this.logger.log('Starting ASUP payload packaging (via asup-packager)...');
 
+    const transmittedIds = await this.asupStatsService.getUntransmittedIds();
+    if (transmittedIds.length === 0) {
+      this.logger.log('No untransmitted records to package');
+      return;
+    }
+
     const payload = await this.asupPackagerService.packageAsupPayload();
     if (!payload) {
       return;
@@ -176,10 +182,12 @@ export class AsupSchedulerService {
     const archiveFilename = path.basename(archivePath);
     const requestUrl = `${this.asupEndpointUrl.replace(/\/$/, '')}/${archiveFilename}`;
     this.logger.log(`Transmitting ASUP .7z payload to: ${requestUrl}`);
-    const archiveBuffer = await fs.readFile(archivePath);
+    const archiveStream = createReadStream(archivePath);
+    const archiveStat = await fs.stat(archivePath);
     const putOptions = {
       headers: {
         'Content-Type': 'application/x-7z-compressed',
+        'Content-Length': archiveStat.size.toString(),
         'X-ASUP-Source': 'NDM',
         'X-ASUP-Version': '1.3',
         'X-Netapp-Asup-Payload-Checksum': md5Checksum,
@@ -193,7 +201,8 @@ export class AsupSchedulerService {
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= ASUP_TRANSMIT_MAX_RETRIES; attempt++) {
       try {
-        await axios.put(requestUrl, archiveBuffer, putOptions);
+        const stream = attempt === 1 ? archiveStream : createReadStream(archivePath);
+        await axios.put(requestUrl, stream, putOptions);
         this.logger.log('ASUP transmission completed');
         lastError = null;
         break;
@@ -213,7 +222,7 @@ export class AsupSchedulerService {
       throw lastError;
     }
 
-    const recordsMarked = await this.asupStatsService.markAsTransmitted();
+    const recordsMarked = await this.asupStatsService.markAsTransmitted(transmittedIds);
     this.logger.log(`Marked ${recordsMarked} records as transmitted`);
   }
 

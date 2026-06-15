@@ -525,17 +525,18 @@ export class JobRunService {
         throw new Error(`ZIP file not found after creation: ${zipFilePath}`);
       }
 
-      let fileBuffer: Buffer;
-      try {
-        fileBuffer = await fs.promises.readFile(zipFilePath);
-      } catch (readError) {
-        this.logger.error(`projectId: ${projectId} Failed to read ZIP at: ${zipFilePath}`, readError?.stack || readError);
-        throw readError;
-      }
+      const zipStat = await fs.promises.stat(zipFilePath);
+      const digest = await new Promise<string>((resolve, reject) => {
+        const hash = crypto.createHash("sha256");
+        const stream = fs.createReadStream(zipFilePath);
+        stream.on("data", (chunk) => hash.update(chunk));
+        stream.on("end", () => resolve(hash.digest("hex")));
+        stream.on("error", reject);
+      });
       const reportData = {
         filePath: zipFilePath,
-        size: fileBuffer.length,
-        digest: crypto.createHash("sha256").update(fileBuffer).digest("hex"),
+        size: zipStat.size,
+        digest,
       };
       const report = this.reportsRepo.create({
         jobRunId,

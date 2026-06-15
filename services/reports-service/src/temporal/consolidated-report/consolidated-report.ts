@@ -1,6 +1,21 @@
 import { proxyActivities, log } from '@temporalio/workflow';
 import { ActivitiesService } from 'src/activities/activities.service';
 
+const CONCURRENCY_LIMIT = 4;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += CONCURRENCY_LIMIT) {
+    const batch = items.slice(i, i + CONCURRENCY_LIMIT);
+    const batchResults = await Promise.all(batch.map(fn));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 const { 
   getDiscoveryJobsForFileServer,
   generatePdfForJobRun,
@@ -86,27 +101,25 @@ export const GenerateConsolidatedReportWorkflow = async ({
 
     if (format === 'csv') {
       const csvFilePaths: string[] = [];
-      const csvResults = await Promise.all(
-        discoveryJobs.map(async (job) => {
-          try {
-            log.info(`Generating CSV for jobRunId: ${job.jobRunId}, volumePath: ${job.volumePath}`);
-            const csvFilePath = await generateCsvForJobRun({ 
-              jobRunId: job.jobRunId, 
-              volumePath: job.volumePath 
-            });
-            if (csvFilePath) {
-              log.info(`Successfully generated CSV for jobRunId: ${job.jobRunId}`);
-              return { success: true, csvFilePath, volumePath: job.volumePath };
-            } else {
-              log.warn(`No CSV generated for jobRunId: ${job.jobRunId}`);
-              return { success: false, volumePath: job.volumePath };
-            }
-          } catch (error) {
-            log.error(`Failed to generate CSV for jobRunId: ${job.jobRunId}: ${error.message}`);
-            return { success: false, volumePath: job.volumePath, error: error.message };
+      const csvResults = await mapWithConcurrency(discoveryJobs, async (job) => {
+        try {
+          log.info(`Generating CSV for jobRunId: ${job.jobRunId}, volumePath: ${job.volumePath}`);
+          const csvFilePath = await generateCsvForJobRun({ 
+            jobRunId: job.jobRunId, 
+            volumePath: job.volumePath 
+          });
+          if (csvFilePath) {
+            log.info(`Successfully generated CSV for jobRunId: ${job.jobRunId}`);
+            return { success: true as const, csvFilePath, volumePath: job.volumePath };
+          } else {
+            log.warn(`No CSV generated for jobRunId: ${job.jobRunId}`);
+            return { success: false as const, volumePath: job.volumePath };
           }
-        })
-      );
+        } catch (error) {
+          log.error(`Failed to generate CSV for jobRunId: ${job.jobRunId}: ${error.message}`);
+          return { success: false as const, volumePath: job.volumePath, error: error.message };
+        }
+      });
 
       csvResults.forEach((r) => {
         if (r.success) {
@@ -135,27 +148,25 @@ export const GenerateConsolidatedReportWorkflow = async ({
       result.reportPath = reportPath;
     } else {
       const pdfFilePaths: string[] = [];
-      const pdfResults = await Promise.all(
-        discoveryJobs.map(async (job) => {
-          try {
-            log.info(`Generating PDF for jobRunId: ${job.jobRunId}, volumePath: ${job.volumePath}`);
-            const pdfFilePath = await generatePdfForJobRun({ 
-              jobRunId: job.jobRunId, 
-              volumePath: job.volumePath 
-            });
-            if (pdfFilePath) {
-              log.info(`Successfully generated PDF for jobRunId: ${job.jobRunId}`);
-              return { success: true, pdfFilePath, volumePath: job.volumePath };
-            } else {
-              log.warn(`No PDF generated for jobRunId: ${job.jobRunId}`);
-              return { success: false, volumePath: job.volumePath };
-            }
-          } catch (error) {
-            log.error(`Failed to generate PDF for jobRunId: ${job.jobRunId}: ${error.message}`);
-            return { success: false, volumePath: job.volumePath, error: error.message };
+      const pdfResults = await mapWithConcurrency(discoveryJobs, async (job) => {
+        try {
+          log.info(`Generating PDF for jobRunId: ${job.jobRunId}, volumePath: ${job.volumePath}`);
+          const pdfFilePath = await generatePdfForJobRun({ 
+            jobRunId: job.jobRunId, 
+            volumePath: job.volumePath 
+          });
+          if (pdfFilePath) {
+            log.info(`Successfully generated PDF for jobRunId: ${job.jobRunId}`);
+            return { success: true as const, pdfFilePath, volumePath: job.volumePath };
+          } else {
+            log.warn(`No PDF generated for jobRunId: ${job.jobRunId}`);
+            return { success: false as const, volumePath: job.volumePath };
           }
-        })
-      );
+        } catch (error) {
+          log.error(`Failed to generate PDF for jobRunId: ${job.jobRunId}: ${error.message}`);
+          return { success: false as const, volumePath: job.volumePath, error: error.message };
+        }
+      });
 
       pdfResults.forEach((pdfResult) => {
         if (pdfResult.success) {

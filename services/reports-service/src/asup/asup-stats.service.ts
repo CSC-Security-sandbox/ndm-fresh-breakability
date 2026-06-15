@@ -215,18 +215,31 @@ export class AsupStatsService {
   }
 
   /**
-   * Mark all untransmitted records as transmitted.
-   * Called after successful ASUP transmission.
-   * Returns the number of records marked.
+   * Get IDs of all untransmitted records (snapshot for transmission).
    */
-  async markAsTransmitted(): Promise<number> {
+  async getUntransmittedIds(): Promise<string[]> {
+    const query = `SELECT id FROM datamigrator.asup_stats WHERE transmitted = FALSE`;
+    const rows = await this.dataSource.query(query);
+    return (Array.isArray(rows) ? rows : []).map((r: any) => r.id);
+  }
+
+  /**
+   * Mark specific records as transmitted by their IDs.
+   * Called after successful ASUP transmission with the IDs captured before packaging.
+   */
+  async markAsTransmitted(ids?: string[]): Promise<number> {
+    if (!ids || ids.length === 0) {
+      return 0;
+    }
+
     const query = `
       UPDATE datamigrator.asup_stats
       SET transmitted = TRUE
-      WHERE transmitted = FALSE
+      WHERE id = ANY($1)
+        AND transmitted = FALSE
     `;
 
-    const result = await this.dataSource.query(query);
+    const result = await this.dataSource.query(query, [ids]);
     const count = (result as { rowCount?: number })?.rowCount ?? 0;
     
     this.logger.log(`Marked ${count} ASUP stats records as transmitted`);

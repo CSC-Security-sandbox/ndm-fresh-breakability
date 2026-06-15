@@ -17,11 +17,18 @@ export const SQL_QUERIES = {
   `,
 };
 
+const CACHE_MAX_SIZE = 10000;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+interface CacheEntry {
+  projectId: string;
+  expiresAt: number;
+}
+
 @Injectable()
 export class ProjectIdCacheService {
   private readonly logger: LoggerService | Logger;
-  // Service-scoped cache for jobRunId to projectId mapping
-  private jobRunIdToProjectIdMap: Map<string, string> = new Map();
+  private jobRunIdToProjectIdMap: Map<string, CacheEntry> = new Map();
 
   constructor(
     private readonly dataSource: DataSource,
@@ -50,11 +57,15 @@ export class ProjectIdCacheService {
     }
 
     // First try to get from cache
-    let projectId = this.jobRunIdToProjectIdMap.get(jobRunId) || null;
+    const cached = this.jobRunIdToProjectIdMap.get(jobRunId);
+    let projectId: string | null = null;
 
-    if (projectId) {
-      this.logger.log(`Retrieved projectId: ${projectId} from cache for jobRunId: ${jobRunId}`);
-      return projectId;
+    if (cached) {
+      if (Date.now() < cached.expiresAt) {
+        this.logger.log(`Retrieved projectId: ${cached.projectId} from cache for jobRunId: ${jobRunId}`);
+        return cached.projectId;
+      }
+      this.jobRunIdToProjectIdMap.delete(jobRunId);
     }
 
     // If not in cache, try database lookup (handles service restart scenarios)
@@ -74,7 +85,14 @@ export class ProjectIdCacheService {
    */
   setProjectIdInCache(jobRunId: string, projectId: string): void {
     if (projectId && jobRunId) {
-      this.jobRunIdToProjectIdMap.set(jobRunId, projectId);
+      if (this.jobRunIdToProjectIdMap.size >= CACHE_MAX_SIZE) {
+        const firstKey = this.jobRunIdToProjectIdMap.keys().next().value;
+        if (firstKey) this.jobRunIdToProjectIdMap.delete(firstKey);
+      }
+      this.jobRunIdToProjectIdMap.set(jobRunId, {
+        projectId,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
       this.logger.log(`Cached projectId: ${projectId} for jobRunId: ${jobRunId}`);
     } else {
       this.logger.error(`Failed to cache projectId: invalid parameters - jobRunId: '${jobRunId}', projectId: '${projectId}'`);
@@ -147,9 +165,9 @@ export class ProjectIdCacheService {
    * Get cache statistics for monitoring
    */
   getCacheStats(): { size: number; entries: Array<{ jobRunId: string; projectId: string }> } {
-    const entries = Array.from(this.jobRunIdToProjectIdMap.entries()).map(([jobRunId, projectId]) => ({
+    const entries = Array.from(this.jobRunIdToProjectIdMap.entries()).map(([jobRunId, entry]) => ({
       jobRunId,
-      projectId,
+      projectId: entry.projectId,
     }));
 
     return {

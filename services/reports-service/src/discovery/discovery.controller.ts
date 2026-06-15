@@ -209,7 +209,9 @@ export class DiscoveryController {
     if (!reportType || !Object.values(ReportType).includes(reportType)) {
       throw new BadRequestException('Invalid report type. Allowed values are COC or DISCOVERY');
     }
-    this.discoveryService.createReportFile(jobRunId, reportType);
+    this.discoveryService.createReportFile(jobRunId, reportType).catch((err) => {
+      this.logger.error(`Report generation failed for jobRunId: ${jobRunId}: ${err.message}`, err?.stack);
+    });
     return "OK"
   }
 
@@ -234,7 +236,9 @@ export class DiscoveryController {
   async generateJobsReport(
     @Body('jobRunId') jobRunId: string,
   ): Promise<string> {
-    this.discoveryService.createJobsPDFReportData(jobRunId);
+    this.discoveryService.createJobsPDFReportData(jobRunId).catch((err) => {
+      this.logger.error(`Jobs report generation failed for jobRunId: ${jobRunId}: ${err.message}`, err?.stack);
+    });
     return "OK"
   }
 
@@ -247,7 +251,7 @@ export class DiscoveryController {
       this.logger.log(
         `Received discovery completed message: ${JSON.stringify(payload)}`
       );
-      this.discoveryService.createReportFile(payload.jobRunId, 'DISCOVERY');
+      await this.discoveryService.createReportFile(payload.jobRunId, 'DISCOVERY');
       channel.ack(originalMsg);
     } catch (err) {
       this.logger.error(`Error processing inventory message: ${err.message}`);
