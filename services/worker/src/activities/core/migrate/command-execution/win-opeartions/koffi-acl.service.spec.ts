@@ -299,6 +299,90 @@ describe('KoffiAclService', () => {
       expect(result.Attributes).toContain('Archive');
     });
 
+    it('should decode ACE SIDs from the DACL into the returned descriptor', async () => {
+      const fakeSdPtr = Buffer.alloc(8);
+      const fakeDaclPtr = Buffer.alloc(8);
+      const fakeAcePtr = Buffer.alloc(20);
+
+      (service as any).getNamedSecurityInfoAsync.mockImplementation(
+        (_path, _objType, _secInfo, _pOwner, _pGroup, _pDacl, _pSacl, pSD) => {
+          pSD[0] = fakeSdPtr;
+          return Promise.resolve(0);
+        },
+      );
+
+      mockGetSecurityDescriptorControl.mockImplementation((_sd, ctrl, rev) => {
+        ctrl[0] = 0x0004;
+        rev[0] = 1;
+        return true;
+      });
+
+      mockGetSecurityDescriptorOwner.mockImplementation((_sd, owner, def) => {
+        owner[0] = Buffer.from('owner');
+        def[0] = false;
+        return true;
+      });
+      mockGetSecurityDescriptorGroup.mockImplementation((_sd, group, def) => {
+        group[0] = Buffer.from('group');
+        def[0] = false;
+        return true;
+      });
+      mockGetSecurityDescriptorDacl.mockImplementation((_sd, present, dacl, def) => {
+        present[0] = true;
+        dacl[0] = fakeDaclPtr;
+        def[0] = false;
+        return true;
+      });
+      mockGetAce.mockImplementation((_dacl, index, aceOut) => {
+        if (index !== 0) return false;
+        aceOut[0] = fakeAcePtr;
+        return true;
+      });
+      mockConvertSidToStringSidW.mockImplementation((sid, strOut) => {
+        const memory = new Uint8Array(koffi.view(sid, 12));
+        if (memory[0] === 1 && memory[1] === 2) {
+          strOut[0] = Buffer.from('S-1-5-21-2000\0', 'utf16le');
+          return true;
+        }
+        strOut[0] = Buffer.from('S-1-5-21-1000\0', 'utf16le');
+        return true;
+      });
+
+      const decodeSpy = jest.spyOn(koffi, 'decode');
+      decodeSpy.mockImplementation((value: any, arg2: any, arg3?: any, arg4?: any) => {
+        if (value === fakeDaclPtr) {
+          return new Uint8Array([2, 0, 28, 0, 1, 0, 0, 0]);
+        }
+        if (value === fakeAcePtr && arg2 && arg2 !== 'str16') {
+          return new Uint8Array([
+            0, 0x10, 20, 0,
+            0xff, 0x01, 0x1f, 0x00,
+            1, 2, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+          ]);
+        }
+        if (arg2 === 'str16') {
+          return Buffer.from(value).toString('utf16le').replace(/\0+$/, '');
+        }
+        return (koffi.decode as jest.MockedFunction<typeof koffi.decode>).getMockImplementation()?.(value, arg2, arg3 as never, arg4 as never);
+      });
+
+      (service as any).getFileAttributesAsync.mockResolvedValue(0x0020);
+
+      const result = await service.getSecurityDescriptor('C:\\test\\file.txt');
+
+      expect(result.DaclAces).toEqual([
+        expect.objectContaining({
+          Sid: 'S-1-5-21-2000',
+          AccessMask: 0x001f01ff,
+          AceType: 0,
+          AceFlags: 0x10,
+          IsInherited: true,
+        }),
+      ]);
+    });
+
     it('should always call LocalFree even on errors', async () => {
       const fakeSdPtr = Buffer.alloc(8);
       (service as any).getNamedSecurityInfoAsync.mockImplementation(

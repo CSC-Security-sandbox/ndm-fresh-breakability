@@ -118,14 +118,14 @@ export class KoffiAclService {
       // ---- advapi32 functions ----
 
       this.GetNamedSecurityInfoW = advapi32.func('__stdcall', 'GetNamedSecurityInfoW', 'uint32', [
-        'str16',    // pObjectName
-        'uint32',   // ObjectType
-        'uint32',   // SecurityInfo
-        'void **',  // ppsidOwner
-        'void **',  // ppsidGroup
-        'void **',  // ppDacl
-        'void **',  // ppSacl
-        'void **',  // ppSecurityDescriptor
+        'str16',             // pObjectName
+        'uint32',            // ObjectType
+        'uint32',            // SecurityInfo
+        koffi.out('void **'),  // ppsidOwner
+        koffi.out('void **'),  // ppsidGroup
+        koffi.out('void **'),  // ppDacl
+        koffi.out('void **'),  // ppSacl
+        koffi.out('void **'),  // ppSecurityDescriptor
       ]);
 
       this.SetNamedSecurityInfoW = advapi32.func('__stdcall', 'SetNamedSecurityInfoW', 'uint32', [
@@ -139,9 +139,9 @@ export class KoffiAclService {
       ]);
 
       this.GetSecurityDescriptorControl = advapi32.func('__stdcall', 'GetSecurityDescriptorControl', 'bool', [
-        'void *',    // pSecurityDescriptor
-        'uint16 *',  // pControl
-        'uint32 *',  // lpdwRevision
+        'void *',               // pSecurityDescriptor
+        koffi.out('uint16 *'),  // pControl
+        koffi.out('uint32 *'),  // lpdwRevision
       ]);
 
       this.GetSecurityDescriptorLength = advapi32.func('__stdcall', 'GetSecurityDescriptorLength', 'uint32', [
@@ -149,38 +149,38 @@ export class KoffiAclService {
       ]);
 
       this.GetSecurityDescriptorOwner = advapi32.func('__stdcall', 'GetSecurityDescriptorOwner', 'bool', [
-        'void *',    // pSecurityDescriptor
-        'void **',   // pOwner (out SID pointer)
-        'bool *',    // lpbOwnerDefaulted
+        'void *',              // pSecurityDescriptor
+        koffi.out('void **'),  // pOwner (out SID pointer)
+        koffi.out('bool *'),   // lpbOwnerDefaulted
       ]);
 
       this.GetSecurityDescriptorGroup = advapi32.func('__stdcall', 'GetSecurityDescriptorGroup', 'bool', [
-        'void *',    // pSecurityDescriptor
-        'void **',   // pGroup (out SID pointer)
-        'bool *',    // lpbGroupDefaulted
+        'void *',              // pSecurityDescriptor
+        koffi.out('void **'),  // pGroup (out SID pointer)
+        koffi.out('bool *'),   // lpbGroupDefaulted
       ]);
 
       this.GetSecurityDescriptorDacl = advapi32.func('__stdcall', 'GetSecurityDescriptorDacl', 'bool', [
-        'void *',    // pSecurityDescriptor
-        'bool *',    // lpbDaclPresent
-        'void **',   // pDacl
-        'bool *',    // lpbDaclDefaulted
+        'void *',              // pSecurityDescriptor
+        koffi.out('bool *'),   // lpbDaclPresent
+        koffi.out('void **'),  // pDacl
+        koffi.out('bool *'),   // lpbDaclDefaulted
       ]);
 
       this.GetAce = advapi32.func('__stdcall', 'GetAce', 'bool', [
-        'void *',    // pAcl
-        'uint32',    // dwAceIndex
-        'void **',   // pAce (out)
+        'void *',              // pAcl
+        'uint32',              // dwAceIndex
+        koffi.out('void **'),  // pAce (out)
       ]);
 
       this.ConvertSidToStringSidW = advapi32.func('__stdcall', 'ConvertSidToStringSidW', 'bool', [
-        'void *',     // Sid
-        'void **',    // StringSid (out - pointer to LPWSTR)
+        'void *',              // Sid
+        koffi.out('void **'),  // StringSid (out - pointer to LPWSTR)
       ]);
 
       this.ConvertStringSidToSidW = advapi32.func('__stdcall', 'ConvertStringSidToSidW', 'bool', [
-        'str16',    // StringSid
-        'void **',  // Sid (out)
+        'str16',               // StringSid
+        koffi.out('void **'),  // Sid (out)
       ]);
 
       this.GetLengthSid = advapi32.func('__stdcall', 'GetLengthSid', 'uint32', [
@@ -247,7 +247,7 @@ export class KoffiAclService {
       this.logger.log('Koffi ACL service initialized — advapi32 + kernel32 bound');
       return true;
     } catch (error) {
-      this.logger.error(`Failed to initialize koffi ACL bindings: ${error.message}`);
+      this.logger.error(`Failed to initialize koffi ACL bindings: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
@@ -476,7 +476,7 @@ export class KoffiAclService {
     const strOut = [null];
     const ok = this.ConvertSidToStringSidW(sidPtr, strOut);
     if (!ok || !strOut[0]) return '';
-    const sidStr = koffi.decode(strOut[0], 'str16');
+    const sidStr = koffi.decode(strOut[0], 'char16_t', -1);
     this.LocalFree(strOut[0]);
     return sidStr;
   }
@@ -546,12 +546,7 @@ export class KoffiAclService {
       const aceSize = headerBuf[2] | (headerBuf[3] << 8);
       const accessMask = headerBuf[4] | (headerBuf[5] << 8) | (headerBuf[6] << 16) | (headerBuf[7] << 24);
 
-      // SID starts at offset 8 in ACCESS_ALLOWED_ACE / ACCESS_DENIED_ACE
-      const sidPtr = koffi.decode(acePtr, 'void *', { offset: 8 }) ?? acePtr;
-      // Actually, the SID is embedded starting at SidStart field.
-      // For ACCESS_ALLOWED_ACE: Header (4) + Mask (4) = offset 8.
-      // koffi.decode with offset is not directly available, so compute
-      // the pointer arithmetic manually.
+      // SID is embedded at offset 8: ACE_HEADER (4 bytes) + AccessMask (4 bytes)
       const sidOffset = 8; // sizeof(ACE_HEADER) + sizeof(ACCESS_MASK)
       const aceBuf = koffi.decode(acePtr, koffi.array('uint8', aceSize));
       const sidBytes = aceBuf.slice(sidOffset);
@@ -578,15 +573,18 @@ export class KoffiAclService {
    */
   private sidBytesToString(sidBuf: Buffer): string {
     const ptr = koffi.alloc('uint8', sidBuf.length);
-    const target = koffi.decode(ptr, koffi.array('uint8', sidBuf.length));
-    for (let i = 0; i < sidBuf.length; i++) target[i] = sidBuf[i];
+    try {
+      koffi.encode(ptr, 'uint8', Array.from(sidBuf), sidBuf.length);
 
-    const strOut = [null];
-    const ok = this.ConvertSidToStringSidW(ptr, strOut);
-    if (!ok || !strOut[0]) return '';
-    const sidStr = koffi.decode(strOut[0], 'str16');
-    this.LocalFree(strOut[0]);
-    return sidStr;
+      const strOut = [null];
+      const ok = this.ConvertSidToStringSidW(ptr, strOut);
+      if (!ok || !strOut[0]) return '';
+      const sidStr = koffi.decode(strOut[0], 'char16_t', -1);
+      this.LocalFree(strOut[0]);
+      return sidStr;
+    } finally {
+      koffi.free(ptr);
+    }
   }
 
   /**
