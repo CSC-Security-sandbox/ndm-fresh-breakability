@@ -163,7 +163,7 @@ export class RolePermissionService {
 
       const rolePermission = await this.rolePermissionRepository.findOne({
         where: { id },
-        relations: ['role'],
+        relations: { role: true },
       });
 
       if (!rolePermission) {
@@ -213,7 +213,7 @@ export class RolePermissionService {
           [sortField]: sortOrder,
         },
         where,
-        relations: ['role', 'permission'],
+        relations: { role: true, permission: true },
       };
 
       const rolePermissions = await this.rolePermissionRepository.find(options);

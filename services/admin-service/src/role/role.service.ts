@@ -62,7 +62,7 @@ export class RoleService {
         where: {
           role_status: 'active',
         },
-        relations: ['role_permissions'],
+        relations: { role_permissions: true },
       });
 
       this.logger.log('Successfully retrieved roles', {

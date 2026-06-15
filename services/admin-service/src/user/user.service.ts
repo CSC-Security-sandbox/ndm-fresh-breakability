@@ -117,8 +117,8 @@ export class UserService {
             { projectId }, // Users with roles for the specific project
             { projectId: IsNull() } // App admins with global access (projectId is null)
           ],
-          relations: ['user'],
-          select: ['userId']
+          relations: { user: true },
+          select: { userId: true }
         });
 
         if (userRoles.length === 0) {
@@ -170,16 +170,16 @@ export class UserService {
     const [createdByUsers, updatedByUsers, allRoles] = await Promise.all([
       createdByIds.length > 0 ? this.userRepository.find({
         where: { id: In(createdByIds) },
-        select: ['id', 'email', 'user_status'],
+        select: { id: true, email: true, user_status: true },
       }) : [],
       updatedByIds.length > 0 ? this.userRepository.find({
         where: { id: In(updatedByIds) },
-        select: ['id', 'email', 'user_status'],
+        select: { id: true, email: true, user_status: true },
       }) : [],
       this.userRoleRepository.find({
         where: roleWhereConditions,
-        relations: ['role'],
-        select: ['userId', 'roleId', 'projectId'],
+        relations: { role: true },
+        select: { userId: true, roleId: true, projectId: true },
       }),
     ]);
 
@@ -285,7 +285,7 @@ export class UserService {
 
       const user = await this.userRepository.findOne({
         where: { id },
-        relations: ['user_roles'],
+        relations: { user_roles: true },
       });
 
       if (!user) {
@@ -339,7 +339,7 @@ export class UserService {
 
       const user = await this.userRepository.findOne({
         where: { email },
-        relations: ['user_roles', 'user_roles.role', 'user_roles.project'],
+        relations: { user_roles: { role: true, project: true } },
       });
 
       if (!user) {
@@ -380,7 +380,7 @@ export class UserService {
       const roleIds = [...new Set(user.user_roles.map(ur => ur.role.id))];
       const allRolePermissions = await this.rolePermissionRepository.find({
         where: { role: { id: In(roleIds) } },
-        relations: ['permission', 'role'],
+        relations: { permission: true, role: true },
       });
 
       // Create a map of roleId -> permissions for efficient lookup
@@ -413,7 +413,7 @@ export class UserService {
   public async getPermissionsByRoles(roleId: string) {
     const rolePermissions = await this.rolePermissionRepository.find({
       where: { role: { id: roleId } },
-      relations: ['permission'],
+      relations: { permission: true },
     });
     return rolePermissions.map((rp) => rp.permission.permission_name);
   }

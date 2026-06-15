@@ -298,7 +298,7 @@ export class UserRoleService {
     try {
       const userRole = await this.userRoleRepository.findOne({
         where: { id },
-        relations: ['user', 'role', 'project', 'account'],
+        relations: { user: true, role: true, project: true, account: true },
       });
 
       if (!userRole) {
@@ -347,7 +347,7 @@ export class UserRoleService {
           [sortField]: sortOrder,
         },
         where,
-        relations: ['user', 'role', 'project', 'account'],
+        relations: { user: true, role: true, project: true, account: true },
       };
 
       const result = await this.userRoleRepository.find(options);
@@ -380,7 +380,7 @@ export class UserRoleService {
           [sortField]: sortOrder,
         },
         where,
-        relations: ['user_roles', 'user_roles.role'],
+        relations: { user_roles: { role: true } },
       };
       const [users, total] = await this.userRepository.findAndCount(options);
 

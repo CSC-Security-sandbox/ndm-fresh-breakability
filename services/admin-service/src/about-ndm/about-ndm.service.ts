@@ -55,7 +55,7 @@ export class AboutNdmService {
 
       // Worker versions from DB (replaces Prometheus worker_info query)
       const workers = await this.workerRepository.find({
-        select: ['workerName', 'ipAddress', 'workerVersion', 'platform'],
+        select: { workerName: true, ipAddress: true, workerVersion: true, platform: true },
       });
 
       // Group workers by version

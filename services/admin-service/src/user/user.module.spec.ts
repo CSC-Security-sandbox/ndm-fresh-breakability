@@ -18,7 +18,7 @@ describe('UserModule', () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
-          type: 'sqlite',
+          type: 'better-sqlite3',
           database: ':memory:',
           entities: [
             User,

@@ -2242,7 +2242,7 @@ export class UpgradeService implements OnModuleInit, OnModuleDestroy {
       const workflowData = await this.workflowService.getWorkflowStatus(workflowId);
 
       const workers = await this.workerRepository.find({
-        relations: ['stats'],
+        relations: { stats: true },
         where: { currentMulticastWorkflowId: workflowId },
       });
 

@@ -337,8 +337,8 @@ describe('UserService', () => {
         { projectId },
         { projectId: IsNull() }
       ],
-      relations: ['user'],
-      select: ['userId']
+      relations: { user: true },
+      select: { userId: true }
     });
 
     expect(result).toHaveLength(3);
@@ -377,11 +377,11 @@ describe('UserService', () => {
 
     expect(userRoleRepository.find).toHaveBeenCalledWith({
       where: [
-        { projectId }, // Users with roles for the specific project
-        { projectId: IsNull() } // App admins with global access (projectId is null)
+        { projectId },
+        { projectId: IsNull() }
       ],
-      relations: ['user'],
-      select: ['userId']
+      relations: { user: true },
+      select: { userId: true }
     });
 
     expect(result).toEqual([]);
@@ -812,7 +812,7 @@ describe('UserService', () => {
 
     expect(userRepository.findOne).toHaveBeenCalledWith({
       where: { id: '1' },
-      relations: ['user_roles'],
+      relations: { user_roles: true },
     });
 
     expect(userRepository.remove).toHaveBeenCalledWith(user);

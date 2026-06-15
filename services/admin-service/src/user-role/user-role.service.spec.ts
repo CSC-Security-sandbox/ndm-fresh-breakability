@@ -335,7 +335,7 @@ describe('UserRoleService', () => {
 
     expect(userRoleRepository.findOne).toHaveBeenCalledWith({
       where: { id: '1' },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -362,7 +362,7 @@ describe('UserRoleService', () => {
 
     expect(userRoleRepository.findOne).toHaveBeenCalledWith({
       where: { id: '1' },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -459,7 +459,7 @@ describe('UserRoleService', () => {
       take: 10,
       order: { id: 'ASC' },
       where: {},
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -486,7 +486,7 @@ describe('UserRoleService', () => {
       take: 10,
       order: { id: 'ASC' },
       where: { user: { id: '1' } },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -513,7 +513,7 @@ describe('UserRoleService', () => {
       take: 10,
       order: { id: 'ASC' },
       where: { role: { id: '1' } },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -542,7 +542,7 @@ describe('UserRoleService', () => {
       take: 10,
       order: { id: 'ASC' },
       where: { project: { id: '1' } },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 
@@ -571,7 +571,7 @@ describe('UserRoleService', () => {
       take: 10,
       order: { id: 'ASC' },
       where: { account: { id: '1' } },
-      relations: ['user', 'role', 'project', 'account'],
+      relations: { user: true, role: true, project: true, account: true },
     });
   });
 

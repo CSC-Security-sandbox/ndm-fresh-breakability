@@ -121,7 +121,7 @@ export class ProjectService {
         [sortField]: sortOrder,
       },
       where: filter,
-      relations: ['account'],
+      relations: { account: true },
     };
 
     const projects = await this.projectRepository.find(options);
@@ -130,12 +130,12 @@ export class ProjectService {
       projects.map(async (project) => {
         const createdByUser = await this.userRepository.findOne({
           where: { id: project.created_by },
-          select: ['id', 'email', 'user_status'],
+          select: { id: true, email: true, user_status: true },
         });
 
         const updatedByUser = await this.userRepository.findOne({
           where: { id: project.updated_by },
-          select: ['id', 'email', 'user_status'],
+          select: { id: true, email: true, user_status: true },
         });
 
         return {
@@ -164,12 +164,12 @@ export class ProjectService {
       order: {
         [sortField]: sortOrder,
       },
-      relations: ['account'],
+      relations: { account: true },
     };
 
     const account = await this.accountRepository.findOne({
       where: { id: account_id },
-      relations: ['projects'],
+      relations: { projects: true },
     });
 
     if (!account) {
@@ -185,7 +185,7 @@ export class ProjectService {
           userId: userId,
           accountId: account_id,
         },
-        select: ['projectId'],
+        select: { projectId: true },
       });
 
       const allowedProjectIds = userRoles.map((ur) => ur.projectId);
@@ -207,12 +207,12 @@ export class ProjectService {
       projects.map(async (project) => {
         const createdByUser = await this.userRepository.findOne({
           where: { id: project.created_by },
-          select: ['id', 'email', 'user_status'],
+          select: { id: true, email: true, user_status: true },
         });
 
         const updatedByUser = await this.userRepository.findOne({
           where: { id: project.updated_by },
-          select: ['id', 'email', 'user_status'],
+          select: { id: true, email: true, user_status: true },
         });
 
         return {

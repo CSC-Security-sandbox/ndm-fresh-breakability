@@ -506,7 +506,7 @@ describe('ProjectService', () => {
 
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: accountId },
-        relations: ['projects'],
+        relations: { projects: true },
       });
 
       expect(userRoleRepository.find).toHaveBeenCalledWith({
@@ -514,7 +514,7 @@ describe('ProjectService', () => {
           userId: userMock.user.id,
           accountId: accountId,
         },
-        select: ['projectId'],
+        select: { projectId: true },
       });
 
       expect(projectRepository.find).toHaveBeenCalledWith(
@@ -527,7 +527,7 @@ describe('ProjectService', () => {
           order: {
             created_at: 'ASC',
           },
-          relations: ['account'],
+          relations: { account: true },
         }),
       );
 
@@ -638,12 +638,12 @@ describe('ProjectService', () => {
       );
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: accountId },
-        relations: ['projects'],
+        relations: { projects: true },
       });
       expect(result2).toEqual(projects);
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: accountId },
-        relations: ['projects'],
+        relations: { projects: true },
       });
       expect(result).toEqual(projects);
     });
@@ -658,7 +658,7 @@ describe('ProjectService', () => {
       ).rejects.toThrow(NotFoundException);
       expect(accountRepository.findOne).toHaveBeenCalledWith({
         where: { id: '121' },
-        relations: ['projects'],
+        relations: { projects: true },
       });
     });
   });

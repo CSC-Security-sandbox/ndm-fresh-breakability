@@ -28,7 +28,7 @@ describe('ProjectModule', () => {
     module = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
-          type: 'sqlite',
+          type: 'better-sqlite3',
           database: ':memory:',
           entities: [
             Account,

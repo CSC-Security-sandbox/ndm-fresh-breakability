@@ -96,7 +96,7 @@ describe('RolePermissionService', () => {
       expect(result).toEqual(mockRolePermissions);
       expect(rolePermissionRepository.find).toHaveBeenCalledWith({
         order: { '': 'ASC' },
-        relations: ['role', 'permission'],
+        relations: { role: true, permission: true },
         skip: 0,
         take: 1,
         where: {},
@@ -114,7 +114,7 @@ describe('RolePermissionService', () => {
         take: 1,
         skip: 0,
         order: { '': 'ASC' },
-        relations: ['role', 'permission'],
+        relations: { role: true, permission: true },
       });
     });
 
@@ -449,7 +449,7 @@ describe('RolePermissionService', () => {
       expect(result).toEqual(rolePermission);
       expect(rolePermissionRepository.findOne).toHaveBeenCalledWith({
         where: { id },
-        relations: ['role'],
+        relations: { role: true },
       });
     });
 
