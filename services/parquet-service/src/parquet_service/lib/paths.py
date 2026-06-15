@@ -71,10 +71,7 @@ def atomic_parquet(final_path: Path) -> Iterator[Path]:
     tmp = final_path.with_suffix(final_path.suffix + ".tmp")
     try:
         yield tmp
-        # footer validation — raises if the file is not a complete Parquet
-        pq.ParquetFile(str(tmp)).metadata
-        os.replace(tmp, final_path)
-        _fsync_dir(final_path.parent)
+        promote_atomically(tmp, final_path)
     except BaseException:
         with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
@@ -93,9 +90,25 @@ def sweep_tmp(directory: Path) -> int:
     return n
 
 
-def _fsync_dir(directory: Path) -> None:
+# --- D7 atomic-seal primitives (single source of truth, shared by ParquetWriter + atomic_parquet) ---
+
+
+def fsync_dir(directory: Path) -> None:
+    """fsync a directory entry so a contained rename/unlink is durable (D7)."""
     fd = os.open(str(directory), os.O_RDONLY)
     try:
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def validate_parquet_footer(path: Path) -> None:
+    """Read just the Parquet footer; raises if the file is truncated or not valid Parquet (D7)."""
+    pq.read_metadata(str(path))
+
+
+def promote_atomically(tmp: Path, final: Path) -> None:
+    """The D7 seal sequence: footer-validate the .tmp -> atomic rename -> fsync the parent dir."""
+    validate_parquet_footer(tmp)
+    tmp.replace(final)  # atomic on POSIX within the same mount
+    fsync_dir(final.parent)

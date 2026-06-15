@@ -9,7 +9,6 @@ with the list of entry-ids in that file so the caller can XACK them — and ONLY
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,20 +16,13 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .paths import promote_atomically
 from .schema import (
     COMPRESSION,
     COMPRESSION_LEVEL,
     DATA_PAGE_SIZE,
     DICTIONARY_COLUMNS,
 )
-
-
-def _fsync_dir(directory: Path) -> None:
-    fd = os.open(str(directory), os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
 
 
 @dataclass
@@ -132,9 +124,7 @@ class ParquetWriter:
         cur = self._cur
         assert cur is not None
         cur.writer.close()                       # footer flushed into cur.tmp
-        pq.ParquetFile(str(cur.tmp)).metadata    # footer validation (raises on corruption)
-        os.replace(cur.tmp, cur.path)            # atomic on POSIX within the same mount
-        _fsync_dir(cur.path.parent)
+        promote_atomically(cur.tmp, cur.path)    # validate footer -> atomic rename -> fsync(dir) (D7)
         if self._on_seal:                        # ack-after-seal: caller XACKs only now
             self._on_seal(SealInfo(path=cur.path, entry_ids=list(cur.entry_ids), rows=cur.rows))
         self._n += 1

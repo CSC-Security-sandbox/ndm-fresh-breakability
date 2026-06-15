@@ -11,9 +11,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from .config import get_settings
-from .workflow import activities as acts
-from .workflow.merge_child import MergeSortChildWorkflow, merge_sort_activity
-from .workflow.scan_ingestion import ScanIngestionWorkflow
+from .workflow.registry import ALL_ACTIVITIES, ALL_WORKFLOWS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -27,16 +25,8 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=s.task_queue,
-        workflows=[ScanIngestionWorkflow, MergeSortChildWorkflow],
-        activities=[
-            acts.consume_stream,
-            acts.sort_per_file,
-            acts.build_merkle,
-            acts.compare_diff,
-            acts.consume_errors,
-            acts.promote_and_retain,
-            merge_sort_activity,
-        ],
+        workflows=ALL_WORKFLOWS,
+        activities=ALL_ACTIVITIES,
         activity_executor=ThreadPoolExecutor(max_workers=8),
     )
 

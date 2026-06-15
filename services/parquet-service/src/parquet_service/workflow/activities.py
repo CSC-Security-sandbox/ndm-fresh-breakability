@@ -19,7 +19,16 @@ from ..lib import merkle, paths, sorter
 from ..lib.comparator import ParquetComparator
 from ..lib.parquet_writer import ParquetWriter, SealInfo
 from ..lib.schema import RAW_SCHEMA, build_kv_metadata
-from .types import DiffInput, IngestLegInput
+from .types import (
+    ConsumeResult,
+    DiffInput,
+    DiffResult,
+    ErrorsResult,
+    IngestLegInput,
+    MerkleResult,
+    PromoteResult,
+    SortResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +38,7 @@ def _redis() -> redis.Redis:
 
 
 @activity.defn(name="consume_stream")
-def consume_stream(leg: IngestLegInput) -> dict:
+def consume_stream(leg: IngestLegInput) -> ConsumeResult:
     """Drain the per-path parquet stream into rotated raw Parquet; ack-after-seal (D7)."""
     s = get_settings()
     client = _redis()
@@ -71,11 +80,11 @@ def consume_stream(leg: IngestLegInput) -> dict:
                 writer.append(payload, entry_id)
                 rows += 1
     writer.close()
-    return {"rows": rows, "side": leg.side, "path_id": leg.path_id}
+    return ConsumeResult(rows=rows, side=leg.side, path_id=leg.path_id)
 
 
 @activity.defn(name="sort_per_file")
-def sort_per_file(leg: IngestLegInput) -> dict:
+def sort_per_file(leg: IngestLegInput) -> SortResult:
     """Sort each rotated raw Parquet -> separate *.sorted.parquet in the same folder (D8)."""
     s = get_settings()
     run = paths.run_dir(s.data_root, leg.account_id, leg.job_config_id, leg.path_id, leg.job_run_id)
@@ -88,22 +97,22 @@ def sort_per_file(leg: IngestLegInput) -> dict:
         sorter.sort_file(raw, dst, RAW_SCHEMA)
         n += 1
         activity.heartbeat(f"sorted={raw.name}")
-    return {"sorted_files": n}
+    return SortResult(sorted_files=n)
 
 
 @activity.defn(name="build_merkle")
-def build_merkle(leg: IngestLegInput) -> dict:
+def build_merkle(leg: IngestLegInput) -> MerkleResult:
     """Build the directory Merkle (children-only hash + copied dir attrs) from the merged file."""
     s = get_settings()
     run = paths.run_dir(s.data_root, leg.account_id, leg.job_config_id, leg.path_id, leg.job_run_id)
     merged = paths.merged_path(run, leg.job_run_id, leg.side)
     out = paths.merkle_path(run, leg.job_run_id)
     root = merkle.MerkleBuilder().build(merged, out)
-    return {"root_hash": root.dir_hash, "n_dirs": root.n_dirs}
+    return MerkleResult(root_hash=root.dir_hash, n_dirs=root.n_dirs)
 
 
 @activity.defn(name="compare_diff")
-def compare_diff(diff: DiffInput) -> dict:
+def compare_diff(diff: DiffInput) -> DiffResult:
     """Diff snapshots, emit OPS_CMD to {jobRunId}:commands, checkpoint by dir_path (D14)."""
     s = get_settings()
     client = _redis()
@@ -131,18 +140,18 @@ def compare_diff(diff: DiffInput) -> dict:
         batch=s.diff_batch_dirs,
     )
     stats = cmp.run()
-    return {"commands_emitted": stats.commands_emitted, "subtrees_skipped": stats.subtrees_skipped}
+    return DiffResult(commands_emitted=stats.commands_emitted, subtrees_skipped=stats.subtrees_skipped)
 
 
 @activity.defn(name="consume_errors")
-def consume_errors(leg: IngestLegInput) -> dict:
+def consume_errors(leg: IngestLegInput) -> ErrorsResult:
     """Consume {jobRunId}:errors -> error Parquet under <jobRunId>/errors/ (write-only, Phase 1, D18)."""
     # TODO: drain errors stream to ERROR_SCHEMA Parquet via ParquetWriter, ack-after-seal.
     raise NotImplementedError("error-stream -> error Parquet (write-only) — SPEC §3.3 / D18")
 
 
 @activity.defn(name="promote_and_retain")
-def promote_and_retain(diff: DiffInput) -> dict:
+def promote_and_retain(diff: DiffInput) -> PromoteResult:
     """On diff completion: drop raw/+*.sorted, delete the older snapshot, keep current as prior (D14)."""
     # TODO: implement retention per §8 (fsync(dir) after unlink). Dest-leg snapshot dropped at baseline.
     raise NotImplementedError("retention / promotion — SPEC §8 / D14")

@@ -15,11 +15,11 @@ with workflow.unsafe.imports_passed_through():
     from ..config import get_settings
     from ..lib import paths, sorter
     from ..lib.schema import RAW_SCHEMA
-    from .types import IngestLegInput
+    from .types import IngestLegInput, MergeResult
 
 
 @activity.defn(name="merge_sort")
-def merge_sort_activity(leg: IngestLegInput) -> dict:
+def merge_sort_activity(leg: IngestLegInput) -> MergeResult:
     """k-way merge of the *.sorted.parquet files -> merged/<run>-<side>.parquet."""
     s = get_settings()
     run = paths.run_dir(s.data_root, leg.account_id, leg.job_config_id, leg.path_id, leg.job_run_id)
@@ -29,13 +29,13 @@ def merge_sort_activity(leg: IngestLegInput) -> dict:
         sorted_inputs, out, RAW_SCHEMA,
         fan_in=s.merge_fan_in, mem_budget_bytes=s.merge_mem_budget_bytes, spill_dir=s.spill_dir,
     )
-    return {"inputs": len(sorted_inputs), "merged": str(out)}
+    return MergeResult(inputs=len(sorted_inputs), merged=str(out))
 
 
 @workflow.defn(name="MergeSortChildWorkflow")
 class MergeSortChildWorkflow:
     @workflow.run
-    async def run(self, leg: IngestLegInput) -> dict:
+    async def run(self, leg: IngestLegInput) -> MergeResult:
         return await workflow.execute_activity(
             merge_sort_activity,
             leg,

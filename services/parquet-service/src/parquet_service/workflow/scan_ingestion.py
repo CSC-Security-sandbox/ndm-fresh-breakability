@@ -27,7 +27,14 @@ with workflow.unsafe.imports_passed_through():
         sort_per_file,
     )
     from .merge_child import MergeSortChildWorkflow
-    from .types import DiffInput, IngestLegInput, JobRunStatus, RunMode, ScanIngestionInput
+    from .types import (
+        DiffInput,
+        IngestLegInput,
+        JobRunStatus,
+        RunMode,
+        ScanIngestionInput,
+        ScanIngestionResult,
+    )
 
 _ACTIVITY_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=5),
@@ -53,7 +60,7 @@ class ScanIngestionWorkflow:
 
     # --- main ---
     @workflow.run
-    async def run(self, inp: ScanIngestionInput) -> dict:
+    async def run(self, inp: ScanIngestionInput) -> ScanIngestionResult:
         workflow.logger.info("ScanIngestion start jobRun=%s mode=%s", inp.job_run_id, inp.run_mode)
 
         legs = [_leg(inp, inp.source_path_id, "src")]
@@ -82,7 +89,11 @@ class ScanIngestionWorkflow:
         )
 
         # TODO: signal the parent MigrationWorkflow with {status, commands_emitted} (SPEC §6 / completion).
-        return {"jobRunId": inp.job_run_id, **diff_res}
+        return ScanIngestionResult(
+            job_run_id=inp.job_run_id,
+            commands_emitted=diff_res.commands_emitted,
+            subtrees_skipped=diff_res.subtrees_skipped,
+        )
 
     async def _ingest_leg(self, leg: IngestLegInput) -> None:
         await workflow.execute_activity(
