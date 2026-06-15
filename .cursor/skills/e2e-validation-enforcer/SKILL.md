@@ -1,6 +1,6 @@
 ---
 name: e2e-validation-enforcer
-description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 14 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, DLM focus markers, file/directory operation parity, and file/directory metadata-change parity. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking directory coverage parity with files, when checking E2E robustness, or when working in ndm-api-tests/.
+description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 15 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, DLM focus markers, file/directory operation parity, file/directory metadata-change parity, and source↔destination data sanity after migration. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking directory coverage parity with files, when checking source/destination data sanity, when checking E2E robustness, or when working in ndm-api-tests/.
 disable-model-invocation: true
 ---
 
@@ -20,7 +20,7 @@ Audits and (on confirmation) fixes NDM API E2E tests in [ndm-api-tests/](../../.
 - Never touch product source under `services/`. Fixtures must match what the service actually emits (see [reference.md](reference.md)).
 - Treat `disable-model-invocation: true`: only run when explicitly invoked.
 
-## The 14 rules
+## The 15 rules
 
 Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 
@@ -40,6 +40,7 @@ Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 | 12 | Cutover fixtures actually fail when content is wrong | A cutover fixture with no rows, or with rows whose checksum/path values are stale placeholders. Covered by rules 2 and 3. | blocker |
 | 13 | File add/change/delete operations have a matching directory operation | A test that adds, changes, or deletes **files** (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`, or any helper that only touches files) without a corresponding directory add/change/delete in the same scenario | major |
 | 14 | File metadata-change steps have a matching directory metadata-change step | A step that changes **file** metadata (atime, mtime, permissions/mode, owner/group, SID/ACL, stamp) without a corresponding **directory** metadata change | major |
+| 15 | Every test that completes a migration verifies source↔destination data sanity | A test that runs a migration to `COMPLETED_JOBRUN` without asserting source and destination data sanity per the applicable rules above (checksum match, exact counts, file+directory parity, metadata parity) | blocker |
 
 ## Canonical column sets
 
@@ -71,6 +72,7 @@ E2E Validation Enforcer — Findings
 - [ ] R12 Cutover fixtures non-vacuous:   <count> file(s)
 - [ ] R13 File ops have directory ops:    <count> test(s)
 - [ ] R14 File meta has directory meta:   <count> step(s)
+- [ ] R15 Migration data sanity (src↔dst): <count> test(s)
 ```
 
 Under each rule, list `path/to/file.go:LINE — short description`.
@@ -95,6 +97,7 @@ Run these searches (use the `Grep`/`Glob` tools, not shell):
 | R12 | JSON cutover fixture with `[]` or only stale `Target Checksum` keys | `ndm-api-tests/validators/**/*cutover*.json` |
 | R13 | `AddDataToVolume\|ModifyDataOnVolume\|RemoveDeltaFromVolume\|AddData\|ModifyData\|RemoveData\|createnew\|fsutil file\|dd if=` (file ops) — then confirm the same scenario also has a directory op (`mkdir`/`rmdir`/`AddDir`/`RemoveDir`/rename of a directory) | `ndm-api-tests/tests/**/*_test.go` |
 | R14 | `preserveAccessTime\|preservePermissions\|atime\|mtime\|chmod\|chown\|Chmod\|Chown\|SetPermissions\|StampMetaData\|ModifyMetadata\|touch -` (file metadata change) — then confirm a matching directory metadata change exists | `ndm-api-tests/tests/**/*_test.go` |
+| R15 | `CreateMigrationJob` + `WaitForJobState(..., COMPLETED_JOBRUN)` — then confirm source↔destination data sanity is asserted (`ChecksumMatchStatus` = `yes`, exact counts, file+dir parity, metadata parity) and not just job completion | `ndm-api-tests/tests/**/*_test.go` |
 
 ### Step 2 — Cite each finding
 
@@ -110,6 +113,7 @@ Example findings produced against the current tree:
 - `ndm-api-tests/tests/e2e/TC-SUPPORT-BUNDLE_test.go — R10 runs migration + cutover with no ValidateReport / CountMigrationReportRows calls.`
 - `ndm-api-tests/tests/e2e/TC-004_test.go:293 — R13 AddDataToVolume / RemoveDeltaFromVolume act on files only; no matching directory add/delete in the scenario.`
 - `ndm-api-tests/tests/e2e/TC-002_test.go:220 — R14 preserveAccessTime/preservePermissions exercise file metadata only; no directory metadata change step.`
+- `ndm-api-tests/tests/e2e/TC-001_test.go — R15 migration completes but no source↔destination data sanity assertion (ChecksumMatchStatus / exact counts) beyond job completion.`
 
 ### Step 3 — Confirm
 
@@ -316,6 +320,43 @@ Expect(destDirPerm).To(Equal(expectedDirPerm))
 
 Tie directory metadata into the report assertions too: for SMB confirm `Source/Target ACE Details` and SID columns on directory rows; for NFS confirm `Source/Destination Unix Permissions`, UID, and GID on directory rows.
 
+### R15 — Source↔destination data sanity after every completed migration
+
+Principle: **every test that completes a migration MUST verify source and destination data sanity according to the applicable rules above** — it is not enough to assert the job reached `COMPLETED_JOBRUN`. Reusing the rules already defined:
+
+1. **Checksum match (data integrity):** the CoC report's `ChecksumMatchStatus` column MUST be `"yes"` for every file row (source checksum == destination checksum). This proves bytes actually transferred correctly. Requires the full-column fixture from R1.
+2. **Exact counts (R6):** assert the exact number of migrated file rows (`CountCocFileOnlyRows`) equals the expected source file count — no `>=`.
+3. **File + directory parity (R13):** assert both file rows and directory rows reached the destination.
+4. **Metadata parity (R14):** assert the metadata columns (SMB SID/ACE, NFS UID/GID/permissions) match between source and destination for both files and directories.
+
+Add a single data-sanity block after migration completes:
+
+```go
+By("R15: Verifying source↔destination data sanity after migration")
+
+// 1) Full-column CoC validation (R1) — includes checksums + metadata
+result, err := ValidateReport(migrationJobRunID, JobTypeMigration,
+    fmt.Sprintf("../../validators/%s/src_to_dest_vol_migration.json", PROTOCOL_TYPE),
+    volumeReplacementMap)
+Expect(err).NotTo(HaveOccurred(), "migration CoC validation failed for %s", migrationJobRunID)
+
+// 2) Data integrity: every file row must have ChecksumMatchStatus == "yes"
+mismatches, err := CountCocChecksumMismatches(migrationJobRunID) // helper: rows where ChecksumMatchStatus == "no"
+Expect(err).NotTo(HaveOccurred())
+Expect(mismatches).To(BeZero(),
+    "data sanity failed: %d file(s) have mismatched source/destination checksums", mismatches)
+
+// 3) Exact file count (R6)
+fileRows, err := CountCocFileOnlyRows(migrationJobRunID)
+Expect(err).NotTo(HaveOccurred())
+Expect(fileRows).To(Equal(expectedSourceFileCount),
+    "data sanity failed: expected %d files migrated but CoC shows %d", expectedSourceFileCount, fileRows)
+```
+
+If `CountCocChecksumMismatches` does not exist, add it under `ndm-api-tests/utils/` mirroring `CountCocFileOnlyRows` (count rows where the `ChecksumMatchStatus` column equals `"no"`). Do not change product source.
+
+Scope note: this applies to functional migration tests. RBAC/permission-flow smoke tests whose intent is authorization (not data fidelity) may document a justified exception in a comment, but any test that exists to prove migration correctness MUST include the sanity block.
+
 ## Verification after fixes
 
 ```bash
@@ -333,4 +374,4 @@ Re-run the audit. The findings checklist must be all-zero before declaring done.
 - Column source of truth: [reference.md](reference.md)
 - E2E test conventions: [`.cursor/skills/e2e-testing/SKILL.md`](../e2e-testing/SKILL.md)
 - Go/Ginkgo review rules: [`.cursor/rules/go-tests.mdc`](../../rules/go-tests.mdc)
-- Always-on guardrails for the same 14 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)
+- Always-on guardrails for the same 15 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)

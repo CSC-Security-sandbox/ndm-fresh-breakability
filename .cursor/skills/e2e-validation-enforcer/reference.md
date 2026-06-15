@@ -155,6 +155,9 @@ From [`ndm-api-tests/utils/report_validator.go`](../../../ndm-api-tests/utils/re
 | `CountMigrationReportRows(jobRunID)` | total row count in `coc-report.csv` | R6, R10 |
 | `CountCocFileOnlyRows(jobRunID)` | file-only rows (non-empty `Destination Checksum`) | R6 |
 | `CountDeletedReportRows(jobRunID)` | row count in `deleted-report.csv` | R5 |
+| `CountCocChecksumMismatches(jobRunID)` *(add if missing)* | rows where `ChecksumMatchStatus` == `"no"` | R15 |
+
+`ChecksumMatchStatus` (CoC column) is the source↔destination data-integrity signal: `"yes"` means source checksum == destination checksum. For R15 data sanity, every file row must be `"yes"`. Directory rows are always `"yes"` (no content). If `CountCocChecksumMismatches` does not exist, add it under `ndm-api-tests/utils/` mirroring `CountCocFileOnlyRows`.
 
 From [`ndm-api-tests/utils/jobs.go`](../../../ndm-api-tests/utils/jobs.go) (and friends):
 
