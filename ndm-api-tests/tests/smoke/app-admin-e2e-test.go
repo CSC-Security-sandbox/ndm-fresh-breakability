@@ -76,22 +76,31 @@ var _ = Describe("App Admin Source File Server Test", func() {
 		var err error
 		var resp *http.Response
 
-		sourceConfigId, resp, err = CreateFileServer(sourceParams, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
+		if NeedsGCNVManualUpload() {
+			sourceConfigId, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[0]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+		} else {
+			sourceConfigId, resp, err = CreateFileServer(sourceParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating source file server")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			defer resp.Body.Close()
+		}
 		Expect(sourceConfigId).NotTo(BeEmpty(), "sourceConfigID is empty")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		defer resp.Body.Close()
-		By(fmt.Sprintf("Source file server created with config ID: %#v", resp))
 
 		By("Retrieving file server information by ID")
-		sourcePathId, err := GetExportPathID("source", clonedSourceVolumes[0], sourceConfigId, headers)
+		var sourcePathId string
+		if NeedsGCNVManualUpload() {
+			sourcePathId, err = GetSourcePathIDForGCNV(clonedSourceVolumes[0], sourceConfigId, headers)
+		} else {
+			sourcePathId, err = GetExportPathID("source", clonedSourceVolumes[0], sourceConfigId, headers)
+		}
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 
 		By("Creating a new discovery job for the source server")
 		jobParams := DiscoveryJobParams{
 			SourcePathIDs:            []string{sourcePathId},
 			ExcludeOlderThan:         nil,
-			ExcludeFilePatterns:      "",
+			ExcludeFilePatterns:      "*/.snapshot",
 			PreserveAccessTime:       false,
 			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,
@@ -131,21 +140,30 @@ var _ = Describe("App Admin Source File Server Test", func() {
 			Workers:          []string{workerId},
 			WorkingDirectory: "",
 		}
-		destinationConfigId, resp, err = CreateFileServer(destinationParams, headers)
-		Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
+		if NeedsGCNVManualUpload() {
+			destinationConfigId, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[0]}, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+		} else {
+			destinationConfigId, resp, err = CreateFileServer(destinationParams, headers)
+			Expect(err).NotTo(HaveOccurred(), "Error creating destination file server")
+			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
+			defer resp.Body.Close()
+		}
 		Expect(destinationConfigId).NotTo(BeEmpty(), "Destination config ID should not be empty")
-		Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
-		defer resp.Body.Close()
 
 		By("Getting destination file server details")
-		destinationPathId, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigId, headers)
+		if NeedsGCNVManualUpload() {
+			destinationPathId, err = GetSourcePathIDForGCNV(clonedDestVolumes[0], destinationConfigId, headers)
+		} else {
+			destinationPathId, err = GetExportPathID("destination", clonedDestVolumes[0], destinationConfigId, headers)
+		}
 		Expect(err).NotTo(HaveOccurred(), "Error getting destination export path ID")
 
 		By("Creating a new discovery job for the destination server")
 		destJobParams := DiscoveryJobParams{
 			SourcePathIDs:            []string{destinationPathId},
 			ExcludeOlderThan:         nil,
-			ExcludeFilePatterns:      "",
+			ExcludeFilePatterns:      "*/.snapshot",
 			PreserveAccessTime:       false,
 			FirstRunAt:               GetCurrentUTCTimestamp(),
 			CreatedBy:                nil,

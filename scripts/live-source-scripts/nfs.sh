@@ -11,11 +11,14 @@
 #   file with mtime changes as fast as possible – no sleep, no delay.
 #   Use this to stress-test retry logic / conflict detection.
 #
-# Operations (both modes):
+# Operations (random mode):
 #   TOUCH_MTIME    – change mtime only (atime preserved)
 #   CHANGE_UID_GID – change owner uid:gid
-#   CREATE_FILE    – create a new file with random content  (random mode only)
-#   DELETE_FILE    – delete a random file  (random mode only)
+#   CREATE_FILE    – create a new file with random content
+#   DELETE_FILE    – delete a random file
+#   CREATE_DIR     – create a new directory with 1-3 files inside
+#   DELETE_DIR     – delete a script-created directory + its contents
+#   APPEND_DATA    – append random bytes to an existing file
 #
 # Every operation is logged as a JSON line to the log file.
 #
@@ -114,8 +117,9 @@ declare -a dirs=()
 declare -a files=()
 
 build_state() {
-    mapfile -d '' dirs  < <(find "$MOUNT" -mindepth 1 -type d -print0)
-    mapfile -d '' files < <(find "$MOUNT" -mindepth 1 -type f -print0)
+    # timeout caps slow NFS scans; partial results are fine for churn
+    mapfile -d '' dirs  < <(timeout 30s find "$MOUNT" -mindepth 1 -type d -print0 2>/dev/null || true)
+    mapfile -d '' files < <(timeout 30s find "$MOUNT" -mindepth 1 -type f -print0 2>/dev/null || true)
     echo "[scan] ${#dirs[@]} dirs, ${#files[@]} files under $MOUNT" >&2
 }
 
@@ -220,30 +224,18 @@ op_create_file() {
 
     local fname="churn_$(printf '%06d' "$FILE_COUNTER")_${RANDOM}.txt"
     local fpath="$parent/$fname"
-    local size=$(( RANDOM % 4097 ))   # 0–4096 bytes
-    local ok=0
+    local size=$(( (RANDOM % 4096) + 1 ))   # 1–4096 bytes
 
-    if (( size > 0 )); then
-        dd if=/dev/urandom of="$fpath" bs=1 count="$size" 2>/dev/null && ok=1
-    else
-        : > "$fpath" && ok=1
-    fi
-
-    if (( ok == 1 )); then
+    if dd if=/dev/urandom of="$fpath" bs="$size" count=1 2>/dev/null; then
         (( FILE_COUNTER++ )) || true
         files+=("$fpath")
-        local rel
-        rel=$(relative_path "$fpath")
-        log_op "CREATE_FILE" "$rel" "{\"size_bytes\":$size}"
+        log_op "CREATE_FILE" "$(relative_path "$fpath")" "{\"size_bytes\":$size}"
     else
-        local rel
-        rel=$(relative_path "$fpath")
-        log_error "CREATE_FILE" "$rel" "write failed"
+        log_error "CREATE_FILE" "$(relative_path "$fpath")" "write failed"
     fi
 }
 
 op_delete_file() {
-    # Keep at least 5 files in the tree
     (( ${#files[@]} <= 5 )) && return
 
     local idx=$(( RANDOM % ${#files[@]} ))
@@ -259,16 +251,100 @@ op_delete_file() {
     fi
 }
 
+op_create_dir() {
+    local parent
+    parent=$(pick_random_dir)
+
+    local dname="churn_dir_$(printf '%06d' "$DIR_COUNTER")_${RANDOM}"
+    local dpath="$parent/$dname"
+
+    if mkdir -p "$dpath" 2>/dev/null; then
+        (( DIR_COUNTER++ )) || true
+        dirs+=("$dpath")
+        local rel
+        rel=$(relative_path "$dpath")
+        log_op "CREATE_DIR" "$rel" "{}"
+
+        local file_count=$(( (RANDOM % 3) + 1 ))
+        for (( fc = 0; fc < file_count; fc++ )); do
+            local fname="churn_$(printf '%06d' "$FILE_COUNTER")_${RANDOM}.txt"
+            local fpath="$dpath/$fname"
+            local size=$(( (RANDOM % 4096) + 1 ))
+            if dd if=/dev/urandom of="$fpath" bs="$size" count=1 2>/dev/null; then
+                (( FILE_COUNTER++ )) || true
+                files+=("$fpath")
+                log_op "CREATE_FILE" "$(relative_path "$fpath")" "{\"size_bytes\":$size,\"in_new_dir\":true}"
+            fi
+        done
+    else
+        log_error "CREATE_DIR" "$(relative_path "$dpath")" "mkdir failed"
+    fi
+}
+
+op_delete_dir() {
+    (( ${#dirs[@]} <= 3 )) && return
+
+    local attempts=0
+    while (( attempts < 10 )); do
+        (( attempts++ ))
+        local idx=$(( RANDOM % ${#dirs[@]} ))
+        local target="${dirs[$idx]}"
+
+        # Only delete directories created by this script
+        [[ "$(basename "$target")" != churn_dir_* ]] && continue
+        [[ "$target" == "$MOUNT" ]] && continue
+
+        local rel
+        rel=$(relative_path "$target")
+
+        if rm -rf "$target" 2>/dev/null; then
+            dirs=("${dirs[@]:0:$idx}" "${dirs[@]:$((idx+1))}")
+            local -a new_files=()
+            for f in "${files[@]}"; do
+                [[ "$f" != "$target"/* ]] && new_files+=("$f")
+            done
+            files=("${new_files[@]}")
+            log_op "DELETE_DIR" "$rel" "{}"
+            return
+        else
+            log_error "DELETE_DIR" "$rel" "rm -rf failed"
+            return
+        fi
+    done
+}
+
+op_append_data() {
+    (( ${#files[@]} == 0 )) && return
+
+    local idx=$(( RANDOM % ${#files[@]} ))
+    local target="${files[$idx]}"
+    [[ ! -f "$target" ]] && return
+
+    local rel
+    rel=$(relative_path "$target")
+    local append_size=$(( (RANDOM % 1024) + 1 ))   # 1-1024 bytes
+
+    if dd if=/dev/urandom bs="$append_size" count=1 2>/dev/null >> "$target"; then
+        log_op "APPEND_DATA" "$rel" "{\"appended_bytes\":$append_size}"
+    else
+        log_error "APPEND_DATA" "$rel" "append failed"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Weighted operation picker
-# Weights: TOUCH_MTIME=3, CHANGE_UID_GID=3, CREATE_FILE=2, DELETE_FILE=1  (sum = 9)
+# Weights: TOUCH_MTIME=2, CHANGE_UID_GID=2, CREATE_FILE=2, DELETE_FILE=1,
+#          CREATE_DIR=2, DELETE_DIR=1, APPEND_DATA=2  (sum = 12)
 # ---------------------------------------------------------------------------
 pick_op() {
-    local r=$(( RANDOM % 9 ))
-    if   (( r < 3 )); then echo "op_touch_mtime"
-    elif (( r < 6 )); then echo "op_change_uid_gid"
-    elif (( r < 8 )); then echo "op_create_file"
-    else                   echo "op_delete_file"
+    local r=$(( RANDOM % 12 ))
+    if   (( r < 2 )); then echo "op_touch_mtime"
+    elif (( r < 4 )); then echo "op_change_uid_gid"
+    elif (( r < 6 )); then echo "op_create_file"
+    elif (( r < 7 )); then echo "op_delete_file"
+    elif (( r < 9 )); then echo "op_create_dir"
+    elif (( r < 10 )); then echo "op_delete_dir"
+    else                    echo "op_append_data"
     fi
 }
 
@@ -316,6 +392,7 @@ trap 'RUNNING=0; echo "" >&2; echo "Churn script stopping..." >&2' INT TERM
 # Main
 # ---------------------------------------------------------------------------
 FILE_COUNTER=0
+DIR_COUNTER=0
 
 DURATION_DISPLAY="$DURATION"
 (( DURATION == 0 )) && DURATION_DISPLAY="\"unlimited\""
@@ -393,5 +470,5 @@ while (( RUNNING == 1 )); do
 done
 
 ELAPSED=$(( $(date -u +%s) - START_TIME ))
-log_op "SCRIPT_STOP" "$MOUNT" "{\"mode\":\"random\",\"files_created\":$FILE_COUNTER,\"elapsed_s\":$ELAPSED}"
+log_op "SCRIPT_STOP" "$MOUNT" "{\"mode\":\"random\",\"files_created\":$FILE_COUNTER,\"dirs_created\":$DIR_COUNTER,\"elapsed_s\":$ELAPSED}"
 echo "NFS churn finished." >&2

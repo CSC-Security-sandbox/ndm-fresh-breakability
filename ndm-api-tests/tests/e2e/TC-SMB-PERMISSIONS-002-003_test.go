@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	. "ndm-api-tests/utils"
+	"net/http"
 	"strings"
 	"time"
 
@@ -68,6 +69,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
 			var migrationJobConfigIDs []string
+			var resp *http.Response
 
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
@@ -129,14 +131,23 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred(), "Error creating source SMB file server")
+			if NeedsGCNVManualUpload() {
+				sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[3]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating source SMB file server")
+				defer resp.Body.Close()
+			}
 			Expect(sourceConfigID).NotTo(BeEmpty(), "sourceConfigID is empty")
-			defer resp.Body.Close()
 			LogDebug(fmt.Sprintf("Source file server created: %s", sourceConfigID))
 
 			By("Getting source export path ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[3], sourceConfigID, headers)
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred(), "Error getting source export path")
 			LogDebug(fmt.Sprintf("Source export path ID: %s", sourcePathID1))
 
@@ -266,12 +277,21 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[2]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred())
+				defer resp.Body.Close()
+			}
 
 			By("Getting the destination file server export path ID")
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[2], destinationConfigID, headers)
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			Wait(5)
@@ -431,6 +451,7 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 			var sourceConfigID, sourcePathID1 string
 			var destinationConfigID, destinationPathID1 string
 			var migrationJobConfigIDs []string
+			var resp *http.Response
 			// Generate unique ID for FileServer names
 			uniqueID := uuid.New().String()[:8]
 			By("Ensuring Windows worker is joined to Active Directory domain")
@@ -489,12 +510,21 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			sourceConfigID, resp, err := CreateFileServer(sourceParams, headers)
-			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
+			if NeedsGCNVManualUpload() {
+				sourceConfigID, err = CreateSourceFileServerForGCNV(sourceParams, []string{clonedSourceVolumes[3]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV source file server")
+			} else {
+				sourceConfigID, resp, err = CreateFileServer(sourceParams, headers)
+				Expect(err).NotTo(HaveOccurred())
+				defer resp.Body.Close()
+			}
 
 			By("Getting source export path ID")
-			sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				sourcePathID1, err = GetSourcePathIDForGCNV(clonedSourceVolumes[3], sourceConfigID, headers)
+			} else {
+				sourcePathID1, err = GetExportPathID("source", clonedSourceVolumes[3], sourceConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			Wait(3)
@@ -594,11 +624,20 @@ var _ = Describe("TC-SMB-PERMISSIONS-002: Test SMB permissions with and without 
 				Workers:          []string{workerId1},
 				WorkingDirectory: "",
 			}
-			destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
-			Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
+			if NeedsGCNVManualUpload() {
+				destinationConfigID, err = CreateSourceFileServerForGCNV(destinationParams, []string{clonedDestVolumes[2]}, headers)
+				Expect(err).NotTo(HaveOccurred(), "Error creating GCNV destination file server")
+			} else {
+				destinationConfigID, resp, err = CreateFileServer(destinationParams, headers)
+				Expect(err).NotTo(HaveOccurred())
+				defer resp.Body.Close()
+			}
 
-			destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			if NeedsGCNVManualUpload() {
+				destinationPathID1, err = GetSourcePathIDForGCNV(clonedDestVolumes[2], destinationConfigID, headers)
+			} else {
+				destinationPathID1, err = GetExportPathID("destination", clonedDestVolumes[2], destinationConfigID, headers)
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			Wait(5)
