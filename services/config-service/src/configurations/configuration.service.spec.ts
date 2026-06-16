@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { LoggerFactory } from '@netapp-cloud-datamigrate/logger-lib';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -267,6 +267,53 @@ describe('ConfigurationService', () => {
         },
         { provide: LoggerFactory, useValue: loggerFactoryMock },
         {
+          provide: DataSource,
+          useValue: {
+            // Route transactional manager calls back to the existing repository
+            // mocks so per-test assertions on mockConfigRepository.save etc. still apply.
+            createQueryRunner: jest.fn().mockReturnValue({
+              connect: jest.fn(),
+              startTransaction: jest.fn(),
+              commitTransaction: jest.fn(),
+              rollbackTransaction: jest.fn(),
+              release: jest.fn(),
+              manager: {
+                save: jest.fn().mockImplementation((entityClass, entity) => {
+                  if (entityClass === ConfigEntity) {
+                    return mockConfigRepository.save(entity);
+                  }
+                  if (entityClass === FileServerWorkingDirectoryMappingEntity) {
+                    return mockMappingRepository.save(entity);
+                  }
+                  if (entityClass === VolumeEntity) {
+                    return mockVolumeRepository.save(entity);
+                  }
+                  return Promise.resolve(entity);
+                }),
+                getRepository: jest.fn().mockImplementation((entityClass) => {
+                  if (entityClass === VolumeEntity) return mockVolumeRepository;
+                  if (entityClass === ConfigEntity) return mockConfigRepository;
+                  if (
+                    entityClass === FileServerWorkingDirectoryMappingEntity
+                  ) {
+                    return mockMappingRepository;
+                  }
+                  return {
+                    save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+                    update: jest.fn().mockResolvedValue({}),
+                    findOne: jest.fn(),
+                    create: jest.fn().mockImplementation((data) => data),
+                  };
+                }),
+                create: jest.fn().mockImplementation((_entityClass, data) => data),
+                findOne: jest.fn(),
+                update: jest.fn().mockResolvedValue({}),
+                delete: jest.fn().mockResolvedValue({}),
+              },
+            }),
+          },
+        },
+        {
           provide: WorkflowService,
           useValue: mockWorkflowService,
         },
@@ -408,7 +455,7 @@ describe('ConfigurationService', () => {
       jest.spyOn(service, 'isRefreshPossible').mockResolvedValue({ isRefreshAvailable: true });
       mockConfigRepository.findOne.mockResolvedValue(null);
       await expect(service.getConfigById(uuidv4())).rejects.toThrow(
-        InternalServerErrorException,
+        NotFoundException,
       );
     });
     it('should handle ERRORED status by setting fileServers volumes to empty array for Other NAS', async () => {
@@ -2398,11 +2445,8 @@ describe('ConfigurationService', () => {
 
     it('should handle non-existent config during removal', async () => {
       mockConfigRepository.findOne.mockResolvedValue(null);
-      mockConfigRepository.remove.mockImplementation(() => {
-        throw new NotFoundException('Config for id not found.');
-      });
 
-      await expect(service.remove(uuidv4())).rejects.toThrow('Config for id');
+      await expect(service.remove(uuidv4())).rejects.toThrow('Config with id');
     });
   });
 
@@ -6562,6 +6606,21 @@ describe('ConfigurationService', () => {
       mockVolumeRepository.find.mockResolvedValue([]);
       mockVolumeRepository.create.mockReturnValue({});
       mockVolumeRepository.save.mockResolvedValue({});
+      mockVolumeRepository.update.mockResolvedValue({});
+      mockFileServerRepository.update.mockResolvedValue({});
+      mockVolumeRepository.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+      jobConfigRepoMock.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
 
       await (service as any).syncVolumesForFileServers(
         fileServers,
@@ -6573,6 +6632,102 @@ describe('ConfigurationService', () => {
       );
 
       expect(mockVolumeRepository.create).toHaveBeenCalled();
+    });
+
+    it('should mark all file servers as refreshed with a single bulk update after processing all zones (CS-010)', async () => {
+      const fileServerId1 = uuidv4();
+      const fileServerId2 = uuidv4();
+      const fileServerId3 = uuidv4();
+
+      const fileServers = [
+        { id: fileServerId1, protocol: Protocol.NFS, workers: [], volumes: [] },
+        { id: fileServerId2, protocol: Protocol.NFS, workers: [], volumes: [] },
+        { id: fileServerId3, protocol: Protocol.NFS, workers: [], volumes: [] },
+      ] as any[];
+
+      const discoveredPathsMap = new Map([
+        [fileServerId1, [{ volumePath: '/path1', directoryPath: '/path1' }]],
+        [fileServerId2, [{ volumePath: '/path2', directoryPath: '/path2' }]],
+        [fileServerId3, [{ volumePath: '/path3', directoryPath: '/path3' }]],
+      ]);
+
+      mockVolumeRepository.update.mockResolvedValue({});
+      mockVolumeRepository.save.mockResolvedValue({});
+      mockVolumeRepository.find.mockResolvedValue([]);
+      mockFileServerRepository.update.mockResolvedValue({});
+      mockVolumeRepository.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+      jobConfigRepoMock.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+
+      await (service as any).syncVolumesForFileServers(
+        fileServers,
+        discoveredPathsMap,
+        'user1',
+        'user1',
+        undefined,
+        ServerType.emc,
+      );
+
+      // Bulk update called exactly once with all file server IDs — not once per zone
+      expect(mockFileServerRepository.update).toHaveBeenCalledTimes(1);
+      expect(mockFileServerRepository.update).toHaveBeenCalledWith(
+        { id: In([fileServerId1, fileServerId2, fileServerId3]) },
+        { isRefreshed: true },
+      );
+    });
+
+    it('should still mark single file server as refreshed via bulk update', async () => {
+      const fileServerId = uuidv4();
+      const fileServers = [
+        { id: fileServerId, protocol: Protocol.NFS, workers: [], volumes: [] },
+      ] as any[];
+
+      const discoveredPathsMap = new Map([
+        [fileServerId, [{ volumePath: '/path1', directoryPath: '/path1' }]],
+      ]);
+
+      mockVolumeRepository.update.mockResolvedValue({});
+      mockVolumeRepository.save.mockResolvedValue({});
+      mockVolumeRepository.find.mockResolvedValue([]);
+      mockFileServerRepository.update.mockResolvedValue({});
+      mockVolumeRepository.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+      jobConfigRepoMock.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+
+      await (service as any).syncVolumesForFileServers(
+        fileServers,
+        discoveredPathsMap,
+        'user1',
+        'user1',
+        undefined,
+        ServerType.emc,
+      );
+
+      expect(mockFileServerRepository.update).toHaveBeenCalledTimes(1);
+      expect(mockFileServerRepository.update).toHaveBeenCalledWith(
+        { id: In([fileServerId]) },
+        { isRefreshed: true },
+      );
     });
   });
 

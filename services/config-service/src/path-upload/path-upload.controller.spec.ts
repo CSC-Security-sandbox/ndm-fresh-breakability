@@ -181,11 +181,10 @@ describe('PathUploadController', () => {
         sendFile: jest.fn(),
         pipe: jest.fn()
       };
-      
+
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       (fs.mkdirSync as jest.Mock).mockImplementation(() => {});
-      (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
-      (fs.createReadStream as jest.Mock).mockImplementation(() => {
+      (fs.writeFileSync as jest.Mock).mockImplementation(() => {
         throw new Error('File not found');
       });
 

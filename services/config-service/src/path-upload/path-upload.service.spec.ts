@@ -157,6 +157,7 @@ describe('PathUploadService', () => {
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
       jest.spyOn(uploadRepo, 'save').mockResolvedValue(new PathUploadsEntity());
+      jest.spyOn(uploadRepo, 'create').mockImplementation((d) => d as any);
       jest.spyOn(volumeRepo, 'findOne').mockResolvedValue(null);
       jest.spyOn(volumeRepo, 'find').mockResolvedValue([]);
       jest
@@ -165,7 +166,7 @@ describe('PathUploadService', () => {
 
       const result = await service.processFileUpload(dto, fileServer.id);
       expect(result).toBeDefined();
-      expect(service.createUpload).toHaveBeenCalled();
+      expect(uploadRepo.save).toHaveBeenCalled();
       expect(result.message).toBe('File upload processed successfully');
       expect(result.newPaths).toBe(2);
       expect(result.alreadyExitingPaths).toBe(0);
@@ -192,6 +193,7 @@ describe('PathUploadService', () => {
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
       jest.spyOn(uploadRepo, 'save').mockResolvedValue(new PathUploadsEntity());
+      jest.spyOn(uploadRepo, 'create').mockImplementation((d) => d as any);
       jest
         .spyOn(volumeRepo, 'findOne')
         .mockResolvedValue(mockExistingPath[0] as any);
@@ -228,6 +230,7 @@ describe('PathUploadService', () => {
       fileServer.exportPathSource = ExportPathSource.MANUAL_UPLOAD;
       jest.spyOn(fileServerRepo, 'findOneBy').mockResolvedValue(fileServer);
       jest.spyOn(uploadRepo, 'save').mockResolvedValue(new PathUploadsEntity());
+      jest.spyOn(uploadRepo, 'create').mockImplementation((d) => d as any);
       jest.spyOn(volumeRepo, 'findOne').mockResolvedValue(null);
       jest.spyOn(volumeRepo, 'find').mockResolvedValue(mockExistingPath as any);
       jest
@@ -521,6 +524,100 @@ describe('PathUploadService', () => {
       expect(result).toBeDefined();
       expect(result.validPaths.length).toBe(1);
       expect(result.invalidPaths.length).toBe(1);
+    });
+
+    it('should bulk-save existing paths in one volumeRepo.save call instead of N sequential saves (CS-020)', async () => {
+      const uploadId = 'existing-upload-id';
+      const fileServerId = 'file-server-id';
+      const mockUpload = new PathUploadsEntity();
+      mockUpload.uploadId = uploadId;
+      mockUpload.fileServerId = fileServerId;
+
+      const mockValidationResult = {
+        validPaths: [
+          { volumePath: '/path/1', id: 'upload_1', reachableCount: 1, message: 'ok' },
+          { volumePath: '/path/2', id: 'upload_2', reachableCount: 1, message: 'ok' },
+          { volumePath: '/path/3', id: 'upload_3', reachableCount: 1, message: 'ok' },
+        ],
+        invalidPaths: [],
+      };
+
+      // All 3 paths already exist in DB
+      const existingVolumes = [
+        { id: 'vol_1', volumePath: '/path/1', fileServerId, isValid: false, reachableCount: 0 },
+        { id: 'vol_2', volumePath: '/path/2', fileServerId, isValid: false, reachableCount: 0 },
+        { id: 'vol_3', volumePath: '/path/3', fileServerId, isValid: false, reachableCount: 0 },
+      ];
+
+      jest.spyOn(uploadRepo, 'findOne').mockResolvedValue(mockUpload);
+      jest.spyOn(service, 'processValidationResult').mockResolvedValue(mockValidationResult as any);
+      jest.spyOn(volumeRepo, 'find')
+        .mockResolvedValueOnce(existingVolumes as any)  // first call: find existing paths
+        .mockResolvedValueOnce([]);                      // second call: find invalid paths
+      jest.spyOn(volumeRepo, 'save').mockResolvedValue({} as any);
+      jest.spyOn(uploadRepo, 'update').mockResolvedValue({} as any);
+      jobConfigRepoMock.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+
+      await service.processUploadUpdate(mockValidationResult.validPaths, uploadId);
+
+      // volumeRepo.save called exactly once with all 3 existing paths — not 3 times
+      expect(volumeRepo.save).toHaveBeenCalledTimes(1);
+      expect(volumeRepo.save).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ volumePath: '/path/1', isValid: true }),
+          expect.objectContaining({ volumePath: '/path/2', isValid: true }),
+          expect.objectContaining({ volumePath: '/path/3', isValid: true }),
+        ]),
+      );
+    });
+
+    it('should call uploadRepo.update for all paths in parallel (CS-020)', async () => {
+      const uploadId = 'existing-upload-id';
+      const fileServerId = 'file-server-id';
+      const mockUpload = new PathUploadsEntity();
+      mockUpload.uploadId = uploadId;
+      mockUpload.fileServerId = fileServerId;
+
+      const mockValidationResult = {
+        validPaths: [
+          { volumePath: '/path/1', id: 'upload_1', reachableCount: 1, message: 'ok' },
+          { volumePath: '/path/2', id: 'upload_2', reachableCount: 1, message: 'ok' },
+        ],
+        invalidPaths: [
+          { volumePath: '/path/bad', id: 'upload_3', reachableCount: 0, message: 'unreachable' },
+        ],
+      };
+
+      jest.spyOn(uploadRepo, 'findOne').mockResolvedValue(mockUpload);
+      jest.spyOn(service, 'processValidationResult').mockResolvedValue(mockValidationResult as any);
+      jest.spyOn(volumeRepo, 'find').mockResolvedValue([]);
+      jest.spyOn(volumeRepo, 'create').mockImplementation((data: any) => data);
+      jest.spyOn(volumeRepo, 'save').mockResolvedValue({} as any);
+      const uploadUpdateSpy = jest.spyOn(uploadRepo, 'update').mockResolvedValue({} as any);
+      jobConfigRepoMock.createQueryBuilder.mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({}),
+      });
+
+      await service.processUploadUpdate(
+        [...mockValidationResult.validPaths, ...mockValidationResult.invalidPaths],
+        uploadId,
+      );
+
+      // uploadRepo.update called once per path (3 total)
+      expect(uploadUpdateSpy).toHaveBeenCalledTimes(3);
+      expect(uploadUpdateSpy).toHaveBeenCalledWith('upload_1', expect.objectContaining({ validationResponse: expect.stringContaining('SUCCESS') }));
+      expect(uploadUpdateSpy).toHaveBeenCalledWith('upload_2', expect.objectContaining({ validationResponse: expect.stringContaining('SUCCESS') }));
+      expect(uploadUpdateSpy).toHaveBeenCalledWith('upload_3', expect.objectContaining({ validationResponse: expect.stringContaining('ERROR') }));
     });
   });
 

@@ -582,7 +582,7 @@ describe('WorkManagerService', () => {
       expect(mockConfig.fileServers[0].status).toBe('IN_PROGRESS');
     });
 
-    it('should log an error when config repo operation fails', async () => {
+    it('should log and rethrow error when config repo operation fails', async () => {
       const data = {
         configId: 'config-1',
         status: 'FAIL',
@@ -591,7 +591,7 @@ describe('WorkManagerService', () => {
       const error = new Error('database failure');
       (configRepo.findOne as jest.Mock).mockRejectedValue(error);
 
-      await service.validateWorkingDirectory(data as any);
+      await expect(service.validateWorkingDirectory(data as any)).rejects.toThrow('database failure');
       expect(logger.error).toHaveBeenCalledWith(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
       );

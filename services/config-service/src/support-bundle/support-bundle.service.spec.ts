@@ -253,16 +253,17 @@ describe('SupportBundleService', () => {
       });
     });
 
-    it('should handle workflow start error and continue execution', async () => {
+    it('should log and rethrow when workflow start fails', async () => {
       const mockEntity = { id: 1, requestId: mockUuid };
       supportBundleRepo.create.mockReturnValue(mockEntity as any);
       supportBundleRepo.save.mockResolvedValue(mockEntity as any);
       const workflowError = new Error('Workflow failed');
       workflowService.startWorkflow.mockRejectedValue(workflowError);
 
-      const result = await service.create(mockCreateDto, mockUserDetails);
+      await expect(
+        service.create(mockCreateDto, mockUserDetails),
+      ).rejects.toThrow('Workflow failed');
 
-      expect(result).toEqual({ traceId: mockUuid });
       expect(mockLogger.error).toHaveBeenCalledWith(
         `Error while starting SupportBundleWorkflow - ${workflowError.message}`,
       );
