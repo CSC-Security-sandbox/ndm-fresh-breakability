@@ -1,12 +1,12 @@
 ---
 name: e2e-validation-enforcer
-description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 15 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, DLM focus markers, file/directory operation parity, file/directory metadata-change parity, and source↔destination data sanity after migration. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking directory coverage parity with files, when checking source/destination data sanity, when checking E2E robustness, or when working in ndm-api-tests/.
+description: Audits NDM API E2E tests in ndm-api-tests/ for robust report validation and enforces 16 specific rules covering CoC/cutover/discovery report fixtures, deletion-sync, incremental delta counts, pause/resume, custom migration options, rate-limiting smoke, support bundle, DLM focus markers, file/directory operation parity, file/directory metadata-change parity, source↔destination data sanity after migration, and support-bundle control-plane + worker log presence. Use when the user asks to audit/review/enforce E2E test validation, when fixing CoC/cutover/discovery report coverage, when re-enabling cutover or rate-limiting tests, when checking directory coverage parity with files, when checking source/destination data sanity, when checking support-bundle log coverage, when checking E2E robustness, or when working in ndm-api-tests/.
 disable-model-invocation: true
 ---
 
 # E2E Validation Enforcer
 
-Audits and (on confirmation) fixes NDM API E2E tests in [ndm-api-tests/](../../../ndm-api-tests/) so that report validation is robust and the 12 rules below are enforced. Defers to [go-tests.mdc](../../rules/go-tests.mdc) for Go/Ginkgo conventions and to [e2e-testing/SKILL.md](../e2e-testing/SKILL.md) for the broader E2E test structure.
+Audits and (on confirmation) fixes NDM API E2E tests in [ndm-api-tests/](../../../ndm-api-tests/) so that report validation is robust and the 16 rules below are enforced. Defers to [go-tests.mdc](../../rules/go-tests.mdc) for Go/Ginkgo conventions and to [e2e-testing/SKILL.md](../e2e-testing/SKILL.md) for the broader E2E test structure.
 
 ## Behaviour
 
@@ -20,7 +20,7 @@ Audits and (on confirmation) fixes NDM API E2E tests in [ndm-api-tests/](../../.
 - Never touch product source under `services/`. Fixtures must match what the service actually emits (see [reference.md](reference.md)).
 - Treat `disable-model-invocation: true`: only run when explicitly invoked.
 
-## The 15 rules
+## The 16 rules
 
 Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 
@@ -41,6 +41,7 @@ Each rule = Issue → Change → Outcome. Severity is `blocker` unless noted.
 | 13 | File add/change/delete operations have a matching directory operation | A test that adds, changes, or deletes **files** (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`, or any helper that only touches files) without a corresponding directory add/change/delete in the same scenario | major |
 | 14 | File metadata-change steps have a matching directory metadata-change step | A step that changes **file** metadata (atime, mtime, permissions/mode, owner/group, SID/ACL, stamp) without a corresponding **directory** metadata change | major |
 | 15 | Every test that completes a migration verifies source↔destination data sanity | A test that runs a migration to `COMPLETED_JOBRUN` without asserting source and destination data sanity per the applicable rules above (checksum match, exact counts, file+directory parity, metadata parity) | blocker |
+| 16 | Every support-bundle generation confirms control-plane (cp) AND worker logs are present and non-empty | A test that calls `GenerateSupportBundle` / downloads a bundle without asserting both the `control-plane/*.log` files and the `worker/<id>/worker.log` files exist and are non-empty | blocker |
 
 ## Canonical column sets
 
@@ -73,6 +74,7 @@ E2E Validation Enforcer — Findings
 - [ ] R13 File ops have directory ops:    <count> test(s)
 - [ ] R14 File meta has directory meta:   <count> step(s)
 - [ ] R15 Migration data sanity (src↔dst): <count> test(s)
+- [ ] R16 Bundle has cp + worker logs:     <count> test(s)
 ```
 
 Under each rule, list `path/to/file.go:LINE — short description`.
@@ -98,6 +100,7 @@ Run these searches (use the `Grep`/`Glob` tools, not shell):
 | R13 | `AddDataToVolume\|ModifyDataOnVolume\|RemoveDeltaFromVolume\|AddData\|ModifyData\|RemoveData\|createnew\|fsutil file\|dd if=` (file ops) — then confirm the same scenario also has a directory op (`mkdir`/`rmdir`/`AddDir`/`RemoveDir`/rename of a directory) | `ndm-api-tests/tests/**/*_test.go` |
 | R14 | `preserveAccessTime\|preservePermissions\|atime\|mtime\|chmod\|chown\|Chmod\|Chown\|SetPermissions\|StampMetaData\|ModifyMetadata\|touch -` (file metadata change) — then confirm a matching directory metadata change exists | `ndm-api-tests/tests/**/*_test.go` |
 | R15 | `CreateMigrationJob` + `WaitForJobState(..., COMPLETED_JOBRUN)` — then confirm source↔destination data sanity is asserted (`ChecksumMatchStatus` = `yes`, exact counts, file+dir parity, metadata parity) and not just job completion | `ndm-api-tests/tests/**/*_test.go` |
+| R16 | `GenerateSupportBundle\|DownloadSupportBundleZip` — then confirm both `control-plane`/`CheckLogFileExistsAndNotEmpty` (cp logs) AND `worker`/`CheckAllWorkerLogsNotEmpty\|CheckAtLeastTwoWorkerFolders` (worker logs) are asserted | `ndm-api-tests/tests/**/*_test.go` |
 
 ### Step 2 — Cite each finding
 
@@ -114,6 +117,7 @@ Example findings produced against the current tree:
 - `ndm-api-tests/tests/e2e/TC-004_test.go:293 — R13 AddDataToVolume / RemoveDeltaFromVolume act on files only; no matching directory add/delete in the scenario.`
 - `ndm-api-tests/tests/e2e/TC-002_test.go:220 — R14 preserveAccessTime/preservePermissions exercise file metadata only; no directory metadata change step.`
 - `ndm-api-tests/tests/e2e/TC-001_test.go — R15 migration completes but no source↔destination data sanity assertion (ChecksumMatchStatus / exact counts) beyond job completion.`
+- `ndm-api-tests/tests/e2e/TC-SUPPORT-BUNDLE_test.go:343 — R16 cp-log check skips when the file is missing (skip-on-not-exist) so an absent control-plane log passes; worker + cp logs must both be asserted present and non-empty.`
 
 ### Step 3 — Confirm
 
@@ -357,6 +361,40 @@ If `CountCocChecksumMismatches` does not exist, add it under `ndm-api-tests/util
 
 Scope note: this applies to functional migration tests. RBAC/permission-flow smoke tests whose intent is authorization (not data fidelity) may document a justified exception in a comment, but any test that exists to prove migration correctness MUST include the sanity block.
 
+### R16 — Support bundle must contain control-plane (cp) AND worker logs
+
+Principle: **any test that generates/downloads a support bundle MUST assert the bundle actually contains both control-plane (cp) logs and worker logs, present and non-empty.** Generating and downloading a bundle (or unzipping it) without inspecting its contents is not a real validation.
+
+Bundle layout (from `utils/support_bundle_utils.go`):
+- CP logs: `ndm_logs/<projectId>/<date>/control-plane/<service>.log` (`admin-service`, `config-service`, `datamigrator-ui`, `jobs-service`, `reports-service`) — assert via `CheckLogFileExistsAndNotEmpty`.
+- Worker logs: `ndm_logs/<date>/worker/<workerId>/worker.log` — assert via `CheckAllWorkerLogsNotEmpty` (every worker log non-empty) and/or `CheckAtLeastTwoWorkerFolders`.
+
+Common gap: a `strings.Contains(err.Error(), "log file does not exist")` skip means a **missing** cp log silently passes. Remove the skip — a missing or empty cp/worker log MUST fail the test.
+
+```go
+By("R16: Verifying the support bundle contains control-plane and worker logs")
+Expect(GenerateSupportBundle(ProjectId, workerId1, workerId2)).To(Succeed())
+Wait(10)
+Expect(DownloadSupportBundleZip()).To(Succeed())
+Expect(Unzip(zipPath, extractDir)).To(Succeed())
+
+today := time.Now().Format("2006-01-02")
+
+// 1) Control-plane (cp) logs — every expected service log must exist and be non-empty (no skip-on-missing)
+cpLogs := []string{"admin-service.log", "config-service.log", "datamigrator-ui.log", "jobs-service.log", "reports-service.log"}
+for _, logFile := range cpLogs {
+    logPath := fmt.Sprintf("ndm_logs/%s/%s/control-plane/%s", ProjectId, today, logFile)
+    Expect(CheckLogFileExistsAndNotEmpty(extractDir, logPath)).To(Succeed(),
+        "support bundle missing/empty control-plane log: %s", logFile)
+}
+
+// 2) Worker logs — at least the expected worker folders, each worker.log non-empty
+Expect(CheckAtLeastTwoWorkerFolders(extractDir, today, ProjectId)).To(Succeed(), "worker log folders missing in bundle")
+Expect(CheckAllWorkerLogsNotEmpty(extractDir, today)).To(Succeed(), "one or more worker logs missing/empty in bundle")
+```
+
+A bundle test that asserts only cp logs (no worker logs) or only worker logs (no cp logs) is still a violation — both are required.
+
 ## Verification after fixes
 
 ```bash
@@ -374,4 +412,4 @@ Re-run the audit. The findings checklist must be all-zero before declaring done.
 - Column source of truth: [reference.md](reference.md)
 - E2E test conventions: [`.cursor/skills/e2e-testing/SKILL.md`](../e2e-testing/SKILL.md)
 - Go/Ginkgo review rules: [`.cursor/rules/go-tests.mdc`](../../rules/go-tests.mdc)
-- Always-on guardrails for the same 15 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)
+- Always-on guardrails for the same 16 rules: [`.cursor/rules/e2e-validation-enforcer.mdc`](../../rules/e2e-validation-enforcer.mdc)

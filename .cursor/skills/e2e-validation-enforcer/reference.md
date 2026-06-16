@@ -176,6 +176,17 @@ Directories appear in the reports distinctly from files, so directory parity is 
 
 The current data helpers in [`ndm-api-tests/utils/file_server.go`](../../../ndm-api-tests/utils/file_server.go) (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`) operate on **files only** — add directory-equivalent helpers (e.g. `AddDirToVolume`, `RemoveDirFromVolume`, `SetPermissionsOnDir`) mirroring them when fixing R13/R14.
 
+## Support bundle layout (R16)
+
+The downloaded bundle (`ndm_logs.zip`, unzipped via `Unzip`) contains two log families that BOTH must be asserted present and non-empty:
+
+| Log family | Path inside bundle | Helper | Expected files |
+|------------|--------------------|--------|----------------|
+| Control-plane (cp) | `ndm_logs/<projectId>/<date>/control-plane/<service>.log` | `CheckLogFileExistsAndNotEmpty(extractDir, path)` | `admin-service.log`, `config-service.log`, `datamigrator-ui.log`, `jobs-service.log`, `reports-service.log` |
+| Worker | `ndm_logs/<date>/worker/<workerId>/worker.log` | `CheckAllWorkerLogsNotEmpty(extractDir, date)`, `CheckAtLeastTwoWorkerFolders(extractDir, date, projectId)` | one `worker.log` per worker folder |
+
+`<date>` is `time.Now().Format("2006-01-02")`. Helpers live in [`ndm-api-tests/utils/support_bundle_utils.go`](../../../ndm-api-tests/utils/support_bundle_utils.go). Do NOT skip a missing log via `strings.Contains(err.Error(), "log file does not exist")` — a missing/empty cp or worker log must fail the test.
+
 ## Job type / report layout cheatsheet
 
 | Job type | CSV filename(s) | Validator job type constant | Notes |

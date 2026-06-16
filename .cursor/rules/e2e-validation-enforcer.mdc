@@ -1,12 +1,12 @@
 ---
-description: "Always-on guardrails for robust E2E validation in ndm-api-tests. Enforces 15 rules covering CoC/cutover/discovery report fixtures, deletion-sync, exact incremental counts, pause/resume, custom migration options, rate-limiting smoke, support-bundle reports, focus markers, file/directory operation parity, file/directory metadata-change parity, and source↔destination data sanity after migration."
+description: "Always-on guardrails for robust E2E validation in ndm-api-tests. Enforces 16 rules covering CoC/cutover/discovery report fixtures, deletion-sync, exact incremental counts, pause/resume, custom migration options, rate-limiting smoke, support-bundle reports, focus markers, file/directory operation parity, file/directory metadata-change parity, source↔destination data sanity after migration, and support-bundle control-plane + worker log presence."
 globs: "ndm-api-tests/**/*.{go,json}"
 alwaysApply: false
 ---
 
 # E2E Validation Enforcer — Guardrails
 
-Whenever you edit anything under `ndm-api-tests/` (Go tests or JSON fixtures), the 15 rules below MUST hold. For the full audit/fix workflow, detection patterns, column lists, and fix recipes, follow [`.cursor/skills/e2e-validation-enforcer/SKILL.md`](../skills/e2e-validation-enforcer/SKILL.md). Go/Ginkgo conventions are in [`go-tests.mdc`](go-tests.mdc).
+Whenever you edit anything under `ndm-api-tests/` (Go tests or JSON fixtures), the 16 rules below MUST hold. For the full audit/fix workflow, detection patterns, column lists, and fix recipes, follow [`.cursor/skills/e2e-validation-enforcer/SKILL.md`](../skills/e2e-validation-enforcer/SKILL.md). Go/Ginkgo conventions are in [`go-tests.mdc`](go-tests.mdc).
 
 ## MUST
 
@@ -22,17 +22,19 @@ Whenever you edit anything under `ndm-api-tests/` (Go tests or JSON fixtures), t
 10. **R13** Anytime a test adds, changes, or deletes **files** (`AddDataToVolume`, `ModifyDataOnVolume`, `RemoveDeltaFromVolume`, `fsutil file createnew`, `dd if=`, etc.), it MUST include a corresponding directory add/change/delete in the same scenario AND validate the directory change (CoC directory rows with `Type: "directory"` / `total_directories`).
 11. **R14** Anytime a test has a step to change **file** metadata (atime, mtime, permissions/mode, owner/group, SID/ACL, stamp), it MUST add a corresponding **directory** metadata-change step and assert it on the destination.
 12. **R15** Every test that completes a migration (`CreateMigrationJob` reaching `COMPLETED_JOBRUN`) MUST verify source↔destination data sanity per the applicable rules above — checksum match (`ChecksumMatchStatus` = `yes` for all file rows), exact counts (R6), file+directory parity (R13), and metadata parity (R14). Job completion alone is insufficient.
+13. **R16** Every test that generates/downloads a support bundle (`GenerateSupportBundle` / `DownloadSupportBundleZip`) MUST assert the bundle contains BOTH control-plane (cp) logs (`ndm_logs/<projectId>/<date>/control-plane/*.log` via `CheckLogFileExistsAndNotEmpty`) AND worker logs (`ndm_logs/<date>/worker/<id>/worker.log` via `CheckAllWorkerLogsNotEmpty` / `CheckAtLeastTwoWorkerFolders`), each present and non-empty.
 
 ## MUST NOT
 
-13. **R9** MUST NOT commit `XIt(`, `PIt(`, or `Pending(` on rate-limiting / 429 tests under `ndm-api-tests/tests/smoke/`.
-14. **R11** MUST NOT commit focus markers anywhere under `ndm-api-tests/`: `FIt(`, `FDescribe(`, `FContext(`, `FSpecify(`, `FWhen(`.
-15. **R3** MUST NOT introduce `Target Checksum` in any fixture — that column does not exist; use `Destination Checksum`.
-16. **R12** MUST NOT commit a cutover fixture that is `[]` or whose only keys are unknown to the CSV (passes vacuously).
-17. **R13/R14** MUST NOT commit a file add/change/delete or file metadata-change step without its directory counterpart.
-18. **R15** MUST NOT consider a migration test complete on job status alone — without a source↔destination data-sanity assertion.
-19. MUST NOT add new validator paths under `TC-009-JSON` (the directory does not exist; this was the cause of the original disabled-cutover incident).
-20. MUST NOT bypass the helpers in `ndm-api-tests/utils/report_validator.go` by hand-parsing CSV ZIPs in tests. Reuse `ValidateReport`, `CountMigrationReportRows`, `CountCocFileOnlyRows`, `CountDeletedReportRows`.
+14. **R9** MUST NOT commit `XIt(`, `PIt(`, or `Pending(` on rate-limiting / 429 tests under `ndm-api-tests/tests/smoke/`.
+15. **R11** MUST NOT commit focus markers anywhere under `ndm-api-tests/`: `FIt(`, `FDescribe(`, `FContext(`, `FSpecify(`, `FWhen(`.
+16. **R3** MUST NOT introduce `Target Checksum` in any fixture — that column does not exist; use `Destination Checksum`.
+17. **R12** MUST NOT commit a cutover fixture that is `[]` or whose only keys are unknown to the CSV (passes vacuously).
+18. **R13/R14** MUST NOT commit a file add/change/delete or file metadata-change step without its directory counterpart.
+19. **R15** MUST NOT consider a migration test complete on job status alone — without a source↔destination data-sanity assertion.
+20. **R16** MUST NOT consider a support-bundle test complete after only generating/downloading/unzipping — or after asserting only cp logs or only worker logs; both log types must be verified. MUST NOT skip a missing cp/worker log (e.g. `strings.Contains(err.Error(), "log file does not exist")` skip) — a missing or empty log MUST fail.
+21. MUST NOT add new validator paths under `TC-009-JSON` (the directory does not exist; this was the cause of the original disabled-cutover incident).
+22. MUST NOT bypass the helpers in `ndm-api-tests/utils/report_validator.go` by hand-parsing CSV ZIPs in tests. Reuse `ValidateReport`, `CountMigrationReportRows`, `CountCocFileOnlyRows`, `CountDeletedReportRows`.
 
 ## When a violation is detected during editing
 
