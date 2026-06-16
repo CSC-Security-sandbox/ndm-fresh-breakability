@@ -1,0 +1,92 @@
+name: Dependency Version Sync
+
+# Enforces that dependencies shared across services/ and lib/ stay in lock-step
+# (e.g. NestJS, Temporal, TypeScript toolchain, security overrides). Driven by
+# .syncpackrc.json at the repo root. See docs/dependency-sync.md.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '.syncpackrc.json'
+      - 'package.json'
+      - 'services/*/package.json'
+      - 'lib/*/package.json'
+      - '.github/workflows/dependency-sync.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syncpack-lint:
+    name: Lint dependency versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root tooling (syncpack)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run syncpack lint
+        id: lint
+        # Non-blocking for now: the repo has a known drift backlog that will be
+        # fixed in follow-up PRs. Remove `continue-on-error` once the backlog
+        # is cleared so this becomes a hard gate.
+        continue-on-error: true
+        run: |
+          set +e
+          npm run deps:lint | tee syncpack-lint.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit $status
+
+      - name: Summarize results
+        if: always()
+        run: |
+          {
+            echo "## Dependency Version Sync"
+            echo ""
+            if [ ! -f syncpack-lint.log ]; then
+              echo "syncpack lint did not produce output (an earlier step likely failed — check the job log)."
+            elif [ "${{ steps.lint.outputs.status }}" = "0" ]; then
+              echo "All shared dependencies are in sync across services/ and lib/."
+            else
+              mismatches=$(grep -c '^\s*✘' syncpack-lint.log 2>/dev/null || true)
+              mismatches=${mismatches:-0}
+              echo "Found **${mismatches}** version/range mismatch(es) in shared dependency groups."
+              echo ""
+              echo "Run \`npm run deps:fix\` locally to auto-fix, then commit the updated \`package.json\` files."
+              echo ""
+              echo "<details><summary>Full syncpack report</summary>"
+              echo ""
+              echo '```'
+              cat syncpack-lint.log
+              echo '```'
+              echo ""
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload syncpack report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.3.3
+        with:
+          name: syncpack-lint-report
+          path: syncpack-lint.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,18 @@
+{
+  "name": "ndm-monorepo-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repo-wide tooling for the NDM monorepo. Does NOT declare workspaces; each service/lib continues to install and build independently.",
+  "scripts": {
+    "deps:fix": "syncpack fix --dependency-types prod,dev,peer,overrides && syncpack format",
+    "deps:format": "syncpack format",
+    "deps:lint": "syncpack lint --dependency-types prod,dev,peer,overrides",
+    "deps:list": "syncpack list --dependency-types prod,dev,peer,overrides"
+  },
+  "devDependencies": {
+    "syncpack": "15.3.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

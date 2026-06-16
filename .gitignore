@@ -1,0 +1,6 @@
+# Python bytecode under top-level scripts/
+scripts/**/__pycache__/
+
+# Root tooling install (syncpack etc. — see /package.json)
+/node_modules/
+/syncpack-report.csv

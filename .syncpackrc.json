@@ -1,0 +1,205 @@
+{
+  "$schema": "https://unpkg.com/syncpack@15.3.1/dist/schema.json",
+  "source": [
+    "package.json",
+    "services/*/package.json",
+    "lib/*/package.json"
+  ],
+  "sortPackages": true,
+  "sortFirst": [
+    "name",
+    "version",
+    "private",
+    "description",
+    "author",
+    "license",
+    "main",
+    "types",
+    "bin",
+    "scripts",
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "overrides"
+  ],
+  "versionGroups": [
+    {
+      "label": "Frontend (datamigrator-ui) — React/Vite, independent toolchain from backend",
+      "packages": ["datamigrator-ui"],
+      "isIgnored": true
+    },
+    {
+      "label": "peerDependencies in libs are intentionally loose — do not enforce",
+      "dependencyTypes": ["peer"],
+      "isIgnored": true
+    },
+    {
+      "label": "Internal @netapp-cloud-datamigrate libs must be in lock-step",
+      "dependencies": [
+        "@netapp-cloud-datamigrate/**",
+        "@NetApp-Cloud-DataMigrate/**"
+      ]
+    },
+    {
+      "label": "NestJS framework — every backend service & lib must pull the same NestJS",
+      "dependencies": ["@nestjs/**"]
+    },
+    {
+      "label": "Temporal SDK — client/worker/workflow must move together",
+      "dependencies": ["@temporalio/**"]
+    },
+    {
+      "label": "TypeScript & TS toolchain",
+      "dependencies": [
+        "typescript",
+        "ts-jest",
+        "ts-loader",
+        "ts-node",
+        "tsconfig-paths",
+        "typescript-eslint",
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser"
+      ]
+    },
+    {
+      "label": "Jest & test utilities",
+      "dependencies": [
+        "jest",
+        "jest-junit",
+        "@types/jest",
+        "supertest",
+        "@types/supertest"
+      ]
+    },
+    {
+      "label": "ESLint & Prettier toolchain",
+      "dependencies": [
+        "eslint",
+        "eslint-config-prettier",
+        "eslint-plugin-prettier",
+        "@eslint/js",
+        "@eslint/eslintrc",
+        "globals",
+        "prettier"
+      ]
+    },
+    {
+      "label": "Shared @types/*",
+      "dependencies": ["@types/node", "@types/express"]
+    },
+    {
+      "label": "Common runtime libraries",
+      "dependencies": [
+        "axios",
+        "rxjs",
+        "reflect-metadata",
+        "class-transformer",
+        "class-validator",
+        "uuid",
+        "pg",
+        "redis",
+        "winston",
+        "winston-daily-rotate-file",
+        "nest-winston",
+        "express"
+      ]
+    },
+    {
+      "label": "Security-related overrides — must be identical across backend services",
+      "dependencies": [
+        "fast-uri",
+        "follow-redirects",
+        "flatted",
+        "picomatch",
+        "postcss",
+        "multer",
+        "lodash",
+        "form-data",
+        "sha.js",
+        "qs",
+        "@isaacs/brace-expansion",
+        "brace-expansion",
+        "diff",
+        "serialize-javascript",
+        "minimatch",
+        "test-exclude",
+        "handlebars",
+        "protobufjs",
+        "path-to-regexp",
+        "tar",
+        "fast-xml-parser",
+        "glob",
+        "jws",
+        "validator",
+        "@swc/core",
+        "uuid"
+      ],
+      "dependencyTypes": ["overrides"]
+    },
+    {
+      "label": "Everything else may drift independently per sub-project",
+      "dependencies": ["**"],
+      "isIgnored": true
+    }
+  ],
+  "semverGroups": [
+    {
+      "label": "Frontend — leave semver style as authored",
+      "packages": ["datamigrator-ui"],
+      "isIgnored": true
+    },
+    {
+      "label": "peerDependencies — leave loose ranges as authored",
+      "dependencyTypes": ["peer"],
+      "isIgnored": true
+    },
+    {
+      "label": "Overrides must be exact pins (they exist to defeat range resolution)",
+      "dependencyTypes": ["overrides"],
+      "range": ""
+    },
+    {
+      "label": "Runtime & framework deps pinned exact (predictable artifact builds)",
+      "dependencies": [
+        "@nestjs/**",
+        "@temporalio/**",
+        "@netapp-cloud-datamigrate/**",
+        "@NetApp-Cloud-DataMigrate/**",
+        "axios",
+        "pg",
+        "uuid"
+      ],
+      "dependencyTypes": ["prod", "dev"],
+      "range": ""
+    },
+    {
+      "label": "Dev tooling uses caret",
+      "dependencies": [
+        "typescript",
+        "ts-jest",
+        "ts-loader",
+        "ts-node",
+        "tsconfig-paths",
+        "typescript-eslint",
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser",
+        "jest",
+        "jest-junit",
+        "@types/jest",
+        "@types/node",
+        "@types/express",
+        "@types/supertest",
+        "supertest",
+        "eslint",
+        "eslint-config-prettier",
+        "eslint-plugin-prettier",
+        "@eslint/js",
+        "@eslint/eslintrc",
+        "globals",
+        "prettier"
+      ],
+      "dependencyTypes": ["dev"],
+      "range": "^"
+    }
+  ]
+}
