@@ -21,6 +21,9 @@ export class WorkflowService implements OnModuleDestroy {
   private logger: LoggerService;
   private client: Client | null = null;
   private connection: Connection | null = null;
+  // Stores the in-flight connection promise so concurrent callers share one connection
+  // instead of each creating their own (which would leak all but the last one).
+  private connectingPromise: Promise<Client> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -30,21 +33,31 @@ export class WorkflowService implements OnModuleDestroy {
   }
 
   private async getClient(): Promise<Client> {
+    // Already connected — reuse existing client
     if (this.client) return this.client;
 
-    try {
-      this.connection = await Connection.connect(
-        this.configService.get<any>('temporal'),
-      );
-      this.client = new Client({ connection: this.connection });
-      return this.client;
-    } catch (error) {
-      this.logger.error(`Failed to connect to Temporal: ${error}`);
-      if (this.connection) {
-        await this.connection.close();
-      }
-      throw error;
-    }
+    // Connection is in progress — wait for it instead of opening a duplicate
+    if (this.connectingPromise) return this.connectingPromise;
+
+    this.connectingPromise = Connection.connect(
+      this.configService.get<any>('temporal'),
+    )
+      .then((conn) => {
+        this.connection = conn;
+        this.client = new Client({ connection: conn });
+        return this.client;
+      })
+      .catch((error) => {
+        this.logger.error(`Failed to connect to Temporal: ${error}`);
+        // Reset so the next call can retry fresh
+        this.connectingPromise = null;
+        if (this.connection) {
+          this.connection.close();
+        }
+        throw error;
+      });
+
+    return this.connectingPromise;
   }
   
   async startWorkflow(

@@ -105,6 +105,8 @@ export class PathUploadService {
         where: { fileServerId },
       });
 
+      const uploadsToSave: Partial<PathUploadsEntity>[] = [];
+
       for (const row of parsedData) {
         const [volumePath] = row;
         const trimmedPath = volumePath.trim();
@@ -120,8 +122,7 @@ export class PathUploadService {
             `Path ${trimmedPath} already exists for file server ${fileServerId}`,
           );
           uploadStats.alreadyExitingPaths++;
-          // createUpload
-          await this.createUpload({
+          uploadsToSave.push({
             uploadId,
             volumePath: trimmedPath,
             fileServerId: fileServerId,
@@ -132,7 +133,7 @@ export class PathUploadService {
           continue;
         }
         // If the path does not exist, create a new PathUploadsEntity
-        await this.createUpload({
+        uploadsToSave.push({
           uploadId,
           volumePath: trimmedPath,
           fileServerId: fileServerId,
@@ -151,7 +152,7 @@ export class PathUploadService {
         volume entity which are not in the uploadData,
         increment noLongerAvailablePaths count by number of such paths
       */
-      existingPaths.filter(async (path) => {
+      for (const path of existingPaths) {
         const isPathNoLongerAvailable = !parsedData.some(
           (row) => row[0].trim() === path.volumePath,
         );
@@ -160,7 +161,7 @@ export class PathUploadService {
           this.logger.warn(
             `Path ${path.volumePath} is no longer available for file server ${fileServerId}`,
           );
-          await this.createUpload({
+          uploadsToSave.push({
             id: path.id,
             uploadId,
             volumePath: path.volumePath,
@@ -169,10 +170,14 @@ export class PathUploadService {
             action: UploadPathAction.DELETE,
             createdBy: userDetails?.user?.id || null,
           });
-          return true;
         }
-        return false;
-      });
+      }
+
+      if (uploadsToSave.length > 0) {
+        await this.uploadRepo.save(
+          uploadsToSave.map((d) => this.uploadRepo.create(d)),
+        );
+      }
 
       return {
         message: 'File upload processed successfully',
@@ -349,19 +354,18 @@ export class PathUploadService {
       const existingPathsMap = new Map(
         existingPaths.map((v) => [`${v.volumePath}-${fileServerId}`, v]),
       );
+      const pathsToUpdate: VolumeEntity[] = [];
       const newPaths: VolumeEntity[] = [];
 
       for (const path of allPaths) {
         const pathKey = `${path.volumePath}-${fileServerId}`;
         const existingPath = existingPathsMap.get(pathKey);
         if (existingPath) {
-          // Update existing path
           existingPath.isValid = path.isValid;
           existingPath.reachableCount = path.reachableCount;
           existingPath.createdBy = createdBy;
-          await this.volumeRepo.save(existingPath);
+          pathsToUpdate.push(existingPath);
         } else {
-          // Create new path
           const newVolume = this.volumeRepo.create({
             id: path.id,
             volumePath: path.volumePath,
@@ -372,14 +376,20 @@ export class PathUploadService {
           });
           newPaths.push(newVolume);
         }
-        // update the upload record with validation response
-        await this.uploadRepo.update(path.id, {
-          validationResponse: JSON.stringify(
-            `${path.isValid ? 'SUCCESS: ' : 'ERROR: '} ${path.message}`,
-          ),
-        });
       }
+
+      if (pathsToUpdate.length > 0) await this.volumeRepo.save(pathsToUpdate);
       if (newPaths.length > 0) await this.volumeRepo.save(newPaths);
+
+      await Promise.all(
+        allPaths.map((path) =>
+          this.uploadRepo.update(path.id, {
+            validationResponse: JSON.stringify(
+              `${path.isValid ? 'SUCCESS: ' : 'ERROR: '} ${path.message}`,
+            ),
+          }),
+        ),
+      );
 
       // Inactivate all the job configurations that are using invalid paths as sourcePathId or targetPathId
       const inValidPaths = await this.volumeRepo.find({
@@ -561,9 +571,7 @@ export class PathUploadService {
   }
 
   async createUploadDirectory(): Promise<void> {
-    if (!fs.existsSync('/uploads')) {
-      fs.mkdirSync('/uploads', { recursive: true });
-    }
+    await fs.promises.mkdir('/uploads', { recursive: true });
   }
 
   async getUploadedPaths(

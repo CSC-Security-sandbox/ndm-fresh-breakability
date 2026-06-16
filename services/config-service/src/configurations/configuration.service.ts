@@ -9,7 +9,7 @@ import {
   LoggerFactory,
   LoggerService,
 } from '@netapp-cloud-datamigrate/logger-lib';
-import { FindManyOptions, In, Repository } from 'typeorm';
+import { DataSource, FindManyOptions, In, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
 import {
   ConfigErrorMsg,
@@ -78,6 +78,7 @@ export class ConfigurationService {
   private escapeHtml: typeof escapeHtml;
   private sanitizeHtml: typeof sanitizeHtml;
   constructor(
+    private readonly dataSource: DataSource,
     private readonly storageClientFactory: StorageClientFactory,
     @InjectRepository(ConfigEntity)
     private readonly configEntity: Repository<ConfigEntity>,
@@ -231,7 +232,7 @@ export class ConfigurationService {
         total = await this.configEntity.count({ where: filter });
       } else {
         serverConfig = await this.configEntity.find(findOptions);
-        total = await this.configEntity.count();
+        total = await this.configEntity.count({ where: filter });
       }
       return { serverConfig, total };
     } catch (error) {
@@ -332,6 +333,9 @@ export class ConfigurationService {
         },
       });
 
+      if (!config)
+        throw new NotFoundException(`Config for id ${id} not found.`);
+
       const uploads = await this.pathUploadsRepo.find({
         where: {
           fileServerId: In(config.fileServers.map((fs) => fs.id)),
@@ -340,9 +344,6 @@ export class ConfigurationService {
           ),
         },
       });
-
-      if (!config)
-        throw new NotFoundException(`Config for id ${id} not found.`);
 
       if (config?.fileServers) {
         config.fileServers = config.fileServers.map((fileServer) => ({
@@ -775,11 +776,18 @@ export class ConfigurationService {
         hasWorkersMap[key] = (fs?.workers?.length ?? 0) > 0;
       });
 
+      // Fetch all workers across all zones once — reused in loop and health checks below
+      const allWorkerIds = createConfig.fileServers.flatMap((fs) => fs.workers);
+      const allWorkersWithStats: WorkerEntity[] = await this.WorkerEntity.find({
+        where: { workerId: In(allWorkerIds) },
+        relations: { stats: true },
+      });
+
       const fileServerPromises = createConfig.fileServers.map(
         async (fileServer) => {
-          const workers = await this.WorkerEntity.find({
-            where: { workerId: In(fileServer.workers) },
-          });
+          const workers = allWorkersWithStats.filter(
+            (w) => (fileServer.workers as string[]).includes(w.workerId),
+          );
           credentials.push({
             details: {
               hostname: fileServer.host.trim(),
@@ -813,12 +821,6 @@ export class ConfigurationService {
           });
         },
       );
-      const allWorkerIds = createConfig.fileServers.flatMap((fs) => fs.workers);
-      // To fetch all workers associated with all the file servers of the config
-      const workers: WorkerEntity[] = await this.WorkerEntity.find({
-        where: { workerId: In(allWorkerIds) },
-        relations: { stats: true },
-      });
 
       // Config-level status check
       // For Dell: DRAFT if ANY file server has no workers (priority over IN_PROGRESS)
@@ -865,7 +867,7 @@ export class ConfigurationService {
       }
 
       // Check worker health at config level
-      if (workers?.length > 0 && (await this.isAllWorkerUnHealthy(workers)))
+      if (allWorkersWithStats?.length > 0 && (await this.isAllWorkerUnHealthy(allWorkersWithStats)))
         allUnHealthy = true;
       if (allUnHealthy) {
         config.status = ConfigStatus.ERRORED;
@@ -878,10 +880,9 @@ export class ConfigurationService {
           // Get worker IDs from the already-populated workers relation
           const workerIds = fileServer.workers.map((w) => w.workerId);
 
-          const fsWorkers: WorkerEntity[] = await this.WorkerEntity.find({
-            where: { workerId: In(workerIds) },
-            relations: { stats: true },
-          });
+          const fsWorkers = allWorkersWithStats.filter(
+            (w) => workerIds.includes(w.workerId),
+          );
 
           if (
             fsWorkers?.length > 0 &&
@@ -892,12 +893,43 @@ export class ConfigurationService {
           }
         }
       }
-      const update = await this.configEntity.save(config);
+      // --- Transaction: save config + working directory atomically ---
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      let update: ConfigEntity;
+      try {
+        update = await queryRunner.manager.save(ConfigEntity, config);
+
+        if (!allUnHealthy) {
+          const workingDirectory =
+            this.fileServerWorkingDirectoryMappingEntity.create({
+              pathName: createConfig?.workingDirectory?.pathName,
+              pathId: createConfig?.workingDirectory?.pathId,
+              workingDirectory: createConfig?.workingDirectory?.workingDirectory,
+              configId: update.id,
+              createdBy: userId,
+            });
+          await queryRunner.manager.save(
+            FileServerWorkingDirectoryMappingEntity,
+            workingDirectory,
+          );
+        }
+
+        await queryRunner.commitTransaction();
+      } catch (txError) {
+        await queryRunner.rollbackTransaction();
+        throw txError;
+      } finally {
+        await queryRunner.release();
+      }
+      // --- End transaction ---
+
       if (allUnHealthy) {
         return update;
       }
 
-      // Start validation workflow - discovery is handled internally based on serverType
+      // Side effects outside transaction — email and Temporal are not rollback-able
       await this.startValidateWorkingDirectoryWorkflow(
         createConfig,
         update.id,
@@ -917,18 +949,17 @@ export class ConfigurationService {
           })),
         },
       });
-      const workingDirectory =
-        this.fileServerWorkingDirectoryMappingEntity.create({
-          pathName: createConfig?.workingDirectory?.pathName,
-          pathId: createConfig?.workingDirectory?.pathId,
-          workingDirectory: createConfig?.workingDirectory?.workingDirectory,
-          configId: update.id,
-          createdBy: userId,
-        });
-      await this.fileServerWorkingDirectoryMappingEntity.save(workingDirectory);
 
       // refreshConfig handles Dell (via API) and non-Dell (via workers) internally
-      this.refreshConfig(update.id, traceId);
+      this.refreshConfig(update.id, traceId).catch(async (error) => {
+        this.logger.error(
+          `refreshConfig failed for configId ${update.id}, traceId ${traceId}: ${error.message}`,
+        );
+        await this.configEntity.update(update.id, {
+          status: ConfigStatus.ERRORED,
+          errorMessage: error.message,
+        });
+      });
       return update;
     } catch (error) {
       this.logger.error(
@@ -1001,12 +1032,6 @@ export class ConfigurationService {
         const update = updateConfig.fileServers.find(
           (it) => it.id == fileServer.id,
         );
-        const workers = Array.isArray(update?.workers)
-          ? await this.WorkerEntity.find({
-              where: { workerId: In(update.workers) },
-            })
-          : [];
-
         const workersWithStats: WorkerEntity[] = Array.isArray(update?.workers)
           ? await this.WorkerEntity.find({
               where: { workerId: In(update.workers) },
@@ -1027,14 +1052,14 @@ export class ConfigurationService {
             password: update?.password,
           },
           protocol: fileServer.protocol,
-          workers: workers.map((it) => it.workerId),
+          workers: workersWithStats.map((it) => it.workerId),
         });
 
         return this.fileServerEntity.create({
           id: fileServer.id,
           host: update.host.trim(),
           fileServerName: update.fileServerName,
-          workers: workers,
+          workers: workersWithStats,
           createdBy: fileServer.createdBy,
           protocol: fileServer.protocol,
           protocolVersion: update?.protocolVersion,
@@ -1048,7 +1073,7 @@ export class ConfigurationService {
           smartConnectSsip: update.smartConnectSsip, // SSIP for SmartConnect DNS resolution
           smartConnectDnsZone: update.smartConnectDnsZone, // DNS zone from Isilon API
           dnsServer: update.adServerIp, // AD Server IP from UI (SMB)
-          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
+          status: workersWithStats.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
 
@@ -1062,12 +1087,6 @@ export class ConfigurationService {
       );
 
       const newFileServerPromises = newFileServerDTOs.map(async (newFs) => {
-        const workers = Array.isArray(newFs.workers)
-          ? await this.WorkerEntity.find({
-              where: { workerId: In(newFs.workers) },
-            })
-          : [];
-
         const workersWithStats: WorkerEntity[] = Array.isArray(newFs.workers)
           ? await this.WorkerEntity.find({
               where: { workerId: In(newFs.workers) },
@@ -1088,17 +1107,17 @@ export class ConfigurationService {
             password: newFs.password,
           },
           protocol: newFs.protocol,
-          workers: workers.map((it) => it.workerId),
+          workers: workersWithStats.map((it) => it.workerId),
         });
 
         this.logger.debug(
-          `Creating new file server: ${newFs.fileServerName} (${newFs.protocol}) with ${workers.length} workers`,
+          `Creating new file server: ${newFs.fileServerName} (${newFs.protocol}) with ${workersWithStats.length} workers`,
         );
 
         return this.fileServerEntity.create({
           host: newFs.host.trim(),
           fileServerName: newFs.fileServerName,
-          workers: workers,
+          workers: workersWithStats,
           createdBy: userId,
           protocol: newFs.protocol,
           protocolVersion: newFs.protocolVersion,
@@ -1112,7 +1131,7 @@ export class ConfigurationService {
           smartConnectSsip: newFs.smartConnectSsip, // SSIP for SmartConnect DNS resolution
           smartConnectDnsZone: newFs.smartConnectDnsZone, // DNS zone from Isilon API
           dnsServer: newFs.adServerIp, // AD Server IP from UI (SMB)
-          status: workers.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
+          status: workersWithStats.length > 0 ? ConfigStatus.IN_PROGRESS : ConfigStatus.DRAFT, // Per-zone status
         });
       });
 
@@ -1134,8 +1153,6 @@ export class ConfigurationService {
           workingDirectory?.workingDirectory ?? mapping?.workingDirectory,
         pathId: workingDirectory?.pathId ?? mapping?.pathId,
       });
-
-      await this.fileServerWorkingDirectoryMappingEntity.save(mapping);
 
       const existingWorkers = config.fileServers.flatMap(
         (fileServer) => fileServer.workers,
@@ -1227,10 +1244,43 @@ export class ConfigurationService {
         );
       }
 
-      const update = await this.configEntity.save(config);
+      // --- Transaction: save working dir + config + volumes atomically ---
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      let update: ConfigEntity;
+      try {
+        await queryRunner.manager.save(
+          FileServerWorkingDirectoryMappingEntity,
+          mapping,
+        );
+
+        update = await queryRunner.manager.save(ConfigEntity, config);
+
+        if (!allUnHealthy) {
+          await queryRunner.manager.getRepository(VolumeEntity).update(
+            {
+              fileServerId: In(update.fileServers.map((fs) => fs.id)),
+              isDisabled: false,
+            },
+            { isDisabled: true },
+          );
+        }
+
+        await queryRunner.commitTransaction();
+      } catch (txError) {
+        await queryRunner.rollbackTransaction();
+        throw txError;
+      } finally {
+        await queryRunner.release();
+      }
+      // --- End transaction ---
+
       if (allUnHealthy) {
         return update;
       }
+
+      // Side effects outside transaction — email and Temporal are not rollback-able
       await this.sendMailService.sendMail({
         successEmailType: SuccessEmailType.UPDATE_CONFIGURATION,
         traceId,
@@ -1255,14 +1305,15 @@ export class ConfigurationService {
         traceId,
       );
 
-      await this.volumes.update(
-        {
-          fileServerId: In(update.fileServers.map((fs) => fs.id)),
-          isDisabled: false,
-        },
-        { isDisabled: true },
-      );
-      this.refreshConfig(update.id, traceId);
+      this.refreshConfig(update.id, traceId).catch(async (error) => {
+        this.logger.error(
+          `refreshConfig failed for configId ${update.id}, traceId ${traceId}: ${error.message}`,
+        );
+        await this.configEntity.update(update.id, {
+          status: ConfigStatus.ERRORED,
+          errorMessage: error.message,
+        });
+      });
 
       return update;
     } catch (error) {
@@ -1498,6 +1549,7 @@ export class ConfigurationService {
       const config = await this.configEntity.findOne({
         where: { id },
       });
+      if (!config) throw new NotFoundException(`Config with id ${id} not found.`);
       return await this.configEntity.remove(config);
     } catch (error) {
       this.logger.error(`Error removing config: ${error.message}`);
@@ -1549,85 +1601,87 @@ export class ConfigurationService {
       return { discoveredPathsMap, errorMap };
     }
 
-    // For each specified file server (zone), fetch exports and shares
-    for (const fileServer of fileServers) {
-      this.logger.log(
-        `Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`,
-      );
+    // Fetch exports/shares for all zones in parallel to reduce total wait time
+    await Promise.all(
+      fileServers.map(async (fileServer) => {
+        this.logger.log(
+          `Fetching exports for file server ${fileServer.id} (zone: ${fileServer.fileServerName})`,
+        );
 
-      const volumeDataList: DiscoveredVolumeData[] = [];
-      let apiError: string | null = null;
-      const clientConfig = new ClientConfig(
-        config.serverType as ServerType,
-        config.hostname,
-        config.port,
-        config.username,
-        config.password,
-        config.tlsCaCertificate,
-      );
-      // Get the appropriate storage client based on server type
-      const storageClient = this.storageClientFactory.getClient(clientConfig);
+        const volumeDataList: DiscoveredVolumeData[] = [];
+        let apiError: string | null = null;
+        const clientConfig = new ClientConfig(
+          config.serverType as ServerType,
+          config.hostname,
+          config.port,
+          config.username,
+          config.password,
+          config.tlsCaCertificate,
+        );
+        // Get the appropriate storage client based on server type
+        const storageClient = this.storageClientFactory.getClient(clientConfig);
 
-      // Fetch NFS exports if protocol includes NFS
-      if (fileServer.protocol === Protocol.NFS) {
-        try {
-          const nfsExports = await storageClient.getNFSExportPaths(
-            fileServer.id,
-          );
-          this.logger.log(
-            `Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`,
-          );
+        // Fetch NFS exports if protocol includes NFS
+        if (fileServer.protocol === Protocol.NFS) {
+          try {
+            const nfsExports = await storageClient.getNFSExportPaths(
+              fileServer.id,
+            );
+            this.logger.log(
+              `Found ${nfsExports.length} NFS exports for file server ${fileServer.id}`,
+            );
 
-          for (const nfsExport of nfsExports) {
-            // For NFS: volumePath and directoryPath are the same (both are the export path)
-            volumeDataList.push({
-              volumePath: nfsExport.path,
-              directoryPath: nfsExport.path,
-            });
+            for (const nfsExport of nfsExports) {
+              // For NFS: volumePath and directoryPath are the same (both are the export path)
+              volumeDataList.push({
+                volumePath: nfsExport.path,
+                directoryPath: nfsExport.path,
+              });
+            }
+          } catch (error) {
+            apiError = error.message;
+            this.logger.error(
+              `Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`,
+            );
           }
-        } catch (error) {
-          apiError = error.message;
-          this.logger.error(
-            `Failed to fetch NFS exports for file server ${fileServer.id}: ${error.message}`,
-          );
         }
-      }
 
-      // Fetch SMB shares if protocol includes SMB
-      if (fileServer.protocol === Protocol.SMB) {
-        try {
-          const smbShares = await storageClient.getSMBShares(fileServer.id);
-          this.logger.log(
-            `Found ${smbShares.length} SMB shares for file server ${fileServer.id}`,
-          );
+        // Fetch SMB shares if protocol includes SMB
+        if (fileServer.protocol === Protocol.SMB) {
+          try {
+            const smbShares = await storageClient.getSMBShares(fileServer.id);
+            this.logger.log(
+              `Found ${smbShares.length} SMB shares for file server ${fileServer.id}`,
+            );
 
-          for (const smbShare of smbShares) {
-            // For SMB: volumePath = share name, directoryPath = filesystem path
-            volumeDataList.push({
-              volumePath: smbShare.name,
-              directoryPath: smbShare.path,
-            });
+            for (const smbShare of smbShares) {
+              // For SMB: volumePath = share name, directoryPath = filesystem path
+              volumeDataList.push({
+                volumePath: smbShare.name,
+                directoryPath: smbShare.path,
+              });
+            }
+          } catch (error) {
+            apiError = error.message;
+            this.logger.error(
+              `Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`,
+            );
           }
-        } catch (error) {
-          apiError = error.message;
-          this.logger.error(
-            `Failed to fetch SMB shares for file server ${fileServer.id}: ${error.message}`,
-          );
         }
-      }
 
-      // If API failed for this file server, collect the per-zone error
-      // We don't want to continue and disable volumes due to API failure
-      if (apiError) {
-        errorMap.set(fileServer.id, apiError);
-        continue; // Skip this file server, don't add empty paths
-      }
+        // If API failed for this file server, collect the per-zone error
+        // We don't want to continue and disable volumes due to API failure
+        if (apiError) {
+          errorMap.set(fileServer.id, apiError);
+          return; // Skip this file server, don't add empty paths
+        }
 
-      discoveredPathsMap.set(fileServer.id, volumeDataList);
-      this.logger.log(
-        `Discovered ${volumeDataList.length} paths for file server ${fileServer.id}`,
-      );
-    }
+        discoveredPathsMap.set(fileServer.id, volumeDataList);
+        this.logger.log(
+          `Discovered ${volumeDataList.length} paths for file server ${fileServer.id}`,
+        );
+      }),
+    );
 
     // Log errors if any, but don't throw - let caller handle per-zone errors
     if (errorMap.size > 0) {
@@ -1922,8 +1976,12 @@ export class ConfigurationService {
     let attemptCount = 0;
     const interval = setInterval(async () => {
       if (attemptCount >= maxAttempts) {
-        this.logger.warn(`Workflow ${id}, timed out after ${maxAttempts} attempts.`);
+        this.logger.warn(`Workflow ${id} timed out after ${maxAttempts} attempts.`);
         clearInterval(interval);
+        await this.configEntity.update(configId, {
+          status: ConfigStatus.ERRORED,
+          errorMessage: `Workflow timed out after ${WORKFLOW_EXECUTION_TIMEOUT_SECONDS}s`,
+        });
         return;
       }
       attemptCount++;
@@ -1935,6 +1993,10 @@ export class ConfigurationService {
         if (!details) {
           this.logger.warn(`No workflow details found for workflowId: ${id}`);
           clearInterval(interval);
+          await this.configEntity.update(configId, {
+            status: ConfigStatus.ERRORED,
+            errorMessage: 'Workflow details not found',
+          });
           return;
         }
         if (details.status === WorkflowExecutionStatus.COMPLETED) {
@@ -1946,11 +2008,19 @@ export class ConfigurationService {
             `Workflow ${id} did not complete. Status: ${details.status}`,
           );
           clearInterval(interval);
+          await this.configEntity.update(configId, {
+            status: ConfigStatus.ERRORED,
+            errorMessage: `Workflow ended with status: ${details.status}`,
+          });
           return;
         }
       } catch (error) {
         this.logger.error(`Error fetching workflow result: ${error.message}`);
         clearInterval(interval);
+        await this.configEntity.update(configId, {
+          status: ConfigStatus.ERRORED,
+          errorMessage: error.message,
+        });
         return;
       }
     }, pollIntervalMs);
@@ -2091,21 +2161,23 @@ export class ConfigurationService {
       // 1. Re-enable existing volumes if path still exists on NAS
       // Also update directoryPath for Dell
       if (discoveredPaths.length > 0) {
-        // For each discovered path, update with correct directoryPath
-        for (const vd of volumeDataList) {
-          await this.volumes.update(
-            {
-              fileServerId: fileServer.id,
-              volumePath: vd.volumePath,
-            },
-            {
-              reachableCount: reachableCount,
-              isValid: true,
-              isDisabled: false,
-              directoryPath: vd.directoryPath,
-            },
-          );
-        }
+        // Update all discovered paths in parallel — faster than sequential loop
+        await Promise.all(
+          volumeDataList.map((vd) =>
+            this.volumes.update(
+              {
+                fileServerId: fileServer.id,
+                volumePath: vd.volumePath,
+              },
+              {
+                reachableCount: reachableCount,
+                isValid: true,
+                isDisabled: false,
+                directoryPath: vd.directoryPath,
+              },
+            ),
+          ),
+        );
       }
 
       // 2. Create new volumes only for paths that don't exist in DB
@@ -2150,12 +2222,13 @@ export class ConfigurationService {
         );
       }
 
-      // 4. Mark file server as refreshed
-      await this.fileServerEntity.update(
-        { id: fileServer.id },
-        { isRefreshed: true },
-      );
     }
+
+    // 4. Mark all file servers as refreshed in one bulk update
+    await this.fileServerEntity.update(
+      { id: In(fileServersIds) },
+      { isRefreshed: true },
+    );
 
     // 5. Deactivate job configs with invalid/disabled volumes
     const volumeIds = await this.volumes

@@ -89,8 +89,7 @@ export class PathUploadController {
         fs.writeFileSync(filePath, csvContent, { encoding: 'utf8' });
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        // sendFile handles reading and streaming the file — do not also pipe a readStream as that causes a double-response error
         res.sendFile(filePath);
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res)
     }
 }

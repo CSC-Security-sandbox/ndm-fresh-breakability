@@ -747,30 +747,19 @@ describe('PathUploadService', () => {
   });
 
   describe('createUploadDirectory', () => {
-    const uploadsPath = path.join(process.cwd(), '/uploads');
-
     afterEach(() => {
       jest.resetAllMocks();
     });
 
-    it('should create the uploads directory if it does not exist', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const mkdirSyncMock = jest
-        .spyOn(fs, 'mkdirSync')
-        .mockImplementation(() => {});
+    it('should create the uploads directory', async () => {
+      jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
       await service.createUploadDirectory();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(mkdirSyncMock).toHaveBeenCalled();
+      expect(fs.promises.mkdir).toHaveBeenCalledWith('/uploads', { recursive: true });
     });
 
-    it('should not create the uploads directory if it already exists', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      const mkdirSyncMock = jest
-        .spyOn(fs, 'mkdirSync')
-        .mockImplementation(() => {});
-      await service.createUploadDirectory();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(mkdirSyncMock).not.toHaveBeenCalled();
+    it('should not throw if the uploads directory already exists', async () => {
+      jest.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
+      await expect(service.createUploadDirectory()).resolves.not.toThrow();
     });
   });
 

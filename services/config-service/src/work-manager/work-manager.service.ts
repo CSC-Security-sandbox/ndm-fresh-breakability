@@ -212,7 +212,16 @@ export class WorkManagerService {
       const config = await this.configRepo.findOne({
           where: { id: data.configId },
           relations: ['fileServers'],
-        }); 
+        });
+
+      // Guard: config may have been deleted between workflow start and this callback
+      if (!config) {
+        this.logger.warn(
+          `Config ${data.configId} not found — likely deleted before callback arrived. Skipping status update.`,
+        );
+        return;
+      }
+
       const isOtherNas = config.serverType === ServerType.other;
       // Check if this is a File server status and update only fs status and update the config status accordingly (fileServerId present)
       if (!isOtherNas) {
@@ -265,6 +274,7 @@ export class WorkManagerService {
       this.logger.error(
         `Error while updating the status of a file server after validating export path and working directory- ${error.message}`,
       );
+      throw error;
     }
   }
 

@@ -112,6 +112,7 @@ export class SupportBundleService {
       this.logger.error(
         `Error while starting SupportBundleWorkflow - ${error.message}`,
       );
+      throw error;
     }
 
     return { traceId };
