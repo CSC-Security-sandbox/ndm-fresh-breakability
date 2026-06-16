@@ -42,6 +42,18 @@ class Settings:
     merge_mem_budget_bytes: int
     spill_dir: str
 
+    # --- Workers ---
+    # NB: no dedicated merge queue — one worker per job runs the whole bundle and the merge child
+    # inherits the parent's queue (TS starter leaves the workflow-input merge_task_queue unset).
+    max_concurrent_activities: int  # activity ThreadPoolExecutor size per worker
+    worker_shutdown_timeout: float  # graceful per-worker shutdown wait (s) before cancelling
+
+    # --- Work-manager config poll (worker-only manager) ---
+    worker_config_url: str          # base URL of the service serving the config endpoint
+    config_endpoint: str            # path segment: GET /api/v1/work-manager/<config_endpoint>
+    poll_interval_s: float          # seconds between config polls
+    poll_timeout_s: float           # per-request HTTP timeout for the poll
+
     # --- Diff (§9) ---
     diff_batch_dirs: int
 
@@ -77,6 +89,12 @@ class Settings:
             merge_fan_in=int(e.get("MERGE_FAN_IN", "16")),
             merge_mem_budget_bytes=int(e.get("MERGE_MEM_BUDGET_BYTES", str(2 * GB))),
             spill_dir=e.get("SPILL_DIR", "/tmp"),
+            max_concurrent_activities=int(e.get("MAX_CONCURRENT_ACTIVITIES", "8")),
+            worker_shutdown_timeout=float(e.get("WORKER_SHUTDOWN_TIMEOUT", "10")),
+            worker_config_url=e.get("WORKER_CONFIG_URL", "http://config-service:8080"),
+            config_endpoint=e.get("CONFIG_ENDPOINT", "parquet-config"),
+            poll_interval_s=float(e.get("POLL_INTERVAL_S", "10")),
+            poll_timeout_s=float(e.get("POLL_TIMEOUT_S", "5")),
             diff_batch_dirs=int(e.get("DIFF_BATCH_DIRS", "1000")),
             jwt_public_key_path=e.get("JWT_PUBLIC_KEY_PATH", ""),
             jwt_secret=e.get("JWT_SECRET", ""),

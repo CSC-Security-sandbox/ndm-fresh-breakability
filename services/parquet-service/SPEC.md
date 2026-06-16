@@ -1,11 +1,15 @@
 # parquet-service — Specification
 
-> **Status:** Draft v0.3 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-09
+> **Status:** Draft v0.4 · **Owner:** Abhishek Buragadda · **Last updated:** 2026-06-16
 > Python control-plane service for the NDM Parquet metadata-storage redesign.
 > Starting point: the `local-python-temporal` prototype (FastAPI + Temporal worker + Redis→Parquet activity).
 > Parent design: `ndm-parquet-storage-redesign.md` (technical) + CDMT Confluence proposal (planning).
 > Producer (worker) side: [`services/worker/PARQUET_PRODUCER_SPEC.md`](../worker/PARQUET_PRODUCER_SPEC.md).
-> v0.3 adds: dir own-attributes copied into the merkle Parquet (D12), single-char `file_type` (D17),
+> v0.4 changes the run model to a **worker-only work-manager** (D19): the service polls a config endpoint
+> and runs **one Temporal worker per active job** on a per-job task queue; the **TS side starts the
+> workflows** via the Temporal client (parquet-service no longer owns an HTTP trigger in prod). Supersedes
+> the push-trigger API in §5/§6.
+> v0.3 added: dir own-attributes copied into the merkle Parquet (D12), single-char `file_type` (D17),
 > error Parquet co-located under `<jobRunId>/` (D18), workflow name confirmed (D2), and the **error→command
 > replay** design (`ERROR_SCHEMA` + `attempt`/`is_dir`; `replay_errors` activity §9.1). v0.2 resolved §1 blockers.
 
@@ -24,12 +28,14 @@ emits `OPS_CMD` commands to the existing sync worker.
   stream; baseline ⇒ consume **2** (source + destination).
 
 ### 0.1 In scope (this service)
-Service on the CP via Helm (PVC `/data`, JWT+mTLS to Temporal, **worker-auth Bearer JWT** inbound) · trigger
-API idempotent per `(jobRunId, sourcePathId)` · consume parquet stream(s) → rotated 200 MB Parquet (12-col
+Service on the CP via Helm (PVC `/data`, JWT+mTLS to Temporal) · **worker-only work-manager** (D19): poll the
+config endpoint, run **one Temporal worker per active job** on its `parquet-{jobId}-taskqueue`, reconcile
+on every poll (start new, shut down vanished) · consume parquet stream(s) → rotated 200 MB Parquet (12-col
 §3) · per-file sort + **k-way external merge-sort** · directory Merkle hash · sort-merge diff (baseline
 src-vs-dst, incremental src-vs-prior) with subtree short-circuit · command emission to `${jobRunId}:commands`
 · error stream → **write** error Parquet · pause/stop signals · completion signal to parent
-`MigrationWorkflow` · 4 Prometheus counters.
+`MigrationWorkflow` · 4 Prometheus counters. **The TS side starts the workflows** (Temporal client); this
+service only guarantees a worker is polling each active job's queue.
 
 ### 0.2 Deferred to Phase 2
 `continue_as_new` cadence · OpenTelemetry trace propagation · schema-evolution helper ·
@@ -47,23 +53,24 @@ rich cross-SDK signal payload.
 | # | Decision |
 |---|---|
 | D1 | Folder `services/parquet-service`; Python 3.11; sync activities on a `ThreadPoolExecutor`. |
-| D2 | Workflow **`ScanIngestionWorkflow`** (confirmed; renamed from prototype `RedisToParquetWorkflow`). Task queue `python-pipeline`. |
+| D2 | Workflow **`ScanIngestionWorkflow`** (confirmed; renamed from prototype `RedisToParquetWorkflow`). **Per-job task queue `parquet-{jobId}-taskqueue`** (D19; was static `python-pipeline`). One worker per job registers the whole bundle (workflow + merge child + activities); the merge child inherits the parent's queue. |
 | D3 | Stream keys `${jobRunId}:${sourcePathId}:parquet`, `${jobRunId}:${destPathId}:parquet`. |
 | **D4** | **Merged (full-row) snapshot is RETAINED** — not deleted when the merkle/dir Parquet is built. The merkle is only a comparison **speed-up index**. Deletions are detected by comparing against the prior **merged** file (a path in prior but not in current ⇒ `rf`/`rd`). |
 | **D5** | **Run mode is an input at start.** Baseline ⇒ scan source + dest, consume **2** streams, diff source-merkle vs dest-merkle. Incremental ⇒ scan source only, consume **1** stream, diff vs prior source snapshot. |
 | **D6** | OPS_CMD mapping per §10. **`acl_hash` change ⇒ `sm`** (stamp-metadata, same as mode/uid/gid). Comparison is **file-to-file and directory-to-directory**, so a file↔dir flip emits the right commands naturally — **no `correlation_id`** needed (dropped). |
 | **D7** | **Ack-after-flush/seal:** XACK a stream entry only after its rows are written into a Parquet that is flushed → footer-validated → atomically renamed → `fsync`ed (fixes the prototype's ack-on-read). |
 | **D8** | Per-file sort writes a **separate sorted file in the same folder** as the input (not in-place, not a `sorted/` dir). |
-| **D9** | Idempotency per `(jobRunId, sourcePathId)`: duplicate start returns the existing runId (HTTP 200, `started=false`) via a Redis idempotency key (24h TTL) + deterministic Temporal workflow id. |
+| **D9** | Idempotency is **Temporal-native** (D19): the TS starter uses a deterministic workflow id (e.g. `parquet-{jobRunId}`), so a duplicate start hits `WorkflowAlreadyStartedError` and reuses the run. parquet-service no longer owns a Redis idempotency key (the dev-only HTTP trigger in §5 still keeps the `SETNX` for manual use). |
 | D10 | NFC path normalization is done on the **TS producer** side; the Python sorter assumes NFC. |
 | **D11** | **k-way external merge-sort is REQUIRED** (volumes are huge; entries don't fit in memory). Each rotated file is sorted in memory (it fits), then files are merged k-way (fan-in 16, 2 GB budget, `/tmp` spill). |
 | **D12** | **Dir Merkle hash = over the directory's CHILDREN only** (file + subdir attributes). The directory's **own** attributes are **copied into the merkle Parquet row** (§3.2), so an own-attribute change is found by direct column comparison and a child change via `dir_hash` — both from one file. |
 | **D13** | **Empty directory ⇒ a row with an empty hash** (no children to hash from); its own attributes are still compared. |
 | **D14** | Promotion: when **diff generation completes** (all commands pushed to the stream), delete the **older** snapshot; the **current** snapshot becomes the prior for the next incremental. |
-| **D15** | Inbound auth = **worker Bearer-JWT guard** (the worker calls the API on workflow start, sending `Authorization: Bearer <accessToken>` from `getAccessToken()`); replicate `JwtService.verifyToken` (`lib/auth-lib`). |
+| **D15** | Auth. **Outbound** (prod, D19): the work-manager poll sends `Authorization: Bearer <accessToken>` (Keycloak `getAccessToken()`, 1380-min refresh — TS `WorkManagerService` parity), plus mTLS+JWT to Temporal. **Inbound** Bearer-JWT guard (replicate `JwtService.verifyToken`, `lib/auth-lib`) is retained only for the **dev/manual** HTTP trigger (§5); the prod `/health`+`/metrics` surface is unauthenticated. |
 | **D16** | **Pause:** halt consumption and wait; on resume continue writing — the Parquet is updated once it resumes (no special seal-on-pause). **Stop:** delete partially-created (`.tmp`/unsealed) Parquet files as cleanup. The stop signal flows worker → parquet-service. |
 | **D17** | `file_type` stored as a **single-character code** with a char⇄type enum mapping (§3.1, `FILE_TYPE_CODES`); precise type preserved, diff classifies into file/dir/symlink. |
 | **D18** | Error Parquet lives in the **same `<jobRunId>/` directory** as the other scan-result Parquets (`<jobRunId>/errors/`). |
+| **D19** | **Worker-only work-manager (run model, 2026-06-16).** parquet-service runs as a poller (TS `WorkManagerService` parity): every `POLL_INTERVAL_S` it GETs `GET {WORKER_CONFIG_URL}/api/v1/work-manager/parquet-config` → a list of active-job entries (`{ jobRunId, source, destination|null, taskQueue, workflowId }`; **`jobRunId == jobId`**), and **reconciles** in-process Temporal workers to it: a `taskQueue` in the list with no worker is started; a worker whose `taskQueue` left the list is gracefully shut down. **Presence-based** — the API omits stopped/completed jobs, which tears their worker down. parquet-service **never starts workflows** — the TS side starts `ScanIngestionWorkflow` on `parquet-{jobId}-taskqueue` via the Temporal client with the full input; `source`/`dest` reach the activity through that input (the poll-config copies are informational only). The merge child must inherit the per-job queue (TS leaves the workflow-input `merge_task_queue` unset). |
 
 ---
 
@@ -71,11 +78,14 @@ rich cross-SDK signal payload.
 
 ```
 services/parquet-service/
-  pyproject.toml  Dockerfile  README.md          # one image; Helm deployments override `command` (api vs worker)
+  pyproject.toml  Dockerfile  README.md          # one image; Helm runs `serve` (prod); api/worker = dev modes
   helm/   Chart.yaml  values.yaml  templates/{deployment,service,configmap,secret,networkpolicy,pvc}.yaml
   src/parquet_service/
-    api/        server.py      # FastAPI: /health /metrics POST /workflows/{jobRunId}/{pathId}/start
-                auth.py        # worker Bearer-JWT guard (D15)
+    serve.py        # PROD entrypoint: poll config -> reconcile workers; /health /metrics (D19)
+    work_manager.py # ConfigPoller + WorkerConfig parsing (the outbound poll, D19)
+    worker_manager.py  # WorkerManager: one Temporal worker per job task-queue; reconcile + graceful stop
+    api/        server.py      # DEV trigger: /health /metrics POST /workflows/{jobRunId}/{pathId}/start (§5.2)
+                auth.py        # inbound worker Bearer-JWT guard (D15; dev trigger only)
     workflow/   scan_ingestion.py  # ScanIngestionWorkflow + signal handlers; branches on run_mode
                 activities.py      # thin wrappers over lib/ (no business logic)
                 merge_child.py     # k-way merge-sort child workflow
@@ -89,7 +99,7 @@ services/parquet-service/
     io/         stream_reader.py   # StreamReader (filemeta src/dest, errors)
                 stream_writer.py   # StreamWriter (push / push_bulk → commands stream)
                 checkpoint.py      # Redis checkpoint store (dir_path cursor)
-    config.py   worker.py      # Temporal worker entrypoint (mTLS+JWT client)
+    config.py   worker.py      # DEV static worker: one worker, all queues (mTLS+JWT client)
   tests/  fixtures/  test_*.py
 ```
 
@@ -222,29 +232,45 @@ of `ndm_source_path_id` / `ndm_dest_path_id`.
 
 ---
 
-## 5. API surface
+## 5. Surfaces
 
+### 5.1 Work-manager config poll (prod, outbound — D19)
+The deployed `serve` mode polls, it does not serve a trigger:
 ```
-GET  /health                                      GET /metrics
+GET {WORKER_CONFIG_URL}/api/v1/work-manager/{CONFIG_ENDPOINT}   (default CONFIG_ENDPOINT=parquet-config)
+```
+- **Response:** a list of active-job entries: `{ jobRunId, source, destination|null, taskQueue, workflowId }`
+  (camelCase or the NDM `{data:{items:[...]}}` envelope accepted; `jobRunId == jobId`). Stopped/completed
+  jobs are **omitted** (their worker is then torn down).
+- **Behaviour:** every `POLL_INTERVAL_S`, map entries → `taskQueue` set and **reconcile** in-process workers
+  (start new, gracefully shut down vanished). Only `taskQueue` drives behaviour; `source`/`dest` are carried
+  for logging — the workflow input the TS starter passes is what feeds the stream-reading activity.
+- **Auth (D15):** outbound `Authorization: Bearer <accessToken>` (Keycloak `getAccessToken()`); dev runs
+  unauthenticated (`token_provider=None`).
+- **Served by this process:** `GET /health` (reports active worker queues) · `GET /metrics`. Unauthenticated.
+
+### 5.2 HTTP trigger API (dev/manual only)
+The legacy push trigger is retained behind the `api`/`uvicorn parquet_service.api.server:app` run mode for
+local testing — **not on the prod path** (the TS side starts workflows directly, §6):
+```
 POST /workflows/{jobRunId}/{sourcePathId}/start   GET /workflows/{jobRunId}/{sourcePathId}
 ```
-- **Auth (D15):** worker-auth Bearer-JWT guard. The worker calls this API when starting its workflow,
-  sending `Authorization: Bearer <accessToken>` (from `WorkManager`/`AuthService.getAccessToken()`); the
-  guard verifies the token like jobs-service's `JwtAuthGuard` (`JwtService.verifyToken`, decoded `user`
-  required). Same JWT signing material/issuer as auth-lib.
+- **Auth:** inbound worker Bearer-JWT guard (`JwtService.verifyToken` parity; decoded `user` required).
 - **Request body:** `accountId, jobConfigId, run_mode ∈ {baseline,incremental}, sourcePathId,
   destPathId? (baseline), feature_flag_ctx`.
-- **Idempotency (D9):** `SETNX idemp:${jobRunId}:${sourcePathId}` (TTL 24h); if present return existing run
-  (`started=false`), else `start_workflow` (deterministic id) → `started=true`.
-- **Response:** `{ workflowId, runId, started }`.
+- **Idempotency:** `SETNX idemp:${jobRunId}:${sourcePathId}` (TTL 24h) → existing run (`started=false`) else
+  `start_workflow` → `started=true`. Response `{ workflowId, runId, started }`.
 
 ---
 
 ## 6. Temporal workflow & activities
 
-**`ScanIngestionWorkflow`**, ids `ScanIngestionWorkflow-${jobRunId}-${sourcePathId}-src`
-(`-${destPathId}-dst` for the baseline dest leg). Independent of TS `MigrationWorkflow` (different SDK/queue;
-failure isolation). The TS side starts it via the API and signals pause/stop; it signals completion back.
+**`ScanIngestionWorkflow`**. Independent of TS `MigrationWorkflow` (different SDK/queue; failure isolation).
+**The TS side starts it via the Temporal client** (D19) on the job's `parquet-{jobId}-taskqueue`, with a
+deterministic workflow id (the poll-config `workflowId`, e.g. `parquet-{jobRunId}`) and the full
+`ScanIngestionInput`; it signals pause/stop and receives completion. parquet-service only runs the worker
+that executes it — it does not start the workflow. (The dev HTTP trigger §5.2 still uses the legacy id
+`ScanIngestionWorkflow-${jobRunId}-${sourcePathId}-src`.)
 
 Flow branches on `run_mode`:
 - **incremental:** ingest **source** → sort → merge → merkle → `compare_diff(prior_source, current_source)`.
@@ -404,11 +430,14 @@ row with `attempt+1`; once `attempt` reaches `MAX_RETRY` it is surfaced, not ret
 
 ## 11. Deployment, deps, observability, failure
 
-- **Helm:** own chart bundled into the CP install; `replicas=1`; PVC RWO local-storage at `/data` (200 GB
-  initial); ClusterIP Service; NetworkPolicy ingress from the worker/jobs-service; mTLS+JWT to Temporal
-  (replaces prototype plaintext), JWT refresh cron 1380 min; Redis via CP creds. `mem ≥ baseline + 2 GB ×
-  max_concurrent_merges`.
-- **Deps (Py 3.11):** `temporalio fastapi uvicorn[standard] redis pyarrow pydantic msgpack blake3
+- **Helm:** own chart bundled into the CP install. Deployed mode is `serve` (work-manager, D19):
+  `command: ["python","-m","parquet_service.serve"]`, `/health`+`/metrics` on the api port (liveness +
+  readiness probes), `replicas=1` (per-job isolation is the Temporal workflow id, not pod count). PVC RWO
+  local-storage at `/data` (200 GB initial); ClusterIP Service; **egress** to the config endpoint
+  (`WORKER_CONFIG_URL`); mTLS+JWT to Temporal (replaces prototype plaintext), JWT refresh cron 1380 min;
+  Redis via CP creds. `mem ≥ baseline + 2 GB × max_concurrent_merges`. NetworkPolicy ingress (for the dev
+  `api` mode) from the worker/jobs-service.
+- **Deps (Py 3.11):** `temporalio fastapi uvicorn[standard] redis httpx pyarrow pydantic msgpack blake3
   prometheus-client pyjwt[crypto]/cryptography`; dev `pytest fakeredis`.
 - **Metrics:** `parquets_written, bytes_written, commands_emitted, errors_seen` on `/metrics`.
 - **Failure:** pod restart mid-ingest → replay ≤ 200 MB (ack-after-seal), deduped at merge; partial write →
@@ -418,8 +447,9 @@ row with `attempt+1`; once `attempt` reaches `MAX_RETRY` it is surfaced, not ret
 ---
 
 ## 12. Phase-1 acceptance gate
-Deployed in staging behind a flag (OFF in prod): healthy `/health`, JWT+mTLS to Temporal · idempotent trigger
-per `(jobRunId, sourcePathId)` · consume → rotated 12-col Parquet → per-file sort → k-way merge → merkle ·
+Deployed in staging behind a flag (OFF in prod): healthy `/health`, JWT+mTLS to Temporal · work-manager
+polls config and reconciles one worker per active job (D19); TS-started workflow runs on its per-job queue ·
+consume → rotated 12-col Parquet → per-file sort → k-way merge → merkle ·
 **baseline** src-vs-dst diff **and** incremental src-vs-prior diff emit commands · pause/stop ·
 errors → error Parquet · completion signal on both-stream EOF · Postgres pipeline unchanged, flag reverts.
 1-day load test on a 1M-file fixture.
@@ -433,6 +463,12 @@ errors → error Parquet · completion signal on both-stream EOF · Postgres pip
 3. Single-char codes for `FILE_TYPE_CODES` — confirm the letters in §3.1 (esp. S/P/C/B/H/M/T).
 4. **Replay tuning (§9.1):** `MAX_RETRY` default (~3) and whether `METADATA_UPDATE_CONFLICT` is replayable
    alongside `TRANSIENT`/`RECOVERABLE`.
+5. **Config endpoint owner (D19):** which service serves `GET /api/v1/work-manager/parquet-config`, its
+   host/port (`WORKER_CONFIG_URL`), and who writes/removes entries on job start/stop/complete. It must
+   **omit** stopped/completed jobs (that's the teardown signal).
+6. **Outbound auth wiring (D19):** Keycloak token provider for the poll + mTLS/JWT on `Client.connect`
+   (currently dev-plaintext; the poller has a `token_provider` hook).
 
-*Resolved since v0.2:* dir own-attrs copied into merkle (D12) · error location `<jobRunId>/errors/` (D18) ·
-workflow name `ScanIngestionWorkflow` (D2) · `file_type` single-char (D17).
+*Resolved since v0.2:* worker-only work-manager run model (D19) · dir own-attrs copied into merkle (D12) ·
+error location `<jobRunId>/errors/` (D18) · workflow name `ScanIngestionWorkflow` (D2) ·
+`file_type` single-char (D17).

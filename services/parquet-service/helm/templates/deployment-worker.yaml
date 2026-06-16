@@ -21,11 +21,28 @@ spec:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "-m", "parquet_service.worker"]
+          # Work-manager (worker-only): polls the config endpoint and runs one Temporal worker per active
+          # job. Serves /health + /metrics on the api port. The TS side starts the workflows.
+          command: ["python", "-m", "parquet_service.serve"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
           {{- include "parquet-service.envFrom" . | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
           volumeMounts:
-            {{- include "parquet-service.volumeMounts" . | nindent 12 }}
+            {{- include "parquet-service.worker.volumeMounts" . | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        {{- include "parquet-service.volumes" . | nindent 8 }}
+        {{- include "parquet-service.worker.volumes" . | nindent 8 }}

@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "redis>=5.0.0",
+    "httpx>=0.27.0",            # async client for the work-manager config poll
     "pyarrow>=17.0.0",
     "pydantic>=2.0.0",
     "msgpack>=1.0.0",
@@ -45,6 +46,10 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["N802"]  # test_* helper names need not be snake_case-strict
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are immutable sentinels, not real call-in-default bugs.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Header"]
 
 [tool.ruff.format]
 docstring-code-format = true

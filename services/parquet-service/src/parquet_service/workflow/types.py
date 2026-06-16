@@ -26,6 +26,7 @@ class ScanIngestionInput:
     run_mode: str = RunMode.INCREMENTAL.value
     dest_path_id: str | None = None       # required when run_mode == baseline
     feature_flag_ctx: dict | None = None
+    merge_task_queue: str | None = None   # route the merge child here; None => inherit parent's queue
 
 
 @dataclass
@@ -36,6 +37,7 @@ class IngestLegInput:
     job_run_id: str
     path_id: str
     side: str  # "src" | "dst"
+    merge_task_queue: str | None = None  # route the merge child here; None => inherit parent's queue
 
 
 @dataclass

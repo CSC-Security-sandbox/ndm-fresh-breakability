@@ -26,7 +26,7 @@ spec:
             - containerPort: {{ .Values.api.port }}
           {{- include "parquet-service.envFrom" . | nindent 10 }}
           volumeMounts:
-            {{- include "parquet-service.volumeMounts" . | nindent 12 }}
+            {{- include "parquet-service.api.volumeMounts" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /health
@@ -36,4 +36,4 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        {{- include "parquet-service.volumes" . | nindent 8 }}
+        {{- include "parquet-service.api.volumes" . | nindent 8 }}

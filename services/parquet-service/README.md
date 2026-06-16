@@ -33,10 +33,16 @@ export REDIS_URL=redis://default:redis@localhost:6379/0
 export TEMPORAL_ADDRESS=localhost:7233
 export DATA_ROOT=./data
 
-python -m parquet_service.worker                       # worker
-uvicorn parquet_service.api.server:app --port 6666     # api
+python -m parquet_service.serve                        # work-manager (prod): poll config + 1 worker/job
+python -m parquet_service.worker                       # static single worker, all queues (dev/manual)
+uvicorn parquet_service.api.server:app --port 6666     # HTTP trigger API (dev/manual; starts workflows)
 pytest
 ```
+
+`serve` is the deployed mode (worker-only work-manager): it polls
+`GET {WORKER_CONFIG_URL}/api/v1/work-manager/{CONFIG_ENDPOINT}` every `POLL_INTERVAL_S`, runs one
+in-process Temporal worker per active job on its `parquet-{jobId}-taskqueue`, and tears a worker down
+when its job drops out of the response. It does **not** start workflows — the TS side does that.
 
 ## Run modes (D5)
 

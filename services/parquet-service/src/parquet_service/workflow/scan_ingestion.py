@@ -104,7 +104,12 @@ class ScanIngestionWorkflow:
             sort_per_file, leg, start_to_close_timeout=timedelta(hours=6), retry_policy=_ACTIVITY_RETRY
         )
         await workflow.execute_child_workflow(
-            MergeSortChildWorkflow.run, leg, id=f"merge-{leg.job_run_id}-{leg.path_id}-{leg.side}"
+            MergeSortChildWorkflow.run,
+            leg,
+            id=f"merge-{leg.job_run_id}-{leg.path_id}-{leg.side}",
+            task_queue=leg.merge_task_queue,  # None => inherit parent's queue (static single-worker mode)
+            parent_close_policy=workflow.ParentClosePolicy.TERMINATE,  # no orphaned merge if parent dies
+            cancellation_type=workflow.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
         await workflow.execute_activity(
             build_merkle, leg, start_to_close_timeout=timedelta(hours=6), retry_policy=_ACTIVITY_RETRY
@@ -120,5 +125,5 @@ class ScanIngestionWorkflow:
 def _leg(inp: ScanIngestionInput, path_id: str, side: str) -> "IngestLegInput":
     return IngestLegInput(
         account_id=inp.account_id, job_config_id=inp.job_config_id, job_run_id=inp.job_run_id,
-        path_id=path_id, side=side,
+        path_id=path_id, side=side, merge_task_queue=inp.merge_task_queue,
     )

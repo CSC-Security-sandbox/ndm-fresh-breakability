@@ -27,7 +27,7 @@ async def main() -> None:
         task_queue=s.task_queue,
         workflows=ALL_WORKFLOWS,
         activities=ALL_ACTIVITIES,
-        activity_executor=ThreadPoolExecutor(max_workers=8),
+        activity_executor=ThreadPoolExecutor(max_workers=s.max_concurrent_activities),
     )
 
     stop = asyncio.Event()

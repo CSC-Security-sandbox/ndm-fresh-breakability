@@ -38,6 +38,10 @@ env:
   MERGE_MEM_BUDGET_BYTES: "2147483648"
   SPILL_DIR: "/tmp"
   DIFF_BATCH_DIRS: "1000"
+  # Work-manager config poll (worker-only manager): where to fetch the active-job list and how often.
+  WORKER_CONFIG_URL: "http://config-service:8080"
+  CONFIG_ENDPOINT: "parquet-config"  # GET /api/v1/work-manager/parquet-config
+  POLL_INTERVAL_S: "10"
 
 # JWT/mTLS material wired from existing CP secrets (D15/§11). Names are placeholders.
 auth:
