@@ -244,93 +244,96 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 					Expect(err).NotTo(HaveOccurred(), "error while migration report validation")
 					By(fmt.Sprintf("validate report result : %s", result))
 
-					// Collect failures so both validations always run
-					var failures []string
+					if DeepMigrationValidationEnabled() {
+						// Collect failures so both validations always run
+						var failures []string
 
-					// ── CoC report validation ──
-					By("Validating CoC report against live destination (100 file sample)")
-					dstVolPath := fmt.Sprintf("%s:/%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
-					if PROTOCOL_TYPE == "SMB" {
-						dstVolPath = fmt.Sprintf(`\\%s\%s`, DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
-					}
-					cocResult, cocErr := ValidateCoCAgainstDestination(
-						string(PROTOCOL_TYPE),
-						migrationJobRunID,
-						dstVolPath,
-						GetAttachedWorkerDetails(),
-						PROTOCOL_USERNAME,
-						PROTOCOL_PASSWORD,
-						100,
-						headers,
-					)
-					if cocErr != nil {
-						failures = append(failures, fmt.Sprintf("CoC report validation failed: %v", cocErr))
-						LogError(fmt.Sprintf("[TC-004] CoC report fetch/parse error: %v", cocErr))
-					} else if !cocResult.Match {
-						LogError(fmt.Sprintf("[TC-004] CoC vs destination mismatch: %s", cocResult.Summary()))
-						for _, d := range cocResult.Diffs {
-							LogDebug(fmt.Sprintf("  %s", d))
+						// ── CoC report validation ──
+						By("Validating CoC report against live destination (100 file sample)")
+						dstVolPath := fmt.Sprintf("%s:/%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
+						if PROTOCOL_TYPE == "SMB" {
+							dstVolPath = fmt.Sprintf(`\\%s\%s`, DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
 						}
-						failures = append(failures, fmt.Sprintf("CoC report does not match live destination:\n  %s",
-							strings.Join(cocResult.Diffs, "\n  ")))
+						cocResult, cocErr := ValidateCoCAgainstDestination(
+							string(PROTOCOL_TYPE),
+							migrationJobRunID,
+							dstVolPath,
+							GetAttachedWorkerDetails(),
+							PROTOCOL_USERNAME,
+							PROTOCOL_PASSWORD,
+							100,
+							headers,
+						)
+						if cocErr != nil {
+							failures = append(failures, fmt.Sprintf("CoC report validation failed: %v", cocErr))
+							LogError(fmt.Sprintf("[TC-004] CoC report fetch/parse error: %v", cocErr))
+						} else if !cocResult.Match {
+							LogError(fmt.Sprintf("[TC-004] CoC vs destination mismatch: %s", cocResult.Summary()))
+							for _, d := range cocResult.Diffs {
+								LogDebug(fmt.Sprintf("  %s", d))
+							}
+							failures = append(failures, fmt.Sprintf("CoC report does not match live destination:\n  %s",
+								strings.Join(cocResult.Diffs, "\n  ")))
+						} else {
+							LogDebug(fmt.Sprintf("[TC-004] CoC validation PASSED: %s", cocResult.Summary()))
+							fmt.Printf("[TC-004][goroutine-%d] CoC validation PASSED: %s\n", i, cocResult.Summary())
+						}
+
+						// ── Direct src↔dst metadata comparison ──
+						By("Comparing source and destination metadata after base migration")
+						fmt.Printf("[TC-004][goroutine-%d] Starting CompareProtocolMetadata...\n", i)
+						var srcPath, dstPath string
+						if PROTOCOL_TYPE == "SMB" {
+							srcPath = fmt.Sprintf(`\\%s\%s`, SOURCE_HOST_IPs[0], clonedSourceVolumes[i])
+							dstPath = fmt.Sprintf(`\\%s\%s`, DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
+						} else {
+							srcPath = fmt.Sprintf("%s:/%s", SOURCE_HOST_IPs[0], clonedSourceVolumes[i])
+							dstPath = fmt.Sprintf("%s:/%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
+						}
+						fmt.Printf("[TC-004][goroutine-%d] src=%s dst=%s protocol=%s\n", i, srcPath, dstPath, PROTOCOL_TYPE)
+
+						workerCfg := GetAttachedWorkerDetails()
+						cmpResult, cmpErr := CompareProtocolMetadata(
+							string(PROTOCOL_TYPE),
+							srcPath,
+							dstPath,
+							workerCfg,
+							PROTOCOL_USERNAME,
+							PROTOCOL_PASSWORD,
+							fmt.Sprintf("tc-004-base-%d", i),
+							"../../test-results/metadata",
+						)
+						if cmpErr != nil {
+							fmt.Printf("[TC-004][goroutine-%d] ERROR CompareProtocolMetadata: %v\n", i, cmpErr)
+							failures = append(failures, fmt.Sprintf("metadata comparison failed for %s → %s: %v", srcPath, dstPath, cmpErr))
+						} else if cmpResult.HasDiffs {
+							LogError(fmt.Sprintf("[TC-004] metadata mismatch after base migration: %s", cmpResult.Summary()))
+							if cmpResult.DiffsFile != "" {
+								fmt.Printf("[TC-004][goroutine-%d] diffs file: %s\n", i, cmpResult.DiffsFile)
+							}
+							var msgs []string
+							for _, p := range cmpResult.SrcOnlyPaths {
+								msgs = append(msgs, fmt.Sprintf("src-only: %s", p))
+							}
+							for _, p := range cmpResult.DstOnlyPaths {
+								msgs = append(msgs, fmt.Sprintf("dst-only: %s", p))
+							}
+							for _, d := range cmpResult.Discrepancies {
+								msgs = append(msgs, fmt.Sprintf("path=%s field=%s src=%q dst=%q",
+									d.Path, d.Field, d.SrcValue, d.DstValue))
+							}
+							fmt.Printf("[TC-004][goroutine-%d] METADATA MISMATCH:\n  %s\n", i, strings.Join(msgs, "\n  "))
+							failures = append(failures, fmt.Sprintf("direct src↔dst metadata mismatch (%s):\n  %s",
+								cmpResult.Summary(), strings.Join(msgs, "\n  ")))
+						} else {
+							fmt.Printf("[TC-004][goroutine-%d] METADATA COMPARISON PASSED: %s\n", i, cmpResult.Summary())
+						}
+
+						Expect(failures).To(BeEmpty(),
+							"[TC-004][goroutine-%d] validation failures:\n  %s", i, strings.Join(failures, "\n  "))
 					} else {
-						LogDebug(fmt.Sprintf("[TC-004] CoC validation PASSED: %s", cocResult.Summary()))
-						fmt.Printf("[TC-004][goroutine-%d] CoC validation PASSED: %s\n", i, cocResult.Summary())
+						LogDebug(fmt.Sprintf("[TC-004] skipping deep migration validation (set %s=true to enable)", DeepMigrationValidationEnv))
 					}
-
-					// ── Direct src↔dst metadata comparison (always runs) ──
-					By("Comparing source and destination metadata after base migration")
-					fmt.Printf("[TC-004][goroutine-%d] Starting CompareProtocolMetadata...\n", i)
-					var srcPath, dstPath string
-					if PROTOCOL_TYPE == "SMB" {
-						srcPath = fmt.Sprintf(`\\%s\%s`, SOURCE_HOST_IPs[0], clonedSourceVolumes[i])
-						dstPath = fmt.Sprintf(`\\%s\%s`, DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
-					} else {
-						srcPath = fmt.Sprintf("%s:/%s", SOURCE_HOST_IPs[0], clonedSourceVolumes[i])
-						dstPath = fmt.Sprintf("%s:/%s", DESTINATION_HOST_IPs[0], clonedDestVolumes[i])
-					}
-					fmt.Printf("[TC-004][goroutine-%d] src=%s dst=%s protocol=%s\n", i, srcPath, dstPath, PROTOCOL_TYPE)
-
-					workerCfg := GetAttachedWorkerDetails()
-					cmpResult, cmpErr := CompareProtocolMetadata(
-						string(PROTOCOL_TYPE),
-						srcPath,
-						dstPath,
-						workerCfg,
-						PROTOCOL_USERNAME,
-						PROTOCOL_PASSWORD,
-						fmt.Sprintf("tc-004-base-%d", i),
-						"../../test-results/metadata",
-					)
-					if cmpErr != nil {
-						fmt.Printf("[TC-004][goroutine-%d] ERROR CompareProtocolMetadata: %v\n", i, cmpErr)
-						failures = append(failures, fmt.Sprintf("metadata comparison failed for %s → %s: %v", srcPath, dstPath, cmpErr))
-					} else if cmpResult.HasDiffs {
-						LogError(fmt.Sprintf("[TC-004] metadata mismatch after base migration: %s", cmpResult.Summary()))
-						if cmpResult.DiffsFile != "" {
-							fmt.Printf("[TC-004][goroutine-%d] diffs file: %s\n", i, cmpResult.DiffsFile)
-						}
-						var msgs []string
-						for _, p := range cmpResult.SrcOnlyPaths {
-							msgs = append(msgs, fmt.Sprintf("src-only: %s", p))
-						}
-						for _, p := range cmpResult.DstOnlyPaths {
-							msgs = append(msgs, fmt.Sprintf("dst-only: %s", p))
-						}
-						for _, d := range cmpResult.Discrepancies {
-							msgs = append(msgs, fmt.Sprintf("path=%s field=%s src=%q dst=%q",
-								d.Path, d.Field, d.SrcValue, d.DstValue))
-						}
-						fmt.Printf("[TC-004][goroutine-%d] METADATA MISMATCH:\n  %s\n", i, strings.Join(msgs, "\n  "))
-						failures = append(failures, fmt.Sprintf("direct src↔dst metadata mismatch (%s):\n  %s",
-							cmpResult.Summary(), strings.Join(msgs, "\n  ")))
-					} else {
-						fmt.Printf("[TC-004][goroutine-%d] METADATA COMPARISON PASSED: %s\n", i, cmpResult.Summary())
-					}
-
-					// Assert all collected failures at the end
-					Expect(failures).To(BeEmpty(),
-						"[TC-004][goroutine-%d] validation failures:\n  %s", i, strings.Join(failures, "\n  "))
 
 				}(i, migrationJobConfigID)
 			}

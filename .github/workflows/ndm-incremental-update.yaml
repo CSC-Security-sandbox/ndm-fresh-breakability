@@ -931,6 +931,7 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NDM_E2E_DEEP_MIGRATION_VALIDATION: ${{ vars.NDM_E2E_DEEP_MIGRATION_VALIDATION || 'true' }}
 
       AZURE_SMB_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.provision-infrastructure.outputs.windows_worker_ips), ',') }}
       AZURE_SMB_NDM_WORKERS_PORT: ${{ vars.AZURE_SMB_NDM_WORKERS_PORT }}
@@ -1040,6 +1041,7 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NDM_E2E_DEEP_MIGRATION_VALIDATION: ${{ vars.NDM_E2E_DEEP_MIGRATION_VALIDATION || 'true' }}
 
       AZURE_NFS_NDM_WORKERS_HOST: ${{ join(fromJSON(needs.provision-infrastructure.outputs.linux_worker_ips), ',') }}
       AZURE_NFS_NDM_WORKERS_PORT: ${{ vars.AZURE_NFS_NDM_WORKERS_PORT }}

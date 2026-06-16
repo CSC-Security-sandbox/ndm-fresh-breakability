@@ -502,6 +502,7 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NDM_E2E_DEEP_MIGRATION_VALIDATION: ${{ vars.NDM_E2E_DEEP_MIGRATION_VALIDATION || 'true' }}
 
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}
@@ -662,6 +663,7 @@ jobs:
 
       NDM_USERNAME: ${{ secrets.NDM_APP_USERNAME }}
       PASSWORD: ${{ secrets.NDM_APP_PASSWORD }}
+      NDM_E2E_DEEP_MIGRATION_VALIDATION: ${{ vars.NDM_E2E_DEEP_MIGRATION_VALIDATION || 'true' }}
 
       NDM_VM_HOST: ${{ needs.setup-infrastructure.outputs.control_plane_vm_ip_address }}
       NDM_VM_PORT: ${{ vars.NDM_VM_PORT }}

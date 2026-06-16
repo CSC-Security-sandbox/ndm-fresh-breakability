@@ -17,11 +17,33 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// DeepMigrationValidationEnv enables TC-004 live CoC and src↔dst metadata checks
+// after base migration when set to a truthy value (true, 1, yes, on).
+const DeepMigrationValidationEnv = "NDM_E2E_DEEP_MIGRATION_VALIDATION"
+
+// DeepMigrationValidationEnabled reports whether deep post-migration validation should run.
+func DeepMigrationValidationEnabled() bool {
+	v := strings.TrimSpace(os.Getenv(DeepMigrationValidationEnv))
+	if v == "" {
+		return false
+	}
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	switch strings.ToLower(v) {
+	case "1", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
