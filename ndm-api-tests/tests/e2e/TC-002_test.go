@@ -141,7 +141,27 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 				"src_vol2_discovery.json",
 			}
 
-			// Discovery validators only check file counts, no volume names to replace
+			var volumeReplacementMaps []map[string]string
+			if PROTOCOL_TYPE == "NFS" {
+				volumeReplacementMaps = []map[string]string{
+					{
+						"vol_dnd_src_automation_1": clonedSourceVolumes[0],
+					},
+					{
+						"vol_dnd_src_automation_2": clonedSourceVolumes[1],
+					},
+				}
+			} else { // SMB
+				volumeReplacementMaps = []map[string]string{
+					{
+						"volSMBAuto_vol1": clonedSourceVolumes[0],
+					},
+					{
+						"vol4_33": clonedSourceVolumes[1],
+					},
+				}
+			}
+
 			for i, sourceJobConfigID := range sourceDiscoveryJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -159,6 +179,7 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 					sourceDiscoveryJobRunID,
 					JobTypeDiscovery,
 					fmt.Sprintf("../../validators/TC-002-JSON/%s/%s", PROTOCOL_TYPE, discovery_validators[i]),
+					volumeReplacementMaps[i],
 				)
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
@@ -232,36 +253,19 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 				"src2_to_dest2_vol_migration.json",
 			}
 
-			// Create volume replacement maps for dynamic validation
-			// Map old hardcoded validator volume names to cloned volume names
-			var volumeReplacementMaps []map[string]string
+			// Extend volume replacement maps for migration (source + destination volumes).
 			if PROTOCOL_TYPE == "NFS" {
-				volumeReplacementMaps = []map[string]string{
-					{
-						"vol_dnd_src_automation_1":  clonedSourceVolumes[0], // Old NFS source vol -> cloned name
-						"vol_dnd_dest_automation_1": clonedDestVolumes[0],   // Old NFS dest vol -> cloned name
-					},
-					{
-						"vol_dnd_src_automation_2":  clonedSourceVolumes[1], // Old NFS source vol -> cloned name
-						"vol_dnd_dest_automation_2": clonedDestVolumes[1],   // Old NFS dest vol -> cloned name
-					},
-				}
+				volumeReplacementMaps[0]["vol_dnd_dest_automation_1"] = clonedDestVolumes[0]
+				volumeReplacementMaps[1]["vol_dnd_dest_automation_2"] = clonedDestVolumes[1]
 			} else { // SMB
-				volumeReplacementMaps = []map[string]string{
-					{
-						"volSMBAuto_vol1": clonedSourceVolumes[0], // Old SMB source vol -> cloned name
-						"vol1":            clonedDestVolumes[0],   // Old SMB dest vol -> cloned name
-					},
-					{
-						"vol4_33": clonedSourceVolumes[1], // Old SMB source vol -> cloned name
-						"vol2":    clonedDestVolumes[1],   // Old SMB dest vol -> cloned name
-					},
-				}
+				volumeReplacementMaps[0]["vol1"] = clonedDestVolumes[0]
+				volumeReplacementMaps[1]["vol2"] = clonedDestVolumes[1]
 			}
 
 			// migrationCountBySourcePath maps SourceServer.Path -> baseline CoC file count so that
 			// the cutover validation can look up the correct baseline by source path.
 			migrationCountBySourcePath := make(map[string]int)
+
 			for i, migrationJobConfigID := range migrationJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
 				migrationJobRunID := getJobsResp.JobRuns[0].JobRunId

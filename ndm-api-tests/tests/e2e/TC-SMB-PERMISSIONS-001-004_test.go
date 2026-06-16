@@ -211,7 +211,9 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-			result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", "SMB-PERMISSIONS", "tc_01_discovery.json"))
+			result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", "SMB-PERMISSIONS", "tc_01_discovery.json"), map[string]string{
+				"smb_auto_perms1": clonedSourceVolumes[3],
+			})
 			Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 			LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 
@@ -387,7 +389,9 @@ var _ = Describe("TC-SMB-PERMISSIONS-001: Test SMB default/explicit permissions 
 			Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", destinationDiscoveryJobRunID)
 
 			By("Validating discovery report for destination")
-			result, err = ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../../validators/SMB-PERMISSIONS/tc_01_discovery.json")
+			result, err = ValidateReport(destinationDiscoveryJobRunID, JobTypeDiscovery, "../../validators/SMB-PERMISSIONS/tc_01_discovery.json", map[string]string{
+				"smb_auto_perms1": clonedDestVolumes[2],
+			})
 			Expect(err).NotTo(HaveOccurred(), "Error validating discovery report for destination")
 			By(fmt.Sprintf("Discovery report validation result: %s", result))
 

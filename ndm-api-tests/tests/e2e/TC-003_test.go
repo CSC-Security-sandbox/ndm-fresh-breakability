@@ -179,6 +179,20 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				"src_vol_discovery.json",
 				"src_vol2_discovery.json",
 			}
+
+			var discoveryVolumeReplacementMaps []map[string]string
+			if PROTOCOL_TYPE == "NFS" {
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"vol_dnd_src_automation_1": clonedSourceVolumes[0]},
+					{"vol_dnd_src_automation_2": clonedSourceVolumes[1]},
+				}
+			} else { // SMB
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"volSMBAuto_vol1": clonedSourceVolumes[0]},
+					{"vol4_33": clonedSourceVolumes[1]},
+				}
+			}
+
 			for i, configID := range sourceConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(configID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -214,7 +228,7 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 				}
 				err = WaitForJobState(jobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Source discovery job did not complete")
-				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				result, err := ValidateReport(jobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]), discoveryVolumeReplacementMaps[i])
 				Expect(err).NotTo(HaveOccurred(), "Error while validate PDF report")
 				By(fmt.Sprintf("validate report result : %s", result))
 			}

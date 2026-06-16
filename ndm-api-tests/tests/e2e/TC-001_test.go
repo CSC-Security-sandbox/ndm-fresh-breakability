@@ -139,6 +139,20 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				"src_vol_discovery.json",
 				"src_vol2_discovery.json",
 			}
+
+			var discoveryVolumeReplacementMaps []map[string]string
+			if PROTOCOL_TYPE == "NFS" {
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"vol_dnd_src_automation_1": clonedSourceVolumes[0]},
+					{"vol_dnd_src_automation_2": clonedSourceVolumes[1]},
+				}
+			} else { // SMB
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"volSMBAuto_vol1": clonedSourceVolumes[0]},
+					{"vol4_33": clonedSourceVolumes[1]},
+				}
+			}
+
 			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
@@ -152,7 +166,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
 
-				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]))
+				result, err := ValidateReport(sourceDiscoveryJobRunID, JobTypeDiscovery, fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]), discoveryVolumeReplacementMaps[i])
 				Expect(err).NotTo(HaveOccurred(), "Error validating report for job %s", sourceDiscoveryJobRunID)
 				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 			}
