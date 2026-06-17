@@ -114,39 +114,48 @@ export class ProjectService {
     sortOrder: 'ASC' | 'DESC' = 'ASC',
     filter: Partial<CreateProjectDto> = {},
   ): Promise<Project[]> {
-    const options: FindManyOptions<Project> = {
-      skip: (page - 1) * limit,
-      take: limit,
-      order: {
-        [sortField]: sortOrder,
-      },
-      where: filter,
-      relations: { account: true },
-    };
+    try {
+      const options: FindManyOptions<Project> = {
+        skip: (page - 1) * limit,
+        take: limit,
+        order: {
+          [sortField]: sortOrder,
+        },
+        where: filter,
+        relations: { account: true },
+      };
 
-    const projects = await this.projectRepository.find(options);
+      const projects = await this.projectRepository.find(options);
 
-    const transformedProjects = await Promise.all(
-      projects.map(async (project) => {
-        const createdByUser = await this.userRepository.findOne({
-          where: { id: project.created_by },
-          select: { id: true, email: true, user_status: true },
-        });
+      const userIds = [
+        ...new Set(
+          projects
+            .flatMap((p) => [p.created_by, p.updated_by])
+            .filter((id): id is string => !!id),
+        ),
+      ];
 
-        const updatedByUser = await this.userRepository.findOne({
-          where: { id: project.updated_by },
-          select: { id: true, email: true, user_status: true },
-        });
+      const users =
+        userIds.length > 0
+          ? await this.userRepository.find({
+              where: { id: In(userIds) },
+              select: { id: true, email: true, user_status: true },
+            })
+          : [];
 
-        return {
-          ...project,
-          created_by: createdByUser,
-          updated_by: updatedByUser,
-        } as any;
-      }),
-    );
+      const userMap = new Map(users.map((u) => [u.id, u]));
 
-    return transformedProjects;
+      const transformedProjects = projects.map((project) => ({
+        ...project,
+        created_by: userMap.get(project.created_by) ?? null,
+        updated_by: userMap.get(project.updated_by) ?? null,
+      } as any));
+
+      return transformedProjects;
+    } catch (error) {
+      this.logger.error('Failed to retrieve projects', error);
+      throw error;
+    }
   }
 
   async findByAccount(
@@ -203,25 +212,29 @@ export class ProjectService {
 
     const projects = await this.projectRepository.find(options);
 
-    const transformedProjects = await Promise.all(
-      projects.map(async (project) => {
-        const createdByUser = await this.userRepository.findOne({
-          where: { id: project.created_by },
-          select: { id: true, email: true, user_status: true },
-        });
+    const userIds = [
+      ...new Set(
+        projects
+          .flatMap((p) => [p.created_by, p.updated_by])
+          .filter((id): id is string => !!id),
+      ),
+    ];
 
-        const updatedByUser = await this.userRepository.findOne({
-          where: { id: project.updated_by },
-          select: { id: true, email: true, user_status: true },
-        });
+    const users =
+      userIds.length > 0
+        ? await this.userRepository.find({
+            where: { id: In(userIds) },
+            select: { id: true, email: true, user_status: true },
+          })
+        : [];
 
-        return {
-          ...project,
-          created_by: createdByUser,
-          updated_by: updatedByUser,
-        } as any;
-      }),
-    );
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const transformedProjects = projects.map((project) => ({
+      ...project,
+      created_by: userMap.get(project.created_by) ?? null,
+      updated_by: userMap.get(project.updated_by) ?? null,
+    } as any));
 
     return transformedProjects;
   }
