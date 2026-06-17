@@ -1,1 +1,37 @@
-[{"Total Count": "38", "Regular Files Count": "21"}]
+[
+  {
+    "Path": "smb_auto_perms1",
+    "Protocol": "SMB",
+    "File Count with File Size: <8KiB": "21",
+    "Total Number of Directories": "17",
+    "Directories with more than 1 Million Files": "None",
+    "File Count with Modification Time future": "38",
+    "File Count with Creation Time future": "38",
+    "Capacity with Creation Time future": "551 B",
+    "File Count with Access Time future": "38",
+    "Capacity with Access Time future": "551 B",
+    "Capacity with File Size: <8KiB": "551 B",
+    "Total Count": "38",
+    "Regular Files Count": "21",
+    "Symbolic Links Count": "0",
+    "Hard Links Count": "3",
+    "Junctions Count": "0",
+    "Volume Mount Points Count": "0",
+    "Shortcuts Count": "0",
+    "Total Space for Regular Files": "551 B",
+    "Total Space for Directories": "0 B",
+    "Total Space Used": "551 B",
+    ".txt": "size: (551 B); count: (21)",
+    "max_file_size": "54 B",
+    "max_depth": "0",
+    "max_name_length": "20",
+    "Status": "COMPLETED",
+    "Top 5 Longest File Names": "\\inheritance_test\\inheritance_disabled\\child_disabled\\file2.txt (63); \\inheritance_test\\inheritance_enabled\\child_disabled\\file3.txt (62); \\inheritance_test\\inheritance_enabled\\child_enabled\\file2.txt (61); \\permissions_test\\mixed_permissions_dir\\subdir1\\subfile1.txt (60); \\permissions_test\\mixed_permissions_dir\\subdir2\\subfile2.txt (60)",
+    "Top 5 Longest Directory Names": "\\inheritance_test\\inheritance_disabled\\child_disabled (53); \\inheritance_test\\inheritance_enabled\\child_disabled (52); \\inheritance_test\\inheritance_enabled\\child_enabled (51); \\permissions_test\\mixed_permissions_dir\\subdir1 (47); \\permissions_test\\mixed_permissions_dir\\subdir2 (47)",
+    "Top 5 Longest File Path": "\\inheritance_test\\inheritance_disabled\\child_disabled\\file2.txt (63); \\inheritance_test\\inheritance_enabled\\child_disabled\\file3.txt (62); \\inheritance_test\\inheritance_enabled\\child_enabled\\file2.txt (61); \\permissions_test\\mixed_permissions_dir\\subdir1\\subfile1.txt (60); \\permissions_test\\mixed_permissions_dir\\subdir2\\subfile2.txt (60)",
+    "Top 5 Longest Directory Path": "\\inheritance_test\\inheritance_disabled\\child_disabled (53); \\inheritance_test\\inheritance_enabled\\child_disabled (52); \\inheritance_test\\inheritance_enabled\\child_enabled (51); \\permissions_test\\mixed_permissions_dir\\subdir1 (47); \\permissions_test\\mixed_permissions_dir\\subdir2 (47)",
+    "Top 5 Biggest File Names": "\\permissions_test\\file3.txt (54); \\permissions_test\\file2.txt (54); \\permissions_test\\file1.txt (48); \\permissions_test\\subdir2\\subfile2.txt (33); \\permissions_test\\subdir1\\subfile1.txt (33)",
+    "Top 5 Biggest Directory With Count": "\\permissions_test (4); \\permissions_test\\mixed_permissions_dir (2); \\inheritance_test\\inheritance_disabled\\child_disabled (1); \\inheritance_test\\inheritance_enabled\\child_disabled (1); \\inheritance_test\\inheritance_enabled (1)",
+    "Top 5 Biggest Directory With Capacity": "\\permissions_test (175); \\permissions_test\\mixed_permissions_dir (56); \\permissions_test\\subdir2 (33); \\permissions_test\\subdir1 (33); \\permissions_test\\full_access_dir (25)"
+  }
+]

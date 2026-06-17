@@ -283,64 +283,322 @@ func CheckAllWorkerLogsNotEmpty(baseDir, date string) error {
 	return nil
 }
 
-func CheckAtLeastTwoWorkerFolders(baseDir, date, ProjectId string) error {
-	// Find the actual extracted directory structure
+func resolveSupportBundleRoot(baseDir string) (string, error) {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		return fmt.Errorf("could not read base directory: %w", err)
+		return "", fmt.Errorf("could not read base directory: %w", err)
 	}
 
-	var actualBaseDir string
 	for _, entry := range entries {
 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "ndm_logs_") {
-			actualBaseDir = filepath.Join(baseDir, entry.Name())
-			break
+			return filepath.Join(baseDir, entry.Name()), nil
 		}
 	}
 
-	if actualBaseDir == "" {
-		return fmt.Errorf("could not find ndm_logs_ directory in %s", baseDir)
+	// Some bundles extract ndm_logs/ directly without the ndm_logs_<userId> wrapper.
+	if info, err := os.Stat(filepath.Join(baseDir, "ndm_logs")); err == nil && info.IsDir() {
+		return baseDir, nil
 	}
+	return "", fmt.Errorf("could not find ndm_logs_<userId> directory in %s", baseDir)
+}
 
-	// Look for the ndm_logs/date structure
-	ndmLogsDir := filepath.Join(actualBaseDir, "ndm_logs", date)
-	dateEntries, err := os.ReadDir(ndmLogsDir)
+func resolveSupportBundleProjectDir(baseDir, date, projectID string) (string, error) {
+	bundleRoot, err := resolveSupportBundleRoot(baseDir)
 	if err != nil {
-		return fmt.Errorf("could not read date directory: %w", err)
+		return "", err
 	}
 
-	// Find any project directory (could be "no-project" or actual project ID)
-	var projectDir string
-	for _, entry := range dateEntries {
-		if entry.IsDir() {
-			projectDir = filepath.Join(ndmLogsDir, entry.Name())
-			break
+	projectDir := filepath.Join(bundleRoot, "ndm_logs", date, projectID)
+	info, err := os.Stat(projectDir)
+	if err != nil {
+		return "", fmt.Errorf("project directory not found for %s: %w", projectDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("project path is not a directory: %s", projectDir)
+	}
+	return projectDir, nil
+}
+
+const minSupportBundleZipBytes = 1024
+
+// ValidateSupportBundleZipFile checks the downloaded bundle is a non-trivial valid zip archive.
+func ValidateSupportBundleZipFile(zipPath string) error {
+	info, err := os.Stat(zipPath)
+	if err != nil {
+		return fmt.Errorf("could not stat zip file: %w", err)
+	}
+	if info.Size() < minSupportBundleZipBytes {
+		return fmt.Errorf("support bundle zip too small (%d bytes)", info.Size())
+	}
+
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("invalid zip file: %w", err)
+	}
+	defer reader.Close()
+	if len(reader.File) == 0 {
+		return fmt.Errorf("zip file contains no entries")
+	}
+	return nil
+}
+
+// ValidateSupportBundleProjectLayout verifies the expected ndm_logs/{date}/{projectId} tree exists.
+func ValidateSupportBundleProjectLayout(baseDir, date, projectID string) error {
+	projectDir, err := resolveSupportBundleProjectDir(baseDir, date, projectID)
+	if err != nil {
+		return err
+	}
+
+	requiredSubdirs := []string{"control-plane", "worker"}
+	var missing []string
+	for _, subdir := range requiredSubdirs {
+		path := filepath.Join(projectDir, subdir)
+		info, err := os.Stat(path)
+		if err != nil || !info.IsDir() {
+			missing = append(missing, subdir)
 		}
 	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing project subdirectories under %s: %s", projectDir, strings.Join(missing, ", "))
+	}
+	return nil
+}
 
-	if projectDir == "" {
-		return fmt.Errorf("could not find project directory in %s", ndmLogsDir)
+// ValidateControlPlaneServiceLogs verifies required control-plane logs exist and are non-empty.
+func ValidateControlPlaneServiceLogs(baseDir, date, projectID string, logFiles []string) error {
+	projectDir, err := resolveSupportBundleProjectDir(baseDir, date, projectID)
+	if err != nil {
+		return err
 	}
 
-	// Check the worker directory
+	var missing []string
+	for _, logFile := range logFiles {
+		logPath := filepath.Join(projectDir, "control-plane", logFile)
+		info, err := os.Stat(logPath)
+		if err != nil || info.IsDir() || info.Size() == 0 {
+			if err != nil {
+				missing = append(missing, fmt.Sprintf("%s (%v)", logFile, err))
+			} else {
+				missing = append(missing, logFile)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing or empty control-plane logs: %s", strings.Join(missing, "; "))
+	}
+	return nil
+}
+
+// ValidateWorkerServiceLogs verifies each worker folder exists and contains at least one non-empty log file.
+func ValidateWorkerServiceLogs(baseDir, date, projectID string, workerIDs []string) error {
+	projectDir, err := resolveSupportBundleProjectDir(baseDir, date, projectID)
+	if err != nil {
+		return err
+	}
+
 	workerDir := filepath.Join(projectDir, "worker")
 	workerEntries, err := os.ReadDir(workerDir)
 	if err != nil {
-		return fmt.Errorf("could not read worker directory: %w", err)
+		return fmt.Errorf("could not read worker directory %s: %w", workerDir, err)
 	}
 
-	workerFolderCount := 0
+	workerFolders := map[string]bool{}
 	for _, entry := range workerEntries {
 		if entry.IsDir() {
-			workerFolderCount++
+			workerFolders[entry.Name()] = true
 		}
 	}
 
-	if workerFolderCount < 1 {
-		return fmt.Errorf("expected at least 1 worker folder, found %d", workerFolderCount)
+	var issues []string
+	for _, workerID := range workerIDs {
+		if !workerFolders[workerID] {
+			issues = append(issues, fmt.Sprintf("worker folder missing for %s", workerID))
+			continue
+		}
+		if err := workerFolderHasNonEmptyLog(filepath.Join(workerDir, workerID)); err != nil {
+			issues = append(issues, fmt.Sprintf("worker %s: %v", workerID, err))
+		}
+	}
+	if len(issues) > 0 {
+		return fmt.Errorf("worker log validation failed: %s", strings.Join(issues, "; "))
+	}
+	return nil
+}
+
+func workerFolderHasNonEmptyLog(workerFolder string) error {
+	var found bool
+	err := filepath.WalkDir(workerFolder, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Size() > 0 {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no non-empty log files under %s", workerFolder)
+	}
+	return nil
+}
+
+type supportBundleMetricsFolderSpec struct {
+	label        string
+	nameVariants []string
+	filePatterns []string // empty = any non-empty .csv
+	minFiles     int
+	required     bool
+}
+
+// ValidateSupportBundleMetricsData verifies CSV exports requested via otherMetrics are present.
+func ValidateSupportBundleMetricsData(baseDir string) error {
+	bundleRoot, err := resolveSupportBundleRoot(baseDir)
+	if err != nil {
+		return err
 	}
 
+	specs := []supportBundleMetricsFolderSpec{
+		{
+			label:        "Configuration Data",
+			nameVariants: []string{"configuration data", "Configuration Data"},
+			filePatterns: []string{"job_config_details_", "worker_env_logs_"},
+			minFiles:     1,
+			required:     true,
+		},
+		{
+			label:        "State Data",
+			nameVariants: []string{"State Data"},
+			filePatterns: []string{"service_pods_", "metrics_data_", "build_details_"},
+			minFiles:     1,
+			required:     false,
+		},
+		{
+			label:        "System Inventory Data",
+			nameVariants: []string{"System Inventory", "System Inventory Data"},
+			filePatterns: []string{"system-inventory-"},
+			minFiles:     1,
+			required:     false,
+		},
+		{
+			label:        "Performance Metrics",
+			nameVariants: []string{"Performance Metrics"},
+			filePatterns: []string{".csv"},
+			minFiles:     1,
+			required:     false,
+		},
+	}
+
+	var requiredIssues []string
+	var optionalMissing []string
+	optionalPresent := 0
+	for _, spec := range specs {
+		err := validateMetricsFolder(bundleRoot, spec)
+		if err == nil {
+			if !spec.required {
+				optionalPresent++
+			}
+			continue
+		}
+		if spec.required {
+			requiredIssues = append(requiredIssues, fmt.Sprintf("%s: %v", spec.label, err))
+		} else {
+			optionalMissing = append(optionalMissing, spec.label)
+		}
+	}
+	if len(requiredIssues) > 0 {
+		return fmt.Errorf("metrics validation failed: %s", strings.Join(requiredIssues, "; "))
+	}
+	// Prometheus-backed exports may be partial depending on scrape coverage; require at least 2 of 3.
+	if optionalPresent < 2 {
+		return fmt.Errorf(
+			"expected at least 2 prometheus-backed metrics folders with csv data, found %d (missing: %s)",
+			optionalPresent, strings.Join(optionalMissing, ", "),
+		)
+	}
 	return nil
+}
+
+func validateMetricsFolder(bundleRoot string, spec supportBundleMetricsFolderSpec) error {
+	folderPath, err := findSupportBundleMetricsFolder(bundleRoot, spec.nameVariants)
+	if err != nil {
+		return err
+	}
+
+	matched, err := countMatchingCSVFiles(folderPath, spec.filePatterns)
+	if err != nil {
+		return err
+	}
+	if matched < spec.minFiles {
+		return fmt.Errorf(
+			"expected at least %d matching csv file(s) in %s, found %d",
+			spec.minFiles, folderPath, matched,
+		)
+	}
+	return nil
+}
+
+func findSupportBundleMetricsFolder(bundleRoot string, nameVariants []string) (string, error) {
+	entries, err := os.ReadDir(bundleRoot)
+	if err != nil {
+		return "", fmt.Errorf("could not read bundle root %s: %w", bundleRoot, err)
+	}
+
+	names := make(map[string]bool, len(nameVariants))
+	for _, variant := range nameVariants {
+		names[strings.ToLower(variant)] = true
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() && names[strings.ToLower(entry.Name())] {
+			return filepath.Join(bundleRoot, entry.Name()), nil
+		}
+	}
+	return "", fmt.Errorf("folder not found (tried: %s)", strings.Join(nameVariants, ", "))
+}
+
+func countMatchingCSVFiles(folderPath string, patterns []string) (int, error) {
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		return 0, fmt.Errorf("could not read folder: %w", err)
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".csv") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return 0, err
+		}
+		if info.Size() == 0 {
+			continue
+		}
+		if len(patterns) == 0 || csvNameMatchesAnyPattern(entry.Name(), patterns) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func csvNameMatchesAnyPattern(name string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if pattern == ".csv" || strings.Contains(name, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // Helper for safe slicing

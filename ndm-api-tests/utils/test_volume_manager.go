@@ -329,7 +329,7 @@ func (tm *TestVolumeManager) CleanupAllVolumes() error {
 			} else {
 				LogDebug(fmt.Sprintf("[CLEANUP] Successfully deleted SMB share '%s'", volInfo.Name))
 			}
-		}
+		} 
 
 		// Step 2: Delete the volume
 		LogDebug(fmt.Sprintf("[CLEANUP] Deleting volume '%s' (UUID: %s)", volInfo.Name, volInfo.UUID))

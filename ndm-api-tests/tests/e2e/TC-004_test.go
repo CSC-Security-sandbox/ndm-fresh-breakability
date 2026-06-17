@@ -425,11 +425,11 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				err = WaitForJobState(additionDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job after addition sync did not complete")
 
-				// Discovery validators only check file counts, no volume names to replace
 				result, err := ValidateReport(
 					additionDiscoveryJobRunID,
 					JobTypeDiscovery,
 					fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, additionDiscoveryValidators[i]),
+					volumeReplacementMaps[i],
 				)
 				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report after addition sync")
 				By(fmt.Sprintf("Addition discovery validation result: %s", result))
@@ -512,11 +512,11 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				err := WaitForJobState(deletionRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Deletion discovery job did not complete")
 
-				// Discovery validators only check file counts, no volume names to replace
 				result, err := ValidateReport(
 					deletionRunID,
 					JobTypeDiscovery,
 					fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, deletion_discovery_validators[i]),
+					volumeReplacementMaps[i],
 				)
 				Expect(err).NotTo(HaveOccurred(), "Error validating deletion discovery report")
 				By(fmt.Sprintf("Validate deletion discovery report result: %s", result))

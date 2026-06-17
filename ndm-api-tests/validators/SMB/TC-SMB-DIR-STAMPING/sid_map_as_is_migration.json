@@ -1,0 +1,16 @@
+[
+    {
+      "Source Path": "ss-src\\Dir2/"
+    },
+    {
+      "Source Path": "ss-src\\Dir2\\Test1"
+    },
+    {
+      "Source Path": "ss-src\\Dir2\\Test1\\text2.txt",
+      "Destination Checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "Source Path": "ss-src\\Dir2\\Text1.txt",
+      "Destination Checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]

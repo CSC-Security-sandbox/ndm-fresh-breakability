@@ -80,6 +80,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_vm_cleanup:
+        description: 'Skip Terraform VM teardown'
+        required: false
+        default: false
+        type: boolean
 
   workflow_call: 
     inputs:
@@ -139,6 +144,11 @@ on:
         type: boolean
       run_ui_tests:
         description: 'Run UI E2E tests (headless Playwright)'
+        required: false
+        default: false
+        type: boolean
+      skip_vm_cleanup:
+        description: 'Skip Terraform VM teardown'
         required: false
         default: false
         type: boolean
@@ -560,6 +570,8 @@ jobs:
       AWS_FSXN_SMB_DEST_VOLUMES: ${{ vars.AWS_FSXN_SMB_DEST_VOLUMES }}
       AWS_FSXN_SMB_SRC_HOST_IP: ${{ vars.AWS_FSXN_SMB_SRC_HOST_IP }}
       AWS_FSXN_SMB_DST_HOST_IP: ${{ vars.AWS_FSXN_SMB_DST_HOST_IP }}
+      AWS_WIN_DNS_SERVERS: ${{ vars.AWS_WIN_DNS_SERVERS }}
+      MIGRATION_SMB_DIR: ${{ vars.MIGRATION_SMB_DIR }}
 
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
@@ -714,6 +726,7 @@ jobs:
       AWS_FSXN_NFS_DEST_VOLUMES: ${{ vars.AWS_FSXN_NFS_DEST_VOLUMES }}
       AWS_FSXN_NFS_SRC_HOST_IP: ${{ vars.AWS_FSXN_NFS_SRC_HOST_IP }}
       AWS_FSXN_NFS_DST_HOST_IP: ${{ vars.AWS_FSXN_NFS_DST_HOST_IP }}
+      MIGRATION_NFS_DIR: ${{ vars.MIGRATION_NFS_DIR }}
 
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}
@@ -1575,11 +1588,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Terraform
+        if: ${{ inputs.skip_vm_cleanup != true && github.event.inputs.skip_vm_cleanup != 'true' }}
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Configure Provider Credentials for Cleanup
+        if: ${{ inputs.skip_vm_cleanup != true && github.event.inputs.skip_vm_cleanup != 'true' }}
         run: |
           CLOUD="${{ inputs.cloud_provider || github.event.inputs.cloud_provider || 'azure' }}"
           VM_PASSWORD=$(echo "${{ secrets.NDM_SSH_PASSWORD }}" | base64 --decode)
@@ -1623,12 +1638,14 @@ jobs:
           fi
 
       - name: Download Terraform State
+        if: ${{ inputs.skip_vm_cleanup != true && github.event.inputs.skip_vm_cleanup != 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: terraform-state
           path: ${{ env.TF_DIR }}
 
       - name: Initialize Terraform for Cleanup
+        if: ${{ inputs.skip_vm_cleanup != true && github.event.inputs.skip_vm_cleanup != 'true' }}
         run: |
           cd $TF_DIR
           terraform init
@@ -1783,6 +1800,7 @@ jobs:
           echo "Snapshot cleanup completed"
 
       - name: Destroy Terraform Resources
+        if: ${{ inputs.skip_vm_cleanup != true && github.event.inputs.skip_vm_cleanup != 'true' }}
         run: |
           cd $TF_DIR
           terraform destroy -auto-approve

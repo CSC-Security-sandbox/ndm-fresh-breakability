@@ -139,7 +139,25 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
 
 			By("Getting jobs by jobConfigId for source")
-			for _, sourceJobConfigID := range sourceJobConfigIDs {
+			discovery_validators := []string{
+				"src_vol_discovery.json",
+				"src_vol2_discovery.json",
+			}
+
+			var discoveryVolumeReplacementMaps []map[string]string
+			if PROTOCOL_TYPE == "NFS" {
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"vol_dnd_src_automation_1": clonedSourceVolumes[0]},
+					{"vol_dnd_src_automation_2": clonedSourceVolumes[1]},
+				}
+			} else { // SMB
+				discoveryVolumeReplacementMaps = []map[string]string{
+					{"volSMBAuto_vol1": clonedSourceVolumes[0]},
+					{"vol4_33": clonedSourceVolumes[1]},
+				}
+			}
+
+			for i, sourceJobConfigID := range sourceJobConfigIDs {
 				getJobsResp, resp, err := GetJobRunDetails(sourceJobConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), "Error getting job run ID")
 				Expect(resp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK")
@@ -151,6 +169,15 @@ var _ = Describe("Support Bundle Test e2e", func() {
 				// Wait for discovery jobs to complete
 				err = WaitForJobState(sourceDiscoveryJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Discovery job %s did not complete", sourceDiscoveryJobRunID)
+
+				result, err := ValidateReport(
+					sourceDiscoveryJobRunID,
+					JobTypeDiscovery,
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, discovery_validators[i]),
+					discoveryVolumeReplacementMaps[i],
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error validating discovery report for job %s", sourceDiscoveryJobRunID)
+				LogDebug(fmt.Sprintf("Validate Report Result for Discovery Job : %s = %s", sourceDiscoveryJobRunID, result))
 			}
 
 			By("Creating the destination file server")
@@ -308,80 +335,46 @@ var _ = Describe("Support Bundle Test e2e", func() {
 			}
 		})
 
-		It("Should generate, download, and verify all control-plane service logs in the support bundle", func() {
+		It("Should generate, download, and thoroughly validate support bundle contents", func() {
 			By("Triggering support bundle generation")
 			Expect(GenerateSupportBundle(ProjectId, workerId1, workerId2)).To(Succeed(), "Support bundle generation failed")
-
-			By("Waiting for support bundle generation to complete")
-			Wait(10) // Adjust as needed for your environment
 
 			By("Downloading the support bundle zip")
 			Expect(DownloadSupportBundleZip()).To(Succeed(), "Support bundle download failed")
 
 			zipPath := "ndm_logs.zip"
-			extractDir := "unzipped"
-			LogDebug(fmt.Sprintf("Zip file path: %s\nExtraction directory: %s", zipPath, extractDir))
+			extractDir := "unzipped_support_bundle"
+			defer os.RemoveAll(extractDir)
+			defer os.Remove(zipPath)
 
-			By("Unzipping the support bundle")
+			By("Validating zip file integrity")
+			Expect(ValidateSupportBundleZipFile(zipPath)).To(Succeed(), "Support bundle zip validation failed")
+
+			By("Extracting the support bundle")
+			Expect(os.RemoveAll(extractDir)).To(Succeed(), "Error resetting extraction directory")
 			Expect(os.MkdirAll(extractDir, os.ModePerm)).To(Succeed(), "Error creating extraction directory")
-			Wait(2) // Optional: wait for filesystem sync
 			Expect(Unzip(zipPath, extractDir)).To(Succeed(), "Unzip error")
 
 			today := time.Now().Format("2006-01-02")
-			logFiles := []string{
+			controlPlaneLogs := []string{
 				"admin-service.log",
 				"config-service.log",
 				"datamigrator-ui.log",
 				"jobs-service.log",
 				"reports-service.log",
 			}
-			LogDebug(fmt.Sprintf("Log files to check: %s", strings.Join(logFiles, ", ")))
 
-			for _, logFile := range logFiles {
-				logPath := fmt.Sprintf("ndm_logs/%s/%s/control-plane/%s", ProjectId, today, logFile)
-				err := CheckLogFileExistsAndNotEmpty(extractDir, logPath)
-				if err != nil && strings.Contains(err.Error(), "log file does not exist") {
-					LogDebug(fmt.Sprintf("Skipping %s: file does not exist", logFile))
-					continue
-				}
-				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("%s: %v", logFile, err))
-				LogDebug(fmt.Sprintf("%s: .log file exists with content", logFile))
-			}
+			By("Validating project layout under ndm_logs/{date}/{projectId}")
+			Expect(ValidateSupportBundleProjectLayout(extractDir, today, ProjectId)).To(Succeed())
 
-			By("Cleaning up the extraction directory and zip file")
-			Expect(os.RemoveAll(extractDir)).To(Succeed(), "Error deleting extraction directory")
-			Expect(os.Remove(zipPath)).To(Succeed(), "Error deleting zip file")
-		})
+			By("Validating all control-plane service logs exist and are non-empty")
+			Expect(ValidateControlPlaneServiceLogs(extractDir, today, ProjectId, controlPlaneLogs)).To(Succeed())
 
-		It("Should generate, download, and verify worker service logs folder is there in support bundle", func() {
-			By("Triggering support bundle generation")
-			Expect(GenerateSupportBundle(ProjectId, workerId1, workerId2)).To(Succeed(), "Support bundle generation failed")
+			By("Validating both worker folders contain non-empty log files")
+			Expect(ValidateWorkerServiceLogs(extractDir, today, ProjectId, []string{workerId1, workerId2})).To(Succeed())
 
-			By("Waiting for support bundle generation to complete")
-			Wait(10) // Adjust as needed for your environment
-
-			By("Downloading the support bundle zip")
-			Expect(DownloadSupportBundleZip()).To(Succeed(), "Support bundle download failed")
-
-			zipPath := "ndm_logs.zip"
-			extractDir := "unzipped"
-			LogDebug(fmt.Sprintf("Zip file path: %s\nExtraction directory: %s", zipPath, extractDir))
-
-			By("Unzipping the support bundle")
-			Expect(os.MkdirAll(extractDir, os.ModePerm)).To(Succeed(), "Error creating extraction directory")
-			Wait(2) // Optional: wait for filesystem sync
-			Expect(Unzip(zipPath, extractDir)).To(Succeed(), "Unzip error")
-
-			today := time.Now().Format("2006-01-02")
-
-			By("Checking that at least 1 worker service log folder exists")
-			baseDir := extractDir
-			err := CheckAtLeastTwoWorkerFolders(baseDir, today, ProjectId)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Worker folder check failed: %v", err))
-
-			By("Cleaning up the extraction directory and zip file")
-			Expect(os.RemoveAll(extractDir)).To(Succeed(), "Error deleting extraction directory")
-			Expect(os.Remove(zipPath)).To(Succeed(), "Error deleting zip file")
+			By("Validating metrics CSV exports (Configuration required; at least 2 of State/Inventory/Performance)")
+			Expect(ValidateSupportBundleMetricsData(extractDir)).To(Succeed())
 		})
 
 		AfterAll(func() {

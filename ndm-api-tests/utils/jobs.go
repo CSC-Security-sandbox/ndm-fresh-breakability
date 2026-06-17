@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,16 +25,17 @@ type MigrationResponseItems struct {
 
 // Detailed job response structure
 type GetJobResponse struct {
-	JobConfigId       string          `json:"jobConfigId"`
-	JobType           string          `json:"jobType"`
-	SourceServer      ServerInfo      `json:"sourceServer"`
-	DestinationServer ServerInfo      `json:"destinationServer"`
-	Status            string          `json:"status"`
-	NextScheduleDate  string          `json:"nextScheduleDate"`
-	CreatedAt         string          `json:"createdAt"`
-	JobRuns           []JobRun        `json:"jobRuns"`
-	AggregateData     AggregateData   `json:"aggregateData"`
-	Errors            json.RawMessage `json:"errors"`
+	JobConfigId             string                 `json:"jobConfigId"`
+	JobType                 string                 `json:"jobType"`
+	SourceServer            ServerInfo             `json:"sourceServer"`
+	DestinationServer       ServerInfo             `json:"destinationServer"`
+	Status                  string                 `json:"status"`
+	NextScheduleDate        string                 `json:"nextScheduleDate"`
+	CreatedAt               string                 `json:"createdAt"`
+	JobRuns                 []JobRun               `json:"jobRuns"`
+	AggregateData           AggregateData          `json:"aggregateData"`
+	ConfigurationsSetToJob  map[string]interface{} `json:"configurationsSetToJob"`
+	Errors                  json.RawMessage        `json:"errors"`
 }
 
 type ServerInfo struct {
@@ -82,14 +82,28 @@ type DiscoveryJobParams struct {
 }
 
 type MigrationJobParams struct {
-	FirstRunAt         string
-	FutureRunSchedule  string
-	SourcePathIDs      []string
-	DestinationPathIDs []string
-	SidMapping         interface{}
-	Options            map[string]interface{}
-	ExtraParams        map[string]interface{}
+	FirstRunAt               string
+	FutureRunSchedule        string
+	SourcePathIDs            []string
+	DestinationPathIDs       []string
+	SidMapping               interface{}
+	Options                  map[string]interface{}
+	ExtraParams              map[string]interface{}
+	// Optional: when set, migration is scoped to this subdirectory on the source volume.
+	SourceDirectoryPath string
+	// Optional: when set, files land under this subdirectory on the destination volume.
+	// Pass an empty string (or omit) to migrate to the root of the destination volume.
+	DestinationDirectoryPath     string
+	SmbPermissionInheritanceMode string
 }
+
+// SmbPermissionInheritanceConfigLabel is the jobs API configuration display key.
+const SmbPermissionInheritanceConfigLabel = "Convert inherited permissions into explicit"
+
+const (
+	SmbInheritModeAsIs       = "INHERIT_PERMS_AS_IS"
+	SmbInheritModeAsExplicit = "INHERIT_PERMS_AS_EXPLICIT"
+)
 
 type BulkCutoverJobParams struct {
 	SourcePathIDs             []string
@@ -108,14 +122,76 @@ type AdHocJobRunResponse struct {
 	} `json:"data"`
 }
 
+// GetDirsRequest is the payload for POST /api/v1/jobs/get-dirs.
+type GetDirsRequest struct {
+	FileServerID string `json:"fileServerId"`
+	ExportPath   string `json:"exportPath"`
+	Path         string `json:"path,omitempty"`
+	Dir          string `json:"dir,omitempty"`
+}
+
+// GetDirsEntry represents a single directory entry returned by get-dirs.
+type GetDirsEntry struct {
+	Name string `json:"name"`
+}
+
+// getDirsResponse is the envelope returned by POST /api/v1/jobs/get-dirs.
+type getDirsResponse struct {
+	Data struct {
+		Items []GetDirsEntry `json:"items"`
+	} `json:"data"`
+}
+
+// =============================================================================
+// DIRECTORY LISTING
+// =============================================================================
+
+// GetDirs calls POST /api/v1/jobs/get-dirs and returns the list of subdirectory
+// names under the given export path (optionally scoped to a sub-path).
+func GetDirs(req GetDirsRequest, headers map[string]string) ([]GetDirsEntry, *http.Response, error) {
+	getDirsURL := JOB_SERVICE_URL + GET_DIRS_ENDPOINT
+
+	payloadBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GetDirs: failed to marshal request: %v", err)
+	}
+
+	resp, err := SendAPIRequest(http.MethodPost, getDirsURL, payloadBytes, headers)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GetDirs: API request error: %v", err)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp, fmt.Errorf("GetDirs: failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, resp, fmt.Errorf("GetDirs: unexpected HTTP status %d — body: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+
+	var envelope getDirsResponse
+	if err := json.Unmarshal(bodyBytes, &envelope); err != nil {
+		return nil, resp, fmt.Errorf("GetDirs: failed to unmarshal response: %v", err)
+	}
+
+	dirs := envelope.Data.Items
+	LogDebug(fmt.Sprintf("GetDirs: found %d directories under exportPath=%s path=%s", len(dirs), req.ExportPath, req.Path))
+	return dirs, resp, nil
+}
+
 // =============================================================================
 // JOB CREATION FUNCTIONS
 // =============================================================================
+
+const snapshotExcludeFilePatterns = ", */~snapshot/*, */.snapshot/*"
 
 // CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
 // parses the response, and returns the destination job configuration ID.
 func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([]string, *http.Response, error) {
 	createDiscoveryURL := JOB_SERVICE_URL + CREATE_DISCOVERY_ENDPOINT
+
+	params.ExcludeFilePatterns += snapshotExcludeFilePatterns
 
 	payload := map[string]interface{}{
 		"excludeOlderThan":    params.ExcludeOlderThan,
@@ -185,30 +261,40 @@ func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([
 	return jobConfigIDs, resp, nil
 }
 
-// CreateMigrationJob creates migration jobs for all combinations of source and destination path IDs.
-// Returns a slice of jobConfigIDs (even if only one).
-func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([]string, *http.Response, error) {
-	createMigrationURL := JOB_SERVICE_URL + CREATE_MIGRATION_ENDPOINT
+func buildMigrationJobPayload(params MigrationJobParams) ([]byte, error) {
+	if params.Options == nil {
+		params.Options = map[string]interface{}{}
+	}
 
 	// Skip .snapshot file for all migrations
 	excludeFilePatterns, ok := params.Options["excludeFilePatterns"].(string)
 	if !ok {
 		return nil, nil, errors.New("excludeFilePatterns must be a string")
 	}
-	excludeFilePatterns += ",*/.snapshot"
+	excludeFilePatterns += snapshotExcludeFilePatterns
 	params.Options["excludeFilePatterns"] = excludeFilePatterns
 
-	// Build migrateConfigs as a slice of maps for all combinations
+	if params.SmbPermissionInheritanceMode != "" {
+		params.Options["smbPermissionInheritanceMode"] = params.SmbPermissionInheritanceMode
+	}
+
 	var migrateConfigs []map[string]interface{}
 	minLen := len(params.SourcePathIDs)
 	if len(params.DestinationPathIDs) < minLen {
 		minLen = len(params.DestinationPathIDs)
 	}
 	for i := 0; i < minLen; i++ {
-		migrateConfigs = append(migrateConfigs, map[string]interface{}{
+		cfg := map[string]interface{}{
 			"sourcePathId":      params.SourcePathIDs[i],
 			"destinationPathId": []string{params.DestinationPathIDs[i]},
-		})
+		}
+		if params.SourceDirectoryPath != "" {
+			cfg["sourceDirectoryPath"] = params.SourceDirectoryPath
+		}
+		if params.DestinationDirectoryPath != "" {
+			cfg["destinationDirectoryPath"] = params.DestinationDirectoryPath
+		}
+		migrateConfigs = append(migrateConfigs, cfg)
 	}
 
 	migrationPayload := map[string]interface{}{
@@ -219,29 +305,16 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 		"options":           params.Options,
 	}
 
-	// This extra params is used when any new key-value needs to add in struct e.g., gidMapping
 	if params.ExtraParams != nil {
 		for key, value := range params.ExtraParams {
 			migrationPayload[key] = value
 		}
 	}
-	payloadBytes, err := json.Marshal(migrationPayload)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	resp, err := SendAPIRequest(http.MethodPost, createMigrationURL, payloadBytes, headers)
-	if err != nil {
-		err = fmt.Errorf("migration job creation failed: API request error: %v", err)
-		return nil, nil, err
-	}
+	return json.Marshal(migrationPayload)
+}
 
-	// Validate HTTP response status
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("migration job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
-		return nil, resp, err
-	}
-
+func parseMigrationJobResponse(resp *http.Response) ([]string, *http.Response, error) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		err = fmt.Errorf("migration job creation failed: error reading response body: %v", err)
@@ -256,17 +329,14 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 	}
 
 	var jobConfigIDs []string
-	// Migration response has nested structure: data.items[0].jobs[]
 	if len(migrationResp.Data.Items) > 0 {
-		jobs := migrationResp.Data.Items[0].Jobs
-		for _, job := range jobs {
+		for _, job := range migrationResp.Data.Items[0].Jobs {
 			if job.ID != "" {
 				jobConfigIDs = append(jobConfigIDs, job.ID)
 			}
 		}
 	}
 
-	// Validate job count and non-empty results
 	if len(jobConfigIDs) == 0 {
 		err = fmt.Errorf("migration job creation failed: no valid jobConfigIDs found in response")
 		return nil, resp, err
@@ -274,6 +344,71 @@ func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([
 
 	LogDebug(fmt.Sprintf("Migration job creation completed successfully. Created %d jobs with IDs: %v", len(jobConfigIDs), jobConfigIDs))
 	return jobConfigIDs, resp, nil
+}
+
+// CreateMigrationJob creates migration jobs for all combinations of source and destination path IDs.
+// Returns a slice of jobConfigIDs (even if only one).
+func CreateMigrationJob(params MigrationJobParams, headers map[string]string) ([]string, *http.Response, error) {
+	createMigrationURL := JOB_SERVICE_URL + CREATE_MIGRATION_ENDPOINT
+
+	payloadBytes, err := buildMigrationJobPayload(params)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := SendAPIRequest(http.MethodPost, createMigrationURL, payloadBytes, headers)
+	if err != nil {
+		err = fmt.Errorf("migration job creation failed: API request error: %v", err)
+		return nil, nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("migration job creation failed: expected HTTP 200 OK, got %d", resp.StatusCode)
+		return nil, resp, err
+	}
+
+	return parseMigrationJobResponse(resp)
+}
+
+// CreateMigrationJobRaw posts a migration job and returns the HTTP response without treating non-2xx as an error.
+func CreateMigrationJobRaw(params MigrationJobParams, headers map[string]string) ([]string, *http.Response, error) {
+	createMigrationURL := JOB_SERVICE_URL + CREATE_MIGRATION_ENDPOINT
+
+	payloadBytes, err := buildMigrationJobPayload(params)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := SendAPIRequest(http.MethodPost, createMigrationURL, payloadBytes, headers)
+	if err != nil {
+		return nil, nil, fmt.Errorf("migration job creation failed: API request error: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp, nil
+	}
+
+	return parseMigrationJobResponse(resp)
+}
+
+// GetSmbInheritanceModeFromJobConfig reads the stored SMB inheritance toggle label from job details.
+func GetSmbInheritanceModeFromJobConfig(jobConfigID string, headers map[string]string) (string, bool, error) {
+	jobDetails, _, err := GetJobRunDetails(jobConfigID, headers, true)
+	if err != nil {
+		return "", false, err
+	}
+	if jobDetails.ConfigurationsSetToJob == nil {
+		return "", false, nil
+	}
+	raw, ok := jobDetails.ConfigurationsSetToJob[SmbPermissionInheritanceConfigLabel]
+	if !ok || raw == nil {
+		return "", false, nil
+	}
+	label, ok := raw.(string)
+	if !ok {
+		return "", false, fmt.Errorf("unexpected type for %s: %T", SmbPermissionInheritanceConfigLabel, raw)
+	}
+	return label, true, nil
 }
 
 // CreateBulkCutoverJob creates bulk cutover jobs for all combinations of source and destination path IDs.
