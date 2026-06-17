@@ -29,6 +29,7 @@ import { CreateRequestDto } from './dto/validate-connection.dto';
 import { ConfigStatusPayloadDTO } from './dto/validate-export-path.dto';
 import { SendMailService } from 'src/util/send-email';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { IngestJobRunConfig } from 'src/entities/ingest-jobrun-config.entity';
 import { generateWorkerName } from 'src/util/utils';
 import { SuccessEmailType } from 'src/util/send-email.type';
 
@@ -46,6 +47,8 @@ export class WorkManagerService {
     private readonly configRepo: Repository<ConfigEntity>,
     @InjectRepository(WorkerJobRunMap)
     private readonly workerJobRunMap: Repository<WorkerJobRunMap>,
+    @InjectRepository(IngestJobRunConfig)
+    private readonly ingestJobRunConfigRepo: Repository<IngestJobRunConfig>,
     private readonly configService: ConfigService,
     private readonly sendMailService: SendMailService,
   ) {
@@ -333,4 +336,35 @@ export class WorkManagerService {
       throw new Error('JobRunId is required to update worker configurations');
     }
   }
+
+  async getIngestConfigs(): Promise<Pick<IngestJobRunConfig, 'jobRunId' | 'taskQueue'>[]> {
+    try {
+      const configs = await this.ingestJobRunConfigRepo.find({
+        where: {
+          jobRun: {
+            status: In([
+              JobRunStatus.Running,
+              JobRunStatus.Ready,
+              JobRunStatus.Pausing,
+              JobRunStatus.Stopping,
+              JobRunStatus.Paused,
+            ]),
+          },
+        },
+        relations: ['jobRun'],
+        select: {
+          jobRunId: true,
+          taskQueue: true,
+        },
+      });
+      return configs;
+    } catch (error) {
+      this.logger.error(
+        `Error fetching ingest configs: ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException('Error fetching ingest configs');
+    }
+  }
+
 }

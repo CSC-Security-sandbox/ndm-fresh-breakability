@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBody,
+  ApiExcludeEndpoint,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -149,5 +150,13 @@ export class WorkManagerController {
       jobRunId,
       workerId,
     );
+  }
+
+  @ApiOperation({ summary: 'Get active ingest configs' })
+  @ApiOkResponse({ description: 'Active ingest configurations for running jobs' })
+  @ApiExcludeEndpoint()
+  @Get('/ingest-configs')
+  async getIngestConfigs() {
+    return this.workManagerService.getIngestConfigs();
   }
 }

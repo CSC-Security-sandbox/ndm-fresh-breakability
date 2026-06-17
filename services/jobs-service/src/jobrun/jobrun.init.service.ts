@@ -39,6 +39,7 @@ import { IdentityConfigCrossMappingEntity } from "src/entities/indentity-mapping
 import { IdentityMappingEntity } from "src/entities/indentity-mapping.entity";
 import { JobOptionsEntity } from "src/entities/joboptions.entity";
 import { WorkerJobRunMap } from "src/entities/workerjobrun.entity";
+import { IngestJobRunConfig } from "src/entities/ingest-jobrun-config.entity";
 import { MigrationConflictService } from "src/migration-conflict/migration-conflict.service";
 import { RedisService } from "src/redis/redis.service";
 import { filterUnhealthyWorkers } from "src/utils/worker-filter";
@@ -56,6 +57,7 @@ import { getWorkflowId } from "./jobrun.util";
 export class JobRunInitService {
   private readonly logger: LoggerService;
   private readonly mountBasePath: string;
+  private readonly enableParquet: boolean;
 
   constructor(
     @InjectRepository(JobRunEntity)
@@ -67,6 +69,8 @@ export class JobRunInitService {
     private fileServerRepo: Repository<FileServerEntity>,
     @InjectRepository(WorkerJobRunMap)
     private workerJobRunMapRepo: Repository<WorkerJobRunMap>,
+    @InjectRepository(IngestJobRunConfig)
+    private ingestJobRunConfigRepo: Repository<IngestJobRunConfig>,
     @InjectRepository(JobOptionsEntity)
     private optionRepo: Repository<JobOptionsEntity>,
     @Inject()
@@ -84,6 +88,7 @@ export class JobRunInitService {
     this.mountBasePath = this.configService.get<string>(
       "app.paths.mountBasePath",
     );
+    this.enableParquet = this.configService.get<boolean>('app.parquet.enabled');
   }
 
   // ------------------ Cron schedule -------------------- //
@@ -219,8 +224,19 @@ export class JobRunInitService {
       });
       await this.buildJobContext(jobRun.id, details);
       await this.initiateWorkflow(jobRun.id, details, projectId);
-      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId);
-      return await this.jobRunRepo.save(jobRun);
+      jobRun.workFlowId = getWorkflowId(jobRun.id, details.jobType, !!details.jobRunId, this.enableParquet);
+      const savedJobRun = await this.jobRunRepo.save(jobRun);
+
+      if (this.enableParquet) {
+        const runId = savedJobRun.id;
+        const ingestConfig = this.ingestJobRunConfigRepo.create({
+          jobRunId: runId,
+          taskQueue: `${runId}-ingestion-taskqueue`,
+        });
+        await this.ingestJobRunConfigRepo.save(ingestConfig);
+      }
+
+      return savedJobRun;
     } catch (error) {
       this.logger.error(`Failed to create job run for ${jobConfigId}: ${error.message}`);
       await this.jobConfigRepo.update(
@@ -491,8 +507,18 @@ export class JobRunInitService {
       }
 
       default: {
+        let workflowName: WorkFlows;
+        switch (this.enableParquet){
+          case true: {
+            //TODO : STUB this is a stub for the parquet workflow
+            workflowName = WorkFlows.PARQUET_MIGRATE;
+            break;
+          }
+          default : 
+            workflowName = WorkFlows.MIGRATE;
+        }
         const startWorkFlowPayload: StartWorkFlowPayload = {
-          workflowId: `${WorkFlows.MIGRATE}-${jobRunId}`,
+          workflowId: `${workflowName}-${jobRunId}`,
           taskQueue: "ParentWorkflow-TaskQueue",
           args: [
             { traceId: jobRunId, payload: jobRunConfig, options: options },
@@ -500,7 +526,7 @@ export class JobRunInitService {
           options: options,
         };
         await this.workFlowService.startWorkflow(
-          WorkFlows.MIGRATE,
+          workflowName,
           startWorkFlowPayload,
         );
         break;

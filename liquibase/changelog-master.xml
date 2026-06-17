@@ -741,4 +741,11 @@
       </rollback>
    </changeSet>
 
+   <changeSet id="20260616_01_create_ingest_jobrun_config_table.sql" author="kb93278">
+      <sqlFile path="liquibase/20260616_01_create_ingest_jobrun_config_table.sql"/>
+      <rollback>
+         <sqlFile path="liquibase/20260616_01_create_ingest_jobrun_config_table_rollback.sql"/>
+      </rollback>
+   </changeSet>
+
 </databaseChangeLog>

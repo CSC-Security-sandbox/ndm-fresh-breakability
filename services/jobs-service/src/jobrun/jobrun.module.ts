@@ -9,6 +9,7 @@ import {SpeedTestConfigEntity, SpeedTestConfigWorkerEntity } from "src/entities/
 import {SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity} from '../entities/speed-test-result.entity'
 import { JobConfigService } from 'src/jobconfig/jobconfig.service';
 import { WorkerJobRunMap } from 'src/entities/workerjobrun.entity';
+import { IngestJobRunConfig } from 'src/entities/ingest-jobrun-config.entity';
 import { InventoryEntity } from 'src/entities/inventory.entity';
 import { JobOptionsEntity } from 'src/entities/joboptions.entity';
 import { ProjectEntity } from 'src/entities/project.entity';
@@ -40,7 +41,7 @@ import { SoftDeleteJobConfigRepository } from 'src/repositories/soft-delete-jobc
 @Module({
     imports: [
         LoggerModule.forRoot(),
-        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity,JobStatsSummaryMvEntity, JobConfigInventoryStatsEntity]),
+        TypeOrmModule.forFeature([JobConfigEntity, SpeedTestConfigEntity, SpeedTestConfigWorkerEntity,JobRunEntity, WorkerJobRunMap, IngestJobRunConfig, JobOptionsEntity, InventoryEntity, ProjectEntity,TaskEntity,OperationsEntity, VolumeEntity, FileServerEntity, SpeedLogEntity, NetworkPerformanceResultEntity, SpeedTestResultEntity, SpeedLogEntryEntity, OperationErrorEntity, WorkerEntity,IdentityConfigCrossMappingEntity,IdentityMappingEntity, ErrorRemedyEntity, SyncEmailEntity,JobStatsSummaryMvEntity, JobConfigInventoryStatsEntity]),
         WorkerModule,
         RedisModule,
         AuthKeycloakModule,

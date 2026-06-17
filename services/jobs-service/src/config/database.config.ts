@@ -33,6 +33,7 @@ import { WorkerStatsEntity } from "src/entities/worker-stats.entity";
 import { SyncEmailEntity } from "src/entities/sync-email.entity";
 import { JobStatsSummaryMvEntity } from "src/entities/job-stats-summary-mv.entity";
 import { JobConfigInventoryStatsEntity } from "src/entities/job-config-inventory-stats.entity";
+import { IngestJobRunConfig } from "src/entities/ingest-jobrun-config.entity";
 
 export default registerAs(
   "typeorm",
@@ -76,7 +77,8 @@ export default registerAs(
       WorkerStatsEntity,
       SyncEmailEntity,
       // This is Materialized View
-      JobStatsSummaryMvEntity      
+      JobStatsSummaryMvEntity,
+      IngestJobRunConfig,
     ],
     migrations: [],
   }),

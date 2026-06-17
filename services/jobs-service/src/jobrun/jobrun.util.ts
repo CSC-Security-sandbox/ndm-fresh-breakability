@@ -16,9 +16,13 @@ const jobTypeWorkflowMap = {
     [JobType.DISCOVER]: WorkFlows.DISCOVERY,
 };
 
-export const getWorkflowId = (jobRunId: string, jobType: JobType, isRetryRun: boolean = false): string => {
+export const getWorkflowId = (jobRunId: string, jobType: JobType, isRetryRun: boolean = false, enableParquet: boolean = false): string => {
     if (isRetryRun) {
         return `${WorkFlows.RETRY}-${jobRunId}`;
+    }
+    if (enableParquet && jobType === JobType.MIGRATE) {
+        // TODO: STUB this is a stub for the parquet workflow
+        return `${WorkFlows.PARQUET_MIGRATE}-${jobRunId}`;
     }
     return `${jobTypeWorkflowMap[jobType]}-${jobRunId}`;
 };
