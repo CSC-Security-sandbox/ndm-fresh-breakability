@@ -319,6 +319,19 @@ var _ = Describe("GCNV Flex Test e2e", Ordered, func() {
 			Expect(approvalErr).NotTo(HaveOccurred(), "Error approving bulk cutover job for run %s", cutoverRunID)
 			Expect(approvalResp.StatusCode).To(Equal(http.StatusOK), "Expected HTTP 200 OK for run %s", cutoverRunID)
 			defer approvalResp.Body.Close()
+			
+			By("Waiting for cutover to complete and validating cutover report")
+			waitErr = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
+			Expect(waitErr).NotTo(HaveOccurred(), "Cutover job did not complete after approval")
+			
+			// GCNV-Flex uses vol2 (clonedSourceVolumes[1])
+			volumeReplacementMap := map[string]string{
+				"vol_dnd_src_automation_2":  clonedSourceVolumes[1],
+				"vol_dnd_dest_automation_2": clonedDestVolumes[1],
+			}
+			result, valErr := ValidateReport(cutoverRunID, JobTypeCutover, "../../validators/NFS/gcnv_flex_cutover_validation.json", volumeReplacementMap)
+			Expect(valErr).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+			By(fmt.Sprintf("GCNV-Flex cutover validation result: %s", result))
 		})
 	})
 })

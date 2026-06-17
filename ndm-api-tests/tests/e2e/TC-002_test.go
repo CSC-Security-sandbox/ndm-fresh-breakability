@@ -342,17 +342,13 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 			}
 
 			// By("Validating cutover reports")
-			// cutover_validators := []string{
-			// 	"nfs_src_to_dest_vol_cutover.json",
-			// 	"nfs_src2_to_dest2_vol_cutover.json",
-			// }
-			// for i, cutoverRunID := range cutoverRunIDs {
-			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/TC-009-JSON/%s/%s", PROTOCOL_TYPE, cutover_validators[i]))
-			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			// 	By(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			// }
-
-			By("Waiting for cutover jobs to complete and validating file counts")
+			By("Waiting for cutover jobs to complete and validating cutover reports")
+			cutoverValidators := []string{
+				"src_to_dest_vol_cutover.json",
+				"src2_to_dest2_vol_cutover.json",
+			}
+			
+			cutoverIndex := 0
 			for sourcePath, cutoverRunID := range cutoverRunBySourcePath {
 				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
@@ -368,6 +364,25 @@ var _ = Describe("TC-002: Run discovery and migration with 'Exclude file older t
 					fmt.Sprintf("Cutover CoC for %s should have %d files (migration baseline) but got %d — possible full re-migration or delta-miss bug", sourcePath, expected, cutoverRowCount),
 				)
 				LogDebug(fmt.Sprintf("Cutover run %s (%s) correctly shows %d files in CoC report", cutoverRunID, sourcePath, cutoverRowCount))
+				
+				// Validate full cutover report structure
+				// Find the volume index by checking which volume name is in the sourcePath
+				volIndex := 0
+				for i, vol := range clonedSourceVolumes {
+					if strings.Contains(sourcePath, vol) {
+						volIndex = i
+						break
+					}
+				}
+				result, err := ValidateReport(
+					cutoverRunID,
+					JobTypeCutover,
+					fmt.Sprintf("../../validators/TC-002-JSON/%s/%s", PROTOCOL_TYPE, cutoverValidators[volIndex]),
+					volumeReplacementMaps[volIndex],
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+				By(fmt.Sprintf("Cutover validation result for %s: %s", sourcePath, result))
+				cutoverIndex++
 			}
 
 			By("########################## TC-002 end ################################")

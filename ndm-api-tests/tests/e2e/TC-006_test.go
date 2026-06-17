@@ -288,9 +288,15 @@ var _ = Describe("TC-006: Run bulk cutover with concurrent migration jobs - batc
 				Expect(err).NotTo(HaveOccurred(), "Restarted migration job did not complete")
 			}
 
-			// result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
-			// Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
-			// By(fmt.Sprintf("validate report result for %s: %s", firstCutoverjobRunID, result))
+			By("Validating cutover report")
+			// TC-006 only has cutover for vol1
+			volumeReplacementMap := map[string]string{
+				"vol_dnd_src_automation_1":  clonedSourceVolumes[0],
+				"vol_dnd_dest_automation_1": clonedDestVolumes[0],
+			}
+			result, err := ValidateReport(firstCutoverjobRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/tc006_cutover_validation.json", PROTOCOL_TYPE), volumeReplacementMap)
+			Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", firstCutoverjobRunID)
+			By(fmt.Sprintf("TC-006 cutover validation result: %s", result))
 
 			By("########################## TC-006 end ################################")
 		})
