@@ -29,6 +29,9 @@ export { waitForApproval } from './core/common/waiting-approval';
 export { CutOverWorkFlow } from './core/parent/cutover-parent-workflow';
 export { MigrationWorkflow } from './core/parent/migration-parent-workflow';
 export { RetryMigrationWorkflow } from './core/parent/retry-migration-parent-workflow';
+export { ParquetMigrationWorkflow } from './core/parent/parquet-migration-parent-workflow';
+export { ParquetChildScanWorkflow } from './core/child/parquet-child-scan.workflow';
+export { ParquetChildSyncWorkflow } from './core/child/parquet-child-sync.workflow';
 
 export { ValidatePathWorkerWorkflow } from './validate-path/validate-path-worker-workflow';
 export { ValidatePathsWorkflow } from './validate-path/validate-path-workflow';

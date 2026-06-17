@@ -11,6 +11,10 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
+    "paths": {
+      "@netapp-cloud-datamigrate/jobs-lib": ["../../../lib/jobs-lib/src/index.ts"],
+      "@netapp-cloud-datamigrate/jobs-lib/*": ["../../../lib/jobs-lib/src/*"]
+    },
     "skipLibCheck": true,
     "strictNullChecks": false,
     "noImplicitAny": false,
