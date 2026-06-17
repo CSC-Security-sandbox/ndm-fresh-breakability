@@ -375,14 +375,7 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 				defer resp.Body.Close()
 			}
 
-			// By("Validating cutover reports")
-			// for _, cutoverRunID := range cutoverRunIDs {
-			// 	result, err := ValidateReport(cutoverRunID, JobTypeCutover, fmt.Sprintf("../../validators/%s/cutover_validation.json", PROTOCOL_TYPE))
-			// 	Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
-			// 	LogDebug(fmt.Sprintf("validate report result for %s: %s", cutoverRunID, result))
-			// }
-
-			By("Waiting for cutover jobs to complete and validating file counts")
+			By("Waiting for cutover jobs to complete and validating cutover reports")
 			for volIndex, cutoverRunID := range cutoverRunByVolIndex {
 				err = WaitForJobState(cutoverRunID, APPROVED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Cutover job %s did not complete after approval", cutoverRunID)
@@ -397,6 +390,17 @@ var _ = Describe("TC-001: Create a fileserver with 2 workers and check discovery
 					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC, cutoverRowCount),
 				)
 				LogDebug(fmt.Sprintf("Cutover run %s (vol%d) correctly shows %d files in CoC report", cutoverRunID, volIndex+1, cutoverRowCount))
+				
+				// Validate full cutover report structure
+				cutoverValidators := []string{"cutover_validation.json", "cutover_validation_vol2.json"}
+				result, err := ValidateReport(
+					cutoverRunID,
+					JobTypeCutover,
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, cutoverValidators[volIndex]),
+					volumeReplacementMaps[volIndex],
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+				By(fmt.Sprintf("Cutover validation result for vol%d: %s", volIndex+1, result))
 			}
 
 			By("########################## TC-001 end ################################")

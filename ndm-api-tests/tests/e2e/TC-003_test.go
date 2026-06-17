@@ -466,6 +466,17 @@ var _ = Describe("TC-003: Complete workflow with discovery, migration, and cutov
 					fmt.Sprintf("Cutover CoC for vol%d should have %d files (baseline %d + %d delta) but got %d — possible full re-migration or delta-miss bug", volIndex+1, expected, BaselineCutoverFileCount(volIndex), DeltaFilesInCutoverCoC, cutoverRowCount),
 				)
 				LogDebug(fmt.Sprintf("Cutover run %s (vol%d) correctly shows %d files in CoC report", cutoverRunID, volIndex+1, cutoverRowCount))
+				
+				// Validate full cutover report structure
+				cutoverValidators := []string{"src_to_dest_vol_cutover.json", "src2_to_dest2_vol_cutover.json"}
+				result, err := ValidateReport(
+					cutoverRunID,
+					JobTypeCutover,
+					fmt.Sprintf("../../validators/%s/%s", PROTOCOL_TYPE, cutoverValidators[volIndex]),
+					volumeReplacementMaps[volIndex],
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error while cutover report validation for run %s", cutoverRunID)
+				By(fmt.Sprintf("Cutover validation result for vol%d: %s", volIndex+1, result))
 			}
 
 			By("########################## TC-003 end ################################")
