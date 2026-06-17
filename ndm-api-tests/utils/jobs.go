@@ -269,7 +269,7 @@ func buildMigrationJobPayload(params MigrationJobParams) ([]byte, error) {
 	// Skip .snapshot file for all migrations
 	excludeFilePatterns, ok := params.Options["excludeFilePatterns"].(string)
 	if !ok {
-		return nil, nil, errors.New("excludeFilePatterns must be a string")
+		return nil, fmt.Errorf("excludeFilePatterns must be a string")
 	}
 	excludeFilePatterns += snapshotExcludeFilePatterns
 	params.Options["excludeFilePatterns"] = excludeFilePatterns
