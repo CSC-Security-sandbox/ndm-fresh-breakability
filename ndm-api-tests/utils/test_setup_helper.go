@@ -571,6 +571,42 @@ func SetupTestVolumesBeforeEach() ([]string, []string, *TestVolumeManager, *Test
 	return sourceClones, destClones, sourceVolumeManager, destVolumeManager, nil
 }
 
+// ReCloneDestVolume creates a brand-new destination clone from the master volume at
+// masterIndex. It is used when a test needs an additional, isolated destination
+// volume mid-run (e.g. when two sequential migrations share the same Context but
+// must each start from a clean slate). Returns the new clone name and a cleanup
+// function that deletes the clone; callers should defer the cleanup function.
+func ReCloneDestVolume(masterIndex int) (cloneName string, cleanup func(), err error) {
+	if GlobalVolumeSetup == nil {
+		return "", func() {}, fmt.Errorf("GlobalVolumeSetup not initialized")
+	}
+	if masterIndex < 0 || masterIndex >= len(GlobalVolumeSetup.MasterDestVolumes) {
+		return "", func() {}, fmt.Errorf("dest master index %d out of range (have %d masters)", masterIndex, len(GlobalVolumeSetup.MasterDestVolumes))
+	}
+
+	var mgr *TestVolumeManager
+	if GlobalVolumeSetup.CloneProvider == VolumeCloneProviderANF {
+		mgr = NewANFTestVolumeManager(*GlobalVolumeSetup.DestANFConfig)
+	} else {
+		mgr = NewTestVolumeManager(
+			GlobalVolumeSetup.DestOntapURL,
+			GlobalVolumeSetup.DestOntapUsername,
+			GlobalVolumeSetup.DestOntapPassword,
+			GlobalVolumeSetup.DestSVMName,
+			"",
+		)
+	}
+
+	masterName := GlobalVolumeSetup.MasterDestVolumes[masterIndex]
+	cloneName, err = mgr.CreateCloneVolume(masterName)
+	if err != nil {
+		return "", func() {}, fmt.Errorf("failed to create fresh dest clone from '%s': %w", masterName, err)
+	}
+
+	cleanup = func() { _ = mgr.CleanupAllVolumes() }
+	return cloneName, cleanup, nil
+}
+
 // CleanupTestVolumesAfterEach deletes cloned volumes after each test
 // Pass in the specific volume managers returned from SetupTestVolumesBeforeEach
 // This ensures each test only cleans up its own volumes (critical for parallel execution)

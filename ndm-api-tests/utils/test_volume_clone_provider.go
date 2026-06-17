@@ -93,12 +93,25 @@ func RequiredCloneSelectionForTest(testIdentifier string, protocol Protocol) Clo
 				SourceIndices: []int{2},
 				DestIndices:   []int{2},
 			}
+		case strings.Contains(normalized, "TC-SMB-DIR-STAMPING"):
+			// Dir-stamping test sources from index 4 and uses dest index 2.
+			return CloneSelection{
+				SourceIndices: []int{4},
+				DestIndices:   []int{2},
+			}
 		case strings.Contains(normalized, "TC-SMB-PERMISSIONS"),
 			strings.Contains(normalized, "TC-SMB-SID-MAPPING"),
 			strings.Contains(normalized, "TC-SMB-NO-SID-MAPPING"):
 			return CloneSelection{
 				SourceIndices: []int{3},
 				DestIndices:   []int{2},
+			}
+		case strings.Contains(normalized, "DLM"):
+			// TC-001 DLM test: sources from index 4 and uses dest index 0.
+			// Indices 0 and 1 are not needed since DLM only migrates a single directory.
+			return CloneSelection{
+				SourceIndices: []int{4},
+				DestIndices:   []int{0},
 			}
 		case strings.Contains(normalized, "RTC-004"), strings.Contains(normalized, "RTC-005"):
 			return CloneSelection{

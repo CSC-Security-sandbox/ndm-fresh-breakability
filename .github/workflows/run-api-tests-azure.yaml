@@ -560,6 +560,8 @@ jobs:
       AWS_FSXN_SMB_DEST_VOLUMES: ${{ vars.AWS_FSXN_SMB_DEST_VOLUMES }}
       AWS_FSXN_SMB_SRC_HOST_IP: ${{ vars.AWS_FSXN_SMB_SRC_HOST_IP }}
       AWS_FSXN_SMB_DST_HOST_IP: ${{ vars.AWS_FSXN_SMB_DST_HOST_IP }}
+      AWS_WIN_DNS_SERVERS: ${{ vars.AWS_WIN_DNS_SERVERS }}
+      MIGRATION_SMB_DIR: ${{ vars.MIGRATION_SMB_DIR }}
 
       SMB_EXECUTABLE_FILENAME: ${{ vars.SMB_EXECUTABLE_FILENAME }}
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
@@ -714,6 +716,7 @@ jobs:
       AWS_FSXN_NFS_DEST_VOLUMES: ${{ vars.AWS_FSXN_NFS_DEST_VOLUMES }}
       AWS_FSXN_NFS_SRC_HOST_IP: ${{ vars.AWS_FSXN_NFS_SRC_HOST_IP }}
       AWS_FSXN_NFS_DST_HOST_IP: ${{ vars.AWS_FSXN_NFS_DST_HOST_IP }}
+      MIGRATION_NFS_DIR: ${{ vars.MIGRATION_NFS_DIR }}
 
       BUILD_VERSION: ${{ inputs.build_version || github.event.inputs.build_version }}
       REF_TYPE: ${{ inputs.ref_type || github.event.inputs.ref_type }}

@@ -19,12 +19,14 @@ type SMBFilePermission struct {
 	LastModified string            `json:"lastModified"`
 }
 
+// ACLEntry mirrors one Windows DACL ACE from Get-Acl.
 type ACLEntry struct {
-	Principal        string   `json:"principal"`
-	AccessType       string   `json:"accessType"`
-	Permissions      string   `json:"permissions"`
-	InheritanceFlags []string `json:"inheritanceFlags"`
-	PropagationFlags string   `json:"propagationFlags"`
+	Principal           string   `json:"principal"`
+	AccessType          string   `json:"accessType"`
+	Permissions         string   `json:"permissions"`
+	InheritanceFlags    []string `json:"inheritanceFlags"`
+	PropagationFlags    string   `json:"propagationFlags"`
+	InheritedFromParent bool     `json:"inheritedFromParent"`
 }
 
 // PowerShell Get-Acl JSON structures for parsing
@@ -294,13 +296,21 @@ func tryParsePowerShellJSON(output string) ([]SMBFilePermission, error) {
 	// Clean up the output and find JSON array or object
 	output = strings.TrimSpace(output)
 
-	// Find the start of JSON (either [ or {)
-	jsonStart := strings.Index(output, "[")
-	if jsonStart == -1 {
-		jsonStart = strings.Index(output, "{")
-		if jsonStart == -1 {
-			return nil, fmt.Errorf("no JSON found in output")
-		}
+	// Find the start of JSON — prefer whichever comes first: [ or {
+	arrayStart := strings.Index(output, "[")
+	objectStart := strings.Index(output, "{")
+
+	jsonStart := -1
+	if arrayStart == -1 && objectStart == -1 {
+		return nil, fmt.Errorf("no JSON found in output")
+	} else if arrayStart == -1 {
+		jsonStart = objectStart
+	} else if objectStart == -1 {
+		jsonStart = arrayStart
+	} else if objectStart < arrayStart {
+		jsonStart = objectStart
+	} else {
+		jsonStart = arrayStart
 	}
 
 	// Extract everything from the JSON start
@@ -418,11 +428,12 @@ func convertPowerShellACLsToSMBPermissions(psACLs []PowerShellACLResponse) []SMB
 			inheritFlags := parseInheritanceFlagsFromString(access.InheritanceFlags)
 
 			aclEntry := ACLEntry{
-				Principal:        access.Principal,
-				AccessType:       access.Type,
-				Permissions:      access.Rights,
-				InheritanceFlags: inheritFlags,
-				PropagationFlags: access.PropagationFlags,
+				Principal:           access.Principal,
+				AccessType:          access.Type,
+				Permissions:         access.Rights,
+				InheritanceFlags:    inheritFlags,
+				PropagationFlags:    access.PropagationFlags,
+				InheritedFromParent: access.IsInherited,
 			}
 
 			perm.ACLEntries = append(perm.ACLEntries, aclEntry)
@@ -711,6 +722,19 @@ func removeEmpty(s []string) []string {
 func normalizePermission(perm string) string {
 	perm = strings.ToUpper(strings.TrimSpace(perm))
 
+	// Strip ", SYNCHRONIZE" suffix — PowerShell's FileSystemRights.ToString() appends it
+	// to most permission sets (e.g. "Modify, Synchronize", "Read, Synchronize").
+	// Synchronize is implicitly granted and not meaningful for ACL comparison.
+	perm = strings.Replace(perm, ", SYNCHRONIZE", "", -1)
+	perm = strings.Replace(perm, ",SYNCHRONIZE", "", -1)
+	perm = strings.Replace(perm, "SYNCHRONIZE, ", "", -1)
+	perm = strings.Replace(perm, "SYNCHRONIZE,", "", -1)
+	// If only SYNCHRONIZE remains after stripping, treat as READ (minimum meaningful access)
+	if perm == "SYNCHRONIZE" {
+		return "READ"
+	}
+	perm = strings.TrimSpace(perm)
+
 	// Handle numeric FileSystemRights values
 	// These are common bitmask values that represent the same effective permissions
 	switch perm {
@@ -742,6 +766,23 @@ func normalizePermission(perm string) string {
 	default:
 		return perm
 	}
+}
+
+// permissionSubsumedBy returns true if 'have' permission level includes 'need' permission level.
+// FULL ⊃ MODIFY ⊃ READ/WRITE; FULL ⊃ READ; FULL ⊃ WRITE; MODIFY ⊃ READ
+func permissionSubsumedBy(need, have string) bool {
+	need = normalizePermission(need)
+	have = normalizePermission(have)
+	if need == have {
+		return true
+	}
+	// switch have {
+	// case "FULL":
+	// 	return true // FULL subsumes everything
+	// case "MODIFY":
+	// 	return need == "READ" || need == "WRITE" || need == "EXECUTE"
+	// }
+	return false
 }
 
 func getFileNameFromPath(fullPath string) string {
@@ -950,14 +991,105 @@ net use %s /delete /y >$null 2>&1
 		return nil, fmt.Errorf("failed to get ACLs via PowerShell: %w", err)
 	}
 
-	// Parse JSON output
-	var psACLs []PowerShellACLResponse
-	if err := json.Unmarshal([]byte(output), &psACLs); err != nil {
+	LogDebug(fmt.Sprintf("GetSMBPermissionsWithPowerShell raw output length: %d", len(output)))
+
+	// Parse JSON output using the robust helper that handles leading text and single-object responses
+	permissions, err := tryParsePowerShellJSON(output)
+	if err != nil {
 		LogDebug(fmt.Sprintf("Failed to parse PowerShell JSON output: %v\nOutput: %s", err, output))
 		return nil, fmt.Errorf("failed to parse PowerShell JSON: %w", err)
 	}
 
-	return convertPowerShellACLsToSMBPermissions(psACLs), nil
+	if len(permissions) == 0 {
+		LogDebug(fmt.Sprintf("GetSMBPermissionsWithPowerShell returned 0 permissions. Output: %s", output))
+		return nil, fmt.Errorf("no permissions found in PowerShell output")
+	}
+
+	LogDebug(fmt.Sprintf("GetSMBPermissionsWithPowerShell parsed %d permissions successfully", len(permissions)))
+	return permissions, nil
+}
+
+// GetSMBDirPermissionsRecursive reads ACLs for a directory and all its children (recursive).
+// dirPath should be a relative path like "/folder" (leading slash is stripped for Windows).
+func GetSMBDirPermissionsRecursive(export, dirPath string) ([]SMBFilePermission, error) {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+	mappedDrive := `Z:`
+	winDir := strings.ReplaceAll(strings.TrimPrefix(dirPath, "/"), "/", `\`)
+
+	psScript := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+try { net use %s /delete /y *>$null } catch { }
+net use %s %s /user:%s "%s" | Out-Null
+
+$root = "%s\%s"
+$items = @($root) + @(Get-ChildItem -Path $root -Recurse -Force | ForEach-Object { $_.FullName })
+$results = @()
+
+foreach ($path in $items) {
+    if (Test-Path $path) {
+        $acl = Get-Acl $path
+        $isDir = (Get-Item $path) -is [System.IO.DirectoryInfo]
+        $accessList = @()
+        if ($acl.Access -ne $null) {
+            $accessList = @($acl.Access | ForEach-Object {
+                [PSCustomObject]@{
+                    Principal = $_.IdentityReference.Value
+                    Rights = $_.FileSystemRights.ToString()
+                    Type = $_.AccessControlType.ToString()
+                    IsInherited = $_.IsInherited
+                    InheritanceFlags = $_.InheritanceFlags.ToString()
+                    PropagationFlags = $_.PropagationFlags.ToString()
+                }
+            })
+        }
+        $obj = [PSCustomObject]@{
+            Path = $path
+            Owner = $acl.Owner
+            IsDirectory = $isDir
+            Access = $accessList
+        }
+        $results += $obj
+    }
+}
+
+$results | ConvertTo-Json -Depth 10
+net use %s /delete /y >$null 2>&1
+`, mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD, mappedDrive, winDir, mappedDrive)
+
+	config := GetAttachedWorkerDetails()
+	sshConfig := SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}
+
+	command := fmt.Sprintf(`powershell.exe -NoProfile -NonInteractive -EncodedCommand "%s"`, encodePowerShellCommand(psScript))
+	output, err := sshRunScript(sshConfig, command)
+	if err != nil {
+		return nil, fmt.Errorf("GetSMBDirPermissionsRecursive failed: %w\noutput: %s", err, output)
+	}
+
+	permissions, err := tryParsePowerShellJSON(output)
+	if err != nil {
+		// Dump raw JSON on parse failure for debugging
+		if len(output) > 5000 {
+			LogDebug(fmt.Sprintf("GetSMBDirPermissionsRecursive(%s) RAW JSON (first 5000 chars): %s", dirPath, output[:5000]))
+		} else {
+			LogDebug(fmt.Sprintf("GetSMBDirPermissionsRecursive(%s) RAW JSON: %s", dirPath, output))
+		}
+		return nil, fmt.Errorf("failed to parse recursive permissions JSON: %w", err)
+	}
+
+	// Dump a sample of raw output for debugging permission comparison issues
+	if len(output) > 2000 {
+		LogDebug(fmt.Sprintf("GetSMBDirPermissionsRecursive(%s) RAW JSON (first 2000 chars): %s", dirPath, output[:2000]))
+	} else {
+		LogDebug(fmt.Sprintf("GetSMBDirPermissionsRecursive(%s) RAW JSON: %s", dirPath, output))
+	}
+	LogDebug(fmt.Sprintf("GetSMBDirPermissionsRecursive(%s) parsed %d items", dirPath, len(permissions)))
+	return permissions, nil
 }
 
 func normalizePrincipal(principal string) string {
@@ -2589,16 +2721,14 @@ func isInheritanceBlocked(perm SMBFilePermission) bool {
 		return false
 	}
 
-	// Count inherited ACLs (have "I" flag)
 	inheritedCount := 0
 	hasPropagationFlags := false
 
 	for _, acl := range perm.ACLEntries {
-		// Check for inherited flag
+		if acl.InheritedFromParent {
+			inheritedCount++
+		}
 		for _, flag := range acl.InheritanceFlags {
-			if flag == "I" {
-				inheritedCount++
-			}
 			if flag == "OI" || flag == "CI" {
 				hasPropagationFlags = true
 			}
@@ -2657,3 +2787,302 @@ func LogInheritanceScenarioSummary(permissions []SMBFilePermission) {
 	LogDebug(fmt.Sprintf("  Mixed (Parent Child): %d items", mixedScenario))
 	LogDebug(fmt.Sprintf("  Total items: %d", len(permissions)))
 }
+
+// Dir stamping fixture constants (nested /A tree).
+const (
+	DirStampingSourceRoot      = "/A"
+	DirStampingDestRoot        = "/A"
+	DirStampingG03AltSource    = "/G03B"
+	DirStampingG03AltDest      = "/G03B"
+	DirStampingPermissionAUser = "Everyone"
+	DirStampingPermissionBUser = "BUILTIN\\Users"
+	DirStampingMappedDrive     = "Z:"
+)
+
+
+
+// GrantSMBDirStampingPrincipalOnPath adds an explicit ACE for principal on a given root path (e.g. "/A2").
+func GrantSMBDirStampingPrincipalOnPath(export, root, principal string) error {
+	split := strings.Split(export, ":")
+	smbShare := fmt.Sprintf(`\\%s\%s`, strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+	mappedDrive := DirStampingMappedDrive
+	r := strings.TrimPrefix(root, "/")
+	script := fmt.Sprintf(
+		`cmd /C net use %s /delete /y >nul 2>&1 & net use %s %s /user:%s "%s" && icacls %s\%s /grant "%s:(OI)(CI)M" & net use %s /delete /y`,
+		mappedDrive, mappedDrive, smbShare, PROTOCOL_USERNAME, PROTOCOL_PASSWORD,
+		mappedDrive, r, principal, mappedDrive,
+	)
+	config := GetAttachedWorkerDetails()
+	_, err := sshRunScript(SSHConfig{
+		Username: config.Username,
+		Host:     config.Host,
+		Port:     config.Port,
+		Password: config.Password,
+	}, script)
+	return err
+}
+
+
+
+
+
+func permissionsByBaseName(perms []SMBFilePermission) map[string]SMBFilePermission {
+	out := make(map[string]SMBFilePermission, len(perms))
+	for _, perm := range perms {
+		out[perm.FilePath] = perm
+	}
+	return out
+}
+
+
+
+
+// SMBMigrationRootKey is the relative key assigned to the migrated directory's root
+// node on both sides of a comparison (the source migration directory on one side, its
+// landing directory/volume root on the other) once permissions have been rebased with
+// rebaseToMigrationRoot. The dir-stamping comparators apply the inheritance-mode rule
+// only to this entry; every other (child) entry is validated with the AS_IS
+// preservation rule.
+const SMBMigrationRootKey = "."
+
+/*compareSMBDirStamping validates SMB directory-level inheritance-mode stamping.
+
+The migration engine applies the inheritance-mode transform (AS_IS vs EXPLICIT) ONLY
+to the migrated directory's root node — never to its children. So the comparison must
+be split:
+
+  - Migrated directory root (the entry keyed SMBMigrationRootKey): validated with the
+    mode-specific rule. In EXPLICIT mode every source ACE (inherited or explicit) must
+    appear on the destination, and source inherited ACEs must become explicit on the
+    destination. In AS_IS mode the root is validated like any other node.
+  - All child nodes: validated with the AS_IS preservation rule (source explicit ACEs
+    must appear on the destination; source inherited ACEs are skipped because the OS
+    re-propagates them naturally from the now-stamped parent). This holds for both job
+    modes, since children are never mode-transformed.
+
+When explicitMode is true the caller MUST rebase both sides with rebaseToMigrationRoot
+so the migrated directory's root is keyed SMBMigrationRootKey; otherwise the EXPLICIT
+rule would never be applied and the test would silently weaken to AS_IS.
+
+sidMapping (source SID -> target SID) is applied to each source principal before
+matching against the destination; pass nil when no SID remapping is expected.*/
+func compareSMBDirStamping(sourcePerms, destPerms []SMBFilePermission, explicitMode bool, sidMapping map[string]string) error {
+	if len(sourcePerms) == 0 {
+		return fmt.Errorf("source permissions list is empty")
+	}
+	if len(destPerms) == 0 {
+		return fmt.Errorf("destination permissions list is empty")
+	}
+
+	sourceMap := permissionsByBaseName(sourcePerms)
+	destMap := permissionsByBaseName(destPerms)
+
+	label := "AS_IS"
+	if explicitMode {
+		label = "EXPLICIT"
+	}
+	if sidMapping != nil {
+		label += "+SIDMAP"
+	}
+
+	if explicitMode {
+		if _, ok := sourceMap[SMBMigrationRootKey]; !ok {
+			return fmt.Errorf(
+				"[%s] migration-root entry (keyed %q) not found in source permissions — "+
+					"rebase both sides with rebaseToMigrationRoot before an EXPLICIT-mode comparison",
+				label, SMBMigrationRootKey)
+		}
+	}
+
+	LogDebug(fmt.Sprintf("[%s] comparing %d source paths against %d dest paths", label, len(sourceMap), len(destMap)))
+
+	var issues []string
+	for name, sourcePerm := range sourceMap {
+		destPerm, ok := destMap[name]
+		if !ok {
+			issues = append(issues, fmt.Sprintf("%s: path missing on destination", name))
+			LogDebug(fmt.Sprintf("[%s] %s: MISSING on destination", label, name))
+			continue
+		}
+
+		srcJSON, _ := json.MarshalIndent(sourcePerm.ACLEntries, "    ", "  ")
+		dstJSON, _ := json.MarshalIndent(destPerm.ACLEntries, "    ", "  ")
+		LogDebug(fmt.Sprintf("[%s] path: %s\n  source ACEs:\n    %s\n  dest ACEs:\n    %s", label, name, srcJSON, dstJSON))
+
+		// The inheritance-mode (EXPLICIT) rule applies only to the migrated directory's
+		// root node; every child node is validated for preservation with the AS_IS rule.
+		if explicitMode && name == SMBMigrationRootKey {
+			issues = append(issues, validateSMBExplicitNode(label, name, sourcePerm, destPerm, sidMapping)...)
+		} else {
+			issues = append(issues, validateSMBAsIsNode(label, name, sourcePerm, destPerm, sidMapping)...)
+		}
+	}
+
+	if len(issues) > 0 {
+		LogDebug(fmt.Sprintf("[%s] FAILED — %d issues: %v", label, len(issues), issues))
+		return fmt.Errorf("smb dir-stamping (%s) validation failed: %v", label, issues)
+	}
+	LogDebug(fmt.Sprintf("[%s] PASSED — all paths validated", label))
+	return nil
+}
+
+/*validateSMBExplicitNode applies the EXPLICIT-mode rule to a single node: every source
+ACE (inherited or explicit) must appear on the destination with the same principal and
+permission, and if the source ACE was inherited the destination ACE must be explicit
+(the migration engine converts inherited ACEs into explicit ones). It returns one issue
+string per ACE that fails the rule.*/
+func validateSMBExplicitNode(label, name string, sourcePerm, destPerm SMBFilePermission, sidMapping map[string]string) []string {
+	var issues []string
+	for _, srcACL := range sourcePerm.ACLEntries {
+		aceType := "explicit"
+		if srcACL.InheritedFromParent {
+			aceType = "inherited"
+		}
+		mappedPrincipal := applySIDMapping(srcACL.Principal, sidMapping)
+		found := false
+		for _, destACL := range destPerm.ACLEntries {
+			if !principalsMatchWithMapping(srcACL.Principal, destACL.Principal, sidMapping) {
+				continue
+			}
+			// Allow and Deny are opposite security intents; they must match exactly.
+			if srcACL.AccessType != destACL.AccessType {
+				continue
+			}
+			// If source ACE was inherited, dest ACE must be explicit.
+			if srcACL.InheritedFromParent && destACL.InheritedFromParent {
+				continue
+			}
+			if permissionSubsumedBy(srcACL.Permissions, destACL.Permissions) {
+				found = true
+				break
+			}
+		}
+		if found {
+			LogDebug(fmt.Sprintf("[%s]   OK  src %s ACE: %s → %s (%s)", label, aceType, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+		} else {
+			LogDebug(fmt.Sprintf("[%s]   FAIL src %s ACE: %s → %s (%s) — missing or not explicit on dest", label, aceType, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+			issues = append(issues, fmt.Sprintf(
+				"%s: source %s ACE for %s (mapped to %s) (%s) missing or not explicit on destination",
+				name, aceType, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+		}
+	}
+	return issues
+}
+
+/*validateSMBAsIsNode applies the AS_IS preservation rule to a single node: every source
+explicit ACE must appear on the destination (inherited or explicit); source inherited
+ACEs are skipped because the OS propagates them naturally from the parent.*/
+func validateSMBAsIsNode(label, name string, sourcePerm, destPerm SMBFilePermission, sidMapping map[string]string) []string {
+	var issues []string
+	for _, srcACL := range sourcePerm.ACLEntries {
+		if srcACL.InheritedFromParent {
+			LogDebug(fmt.Sprintf("[%s]   SKIP inherited ACE: %s (%s) — OS propagates naturally", label, srcACL.Principal, srcACL.Permissions))
+			continue
+		}
+		mappedPrincipal := applySIDMapping(srcACL.Principal, sidMapping)
+		found := false
+		for _, destACL := range destPerm.ACLEntries {
+			// Allow and Deny are opposite security intents; they must match exactly.
+			if srcACL.AccessType != destACL.AccessType {
+				continue
+			}
+			if principalsMatchWithMapping(srcACL.Principal, destACL.Principal, sidMapping) &&
+				permissionSubsumedBy(srcACL.Permissions, destACL.Permissions) {
+				found = true
+				break
+			}
+		}
+		if found {
+			LogDebug(fmt.Sprintf("[%s]   OK  explicit ACE: %s → %s (%s)", label, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+		} else {
+			LogDebug(fmt.Sprintf("[%s]   FAIL explicit ACE: %s → %s (%s) — missing on dest", label, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+			issues = append(issues, fmt.Sprintf(
+				"%s: source explicit ACE for %s (mapped to %s) (%s) missing on destination",
+				name, srcACL.Principal, mappedPrincipal, srcACL.Permissions))
+		}
+	}
+	return issues
+}
+
+// CompareSMBPermissionsAsExplicitMode verifies EXPLICIT-mode stamping. The inherited→explicit
+// conversion is validated only on the migrated directory's root (keyed SMBMigrationRootKey);
+// child nodes are validated for preservation with the AS_IS rule. Both sides must be rebased
+// with rebaseToMigrationRoot before calling.
+func CompareSMBPermissionsAsExplicitMode(sourcePerms, destPerms []SMBFilePermission) error {
+	return compareSMBDirStamping(sourcePerms, destPerms, true, nil)
+}
+
+/*CompareSMBPermissionsAsIsMode verifies directory-level stamping in AS_IS mode across
+all directories and subdirectories.
+
+Rule applied per ACE :
+  - Source explicit ACE → must appear on destination (inherited or explicit).
+  - Source inherited ACEs are skipped — the OS propagates them naturally through
+    Windows inheritance and no explicit stamping is expected for them.*/
+func CompareSMBPermissionsAsIsMode(sourcePerms, destPerms []SMBFilePermission) error {
+	return compareSMBDirStamping(sourcePerms, destPerms, false, nil)
+}
+
+// wellKnownSIDAliases maps interchangeable representations of well-known principals
+// to a single canonical token, so that a target SID such as "S-1-1-0" matches the
+// display name ("Everyone") that Windows reports for the same principal on the destination.
+var wellKnownSIDAliases = map[string]string{
+	"S-1-1-0":      "EVERYONE",
+	"EVERYONE":     "EVERYONE",
+	"S-1-5-32-544": "BUILTIN\\ADMINISTRATORS",
+	"S-1-5-18":     "NT AUTHORITY\\SYSTEM",
+}
+
+
+func canonicalPrincipal(principal string) string {
+	p := normalizePrincipal(principal)
+	if alias, ok := wellKnownSIDAliases[p]; ok {
+		return alias
+	}
+	return p
+}
+
+// applySIDMapping translates a source principal through a source-SID -> target-SID
+// mapping. If no mapping applies, the original principal is returned unchanged.
+func applySIDMapping(principal string, sidMapping map[string]string) string {
+	if mapped, ok := sidMapping[strings.TrimSpace(principal)]; ok {
+		return mapped
+	}
+	return principal
+}
+
+// principalsMatchWithMapping reports whether a source principal — after being remapped
+// through sidMapping — refers to the same principal as a destination principal,
+// accounting for well-known SID/name aliases.
+func principalsMatchWithMapping(srcPrincipal, destPrincipal string, sidMapping map[string]string) bool {
+	mappedSrc := applySIDMapping(srcPrincipal, sidMapping)
+	return canonicalPrincipal(mappedSrc) == canonicalPrincipal(destPrincipal)
+}
+
+/*CompareSMBPermissionsAsIsModeWithSIDMapping is the SID-mapping-aware variant of
+CompareSMBPermissionsAsIsMode. Each source ACE principal is translated through
+sidMapping (source SID -> target SID) before being matched against the destination,
+so an ACE whose SID was remapped during migration is expected to appear under its
+target principal on the destination.
+
+Rule applied per ACE: source explicit ACEs must appear on the destination under the
+mapped principal; source inherited ACEs are skipped (the OS propagates them naturally).*/
+func CompareSMBPermissionsAsIsModeWithSIDMapping(sourcePerms, destPerms []SMBFilePermission, sidMapping map[string]string) error {
+	return compareSMBDirStamping(sourcePerms, destPerms, false, sidMapping)
+}
+
+/*CompareSMBPermissionsAsExplicitModeWithSIDMapping is the SID-mapping-aware variant of
+CompareSMBPermissionsAsExplicitMode. Each source ACE principal is translated through
+sidMapping (source SID -> target SID) before being matched against the destination.
+
+The EXPLICIT rule (every source ACE present on the destination, with inherited source
+ACEs converted to explicit) is applied only to the migrated directory's root (keyed
+SMBMigrationRootKey); child nodes are validated for preservation with the AS_IS rule.
+Both sides must be rebased with rebaseToMigrationRoot before calling.*/
+func CompareSMBPermissionsAsExplicitModeWithSIDMapping(sourcePerms, destPerms []SMBFilePermission, sidMapping map[string]string) error {
+	return compareSMBDirStamping(sourcePerms, destPerms, true, sidMapping)
+}
+
+
+
+
