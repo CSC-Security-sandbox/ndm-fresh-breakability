@@ -894,11 +894,15 @@ export class ConfigurationService {
         }
       }
       // --- Transaction: save config + working directory atomically ---
+      // connect()/startTransaction() are inside the try so release() in the
+      // finally always runs, even if acquiring the connection or beginning the
+      // transaction fails (avoids leaking a pooled connection).
       const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
       let update: ConfigEntity;
       try {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
         update = await queryRunner.manager.save(ConfigEntity, config);
 
         if (!allUnHealthy) {
@@ -918,7 +922,9 @@ export class ConfigurationService {
 
         await queryRunner.commitTransaction();
       } catch (txError) {
-        await queryRunner.rollbackTransaction();
+        if (queryRunner.isTransactionActive) {
+          await queryRunner.rollbackTransaction();
+        }
         throw txError;
       } finally {
         await queryRunner.release();
@@ -1242,11 +1248,15 @@ export class ConfigurationService {
       }
 
       // --- Transaction: save working dir + config + volumes atomically ---
+      // connect()/startTransaction() are inside the try so release() in the
+      // finally always runs, even if acquiring the connection or beginning the
+      // transaction fails (avoids leaking a pooled connection).
       const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
       let update: ConfigEntity;
       try {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
         await queryRunner.manager.save(
           FileServerWorkingDirectoryMappingEntity,
           mapping,
@@ -1266,7 +1276,9 @@ export class ConfigurationService {
 
         await queryRunner.commitTransaction();
       } catch (txError) {
-        await queryRunner.rollbackTransaction();
+        if (queryRunner.isTransactionActive) {
+          await queryRunner.rollbackTransaction();
+        }
         throw txError;
       } finally {
         await queryRunner.release();
@@ -2160,12 +2172,6 @@ export class ConfigurationService {
       );
 
       const discoveredPaths = volumeDataList.map((v) => v.volumePath);
-
-      // Build a map of volumePath -> directoryPath for quick lookup
-      const directoryPathMap = new Map<string, string>();
-      for (const vd of volumeDataList) {
-        directoryPathMap.set(vd.volumePath, vd.directoryPath);
-      }
 
       // 1. Re-enable existing volumes if path still exists on NAS
       // Also update directoryPath for Dell
