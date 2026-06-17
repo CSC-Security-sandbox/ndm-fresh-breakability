@@ -540,13 +540,15 @@ func (r *CoCValidationResult) Summary() string {
 // ValidateCoCAgainstDestination fetches the CoC report for the given jobRunID,
 // mounts/scans the destination volume, and validates up to sampleSize files.
 //
-// For NFS:  checks size, UID, GID, permissions, checksum (src==dst in report)
+// For NFS:  checks size, UID, GID, permissions, checksum (src==dst in report).
+//           The destination scan runs on the Linux worker (same NFS client as migration/CoC),
+//           so UID/GID are compared strictly — 0 and 65534 are not treated as equivalent.
 // For SMB:  checks size, owner, checksum (src==dst in report)
 //
 // protocol: "NFS" or "SMB"
 // jobRunID: the migration job run ID (used to fetch CoC CSV via API)
 // dstPath:  NFS "host:/export" or SMB "\\host\share"
-// workerCfg: SSH config for destination scanning (NFS: local exec, SMB: Windows worker)
+// workerCfg: SSH config for destination scanning (NFS: Linux worker, SMB: Windows worker)
 // smbUser/smbPass: SMB credentials (ignored for NFS)
 // sampleSize: max files to validate (e.g. 100)
 func ValidateCoCAgainstDestination(
@@ -590,7 +592,7 @@ func ValidateCoCAgainstDestination(
 
 	switch strings.ToUpper(protocol) {
 	case "NFS":
-		return validateNFSCoCAgainstDst(rows, dstPath, sampleSize)
+		return validateNFSCoCAgainstDst(rows, dstPath, workerCfg, sampleSize)
 	case "SMB":
 		return validateSMBCoCAgainstDst(rows, dstPath, workerCfg, smbUser, smbPass, sampleSize)
 	default:
@@ -600,35 +602,29 @@ func ValidateCoCAgainstDestination(
 
 // ─── NFS CoC validation ──────────────────────────────────────────────────────
 
-func validateNFSCoCAgainstDst(rows []map[string]string, dstExport string, sampleSize int) (*CoCValidationResult, error) {
-	LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] START dst=%s sampleSize=%d", dstExport, sampleSize))
-
-	// Mount and scan destination under a single sudo invocation.
-	uid := fmt.Sprintf("%d", time.Now().UnixNano())
-	mp := fmt.Sprintf("/mnt/coc_val_%s", uid)
+func validateNFSCoCAgainstDst(rows []map[string]string, dstExport string, workerCfg SSHConfig, sampleSize int) (*CoCValidationResult, error) {
+	if strings.TrimSpace(workerCfg.Host) == "" {
+		return nil, fmt.Errorf("NFS CoC validation requires an attached Linux worker SSH config")
+	}
+	LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] START dst=%s worker=%s sampleSize=%d", dstExport, workerCfg.Host, sampleSize))
 
 	script := fmt.Sprintf(`
 set -e
-if ! command -v mount.nfs >/dev/null 2>&1; then
-  apt-get install -y nfs-common >/dev/null 2>&1
-fi
-mkdir -p "%[1]s"
-mount -o ro -t nfs "%[2]s" "%[1]s"
-find "%[1]s" -mindepth 1 -not -path '*/.snapshot/*' -printf '%%P\t%%y\t%%s\t%%U\t%%G\t%%m\n'
-umount "%[1]s" || umount -l "%[1]s"
-rm -rf "%[1]s"
-`, mp, dstExport)
+MP=$(mktemp -d -t coc_val.XXXXXX)
+trap 'sudo umount "$MP" 2>/dev/null || sudo umount -l "$MP" 2>/dev/null || true; rm -rf "$MP"' EXIT
+sudo mkdir -p "$MP"
+	sudo mount -o %[2]s -t nfs %[1]s "$MP"
+sudo find "$MP" -mindepth 1 -not -path '*/.snapshot/*' -printf '%%P\t%%y\t%%s\t%%U\t%%G\t%%m\n'
+`, strconv.Quote(dstExport), nfsMountOpts())
 
-	LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] mounting %s at %s", dstExport, mp))
-	cmd := exec.Command("sudo", "bash", "-c", script)
-	out, err := cmd.CombinedOutput()
+	LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] scanning %s on worker %s", dstExport, workerCfg.Host))
+	out, err := sshRunScript(workerCfg, script)
 	if err != nil {
-		LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] NFS scan FAILED: %v, output length=%d, output=%q", err, len(out), string(out)))
-		return nil, fmt.Errorf("NFS scan %s failed: %w\noutput: %s", dstExport, err, string(out))
+		LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] NFS scan FAILED: %v, output=%q", err, out))
+		return nil, fmt.Errorf("NFS scan %s on worker %s failed: %w\noutput: %s", dstExport, workerCfg.Host, err, out)
 	}
 	LogDebug(fmt.Sprintf("[validateNFSCoCAgainstDst] NFS scan completed, output length=%d bytes", len(out)))
 
-	// Parse scan output into a map: path → {size, uid, gid, perms}
 	type nfsStat struct {
 		size, uid, gid, perms string
 	}
@@ -641,7 +637,7 @@ rm -rf "%[1]s"
 		if len(parts) < 6 {
 			continue
 		}
-		if parts[1] == "f" { // files only
+		if parts[1] == "f" {
 			dstStats[parts[0]] = nfsStat{size: parts[2], uid: parts[3], gid: parts[4], perms: parts[5]}
 		}
 	}
@@ -676,11 +672,10 @@ rm -rf "%[1]s"
 		if sizeStr := strings.TrimSpace(row["Size in Bytes"]); sizeStr != "" && sizeStr != stat.size {
 			result.Diffs = append(result.Diffs, fmt.Sprintf("%s: size report=%s actual=%s", dstRelPath, sizeStr, stat.size))
 		}
-		// UID
+		// UID/GID — strict match; scan runs on the worker (same view as CoC), not the CI runner
 		if uid := strings.TrimSpace(row["Destination UID"]); uid != "" && uid != stat.uid {
 			result.Diffs = append(result.Diffs, fmt.Sprintf("%s: UID report=%s actual=%s", dstRelPath, uid, stat.uid))
 		}
-		// GID
 		if gid := strings.TrimSpace(row["Destination GID"]); gid != "" && gid != stat.gid {
 			result.Diffs = append(result.Diffs, fmt.Sprintf("%s: GID report=%s actual=%s", dstRelPath, gid, stat.gid))
 		}
@@ -850,6 +845,15 @@ func min8(n int) int {
 		return n
 	}
 	return 8
+}
+
+// nfsMountOpts returns mount -o flags aligned with the worker migration mount command.
+func nfsMountOpts() string {
+	v := strings.TrimPrefix(strings.TrimSpace(string(ProtocolVersion3)), "v")
+	if v == "" {
+		v = "3"
+	}
+	return fmt.Sprintf("ro,nfsvers=%s,soft,intr,nolock,tcp", v)
 }
 
 // symbolicPermsToOctal converts a symbolic permission string like "-rwxrwxr-x"
