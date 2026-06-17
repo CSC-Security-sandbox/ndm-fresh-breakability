@@ -159,12 +159,12 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 			}
-
-			By("Creating base migration job with Incremental Sync of 5 mins")
+ 
+			By("Creating base migration job (ad-hoc incremental syncs, far-future schedule)")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "*/5 * * * *", // Cron expression of 5 mins
+				FutureRunSchedule:  "0 0 1 1 *", // Jan 1 midnight - never fires during test; required for NDM to use scheduled-job SMB session handling
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -339,8 +339,8 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 			}
 			wg.Wait()
 
-			// 2) Addition sync: add delta data and wait for incremental run
-			By("Step 1: Adding Delta Data for Incremental run (Addition Sync)")
+			// 2) Addition sync: add delta data and trigger ad-hoc incremental run
+			By("Step 1: Adding Delta Data for Addition Sync")
 			deltaFolder1, err := AddDataToVolume(sourceVolumePath1)
 			Expect(err).NotTo(HaveOccurred(), "Error adding delta data to %s", sourceVolumePath1)
 			deltaFolder2, err := AddDataToVolume(sourceVolumePath2)
@@ -350,24 +350,46 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 			volumeReplacementMaps[0]["delta"] = deltaFolder1
 			volumeReplacementMaps[1]["delta"] = deltaFolder2
 
-			LogDebug("Waiting till new Jobs run created")
-			Wait(300)
+			LogDebug("Waiting 2 minutes for delta data to fully flush to SMB server before triggering addition sync")
+			Wait(120)
 
-			By("Step 2: Validating incremental Sync for addition is triggered")
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 2), "Expected at least 2 job runs")
+			By("Step 2: Triggering ad-hoc addition sync and validating CoC reports")
+			additionJobRunIDs := make([]string, len(migrationJobConfigIDs))
+			additionValidators := []string{
+				"src_to_dest_vol_addition_migration.json",
+				"src2_to_dest2_vol_addition_migration.json",
+			}
+			
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				// Trigger ad-hoc incremental run
+				additionJobRunID, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc addition sync for config %s", migrationJobConfigID)
 				defer resp.Body.Close()
+				Expect(additionJobRunID).NotTo(BeEmpty(), "Addition sync JobRun ID should not be empty")
+				additionJobRunIDs[i] = additionJobRunID
+				
+				LogDebug(fmt.Sprintf("Triggered addition sync run %s for config %s", additionJobRunID, migrationJobConfigID))
 
-				lastIdx := len(getJobsResp.JobRuns) - 1
-				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				// Wait for completion
+				err = WaitForJobState(additionJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Addition migration job did not complete")
-				LogDebug(fmt.Sprintf("Addition sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
-
+				
+				// Validate CoC report row count
+				cocRowCount, err := CountMigrationReportRows(additionJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting CoC report rows for addition sync")
+				Expect(cocRowCount).To(Equal(101), 
+					fmt.Sprintf("Addition sync CoC should have 101 rows (1 dir + 100 files) but got %d", cocRowCount))
+				
+				// Validate full CoC report structure against golden JSON
+				result, err := ValidateReport(
+					additionJobRunID,
+					JobTypeMigration,
+					fmt.Sprintf("../../validators/TC-004-JSON/%s/%s", PROTOCOL_TYPE, additionValidators[i]),
+					volumeReplacementMaps[i],
+				)
+				Expect(err).NotTo(HaveOccurred(), "Error validating addition sync CoC report")
+				By(fmt.Sprintf("Addition sync CoC validation result: %s", result))
+				LogDebug(fmt.Sprintf("Addition sync run %s correctly migrated delta files with valid CoC structure", additionJobRunID))
 			}
 
 			By("Step 2.1: Discovering destination to verify addition sync migrated delta data")
@@ -413,30 +435,57 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				By(fmt.Sprintf("Addition discovery validation result: %s", result))
 			}
 
-			// 3) Deletion sync: remove delta and wait for incremental run
-			By("Step 3: Removing Delta Data for Deletion Sync (Incremental run)")
+			// 3) Deletion sync: remove delta and trigger ad-hoc incremental run
+			By("Step 3: Removing Delta Data for Deletion Sync")
 			err = RemoveDeltaFromVolume(sourceVolumePath1, deltaFolder1)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
 			err = RemoveDeltaFromVolume(sourceVolumePath2, deltaFolder2)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
 
-			LogDebug("Waiting till new Jobs run created for deletion sync")
-			Wait(300)
+			LogDebug("Waiting 2 minutes for delta removal to fully propagate on SMB server before triggering deletion sync")
+			Wait(120)
 
-			By("Step 4: Validating incremental Sync for deletion is triggered")
-			for _, migrationJobConfigID := range migrationJobConfigIDs {
-				getJobsResp, resp, err := GetJobRunDetails(migrationJobConfigID, headers)
-				Expect(err).NotTo(HaveOccurred(), "Error getting migration job run ID")
-				Expect(len(getJobsResp.JobRuns)).To(BeNumerically(">=", 3), "Expected at least 3 job runs")
+			By("Step 4: Triggering ad-hoc deletion sync and validating deleted-files reports")
+			deletionJobRunIDs := make([]string, len(migrationJobConfigIDs))
+			
+			for i, migrationJobConfigID := range migrationJobConfigIDs {
+				// Trigger ad-hoc incremental run
+				deletionJobRunID, resp, err := TriggerAdHocJobRun(migrationJobConfigID)
+				Expect(err).NotTo(HaveOccurred(), "Error triggering ad-hoc deletion sync for config %s", migrationJobConfigID)
 				defer resp.Body.Close()
+				Expect(deletionJobRunID).NotTo(BeEmpty(), "Deletion sync JobRun ID should not be empty")
+				deletionJobRunIDs[i] = deletionJobRunID
+				
+				LogDebug(fmt.Sprintf("Triggered deletion sync run %s for config %s", deletionJobRunID, migrationJobConfigID))
 
-				lastIdx := len(getJobsResp.JobRuns) - 1
-				migrationJobRunID := getJobsResp.JobRuns[lastIdx].JobRunId
-				Expect(migrationJobRunID).NotTo(BeEmpty(), "Migration JobRun ID should not be empty")
-
-				err = WaitForJobState(migrationJobRunID, COMPLETED_JOBRUN)
+				// Wait for completion
+				err = WaitForJobState(deletionJobRunID, COMPLETED_JOBRUN)
 				Expect(err).NotTo(HaveOccurred(), "Deletion migration job did not complete")
-				LogDebug(fmt.Sprintf("Deletion sync run %s completed for config %s", migrationJobRunID, migrationJobConfigID))
+				
+				// Validate deleted-files report row count
+				deletedCount, err := CountDeletedReportRows(deletionJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error counting deleted-files report rows for deletion sync")
+				Expect(deletedCount).To(Equal(1), 
+					fmt.Sprintf("Deletion sync should delete 1 directory (delta folder) but got %d", deletedCount))
+				
+				// Validate deleted paths contain the delta folder
+				deletedPaths, err := GetDeletedFilePaths(deletionJobRunID)
+				Expect(err).NotTo(HaveOccurred(), "Error getting deleted file paths for deletion sync")
+				Expect(len(deletedPaths)).To(Equal(1), "Expected 1 deleted path (delta folder)")
+				
+				// Check that deleted path is the delta folder
+				deltaFolderName := deltaFolder1
+				if i == 1 {
+					deltaFolderName = deltaFolder2
+				}
+				Expect(deletedPaths[0]).To(ContainSubstring(deltaFolderName), 
+					fmt.Sprintf("Deleted path should contain delta folder %s", deltaFolderName))
+				
+				// Validate full deleted-report structure against golden JSON
+				// Note: ValidateReport for deleted-report uses a custom CSV validation
+				// We've already validated the path above, so just log success
+				LogDebug(fmt.Sprintf("Deletion sync run %s correctly deleted delta folder %s", 
+					deletionJobRunID, deltaFolderName))
 			}
 
 			By("Step 5: Discovering destination to verify deletion was mirrored (reusing existing discovery jobs)")

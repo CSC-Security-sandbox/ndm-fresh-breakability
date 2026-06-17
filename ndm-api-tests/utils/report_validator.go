@@ -798,6 +798,61 @@ func CountDeletedReportRows(jobRunID string) (int, error) {
 	return count, nil
 }
 
+// GetDeletedFilePaths returns the list of deleted file/directory paths from deleted-report.csv
+func GetDeletedFilePaths(jobRunID string) ([]string, error) {
+	data, err := fetchCocCSV(jobRunID)
+	if err != nil {
+		return nil, fmt.Errorf("GetDeletedFilePaths: fetch CoC ZIP for job %s: %w", jobRunID, err)
+	}
+
+	csvFiles, err := extractCSVFilesFromZip(data)
+	if err != nil {
+		return nil, fmt.Errorf("GetDeletedFilePaths: extract ZIP for job %s: %w", jobRunID, err)
+	}
+
+	var csvBytes []byte
+	for zipPath, b := range csvFiles {
+		if strings.Contains(strings.ToLower(path.Base(normalizeZipEntryPath(zipPath))), "deleted-report.csv") {
+			csvBytes = b
+			break
+		}
+	}
+	if csvBytes == nil {
+		return nil, fmt.Errorf("GetDeletedFilePaths: deleted-report.csv not found in CoC ZIP for job %s", jobRunID)
+	}
+
+	reader := csv.NewReader(bytes.NewReader(csvBytes))
+	header, err := reader.Read()
+	if err != nil {
+		return nil, fmt.Errorf("GetDeletedFilePaths: read CSV header for job %s: %w", jobRunID, err)
+	}
+
+	// Find "Destination Path" column
+	pathIdx := -1
+	for i, h := range header {
+		if strings.TrimSpace(h) == "Destination Path" {
+			pathIdx = i
+			break
+		}
+	}
+	if pathIdx == -1 {
+		return nil, fmt.Errorf("GetDeletedFilePaths: \"Destination Path\" column not found in deleted-report.csv for job %s", jobRunID)
+	}
+
+	var paths []string
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			break
+		}
+		if pathIdx < len(record) {
+			paths = append(paths, strings.TrimSpace(record[pathIdx]))
+		}
+	}
+	LogDebug(fmt.Sprintf("GetDeletedFilePaths: job %s has %d deleted paths", jobRunID, len(paths)))
+	return paths, nil
+}
+
 // CountCocFileOnlyRows returns the number of file-only rows in coc-report.csv.
 // Directory rows have an empty "Destination Checksum"; file rows have a non-empty value.
 func CountCocFileOnlyRows(jobRunID string) (int, error) {
