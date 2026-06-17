@@ -55,9 +55,19 @@ export const formatResponseData:any =(data: any): any => {
     if (Array.isArray(data)) {
         responseData.items = [...data];
     } else if (data !== null && typeof data === 'object' ) {
-        const { id, message: _msg, ...rest } = data as any;
-        if (id !== undefined) responseData.id = id;
-        responseData.items = { ...rest };
+        if (Array.isArray(data.data) && 'total' in data) {
+            responseData.items = [...data.data];
+            responseData.meta = {
+                total: data.total,
+                page: data.page,
+                pageSize: data.limit,
+                hasMore: data.page * data.limit < data.total,
+            };
+        } else {
+            const { id, message: _msg, ...rest } = data as any;
+            if (id !== undefined) responseData.id = id;
+            responseData.items = { ...rest };
+        }
     } else {
         responseData.items = data;
     }

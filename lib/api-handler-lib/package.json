@@ -3,7 +3,7 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
-  "version": "0.0.1",
+  "version": "0.0.11",
   "description": "handles all the API response and error handling for the application",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
