@@ -43,6 +43,14 @@ while [[ $# -gt 0 ]]; do
             RUN_ALL=false
             shift
             ;;
+        --clone_provider=*)
+            export VOLUME_CLONE_PROVIDER="${1#*=}"
+            shift
+            ;;
+        --clone_provider)
+            export VOLUME_CLONE_PROVIDER="$2"
+            shift 2
+            ;;
         *)
             # Unknown option, ignore and continue
             shift

@@ -184,10 +184,14 @@ func GetDirs(req GetDirsRequest, headers map[string]string) ([]GetDirsEntry, *ht
 // JOB CREATION FUNCTIONS
 // =============================================================================
 
+const snapshotExcludeFilePatterns = ", */~snapshot/*, */.snapshot/*"
+
 // CreateDiscoveryJob creates a discovery job using the provided parameters and headers,
 // parses the response, and returns the destination job configuration ID.
 func CreateDiscoveryJob(params DiscoveryJobParams, headers map[string]string) ([]string, *http.Response, error) {
 	createDiscoveryURL := JOB_SERVICE_URL + CREATE_DISCOVERY_ENDPOINT
+
+	params.ExcludeFilePatterns += snapshotExcludeFilePatterns
 
 	payload := map[string]interface{}{
 		"excludeOlderThan":    params.ExcludeOlderThan,
@@ -263,12 +267,11 @@ func buildMigrationJobPayload(params MigrationJobParams) ([]byte, error) {
 	}
 
 	// Skip .snapshot file for all migrations
-	excludeFilePatterns, _ := params.Options["excludeFilePatterns"].(string)
-	if excludeFilePatterns == "" {
-		excludeFilePatterns = "*/.snapshot"
-	} else {
-		excludeFilePatterns += ",*/.snapshot"
+	excludeFilePatterns, ok := params.Options["excludeFilePatterns"].(string)
+	if !ok {
+		return nil, fmt.Errorf("excludeFilePatterns must be a string")
 	}
+	excludeFilePatterns += snapshotExcludeFilePatterns
 	params.Options["excludeFilePatterns"] = excludeFilePatterns
 
 	if params.SmbPermissionInheritanceMode != "" {
