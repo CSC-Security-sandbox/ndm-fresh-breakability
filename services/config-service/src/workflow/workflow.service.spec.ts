@@ -92,6 +92,22 @@ describe('WorkflowService', () => {
         `Failed to connect to Temporal: ${error}`,
       );
     });
+
+    it('should close and clear the connection if client creation fails after connecting', async () => {
+      configService.get.mockReturnValue({ address: 'localhost:7233' });
+      (Connection.connect as jest.Mock).mockResolvedValue(mockConnection);
+      (mockConnection.close as jest.Mock).mockResolvedValue(undefined);
+      const clientError = new Error('Client creation failed');
+      (Client as jest.Mock).mockImplementationOnce(() => {
+        throw clientError;
+      });
+
+      await expect(service['getClient']()).rejects.toThrow(clientError);
+      // Stale connection is closed and cleared so a retry starts fresh
+      expect(mockConnection.close).toHaveBeenCalled();
+      expect(service['connection']).toBeNull();
+      expect(service['connectingPromise']).toBeNull();
+    });
   });
 
   describe('getWorkFlowRes', () => {

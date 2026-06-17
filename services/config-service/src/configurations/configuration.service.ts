@@ -951,14 +951,11 @@ export class ConfigurationService {
       });
 
       // refreshConfig handles Dell (via API) and non-Dell (via workers) internally
-      this.refreshConfig(update.id, traceId).catch(async (error) => {
+      this.refreshConfig(update.id, traceId).catch((error) => {
         this.logger.error(
           `refreshConfig failed for configId ${update.id}, traceId ${traceId}: ${error.message}`,
         );
-        await this.configEntity.update(update.id, {
-          status: ConfigStatus.ERRORED,
-          errorMessage: error.message,
-        });
+        return this.safeMarkConfigErrored(update.id, error.message);
       });
       return update;
     } catch (error) {
@@ -1305,14 +1302,11 @@ export class ConfigurationService {
         traceId,
       );
 
-      this.refreshConfig(update.id, traceId).catch(async (error) => {
+      this.refreshConfig(update.id, traceId).catch((error) => {
         this.logger.error(
           `refreshConfig failed for configId ${update.id}, traceId ${traceId}: ${error.message}`,
         );
-        await this.configEntity.update(update.id, {
-          status: ConfigStatus.ERRORED,
-          errorMessage: error.message,
-        });
+        return this.safeMarkConfigErrored(update.id, error.message);
       });
 
       return update;
@@ -1978,10 +1972,10 @@ export class ConfigurationService {
       if (attemptCount >= maxAttempts) {
         this.logger.warn(`Workflow ${id} timed out after ${maxAttempts} attempts.`);
         clearInterval(interval);
-        await this.configEntity.update(configId, {
-          status: ConfigStatus.ERRORED,
-          errorMessage: `Workflow timed out after ${WORKFLOW_EXECUTION_TIMEOUT_SECONDS}s`,
-        });
+        await this.safeMarkConfigErrored(
+          configId,
+          `Workflow timed out after ${WORKFLOW_EXECUTION_TIMEOUT_SECONDS}s`,
+        );
         return;
       }
       attemptCount++;
@@ -1993,10 +1987,10 @@ export class ConfigurationService {
         if (!details) {
           this.logger.warn(`No workflow details found for workflowId: ${id}`);
           clearInterval(interval);
-          await this.configEntity.update(configId, {
-            status: ConfigStatus.ERRORED,
-            errorMessage: 'Workflow details not found',
-          });
+          await this.safeMarkConfigErrored(
+            configId,
+            'Workflow details not found',
+          );
           return;
         }
         if (details.status === WorkflowExecutionStatus.COMPLETED) {
@@ -2008,22 +2002,37 @@ export class ConfigurationService {
             `Workflow ${id} did not complete. Status: ${details.status}`,
           );
           clearInterval(interval);
-          await this.configEntity.update(configId, {
-            status: ConfigStatus.ERRORED,
-            errorMessage: `Workflow ended with status: ${details.status}`,
-          });
+          await this.safeMarkConfigErrored(
+            configId,
+            `Workflow ended with status: ${details.status}`,
+          );
           return;
         }
       } catch (error) {
         this.logger.error(`Error fetching workflow result: ${error.message}`);
         clearInterval(interval);
-        await this.configEntity.update(configId, {
-          status: ConfigStatus.ERRORED,
-          errorMessage: error.message,
-        });
+        await this.safeMarkConfigErrored(configId, error.message);
         return;
       }
     }, pollIntervalMs);
+  }
+
+  // Marks a config as ERRORED without throwing, so the detached setInterval
+  // poller in updateResult() can never trigger an unhandled rejection.
+  private async safeMarkConfigErrored(
+    configId: string,
+    errorMessage: string,
+  ): Promise<void> {
+    try {
+      await this.configEntity.update(configId, {
+        status: ConfigStatus.ERRORED,
+        errorMessage,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark config ${configId} as ERRORED: ${error?.message ?? error}`,
+      );
+    }
   }
   
 

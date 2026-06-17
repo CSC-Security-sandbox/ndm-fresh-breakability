@@ -3591,6 +3591,28 @@ describe('ConfigurationService', () => {
       expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
     });
 
+    it('should swallow and log a DB failure when marking config as ERRORED (no unhandled rejection)', async () => {
+      // Trigger an error branch that writes ERRORED status via safeMarkConfigErrored
+      getWorkFlowResMock.mockResolvedValue(null);
+      mockConfigRepository.update.mockRejectedValueOnce(
+        new Error('DB unavailable'),
+      );
+
+      // Detached setInterval callback: must not reject/throw even if the DB write fails
+      service.updateResult('workflow-1', 'config-1');
+
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(mockConfigRepository.update).toHaveBeenCalled();
+      expect(loggerFactoryMock.create().error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to mark config'),
+      );
+
+      // Polling still stops cleanly
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      expect(getWorkFlowResMock).toHaveBeenCalledTimes(1);
+    });
+
     it('should stop polling and log error on fetch failure', async () => {
       getWorkFlowResMock.mockRejectedValue(new Error('Fetch error'));
 
