@@ -7,26 +7,9 @@ from enum import Enum
 
 
 class RunMode(str, Enum):
+    # Valid values for DiffInput.run_mode (kept as the canonical vocabulary; the wire field is a str).
     BASELINE = "baseline"      # scan source + dest, diff src-vs-dst (D5)
     INCREMENTAL = "incremental"  # scan source only, diff vs prior source snapshot
-
-
-class JobRunStatus(str, Enum):
-    RUNNING = "Running"
-    PAUSED = "Paused"
-    STOPPED = "Stopped"
-
-
-@dataclass
-class ScanIngestionInput:
-    account_id: str
-    job_config_id: str
-    job_run_id: str
-    source_path_id: str
-    run_mode: str = RunMode.INCREMENTAL.value
-    dest_path_id: str | None = None       # required when run_mode == baseline
-    feature_flag_ctx: dict | None = None
-    merge_task_queue: str | None = None   # route the merge child here; None => inherit parent's queue
 
 
 @dataclass
@@ -37,7 +20,6 @@ class IngestLegInput:
     job_run_id: str
     path_id: str
     side: str  # "src" | "dst"
-    merge_task_queue: str | None = None  # route the merge child here; None => inherit parent's queue
 
 
 @dataclass
@@ -98,10 +80,3 @@ class PromoteResult:
 
     snapshots_deleted: int
     bytes_freed: int
-
-
-@dataclass
-class ScanIngestionResult:
-    job_run_id: str
-    commands_emitted: int
-    subtrees_skipped: int

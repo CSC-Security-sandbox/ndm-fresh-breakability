@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from parquet_service.config import Settings
 from parquet_service.work_manager import (
     ConfigPoller,
@@ -57,7 +59,13 @@ def test_extract_entries_shapes() -> None:
     assert extract_entries(bare) == bare
     assert extract_entries({"data": {"items": {"metaConfig": bare}}}) == bare
     assert extract_entries({"items": bare}) == bare
-    assert extract_entries({"unexpected": 1}) == []
+    assert extract_entries([]) == []  # a cleanly-empty roster is valid (tears all workers down)
+
+
+def test_extract_entries_unrecognised_shape_raises() -> None:
+    # An unrecognised shape must NOT be silently read as "no jobs" (that would nuke all workers).
+    with pytest.raises(ValueError):
+        extract_entries({"unexpected": 1})
 
 
 # --- poller ----------------------------------------------------------------
@@ -129,17 +137,19 @@ def test_poller_poll_once_reconciles_workers() -> None:
     asyncio.run(scenario())
 
 
-def test_poller_adds_bearer_when_token_provider_set() -> None:
-    http = _FakeHttp([])
-
-    async def token() -> str:
-        return "tok123"
+def test_poller_skips_reconcile_on_unrecognised_payload() -> None:
+    http = _FakeHttp([{"taskQueue": "parquet-j1-taskqueue"}])
 
     async def scenario() -> None:
         mgr = WorkerManager(None, _settings(), worker_factory=lambda tq: _FakeWorker(tq))
-        poller = ConfigPoller(mgr, _settings(), http, token_provider=token)
-        await poller.fetch()
-        _, headers = http.calls[0]
-        assert headers is not None and headers["Authorization"] == "Bearer tok123"
+        poller = ConfigPoller(mgr, _settings(), http)
+        await poller.poll_once()
+        assert mgr.active_queues() == ["parquet-j1-taskqueue"]
+
+        # Upstream returns garbage -> poll_once swallows it and leaves the worker running.
+        http.payload = {"unexpected": 1}
+        await poller.poll_once()
+        assert mgr.active_queues() == ["parquet-j1-taskqueue"]
+        await mgr.shutdown()
 
     asyncio.run(scenario())

@@ -18,9 +18,7 @@ BANNED_TOP_LEVEL = frozenset(
     {"redis", "temporalio", "fastapi", "uvicorn", "starlette", "prometheus_client", "jwt"}
 )
 # Sibling layers — anything under these is off-limits to lib/.
-BANNED_INTERNAL = frozenset(
-    {"parquet_service.io", "parquet_service.workflow", "parquet_service.api"}
-)
+BANNED_INTERNAL = frozenset({"parquet_service.io", "parquet_service.workflow"})
 
 
 def _resolve(module: str | None, level: int, package: str) -> str:

@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -20,8 +19,6 @@ from .config import Settings
 from .worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
-
-TokenProvider = Callable[[], Awaitable[str | None]]
 
 
 @dataclass(frozen=True)
@@ -67,7 +64,10 @@ def extract_entries(payload: Any) -> list[dict[str, Any]]:
     """Pull the config list out of the response, tolerating the NDM ResponseInterceptor envelope.
 
     Accepts a bare list, `{items: [...]}`, `{data: {items: [...]}}`, or
-    `{data: {items: {metaConfig: [...]}}}` (worker-service shape).
+    `{data: {items: {metaConfig: [...]}}}` (worker-service shape). A cleanly-empty roster is
+    returned as `[]` (a legitimately empty list tears every worker down). A payload whose shape we
+    do NOT recognise raises ValueError so the caller can SKIP reconciliation — a transient upstream
+    glitch must never be mistaken for "no jobs" and nuke all running workers.
     """
     if isinstance(payload, list):
         return [e for e in payload if isinstance(e, dict)]
@@ -79,8 +79,7 @@ def extract_entries(payload: Any) -> list[dict[str, Any]]:
             node = node.get("metaConfig", node)
         if isinstance(node, list):
             return [e for e in node if isinstance(e, dict)]
-    logger.warning("unrecognised config payload shape: %s", type(payload).__name__)
-    return []
+    raise ValueError(f"unrecognised config payload shape: {type(payload).__name__}")
 
 
 class _ResponseLike(Protocol):
@@ -104,26 +103,16 @@ class ConfigPoller:
         manager: WorkerManager,
         settings: Settings,
         http_client: _HttpClientLike,
-        *,
-        token_provider: TokenProvider | None = None,
     ) -> None:
         self._manager = manager
         self._settings = settings
         self._http = http_client
-        self._token_provider = token_provider
         self._url = f"{settings.worker_config_url}/api/v1/work-manager/{settings.config_endpoint}"
 
-    async def _headers(self) -> dict[str, str]:
-        headers = {"Accept": "application/json"}
-        if self._token_provider is not None:
-            token = await self._token_provider()
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-        return headers
-
     async def fetch(self) -> list[WorkerConfig]:
+        # The work-manager config poll is unauthenticated — no Bearer token / auth header.
         resp = await self._http.get(
-            self._url, headers=await self._headers(), timeout=self._settings.poll_timeout_s
+            self._url, headers={"Accept": "application/json"}, timeout=self._settings.poll_timeout_s
         )
         resp.raise_for_status()
         entries = extract_entries(resp.json())
@@ -131,7 +120,15 @@ class ConfigPoller:
         return configs
 
     async def poll_once(self) -> None:
-        configs = await self.fetch()
+        try:
+            configs = await self.fetch()
+        except Exception as exc:
+            # A failed/garbled poll (HTTP error, non-2xx, unrecognised shape) must NOT be read as
+            # "no active jobs" — that would tear down every healthy worker. Skip this cycle instead;
+            # the next successful poll reconciles. Only a cleanly-parsed (possibly empty) roster
+            # reaches reconcile() below.
+            logger.error("config poll fetch failed; keeping current workers unchanged: %s", exc)
+            return
         queues = {c.task_queue for c in configs}
         started, stopped = await self._manager.reconcile(queues)
         if started or stopped:

@@ -43,8 +43,8 @@ class Settings:
     spill_dir: str
 
     # --- Workers ---
-    # NB: no dedicated merge queue — one worker per job runs the whole bundle and the merge child
-    # inherits the parent's queue (TS starter leaves the workflow-input merge_task_queue unset).
+    # NB: no dedicated merge queue — one worker per job runs both ingest legs (src + dst) plus the
+    # sort/merge/merkle/diff activities; merge is a plain activity on the same per-job queue.
     max_concurrent_activities: int  # activity ThreadPoolExecutor size per worker
     worker_shutdown_timeout: float  # graceful per-worker shutdown wait (s) before cancelling
 
@@ -56,13 +56,6 @@ class Settings:
 
     # --- Diff (§9) ---
     diff_batch_dirs: int
-
-    # --- Inbound auth (D15) ---
-    jwt_public_key_path: str
-    jwt_secret: str
-    jwt_algorithms: tuple[str, ...]
-    jwt_issuer: str
-    jwt_audience: str
 
     # --- API ---
     api_port: int
@@ -96,13 +89,6 @@ class Settings:
             poll_interval_s=float(e.get("POLL_INTERVAL_S", "10")),
             poll_timeout_s=float(e.get("POLL_TIMEOUT_S", "5")),
             diff_batch_dirs=int(e.get("DIFF_BATCH_DIRS", "1000")),
-            jwt_public_key_path=e.get("JWT_PUBLIC_KEY_PATH", ""),
-            jwt_secret=e.get("JWT_SECRET", ""),
-            jwt_algorithms=tuple(
-                a.strip() for a in e.get("JWT_ALGORITHMS", "RS256").split(",") if a.strip()
-            ),
-            jwt_issuer=e.get("JWT_ISSUER", ""),
-            jwt_audience=e.get("JWT_AUDIENCE", ""),
             api_port=int(e.get("PORT", "6666")),
         )
 

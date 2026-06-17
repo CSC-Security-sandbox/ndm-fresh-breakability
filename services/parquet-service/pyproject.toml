@@ -18,7 +18,6 @@ dependencies = [
     "msgpack>=1.0.0",
     "blake3>=0.4.0",            # BLAKE3-128 directory hash (D12)
     "prometheus-client>=0.20.0",
-    "pyjwt[crypto]>=2.8.0",     # inbound worker Bearer-JWT guard (D15)
 ]
 
 [project.optional-dependencies]

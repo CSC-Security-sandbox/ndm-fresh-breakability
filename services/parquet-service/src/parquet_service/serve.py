@@ -6,7 +6,7 @@ Run ONE container — `python -m parquet_service.serve` — and it:
   3. reconciles in-process Temporal Workers to the returned job task-queues (`WorkerManager`),
   4. serves a light `/health` + `/metrics` surface.
 
-It does NOT start workflows: the TS side starts `ScanIngestionWorkflow` (id `parquet-{jobRunId}`) on the
+It does NOT host or start workflows: the TS orchestrator starts its scan workflow (id `parquet-{jobRunId}`) on the
 job's `parquet-{jobId}-taskqueue` via the Temporal client; this process only guarantees a worker is
 polling that queue. A job that stops/completes drops out of the config response and its worker is torn
 down on the next cycle.
@@ -64,9 +64,9 @@ async def main() -> None:
 
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=s.api_port, log_config=None))
 
-    # TODO (D15): plug a Keycloak token_provider for the outbound poll once auth is wired (dev: none).
+    # The work-manager config poll is unauthenticated — no token provider needed.
     async with httpx.AsyncClient() as http:
-        poller = ConfigPoller(manager, s, http, token_provider=None)
+        poller = ConfigPoller(manager, s, http)
         poller_task = asyncio.create_task(poller.run(stop), name="pqsvc-config-poller")
         server_task = asyncio.create_task(server.serve(), name="pqsvc-api")
         logger.info("work-manager: API on :%s; polling for jobs every %ss", s.api_port, s.poll_interval_s)

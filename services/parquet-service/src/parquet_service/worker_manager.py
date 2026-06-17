@@ -1,8 +1,9 @@
 """In-process dynamic Temporal worker manager (worker-only work-manager).
 
 Mirrors the TS `WorkManagerService`: ONE process runs a Temporal Worker **per job**, each polling that
-job's dynamic task queue (`parquet-{jobId}-taskqueue`) and registering the whole pipeline bundle
-(`ALL_WORKFLOWS` + `ALL_ACTIVITIES`). Workers are created/destroyed by `reconcile()` against the list
+job's dynamic task queue (`parquet-{jobRunId}-taskqueue`) and registering activities only
+(`ALL_ACTIVITIES`) — workflows live in the TS orchestrator. Workers are created/destroyed by
+`reconcile()` against the list
 returned by the config poll: a queue in the list with no worker is started; a worker whose queue is no
 longer in the list is shut down. This process **never starts workflows** — the TS side does that via the
 Temporal client; here we only guarantee a poller exists on each active job's queue.
@@ -21,7 +22,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from .config import Settings
-from .workflow.registry import ALL_ACTIVITIES, ALL_WORKFLOWS
+from .workflow.registry import ALL_ACTIVITIES
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,6 @@ class WorkerManager:
         return Worker(
             self._client,
             task_queue=task_queue,
-            workflows=ALL_WORKFLOWS,
             activities=ALL_ACTIVITIES,
             activity_executor=ThreadPoolExecutor(
                 max_workers=self._settings.max_concurrent_activities

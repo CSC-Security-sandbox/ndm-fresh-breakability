@@ -11,17 +11,17 @@ See [`SPEC.md`](./SPEC.md) for the full design and decisions (D1–D18).
 
 ```
 src/parquet_service/
-  api/        FastAPI shell (trigger, health, metrics) + worker Bearer-JWT guard
-  workflow/   ScanIngestionWorkflow + activities + merge-sort child workflow
+  workflow/   Temporal activities (consume/sort/merge/merkle/diff/promote) — no workflow defs
   lib/        PURE library — schema, parquet writer, sorter, merkle, comparator, command, paths
   io/         Redis adapters — stream reader/writer, diff checkpoint
   config.py   env/Helm-value settings
-  worker.py   Temporal worker entrypoint
+  serve.py    work-manager entrypoint (poll config + dynamic 1 worker/job)
+  worker.py   static activity-only worker (dev/manual)
 tests/        fixtures + unit tests
 helm/         chart bundled into the Control Plane Helm install
 ```
 
-**Layering rule:** `lib/` has no Redis/Temporal/HTTP imports; only `io/`, `workflow/`, `api/` touch the
+**Layering rule:** `lib/` has no Redis/Temporal/HTTP imports; only `io/` and `workflow/` touch the
 outside world. Activities are thin wrappers; algorithms live in `lib/`.
 
 ## Local dev
@@ -33,9 +33,8 @@ export REDIS_URL=redis://default:redis@localhost:6379/0
 export TEMPORAL_ADDRESS=localhost:7233
 export DATA_ROOT=./data
 
-python -m parquet_service.serve                        # work-manager (prod): poll config + 1 worker/job
-python -m parquet_service.worker                       # static single worker, all queues (dev/manual)
-uvicorn parquet_service.api.server:app --port 6666     # HTTP trigger API (dev/manual; starts workflows)
+python -m parquet_service.serve     # work-manager (prod): poll config + 1 worker/job
+python -m parquet_service.worker    # static activity-only worker on TASK_QUEUE (dev/manual)
 pytest
 ```
 
@@ -52,5 +51,5 @@ The caller (worker) passes `run_mode` at start:
 
 ## Status
 
-Scaffold. Implemented: schemas, stream I/O, paths, command encoding, config, API, worker, packaging, Helm.
+Scaffold. Implemented: schemas, stream I/O, paths, command encoding, config, work-manager (poll + dynamic workers), packaging, Helm.
 Stubbed (contracts defined, see `# TODO`): parquet rotation, k-way merge-sort, Merkle build, comparator/diff.

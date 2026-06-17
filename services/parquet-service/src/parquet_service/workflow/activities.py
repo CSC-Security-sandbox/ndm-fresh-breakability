@@ -6,7 +6,6 @@ Activities are synchronous (run on the worker's ThreadPoolExecutor) since pyarro
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import redis
 from temporalio import activity
@@ -68,6 +67,16 @@ def consume_stream(leg: IngestLegInput) -> ConsumeResult:
     consumer = f"parquet-{activity.info().activity_id}"
     eof = False
     while not eof:
+        # Heartbeat each batch (keeps us inside the heartbeat timeout during quiet stretches) and,
+        # since this is a sync activity, gives Temporal a point to deliver cancellation. When the job
+        # is stopped its queue drops from the poll and the worker is torn down; an in-flight stream
+        # read must notice the cancel and exit instead of being thread-killed mid-write.
+        activity.heartbeat(f"rows={rows}")
+        if activity.is_cancelled():
+            logger.info(
+                "consume_stream cancelled jobRun=%s side=%s rows=%s", leg.job_run_id, leg.side, rows
+            )
+            break
         entries = reader.consume(consumer, s.stream_batch_size, s.stream_block_ms)
         if not entries and reader.eof_seen():
             break

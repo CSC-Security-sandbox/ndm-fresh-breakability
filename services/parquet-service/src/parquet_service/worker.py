@@ -1,4 +1,8 @@
-"""Temporal worker entrypoint — registers ScanIngestionWorkflow + child + activities (SPEC §6)."""
+"""Static single-worker entrypoint (dev/manual) — one activity-only worker on TASK_QUEUE.
+
+Prod uses ``serve.py`` (poll config + one dynamic worker per job). This fixed-queue worker is a
+local-testing convenience; it registers activities only — workflows live in the TS orchestrator.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from .config import get_settings
-from .workflow.registry import ALL_ACTIVITIES, ALL_WORKFLOWS
+from .workflow.registry import ALL_ACTIVITIES
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,7 +29,6 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=s.task_queue,
-        workflows=ALL_WORKFLOWS,
         activities=ALL_ACTIVITIES,
         activity_executor=ThreadPoolExecutor(max_workers=s.max_concurrent_activities),
     )
