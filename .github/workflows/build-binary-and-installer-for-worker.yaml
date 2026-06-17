@@ -45,14 +45,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Replace GitHub Token Placeholder in .npmrc
         run: |
           sed -i 's|${GITOPS_USER_GITHUB_TOKEN}|${{ secrets.GITOPS_USER_GITHUB_TOKEN }}|' .npmrc
 
       - name: Install dependencies and pkg
-        run: npm install && npm install pkg -g
+        run: npm install && npm install @yao-pkg/pkg -g
       
       - name: Run Build
         run: npm run build

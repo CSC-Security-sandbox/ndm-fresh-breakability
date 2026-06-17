@@ -1,5 +1,5 @@
 ---
-istio_version: "1.24.0"
+istio_version: "1.29.4"
 istio_install_profile: "default"
 istio_download_os: linux
 istio_arch_map:

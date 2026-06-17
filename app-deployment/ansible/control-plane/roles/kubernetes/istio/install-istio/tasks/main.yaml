@@ -61,7 +61,7 @@
 
 - name: Install Istio control plane via istioctl with custom config
   ansible.builtin.command: >-
-    {{ istioctl_install_path }} install -f {{ istio_tmp_dir }}/istio-operator-config.yaml -y
+    {{ istioctl_install_path }} install -f {{ istio_tmp_dir }}/istio-operator-config.yaml -y --readiness-timeout 10m0s
   environment:
     KUBECONFIG: "{{ istio_kubeconfig_path }}"
     PATH: "/usr/local/bin:{{ ansible_env.PATH }}"

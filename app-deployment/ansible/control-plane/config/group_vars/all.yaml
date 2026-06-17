@@ -4,7 +4,7 @@ build_version: "0.1.0"
 
 # Istio configuration
 enable_istio: true
-istio_version: "1.24.0"
+istio_version: "1.29.4"
 istio_install_profile: "default"
 istio_namespace: "istio-system"
 
