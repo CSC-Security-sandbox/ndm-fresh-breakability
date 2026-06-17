@@ -159,12 +159,12 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 				destinationPathID2, err = GetExportPathID("destination", clonedDestVolumes[1], destinationConfigID, headers)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("error while getting export path, err : %s", err))
 			}
-
-			By("Creating base migration job (no schedule - will use ad-hoc for incremental syncs)")
+ 
+			By("Creating base migration job (ad-hoc incremental syncs, far-future schedule)")
 			currentDateTime := GetCurrentUTCTimestamp()
 			migrationParams := MigrationJobParams{
 				FirstRunAt:         currentDateTime,
-				FutureRunSchedule:  "", // No schedule - incremental syncs triggered via ad-hoc
+				FutureRunSchedule:  "0 0 1 1 *", // Jan 1 midnight - never fires during test; required for NDM to use scheduled-job SMB session handling
 				SourcePathIDs:      []string{sourcePathID1, sourcePathID2},
 				DestinationPathIDs: []string{destinationPathID1, destinationPathID2},
 				SidMapping:         false,
@@ -350,6 +350,9 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 			volumeReplacementMaps[0]["delta"] = deltaFolder1
 			volumeReplacementMaps[1]["delta"] = deltaFolder2
 
+			LogDebug("Waiting 2 minutes for delta data to fully flush to SMB server before triggering addition sync")
+			Wait(120)
+
 			By("Step 2: Triggering ad-hoc addition sync and validating CoC reports")
 			additionJobRunIDs := make([]string, len(migrationJobConfigIDs))
 			additionValidators := []string{
@@ -438,6 +441,9 @@ var _ = Describe("TC-004: Run migration with incremental sync schedule - verify 
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath1)
 			err = RemoveDeltaFromVolume(sourceVolumePath2, deltaFolder2)
 			Expect(err).NotTo(HaveOccurred(), "Error removing delta data files from %s", sourceVolumePath2)
+
+			LogDebug("Waiting 2 minutes for delta removal to fully propagate on SMB server before triggering deletion sync")
+			Wait(120)
 
 			By("Step 4: Triggering ad-hoc deletion sync and validating deleted-files reports")
 			deletionJobRunIDs := make([]string, len(migrationJobConfigIDs))
