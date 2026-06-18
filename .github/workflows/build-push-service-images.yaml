@@ -473,7 +473,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always() && steps.wiz-scan.outputs.exit_code == '0'
-        uses: github/codeql-action/upload-sarif@7fc1baf373eb073c686865bd453d412d506a05a2 # v3.35.1
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.35.1
         with:
           sarif_file: wiz-results-${{ matrix.service }}.sarif
           category: wiz-${{ matrix.service }}
